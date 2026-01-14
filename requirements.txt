@@ -1,0 +1,35 @@
+# Video Subtitle Remover Pro - Dependencies
+# ==========================================
+
+# Core
+numpy>=1.21.0
+opencv-python>=4.5.0
+Pillow>=9.0.0
+
+# AI/ML Frameworks (choose based on your GPU)
+# ------------------------------------------
+
+# For NVIDIA GPUs (CUDA 11.8):
+# pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu118
+# pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+
+# For AMD/Intel (DirectML):
+# pip install torch-directml==0.2.5.dev240914
+# pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+
+# For CPU only:
+# pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
+# pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+
+# Text Detection
+paddleocr>=2.6.0
+
+# Video Processing
+ffmpeg-python>=0.2.0
+
+# GUI Enhancement (optional)
+# tkinterdnd2>=0.3.0  # For native drag-drop support
+
+# Development
+tqdm>=4.64.0
+colorama>=0.4.5
