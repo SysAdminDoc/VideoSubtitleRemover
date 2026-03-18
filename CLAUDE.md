@@ -1,8 +1,8 @@
 # VideoSubtitleRemover - Working Notes
 
 ## Tech Stack
-- **GUI**: Python/tkinter (~2150 lines), dark theme, tooltips, before/after preview, region selector
-- **Backend**: (~535 lines) PaddleOCR/EasyOCR/OpenCV detection + simple-lama-inpainting + cv2 fallback
+- **GUI**: Python/tkinter (~2250 lines), dark theme, tooltips, before/after preview, mask preview, region selector
+- **Backend**: (~570 lines) PaddleOCR/EasyOCR/OpenCV detection + simple-lama-inpainting + cv2 fallback
 - **Audio**: FFmpeg subprocess (10min timeout)
 - **Build**: PyInstaller, GitHub Actions CI/CD
 
@@ -18,13 +18,13 @@
 - **Inpainting**: LAMA uses `simple-lama-inpainting` (neural), STTN/ProPainter use cv2.inpaint
 - GUI/backend InpaintMode enums have different values -- mapped via `mode_map` dict
 - `subtitle_area` persisted in settings.json as list, restored as tuple
-- Settings lock during processing only affects skip_check + lama_check (scoped, not recursive)
-- `_on_close` sets cancel_event before destroying root
-- `_process_queue` marks ALL remaining items as cancelled (not just next)
-- Output dirs created at processing time (not queue-add time)
+- `_detection_threshold_pct` is a pseudo-attribute (int 10-90), converted to float in `_sync_config_from_ui`
+- Time range: `time_start`/`time_end` in seconds, backend seeks to start frame and stops at end frame
+- Mask preview: right-click queue item filename runs detection and draws red boxes on preview
+- Image output quality: JPEG 95%, PNG compression 3, WebP 95% (auto by extension)
 - Queue capped at 500 items
-- FFmpeg audio merge has 10min timeout to prevent deadlock
-- ALL Python source files are pure ASCII (no unicode section dividers)
+- FFmpeg audio merge has 10min timeout
+- ALL source files are pure ASCII
 
 ## Encoding Rules (CRITICAL)
 - ALL .py files must be pure ASCII -- no em-dashes, no box-drawing chars, no unicode decorators
@@ -32,7 +32,8 @@
 - setup.py uses `os.system('')` to enable ANSI colors on Windows
 
 ## Version History
-- **3.2.0** -- Comprehensive audit: 13 bugs fixed (race conditions, resource leaks, crash paths), tooltips, bigger preview, CI/CD easyocr, FFmpeg timeout, queue cap, ASCII-only source, .gitignore expanded
+- **3.3.0** -- Detection threshold slider, video time-range fields, mask preview (right-click), image quality preservation (JPEG/PNG/WebP), CLI --start/--end/--threshold flags, committed + pushed + branch protection enabled
+- **3.2.0** -- Comprehensive audit: 13 bugs fixed, tooltips, CI/CD easyocr, FFmpeg timeout, queue cap, ASCII-only source
 - **3.1.0** -- Before/after comparison, AI engine badges, Open Log File, right-click folder
 - **3.0.0** -- Real LAMA inpainting, EasyOCR fallback, multi-language, region selector, folder input, CI/CD
 - **2.x** -- Bug fixes, settings persistence, log panel, queue features
@@ -42,12 +43,11 @@
 - STTN/ProPainter still use cv2.inpaint -- only LAMA has real neural inpainting
 - InpaintMode enums differ between GUI and backend -- NEVER unify them
 - EasyOCR uses different language codes than PaddleOCR -- mapping in backend `_load_model`
+- `_detection_threshold_pct` is stored as int (10-90) on config, converted to float (0.1-0.9) in sync
 - Region selector uses `import cv2 as _cv2` -- must use `_cv2` consistently in that scope
 - `subtitle_area` stored as list in JSON, converted to tuple on load
-- `_set_settings_locked` is intentionally scoped to only skip_check + lama_check -- DO NOT walk full widget tree
-- Tooltip class binds with `add="+"` to not clobber existing bindings
-- VideoCapture in region selector uses try/finally for leak-safe release
-- FFmpeg subprocess has 600s timeout -- prevents pipe deadlock on verbose output
+- VideoCapture in region selector and _show_preview uses try/finally for leak-safe release
+- `time_start`/`time_end` of 0 means "full video" -- backend checks `> 0` before seeking
 
 ## Current Status
-- v3.2.0, production-ready, zero non-ASCII in source
+- v3.3.0, committed + pushed, branch protection enabled
