@@ -665,7 +665,7 @@ class DragDropFrame(tk.Frame):
         main_text.pack()
 
         # Sub text
-        sub_text = tk.Label(inner, text="Click = files  |  Right-click = folder  |  Drag & drop both",
+        sub_text = tk.Label(inner, text="or click to browse",
                            font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
                            fg=Theme.TEXT_MUTED)
         sub_text.pack(pady=(5, 0))
