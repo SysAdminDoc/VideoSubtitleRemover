@@ -2,37 +2,40 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.0.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.2.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-Apache%202.0-red)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 
 **Professional AI-powered tool for removing hard-coded subtitles from videos and images**
 
-[Features](#features) • [Installation](#installation) • [Usage](#usage) • [Configuration](#configuration) • [Troubleshooting](#troubleshooting)
+[Features](#features) | [Installation](#installation) | [Usage](#usage) | [Configuration](#configuration) | [CLI](#cli-usage) | [Troubleshooting](#troubleshooting)
 
 </div>
 
 ---
 
-## 📋 Overview
+## Overview
 
-Video Subtitle Remover Pro is a professional Windows application that uses advanced AI algorithms to remove hard-coded subtitles and text watermarks from videos and images. Unlike simple blur or overlay methods, it intelligently fills in the removed areas with content that seamlessly matches the surrounding video.
+Video Subtitle Remover Pro uses real AI neural networks to remove hard-coded subtitles and text watermarks from videos and images. Unlike simple blur or crop methods, it intelligently fills in removed areas with content that matches the surrounding video.
 
-Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), this version provides a polished, professional interface with enhanced features for Windows users.
+Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), enhanced with a professional interface, real LaMa inpainting, multi-engine detection, and 12-language support.
 
-## ✨ Features
+## Features
 
-- **🎯 AI-Powered Removal**: Uses advanced inpainting algorithms (STTN, LAMA, ProPainter) for high-quality subtitle removal
-- **📹 Video & Image Support**: Process MP4, AVI, MKV, MOV, PNG, JPG, and more
-- **🖥️ GPU Acceleration**: Supports NVIDIA CUDA, AMD/Intel DirectML, and CPU fallback
-- **📂 Batch Processing**: Queue multiple files for automated processing
-- **🎨 Modern Dark UI**: Professional interface with your preferred color scheme
-- **⚙️ Customizable Settings**: Fine-tune algorithm parameters for optimal results
-- **🔊 Audio Preservation**: Automatically preserves original audio in output videos
-- **📊 Real-time Progress**: Track processing status with detailed feedback
+- **Real AI Inpainting** — LaMa neural network for high-quality subtitle removal (via `simple-lama-inpainting`)
+- **Multi-Engine Detection** — PaddleOCR > EasyOCR > OpenCV fallback chain (automatic)
+- **12 Language Support** — English, Chinese, Japanese, Korean, French, German, Spanish, Portuguese, Russian, Arabic, Hindi, Italian
+- **GPU Acceleration** — NVIDIA CUDA, AMD/Intel DirectML, and CPU fallback
+- **Subtitle Region Selector** — Draw a rectangle on the first frame to target specific areas
+- **Batch Processing** — Queue files or drag entire folders for automated processing
+- **Before/After Preview** — Side-by-side comparison of completed items
+- **Dark Professional UI** — Catppuccin-inspired theme with real-time progress
+- **Audio Preservation** — Automatically preserves original audio via FFmpeg
+- **Settings Persistence** — All settings saved/restored between sessions
+- **CI/CD Releases** — Automated Windows builds via GitHub Actions
 
-## 💻 System Requirements
+## System Requirements
 
 | Component | Minimum | Recommended |
 |-----------|---------|-------------|
@@ -41,148 +44,118 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 | RAM | 8 GB | 16+ GB |
 | GPU | Any (CPU mode) | NVIDIA RTX 2060+ |
 | VRAM | - | 6+ GB |
-| Storage | 2 GB | 10+ GB |
 | Python | 3.10 | 3.12 |
 
-### GPU Support
-
-| GPU Type | Acceleration | Notes |
-|----------|--------------|-------|
-| NVIDIA (RTX 10xx-50xx) | CUDA | Best performance |
-| AMD Radeon | DirectML | Good performance |
-| Intel Arc/Iris | DirectML | Good performance |
-| Integrated | CPU | Slower but works |
-
-## 📦 Installation
+## Installation
 
 ### Quick Install
 
-1. **Download** the latest release or clone this repository
-2. **Double-click** `Run_VSR_Pro.bat` - it will automatically:
-   - Create a Python virtual environment
-   - Detect your GPU and install appropriate packages
-   - Install all dependencies
-   - Launch the application
+1. **Download** or clone this repository
+2. **Double-click** `Run_VSR_Pro.bat` — first run automatically:
+   - Creates a virtual environment
+   - Detects your GPU and installs appropriate packages
+   - Installs PaddleOCR, EasyOCR, and LaMa inpainting
+   - Launches the application
 
 ### Manual Install
 
 ```powershell
-# Clone or download the repository
-cd video-subtitle-remover-pro
+cd VideoSubtitleRemover
 
 # Create virtual environment
 python -m venv venv
 .\venv\Scripts\activate
 
 # Install PyTorch (choose one):
-
-# For NVIDIA GPUs:
+# NVIDIA:
 pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu118
-
-# For AMD/Intel GPUs:
-pip install torch==2.4.1 torchvision==0.19.1
-pip install torch-directml==0.2.5.dev240914
-
-# For CPU only:
+# CPU:
 pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
 
-# Install other dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# Run the application
+# Run
 python VideoSubtitleRemover.py
 ```
 
 ### FFmpeg (Required for audio)
 
-To preserve audio in processed videos, install FFmpeg:
-
 ```powershell
-# Using winget (Windows 10+):
 winget install ffmpeg
-
-# Or download from: https://ffmpeg.org/download.html
 ```
 
-## 🚀 Usage
+## Usage
 
-### Basic Workflow
-
-1. **Launch** the application via `Run_VSR_Pro.bat`
-2. **Add files** by drag-and-drop or clicking the browse area
-3. **Select algorithm** based on your content type:
-   - **STTN**: Best for real-world videos (fast)
-   - **LAMA**: Best for images and animations (quality)
-   - **ProPainter**: Best for high-motion videos (slow)
-4. **Configure settings** as needed
-5. **Click "Start Processing"** and wait for completion
-6. **Find outputs** in the `output` folder next to your source files
-
-### Supported Formats
-
-| Type | Input Formats |
-|------|--------------|
-| Video | MP4, AVI, MKV, MOV, WMV, FLV, WebM, M4V, MPEG |
-| Image | JPG, JPEG, PNG, BMP, TIFF, WebP |
-
-## ⚙️ Configuration
+1. **Launch** via `Run_VSR_Pro.bat`
+2. **Add files** — Click to browse, right-click for folders, or drag & drop
+3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
+4. **Set language** if subtitles are non-English
+5. **Optionally set region** — Click "Set Region" to draw a rectangle on the subtitle area
+6. **Start Processing** and monitor progress
+7. **Click filename** to preview, **double-click completed item** to open output
 
 ### Algorithm Comparison
 
-| Algorithm | Speed | Quality | VRAM Usage | Best For |
-|-----------|-------|---------|------------|----------|
-| STTN | ⚡ Fast | ★★★★☆ | Moderate | Real-world videos |
-| LAMA | 🔄 Medium | ★★★★★ | Low | Images, animations |
-| ProPainter | 🐢 Slow | ★★★★★ | High | Motion-heavy videos |
+| Algorithm | Inpainting Engine | Speed | Quality | Best For |
+|-----------|-------------------|-------|---------|----------|
+| **LAMA** | Neural (LaMa) | Medium | Best | Images, animations, general use |
+| STTN | OpenCV fallback | Fast | Good | Real-world videos |
+| ProPainter | OpenCV fallback | Medium | Good | Motion-heavy videos |
 
-### STTN Settings
+> LAMA is the recommended mode — it uses a real neural network for inpainting. STTN and ProPainter currently use OpenCV inpainting as fallback until model weights are integrated.
+
+### Detection Engines
+
+The app automatically selects the best available engine:
+
+| Priority | Engine | Install | Languages |
+|----------|--------|---------|-----------|
+| 1 | PaddleOCR | `pip install paddleocr` | 80+ |
+| 2 | EasyOCR | `pip install easyocr` | 80+ |
+| 3 | OpenCV fallback | Built-in | Any (threshold-based) |
+
+## CLI Usage
+
+Process files from the command line:
+
+```bash
+python -m backend.processor -i input.mp4 -o output.mp4 -m lama --lang en --crf 20
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-i`, `--input` | Input file path | Required |
+| `-o`, `--output` | Output file path | Required |
+| `-m`, `--mode` | Algorithm (sttn/lama/propainter) | sttn |
+| `-g`, `--gpu` | GPU device ID (-1 for CPU) | 0 |
+| `-l`, `--lang` | Detection language | en |
+| `--crf` | Output quality (15-35, lower=better) | 23 |
+| `--skip-detection` | Use manual region only | Off |
+| `--fast` | LAMA fast mode | Off |
+| `--no-audio` | Strip audio | Off |
+
+## Configuration
+
+Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and persist across sessions.
+
+### Advanced Settings
 
 | Setting | Description | Default | Range |
 |---------|-------------|---------|-------|
-| Skip Detection | Use manual region (faster) | Off | On/Off |
-| Neighbor Stride | Temporal window size | 10 | 5-30 |
-| Reference Length | Reference frame count | 10 | 5-30 |
+| Neighbor Stride | STTN temporal window | 10 | 5-30 |
+| Reference Length | STTN reference frames | 10 | 5-30 |
 | Max Load Frames | Batch size | 30 | 10-100 |
+| CRF Quality | Output quality (lower=better) | 23 | 15-35 |
 
-### Tips for Best Results
-
-1. **For subtitles at the bottom**: Use STTN with skip detection enabled
-2. **For anime/animation**: Use LAMA for best quality
-3. **For fast-moving scenes**: Use ProPainter (requires high VRAM)
-4. **For batch processing**: Use STTN with skip detection for speed
-5. **For images**: LAMA provides the best single-frame results
-
-## 🔧 Troubleshooting
-
-### Common Issues
+## Troubleshooting
 
 <details>
 <summary><b>CUDA out of memory</b></summary>
 
-- Reduce `Max Load Frames` in STTN settings
-- Switch to LAMA mode (lower VRAM usage)
-- Close other GPU-intensive applications
+- Reduce Max Load Frames in Advanced Settings
+- Switch to LAMA mode (lower VRAM)
 - Use CPU mode as fallback
-
-</details>
-
-<details>
-<summary><b>Processing is slow</b></summary>
-
-- Enable GPU acceleration if available
-- Use STTN with `Skip Detection` enabled
-- For LAMA, enable `Super Fast` mode
-- Reduce video resolution before processing
-
-</details>
-
-<details>
-<summary><b>Poor removal quality</b></summary>
-
-- Try different algorithms (STTN → LAMA → ProPainter)
-- Increase STTN parameters (Neighbor Stride, Reference Length)
-- Disable LAMA Super Fast mode
-- Ensure subtitle region is properly detected
 
 </details>
 
@@ -190,8 +163,16 @@ winget install ffmpeg
 <summary><b>No audio in output</b></summary>
 
 - Install FFmpeg: `winget install ffmpeg`
-- Ensure FFmpeg is in PATH
-- Enable "Preserve original audio" option
+- Ensure "Preserve original audio" is checked
+
+</details>
+
+<details>
+<summary><b>Poor detection accuracy</b></summary>
+
+- Try changing the detection language to match your subtitles
+- Use "Set Region" to manually define the subtitle area
+- Install PaddleOCR for best detection accuracy
 
 </details>
 
@@ -200,53 +181,52 @@ winget install ffmpeg
 
 - Ensure Python 3.10+ is installed
 - Delete `venv` folder and re-run setup
-- Check Windows Defender isn't blocking Python
-- Run as Administrator
+- Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
 
 </details>
 
-### Error Logs
+### Log Files
 
-Logs are displayed in the console window. For detailed debugging:
+- GUI log panel (collapsible, click "Open Log File" for full log)
+- File log: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log` (5MB rotating)
 
-```powershell
-# Run with verbose logging
-python VideoSubtitleRemover.py --verbose 2>&1 | Tee-Object -FilePath debug.log
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-video-subtitle-remover-pro/
+VideoSubtitleRemover/
 ├── VideoSubtitleRemover.py   # Main GUI application
-├── setup.py                  # Installation script
-├── Run_VSR_Pro.bat          # Windows launcher
-├── requirements.txt          # Python dependencies
-├── README.md                 # This file
 ├── backend/
-│   └── processor.py          # Core processing logic
+│   ├── __init__.py           # Module exports
+│   └── processor.py          # Core processing (detection + inpainting)
+├── setup.py                  # First-time environment setup
+├── Run_VSR_Pro.bat           # Windows launcher
+├── build_exe.bat             # PyInstaller build script
+├── requirements.txt          # Python dependencies
+├── .github/workflows/
+│   └── build.yml             # CI/CD release workflow
 ├── assets/                   # Application assets
-├── models/                   # AI model weights
+├── models/                   # AI model weights (auto-downloaded)
 └── output/                   # Default output location
 ```
 
-## 🤝 Credits
+## Credits
 
 - Original project: [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover)
-- STTN algorithm: [STTN Paper](https://arxiv.org/abs/2007.10247)
-- LAMA algorithm: [LAMA Paper](https://arxiv.org/abs/2109.07161)
-- ProPainter algorithm: [ProPainter Paper](https://arxiv.org/abs/2309.03897)
+- LaMa inpainting: [simple-lama-inpainting](https://github.com/enesmsahin/simple-lama-inpainting)
+- EasyOCR: [JaidedAI/EasyOCR](https://github.com/JaidedAI/EasyOCR)
+- STTN: [Learning Joint Spatial-Temporal Transformations](https://arxiv.org/abs/2007.10247)
+- ProPainter: [sczhou/ProPainter](https://github.com/sczhou/ProPainter)
 
-## 📄 License
+## License
 
-This project is licensed under the Apache License 2.0 - see the original repository for details.
+This project is licensed under the Apache License 2.0.
 
 ---
 
 <div align="center">
 
-**Video Subtitle Remover Pro** • Built with 💚 by Maven Imaging Tools
+**Video Subtitle Remover Pro** -- Built by SysAdminDoc
 
-[Report Bug](https://github.com/YaoFANGUK/video-subtitle-remover/issues) • [Request Feature](https://github.com/YaoFANGUK/video-subtitle-remover/issues)
+[Report Bug](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues) | [Request Feature](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues)
 
 </div>

@@ -9,9 +9,9 @@ cd /d "%~dp0"
 :: Check if venv exists
 if not exist "venv\Scripts\python.exe" (
     echo.
-    echo  ╔═══════════════════════════════════════════════════════════╗
-    echo  ║  VIDEO SUBTITLE REMOVER PRO                               ║
-    echo  ╚═══════════════════════════════════════════════════════════╝
+    echo  ============================================================
+    echo   VIDEO SUBTITLE REMOVER PRO
+    echo  ============================================================
     echo.
     echo  First-time setup required!
     echo  Running setup.py...

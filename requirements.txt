@@ -21,15 +21,12 @@ Pillow>=9.0.0
 # pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
-# Text Detection
+# Text Detection (install at least one)
 paddleocr>=2.6.0
+easyocr>=1.7.0
 
-# Video Processing
-ffmpeg-python>=0.2.0
+# Real AI Inpainting (LAMA mode)
+simple-lama-inpainting>=0.1.0
 
 # GUI Enhancement (optional)
 # tkinterdnd2>=0.3.0  # For native drag-drop support
-
-# Development
-tqdm>=4.64.0
-colorama>=0.4.5

@@ -15,6 +15,9 @@ import zipfile
 import shutil
 from pathlib import Path
 
+# Enable ANSI escape codes on Windows 10+
+os.system('')
+
 
 class Colors:
     HEADER = '\033[95m'
@@ -29,13 +32,13 @@ class Colors:
 def print_banner():
     """Print setup banner."""
     banner = """
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║          VIDEO SUBTITLE REMOVER PRO - SETUP                  ║
-║                                                              ║
-║          Professional AI-powered subtitle removal            ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
++--------------------------------------------------------------+
+|                                                              |
+|          VIDEO SUBTITLE REMOVER PRO - SETUP                  |
+|                                                              |
+|          Professional AI-powered subtitle removal            |
+|                                                              |
++--------------------------------------------------------------+
 """
     print(f"{Colors.GREEN}{banner}{Colors.END}")
 
@@ -49,7 +52,7 @@ def check_python():
         print(f"{Colors.RED}ERROR: Python 3.10+ required. Found: {version.major}.{version.minor}{Colors.END}")
         return False
     
-    print(f"  ✓ Python {version.major}.{version.minor}.{version.micro}")
+    print(f"  [OK] Python {version.major}.{version.minor}.{version.micro}")
     return True
 
 
@@ -103,20 +106,20 @@ def detect_gpu():
                     gpu_info["intel"] = True
                     lines = [l.strip() for l in result.stdout.split('\n') if 'intel' in l.lower()]
                     gpu_info["name"] = lines[0] if lines else "Intel GPU"
-        except:
+        except Exception:
             pass
-    
+
     if gpu_info["nvidia"]:
-        print(f"  ✓ NVIDIA GPU detected: {gpu_info['name']}")
+        print(f"  [OK] NVIDIA GPU detected: {gpu_info['name']}")
         print(f"    Driver version: {gpu_info['cuda_version']}")
     elif gpu_info["amd"]:
-        print(f"  ✓ AMD GPU detected: {gpu_info['name']}")
+        print(f"  [OK] AMD GPU detected: {gpu_info['name']}")
         print(f"    Will use DirectML")
     elif gpu_info["intel"]:
-        print(f"  ✓ Intel GPU detected: {gpu_info['name']}")
+        print(f"  [OK] Intel GPU detected: {gpu_info['name']}")
         print(f"    Will use DirectML")
     else:
-        print(f"  ⚠ No GPU detected, will use CPU mode")
+        print(f"  [WARN] No GPU detected, will use CPU mode")
     
     return gpu_info
 
@@ -137,7 +140,7 @@ def create_virtual_env():
     
     try:
         subprocess.run([sys.executable, '-m', 'venv', 'venv'], check=True)
-        print(f"  ✓ Virtual environment created")
+        print(f"  [OK] Virtual environment created")
         return True
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ERROR: Failed to create virtual environment: {e}{Colors.END}")
@@ -184,7 +187,7 @@ def install_pytorch(gpu_info):
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], check=True)
         
-        print(f"  ✓ PyTorch installed")
+        print(f"  [OK] PyTorch installed")
         return True
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ERROR: Failed to install PyTorch: {e}{Colors.END}")
@@ -211,7 +214,7 @@ def install_paddlepaddle(gpu_info):
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cpu/'
             ], check=True)
         
-        print(f"  ✓ PaddlePaddle installed")
+        print(f"  [OK] PaddlePaddle installed")
         return True
     except subprocess.CalledProcessError as e:
         print(f"{Colors.YELLOW}  WARNING: PaddlePaddle installation failed: {e}{Colors.END}")
@@ -229,21 +232,23 @@ def install_dependencies():
         'numpy>=1.21.0',
         'opencv-python>=4.5.0',
         'Pillow>=9.0.0',
-        'tqdm>=4.64.0',
-        'colorama>=0.4.5',
+        'easyocr>=1.7.0',
+        'simple-lama-inpainting>=0.1.0',
     ]
-    
+
     try:
         # Install paddleocr (may fail if PaddlePaddle failed)
         try:
             subprocess.run([pip, 'install', 'paddleocr>=2.6.0'], check=True, capture_output=True)
-        except:
-            print(f"  Note: PaddleOCR installation skipped")
-        
+            print(f"  [OK] PaddleOCR installed")
+        except Exception:
+            print(f"  Note: PaddleOCR skipped (EasyOCR will be used instead)")
+
         for package in packages:
+            print(f"  Installing {package}...")
             subprocess.run([pip, 'install', package], check=True, capture_output=True)
-        
-        print(f"  ✓ Dependencies installed")
+
+        print(f"  [OK] All dependencies installed")
         return True
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ERROR: Failed to install dependencies: {e}{Colors.END}")
@@ -258,12 +263,12 @@ def check_ffmpeg():
         result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
             version = result.stdout.split('\n')[0]
-            print(f"  ✓ FFmpeg found: {version}")
+            print(f"  [OK] FFmpeg found: {version}")
             return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     
-    print(f"{Colors.YELLOW}  ⚠ FFmpeg not found{Colors.END}")
+    print(f"{Colors.YELLOW}  [WARN] FFmpeg not found{Colors.END}")
     print(f"    Audio preservation requires FFmpeg.")
     print(f"    Download from: https://ffmpeg.org/download.html")
     print(f"    Or install with: winget install ffmpeg")
@@ -298,8 +303,8 @@ Read-Host "Press Enter to exit"
     with open("Run_VSR_Pro.ps1", "w") as f:
         f.write(ps_content)
     
-    print(f"  ✓ Created Run_VSR_Pro.bat")
-    print(f"  ✓ Created Run_VSR_Pro.ps1")
+    print(f"  [OK] Created Run_VSR_Pro.bat")
+    print(f"  [OK] Created Run_VSR_Pro.ps1")
 
 
 def main():
@@ -343,8 +348,8 @@ def main():
     print(f"{Colors.GREEN}  SETUP COMPLETE!{Colors.END}")
     print(f"{Colors.GREEN}{'='*60}{Colors.END}")
     print(f"\n  To run the application:")
-    print(f"    • Double-click: {Colors.BOLD}Run_VSR_Pro.bat{Colors.END}")
-    print(f"    • Or run: {Colors.BOLD}python VideoSubtitleRemover.py{Colors.END}")
+    print(f"    * Double-click: {Colors.BOLD}Run_VSR_Pro.bat{Colors.END}")
+    print(f"    * Or run: {Colors.BOLD}python VideoSubtitleRemover.py{Colors.END}")
     print(f"\n  GPU Mode: ", end="")
     
     if gpu_info["nvidia"]:

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Virtual environment
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# App artifacts
+output/
+*.bak
+*.log
+*.exe
+
+# PyInstaller
+*.manifest
+
+# AI model weights (auto-downloaded, large)
+models/*.pth
+models/*.pt
+models/*.onnx
+models/*.bin
+!models/README.txt
+
+# Environment
+.env
+.env.local
+.python-version
