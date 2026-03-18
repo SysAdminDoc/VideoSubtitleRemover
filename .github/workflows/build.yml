@@ -1,0 +1,45 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v3.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy opencv-python Pillow
+          pip install simple-lama-inpainting
+          pip install easyocr
+          pip install pyinstaller
+
+      - name: Build EXE
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "VideoSubtitleRemoverPro" --add-data "backend;backend" --hidden-import "PIL._tkinter_finder" --hidden-import "cv2" --hidden-import "numpy" --hidden-import "tkinter" --hidden-import "tkinter.ttk" --hidden-import "tkinter.filedialog" --hidden-import "tkinter.messagebox" --hidden-import "simple_lama_inpainting" --hidden-import "easyocr" VideoSubtitleRemover.py
+
+      - name: Package release
+        run: |
+          Compress-Archive -Path dist\VideoSubtitleRemoverPro\* -DestinationPath VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip
+        shell: pwsh
+
+      - name: Upload release
+        run: |
+          gh release create ${{ github.event.inputs.version }} VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip --title "VideoSubtitleRemoverPro ${{ github.event.inputs.version }}" --notes "Automated build for ${{ github.event.inputs.version }}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
