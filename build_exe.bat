@@ -3,9 +3,9 @@ title Building Video Subtitle Remover Pro EXE
 cd /d "%~dp0"
 
 echo.
-echo  ╔═══════════════════════════════════════════════════════════╗
-echo  ║  BUILDING VIDEO SUBTITLE REMOVER PRO                      ║
-echo  ╚═══════════════════════════════════════════════════════════╝
+echo  ============================================================
+echo   BUILDING VIDEO SUBTITLE REMOVER PRO
+echo  ============================================================
 echo.
 
 :: Check for venv
@@ -33,7 +33,7 @@ echo.
 echo Building EXE (this may take several minutes)...
 echo.
 
-:: Build with PyInstaller - simplified for compatibility
+:: Build with PyInstaller
 pyinstaller --noconfirm ^
     --onedir ^
     --windowed ^
@@ -46,6 +46,8 @@ pyinstaller --noconfirm ^
     --hidden-import "tkinter.ttk" ^
     --hidden-import "tkinter.filedialog" ^
     --hidden-import "tkinter.messagebox" ^
+    --hidden-import "simple_lama_inpainting" ^
+    --hidden-import "easyocr" ^
     VideoSubtitleRemover.py
 
 if errorlevel 1 (
@@ -56,9 +58,9 @@ if errorlevel 1 (
 )
 
 echo.
-echo ═══════════════════════════════════════════════════════════════
+echo ============================================================
 echo  BUILD COMPLETE!
-echo ═══════════════════════════════════════════════════════════════
+echo ============================================================
 echo.
 echo  EXE Location: dist\VideoSubtitleRemoverPro\
 echo.
