@@ -4,7 +4,7 @@ A professional Windows application for AI-powered subtitle removal from videos a
 Based on: https://github.com/YaoFANGUK/video-subtitle-remover
 
 Author: SysAdminDoc
-Version: 3.3.0
+Version: 3.4.0
 """
 
 import os
@@ -27,7 +27,7 @@ from datetime import datetime
 # =============================================================================
 
 APP_NAME = "Video Subtitle Remover Pro"
-APP_VERSION = "3.3.0"
+APP_VERSION = "3.4.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
@@ -386,6 +386,19 @@ def get_file_info(path: str) -> str:
 # CUSTOM WIDGETS
 # =============================================================================
 
+def _get_dpi_scale(root) -> float:
+    """Get the DPI scaling factor relative to 96 DPI baseline."""
+    try:
+        return root.winfo_fpixels('1i') / 96.0
+    except Exception:
+        return 1.0
+
+
+def _scaled(root, px: int) -> int:
+    """Scale a pixel value by the current DPI factor."""
+    return int(px * _get_dpi_scale(root))
+
+
 class Tooltip:
     """Simple hover tooltip for any widget."""
 
@@ -397,15 +410,27 @@ class Tooltip:
         widget.bind("<Leave>", self._hide, add="+")
 
     def _show(self, event):
-        x = self.widget.winfo_rootx() + 20
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
         self._tip = tk.Toplevel(self.widget)
         self._tip.wm_overrideredirect(True)
-        self._tip.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(self._tip, text=self.text, font=("Segoe UI", 9),
+        # Truncate very long tooltip text
+        display_text = self.text if len(self.text) <= 120 else self.text[:117] + "..."
+        label = tk.Label(self._tip, text=display_text, font=("Segoe UI", 9),
                         bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                        relief="solid", bd=1, padx=6, pady=3)
+                        relief="solid", bd=1, padx=6, pady=3, wraplength=400)
         label.pack()
+        self._tip.update_idletasks()
+        # Position: clamp to screen bounds
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        sw = self._tip.winfo_screenwidth()
+        sh = self._tip.winfo_screenheight()
+        tw = self._tip.winfo_reqwidth()
+        th = self._tip.winfo_reqheight()
+        if x + tw > sw:
+            x = sw - tw - 4
+        if y + th > sh:
+            y = self.widget.winfo_rooty() - th - 4
+        self._tip.wm_geometry(f"+{x}+{y}")
 
     def _hide(self, event):
         if self._tip:
@@ -558,6 +583,14 @@ class ModernProgressBar(tk.Canvas):
         self.fill_color = color
         self._draw()
 
+    def resize(self, width: int, height: int = None):
+        """Resize the progress bar (for DPI/layout changes)."""
+        self.bar_width = width
+        if height:
+            self.bar_height = height
+        self.config(width=self.bar_width, height=self.bar_height)
+        self._draw()
+
 
 class ModernEntry(tk.Frame):
     """A modern styled entry field."""
@@ -612,8 +645,9 @@ class DragDropFrame(tk.Frame):
                         highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE_PRIMARY)
 
         self.on_drop = on_drop
-        self.configure(width=width, height=height)
+        self.configure(height=height)
         self.pack_propagate(False)
+        self.grid_propagate(False)
 
         # Inner content
         inner = tk.Frame(self, bg=Theme.BG_SECONDARY)
@@ -741,11 +775,15 @@ class QueueItemWidget(tk.Frame):
                                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED, anchor="w")
         self.info_label.pack(fill="x", pady=(2, 0))
 
-        # Progress bar
-        self.progress_bar = ModernProgressBar(container, width=380, height=6,
+        # Progress bar (resizes with container)
+        self.progress_bar = ModernProgressBar(container, width=300, height=6,
                                               fill=self._get_status_color())
         self.progress_bar.pack(fill="x", pady=(6, 4))
         self.progress_bar.set_progress(item.progress)
+        def _resize_bar(event):
+            if event.width > 20:
+                self.progress_bar.resize(event.width)
+        container.bind("<Configure>", _resize_bar)
 
         # Bottom row: message + elapsed time
         bottom_row = tk.Frame(container, bg=Theme.BG_TERTIARY)
@@ -954,6 +992,12 @@ class VideoSubtitleRemoverApp:
                  selectbackground=[('readonly', Theme.BLUE_MUTED)],
                  selectforeground=[('readonly', Theme.TEXT_PRIMARY)])
 
+        # Theme the combobox dropdown popup listbox
+        self.root.option_add('*TCombobox*Listbox.background', Theme.BG_TERTIARY)
+        self.root.option_add('*TCombobox*Listbox.foreground', Theme.TEXT_PRIMARY)
+        self.root.option_add('*TCombobox*Listbox.selectBackground', Theme.BLUE_MUTED)
+        self.root.option_add('*TCombobox*Listbox.selectForeground', Theme.TEXT_PRIMARY)
+
         # Checkbutton style
         style.configure("Dark.TCheckbutton",
                        background=Theme.BG_SECONDARY,
@@ -964,6 +1008,15 @@ class VideoSubtitleRemoverApp:
         style.map("Dark.TCheckbutton",
                  background=[('active', Theme.BG_SECONDARY)],
                  indicatorcolor=[('selected', Theme.GREEN_PRIMARY)])
+
+        # Scrollbar style
+        style.configure("Dark.Vertical.TScrollbar",
+                        background=Theme.BG_TERTIARY,
+                        troughcolor=Theme.BG_SECONDARY,
+                        bordercolor=Theme.BG_SECONDARY,
+                        arrowcolor=Theme.TEXT_MUTED)
+        style.map("Dark.Vertical.TScrollbar",
+                 background=[('active', Theme.BORDER)])
 
     def _build_ui(self):
         """Build the main user interface."""
@@ -978,17 +1031,21 @@ class VideoSubtitleRemoverApp:
         content = tk.Frame(main_container, bg=Theme.BG_DARK)
         content.pack(fill="both", expand=True, pady=(20, 0))
 
+        # Use grid for proportional column sizing (left ~55%, right ~45%)
+        content.columnconfigure(0, weight=55)
+        content.columnconfigure(1, weight=45)
+        content.rowconfigure(0, weight=1)
+
         # Left column - Input & Settings
         left_col = tk.Frame(content, bg=Theme.BG_DARK)
-        left_col.pack(side="left", fill="both", expand=True)
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
         self._build_input_section(left_col)
         self._build_settings_section(left_col)
 
         # Right column - Queue & Preview
-        right_col = tk.Frame(content, bg=Theme.BG_DARK, width=420)
-        right_col.pack(side="right", fill="both", padx=(20, 0))
-        right_col.pack_propagate(False)
+        right_col = tk.Frame(content, bg=Theme.BG_DARK)
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
         self._build_queue_section(right_col)
 
@@ -1003,28 +1060,25 @@ class VideoSubtitleRemoverApp:
         header = tk.Frame(parent, bg=Theme.BG_DARK)
         header.pack(fill="x")
 
-        # Title and version
-        title_frame = tk.Frame(header, bg=Theme.BG_DARK)
-        title_frame.pack(side="left")
+        # Top row: title + version
+        top_row = tk.Frame(header, bg=Theme.BG_DARK)
+        top_row.pack(fill="x")
 
-        title = tk.Label(title_frame, text="Video Subtitle Remover",
-                        font=("Segoe UI", 24, "bold"), bg=Theme.BG_DARK,
+        title = tk.Label(top_row, text="Video Subtitle Remover",
+                        font=("Segoe UI", 20, "bold"), bg=Theme.BG_DARK,
                         fg=Theme.TEXT_PRIMARY)
         title.pack(side="left")
 
-        pro_badge = tk.Label(title_frame, text=" PRO", font=("Segoe UI", 12, "bold"),
-                            bg=Theme.GREEN_PRIMARY, fg="#ffffff", padx=8, pady=2)
-        pro_badge.pack(side="left", padx=(10, 0))
+        pro_badge = tk.Label(top_row, text=" PRO", font=("Segoe UI", 10, "bold"),
+                            bg=Theme.GREEN_PRIMARY, fg="#ffffff", padx=6, pady=1)
+        pro_badge.pack(side="left", padx=(8, 0))
 
-        version = tk.Label(title_frame, text=f"v{APP_VERSION}",
-                          font=("Segoe UI", 10), bg=Theme.BG_DARK,
+        version = tk.Label(top_row, text=f"v{APP_VERSION}",
+                          font=("Segoe UI", 9), bg=Theme.BG_DARK,
                           fg=Theme.TEXT_MUTED)
-        version.pack(side="left", padx=(10, 0))
+        version.pack(side="left", padx=(8, 0))
 
-        # Status indicators (right side)
-        status_frame = tk.Frame(header, bg=Theme.BG_DARK)
-        status_frame.pack(side="right")
-
+        # GPU + engine status on the right (same row)
         if self.gpus:
             gpu_text = f"{self.gpus[0]['type']}: {self.gpus[0]['name']}"
             gpu_color = Theme.GREEN_PRIMARY
@@ -1032,17 +1086,14 @@ class VideoSubtitleRemoverApp:
             gpu_text = "CPU Mode"
             gpu_color = Theme.WARNING
 
-        tk.Label(status_frame, text=gpu_text, font=("Segoe UI", 9),
-                bg=Theme.BG_DARK, fg=gpu_color).pack(anchor="e")
-
-        # AI engine badges
-        det_text = "Det: " + ", ".join(self.ai_engines["detection"])
-        inp_text = "Inp: " + ", ".join(self.ai_engines["inpainting"])
+        det_names = ", ".join(self.ai_engines["detection"])
+        inp_names = ", ".join(self.ai_engines["inpainting"])
         has_neural = "LaMa (neural)" in self.ai_engines["inpainting"]
+        status_text = f"{gpu_text}  |  {det_names}  |  {inp_names}"
 
-        tk.Label(status_frame, text=f"{det_text}  |  {inp_text}",
-                font=("Segoe UI", 8), bg=Theme.BG_DARK,
-                fg=Theme.GREEN_PRIMARY if has_neural else Theme.TEXT_MUTED).pack(anchor="e")
+        tk.Label(top_row, text=status_text, font=("Segoe UI", 8),
+                bg=Theme.BG_DARK,
+                fg=Theme.GREEN_PRIMARY if has_neural else gpu_color).pack(side="right")
 
     def _build_input_section(self, parent):
         """Build the file input section."""
@@ -1058,8 +1109,8 @@ class VideoSubtitleRemoverApp:
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
         # Drag & drop area
-        self.drop_area = DragDropFrame(section, self._on_files_dropped, width=420, height=130)
-        self.drop_area.pack(padx=15, pady=(0, 10))
+        self.drop_area = DragDropFrame(section, self._on_files_dropped, height=130)
+        self.drop_area.pack(fill="x", padx=15, pady=(0, 10))
 
         # Output directory row
         out_row = tk.Frame(section, bg=Theme.BG_SECONDARY)
@@ -1116,9 +1167,12 @@ class VideoSubtitleRemoverApp:
         # Algorithm description
         self.algo_desc = tk.Label(settings, text=self._get_algo_description(),
                                  font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
-                                 fg=Theme.TEXT_MUTED, justify="left", anchor="w",
-                                 wraplength=400)
+                                 fg=Theme.TEXT_MUTED, justify="left", anchor="w")
         self.algo_desc.pack(fill="x", pady=(0, 12))
+        # Dynamic wraplength based on actual widget width
+        def _update_wrap(event):
+            self.algo_desc.config(wraplength=max(100, event.width - 20))
+        self.algo_desc.bind("<Configure>", _update_wrap)
 
         # Row 2: GPU selection
         if self.gpus:
@@ -1212,7 +1266,8 @@ class VideoSubtitleRemoverApp:
         # STTN settings
         sttn_frame = tk.LabelFrame(self.adv_panel, text="STTN Settings",
                                   font=("Segoe UI", 9, "bold"), bg=Theme.BG_SECONDARY,
-                                  fg=Theme.TEXT_SECONDARY, bd=1)
+                                  fg=Theme.TEXT_SECONDARY, bd=1,
+                                  highlightbackground=Theme.BORDER, highlightcolor=Theme.BORDER)
         sttn_frame.pack(fill="x", pady=(10, 5))
 
         self._create_slider(sttn_frame, "Neighbor Stride", 5, 30,
@@ -1225,7 +1280,8 @@ class VideoSubtitleRemoverApp:
         # Detection settings
         det_frame = tk.LabelFrame(self.adv_panel, text="Detection",
                                    font=("Segoe UI", 9, "bold"), bg=Theme.BG_SECONDARY,
-                                   fg=Theme.TEXT_SECONDARY, bd=1)
+                                   fg=Theme.TEXT_SECONDARY, bd=1,
+                                  highlightbackground=Theme.BORDER, highlightcolor=Theme.BORDER)
         det_frame.pack(fill="x", pady=(5, 5))
 
         self._create_slider(det_frame, "Threshold", 10, 90,
@@ -1235,7 +1291,8 @@ class VideoSubtitleRemoverApp:
         # Output quality settings
         quality_frame = tk.LabelFrame(self.adv_panel, text="Output Quality",
                                       font=("Segoe UI", 9, "bold"), bg=Theme.BG_SECONDARY,
-                                      fg=Theme.TEXT_SECONDARY, bd=1)
+                                      fg=Theme.TEXT_SECONDARY, bd=1,
+                                  highlightbackground=Theme.BORDER, highlightcolor=Theme.BORDER)
         quality_frame.pack(fill="x", pady=(5, 5))
 
         self._create_slider(quality_frame, "CRF (lower=better)", 15, 35,
@@ -1244,7 +1301,8 @@ class VideoSubtitleRemoverApp:
         # Video time range
         time_frame = tk.LabelFrame(self.adv_panel, text="Video Time Range",
                                     font=("Segoe UI", 9, "bold"), bg=Theme.BG_SECONDARY,
-                                    fg=Theme.TEXT_SECONDARY, bd=1)
+                                    fg=Theme.TEXT_SECONDARY, bd=1,
+                                  highlightbackground=Theme.BORDER, highlightcolor=Theme.BORDER)
         time_frame.pack(fill="x", pady=(5, 5))
 
         time_inner = tk.Frame(time_frame, bg=Theme.BG_SECONDARY)
@@ -1293,6 +1351,8 @@ class VideoSubtitleRemoverApp:
         scale = tk.Scale(frame, from_=min_val, to=max_val, orient="horizontal",
                         bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
                         troughcolor=Theme.BG_TERTIARY, highlightthickness=0,
+                        activebackground=Theme.GREEN_PRIMARY,
+                        sliderrelief="flat", bd=0,
                         showvalue=False, command=update_value)
         scale.set(default)
         scale.pack(side="left", fill="x", expand=True, padx=(10, 10))
@@ -1329,9 +1389,13 @@ class VideoSubtitleRemoverApp:
         batch_bar_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         batch_bar_frame.pack(fill="x", padx=15, pady=(0, 8))
 
-        self.batch_progress = ModernProgressBar(batch_bar_frame, width=380, height=4,
+        self.batch_progress = ModernProgressBar(batch_bar_frame, width=300, height=4,
                                                  fill=Theme.BLUE_PRIMARY)
         self.batch_progress.pack(side="left", fill="x", expand=True)
+        def _resize_batch(event):
+            if event.width > 60:
+                self.batch_progress.resize(event.width - 60)
+        batch_bar_frame.bind("<Configure>", _resize_batch)
 
         self.batch_label = tk.Label(batch_bar_frame, text="", font=("Segoe UI", 8),
                                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED)
@@ -1344,8 +1408,9 @@ class VideoSubtitleRemoverApp:
         # Canvas for scrolling
         self.queue_canvas = tk.Canvas(queue_container, bg=Theme.BG_SECONDARY,
                                      highlightthickness=0)
-        scrollbar = tk.Scrollbar(queue_container, orient="vertical",
-                                command=self.queue_canvas.yview)
+        scrollbar = ttk.Scrollbar(queue_container, orient="vertical",
+                                 command=self.queue_canvas.yview,
+                                 style="Dark.Vertical.TScrollbar")
 
         self.queue_frame = tk.Frame(self.queue_canvas, bg=Theme.BG_SECONDARY)
 
@@ -1382,25 +1447,25 @@ class VideoSubtitleRemoverApp:
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         btn_frame.pack(fill="x", padx=15, pady=(0, 15))
 
-        self.start_btn = ModernButton(btn_frame, text="Start Processing", width=180,
-                                     height=40, command=self._start_processing,
-                                     style="primary")
+        self.start_btn = ModernButton(btn_frame, text="Start Processing", width=140,
+                                     height=36, command=self._start_processing,
+                                     style="primary", font_size=9)
         self.start_btn.pack(side="left")
 
-        self.open_output_btn = ModernButton(btn_frame, text="Open Output", width=110,
-                                            height=40, command=self._open_output_folder,
-                                            style="accent")
-        self.open_output_btn.pack(side="left", padx=(10, 0))
+        self.open_output_btn = ModernButton(btn_frame, text="Output", width=70,
+                                            height=36, command=self._open_output_folder,
+                                            style="accent", font_size=9)
+        self.open_output_btn.pack(side="left", padx=(6, 0))
 
-        self.retry_btn = ModernButton(btn_frame, text="Retry Failed", width=100,
-                                      height=40, command=self._retry_failed,
-                                      style="secondary")
+        self.retry_btn = ModernButton(btn_frame, text="Retry", width=60,
+                                      height=36, command=self._retry_failed,
+                                      style="secondary", font_size=9)
         self.retry_btn.pack(side="right")
 
-        self.clear_btn = ModernButton(btn_frame, text="Clear", width=70,
-                                     height=40, command=self._clear_queue,
-                                     style="secondary")
-        self.clear_btn.pack(side="right", padx=(0, 8))
+        self.clear_btn = ModernButton(btn_frame, text="Clear", width=60,
+                                     height=36, command=self._clear_queue,
+                                     style="secondary", font_size=9)
+        self.clear_btn.pack(side="right", padx=(0, 6))
 
     def _bind_mousewheel(self, event):
         self.queue_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
@@ -1452,7 +1517,8 @@ class VideoSubtitleRemoverApp:
                                 fg=Theme.TEXT_MUTED, font=("Consolas", 9),
                                 relief="flat", bd=4, state="disabled",
                                 wrap="word", insertbackground=Theme.TEXT_PRIMARY)
-        log_scroll = tk.Scrollbar(self._log_body, orient="vertical", command=self.log_text.yview)
+        log_scroll = ttk.Scrollbar(self._log_body, orient="vertical", command=self.log_text.yview,
+                                   style="Dark.Vertical.TScrollbar")
         self.log_text.configure(yscrollcommand=log_scroll.set)
         log_scroll.pack(side="right", fill="y")
         self.log_text.pack(side="left", fill="both", expand=True)
@@ -1597,8 +1663,11 @@ class VideoSubtitleRemoverApp:
         frame_rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
         orig_h, orig_w = frame_rgb.shape[:2]
 
-        # Scale to fit in a reasonable window
-        max_w, max_h = 800, 500
+        # Scale to fit screen (80% of screen size max)
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        max_w = min(800, int(screen_w * 0.8))
+        max_h = min(500, int(screen_h * 0.7))
         scale = min(max_w / orig_w, max_h / orig_h, 1.0)
         disp_w, disp_h = int(orig_w * scale), int(orig_h * scale)
 
@@ -1861,7 +1930,11 @@ class VideoSubtitleRemoverApp:
                 self._preview_label.config(text="Could not read file", image="")
                 return
 
-            max_w, max_h = 390, 120
+            try:
+                max_w = max(200, self._preview_frame.winfo_width() - 20)
+            except Exception:
+                max_w = 390
+            max_h = 120
 
             # Mask preview mode -- show detected regions as red rectangles
             if show_mask:
@@ -2238,10 +2311,14 @@ class VideoSubtitleRemoverApp:
 
 def main():
     """Main entry point."""
-    # High DPI support on Windows
+    # High DPI support on Windows -- Per-Monitor V2 for best multi-monitor support
     try:
         from ctypes import windll
-        windll.shcore.SetProcessDpiAwareness(1)
+        # Try Per-Monitor V2 first (Windows 10 1703+), then fall back
+        try:
+            windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         pass
 
