@@ -641,7 +641,7 @@ class DragDropFrame(tk.Frame):
 
     def __init__(self, parent, on_drop: Callable[[List[str]], None],
                  width=400, height=200, **kwargs):
-        super().__init__(parent, bg=Theme.BG_SECONDARY, highlightthickness=2,
+        super().__init__(parent, bg=Theme.BG_TERTIARY, highlightthickness=1,
                         highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE_PRIMARY)
 
         self.on_drop = on_drop
@@ -650,25 +650,20 @@ class DragDropFrame(tk.Frame):
         self.grid_propagate(False)
 
         # Inner content
-        inner = tk.Frame(self, bg=Theme.BG_SECONDARY)
+        inner = tk.Frame(self, bg=Theme.BG_TERTIARY)
         inner.place(relx=0.5, rely=0.5, anchor="center")
-
-        # Icon (using text as fallback)
-        icon_label = tk.Label(inner, text="+", font=("Segoe UI", 32, "bold"),
-                             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED)
-        icon_label.pack(pady=(0, 6))
 
         # Main text
         main_text = tk.Label(inner, text="Drag & Drop Files Here",
-                            font=("Segoe UI", 12, "bold"), bg=Theme.BG_SECONDARY,
+                            font=("Segoe UI", 11, "bold"), bg=Theme.BG_TERTIARY,
                             fg=Theme.TEXT_PRIMARY)
         main_text.pack()
 
         # Sub text
         sub_text = tk.Label(inner, text="or click to browse",
-                           font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
+                           font=("Segoe UI", 8), bg=Theme.BG_TERTIARY,
                            fg=Theme.TEXT_MUTED)
-        sub_text.pack(pady=(5, 0))
+        sub_text.pack(pady=(3, 0))
 
         # Bind click (left = files, right = folder)
         self.bind("<Button-1>", self._on_click)
@@ -736,7 +731,7 @@ class QueueItemWidget(tk.Frame):
 
         # Main container with padding
         container = tk.Frame(self, bg=Theme.BG_TERTIARY)
-        container.pack(fill="x", padx=12, pady=10)
+        container.pack(fill="x", padx=10, pady=8)
 
         # Top row: filename and status
         top_row = tk.Frame(container, bg=Theme.BG_TERTIARY)
@@ -1020,32 +1015,30 @@ class VideoSubtitleRemoverApp:
 
     def _build_ui(self):
         """Build the main user interface."""
-        # Main container
+        # Main container -- tight padding for professional look
         main_container = tk.Frame(self.root, bg=Theme.BG_DARK)
-        main_container.pack(fill="both", expand=True, padx=20, pady=20)
+        main_container.pack(fill="both", expand=True, padx=12, pady=(10, 8))
 
         # Header
         self._build_header(main_container)
 
-        # Content area (two columns)
+        # Content area (two columns via grid)
         content = tk.Frame(main_container, bg=Theme.BG_DARK)
-        content.pack(fill="both", expand=True, pady=(20, 0))
-
-        # Use grid for proportional column sizing (left ~55%, right ~45%)
-        content.columnconfigure(0, weight=55)
-        content.columnconfigure(1, weight=45)
+        content.pack(fill="both", expand=True, pady=(12, 0))
+        content.columnconfigure(0, weight=55, minsize=360)
+        content.columnconfigure(1, weight=45, minsize=320)
         content.rowconfigure(0, weight=1)
 
         # Left column - Input & Settings
         left_col = tk.Frame(content, bg=Theme.BG_DARK)
-        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
         self._build_input_section(left_col)
         self._build_settings_section(left_col)
 
         # Right column - Queue & Preview
         right_col = tk.Frame(content, bg=Theme.BG_DARK)
-        right_col.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
 
         self._build_queue_section(right_col)
 
@@ -1060,73 +1053,67 @@ class VideoSubtitleRemoverApp:
         header = tk.Frame(parent, bg=Theme.BG_DARK)
         header.pack(fill="x")
 
-        # Top row: title + version
-        top_row = tk.Frame(header, bg=Theme.BG_DARK)
-        top_row.pack(fill="x")
-
-        title = tk.Label(top_row, text="Video Subtitle Remover",
-                        font=("Segoe UI", 20, "bold"), bg=Theme.BG_DARK,
+        # Left: title
+        title = tk.Label(header, text="Video Subtitle Remover",
+                        font=("Segoe UI", 18, "bold"), bg=Theme.BG_DARK,
                         fg=Theme.TEXT_PRIMARY)
         title.pack(side="left")
 
-        pro_badge = tk.Label(top_row, text=" PRO", font=("Segoe UI", 10, "bold"),
-                            bg=Theme.GREEN_PRIMARY, fg="#ffffff", padx=6, pady=1)
-        pro_badge.pack(side="left", padx=(8, 0))
+        pro_badge = tk.Label(header, text="PRO", font=("Segoe UI", 8, "bold"),
+                            bg=Theme.GREEN_PRIMARY, fg="#ffffff", padx=5, pady=1)
+        pro_badge.pack(side="left", padx=(6, 0))
 
-        version = tk.Label(top_row, text=f"v{APP_VERSION}",
-                          font=("Segoe UI", 9), bg=Theme.BG_DARK,
-                          fg=Theme.TEXT_MUTED)
-        version.pack(side="left", padx=(8, 0))
+        tk.Label(header, text=f"v{APP_VERSION}", font=("Segoe UI", 8),
+                bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED).pack(side="left", padx=(6, 0))
 
-        # GPU + engine status on the right (same row)
+        # Right: compact engine status
         if self.gpus:
-            gpu_text = f"{self.gpus[0]['type']}: {self.gpus[0]['name']}"
+            gpu_short = self.gpus[0]['name']
+            # Truncate long GPU names
+            if len(gpu_short) > 30:
+                gpu_short = gpu_short[:27] + "..."
             gpu_color = Theme.GREEN_PRIMARY
         else:
-            gpu_text = "CPU Mode"
+            gpu_short = "CPU"
             gpu_color = Theme.WARNING
 
-        det_names = ", ".join(self.ai_engines["detection"])
-        inp_names = ", ".join(self.ai_engines["inpainting"])
         has_neural = "LaMa (neural)" in self.ai_engines["inpainting"]
-        status_text = f"{gpu_text}  |  {det_names}  |  {inp_names}"
+        det_short = self.ai_engines["detection"][0] if self.ai_engines["detection"] else "None"
+        inp_short = "LaMa AI" if has_neural else "OpenCV"
 
-        tk.Label(top_row, text=status_text, font=("Segoe UI", 8),
-                bg=Theme.BG_DARK,
+        tk.Label(header, text=f"{gpu_short}  |  {det_short}  |  {inp_short}",
+                font=("Segoe UI", 8), bg=Theme.BG_DARK,
                 fg=Theme.GREEN_PRIMARY if has_neural else gpu_color).pack(side="right")
 
     def _build_input_section(self, parent):
         """Build the file input section."""
-        section = tk.Frame(parent, bg=Theme.BG_SECONDARY, highlightthickness=1,
-                          highlightbackground=Theme.BORDER)
-        section.pack(fill="x", pady=(0, 15))
+        section = tk.Frame(parent, bg=Theme.BG_SECONDARY)
+        section.pack(fill="x")
 
         # Section header
-        header = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        header.pack(fill="x", padx=15, pady=(15, 10))
-
-        tk.Label(header, text="INPUT FILES", font=("Segoe UI", 10, "bold"),
-                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        tk.Label(section, text="Input", font=("Segoe UI", 9, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(
+                    anchor="w", padx=12, pady=(10, 6))
 
         # Drag & drop area
-        self.drop_area = DragDropFrame(section, self._on_files_dropped, height=130)
-        self.drop_area.pack(fill="x", padx=15, pady=(0, 10))
+        self.drop_area = DragDropFrame(section, self._on_files_dropped, height=110)
+        self.drop_area.pack(fill="x", padx=12, pady=(0, 6))
 
         # Output directory row
         out_row = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        out_row.pack(fill="x", padx=15, pady=(0, 15))
+        out_row.pack(fill="x", padx=12, pady=(0, 10))
 
-        tk.Label(out_row, text="Output:", font=("Segoe UI", 9),
+        tk.Label(out_row, text="Output:", font=("Segoe UI", 8),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(side="left")
 
         self.output_dir_label = tk.Label(out_row, text="Same as input / output /",
-                                          font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
+                                          font=("Segoe UI", 8), bg=Theme.BG_SECONDARY,
                                           fg=Theme.TEXT_SECONDARY, anchor="w")
-        self.output_dir_label.pack(side="left", padx=(6, 0), fill="x", expand=True)
+        self.output_dir_label.pack(side="left", padx=(4, 0), fill="x", expand=True)
 
         reset_btn = tk.Label(out_row, text="Reset", font=("Segoe UI", 8),
                              bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED, cursor="hand2")
-        reset_btn.pack(side="right", padx=(6, 0))
+        reset_btn.pack(side="right", padx=(4, 0))
         reset_btn.bind("<Button-1>", lambda e: self._reset_output_dir())
 
         choose_btn = tk.Label(out_row, text="Browse", font=("Segoe UI", 8),
@@ -1136,26 +1123,26 @@ class VideoSubtitleRemoverApp:
 
     def _build_settings_section(self, parent):
         """Build the settings section."""
-        section = tk.Frame(parent, bg=Theme.BG_SECONDARY, highlightthickness=1,
-                          highlightbackground=Theme.BORDER)
+        # Divider line
+        tk.Frame(parent, bg=Theme.BORDER, height=1).pack(fill="x", padx=12)
+
+        section = tk.Frame(parent, bg=Theme.BG_SECONDARY)
         section.pack(fill="both", expand=True)
 
         # Section header
-        header = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        header.pack(fill="x", padx=15, pady=(15, 10))
-
-        tk.Label(header, text="PROCESSING SETTINGS", font=("Segoe UI", 10, "bold"),
-                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        tk.Label(section, text="Settings", font=("Segoe UI", 9, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(
+                    anchor="w", padx=12, pady=(8, 4))
 
         # Settings container
         settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        settings.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        settings.pack(fill="both", expand=True, padx=12, pady=(0, 10))
 
         # Row 1: Algorithm selection
         row1 = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        row1.pack(fill="x", pady=(0, 12))
+        row1.pack(fill="x", pady=(0, 6))
 
-        tk.Label(row1, text="Inpainting Algorithm", font=("Segoe UI", 10),
+        tk.Label(row1, text="Algorithm", font=("Segoe UI", 9),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(side="left")
 
         mode_combo = ttk.Combobox(row1, textvariable=self.mode_var, width=20,
@@ -1168,22 +1155,21 @@ class VideoSubtitleRemoverApp:
         self.algo_desc = tk.Label(settings, text=self._get_algo_description(),
                                  font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
                                  fg=Theme.TEXT_MUTED, justify="left", anchor="w")
-        self.algo_desc.pack(fill="x", pady=(0, 12))
-        # Dynamic wraplength based on actual widget width
+        self.algo_desc.pack(fill="x", pady=(0, 6))
         def _update_wrap(event):
-            self.algo_desc.config(wraplength=max(100, event.width - 20))
+            self.algo_desc.config(wraplength=max(100, event.width - 10))
         self.algo_desc.bind("<Configure>", _update_wrap)
 
         # Row 2: GPU selection
         if self.gpus:
             row2 = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-            row2.pack(fill="x", pady=(0, 12))
+            row2.pack(fill="x", pady=(0, 6))
 
-            tk.Label(row2, text="GPU Device", font=("Segoe UI", 10),
+            tk.Label(row2, text="GPU", font=("Segoe UI", 9),
                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(side="left")
 
             gpu_options = [f"{g['name']} ({g['memory']})" for g in self.gpus]
-            gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=30,
+            gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
                                     values=gpu_options, style="Dark.TCombobox",
                                     state="readonly")
             gpu_combo.pack(side="right")
@@ -1191,11 +1177,11 @@ class VideoSubtitleRemoverApp:
 
         # Checkboxes frame
         checks_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        checks_frame.pack(fill="x", pady=(0, 12))
+        checks_frame.pack(fill="x", pady=(0, 4))
 
         # Skip detection checkbox
         self.skip_check = tk.Checkbutton(checks_frame, text="Skip subtitle detection (faster, STTN only)",
-                                        variable=self.skip_detection_var, font=("Segoe UI", 10),
+                                        variable=self.skip_detection_var, font=("Segoe UI", 9),
                                         bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
                                         selectcolor=Theme.BG_TERTIARY, activebackground=Theme.BG_SECONDARY,
                                         activeforeground=Theme.TEXT_PRIMARY)
@@ -1204,7 +1190,7 @@ class VideoSubtitleRemoverApp:
 
         # LAMA fast mode checkbox
         self.lama_check = tk.Checkbutton(checks_frame, text="LAMA Super Fast mode (lower quality)",
-                                        variable=self.lama_fast_var, font=("Segoe UI", 10),
+                                        variable=self.lama_fast_var, font=("Segoe UI", 9),
                                         bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
                                         selectcolor=Theme.BG_TERTIARY, activebackground=Theme.BG_SECONDARY,
                                         activeforeground=Theme.TEXT_PRIMARY)
@@ -1213,16 +1199,16 @@ class VideoSubtitleRemoverApp:
 
         # Preserve audio checkbox
         tk.Checkbutton(checks_frame, text="Preserve original audio",
-                      variable=self.preserve_audio_var, font=("Segoe UI", 10),
+                      variable=self.preserve_audio_var, font=("Segoe UI", 9),
                       bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
                       selectcolor=Theme.BG_TERTIARY, activebackground=Theme.BG_SECONDARY,
                       activeforeground=Theme.TEXT_PRIMARY).pack(anchor="w")
 
         # Language & Region row
         lang_row = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        lang_row.pack(fill="x", pady=(0, 12))
+        lang_row.pack(fill="x", pady=(0, 4))
 
-        tk.Label(lang_row, text="Detection Language", font=("Segoe UI", 10),
+        tk.Label(lang_row, text="Language", font=("Segoe UI", 9),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(side="left")
 
         SUPPORTED_LANGS = ["en", "ch", "ja", "ko", "fr", "de", "es", "pt", "ru", "ar", "hi", "it"]
@@ -1232,7 +1218,7 @@ class VideoSubtitleRemoverApp:
 
         # Subtitle region selector button
         region_row = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        region_row.pack(fill="x", pady=(0, 8))
+        region_row.pack(fill="x", pady=(0, 4))
 
         self.region_label = tk.Label(region_row, text="Subtitle Region: Auto-detect",
                                      font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
@@ -1251,11 +1237,11 @@ class VideoSubtitleRemoverApp:
 
         # Advanced settings toggle
         adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        adv_frame.pack(fill="x", pady=(10, 0))
+        adv_frame.pack(fill="x", pady=(4, 0))
 
         self.adv_visible = False
-        self.adv_toggle = tk.Label(adv_frame, text="> Advanced Settings",
-                                  font=("Segoe UI", 10), bg=Theme.BG_SECONDARY,
+        self.adv_toggle = tk.Label(adv_frame, text="> Advanced",
+                                  font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
                                   fg=Theme.BLUE_PRIMARY, cursor="hand2")
         self.adv_toggle.pack(anchor="w")
         self.adv_toggle.bind("<Button-1>", self._toggle_advanced)
@@ -1361,33 +1347,32 @@ class VideoSubtitleRemoverApp:
         """Toggle advanced settings visibility."""
         self.adv_visible = not self.adv_visible
         if self.adv_visible:
-            self.adv_toggle.config(text="v Advanced Settings")
+            self.adv_toggle.config(text="v Advanced")
             self.adv_panel.pack(fill="x")
         else:
-            self.adv_toggle.config(text="> Advanced Settings")
+            self.adv_toggle.config(text="> Advanced")
             self.adv_panel.pack_forget()
 
     def _build_queue_section(self, parent):
         """Build the processing queue section."""
-        section = tk.Frame(parent, bg=Theme.BG_SECONDARY, highlightthickness=1,
-                          highlightbackground=Theme.BORDER)
+        section = tk.Frame(parent, bg=Theme.BG_SECONDARY)
         section.pack(fill="both", expand=True)
 
         # Section header
         header = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        header.pack(fill="x", padx=15, pady=(15, 10))
+        header.pack(fill="x", padx=12, pady=(10, 4))
 
-        tk.Label(header, text="PROCESSING QUEUE", font=("Segoe UI", 10, "bold"),
+        tk.Label(header, text="Queue", font=("Segoe UI", 9, "bold"),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
         self.queue_count = tk.Label(header, text="0 items",
-                                   font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
+                                   font=("Segoe UI", 8), bg=Theme.BG_SECONDARY,
                                    fg=Theme.TEXT_MUTED)
         self.queue_count.pack(side="right")
 
         # Overall batch progress bar
         batch_bar_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        batch_bar_frame.pack(fill="x", padx=15, pady=(0, 8))
+        batch_bar_frame.pack(fill="x", padx=12, pady=(0, 4))
 
         self.batch_progress = ModernProgressBar(batch_bar_frame, width=300, height=4,
                                                  fill=Theme.BLUE_PRIMARY)
@@ -1403,7 +1388,7 @@ class VideoSubtitleRemoverApp:
 
         # Queue container with scrollbar
         queue_container = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        queue_container.pack(fill="both", expand=True, padx=15, pady=(0, 10))
+        queue_container.pack(fill="both", expand=True, padx=12, pady=(0, 4))
 
         # Canvas for scrolling
         self.queue_canvas = tk.Canvas(queue_container, bg=Theme.BG_SECONDARY,
@@ -1429,23 +1414,22 @@ class VideoSubtitleRemoverApp:
         self.queue_canvas.bind("<Leave>", self._unbind_mousewheel)
 
         # Empty state
-        self.empty_label = tk.Label(self.queue_frame, text="No files in queue\nDrag & drop or browse to add files",
-                                   font=("Segoe UI", 10), bg=Theme.BG_SECONDARY,
-                                   fg=Theme.TEXT_MUTED, justify="center")
-        self.empty_label.pack(pady=40)
+        self.empty_label = tk.Label(self.queue_frame, text="No files in queue",
+                                   font=("Segoe UI", 9), bg=Theme.BG_SECONDARY,
+                                   fg=Theme.TEXT_DISABLED, justify="center")
+        self.empty_label.pack(pady=60)
 
-        # Preview area (shows thumbnail of selected item)
+        # Preview area
         self._preview_frame = tk.Frame(section, bg=Theme.BG_TERTIARY)
-        self._preview_frame.pack(fill="x", padx=15, pady=(0, 8))
+        self._preview_frame.pack(fill="x", padx=12, pady=(0, 6))
         self._preview_label = tk.Label(self._preview_frame, bg=Theme.BG_TERTIARY,
-                                       text="Click filename to preview | Right-click for detection mask",
-                                       font=("Segoe UI", 8), fg=Theme.TEXT_MUTED)
-        self._preview_label.pack(pady=4)
+                                       text="", font=("Segoe UI", 8), fg=Theme.TEXT_MUTED)
+        self._preview_label.pack(pady=2)
         self._preview_photo = None  # prevent GC
 
         # Control buttons
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        btn_frame.pack(fill="x", padx=15, pady=(0, 15))
+        btn_frame.pack(fill="x", padx=12, pady=(0, 10))
 
         self.start_btn = ModernButton(btn_frame, text="Start Processing", width=140,
                                      height=36, command=self._start_processing,
@@ -1484,16 +1468,15 @@ class VideoSubtitleRemoverApp:
 
     def _build_log_panel(self, parent):
         """Build the embedded, collapsible log panel."""
-        log_section = tk.Frame(parent, bg=Theme.BG_SECONDARY, highlightthickness=1,
-                               highlightbackground=Theme.BORDER)
-        log_section.pack(fill="x", pady=(15, 0))
+        log_section = tk.Frame(parent, bg=Theme.BG_SECONDARY)
+        log_section.pack(fill="x", pady=(8, 0))
 
         # Header with toggle + clear
         log_header = tk.Frame(log_section, bg=Theme.BG_SECONDARY)
-        log_header.pack(fill="x", padx=15, pady=(10, 0))
+        log_header.pack(fill="x", padx=12, pady=(6, 0))
 
         self._log_visible = True
-        self._log_toggle_label = tk.Label(log_header, text="v LOG", font=("Segoe UI", 9, "bold"),
+        self._log_toggle_label = tk.Label(log_header, text="v Log", font=("Segoe UI", 8, "bold"),
                                           bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
                                           cursor="hand2")
         self._log_toggle_label.pack(side="left")
@@ -1511,9 +1494,9 @@ class VideoSubtitleRemoverApp:
 
         # Log body (collapsible)
         self._log_body = tk.Frame(log_section, bg=Theme.BG_LOG)
-        self._log_body.pack(fill="x", padx=15, pady=(5, 10))
+        self._log_body.pack(fill="x", padx=12, pady=(4, 8))
 
-        self.log_text = tk.Text(self._log_body, height=5, bg=Theme.BG_LOG,
+        self.log_text = tk.Text(self._log_body, height=4, bg=Theme.BG_LOG,
                                 fg=Theme.TEXT_MUTED, font=("Consolas", 9),
                                 relief="flat", bd=4, state="disabled",
                                 wrap="word", insertbackground=Theme.TEXT_PRIMARY)
@@ -1532,11 +1515,11 @@ class VideoSubtitleRemoverApp:
         """Toggle log panel visibility."""
         self._log_visible = not self._log_visible
         if self._log_visible:
-            self._log_body.pack(fill="x", padx=15, pady=(5, 10))
-            self._log_toggle_label.config(text="v LOG")
+            self._log_body.pack(fill="x", padx=12, pady=(4, 8))
+            self._log_toggle_label.config(text="v Log")
         else:
             self._log_body.pack_forget()
-            self._log_toggle_label.config(text="> LOG")
+            self._log_toggle_label.config(text="> Log")
 
     def _clear_log(self):
         """Clear the log panel."""
@@ -1547,7 +1530,7 @@ class VideoSubtitleRemoverApp:
     def _build_footer(self, parent):
         """Build the footer section."""
         footer = tk.Frame(parent, bg=Theme.BG_DARK)
-        footer.pack(fill="x", pady=(10, 0))
+        footer.pack(fill="x", pady=(6, 0))
 
         # Status bar
         self.status_label = tk.Label(footer, text="Ready", font=("Segoe UI", 9),
@@ -1865,7 +1848,7 @@ class VideoSubtitleRemoverApp:
                 widget.destroy()
             self.queue_widgets.clear()
             self.empty_label = tk.Label(self.queue_frame,
-                                       text="No files in queue\nDrag & drop or browse to add files",
+                                       text="No files in queue",
                                        font=("Segoe UI", 10), bg=Theme.BG_SECONDARY,
                                        fg=Theme.TEXT_MUTED, justify="center")
             self.empty_label.pack(pady=40)
