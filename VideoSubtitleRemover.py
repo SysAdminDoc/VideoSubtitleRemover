@@ -4,7 +4,7 @@ A professional Windows application for AI-powered subtitle removal from videos a
 Based on: https://github.com/YaoFANGUK/video-subtitle-remover
 
 Author: SysAdminDoc
-Version: 3.4.0
+Version: 3.5.0
 """
 
 import os
@@ -27,7 +27,7 @@ from datetime import datetime
 # =============================================================================
 
 APP_NAME = "Video Subtitle Remover Pro"
-APP_VERSION = "3.4.0"
+APP_VERSION = "3.5.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
