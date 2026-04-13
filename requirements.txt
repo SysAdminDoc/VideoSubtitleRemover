@@ -21,8 +21,9 @@ Pillow>=9.0.0
 # pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
-# Text Detection (install at least one)
-paddleocr>=2.6.0
+# Text Detection (install at least one, listed in priority order)
+paddleocr>=3.0.0
+# surya-ocr>=0.9.0  # Optional: fast layout-aware detection (GPL -- see license)
 easyocr>=1.7.0
 
 # Real AI Inpainting (LAMA mode)

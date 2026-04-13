@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.5.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.6.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-Apache%202.0-red)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
@@ -109,11 +109,12 @@ winget install ffmpeg
 
 The app automatically selects the best available engine:
 
-| Priority | Engine | Install | Languages |
-|----------|--------|---------|-----------|
-| 1 | PaddleOCR | `pip install paddleocr` | 80+ |
-| 2 | EasyOCR | `pip install easyocr` | 80+ |
-| 3 | OpenCV fallback | Built-in | Any (threshold-based) |
+| Priority | Engine | Install | Languages | Notes |
+|----------|--------|---------|-----------|-------|
+| 1 | PaddleOCR (PP-OCRv5) | `pip install paddleocr>=3.0.0` | 106 | Best accuracy |
+| 2 | Surya | `pip install surya-ocr` | 90+ | Fastest, layout-aware (GPL) |
+| 3 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
+| 4 | OpenCV fallback | Built-in | Any | Threshold-based |
 
 ## CLI Usage
 
@@ -134,6 +135,9 @@ python -m backend.processor -i input.mp4 -o output.mp4 -m lama --lang en --crf 2
 | `--skip-detection` | Use manual region only | Off |
 | `--fast` | LAMA fast mode | Off |
 | `--no-audio` | Strip audio | Off |
+| `--frame-skip N` | Reuse mask for N frames (0=every frame) | 0 |
+| `--mask-dilate N` | Expand masks by N pixels | 8 |
+| `--no-hw-encode` | Force software encoding (libx264) | Off |
 
 ## Configuration
 
@@ -147,6 +151,9 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Reference Length | STTN reference frames | 10 | 5-30 |
 | Max Load Frames | Batch size | 30 | 10-100 |
 | CRF Quality | Output quality (lower=better) | 23 | 15-35 |
+| Frame Skip | Reuse detection mask for N frames | 0 | 0-10 |
+| Mask Dilate | Expand detected regions (px) | 8 | 0-20 |
+| HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
 
 ## Troubleshooting
 

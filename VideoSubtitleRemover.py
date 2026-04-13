@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
 """
 Video Subtitle Remover Pro
 A professional Windows application for AI-powered subtitle removal from videos and images.
 Based on: https://github.com/YaoFANGUK/video-subtitle-remover
 
 Author: SysAdminDoc
-Version: 3.5.0
+Version: 3.6.0
 """
 
 import os
@@ -27,7 +28,7 @@ from datetime import datetime
 # =============================================================================
 
 APP_NAME = "Video Subtitle Remover Pro"
-APP_VERSION = "3.5.0"
+APP_VERSION = "3.6.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
@@ -165,10 +166,17 @@ class ProcessingConfig:
     time_start: float = 0.0
     time_end: float = 0.0
 
+    # Detection frame skip (0=detect every frame, N=reuse mask for N frames)
+    detection_frame_skip: int = 0
+
+    # Mask dilation in pixels for cleaner removal
+    mask_dilate_px: int = 8
+
     # Output settings
     output_format: str = "mp4"
     preserve_audio: bool = True
     output_quality: int = 23  # CRF value (15-35, lower = better quality)
+    use_hw_encode: bool = True  # try hardware encoding (NVENC/QSV/AMF)
 
     def to_dict(self) -> dict:
         return {
@@ -186,6 +194,11 @@ class ProcessingConfig:
             "output_format": self.output_format,
             "preserve_audio": self.preserve_audio,
             "output_quality": self.output_quality,
+            "time_start": self.time_start,
+            "time_end": self.time_end,
+            "detection_frame_skip": self.detection_frame_skip,
+            "mask_dilate_px": self.mask_dilate_px,
+            "use_hw_encode": self.use_hw_encode,
         }
 
     @classmethod
@@ -210,6 +223,11 @@ class ProcessingConfig:
             output_format=data.get("output_format", "mp4"),
             preserve_audio=data.get("preserve_audio", True),
             output_quality=data.get("output_quality", 23),
+            time_start=data.get("time_start", 0.0),
+            time_end=data.get("time_end", 0.0),
+            detection_frame_skip=data.get("detection_frame_skip", 0),
+            mask_dilate_px=data.get("mask_dilate_px", 8),
+            use_hw_encode=data.get("use_hw_encode", True),
         )
 
 
@@ -352,6 +370,11 @@ def detect_ai_engines() -> dict:
     except ImportError:
         pass
     try:
+        from surya.detection import DetectionPredictor
+        engines["detection"].append("Surya")
+    except ImportError:
+        pass
+    try:
         import easyocr
         engines["detection"].append("EasyOCR")
     except ImportError:
@@ -408,33 +431,44 @@ class Tooltip:
         self._tip = None
         widget.bind("<Enter>", self._show, add="+")
         widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<Destroy>", self._hide, add="+")
 
     def _show(self, event):
-        self._tip = tk.Toplevel(self.widget)
-        self._tip.wm_overrideredirect(True)
-        # Truncate very long tooltip text
-        display_text = self.text if len(self.text) <= 120 else self.text[:117] + "..."
-        label = tk.Label(self._tip, text=display_text, font=("Segoe UI", 9),
-                        bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                        relief="solid", bd=1, padx=6, pady=3, wraplength=400)
-        label.pack()
-        self._tip.update_idletasks()
-        # Position: clamp to screen bounds
-        x = self.widget.winfo_rootx() + 20
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
-        sw = self._tip.winfo_screenwidth()
-        sh = self._tip.winfo_screenheight()
-        tw = self._tip.winfo_reqwidth()
-        th = self._tip.winfo_reqheight()
-        if x + tw > sw:
-            x = sw - tw - 4
-        if y + th > sh:
-            y = self.widget.winfo_rooty() - th - 4
-        self._tip.wm_geometry(f"+{x}+{y}")
+        # Clean up any existing tooltip first
+        if self._tip:
+            self._tip.destroy()
+            self._tip = None
+        try:
+            self._tip = tk.Toplevel(self.widget)
+            self._tip.wm_overrideredirect(True)
+            # Truncate very long tooltip text
+            display_text = self.text if len(self.text) <= 120 else self.text[:117] + "..."
+            label = tk.Label(self._tip, text=display_text, font=("Segoe UI", 9),
+                            bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                            relief="solid", bd=1, padx=6, pady=3, wraplength=400)
+            label.pack()
+            self._tip.update_idletasks()
+            # Position: clamp to screen bounds
+            x = self.widget.winfo_rootx() + 20
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+            sw = self._tip.winfo_screenwidth()
+            sh = self._tip.winfo_screenheight()
+            tw = self._tip.winfo_reqwidth()
+            th = self._tip.winfo_reqheight()
+            if x + tw > sw:
+                x = sw - tw - 4
+            if y + th > sh:
+                y = self.widget.winfo_rooty() - th - 4
+            self._tip.wm_geometry(f"+{x}+{y}")
+        except tk.TclError:
+            self._tip = None
 
     def _hide(self, event):
         if self._tip:
-            self._tip.destroy()
+            try:
+                self._tip.destroy()
+            except tk.TclError:
+                pass
             self._tip = None
 
 
@@ -699,8 +733,8 @@ class DragDropFrame(tk.Frame):
 
     def _on_click(self, event):
         filetypes = [
-            ("All Supported", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.jpg;*.jpeg;*.png;*.bmp"),
-            ("Video Files", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm"),
+            ("All Supported", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp"),
+            ("Video Files", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg"),
             ("Image Files", "*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp"),
             ("All Files", "*.*")
         ]
@@ -776,8 +810,10 @@ class QueueItemWidget(tk.Frame):
         self.progress_bar.pack(fill="x", pady=(6, 4))
         self.progress_bar.set_progress(item.progress)
         def _resize_bar(event):
-            if event.width > 20:
-                self.progress_bar.resize(event.width)
+            # Account for container padx (10+10) and some internal margin
+            bar_w = event.width - 24
+            if bar_w > 20:
+                self.progress_bar.resize(bar_w)
         container.bind("<Configure>", _resize_bar)
 
         # Bottom row: message + elapsed time
@@ -856,6 +892,10 @@ class TextWidgetHandler(logging.Handler):
         elif levelno >= logging.WARNING:
             tag = "warning"
         self.text_widget.insert("end", msg, tag)
+        # Trim to 2000 lines to prevent unbounded memory growth
+        line_count = int(self.text_widget.index("end-1c").split(".")[0])
+        if line_count > 2000:
+            self.text_widget.delete("1.0", f"{line_count - 2000}.0")
         self.text_widget.see("end")
         self.text_widget.config(state="disabled")
 
@@ -891,6 +931,10 @@ class VideoSubtitleRemoverApp:
         self.ai_engines = detect_ai_engines()
         self._elapsed_timer_id = None
         self._output_dir: Optional[Path] = None  # None = use input_dir/output/
+        self._preview_detector = None  # cached SubtitleDetector for mask preview
+        self._preview_detector_lang = None  # lang the cached detector was created with
+        self._cached_remover = None  # cached BackendRemover for batch reuse
+        self._cached_remover_key = None  # (mode, device, lang) key for cache invalidation
 
         # Variables
         self.mode_var = tk.StringVar(value=self.config.mode.value)
@@ -904,9 +948,16 @@ class VideoSubtitleRemoverApp:
         self._setup_styles()
         self._build_ui()
 
-        # GPU setup
+        # GPU setup -- restore saved selection or default to first
         if self.gpus:
-            self.gpu_var.set(f"{self.gpus[0]['name']} ({self.gpus[0]['memory']})")
+            matched = False
+            for g in self.gpus:
+                if g['index'] == self.config.gpu_id:
+                    self.gpu_var.set(f"{g['name']} ({g['memory']})")
+                    matched = True
+                    break
+            if not matched:
+                self.gpu_var.set(f"{self.gpus[0]['name']} ({self.gpus[0]['memory']})")
         else:
             self.gpu_var.set("CPU Mode")
             self.config.use_gpu = False
@@ -935,7 +986,9 @@ class VideoSubtitleRemoverApp:
             self._stop_elapsed_timer()
         self._sync_config_from_ui()
         save_settings(self.config)
-        self.root.destroy()
+        # Brief delay to let processing thread see cancel_event before we
+        # destroy the Tk root (prevents TclError from root.after on dead root)
+        self.root.after(150, self.root.destroy)
 
     def _sync_config_from_ui(self):
         """Sync config object from current UI state."""
@@ -951,14 +1004,10 @@ class VideoSubtitleRemoverApp:
         pct = getattr(self.config, '_detection_threshold_pct', 50)
         self.config.detection_threshold = pct / 100.0
         # Time range
-        try:
-            self.config.time_start = float(self.time_start_entry.get() or 0)
-        except ValueError:
-            self.config.time_start = 0.0
-        try:
-            self.config.time_end = float(self.time_end_entry.get() or 0)
-        except ValueError:
-            self.config.time_end = 0.0
+        self.config.time_start = self._safe_float(self.time_start_entry.get())
+        self.config.time_end = self._safe_float(self.time_end_entry.get())
+        # HW encode
+        self.config.use_hw_encode = self.hw_encode_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -1145,11 +1194,11 @@ class VideoSubtitleRemoverApp:
         tk.Label(row1, text="Algorithm", font=("Segoe UI", 9),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(side="left")
 
-        mode_combo = ttk.Combobox(row1, textvariable=self.mode_var, width=20,
+        self.mode_combo = ttk.Combobox(row1, textvariable=self.mode_var, width=20,
                                  values=[m.value for m in InpaintMode],
                                  style="Dark.TCombobox", state="readonly")
-        mode_combo.pack(side="right")
-        mode_combo.bind("<<ComboboxSelected>>", self._on_mode_changed)
+        self.mode_combo.pack(side="right")
+        self.mode_combo.bind("<<ComboboxSelected>>", self._on_mode_changed)
 
         # Algorithm description
         self.algo_desc = tk.Label(settings, text=self._get_algo_description(),
@@ -1169,11 +1218,11 @@ class VideoSubtitleRemoverApp:
                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(side="left")
 
             gpu_options = [f"{g['name']} ({g['memory']})" for g in self.gpus]
-            gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
+            self.gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
                                     values=gpu_options, style="Dark.TCombobox",
                                     state="readonly")
-            gpu_combo.pack(side="right")
-            gpu_combo.bind("<<ComboboxSelected>>", self._on_gpu_changed)
+            self.gpu_combo.pack(side="right")
+            self.gpu_combo.bind("<<ComboboxSelected>>", self._on_gpu_changed)
 
         # Checkboxes frame
         checks_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
@@ -1212,9 +1261,9 @@ class VideoSubtitleRemoverApp:
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(side="left")
 
         SUPPORTED_LANGS = ["en", "ch", "ja", "ko", "fr", "de", "es", "pt", "ru", "ar", "hi", "it"]
-        lang_combo = ttk.Combobox(lang_row, textvariable=self.lang_var, width=8,
+        self.lang_combo = ttk.Combobox(lang_row, textvariable=self.lang_var, width=8,
                                   values=SUPPORTED_LANGS, style="Dark.TCombobox", state="readonly")
-        lang_combo.pack(side="right")
+        self.lang_combo.pack(side="right")
 
         # Subtitle region selector button
         region_row = tk.Frame(settings, bg=Theme.BG_SECONDARY)
@@ -1274,6 +1323,14 @@ class VideoSubtitleRemoverApp:
                            int(self.config.detection_threshold * 100), "_detection_threshold_pct")
         Tooltip(det_frame, "Detection confidence 10-90%. Lower = more text found, higher = fewer false positives.")
 
+        self._create_slider(det_frame, "Frame Skip", 0, 10,
+                           self.config.detection_frame_skip, "detection_frame_skip")
+        Tooltip(det_frame, "Reuse detection mask for N frames between detections. 0=detect every frame. Higher=faster but less accurate.")
+
+        self._create_slider(det_frame, "Mask Dilate (px)", 0, 20,
+                           self.config.mask_dilate_px, "mask_dilate_px")
+        Tooltip(det_frame, "Expand detected regions by N pixels for cleaner removal boundaries.")
+
         # Output quality settings
         quality_frame = tk.LabelFrame(self.adv_panel, text="Output Quality",
                                       font=("Segoe UI", 9, "bold"), bg=Theme.BG_SECONDARY,
@@ -1283,6 +1340,14 @@ class VideoSubtitleRemoverApp:
 
         self._create_slider(quality_frame, "CRF (lower=better)", 15, 35,
                            self.config.output_quality, "output_quality")
+
+        self.hw_encode_var = tk.BooleanVar(value=self.config.use_hw_encode)
+        tk.Checkbutton(quality_frame, text="Hardware encoding (NVENC/QSV/AMF)",
+                      variable=self.hw_encode_var, font=("Segoe UI", 9),
+                      bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+                      selectcolor=Theme.BG_TERTIARY, activebackground=Theme.BG_SECONDARY,
+                      activeforeground=Theme.TEXT_PRIMARY).pack(anchor="w", padx=10, pady=(0, 5))
+        Tooltip(quality_frame, "Use GPU-accelerated video encoding when available. Falls back to libx264 automatically.")
 
         # Video time range
         time_frame = tk.LabelFrame(self.adv_panel, text="Video Time Range",
@@ -1299,7 +1364,7 @@ class VideoSubtitleRemoverApp:
         self.time_start_entry = tk.Entry(time_inner, width=6, bg=Theme.BG_TERTIARY,
                                           fg=Theme.TEXT_PRIMARY, font=("Segoe UI", 9),
                                           insertbackground=Theme.TEXT_PRIMARY, relief="flat", bd=4)
-        self.time_start_entry.insert(0, "0")
+        self.time_start_entry.insert(0, str(self.config.time_start or 0))
         self.time_start_entry.pack(side="left", padx=(4, 12))
 
         tk.Label(time_inner, text="End (sec):", font=("Segoe UI", 9),
@@ -1307,7 +1372,7 @@ class VideoSubtitleRemoverApp:
         self.time_end_entry = tk.Entry(time_inner, width=6, bg=Theme.BG_TERTIARY,
                                         fg=Theme.TEXT_PRIMARY, font=("Segoe UI", 9),
                                         insertbackground=Theme.TEXT_PRIMARY, relief="flat", bd=4)
-        self.time_end_entry.insert(0, "0")
+        self.time_end_entry.insert(0, str(self.config.time_end or 0))
         self.time_end_entry.pack(side="left", padx=(4, 0))
 
         tk.Label(time_inner, text="(0 = full)", font=("Segoe UI", 8),
@@ -1452,10 +1517,15 @@ class VideoSubtitleRemoverApp:
         self.clear_btn.pack(side="right", padx=(0, 6))
 
     def _bind_mousewheel(self, event):
-        self.queue_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self._mousewheel_bound = True
+        self.queue_canvas.bind("<MouseWheel>", self._on_mousewheel)
+        # Also bind on children so scroll works when hovering queue items
+        for child in self.queue_frame.winfo_children():
+            child.bind("<MouseWheel>", self._on_mousewheel)
 
     def _unbind_mousewheel(self, event):
-        self.queue_canvas.unbind_all("<MouseWheel>")
+        self._mousewheel_bound = False
+        self.queue_canvas.unbind("<MouseWheel>")
 
     def _on_mousewheel(self, event):
         self.queue_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -1613,7 +1683,7 @@ class VideoSubtitleRemoverApp:
         if not source_path:
             source_path = filedialog.askopenfilename(
                 title="Select a video/image to define subtitle region",
-                filetypes=[("All Supported", "*.mp4;*.avi;*.mkv;*.mov;*.jpg;*.jpeg;*.png")]
+                filetypes=[("All Supported", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp")]
             )
         if not source_path:
             return
@@ -1715,6 +1785,14 @@ class VideoSubtitleRemoverApp:
         self.config.subtitle_area = None
         self.region_label.config(text="Subtitle Region: Auto-detect", fg=Theme.TEXT_MUTED)
 
+    @staticmethod
+    def _safe_float(value: str, default: float = 0.0) -> float:
+        """Parse a float from a string, returning default on failure."""
+        try:
+            return float(value or default)
+        except (ValueError, TypeError):
+            return default
+
     def _on_files_dropped(self, files: List[str]):
         """Handle dropped files."""
         for file_path in files:
@@ -1787,8 +1865,11 @@ class VideoSubtitleRemoverApp:
             detection_lang=self.lang_var.get(),
             detection_threshold=getattr(self.config, '_detection_threshold_pct', 50) / 100.0,
             subtitle_area=self.config.subtitle_area,
-            time_start=float(self.time_start_entry.get() or 0),
-            time_end=float(self.time_end_entry.get() or 0),
+            time_start=self._safe_float(self.time_start_entry.get()),
+            time_end=self._safe_float(self.time_end_entry.get()),
+            detection_frame_skip=self.config.detection_frame_skip,
+            mask_dilate_px=self.config.mask_dilate_px,
+            use_hw_encode=self.hw_encode_var.get(),
         )
 
         # Create queue item
@@ -1865,6 +1946,12 @@ class VideoSubtitleRemoverApp:
                                              on_select=self._show_preview)
                     widget.pack(fill="x", pady=(0, 8))
                     self.queue_widgets[item.id] = widget
+                    # Forward mousewheel to queue canvas
+                    widget.bind("<MouseWheel>", self._on_mousewheel)
+                    for child in widget.winfo_children():
+                        child.bind("<MouseWheel>", self._on_mousewheel)
+                        for subchild in child.winfo_children():
+                            subchild.bind("<MouseWheel>", self._on_mousewheel)
 
     def _update_status(self, message: str):
         """Update the status bar."""
@@ -1919,31 +2006,45 @@ class VideoSubtitleRemoverApp:
                 max_w = 390
             max_h = 120
 
-            # Mask preview mode -- show detected regions as red rectangles
+            # Mask preview mode -- run detection in background thread
             if show_mask:
                 self._preview_label.config(text="Detecting...", image="")
                 self._preview_label.update_idletasks()
-                try:
-                    from backend.processor import SubtitleDetector
-                    det = SubtitleDetector(lang=self.lang_var.get())
-                    threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
-                    if self.config.subtitle_area:
-                        boxes = [self.config.subtitle_area]
-                    else:
-                        boxes = det.detect(raw_frame, threshold)
-                    # Draw red rectangles on frame
-                    vis = raw_frame.copy()
-                    for (x1, y1, x2, y2) in boxes:
-                        _cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                    img = to_pil(vis)
-                    count_text = f" ({len(boxes)} regions)" if boxes else " (none found)"
-                    img.thumbnail((max_w, max_h), Image.LANCZOS)
-                    self._preview_photo = ImageTk.PhotoImage(img)
-                    self._preview_label.config(
-                        image=self._preview_photo,
-                        text=f"{det._engine_name}: {len(boxes)} detected" if boxes else "No text detected")
-                except Exception as e:
-                    self._preview_label.config(text=f"Detection error: {e}", image="")
+                frame_copy = raw_frame.copy()
+                lang = self.lang_var.get()
+                threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
+                sub_area = self.config.subtitle_area
+
+                def _detect_bg():
+                    try:
+                        from backend.processor import SubtitleDetector
+                        # Reuse cached detector if lang hasn't changed
+                        if self._preview_detector is None or self._preview_detector_lang != lang:
+                            self._preview_detector = SubtitleDetector(lang=lang)
+                            self._preview_detector_lang = lang
+                        det = self._preview_detector
+                        if sub_area:
+                            boxes = [sub_area]
+                        else:
+                            boxes = det.detect(frame_copy, threshold)
+                        vis = frame_copy.copy()
+                        for (bx1, by1, bx2, by2) in boxes:
+                            _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
+                        img = to_pil(vis)
+                        img.thumbnail((max_w, max_h), Image.LANCZOS)
+                        engine = det._engine_name
+                        n = len(boxes)
+                        def _update_ui():
+                            self._preview_photo = ImageTk.PhotoImage(img)
+                            self._preview_label.config(
+                                image=self._preview_photo,
+                                text=f"{engine}: {n} detected" if n else "No text detected")
+                        self.root.after(0, _update_ui)
+                    except Exception as exc:
+                        self.root.after(0, lambda: self._preview_label.config(
+                            text=f"Detection error: {exc}", image=""))
+
+                threading.Thread(target=_detect_bg, daemon=True).start()
                 return
 
             input_img = to_pil(raw_frame)
@@ -2005,9 +2106,14 @@ class VideoSubtitleRemoverApp:
     def _set_settings_locked(self, locked: bool):
         """Lock or unlock settings controls during processing."""
         state = "disabled" if locked else "normal"
+        combo_state = "disabled" if locked else "readonly"
         try:
             self.skip_check.config(state=state)
             self.lama_check.config(state=state)
+            self.mode_combo.config(state=combo_state)
+            self.lang_combo.config(state=combo_state)
+            if hasattr(self, 'gpu_combo'):
+                self.gpu_combo.config(state=combo_state)
         except Exception:
             pass
 
@@ -2041,6 +2147,8 @@ class VideoSubtitleRemoverApp:
         self.cancel_event.set()
         self._stop_elapsed_timer()
         self._set_settings_locked(False)
+        self._cached_remover = None
+        self._cached_remover_key = None
 
         self.start_btn.set_text("Start Processing")
         self.start_btn.bg_color = Theme.GREEN_PRIMARY
@@ -2081,20 +2189,27 @@ class VideoSubtitleRemoverApp:
         for idx, item in enumerate(items_to_process):
             if self.cancel_event.is_set():
                 # Mark ALL remaining items as cancelled
+                now = datetime.now()
                 for remaining in items_to_process[idx:]:
                     remaining.status = ProcessingStatus.CANCELLED
                     remaining.message = "Cancelled"
+                    remaining.completed_at = now
                     self._update_item_display(remaining)
                 break
 
             # Update batch progress + window title
-            self.root.after(0, self._update_batch_progress, idx, total)
+            try:
+                self.root.after(0, self._update_batch_progress, idx, total)
+            except RuntimeError:
+                return  # root destroyed during shutdown
             self._process_item(item)
 
         # Final batch state
-        self.root.after(0, self._update_batch_progress, total, total)
-        # Reset button
-        self.root.after(0, self._on_processing_complete)
+        try:
+            self.root.after(0, self._update_batch_progress, total, total)
+            self.root.after(0, self._on_processing_complete)
+        except RuntimeError:
+            pass  # root destroyed during shutdown
 
     def _process_item(self, item: QueueItem):
         """Process a single queue item using the backend processor."""
@@ -2118,10 +2233,26 @@ class VideoSubtitleRemoverApp:
                 "ProPainter": BackendInpaintMode.PROPAINTER,
             }
 
-            device = f"cuda:{item.config.gpu_id}" if item.config.use_gpu else "cpu"
+            # Determine device string based on GPU type
+            if item.config.use_gpu:
+                gpu_type = None
+                for g in self.gpus:
+                    if g['index'] == item.config.gpu_id:
+                        gpu_type = g.get('type')
+                        break
+                if gpu_type == "DirectML":
+                    device = "directml"
+                else:
+                    device = f"cuda:{item.config.gpu_id}"
+            else:
+                device = "cpu"
+
+            backend_mode = mode_map.get(item.config.mode.value, BackendInpaintMode.STTN)
+            lang = getattr(item.config, 'detection_lang', 'en')
+            cache_key = (backend_mode, device, lang)
 
             backend_config = BackendConfig(
-                mode=mode_map.get(item.config.mode.value, BackendInpaintMode.STTN),
+                mode=backend_mode,
                 device=device,
                 sttn_skip_detection=item.config.sttn_skip_detection,
                 sttn_neighbor_stride=item.config.sttn_neighbor_stride,
@@ -2130,14 +2261,25 @@ class VideoSubtitleRemoverApp:
                 lama_super_fast=item.config.lama_super_fast,
                 preserve_audio=item.config.preserve_audio,
                 output_quality=item.config.output_quality,
-                detection_lang=getattr(item.config, 'detection_lang', 'en'),
+                detection_lang=lang,
                 detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
                 subtitle_area=item.config.subtitle_area,
                 time_start=getattr(item.config, 'time_start', 0.0),
                 time_end=getattr(item.config, 'time_end', 0.0),
+                detection_frame_skip=getattr(item.config, 'detection_frame_skip', 0),
+                mask_dilate_px=getattr(item.config, 'mask_dilate_px', 8),
+                use_hw_encode=getattr(item.config, 'use_hw_encode', True),
             )
 
-            remover = BackendRemover(backend_config)
+            # Reuse cached remover if mode/device/lang match (avoids reloading
+            # OCR models and re-probing HW encoders for every queue item)
+            if self._cached_remover is not None and self._cached_remover_key == cache_key:
+                remover = self._cached_remover
+                remover.config = backend_config
+            else:
+                remover = BackendRemover(backend_config)
+                self._cached_remover = remover
+                self._cached_remover_key = cache_key
 
             def on_progress(progress: float, message: str):
                 if self.cancel_event.is_set():
@@ -2181,18 +2323,21 @@ class VideoSubtitleRemoverApp:
             else:
                 item.status = ProcessingStatus.ERROR
                 item.message = "Processing failed"
+                item.completed_at = datetime.now()
                 logger.error(f"Failed: {file_name}")
             self._update_item_display(item)
 
         except InterruptedError:
             item.status = ProcessingStatus.CANCELLED
             item.message = "Cancelled"
+            item.completed_at = datetime.now()
             self._update_item_display(item)
             logger.info(f"Cancelled: {Path(item.file_path).name}")
         except Exception as e:
             item.status = ProcessingStatus.ERROR
             item.error = str(e)
             item.message = f"Error: {str(e)}"
+            item.completed_at = datetime.now()
             self._update_item_display(item)
             logger.error(f"Processing error for {item.file_path}: {e}")
 
@@ -2212,9 +2357,20 @@ class VideoSubtitleRemoverApp:
         def update():
             if item.id in self.queue_widgets:
                 self.queue_widgets[item.id].update_item(item)
-            self._update_status(f"Processing: {Path(item.file_path).name} - {item.message}")
+            fname = Path(item.file_path).name
+            if item.status == ProcessingStatus.COMPLETE:
+                self._update_status(f"Complete: {fname}")
+            elif item.status == ProcessingStatus.ERROR:
+                self._update_status(f"Error: {fname} - {item.message}")
+            elif item.status == ProcessingStatus.CANCELLED:
+                self._update_status(f"Cancelled: {fname}")
+            else:
+                self._update_status(f"Processing: {fname} - {item.message}")
 
-        self.root.after(0, update)
+        try:
+            self.root.after(0, update)
+        except RuntimeError:
+            pass  # root already destroyed during shutdown
 
     def _on_processing_complete(self):
         """Handle processing completion."""
@@ -2222,6 +2378,9 @@ class VideoSubtitleRemoverApp:
         self.cancel_event.clear()
         self._stop_elapsed_timer()
         self._set_settings_locked(False)
+        # Clear cached remover so next batch picks up any setting changes
+        self._cached_remover = None
+        self._cached_remover_key = None
         self.start_btn.set_text("Start Processing")
         self.start_btn.bg_color = Theme.GREEN_PRIMARY
         self.start_btn.hover_color = Theme.GREEN_HOVER
