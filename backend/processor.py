@@ -13,9 +13,10 @@ import numpy as np
 import logging
 import tempfile
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional, Tuple, List, Generator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
 
@@ -48,6 +49,10 @@ class ProcessingConfig:
     subtitle_area: Optional[Tuple[int, int, int, int]] = None
     detection_threshold: float = 0.5
     detection_lang: str = "en"
+    detection_frame_skip: int = 0  # 0=detect every frame, N=reuse mask for N frames
+
+    # Mask settings
+    mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
 
     # Time range (video only, seconds from start)
     time_start: float = 0.0   # 0 = beginning
@@ -57,10 +62,11 @@ class ProcessingConfig:
     preserve_audio: bool = True
     output_format: str = "mp4"
     output_quality: int = 23  # CRF value for x264
+    use_hw_encode: bool = True  # try NVENC/QSV before falling back to libx264
 
 
 # =============================================================================
-# SUBTITLE DETECTION -- PaddleOCR > EasyOCR > OpenCV fallback
+# SUBTITLE DETECTION -- PaddleOCR > Surya > EasyOCR > OpenCV fallback
 # =============================================================================
 
 class SubtitleDetector:
@@ -71,12 +77,18 @@ class SubtitleDetector:
         self.lang = lang
         self._engine_name = "none"
         self._paddle_model = None
+        self._surya_det = None
+        self._surya_processor = None
         self._easyocr_reader = None
         self._load_model()
 
+    def _is_gpu_device(self) -> bool:
+        """Check if the device string indicates GPU acceleration."""
+        return 'cuda' in self.device or self.device == 'directml'
+
     def _load_model(self):
-        """Load detection model: try PaddleOCR, then EasyOCR, then fallback."""
-        # Try PaddleOCR first
+        """Load detection model: PaddleOCR > Surya > EasyOCR > OpenCV fallback."""
+        # Try PaddleOCR first (PP-OCRv5 with paddleocr>=3.0.0)
         try:
             from paddleocr import PaddleOCR
             self._paddle_model = PaddleOCR(
@@ -93,10 +105,22 @@ class SubtitleDetector:
         except Exception as e:
             logger.warning(f"PaddleOCR init failed: {e}")
 
+        # Try Surya OCR (fast, layout-aware, 90+ languages)
+        try:
+            from surya.detection import DetectionPredictor
+            self._surya_det = DetectionPredictor()
+            self._engine_name = "Surya"
+            logger.info("Surya text detection loaded")
+            return
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.warning(f"Surya init failed: {e}")
+
         # Try EasyOCR
         try:
             import easyocr
-            gpu = 'cuda' in self.device
+            gpu = self._is_gpu_device()
             # Map PaddleOCR lang codes to EasyOCR equivalents
             easyocr_lang_map = {
                 "ch": "ch_sim", "chinese_cht": "ch_tra",
@@ -124,6 +148,8 @@ class SubtitleDetector:
         """Detect text regions in a frame. Returns list of (x1, y1, x2, y2) boxes."""
         if self._paddle_model is not None:
             return self._detect_paddle(frame, threshold)
+        elif self._surya_det is not None:
+            return self._detect_surya(frame, threshold)
         elif self._easyocr_reader is not None:
             return self._detect_easyocr(frame, threshold)
         else:
@@ -143,6 +169,24 @@ class SubtitleDetector:
             return boxes
         except Exception as e:
             logger.error(f"PaddleOCR detection error: {e}")
+            return self._fallback_detection(frame)
+
+    def _detect_surya(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
+        """Detect text using Surya OCR text detection."""
+        try:
+            from PIL import Image
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(frame_rgb)
+            predictions = self._surya_det([pil_image])
+            boxes = []
+            if predictions and len(predictions) > 0:
+                for bbox in predictions[0].bboxes:
+                    if bbox.confidence >= threshold:
+                        x1, y1, x2, y2 = [int(v) for v in bbox.bbox]
+                        boxes.append((x1, y1, x2, y2))
+            return boxes
+        except Exception as e:
+            logger.error(f"Surya detection error: {e}")
             return self._fallback_detection(frame)
 
     def _detect_easyocr(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
@@ -180,7 +224,9 @@ class SubtitleDetector:
         raw_boxes = []
         for contour in contours:
             x, y, cw, ch = cv2.boundingRect(contour)
-            if y > h * 0.6 and cw > w * 0.08 and ch < h * 0.15 and ch > 4:
+            # Accept subtitle-shaped regions in top 15% or bottom 40% of frame
+            in_subtitle_zone = (y > h * 0.6) or (y + ch < h * 0.15)
+            if in_subtitle_zone and cw > w * 0.08 and ch < h * 0.15 and ch > 4:
                 raw_boxes.append((x, y, x + cw, y + ch))
 
         return self._merge_boxes(raw_boxes, margin=10)
@@ -216,8 +262,15 @@ class SubtitleDetector:
                 new_merged.append((ax1, ay1, ax2, ay2))
                 used.add(i)
             merged = new_merged
-        return [(max(0, x1 + margin), max(0, y1 + margin), x2 - margin, y2 - margin)
-                for x1, y1, x2, y2 in merged]
+        result = []
+        for x1, y1, x2, y2 in merged:
+            ux1 = max(0, x1 + margin)
+            uy1 = max(0, y1 + margin)
+            ux2 = x2 - margin
+            uy2 = y2 - margin
+            if ux2 > ux1 and uy2 > uy1:
+                result.append((ux1, uy1, ux2, uy2))
+        return result
 
 
 # =============================================================================
@@ -309,6 +362,26 @@ class ProPainterInpainter(BaseInpainter):
 
 
 # =============================================================================
+# HARDWARE ENCODER DETECTION
+# =============================================================================
+
+def _detect_hw_encoder() -> Optional[str]:
+    """Probe FFmpeg for hardware encoder availability. Returns encoder name or None."""
+    try:
+        result = subprocess.run(
+            ['ffmpeg', '-hide_banner', '-encoders'],
+            capture_output=True, text=True, timeout=10
+        )
+        for encoder in ('h264_nvenc', 'h264_qsv', 'h264_amf'):
+            if encoder in result.stdout:
+                logger.info(f"Hardware encoder available: {encoder}")
+                return encoder
+    except Exception:
+        pass
+    return None
+
+
+# =============================================================================
 # MAIN SUBTITLE REMOVER
 # =============================================================================
 
@@ -323,10 +396,15 @@ class SubtitleRemover:
         )
         self.inpainter = self._create_inpainter()
         self.on_progress: Optional[Callable[[float, str], None]] = None
+        self._hw_encoder: Optional[str] = None
+
+        if self.config.use_hw_encode:
+            self._hw_encoder = _detect_hw_encoder()
 
         logger.info(f"Detector: {self.detector._engine_name} | "
                     f"Inpainter: {self.config.mode.value} | "
-                    f"Device: {self.config.device}")
+                    f"Device: {self.config.device}"
+                    f"{' | HW encode: ' + self._hw_encoder if self._hw_encoder else ''}")
 
     def _create_inpainter(self) -> BaseInpainter:
         if self.config.mode == InpaintMode.STTN:
@@ -351,6 +429,14 @@ class SubtitleRemover:
             x2 = min(w, x2 + padding)
             y2 = min(h, y2 + padding)
             mask[y1:y2, x1:x2] = 255
+
+        # Morphological dilation for cleaner inpainting boundaries
+        dilate_px = self.config.mask_dilate_px
+        if dilate_px > 0 and mask.max() > 0:
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (dilate_px * 2 + 1, dilate_px * 2 + 1))
+            mask = cv2.dilate(mask, kernel, iterations=1)
+
         return mask
 
     def process_image(self, input_path: str, output_path: str) -> bool:
@@ -379,13 +465,15 @@ class SubtitleRemover:
             self._report_progress(0.9, "Saving result...")
             ext = Path(output_path).suffix.lower()
             if ext in ('.jpg', '.jpeg'):
-                cv2.imwrite(output_path, result, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                ok = cv2.imwrite(output_path, result, [cv2.IMWRITE_JPEG_QUALITY, 95])
             elif ext == '.png':
-                cv2.imwrite(output_path, result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+                ok = cv2.imwrite(output_path, result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
             elif ext == '.webp':
-                cv2.imwrite(output_path, result, [cv2.IMWRITE_WEBP_QUALITY, 95])
+                ok = cv2.imwrite(output_path, result, [cv2.IMWRITE_WEBP_QUALITY, 95])
             else:
-                cv2.imwrite(output_path, result)
+                ok = cv2.imwrite(output_path, result)
+            if not ok:
+                raise IOError(f"Failed to write output image: {output_path}")
             self._report_progress(1.0, "Complete!")
             return True
 
@@ -398,6 +486,8 @@ class SubtitleRemover:
 
     def process_video(self, input_path: str, output_path: str) -> bool:
         temp_dir = None
+        cap = None
+        writer = None
         try:
             self._report_progress(0.0, "Opening video...")
             cap = cv2.VideoCapture(input_path)
@@ -416,10 +506,14 @@ class SubtitleRemover:
             start_frame = 0
             end_frame = total_frames
             if self.config.time_start > 0:
-                start_frame = int(self.config.time_start * fps)
+                start_frame = min(total_frames - 1, int(self.config.time_start * fps))
                 cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
             if self.config.time_end > 0:
                 end_frame = min(total_frames, int(self.config.time_end * fps))
+            if end_frame <= start_frame:
+                raise ValueError(
+                    f"Invalid time range: end ({self.config.time_end}s) "
+                    f"must be after start ({self.config.time_start}s)")
             frames_to_process = end_frame - start_frame
 
             if start_frame > 0 or end_frame < total_frames:
@@ -433,9 +527,14 @@ class SubtitleRemover:
 
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             writer = cv2.VideoWriter(temp_video, fourcc, fps, (width, height))
+            if not writer.isOpened():
+                raise ValueError(f"Could not create video writer for: {temp_video}")
 
             frame_idx = 0
             batch_size = self.config.sttn_max_load_num
+            frame_skip = self.config.detection_frame_skip
+            last_mask = None  # cached mask for frame-skip optimization
+            fixed_mask = None  # cached mask for skip_detection mode
 
             while True:
                 frames = []
@@ -449,12 +548,27 @@ class SubtitleRemover:
                         break
 
                     if self.config.sttn_skip_detection and self.config.subtitle_area:
-                        boxes = [self.config.subtitle_area]
+                        # Fixed region: create mask once and reuse for all frames
+                        if fixed_mask is None:
+                            boxes = [self.config.subtitle_area]
+                            fixed_mask = self._create_mask(frame.shape, boxes)
+                        frames.append(frame)
+                        masks.append(fixed_mask)
+                        frame_idx += 1
+                        continue
+                    elif frame_skip > 0 and last_mask is not None and frame_idx % (frame_skip + 1) != 0:
+                        # Reuse cached mask for intermediate frames
+                        frames.append(frame)
+                        masks.append(last_mask)
+                        frame_idx += 1
+                        continue
                     else:
                         boxes = self.detector.detect(frame, self.config.detection_threshold)
 
+                    mask = self._create_mask(frame.shape, boxes)
+                    last_mask = mask
                     frames.append(frame)
-                    masks.append(self._create_mask(frame.shape, boxes))
+                    masks.append(mask)
                     frame_idx += 1
 
                 if not frames:
@@ -468,13 +582,15 @@ class SubtitleRemover:
                     writer.write(result)
 
             cap.release()
+            cap = None
             writer.release()
+            writer = None
 
             self._report_progress(0.9, "Merging audio...")
             if self.config.preserve_audio:
                 self._merge_audio(input_path, temp_video, output_path)
             else:
-                shutil.copy(temp_video, output_path)
+                self._reencode_or_copy(temp_video, output_path)
 
             self._report_progress(1.0, "Complete!")
             return True
@@ -486,31 +602,89 @@ class SubtitleRemover:
             logger.error(f"Video processing error: {e}")
             return False
         finally:
+            if writer is not None:
+                try:
+                    writer.release()
+                except Exception:
+                    pass
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def _get_encode_args(self) -> List[str]:
+        """Return FFmpeg video encoder arguments, preferring hardware encoding."""
+        if self._hw_encoder and self.config.use_hw_encode:
+            if 'nvenc' in self._hw_encoder:
+                return ['-c:v', self._hw_encoder, '-preset', 'p4',
+                        '-cq', str(self.config.output_quality)]
+            elif 'qsv' in self._hw_encoder:
+                return ['-c:v', self._hw_encoder,
+                        '-global_quality', str(self.config.output_quality)]
+            elif 'amf' in self._hw_encoder:
+                return ['-c:v', self._hw_encoder,
+                        '-quality', 'balanced',
+                        '-rc', 'cqp', '-qp', str(self.config.output_quality)]
+        # Software fallback
+        return ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
+                '-preset', 'medium']
+
+    def _reencode_or_copy(self, source: str, output: str):
+        """Re-encode with preferred encoder or just copy if FFmpeg unavailable."""
+        try:
+            cmd = ['ffmpeg', '-y', '-i', source]
+            cmd += self._get_encode_args()
+            cmd += ['-an', output]
+            subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+        except subprocess.CalledProcessError as e:
+            if self._hw_encoder:
+                logger.warning(f"HW encoder failed, retrying with libx264: {e}")
+                self._hw_encoder = None
+                self._reencode_or_copy(source, output)
+                return
+            shutil.copy(source, output)
+        except Exception:
+            shutil.copy(source, output)
+
     def _merge_audio(self, original: str, processed: str, output: str):
-        import subprocess
         try:
             cmd = [
                 'ffmpeg', '-y',
                 '-i', processed,
-                '-i', original,
-                '-c:v', 'libx264',
-                '-crf', str(self.config.output_quality),
-                '-preset', 'medium',
+            ]
+            # When a time range was used, seek audio to match the processed segment
+            if self.config.time_start > 0:
+                cmd += ['-ss', str(self.config.time_start)]
+            cmd += ['-i', original]
+            if self.config.time_end > 0 and self.config.time_start > 0:
+                duration = self.config.time_end - self.config.time_start
+                cmd += ['-t', str(duration)]
+            elif self.config.time_end > 0:
+                cmd += ['-t', str(self.config.time_end)]
+            cmd += self._get_encode_args()
+            cmd += [
                 '-c:a', 'aac',
                 '-map', '0:v:0',
                 '-map', '1:a:0?',
                 '-shortest',
-                output
+                output,
             ]
             subprocess.run(cmd, check=True, capture_output=True, timeout=600)
-            logger.info("Audio merged successfully")
+            encoder_name = self._hw_encoder or 'libx264'
+            logger.info(f"Audio merged successfully (encoder: {encoder_name})")
         except subprocess.TimeoutExpired:
             logger.warning("FFmpeg audio merge timed out (>10min), copying video without audio")
             shutil.copy(processed, output)
         except subprocess.CalledProcessError as e:
+            # If hardware encoder failed, retry with software
+            if self._hw_encoder:
+                logger.warning(f"HW encoder failed, retrying with libx264: {e}")
+                self._hw_encoder = None
+                self._merge_audio(original, processed, output)
+                return
             logger.warning(f"Audio merge failed: {e}, copying video without audio")
             shutil.copy(processed, output)
         except FileNotFoundError:
@@ -537,6 +711,12 @@ def main():
     parser.add_argument("--start", type=float, default=0, help="Start time in seconds")
     parser.add_argument("--end", type=float, default=0, help="End time in seconds (0=full)")
     parser.add_argument("--threshold", type=float, default=0.5, help="Detection threshold (0.1-1.0)")
+    parser.add_argument("--frame-skip", type=int, default=0,
+                       help="Reuse detection mask for N frames between detections (0=every frame)")
+    parser.add_argument("--mask-dilate", type=int, default=8,
+                       help="Mask dilation in pixels for cleaner removal (0=off)")
+    parser.add_argument("--no-hw-encode", action="store_true",
+                       help="Disable hardware encoding (force libx264)")
 
     args = parser.parse_args()
 
@@ -551,13 +731,16 @@ def main():
         output_quality=args.crf,
         time_start=args.start,
         time_end=args.end,
+        detection_frame_skip=args.frame_skip,
+        mask_dilate_px=args.mask_dilate,
+        use_hw_encode=not args.no_hw_encode,
     )
 
     remover = SubtitleRemover(config)
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
 
     ext = Path(args.input).suffix.lower()
-    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm'}
+    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
 
     if ext in video_exts:
         success = remover.process_video(args.input, args.output)
