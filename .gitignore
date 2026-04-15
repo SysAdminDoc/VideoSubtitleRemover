@@ -40,3 +40,4 @@ models/*.bin
 .env
 .env.local
 .python-version
+CLAUDE.md
