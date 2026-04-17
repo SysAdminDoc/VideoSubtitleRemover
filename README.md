@@ -1,8 +1,18 @@
+<!-- codex-branding:start -->
+<p align="center"><img src="icon.png" width="128" alt="Video Subtitle Remover"></p>
+
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/version-preview-58A6FF?style=for-the-badge">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Python%20GUI-58A6FF?style=for-the-badge">
+</p>
+<!-- codex-branding:end -->
+
 # Video Subtitle Remover Pro
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.6.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.7.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-Apache%202.0-red)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
@@ -23,14 +33,16 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 
 ## Features
 
-- **Real AI Inpainting** — LaMa neural network for high-quality subtitle removal (via `simple-lama-inpainting`)
-- **Multi-Engine Detection** — PaddleOCR > EasyOCR > OpenCV fallback chain (automatic)
+- **Real Video Inpainting** — Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
+- **Real AI Inpainting** — LaMa neural network for still-frame and residual refinement (via `simple-lama-inpainting`)
+- **Multi-Engine Detection** — RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya > EasyOCR > OpenCV fallback chain (automatic)
+- **Seamless Boundaries** — Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **12 Language Support** — English, Chinese, Japanese, Korean, French, German, Spanish, Portuguese, Russian, Arabic, Hindi, Italian
 - **GPU Acceleration** — NVIDIA CUDA, AMD/Intel DirectML, and CPU fallback
 - **Subtitle Region Selector** — Draw a rectangle on the first frame to target specific areas
 - **Batch Processing** — Queue files or drag entire folders for automated processing
 - **Before/After Preview** — Side-by-side comparison of completed items
-- **Dark Professional UI** — Catppuccin-inspired theme with real-time progress
+- **Premium Dark UI** — Cohesive design system with custom sliders, toggles, and status chips
 - **Audio Preservation** — Automatically preserves original audio via FFmpeg
 - **Settings Persistence** — All settings saved/restored between sessions
 - **CI/CD Releases** — Automated Windows builds via GitHub Actions
@@ -99,11 +111,11 @@ winget install ffmpeg
 
 | Algorithm | Inpainting Engine | Speed | Quality | Best For |
 |-----------|-------------------|-------|---------|----------|
-| **LAMA** | Neural (LaMa) | Medium | Best | Images, animations, general use |
-| STTN | OpenCV fallback | Fast | Good | Real-world videos |
-| ProPainter | OpenCV fallback | Medium | Good | Motion-heavy videos |
+| **STTN** | Temporal Background Exposure | Fastest | Great | Live-action video with changing subtitles (default) |
+| LAMA | Neural (LaMa) | Medium | Best still-frame | Images, animations, static backgrounds |
+| ProPainter | TBE + LaMa refinement | Slowest | Best motion | Motion-heavy footage, thick/decorative text |
 
-> LAMA is the recommended mode — it uses a real neural network for inpainting. STTN and ProPainter currently use OpenCV inpainting as fallback until model weights are integrated.
+> All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a hybrid: TBE reconstructs the background, then LaMa refines any residual.
 
 ### Detection Engines
 
@@ -111,10 +123,11 @@ The app automatically selects the best available engine:
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
-| 1 | PaddleOCR (PP-OCRv5) | `pip install paddleocr>=3.0.0` | 106 | Best accuracy |
-| 2 | Surya | `pip install surya-ocr` | 90+ | Fastest, layout-aware (GPL) |
-| 3 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
-| 4 | OpenCV fallback | Built-in | Any | Threshold-based |
+| 1 | **RapidOCR** (ONNX PP-OCR) | `pip install rapidocr` | 100+ | 4-5x faster than PaddleOCR, leak-free (default) |
+| 2 | PaddleOCR (PP-OCRv5) | `pip install paddleocr>=3.0.0` | 106 | High accuracy reference implementation |
+| 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
+| 4 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
+| 5 | OpenCV fallback | Built-in | Any | Threshold-based |
 
 ## CLI Usage
 
@@ -153,6 +166,8 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | CRF Quality | Output quality (lower=better) | 23 | 15-35 |
 | Frame Skip | Reuse detection mask for N frames | 0 | 0-10 |
 | Mask Dilate | Expand detected regions (px) | 8 | 0-20 |
+| Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |
+| TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |
 | HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
 
 ## Troubleshooting
