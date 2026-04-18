@@ -2,9 +2,9 @@
 <p align="center"><img src="icon.png" width="128" alt="Video Subtitle Remover"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-preview-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.12.0-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Python%20GUI-58A6FF?style=for-the-badge">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20desktop-58A6FF?style=for-the-badge">
 </p>
 <!-- codex-branding:end -->
 
@@ -12,9 +12,9 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.7.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.12.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
-![License](https://img.shields.io/badge/license-Apache%202.0-red)
+![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
 
 **Professional AI-powered tool for removing hard-coded subtitles from videos and images**
@@ -43,9 +43,10 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Batch Processing** — Queue files or drag entire folders for automated processing
 - **Before/After Preview** — Side-by-side comparison of completed items
 - **Premium Dark UI** — Cohesive design system with custom sliders, toggles, and status chips
+- **Guided Workflow** — Responsive layout, queue search, keyboard shortcuts, and clearer next-step guidance
 - **Audio Preservation** — Automatically preserves original audio via FFmpeg
 - **Settings Persistence** — All settings saved/restored between sessions
-- **CI/CD Releases** — Automated Windows builds via GitHub Actions
+- **CI/CD Releases** — Automated Windows builds via GitHub Actions, with documentation bundled into release zips
 
 ## System Requirements
 
@@ -68,6 +69,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
    - Detects your GPU and installs appropriate packages
    - Installs PaddleOCR, EasyOCR, and LaMa inpainting
    - Launches the application
+   - Use `Run_VSR_Pro_Debug.bat` if you want the same bootstrap flow with a visible console for troubleshooting
 
 ### Manual Install
 
@@ -97,15 +99,21 @@ python VideoSubtitleRemover.py
 winget install ffmpeg
 ```
 
+### Validation
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
 ## Usage
 
 1. **Launch** via `Run_VSR_Pro.bat`
-2. **Add files** — Click to browse, right-click for folders, or drag & drop
+2. **Add files** — Click to browse, press `Ctrl+O`, right-click for folders, or drag & drop
 3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
 4. **Set language** if subtitles are non-English
 5. **Optionally set region** — Click "Set Region" to draw a rectangle on the subtitle area
 6. **Start Processing** and monitor progress
-7. **Click filename** to preview, **double-click completed item** to open output
+7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame
 
 ### Algorithm Comparison
 
@@ -203,6 +211,7 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 
 - Ensure Python 3.10+ is installed
 - Delete `venv` folder and re-run setup
+- Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
 
 </details>
@@ -222,8 +231,10 @@ VideoSubtitleRemover/
 │   └── processor.py          # Core processing (detection + inpainting)
 ├── setup.py                  # First-time environment setup
 ├── Run_VSR_Pro.bat           # Windows launcher
+├── Run_VSR_Pro_Debug.bat     # Windows launcher with a visible console
 ├── build_exe.bat             # PyInstaller build script
 ├── requirements.txt          # Python dependencies
+├── tests/                    # Focused regression coverage for hardened paths
 ├── .github/workflows/
 │   └── build.yml             # CI/CD release workflow
 ├── assets/                   # Application assets
@@ -241,7 +252,7 @@ VideoSubtitleRemover/
 
 ## License
 
-This project is licensed under the Apache License 2.0.
+This project is licensed under the MIT License.
 
 ---
 

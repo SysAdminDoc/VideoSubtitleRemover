@@ -8,6 +8,7 @@ various inpainting models (STTN, LAMA, ProPainter) for subtitle removal.
 
 import os
 import sys
+import json
 import cv2
 import numpy as np
 import logging
@@ -122,6 +123,236 @@ class ProcessingConfig:
     output_format: str = "mp4"
     output_quality: int = 23  # CRF value for x264
     use_hw_encode: bool = True  # try NVENC/QSV before falling back to libx264
+
+
+def _coerce_bool(value, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off", ""}:
+            return False
+    return default
+
+
+def _coerce_int(value, default: int, min_value: Optional[int] = None,
+                max_value: Optional[int] = None) -> int:
+    try:
+        coerced = int(float(value))
+    except (TypeError, ValueError):
+        coerced = default
+    if min_value is not None:
+        coerced = max(min_value, coerced)
+    if max_value is not None:
+        coerced = min(max_value, coerced)
+    return coerced
+
+
+def _coerce_float(value, default: float, min_value: Optional[float] = None,
+                  max_value: Optional[float] = None) -> float:
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError):
+        coerced = default
+    if min_value is not None:
+        coerced = max(min_value, coerced)
+    if max_value is not None:
+        coerced = min(max_value, coerced)
+    return coerced
+
+
+def _coerce_text(value, default: str, max_length: int = 256) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) > max_length:
+            text = text[:max_length]
+        return text
+    return default
+
+
+def _coerce_rect(value) -> Optional[Tuple[int, int, int, int]]:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        x1, y1, x2, y2 = [int(float(v)) for v in value]
+    except (TypeError, ValueError):
+        return None
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = max(0, x2), max(0, y2)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return (x1, y1, x2, y2)
+
+
+def _coerce_rect_list(value) -> Optional[List[Tuple[int, int, int, int]]]:
+    if not isinstance(value, (list, tuple)):
+        return None
+    rects = []
+    for item in value:
+        rect = _coerce_rect(item)
+        if rect:
+            rects.append(rect)
+    return rects or None
+
+
+def _coerce_backend_mode(value) -> InpaintMode:
+    if isinstance(value, InpaintMode):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        mode_map = {
+            "sttn": InpaintMode.STTN,
+            "lama": InpaintMode.LAMA,
+            "propainter": InpaintMode.PROPAINTER,
+            "pro painter": InpaintMode.PROPAINTER,
+            "auto": InpaintMode.AUTO,
+        }
+        if normalized in mode_map:
+            return mode_map[normalized]
+    return InpaintMode.STTN
+
+
+def _coerce_backend_device(value) -> str:
+    if isinstance(value, str):
+        device = value.strip().lower()
+        if device == "cpu" or device == "directml":
+            return device
+        if device.startswith("cuda:"):
+            try:
+                index = int(device.split(":", 1)[1])
+            except (TypeError, ValueError):
+                return "cpu"
+            return f"cuda:{max(0, index)}"
+    return "cpu"
+
+
+def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
+    """Coerce config values into a safe runtime shape."""
+    config.mode = _coerce_backend_mode(config.mode)
+    config.device = _coerce_backend_device(config.device)
+    config.sttn_skip_detection = _coerce_bool(config.sttn_skip_detection, False)
+    config.sttn_neighbor_stride = _coerce_int(config.sttn_neighbor_stride, 10, 1, 60)
+    config.sttn_reference_length = _coerce_int(config.sttn_reference_length, 10, 1, 60)
+    config.sttn_max_load_num = _coerce_int(config.sttn_max_load_num, 30, 1, 512)
+    config.lama_super_fast = _coerce_bool(config.lama_super_fast, False)
+    config.subtitle_area = _coerce_rect(config.subtitle_area)
+    config.subtitle_areas = _coerce_rect_list(config.subtitle_areas)
+    config.detection_threshold = _coerce_float(config.detection_threshold, 0.5, 0.1, 1.0)
+    config.detection_lang = _coerce_text(config.detection_lang, "en", 24).lower()
+    config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)
+    config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
+    config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
+    config.tbe_enable = _coerce_bool(config.tbe_enable, True)
+    config.tbe_min_coverage = _coerce_int(config.tbe_min_coverage, 3, 1, 32)
+    config.tbe_use_median = _coerce_bool(config.tbe_use_median, True)
+    config.tbe_flow_warp = _coerce_bool(config.tbe_flow_warp, False)
+    config.tbe_scene_cut_split = _coerce_bool(config.tbe_scene_cut_split, True)
+    config.tbe_scene_cut_threshold = _coerce_float(config.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
+    config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
+    config.export_mask_video = _coerce_bool(config.export_mask_video, False)
+    config.export_srt = _coerce_bool(config.export_srt, False)
+    config.adaptive_batch = _coerce_bool(config.adaptive_batch, True)
+    config.auto_exposure_threshold = _coerce_float(config.auto_exposure_threshold, 0.55, 0.0, 1.0)
+    config.deinterlace = _coerce_bool(config.deinterlace, False)
+    config.deinterlace_auto = _coerce_bool(config.deinterlace_auto, True)
+    config.keyframe_detection = _coerce_bool(config.keyframe_detection, False)
+    config.quality_report = _coerce_bool(config.quality_report, False)
+    config.kalman_tracking = _coerce_bool(config.kalman_tracking, True)
+    config.kalman_iou_threshold = _coerce_float(config.kalman_iou_threshold, 0.3, 0.0, 1.0)
+    config.kalman_max_age = _coerce_int(config.kalman_max_age, 2, 0, 120)
+    config.phash_skip_enable = _coerce_bool(config.phash_skip_enable, True)
+    config.phash_skip_distance = _coerce_int(config.phash_skip_distance, 4, 0, 64)
+    config.colour_tune_enable = _coerce_bool(config.colour_tune_enable, False)
+    config.colour_tune_tolerance = _coerce_int(config.colour_tune_tolerance, 25, 0, 255)
+    config.time_start = max(0.0, _coerce_float(config.time_start, 0.0))
+    config.time_end = max(0.0, _coerce_float(config.time_end, 0.0))
+    if config.time_end and config.time_end < config.time_start:
+        config.time_end = 0.0
+    config.preserve_audio = _coerce_bool(config.preserve_audio, True)
+    config.output_format = _coerce_text(config.output_format, "mp4", 16).lower()
+    config.output_quality = _coerce_int(config.output_quality, 23, 0, 51)
+    config.use_hw_encode = _coerce_bool(config.use_hw_encode, True)
+    return config
+
+
+def _ensure_output_parent(path: str):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+
+def _path_key(path: Path | str) -> str:
+    return str(Path(path).resolve(strict=False)).casefold()
+
+
+def _choose_available_output_path(base_path: Path, reserved: Optional[set[str]] = None) -> Path:
+    """Avoid overwriting an existing file or a path reserved earlier in the batch."""
+    reserved = reserved or set()
+    candidate = base_path
+    counter = 2
+    while candidate.exists() or _path_key(candidate) in reserved:
+        candidate = base_path.with_name(f"{base_path.stem}({counter}){base_path.suffix}")
+        counter += 1
+    return candidate
+
+
+def _write_text_atomic(path: Path, text: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        temp_path = Path(temp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
+def _allocate_temp_output_path(path: Path | str) -> Path:
+    """Create a sibling temp file path that preserves the final suffix."""
+    final_path = Path(path)
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{final_path.stem}.",
+        suffix=final_path.suffix or ".tmp",
+        dir=str(final_path.parent),
+    )
+    os.close(fd)
+    return Path(temp_name)
+
+
+def _cleanup_temp_output(path: Optional[Path | str]):
+    if not path:
+        return
+    try:
+        Path(path).unlink()
+    except OSError:
+        pass
+
+
+def _promote_temp_output(temp_path: Path | str, final_path: Path | str):
+    _ensure_output_parent(str(final_path))
+    os.replace(Path(temp_path), Path(final_path))
+
+
+def _copy_file_atomic(source: str, output: str):
+    temp_output = _allocate_temp_output_path(output)
+    try:
+        shutil.copy2(source, temp_output)
+        _promote_temp_output(temp_output, output)
+    finally:
+        _cleanup_temp_output(temp_output)
 
 
 # =============================================================================
@@ -1117,7 +1348,8 @@ def _deinterlace_to_temp(src: str, temp_dir: str) -> str:
     via the temp_dir lifecycle."""
     dst = os.path.join(temp_dir, "deinterlaced.mp4")
     cmd = [
-        'ffmpeg', '-y', '-i', src,
+        'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
+        '-i', src,
         '-vf', 'yadif=1',
         '-c:v', 'libx264', '-crf', '16', '-preset', 'veryfast',
         '-c:a', 'copy', dst,
@@ -1150,7 +1382,7 @@ class SubtitleRemover:
     """Coordinates detection and inpainting to remove subtitles from videos/images."""
 
     def __init__(self, config: ProcessingConfig = None):
-        self.config = config or ProcessingConfig()
+        self.config = normalize_processing_config(config or ProcessingConfig())
         self.detector = SubtitleDetector(
             self.config.device,
             lang=self.config.detection_lang
@@ -1176,14 +1408,16 @@ class SubtitleRemover:
         # Adaptive batch sizing -- probe free VRAM, scale sttn_max_load_num.
         # Defaults to the user-configured value on probe failure.
         if self.config.adaptive_batch and 'cuda' in self.config.device:
+            pynvml = None
+            nvml_started = False
             try:
                 import pynvml  # type: ignore
                 pynvml.nvmlInit()
+                nvml_started = True
                 h = pynvml.nvmlDeviceGetHandleByIndex(
                     int(self.config.device.split(':')[-1] or 0))
                 info = pynvml.nvmlDeviceGetMemoryInfo(h)
                 free_gb = info.free / (1024 ** 3)
-                pynvml.nvmlShutdown()
                 # Rough heuristic: 1080p TBE costs ~50 MB per frame (RGB + mask +
                 # scratch). Scale target batch by (free_vram / safety_factor).
                 safety = 6.0  # GB reserved for model + OS
@@ -1197,6 +1431,12 @@ class SubtitleRemover:
                     self.config.sttn_max_load_num = target
             except Exception:
                 pass
+            finally:
+                if pynvml is not None and nvml_started:
+                    try:
+                        pynvml.nvmlShutdown()
+                    except Exception:
+                        pass
 
         logger.info(f"Detector: {self.detector._engine_name} | "
                     f"Inpainter: {self.config.mode.value} | "
@@ -1428,11 +1668,12 @@ class SubtitleRemover:
             cues.append((cur_start, cur_end, cur_text))
 
         try:
-            with open(path, 'w', encoding='utf-8') as f:
-                for i, (s, e, txt) in enumerate(cues, 1):
-                    t_start = (s + offset_frames) / fps
-                    t_end = (e + offset_frames + 1) / fps
-                    f.write(f"{i}\n{ts(t_start)} --> {ts(t_end)}\n{txt}\n\n")
+            payload = []
+            for i, (s, e, txt) in enumerate(cues, 1):
+                t_start = (s + offset_frames) / fps
+                t_end = (e + offset_frames + 1) / fps
+                payload.append(f"{i}\n{ts(t_start)} --> {ts(t_end)}\n{txt}\n\n")
+            _write_text_atomic(Path(path), "".join(payload))
             logger.info(f"SRT written: {path} ({len(cues)} cues)")
         except Exception as exc:
             logger.warning(f"SRT write failed: {exc}")
@@ -1448,6 +1689,7 @@ class SubtitleRemover:
 
     def process_image(self, input_path: str, output_path: str) -> bool:
         try:
+            _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
             image = cv2.imread(input_path)
             if image is None:
@@ -1462,7 +1704,7 @@ class SubtitleRemover:
 
             if not boxes:
                 logger.info("No text detected, copying original")
-                shutil.copy(input_path, output_path)
+                _copy_file_atomic(input_path, output_path)
                 self._report_progress(1.0, "Complete (no text found)")
                 return True
 
@@ -1472,16 +1714,21 @@ class SubtitleRemover:
 
             self._report_progress(0.9, "Saving result...")
             ext = Path(output_path).suffix.lower()
-            if ext in ('.jpg', '.jpeg'):
-                ok = cv2.imwrite(output_path, result, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            elif ext == '.png':
-                ok = cv2.imwrite(output_path, result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
-            elif ext == '.webp':
-                ok = cv2.imwrite(output_path, result, [cv2.IMWRITE_WEBP_QUALITY, 95])
-            else:
-                ok = cv2.imwrite(output_path, result)
-            if not ok:
-                raise IOError(f"Failed to write output image: {output_path}")
+            temp_output = _allocate_temp_output_path(output_path)
+            try:
+                if ext in ('.jpg', '.jpeg'):
+                    ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                elif ext == '.png':
+                    ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+                elif ext == '.webp':
+                    ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_WEBP_QUALITY, 95])
+                else:
+                    ok = cv2.imwrite(str(temp_output), result)
+                if not ok:
+                    raise IOError(f"Failed to write output image: {output_path}")
+                _promote_temp_output(temp_output, output_path)
+            finally:
+                _cleanup_temp_output(temp_output)
             self._report_progress(1.0, "Complete!")
             return True
 
@@ -1496,7 +1743,10 @@ class SubtitleRemover:
         temp_dir = None
         cap = None
         writer = None
+        mask_writer = None
+        temp_mask_path = None
         try:
+            _ensure_output_parent(output_path)
             self._report_progress(0.0, "Opening video...")
 
             # Optional deinterlace preprocessing. Produces a temp
@@ -1592,12 +1842,12 @@ class SubtitleRemover:
             last_hash_frame_idx = -1
 
             # Mask video writer (optional debug artifact)
-            mask_writer = None
             mask_path = None
             if self.config.export_mask_video:
                 mask_path = str(Path(output_path).with_suffix('')) + '.mask.mp4'
+                temp_mask_path = _allocate_temp_output_path(mask_path)
                 mask_writer = cv2.VideoWriter(
-                    mask_path, cv2.VideoWriter_fourcc(*'mp4v'),
+                    str(temp_mask_path), cv2.VideoWriter_fourcc(*'mp4v'),
                     fps, (width, height), isColor=False)
                 if not mask_writer.isOpened():
                     logger.warning(f"Could not open mask video writer: {mask_path}")
@@ -1717,13 +1967,16 @@ class SubtitleRemover:
             writer = None
             if mask_writer is not None:
                 mask_writer.release()
-                logger.info(f"Mask video written: {mask_path}")
 
             self._report_progress(0.9, "Merging audio...")
             if self.config.preserve_audio:
                 self._merge_audio(input_path, temp_video, output_path)
             else:
                 self._reencode_or_copy(temp_video, output_path)
+            if mask_writer is not None and mask_path and temp_mask_path:
+                _promote_temp_output(temp_mask_path, mask_path)
+                temp_mask_path = None
+                logger.info(f"Mask video written: {mask_path}")
 
             if self.config.export_srt and self._srt_entries:
                 srt_path = str(Path(output_path).with_suffix('.srt'))
@@ -1758,11 +2011,17 @@ class SubtitleRemover:
                     writer.release()
                 except Exception:
                     pass
+            if mask_writer is not None:
+                try:
+                    mask_writer.release()
+                except Exception:
+                    pass
             if cap is not None:
                 try:
                     cap.release()
                 except Exception:
                     pass
+            _cleanup_temp_output(temp_mask_path)
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -1785,25 +2044,32 @@ class SubtitleRemover:
 
     def _reencode_or_copy(self, source: str, output: str):
         """Re-encode with preferred encoder or just copy if FFmpeg unavailable."""
+        temp_output = _allocate_temp_output_path(output)
         try:
-            cmd = ['ffmpeg', '-y', '-i', source]
+            _ensure_output_parent(output)
+            cmd = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats', '-i', source]
             cmd += self._get_encode_args()
-            cmd += ['-an', output]
+            cmd += ['-an', str(temp_output)]
             subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+            _promote_temp_output(temp_output, output)
         except subprocess.CalledProcessError as e:
             if self._hw_encoder:
                 logger.warning(f"HW encoder failed, retrying with libx264: {e}")
                 self._hw_encoder = None
                 self._reencode_or_copy(source, output)
                 return
-            shutil.copy(source, output)
+            _copy_file_atomic(source, output)
         except Exception:
-            shutil.copy(source, output)
+            _copy_file_atomic(source, output)
+        finally:
+            _cleanup_temp_output(temp_output)
 
     def _merge_audio(self, original: str, processed: str, output: str):
+        temp_output = _allocate_temp_output_path(output)
         try:
+            _ensure_output_parent(output)
             cmd = [
-                'ffmpeg', '-y',
+                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
                 '-i', processed,
             ]
             # When a time range was used, seek audio to match the processed segment
@@ -1821,14 +2087,15 @@ class SubtitleRemover:
                 '-map', '0:v:0',
                 '-map', '1:a:0?',
                 '-shortest',
-                output,
+                str(temp_output),
             ]
             subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+            _promote_temp_output(temp_output, output)
             encoder_name = self._hw_encoder or 'libx264'
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")
         except subprocess.TimeoutExpired:
             logger.warning("FFmpeg audio merge timed out (>10min), copying video without audio")
-            shutil.copy(processed, output)
+            _copy_file_atomic(processed, output)
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
             if self._hw_encoder:
@@ -1837,10 +2104,12 @@ class SubtitleRemover:
                 self._merge_audio(original, processed, output)
                 return
             logger.warning(f"Audio merge failed: {e}, copying video without audio")
-            shutil.copy(processed, output)
+            _copy_file_atomic(processed, output)
         except FileNotFoundError:
             logger.warning("FFmpeg not found, copying video without audio")
-            shutil.copy(processed, output)
+            _copy_file_atomic(processed, output)
+        finally:
+            _cleanup_temp_output(temp_output)
 
 
 def _default_checkpoint_dir() -> Path:
@@ -1871,30 +2140,52 @@ def _checkpoint_is_done(ckpt_dir: Path, key: str, output_path: str) -> bool:
 def _checkpoint_mark_done(ckpt_dir: Path, key: str):
     marker = ckpt_dir / f"{key}.done"
     try:
-        marker.write_text("ok", encoding="utf-8")
+        _write_text_atomic(marker, "ok")
     except Exception as exc:
         logger.warning(f"Could not write checkpoint {marker}: {exc}")
 
 
 def _load_json_config(path: str) -> dict:
     """Load a JSON config file of {field: value} pairs for ProcessingConfig."""
-    import json as _json
     with open(path, "r", encoding="utf-8") as f:
-        return _json.load(f)
+        payload = json.load(f)
+    if not isinstance(payload, dict):
+        raise ValueError("config file must contain a top-level JSON object")
+    return payload
+
+
+def _apply_auto_band_override(remover, input_path: str, *, auto_band: bool,
+                              base_subtitle_area, base_subtitle_areas):
+    """Reset per-file region overrides before optionally probing a fresh band."""
+    remover.config.subtitle_area = base_subtitle_area
+    remover.config.subtitle_areas = list(base_subtitle_areas) if base_subtitle_areas else None
+    if not auto_band or base_subtitle_area or base_subtitle_areas:
+        return base_subtitle_area
+    band = remover.detect_subtitle_band(input_path)
+    remover.config.subtitle_area = band
+    return band
 
 
 def main():
     """CLI entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Video Subtitle Remover")
+    parser = argparse.ArgumentParser(
+        description="Video Subtitle Remover Pro CLI",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python -m backend.processor -i input.mp4 -o output.mp4 -m sttn --lang en\n"
+            "  python -m backend.processor --pattern \"inputs/*.mp4\" --out-dir cleaned --mode auto"
+        ),
+    )
     parser.add_argument("--input", "-i", help="Input file path")
     parser.add_argument("--output", "-o", help="Output file path")
     parser.add_argument("--pattern", help="Glob pattern for batch mode (e.g. 'inputs/*.mp4')")
     parser.add_argument("--out-dir", help="Output directory for batch mode")
     parser.add_argument("--config", help="JSON config file (key=value pairs overriding CLI defaults)")
     parser.add_argument("--checkpoint-dir", default=None,
-                       help="Checkpoint dir for crash-resume (default: %APPDATA%/.../checkpoints)")
+                       help="Checkpoint dir for crash-resume (default: %%APPDATA%%/.../checkpoints)")
     parser.add_argument("--no-resume", action="store_true",
                        help="Ignore any existing checkpoint and reprocess every file")
     parser.add_argument("--mode", "-m", default="sttn",
@@ -1966,6 +2257,28 @@ def main():
         parser.error("--pattern requires --out-dir")
     if args.input and not args.output:
         parser.error("--input requires --output")
+    if not 0.1 <= args.threshold <= 1.0:
+        parser.error("--threshold must be between 0.1 and 1.0")
+    if not 15 <= args.crf <= 35:
+        parser.error("--crf must be between 15 and 35")
+    if args.start < 0 or args.end < 0:
+        parser.error("--start and --end must be zero or positive")
+    if args.end and args.end < args.start:
+        parser.error("--end must be greater than or equal to --start")
+    if args.frame_skip < 0:
+        parser.error("--frame-skip must be zero or positive")
+    if args.mask_dilate < 0:
+        parser.error("--mask-dilate must be zero or positive")
+    if args.mask_feather < 0:
+        parser.error("--mask-feather must be zero or positive")
+    if args.edge_ring < 0:
+        parser.error("--edge-ring must be zero or positive")
+    if not 0.0 <= args.auto_threshold <= 1.0:
+        parser.error("--auto-threshold must be between 0 and 1")
+    if not 0 <= args.phash_distance <= 64:
+        parser.error("--phash-distance must be between 0 and 64")
+    if args.colour_tolerance < 0:
+        parser.error("--colour-tolerance must be zero or positive")
 
     config = ProcessingConfig(
         mode=InpaintMode(args.mode),
@@ -2000,6 +2313,9 @@ def main():
         quality_report=args.quality_report,
         use_hw_encode=not args.no_hw_encode,
     )
+    config = normalize_processing_config(config)
+
+    ffmpeg_ready = shutil.which("ffmpeg") is not None
 
     # Optional JSON config overlay. Applied after CLI args so a config file
     # can set fields that aren't exposed as flags (kalman_max_age,
@@ -2009,15 +2325,19 @@ def main():
             overlay = _load_json_config(args.config)
             for k, v in overlay.items():
                 if k == "mode":
-                    try:
-                        config.mode = InpaintMode(v)
-                    except ValueError:
+                    mode_value = _coerce_backend_mode(v)
+                    if isinstance(v, str) and v.strip().casefold() in {
+                        "sttn", "lama", "propainter", "pro painter", "auto"
+                    }:
+                        config.mode = mode_value
+                    else:
                         logger.warning(f"Ignoring unknown mode in config: {v}")
                     continue
                 if hasattr(config, k):
                     setattr(config, k, v)
                 else:
                     logger.warning(f"Ignoring unknown config field: {k}")
+            config = normalize_processing_config(config)
             logger.info(f"Loaded config overlay from {args.config}")
         except Exception as exc:
             parser.error(f"Could not load --config {args.config}: {exc}")
@@ -2026,23 +2346,45 @@ def main():
     remover = SubtitleRemover(config)
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
 
+    print(
+        "[run] "
+        f"mode={config.mode.value} | device={config.device} | lang={config.detection_lang} | "
+        f"audio={'on' if config.preserve_audio else 'off'} | hw_encode={'on' if config.use_hw_encode else 'off'}"
+    )
+    if config.preserve_audio and not ffmpeg_ready:
+        print("[note] FFmpeg is not available, so outputs will be saved without original audio.")
+
     video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
     ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else _default_checkpoint_dir()
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+    base_subtitle_area = config.subtitle_area
+    base_subtitle_areas = list(config.subtitle_areas) if config.subtitle_areas else None
 
     def _process_one(inp: str, outp: str) -> bool:
         key = _checkpoint_key(inp, outp)
         if not args.no_resume and _checkpoint_is_done(ckpt_dir, key, outp):
             print(f"[skip] {Path(inp).name} (checkpoint)")
             return True
+        _apply_auto_band_override(
+            remover,
+            inp,
+            auto_band=False,
+            base_subtitle_area=base_subtitle_area,
+            base_subtitle_areas=base_subtitle_areas,
+        )
         ext = Path(inp).suffix.lower()
         if ext in video_exts:
             if args.auto_band:
-                band = remover.detect_subtitle_band(inp)
+                band = _apply_auto_band_override(
+                    remover,
+                    inp,
+                    auto_band=True,
+                    base_subtitle_area=base_subtitle_area,
+                    base_subtitle_areas=base_subtitle_areas,
+                )
                 if band:
                     print(f"[auto-band] {Path(inp).name}: {band}")
-                    remover.config.subtitle_area = band
-                else:
+                elif not (base_subtitle_area or base_subtitle_areas):
                     print(f"[auto-band] {Path(inp).name}: no dominant band, full-frame")
             ok = remover.process_video(inp, outp)
         else:
@@ -2060,11 +2402,16 @@ def main():
             parser.error(f"No files matched pattern: {args.pattern}")
         out_dir = Path(args.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[batch] {len(inputs)} file(s) | out={out_dir} | resume={not args.no_resume}")
+        print(f"[batch] {len(inputs)} file(s) queued | out={out_dir} | resume={'on' if not args.no_resume else 'off'}")
         failures = 0
+        reserved_outputs: set[str] = set()
         for i, inp in enumerate(inputs, 1):
             src = Path(inp)
-            outp = str(out_dir / f"{src.stem}_no_sub{src.suffix}")
+            outp = str(_choose_available_output_path(
+                out_dir / f"{src.stem}_no_sub{src.suffix}",
+                reserved_outputs,
+            ))
+            reserved_outputs.add(_path_key(outp))
             print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
             try:
                 ok = _process_one(inp, outp)
@@ -2073,11 +2420,17 @@ def main():
                 ok = False
             if not ok:
                 failures += 1
-        print(f"\n[batch] done: {len(inputs) - failures}/{len(inputs)} succeeded")
+        succeeded = len(inputs) - failures
+        print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded")
+        if failures:
+            print("[batch] Some items need attention. Review the errors above before retrying.")
         sys.exit(0 if failures == 0 else 1)
 
     # ---- Single-file mode ----
+    print(f"[file] source={Path(args.input).name}")
+    print(f"[file] output={args.output}")
     success = _process_one(args.input, args.output)
+    print(f"[file] {'completed' if success else 'failed'}")
     sys.exit(0 if success else 1)
 
 
