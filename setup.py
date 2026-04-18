@@ -3,20 +3,19 @@ Video Subtitle Remover Pro - Setup Script
 ==========================================
 
 This script helps set up the application environment on Windows.
-Run: python setup.py install
+Run: python setup.py
 """
 
 import os
 import sys
 import subprocess
 import platform
-import urllib.request
-import zipfile
 import shutil
 from pathlib import Path
 
 # Enable ANSI escape codes on Windows 10+
 os.system('')
+REQUIREMENTS_FILE = Path("requirements.txt")
 
 
 class Colors:
@@ -227,26 +226,38 @@ def install_dependencies():
     print(f"\n{Colors.BLUE}[6/6]{Colors.END} Installing other dependencies...")
     
     pip = get_pip_command()
-    
-    packages = [
-        'numpy>=1.21.0',
-        'opencv-python>=4.5.0',
-        'Pillow>=9.0.0',
-        'easyocr>=1.7.0',
-        'simple-lama-inpainting>=0.1.0',
-    ]
 
     try:
-        # Install paddleocr (may fail if PaddlePaddle failed)
-        try:
-            subprocess.run([pip, 'install', 'paddleocr>=2.6.0'], check=True, capture_output=True)
-            print(f"  [OK] PaddleOCR installed")
-        except Exception:
-            print(f"  Note: PaddleOCR skipped (EasyOCR will be used instead)")
+        print("  Refreshing packaging tools...")
+        subprocess.run([pip, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'], check=True)
 
-        for package in packages:
+        if REQUIREMENTS_FILE.exists():
+            print(f"  Installing dependencies from {REQUIREMENTS_FILE}...")
+            try:
+                subprocess.run([pip, 'install', '-r', str(REQUIREMENTS_FILE)], check=True)
+                print(f"  [OK] Requirements installed")
+                return True
+            except subprocess.CalledProcessError:
+                print(f"  Requirements install hit an optional dependency issue, falling back to the core stack...")
+
+        core_packages = [
+            'numpy>=1.21.0',
+            'opencv-python>=4.5.0',
+            'Pillow>=9.0.0',
+            'rapidocr>=2.0.0',
+            'easyocr>=1.7.0',
+            'simple-lama-inpainting>=0.1.0',
+        ]
+
+        for package in core_packages:
             print(f"  Installing {package}...")
-            subprocess.run([pip, 'install', package], check=True, capture_output=True)
+            subprocess.run([pip, 'install', package], check=True)
+
+        try:
+            subprocess.run([pip, 'install', 'paddleocr>=3.0.0'], check=True)
+            print(f"  [OK] PaddleOCR installed")
+        except subprocess.CalledProcessError:
+            print(f"  Note: PaddleOCR skipped (RapidOCR / EasyOCR will be used instead)")
 
         print(f"  [OK] All dependencies installed")
         return True
@@ -281,29 +292,131 @@ def create_launcher():
     
     # Windows batch file
     batch_content = '''@echo off
+setlocal EnableDelayedExpansion
+
 title Video Subtitle Remover Pro
+
 cd /d "%~dp0"
-call venv\\Scripts\\activate.bat
-python VideoSubtitleRemover.py
+
+if not exist "venv\\Scripts\\python.exe" (
+    echo.
+    echo  ============================================================
+    echo   VIDEO SUBTITLE REMOVER PRO
+    echo  ============================================================
+    echo.
+    echo  First-time setup required.
+    echo  Preparing the runtime and dependencies...
+    echo.
+    python setup.py
+    if errorlevel 1 (
+        echo.
+        echo  Setup did not complete. Review the messages above, then try again.
+        pause
+        exit /b 1
+    )
+)
+
+echo Launching Video Subtitle Remover Pro...
+if exist "venv\\Scripts\\pythonw.exe" (
+    start "" "venv\\Scripts\\pythonw.exe" "VideoSubtitleRemover.py"
+    exit /b 0
+)
+
+if exist "venv\\Scripts\\python.exe" (
+    start "" "venv\\Scripts\\python.exe" "VideoSubtitleRemover.py"
+    exit /b 0
+)
+
+echo.
+echo  The Python runtime could not be found in the virtual environment.
+echo  Re-run setup.py to repair the installation.
 pause
+exit /b 1
 '''
     
     with open("Run_VSR_Pro.bat", "w") as f:
         f.write(batch_content)
+
+    debug_batch_content = '''@echo off
+setlocal EnableDelayedExpansion
+
+title Video Subtitle Remover Pro (Debug)
+
+cd /d "%~dp0"
+
+if not exist "venv\\Scripts\\python.exe" (
+    echo.
+    echo  ============================================================
+    echo   VIDEO SUBTITLE REMOVER PRO (DEBUG)
+    echo  ============================================================
+    echo.
+    echo  First-time setup required.
+    echo  Preparing the runtime and dependencies...
+    echo.
+    python setup.py
+    if errorlevel 1 (
+        echo.
+        echo  Setup did not complete. Review the messages above, then try again.
+        pause
+        exit /b 1
+    )
+)
+
+call venv\\Scripts\\activate.bat
+echo Launching Video Subtitle Remover Pro in debug mode...
+echo The console will stay open after exit so you can review logs and tracebacks.
+echo.
+python VideoSubtitleRemover.py
+
+pause
+'''
+
+    with open("Run_VSR_Pro_Debug.bat", "w") as f:
+        f.write(debug_batch_content)
     
     # PowerShell script
     ps_content = '''# Video Subtitle Remover Pro Launcher
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
-& .\\venv\\Scripts\\Activate.ps1
-python VideoSubtitleRemover.py
+
+if (-not (Test-Path ".\\venv\\Scripts\\python.exe")) {
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host " VIDEO SUBTITLE REMOVER PRO" -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "First-time setup required." -ForegroundColor Yellow
+    Write-Host "Preparing the runtime and dependencies..." -ForegroundColor Yellow
+    Write-Host ""
+    python setup.py
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "Setup did not complete. Review the messages above, then try again." -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit $LASTEXITCODE
+    }
+}
+
+if (Test-Path ".\\venv\\Scripts\\pythonw.exe") {
+    Start-Process -FilePath ".\\venv\\Scripts\\pythonw.exe" -ArgumentList "VideoSubtitleRemover.py"
+    exit 0
+}
+
+if (Test-Path ".\\venv\\Scripts\\python.exe") {
+    Start-Process -FilePath ".\\venv\\Scripts\\python.exe" -ArgumentList "VideoSubtitleRemover.py"
+    exit 0
+}
+
+Write-Host "The Python runtime could not be found in the virtual environment." -ForegroundColor Yellow
 Read-Host "Press Enter to exit"
+exit 1
 '''
-    
+
     with open("Run_VSR_Pro.ps1", "w") as f:
         f.write(ps_content)
-    
+
     print(f"  [OK] Created Run_VSR_Pro.bat")
+    print(f"  [OK] Created Run_VSR_Pro_Debug.bat")
     print(f"  [OK] Created Run_VSR_Pro.ps1")
 
 
@@ -338,7 +451,7 @@ def main():
         sys.exit(1)
     
     # Check FFmpeg
-    check_ffmpeg()
+    ffmpeg_ok = check_ffmpeg()
     
     # Create launcher
     create_launcher()
@@ -349,6 +462,7 @@ def main():
     print(f"{Colors.GREEN}{'='*60}{Colors.END}")
     print(f"\n  To run the application:")
     print(f"    * Double-click: {Colors.BOLD}Run_VSR_Pro.bat{Colors.END}")
+    print(f"    * Troubleshooting: {Colors.BOLD}Run_VSR_Pro_Debug.bat{Colors.END}")
     print(f"    * Or run: {Colors.BOLD}python VideoSubtitleRemover.py{Colors.END}")
     print(f"\n  GPU Mode: ", end="")
     
@@ -358,6 +472,8 @@ def main():
         print(f"{Colors.GREEN}DirectML{Colors.END}")
     else:
         print(f"{Colors.YELLOW}CPU (slower){Colors.END}")
+    if not ffmpeg_ok:
+        print(f"\n  {Colors.YELLOW}FFmpeg is still missing.{Colors.END} Video outputs will work, but audio preservation stays unavailable until FFmpeg is installed.")
 
 
 if __name__ == "__main__":

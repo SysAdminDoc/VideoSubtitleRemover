@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.2.0)'
+        description: 'Version tag (e.g. v3.12.0)'
         required: true
 
 permissions:
@@ -24,14 +24,77 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy opencv-python Pillow
-          pip install simple-lama-inpainting
-          pip install easyocr
-          pip install pyinstaller
+          python -m pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy opencv-python Pillow
+          python -m pip install rapidocr rapidocr-onnxruntime
+          python -m pip install simple-lama-inpainting
+          python -m pip install easyocr
+          try {
+            python -m pip install "paddleocr>=3.0.0"
+          } catch {
+            Write-Host "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
+          }
+          try {
+            python -m pip install "torch-directml==0.2.5.dev240914"
+          } catch {
+            Write-Host "torch-directml install skipped; release will rely on CUDA/CPU builds."
+          }
+          python -m pip install pyinstaller
+
+      - name: Run regression tests
+        run: |
+          python -m unittest discover -s tests -v
 
       - name: Build EXE
         run: |
-          pyinstaller --noconfirm --onedir --windowed --name "VideoSubtitleRemoverPro" --add-data "backend;backend" --hidden-import "PIL._tkinter_finder" --hidden-import "cv2" --hidden-import "numpy" --hidden-import "tkinter" --hidden-import "tkinter.ttk" --hidden-import "tkinter.filedialog" --hidden-import "tkinter.messagebox" --hidden-import "simple_lama_inpainting" --hidden-import "easyocr" VideoSubtitleRemover.py
+          $iconArgs = @()
+          if (Test-Path "icon.ico") {
+            $iconArgs = @("--icon", "icon.ico")
+          }
+
+          $dataArgs = @("--add-data", "backend;backend")
+          if (Test-Path "assets") { $dataArgs += @("--add-data", "assets;assets") }
+          if (Test-Path "banner.png") { $dataArgs += @("--add-data", "banner.png;.") }
+          if (Test-Path "icon.png") { $dataArgs += @("--add-data", "icon.png;.") }
+          if (Test-Path "favicon.ico") { $dataArgs += @("--add-data", "favicon.ico;.") }
+          if (Test-Path "icon.ico") { $dataArgs += @("--add-data", "icon.ico;.") }
+          if (Test-Path "icons") { $dataArgs += @("--add-data", "icons;icons") }
+
+          $hiddenImports = @(
+            "--hidden-import", "PIL._tkinter_finder",
+            "--hidden-import", "cv2",
+            "--hidden-import", "numpy",
+            "--hidden-import", "tkinter",
+            "--hidden-import", "tkinter.ttk",
+            "--hidden-import", "tkinter.filedialog",
+            "--hidden-import", "tkinter.messagebox",
+            "--hidden-import", "simple_lama_inpainting"
+          )
+
+          function Add-HiddenImportIfAvailable([string]$moduleName) {
+            python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$moduleName') else 1)"
+            if ($LASTEXITCODE -eq 0) {
+              $script:hiddenImports += @("--hidden-import", $moduleName)
+              Write-Host "Including optional module: $moduleName"
+            } else {
+              Write-Host "Optional module not installed, skipping: $moduleName"
+            }
+          }
+
+          Add-HiddenImportIfAvailable "rapidocr"
+          Add-HiddenImportIfAvailable "rapidocr_onnxruntime"
+          Add-HiddenImportIfAvailable "paddleocr"
+          Add-HiddenImportIfAvailable "easyocr"
+          Add-HiddenImportIfAvailable "torch_directml"
+
+          python -m PyInstaller --noconfirm --onedir --windowed @iconArgs --name "VideoSubtitleRemoverPro" @dataArgs @hiddenImports VideoSubtitleRemover.py
+
+          $distDir = "dist\VideoSubtitleRemoverPro"
+          foreach ($doc in @("README.md", "LICENSE", "CHANGELOG.md")) {
+            if (Test-Path $doc) {
+              Copy-Item $doc -Destination (Join-Path $distDir $doc) -Force
+            }
+          }
 
       - name: Package release
         run: |

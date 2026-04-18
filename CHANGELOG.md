@@ -2,6 +2,59 @@
 
 All notable changes to VideoSubtitleRemover will be documented in this file.
 
+## [Unreleased]
+
+Premium polish and product-coherence repair pass across the desktop UI,
+runtime behavior, docs, packaging, and release tooling.
+
+- **GUI workflow polish**: responsive shell behavior, stronger next-step
+  guidance, richer queue/preview states, clearer mask-review affordances,
+  and a themed preset-save dialog.
+- **Minimalist GUI pass**: the header, import area, queue list, and preview
+  surfaces now use fewer competing accents, shorter copy, calmer status
+  chips, and fewer duplicated row actions so core tasks are easier to find.
+- **Settings reliability**: queued idle items now refresh from the current
+  UI state when a batch starts, so late changes to language, region, and
+  quality settings are honored consistently.
+- **Runtime trust signals**: FFmpeg readiness is surfaced in the header,
+  About dialog, and processing warnings so audio-preservation behavior is
+  never ambiguous.
+- **Quality-report follow-through**: completed queue items, previews, and the
+  batch summary now surface sampled PSNR / SSIM metrics when quality checks
+  are enabled, matching the control's promise.
+- **Queue intake repair**: bulk imports now summarize added vs duplicate items
+  more calmly, and queued outputs stay collision-safe even when multiple idle
+  items target the same custom output location.
+- **Config hardening**: settings, presets, and CLI JSON overlays now validate
+  malformed values more defensively, use safer atomic writes for local JSON
+  persistence, and fall back cleanly from corrupted top-level payloads.
+- **Backend path safety**: CLI and batch outputs now create missing parent
+  directories, avoid same-name collisions inside shared batch output folders,
+  and reduce ffmpeg log capture noise during long-running encode steps.
+- **Output transaction safety**: final image, video, mask-video, and fallback
+  copy writes now stage into sibling temp files before replacing the final
+  destination, which avoids leaking partial outputs after failures or user
+  stops.
+- **Setup and launcher polish**: setup now prefers `requirements.txt`,
+  quietly launches the GUI with `pythonw`, and keeps the generated batch and
+  debug launchers aligned with the polished first-run experience.
+- **Packaging repair**: local and GitHub Actions builds now include more of
+  the real runtime shape, including branding assets, optional OCR imports, and
+  bundled docs in release folders.
+- **Docs alignment**: README version/license/workflow details now match the
+  current product behavior, and placeholder support folders now explain their
+  purpose clearly.
+- **Regression coverage**: added focused unittest coverage for config
+  normalization, defensive JSON loading, and output collision handling, and
+  the release workflow now runs those tests before packaging.
+- **Stop-flow hardening**: the desktop batch controls now treat Stop as a
+  safe stop request instead of an immediate restart opportunity, preventing
+  overlapping processing threads while a current item winds down.
+- **Preview and shutdown race repair**: background mask previews now ignore
+  stale results after the user switches items, and closing the app during a
+  batch waits briefly for active work to notice cancellation instead of
+  immediately tearing down the UI.
+
 ## [v3.12.0] - 2026-04-17
 
 Smart routing, legacy-source preprocessing, and self-testing. Four more
