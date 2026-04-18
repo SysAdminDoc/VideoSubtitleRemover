@@ -14,6 +14,7 @@ import json
 import threading
 import subprocess
 import time
+import tempfile
 import logging
 import logging.handlers
 import traceback
@@ -135,7 +136,7 @@ class Theme:
 
     # Progress
     PROGRESS_BG = "#182236"
-    PROGRESS_FILL = "#34d399"
+    PROGRESS_FILL = BLUE_PRIMARY
 
     # Typography (Segoe UI stack). Use these constants instead of inline fonts.
     FONT_FAMILY = "Segoe UI"
@@ -374,13 +375,63 @@ class ProcessingConfig:
             "onboarding_seen": self.onboarding_seen,
         }
 
+    def normalized(self) -> 'ProcessingConfig':
+        """Coerce persisted or imported values into a safe, UI-friendly shape."""
+        self.mode = _coerce_gui_mode(self.mode)
+        self.use_gpu = _coerce_bool(self.use_gpu, True)
+        self.gpu_id = max(0, _coerce_int(self.gpu_id, 0))
+        self.sttn_skip_detection = _coerce_bool(self.sttn_skip_detection, False)
+        self.sttn_neighbor_stride = _coerce_int(self.sttn_neighbor_stride, 10, 5, 30)
+        self.sttn_reference_length = _coerce_int(self.sttn_reference_length, 10, 5, 30)
+        self.sttn_max_load_num = _coerce_int(self.sttn_max_load_num, 30, 10, 100)
+        self.lama_super_fast = _coerce_bool(self.lama_super_fast, False)
+        self.subtitle_area = _coerce_rect(self.subtitle_area)
+        self.subtitle_areas = _coerce_rect_list(self.subtitle_areas)
+        self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
+        self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
+        self.time_start = max(0.0, _coerce_float(self.time_start, 0.0))
+        self.time_end = max(0.0, _coerce_float(self.time_end, 0.0))
+        if self.time_end and self.time_end < self.time_start:
+            self.time_end = 0.0
+        self.detection_frame_skip = _coerce_int(self.detection_frame_skip, 0, 0, 10)
+        self.mask_dilate_px = _coerce_int(self.mask_dilate_px, 8, 0, 20)
+        self.mask_feather_px = _coerce_int(self.mask_feather_px, 4, 0, 15)
+        self.tbe_enable = _coerce_bool(self.tbe_enable, True)
+        self.tbe_min_coverage = _coerce_int(self.tbe_min_coverage, 3, 1, 10)
+        self.tbe_use_median = _coerce_bool(self.tbe_use_median, True)
+        self.tbe_flow_warp = _coerce_bool(self.tbe_flow_warp, False)
+        self.tbe_scene_cut_split = _coerce_bool(self.tbe_scene_cut_split, True)
+        self.tbe_scene_cut_threshold = _coerce_float(self.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
+        self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 8)
+        self.auto_band = _coerce_bool(self.auto_band, False)
+        self.export_srt = _coerce_bool(self.export_srt, False)
+        self.export_mask_video = _coerce_bool(self.export_mask_video, False)
+        self.adaptive_batch = _coerce_bool(self.adaptive_batch, True)
+        self.auto_exposure_threshold = _coerce_float(self.auto_exposure_threshold, 0.55, 0.0, 1.0)
+        self.deinterlace = _coerce_bool(self.deinterlace, False)
+        self.deinterlace_auto = _coerce_bool(self.deinterlace_auto, True)
+        self.keyframe_detection = _coerce_bool(self.keyframe_detection, False)
+        self.quality_report = _coerce_bool(self.quality_report, False)
+        self.kalman_tracking = _coerce_bool(self.kalman_tracking, True)
+        self.kalman_iou_threshold = _coerce_float(self.kalman_iou_threshold, 0.3, 0.0, 1.0)
+        self.kalman_max_age = _coerce_int(self.kalman_max_age, 2, 0, 30)
+        self.phash_skip_enable = _coerce_bool(self.phash_skip_enable, True)
+        self.phash_skip_distance = _coerce_int(self.phash_skip_distance, 4, 0, 64)
+        self.colour_tune_enable = _coerce_bool(self.colour_tune_enable, False)
+        self.colour_tune_tolerance = _coerce_int(self.colour_tune_tolerance, 25, 0, 100)
+        self.output_format = _coerce_text(self.output_format, "mp4", 16).lower()
+        self.preserve_audio = _coerce_bool(self.preserve_audio, True)
+        self.output_quality = _coerce_int(self.output_quality, 23, 15, 35)
+        self.use_hw_encode = _coerce_bool(self.use_hw_encode, True)
+        self.window_geometry = _coerce_text(self.window_geometry, "", 64)
+        self.adv_panel_open = _coerce_bool(self.adv_panel_open, False)
+        self.log_panel_open = _coerce_bool(self.log_panel_open, True)
+        self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)
+        return self
+
     @classmethod
     def from_dict(cls, data: dict) -> 'ProcessingConfig':
-        mode_str = data.get("mode", "STTN")
-        try:
-            mode = InpaintMode(mode_str)
-        except ValueError:
-            mode = InpaintMode.STTN
+        mode = data.get("mode", InpaintMode.STTN.value)
         return cls(
             mode=mode,
             use_gpu=data.get("use_gpu", True),
@@ -430,7 +481,7 @@ class ProcessingConfig:
             adv_panel_open=data.get("adv_panel_open", False),
             log_panel_open=data.get("log_panel_open", True),
             onboarding_seen=data.get("onboarding_seen", False),
-        )
+        ).normalized()
 
 
 @dataclass
@@ -440,12 +491,138 @@ class QueueItem:
     file_path: str
     output_path: str
     config: ProcessingConfig
+    output_path_locked: bool = False
     status: ProcessingStatus = ProcessingStatus.IDLE
     progress: float = 0.0
     message: str = ""
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    quality_report: Optional[dict] = None
+
+
+def _coerce_bool(value, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off", ""}:
+            return False
+    return default
+
+
+def _coerce_int(value, default: int, min_value: Optional[int] = None,
+                max_value: Optional[int] = None) -> int:
+    try:
+        coerced = int(float(value))
+    except (TypeError, ValueError):
+        coerced = default
+    if min_value is not None:
+        coerced = max(min_value, coerced)
+    if max_value is not None:
+        coerced = min(max_value, coerced)
+    return coerced
+
+
+def _coerce_float(value, default: float, min_value: Optional[float] = None,
+                  max_value: Optional[float] = None) -> float:
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError):
+        coerced = default
+    if min_value is not None:
+        coerced = max(min_value, coerced)
+    if max_value is not None:
+        coerced = min(max_value, coerced)
+    return coerced
+
+
+def _coerce_text(value, default: str, max_length: int = 256) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if len(text) > max_length:
+            text = text[:max_length]
+        return text
+    return default
+
+
+def _coerce_rect(value) -> Optional[Tuple[int, int, int, int]]:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        x1, y1, x2, y2 = [int(float(v)) for v in value]
+    except (TypeError, ValueError):
+        return None
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = max(0, x2), max(0, y2)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return (x1, y1, x2, y2)
+
+
+def _coerce_rect_list(value) -> Optional[List[Tuple[int, int, int, int]]]:
+    if not isinstance(value, (list, tuple)):
+        return None
+    rects = []
+    for item in value:
+        rect = _coerce_rect(item)
+        if rect:
+            rects.append(rect)
+    return rects or None
+
+
+def _coerce_gui_mode(value) -> InpaintMode:
+    if isinstance(value, InpaintMode):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        mode_map = {
+            "auto": InpaintMode.AUTO,
+            "sttn": InpaintMode.STTN,
+            "lama": InpaintMode.LAMA,
+            "propainter": InpaintMode.PROPAINTER,
+            "pro painter": InpaintMode.PROPAINTER,
+        }
+        if normalized in mode_map:
+            return mode_map[normalized]
+    return InpaintMode.STTN
+
+
+def _read_json_object(path: Path, label: str) -> Optional[dict]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning(f"Could not read {label} from {path}: {exc}")
+        return None
+    if not isinstance(payload, dict):
+        logger.warning(f"Ignoring {label} at {path}: expected a JSON object")
+        return None
+    return payload
+
+
+def _write_json_atomic(path: Path, payload: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        temp_path = Path(temp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 # =============================================================================
@@ -456,7 +633,9 @@ def load_settings() -> ProcessingConfig:
     """Load saved settings from disk."""
     try:
         if SETTINGS_FILE.exists():
-            data = json.loads(SETTINGS_FILE.read_text(encoding='utf-8'))
+            data = _read_json_object(SETTINGS_FILE, "settings")
+            if not data:
+                return ProcessingConfig()
             logger.info(f"Settings loaded from {SETTINGS_FILE}")
             return ProcessingConfig.from_dict(data)
     except Exception as e:
@@ -467,7 +646,7 @@ def load_settings() -> ProcessingConfig:
 def save_settings(config: ProcessingConfig):
     """Save settings to disk."""
     try:
-        SETTINGS_FILE.write_text(json.dumps(config.to_dict(), indent=2), encoding='utf-8')
+        _write_json_atomic(SETTINGS_FILE, config.normalized().to_dict())
         logger.info(f"Settings saved to {SETTINGS_FILE}")
     except Exception as e:
         logger.warning(f"Could not save settings: {e}")
@@ -562,17 +741,16 @@ BUILTIN_PRESETS = {
 
 
 def _load_user_presets() -> dict:
-    try:
-        if PRESETS_FILE.exists():
-            return json.loads(PRESETS_FILE.read_text(encoding='utf-8'))
-    except Exception as exc:
-        logger.warning(f"Could not load user presets: {exc}")
+    if PRESETS_FILE.exists():
+        payload = _read_json_object(PRESETS_FILE, "user presets")
+        if payload is not None:
+            return payload
     return {}
 
 
 def _save_user_presets(presets: dict):
     try:
-        PRESETS_FILE.write_text(json.dumps(presets, indent=2), encoding='utf-8')
+        _write_json_atomic(PRESETS_FILE, presets)
     except Exception as exc:
         logger.warning(f"Could not save user presets: {exc}")
 
@@ -581,7 +759,8 @@ def list_presets() -> List[Tuple[str, str]]:
     """Return [(name, description)] for every built-in + user preset."""
     items = [(n, p.get("description", "")) for n, p in BUILTIN_PRESETS.items()]
     for name, payload in _load_user_presets().items():
-        items.append((name, payload.get("description", "User preset")))
+        if isinstance(payload, dict):
+            items.append((name, _coerce_text(payload.get("description", "User preset"), "User preset", 120)))
     return items
 
 
@@ -590,25 +769,27 @@ def apply_preset(config: ProcessingConfig, name: str) -> bool:
     preset = BUILTIN_PRESETS.get(name)
     if preset is None:
         preset = _load_user_presets().get(name)
-    if not preset:
+    if not isinstance(preset, dict):
         return False
     fields = preset.get("fields", {})
+    if not isinstance(fields, dict):
+        return False
     for k, v in fields.items():
         if k == "mode":
-            try:
-                config.mode = InpaintMode(v)
-            except ValueError:
-                pass
+            config.mode = _coerce_gui_mode(v)
             continue
         if hasattr(config, k):
             setattr(config, k, v)
+    config.normalized()
     return True
 
 
 def save_user_preset(name: str, description: str, config: ProcessingConfig,
                       fields: Optional[List[str]] = None) -> bool:
     """Snapshot the selected fields from `config` into a user preset."""
-    if not name.strip():
+    name = _coerce_text(name, "", 80)
+    description = _coerce_text(description, "User preset", 160) or "User preset"
+    if not name:
         return False
     if name in BUILTIN_PRESETS:
         return False  # don't let users overwrite built-ins
@@ -620,6 +801,7 @@ def save_user_preset(name: str, description: str, config: ProcessingConfig,
         "auto_band",
     ]
     fields = fields or default_fields
+    config = config.normalized()
     snap = {}
     for k in fields:
         v = getattr(config, k, None)
@@ -657,7 +839,7 @@ def export_preset(name: str, path: str) -> bool:
         "vsr_preset_format": 1,
     }
     try:
-        Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        _write_json_atomic(Path(path), payload)
         return True
     except Exception as exc:
         logger.warning(f"Could not export preset '{name}' to {path}: {exc}")
@@ -669,17 +851,15 @@ def import_preset(path: str) -> Optional[str]:
     library. Returns the installed name on success, None on failure.
     Collisions with built-in names are rejected; collisions with existing
     user presets overwrite."""
-    try:
-        payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    except Exception as exc:
-        logger.warning(f"Could not read preset file {path}: {exc}")
+    payload = _read_json_object(Path(path), "preset import")
+    if payload is None:
         return None
     if payload.get("vsr_preset_format") != 1:
         logger.warning(f"Not a v1 VSR preset: {path}")
         return None
-    name = payload.get("name", "").strip()
+    name = _coerce_text(payload.get("name", ""), "", 80)
     fields = payload.get("fields", {})
-    description = payload.get("description", "Imported preset")
+    description = _coerce_text(payload.get("description", "Imported preset"), "Imported preset", 160)
     if not name or not isinstance(fields, dict):
         return None
     if name in BUILTIN_PRESETS:
@@ -821,6 +1001,20 @@ def detect_ai_engines() -> dict:
     return engines
 
 
+def detect_ffmpeg() -> bool:
+    """Check whether FFmpeg is available on PATH."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def get_file_info(path: str) -> str:
     """Get a short info string for a file (type + size)."""
     p = Path(path)
@@ -845,6 +1039,59 @@ def truncate_middle(text: str, max_length: int = 56) -> str:
     lead = max_length // 2 - 2
     tail = max_length - lead - 3
     return f"{text[:lead]}...{text[-tail:]}"
+
+
+def format_quality_report(metrics: Optional[dict], compact: bool = False) -> str:
+    """Format a PSNR / SSIM quality-report payload for the UI."""
+    if not metrics:
+        return ""
+    try:
+        psnr = float(metrics.get("psnr"))
+        ssim = float(metrics.get("ssim"))
+    except (TypeError, ValueError):
+        return ""
+
+    if compact:
+        return f"PSNR {psnr:.1f} dB - SSIM {ssim:.4f}"
+
+    samples = metrics.get("samples")
+    try:
+        sample_count = int(samples)
+    except (TypeError, ValueError):
+        sample_count = 0
+
+    suffix = ""
+    if sample_count > 0:
+        suffix = f" across {sample_count} sampled frame{'s' if sample_count != 1 else ''}"
+    return f"PSNR {psnr:.2f} dB and SSIM {ssim:.4f}{suffix}"
+
+
+def summarize_quality_reports(reports: List[Optional[dict]]) -> Optional[dict]:
+    """Average PSNR / SSIM metrics across completed queue items."""
+    valid = []
+    total_samples = 0
+    for report in reports:
+        if not report:
+            continue
+        try:
+            psnr = float(report.get("psnr"))
+            ssim = float(report.get("ssim"))
+            samples = int(report.get("samples", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        valid.append((psnr, ssim, samples))
+        total_samples += max(0, samples)
+
+    if not valid:
+        return None
+
+    count = len(valid)
+    return {
+        "psnr": sum(item[0] for item in valid) / count,
+        "ssim": sum(item[1] for item in valid) / count,
+        "items": count,
+        "samples": total_samples,
+    }
 
 
 def status_ui(status: ProcessingStatus) -> dict:
@@ -1003,17 +1250,17 @@ class ModernButton(tk.Canvas):
 
     def _apply_style(self, style):
         if style == "primary":
-            self.bg_color = Theme.GREEN_PRIMARY
-            self.hover_color = Theme.GREEN_HOVER
-            self.press_color = Theme.GREEN_PRESS
-            self.fg_color = "#04120b"
-            self.border_color = Theme.GREEN_HOVER
-        elif style == "accent":
             self.bg_color = Theme.BLUE_PRIMARY
             self.hover_color = Theme.BLUE_HOVER
             self.press_color = Theme.BLUE_PRESS
             self.fg_color = "#071226"
             self.border_color = Theme.BLUE_HOVER
+        elif style == "accent":
+            self.bg_color = Theme.BLUE_MUTED
+            self.hover_color = Theme.BG_RAISED
+            self.press_color = Theme.BG_CARD_SELECTED
+            self.fg_color = Theme.TEXT_PRIMARY
+            self.border_color = Theme.BORDER
         elif style == "secondary":
             self.bg_color = Theme.BG_TERTIARY
             self.hover_color = Theme.BG_RAISED
@@ -1095,7 +1342,7 @@ class ModernButton(tk.Canvas):
 
     def _subtle_border(self):
         # For filled CTAs, border should match the fill for a flat look
-        if self.style in ("primary", "accent", "danger"):
+        if self.style in ("primary", "danger"):
             return self.bg_color
         return Theme.BORDER_SUBTLE
 
@@ -1326,8 +1573,8 @@ class ModernToggle(tk.Canvas):
             box_fill = Theme.BG_TERTIARY
             box_border = Theme.BORDER_SUBTLE
         elif checked:
-            box_fill = Theme.GREEN_PRIMARY
-            box_border = Theme.GREEN_HOVER
+            box_fill = Theme.BLUE_PRIMARY
+            box_border = Theme.BLUE_HOVER
         else:
             box_fill = Theme.BG_TERTIARY
             box_border = Theme.BORDER_STRONG if self.hovered else Theme.BORDER
@@ -1459,7 +1706,7 @@ class ModernSlider(tk.Frame):
         if thumb_x > left:
             self.canvas.create_rectangle(
                 left, mid - self.TRACK_H // 2, thumb_x, mid + self.TRACK_H // 2,
-                fill=Theme.GREEN_PRIMARY, outline="",
+                fill=Theme.BLUE_PRIMARY, outline="",
             )
 
         # Thumb
@@ -1471,7 +1718,7 @@ class ModernSlider(tk.Frame):
         self.canvas.create_oval(
             thumb_x - self.THUMB_R, mid - self.THUMB_R,
             thumb_x + self.THUMB_R, mid + self.THUMB_R,
-            fill=Theme.GREEN_PRIMARY, outline=Theme.GREEN_HOVER, width=1,
+            fill=Theme.BLUE_PRIMARY, outline=Theme.BLUE_HOVER, width=1,
         )
 
     def _on_press(self, event):
@@ -1913,17 +2160,19 @@ class _Segment(tk.Canvas):
 
 
 class DragDropFrame(tk.Frame):
-    """A refined drop target surface. Subtle dashed dropzone feel (via
-    highlightthickness), crisp hover state, and a clearly prioritized CTA."""
+    """A calm drop target surface with a single clear import action."""
 
     def __init__(self, parent, on_drop: Callable[[List[str]], None],
                  width=400, height=200, **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
-                        highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE_PRIMARY)
+                        highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE_PRIMARY,
+                        takefocus=1)
 
         self.on_drop = on_drop
         self.normal_bg = Theme.BG_CARD
         self.hover_bg = Theme.BG_CARD_HOVER
+        self.hovered = False
+        self.focused = False
         self.configure(height=height)
         self.pack_propagate(False)
         self.grid_propagate(False)
@@ -1935,19 +2184,19 @@ class DragDropFrame(tk.Frame):
         self._surface_widgets = [self, inner]
 
         # Import glyph
-        glyph = tk.Label(inner, text="+", font=f(28, "bold"),
+        glyph = tk.Label(inner, text="+", font=f(22, "bold"),
                          bg=self.normal_bg, fg=Theme.BLUE_PRIMARY)
         glyph.pack()
 
         # Main text
-        main_text = tk.Label(inner, text="Drop videos or images here",
+        main_text = tk.Label(inner, text="Add files to the queue",
                             font=f(Theme.F_TITLE, "bold"), bg=self.normal_bg,
                             fg=Theme.TEXT_PRIMARY)
         main_text.pack(pady=(2, 0))
 
         # Sub text
         sub_text = tk.Label(inner,
-                           text="Or pick files and folders manually. Originals stay untouched.",
+                           text="Drag files here, choose files, or choose a folder. Originals stay untouched.",
                            font=f(Theme.F_BODY_SM), bg=self.normal_bg,
                            fg=Theme.TEXT_SECONDARY, justify="center", wraplength=480)
         sub_text.pack(pady=(6, 12))
@@ -1960,13 +2209,13 @@ class DragDropFrame(tk.Frame):
                                           style="accent", size="md")
         self.add_files_btn.pack(side="left")
 
-        self.add_folder_btn = ModernButton(actions, text="Add folder", width=112,
+        self.add_folder_btn = ModernButton(actions, text="Choose folder", width=118,
                                            command=self._open_folder_dialog,
                                            style="secondary", size="md")
         self.add_folder_btn.pack(side="left", padx=(8, 0))
 
         support_text = tk.Label(inner,
-                                text="MP4 MKV MOV WEBM     PNG JPG TIFF WEBP     Nested folders",
+                                text="Videos and images supported",
                                 font=f(Theme.F_META, "bold"), bg=self.normal_bg,
                                 fg=Theme.TEXT_DISABLED)
         support_text.pack(pady=(12, 0))
@@ -1977,6 +2226,10 @@ class DragDropFrame(tk.Frame):
         self.bind("<Button-3>", self._on_right_click)
         self.bind("<Enter>", self._on_enter, add="+")
         self.bind("<Leave>", self._on_leave, add="+")
+        self.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Return>", lambda e: self._open_file_dialog())
+        self.bind("<space>", lambda e: self._open_file_dialog())
         for child in (inner, glyph, main_text, sub_text, support_text):
             child.bind("<Button-1>", self._on_click)
             child.bind("<Button-3>", self._on_right_click)
@@ -2035,16 +2288,29 @@ class DragDropFrame(tk.Frame):
             self.on_drop([folder])
 
     def _on_click(self, event):
+        self.focus_set()
         self._open_file_dialog()
 
     def _on_right_click(self, event):
+        self.focus_set()
         self._open_folder_dialog()
 
     def _on_enter(self, event):
-        self._set_bg(self.hover_bg, Theme.BLUE_PRIMARY)
+        self.hovered = True
+        self._set_bg(self.hover_bg, Theme.BORDER_FOCUS if self.focused else Theme.BLUE_PRIMARY)
 
     def _on_leave(self, event):
-        self._set_bg(self.normal_bg, Theme.BORDER)
+        self.hovered = False
+        self._set_bg(self.normal_bg, Theme.BORDER_FOCUS if self.focused else Theme.BORDER)
+
+    def _on_focus_in(self, event):
+        self.focused = True
+        self._set_bg(self.hover_bg if self.hovered else self.normal_bg, Theme.BORDER_FOCUS)
+
+    def _on_focus_out(self, event):
+        self.focused = False
+        self._set_bg(self.hover_bg if self.hovered else self.normal_bg,
+                     Theme.BLUE_PRIMARY if self.hovered else Theme.BORDER)
 
 
 class QueueItemWidget(tk.Frame):
@@ -2131,21 +2397,10 @@ class QueueItemWidget(tk.Frame):
         self.actions_row = tk.Frame(self.container, bg=self._surface_bg)
         self.actions_row.pack(fill="x", pady=(Theme.S_MD, 0))
 
-        self.preview_btn = ModernButton(self.actions_row, text="Preview", width=86,
-                                        command=self._request_preview, style="ghost",
-                                        size="sm")
-        self.preview_btn.pack(side="left")
-
-        self.mask_btn = ModernButton(self.actions_row, text="Detect", width=78,
-                                     command=self._request_mask_preview, style="ghost",
-                                     size="sm")
-        self.mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(self.mask_btn, "Run detection on the first frame and draw mask boxes.")
-
         self.remove_btn = ModernButton(self.actions_row, text="Remove", width=78,
                                        command=lambda: self.on_remove(self.item.id),
                                        style="ghost", size="sm")
-        self.remove_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        self.remove_btn.pack(side="left")
 
         self.open_btn = ModernButton(self.actions_row, text="Open result", width=104,
                                      command=self._open_output, style="accent",
@@ -2176,7 +2431,7 @@ class QueueItemWidget(tk.Frame):
 
         menu.add_command(label="Preview source frame",
                          command=self._request_preview)
-        menu.add_command(label="Detect subtitle mask",
+        menu.add_command(label="Review subtitle mask",
                          command=self._request_mask_preview)
         menu.add_separator()
         menu.add_command(label="Open result",
@@ -2248,7 +2503,7 @@ class QueueItemWidget(tk.Frame):
         for widget in (self.top_row, self.bottom_row, self.actions_row):
             widget.config(bg=bg)
         self.progress_bar.config(bg=bg)
-        for button in (self.remove_btn, self.preview_btn, self.mask_btn, self.open_btn):
+        for button in (self.remove_btn, self.open_btn):
             button.config(bg=bg)
         # Accent stripe: painted when a value is passed, otherwise matches bg
         self.accent_stripe.config(bg=accent or bg)
@@ -2278,8 +2533,24 @@ class QueueItemWidget(tk.Frame):
         self.status_badge.config(text=badge["label"], fg=badge["color"], bg=badge["bg"])
         self.progress_bar.set_progress(item.progress)
         self.progress_bar.set_color(self._get_status_color())
-        self.message_label.config(text=item.message or "Ready to process")
-        self.open_btn.set_enabled(item.status == ProcessingStatus.COMPLETE and Path(item.output_path).exists())
+        status_message = truncate_middle(item.message or "Ready to process", 74)
+        message_color = {
+            ProcessingStatus.COMPLETE: Theme.SUCCESS,
+            ProcessingStatus.ERROR: Theme.ERROR,
+            ProcessingStatus.CANCELLED: Theme.WARNING,
+            ProcessingStatus.LOADING: Theme.INFO,
+            ProcessingStatus.DETECTING: Theme.INFO,
+            ProcessingStatus.PROCESSING: Theme.INFO,
+            ProcessingStatus.MERGING: Theme.WARNING,
+        }.get(item.status, Theme.TEXT_SECONDARY)
+        self.message_label.config(text=status_message, fg=message_color)
+        can_open = item.status == ProcessingStatus.COMPLETE and Path(item.output_path).exists()
+        self.open_btn.set_enabled(can_open)
+        if can_open:
+            if not self.open_btn.winfo_ismapped():
+                self.open_btn.pack(side="right")
+        elif self.open_btn.winfo_manager():
+            self.open_btn.pack_forget()
         self.remove_btn.set_enabled(item.status not in (
             ProcessingStatus.LOADING,
             ProcessingStatus.DETECTING,
@@ -2293,7 +2564,12 @@ class QueueItemWidget(tk.Frame):
             end = item.completed_at or datetime.now()
             elapsed = (end - item.started_at).total_seconds()
             elapsed_text = format_time(elapsed)
-        self.time_label.config(text=elapsed_text)
+        pct_text = f"{int(item.progress * 100)}%" if item.progress > 0 else ""
+        if pct_text and elapsed_text:
+            meta_text = f"{pct_text} / {elapsed_text}"
+        else:
+            meta_text = pct_text or elapsed_text
+        self.time_label.config(text=meta_text)
 
         # Active-state pulsing indicator (start/stop based on status)
         active = item.status in (ProcessingStatus.LOADING,
@@ -2444,10 +2720,13 @@ class VideoSubtitleRemoverApp:
         self.queue: List[QueueItem] = []
         self.queue_widgets: dict = {}
         self.is_processing = False
+        self._stop_requested = False
+        self._processing_thread: Optional[threading.Thread] = None
         self.cancel_event = threading.Event()
         self.queue_lock = threading.Lock()
         self.gpus = detect_gpu()
         self.ai_engines = detect_ai_engines()
+        self.ffmpeg_ready = detect_ffmpeg()
         self._elapsed_timer_id = None
         self._output_dir: Optional[Path] = None  # None = use input_dir/output/
         self._preview_detector = None  # cached SubtitleDetector for mask preview
@@ -2457,11 +2736,15 @@ class VideoSubtitleRemoverApp:
         self._selected_queue_item_id: Optional[str] = None
         self._brand_photo = None
         self._status_tone = "neutral"
+        self._shutdown_started = False
         self._taskbar = None  # created after the root is fully realized
         self._batch_times: List[float] = []  # seconds per item for ETA
         self._batch_started_at: Optional[datetime] = None
+        self._preview_request_id = 0
         self._throbber_id = None
         self._throbber_phase = 0
+        self._layout_mode = "wide"
+        self._workflow_pills = []
 
         # Variables
         self.mode_var = tk.StringVar(value=self.config.mode.value)
@@ -2474,6 +2757,8 @@ class VideoSubtitleRemoverApp:
         # Build UI
         self._setup_styles()
         self._build_ui()
+        self._bind_shortcuts()
+        self.root.bind("<Configure>", self._on_root_configure, add="+")
 
         # GPU setup -- restore saved selection or default to first
         if self.gpus:
@@ -2499,6 +2784,7 @@ class VideoSubtitleRemoverApp:
         self._update_output_label()
         self._update_region_label_display()
         self._refresh_action_states()
+        self.root.after(0, lambda: self._apply_responsive_layout(self.root.winfo_width()))
 
         # Restore persisted panel visibility (defaults: advanced closed, log open)
         try:
@@ -2517,7 +2803,11 @@ class VideoSubtitleRemoverApp:
 
     def _on_close(self):
         """Stop processing, save settings, and close."""
-        if self.is_processing:
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
+        active_thread = self._has_active_processing_thread()
+        if self.is_processing or active_thread:
             n = sum(1 for it in self.queue
                     if it.status in (ProcessingStatus.LOADING,
                                      ProcessingStatus.DETECTING,
@@ -2533,10 +2823,17 @@ class VideoSubtitleRemoverApp:
                 cancel_label="Keep working",
                 tone="danger",
             ):
+                self._shutdown_started = False
                 return
-            self.is_processing = False
             self.cancel_event.set()
             self._stop_elapsed_timer()
+            self._stop_requested = True
+            self._update_status(
+                "Closing after the current step stops safely...",
+                "warning",
+            )
+            if self._taskbar:
+                self._taskbar.set_state(TaskbarProgress.STATE_PAUSED)
         self._sync_config_from_ui()
         # Persist window layout and panel states for next launch
         try:
@@ -2546,9 +2843,23 @@ class VideoSubtitleRemoverApp:
         except Exception:
             pass
         save_settings(self.config)
-        # Brief delay to let processing thread see cancel_event before we
-        # destroy the Tk root (prevents TclError from root.after on dead root)
-        self.root.after(150, self.root.destroy)
+        self._finish_close_when_safe(time.monotonic() + 2.0)
+
+    def _finish_close_when_safe(self, deadline: float):
+        """Wait briefly for active work to notice cancellation before exit."""
+        if not self._has_active_processing_thread() or time.monotonic() >= deadline:
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+            return
+        try:
+            self.root.after(100, lambda: self._finish_close_when_safe(deadline))
+        except Exception:
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
 
     def _sync_config_from_ui(self):
         """Sync config object from current UI state."""
@@ -2599,6 +2910,25 @@ class VideoSubtitleRemoverApp:
             if f"{gpu['name']} ({gpu['memory']})" == selection:
                 self.config.gpu_id = gpu['index']
                 break
+
+    def _make_processing_snapshot(self) -> ProcessingConfig:
+        """Build a fresh processing snapshot from the current UI state."""
+        self._sync_config_from_ui()
+        return ProcessingConfig.from_dict(self.config.to_dict())
+
+    def _apply_current_settings_to_idle_items(self) -> int:
+        """Refresh all not-yet-running queue items from the current UI state."""
+        snapshot = self._make_processing_snapshot()
+        updated = 0
+        with self.queue_lock:
+            for item in self.queue:
+                if item.status == ProcessingStatus.IDLE:
+                    item.config = ProcessingConfig.from_dict(snapshot.to_dict())
+                    updated += 1
+        output_updates = self._refresh_idle_output_paths()
+        if output_updates:
+            self._update_queue_display()
+        return updated
 
     def _setup_styles(self):
         """Configure ttk styles for a cohesive dark theme."""
@@ -2656,31 +2986,26 @@ class VideoSubtitleRemoverApp:
                         highlightbackground=Theme.BORDER_SUBTLE)
 
     def _create_chip(self, parent, label: str, value: str, fg: str, bg: str) -> tk.Frame:
-        """Refined header chip with a status dot indicator."""
+        """Minimal status chip with a single clear line of text."""
         chip = tk.Frame(parent, bg=bg, highlightthickness=1,
-                        highlightbackground=Theme.BORDER)
-
-        top = tk.Frame(chip, bg=bg)
-        top.pack(anchor="w", padx=12, pady=(8, 0))
-        # Status dot
-        dot = tk.Canvas(top, width=8, height=8, bg=bg, highlightthickness=0)
-        dot.create_oval(1, 1, 7, 7, fill=fg, outline="")
-        dot.pack(side="left", padx=(0, 6), pady=(2, 0))
-        tk.Label(top, text=label.upper(), font=f(Theme.F_MICRO, "bold"),
-                 bg=bg, fg=Theme.TEXT_MUTED).pack(side="left")
-
-        tk.Label(chip, text=value, font=f(Theme.F_BODY_SM, "bold"),
-                 bg=bg, fg=fg).pack(anchor="w", padx=12, pady=(2, 8))
+                        highlightbackground=Theme.BORDER_SUBTLE)
+        tk.Label(
+            chip,
+            text=f"{label}: {value}",
+            font=f(Theme.F_META, "bold"),
+            bg=bg,
+            fg=fg,
+            padx=12,
+            pady=7,
+        ).pack(anchor="w")
         return chip
 
     def _section_title(self, parent, eyebrow: str, title: str, hint: str,
                        pad_x: int = 20, pad_top: int = 16):
-        """Consistent section header: eyebrow + title + hint line."""
+        """Consistent section header: title + hint line."""
         bg = parent.cget("bg")
-        tk.Label(parent, text=eyebrow.upper(), font=f(Theme.F_EYEBROW, "bold"),
-                 bg=bg, fg=Theme.TEXT_MUTED).pack(anchor="w", padx=pad_x, pady=(pad_top, 2))
         tk.Label(parent, text=title, font=f(Theme.F_HEADING, "bold"),
-                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x)
+                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x, pady=(pad_top, 0))
         if hint:
             tk.Label(parent, text=hint, font=f(Theme.F_BODY_SM),
                      bg=bg, fg=Theme.TEXT_MUTED, wraplength=560,
@@ -2689,15 +3014,13 @@ class VideoSubtitleRemoverApp:
     def _create_card(self, parent, bg=Theme.BG_CARD) -> tk.Frame:
         """Bordered card container with consistent style."""
         return tk.Frame(parent, bg=bg, highlightthickness=1,
-                        highlightbackground=Theme.BORDER)
+                        highlightbackground=Theme.BORDER_SUBTLE)
 
     def _card_header(self, parent, eyebrow: str, title: str, bg=Theme.BG_CARD,
                      pad_x: int = 16, pad_top: int = 14):
-        """Card-internal section header: tiny eyebrow + bold title."""
-        tk.Label(parent, text=eyebrow.upper(), font=f(Theme.F_EYEBROW, "bold"),
-                 bg=bg, fg=Theme.TEXT_MUTED).pack(anchor="w", padx=pad_x, pady=(pad_top, 2))
+        """Card-internal section header with a single clear title."""
         tk.Label(parent, text=title, font=f(Theme.F_TITLE, "bold"),
-                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x, pady=(0, 10))
+                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x, pady=(pad_top, 10))
 
     def _divider(self, parent, pad: int = 0):
         tk.Frame(parent, bg=Theme.BORDER_SUBTLE, height=1).pack(
@@ -2852,6 +3175,7 @@ class VideoSubtitleRemoverApp:
         self._selected_queue_item_id = item_id
         for wid, widget in self.queue_widgets.items():
             widget.set_selected(wid == item_id)
+        self._update_preview_actions()
 
     def _refresh_action_states(self):
         """Enable or disable primary queue actions based on current state."""
@@ -2859,15 +3183,257 @@ class VideoSubtitleRemoverApp:
         has_complete = any(item.status == ProcessingStatus.COMPLETE for item in self.queue)
         has_retry = any(item.status in (ProcessingStatus.ERROR, ProcessingStatus.CANCELLED)
                         for item in self.queue)
+        active_thread = self._has_active_processing_thread()
+        batch_busy = self.is_processing or active_thread
 
         if hasattr(self, "start_btn"):
-            self.start_btn.set_enabled(self.is_processing or has_queue)
+            can_stop = active_thread and not self._stop_requested
+            can_start = (not batch_busy) and has_queue
+            self.start_btn.set_enabled(can_stop or can_start)
         if hasattr(self, "open_output_btn"):
             self.open_output_btn.set_enabled(has_complete)
         if hasattr(self, "retry_btn"):
-            self.retry_btn.set_enabled((not self.is_processing) and has_retry)
+            self.retry_btn.set_enabled((not batch_busy) and has_retry)
         if hasattr(self, "clear_btn"):
-            self.clear_btn.set_enabled((not self.is_processing) and has_queue)
+            self.clear_btn.set_enabled((not batch_busy) and has_queue)
+        if hasattr(self, "batch_label") and not batch_busy:
+            pending = sum(1 for item in self.queue if item.status == ProcessingStatus.IDLE)
+            if pending:
+                self.batch_label.config(
+                    text=f"{pending} queued and ready to process",
+                    fg=Theme.TEXT_SECONDARY,
+                )
+            elif has_complete:
+                self.batch_label.config(
+                    text="Outputs are ready for review",
+                    fg=Theme.SUCCESS,
+                )
+            elif has_retry:
+                self.batch_label.config(
+                    text="Some items need attention",
+                    fg=Theme.WARNING,
+                )
+            else:
+                self.batch_label.config(text="Ready", fg=Theme.TEXT_MUTED)
+        self._update_preview_actions()
+        self._update_guidance_surface()
+
+    def _bind_shortcuts(self):
+        """Register global shortcuts for the most common actions."""
+        self.root.bind("<Control-o>", lambda e: self._open_file_picker())
+        self.root.bind("<Control-O>", lambda e: self._open_file_picker())
+        self.root.bind("<Control-Return>", lambda e: self._start_processing())
+        self.root.bind("<F5>", lambda e: self._start_processing())
+        self.root.bind("<Control-l>", lambda e: self._toggle_log_panel())
+        self.root.bind("<Control-L>", lambda e: self._toggle_log_panel())
+        self.root.bind("<Control-f>", self._focus_queue_filter)
+        self.root.bind("<Control-F>", self._focus_queue_filter)
+
+    def _open_file_picker(self):
+        if hasattr(self, "drop_area"):
+            self.drop_area._open_file_dialog()
+
+    def _focus_queue_filter(self, event=None):
+        if len(self.queue) < 6 or not hasattr(self, "_queue_filter_entry"):
+            return "break"
+        try:
+            self._queue_filter_frame.pack(
+                fill="x", padx=Theme.S_XL, pady=(0, Theme.S_SM),
+                before=self._queue_container)
+            self._queue_filter_entry.focus_set()
+            self._queue_filter_entry.selection_range(0, "end")
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _on_root_configure(self, event):
+        """Keep layout responsive as the window width changes."""
+        if event.widget is not self.root:
+            return
+        self._apply_responsive_layout(event.width)
+
+    def _apply_responsive_layout(self, width: int):
+        """Stack columns and footer/help clusters on narrower windows."""
+        if not hasattr(self, "_content"):
+            return
+
+        mode = "stacked" if width < 1180 else "wide"
+        if mode == self._layout_mode:
+            if hasattr(self, "preview_meta_label"):
+                self.preview_meta_label.config(wraplength=520 if mode == "stacked" else 360)
+            if hasattr(self, "header_guidance_body"):
+                self.header_guidance_body.config(wraplength=520 if mode == "stacked" else 300)
+            if hasattr(self, "status_hint"):
+                self.status_hint.config(wraplength=520 if mode == "stacked" else 360)
+            return
+
+        self._layout_mode = mode
+        stacked = (mode == "stacked")
+
+        self._left_col.grid_forget()
+        self._right_col.grid_forget()
+
+        if stacked:
+            self._content.columnconfigure(0, weight=1, minsize=0)
+            self._content.columnconfigure(1, weight=0, minsize=0)
+            self._content.rowconfigure(0, weight=0)
+            self._content.rowconfigure(1, weight=1)
+            self._left_col.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, Theme.S_MD))
+            self._right_col.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+
+            self._header_right.pack_forget()
+            self._header_right.pack(fill="x", pady=(Theme.S_LG, 0))
+            self._header_chips.pack_forget()
+            self._header_chips.pack(anchor="w")
+            self._header_help_btn.pack_forget()
+            self._header_help_btn.pack(anchor="w", pady=(Theme.S_SM, 0))
+            self._header_guidance_panel.pack_forget()
+            self._header_guidance_panel.pack(fill="x", pady=(Theme.S_SM, 0))
+
+            self._footer_left.pack_forget()
+            self._footer_left.pack(anchor="w")
+            self.status_hint.pack_forget()
+            self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
+        else:
+            self._content.columnconfigure(0, weight=57, minsize=440)
+            self._content.columnconfigure(1, weight=43, minsize=360)
+            self._content.rowconfigure(0, weight=1)
+            self._content.rowconfigure(1, weight=0)
+            self._left_col.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_MD))
+            self._right_col.grid(row=0, column=1, sticky="nsew", padx=(Theme.S_MD, 0))
+
+            self._header_right.pack_forget()
+            self._header_right.pack(side="right", anchor="n")
+            self._header_chips.pack_forget()
+            self._header_chips.pack(anchor="e")
+            self._header_help_btn.pack_forget()
+            self._header_help_btn.pack(anchor="e", pady=(Theme.S_SM, 0))
+            self._header_guidance_panel.pack_forget()
+            self._header_guidance_panel.pack(anchor="e", fill="x", pady=(Theme.S_SM, 0))
+
+            self._footer_left.pack_forget()
+            self._footer_left.pack(side="left")
+            self.status_hint.pack_forget()
+            self.status_hint.pack(side="right")
+
+        self.preview_meta_label.config(wraplength=520 if stacked else 360)
+        self.header_guidance_body.config(wraplength=520 if stacked else 300)
+        self.status_hint.config(wraplength=520 if stacked else 360)
+
+    def _get_selected_queue_item(self) -> Optional[QueueItem]:
+        """Return the currently selected queue item, if any."""
+        if not self._selected_queue_item_id:
+            return None
+        return next((item for item in self.queue if item.id == self._selected_queue_item_id), None)
+
+    def _set_workflow_stage(self, stage: int):
+        """Update the compact workflow pills in the header."""
+        for idx, pill in enumerate(self._workflow_pills, start=1):
+            if idx < stage:
+                frame_bg = Theme.SUCCESS_BG
+                frame_border = Theme.GREEN_HOVER
+                badge_bg = Theme.GREEN_PRIMARY
+                badge_fg = "#04120b"
+                text_fg = Theme.SUCCESS
+            elif idx == stage:
+                frame_bg = Theme.BLUE_MUTED
+                frame_border = Theme.BLUE_PRIMARY
+                badge_bg = Theme.BLUE_PRIMARY
+                badge_fg = "#071226"
+                text_fg = Theme.TEXT_PRIMARY
+            else:
+                frame_bg = Theme.BG_CARD
+                frame_border = Theme.BORDER
+                badge_bg = Theme.BG_TERTIARY
+                badge_fg = Theme.TEXT_MUTED
+                text_fg = Theme.TEXT_SECONDARY
+            pill["frame"].config(bg=frame_bg, highlightbackground=frame_border)
+            pill["badge"].config(bg=badge_bg, fg=badge_fg)
+            pill["text"].config(bg=frame_bg, fg=text_fg)
+
+    def _update_guidance_surface(self):
+        """Keep the header guidance card and footer hint aligned with state."""
+        if not hasattr(self, "header_guidance_title"):
+            return
+
+        selected = self._get_selected_queue_item()
+        has_queue = bool(self.queue)
+        has_complete = any(item.status == ProcessingStatus.COMPLETE for item in self.queue)
+        has_retry = any(item.status in (ProcessingStatus.ERROR, ProcessingStatus.CANCELLED)
+                        for item in self.queue)
+
+        if self._stop_requested:
+            stage = 3
+            title = "Stopping batch"
+            body = ("The current item is wrapping up so the app can stop cleanly without risking overlapping work. "
+                    "Finished outputs stay on disk and remaining items will be marked as stopped.")
+            hint = "Stopping safely. Please wait for the current item to finish its active step."
+        elif self.is_processing:
+            stage = 3
+            title = "Batch running"
+            body = ("Live preview, ETA, and the activity log stay up to date while the batch works. "
+                    "Stop is safe: completed outputs stay on disk.")
+            hint = "Use Stop batch if you need to pause. Finished outputs are preserved."
+        elif not has_queue:
+            stage = 1
+            title = "Build your batch"
+            body = "Import files or choose a folder to start."
+            hint = "Import files or choose a folder to start."
+        elif has_retry:
+            stage = 3 if has_complete else 2
+            title = "Review the outliers"
+            body = "Retry failed items or open the log for details."
+            hint = "Retry failed items or open the log for details."
+        elif not selected:
+            stage = 2
+            title = "Inspect a sample frame"
+            body = "Select one item and review the mask before starting."
+            hint = "Select one item and review the mask before starting."
+        elif has_complete:
+            stage = 3
+            title = "Outputs are ready"
+            body = "Preview a finished item or open the output folder."
+            hint = "Preview a finished item or open the output folder."
+        else:
+            stage = 3
+            title = "Ready to run"
+            body = "Start the batch when the preview framing looks right."
+            hint = "Start the batch when the preview framing looks right."
+
+        self._set_workflow_stage(stage)
+        self.header_guidance_title.config(text=title)
+        self.header_guidance_body.config(text=body)
+        if hasattr(self, "status_hint"):
+            self.status_hint.config(text=hint)
+
+    def _update_preview_actions(self):
+        """Enable preview tools only when they make sense for the selection."""
+        if not hasattr(self, "preview_mask_btn"):
+            return
+        selected = self._get_selected_queue_item()
+        can_preview = bool(selected and PIL_AVAILABLE)
+        self.preview_mask_btn.set_enabled(bool(selected) and not self.is_processing)
+        self.preview_zoom_btn.set_enabled(can_preview)
+        self._preview_label.config(cursor="hand2" if can_preview else "")
+
+        if selected:
+            badge = status_ui(selected.status)
+            self.preview_status_chip.config(
+                text=badge["label"],
+                fg=badge["color"],
+                bg=badge["bg"],
+            )
+        else:
+            self.preview_status_chip.config(
+                text="Waiting",
+                fg=Theme.TEXT_MUTED,
+                bg=Theme.BG_TERTIARY,
+            )
+
+    def _open_selected_mask_preview(self):
+        item = self._get_selected_queue_item()
+        if item:
+            self._show_preview(item, show_mask=True)
 
     def _build_ui(self):
         """Build the main user interface with balanced spacing rhythm."""
@@ -2888,6 +3454,8 @@ class VideoSubtitleRemoverApp:
         # Left column - Input & Settings
         left_col = tk.Frame(content, bg=Theme.BG_DARK)
         left_col.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_MD))
+        self._content = content
+        self._left_col = left_col
 
         self._build_input_section(left_col)
         self._build_settings_section(left_col)
@@ -2895,6 +3463,7 @@ class VideoSubtitleRemoverApp:
         # Right column - Queue & Preview
         right_col = tk.Frame(content, bg=Theme.BG_DARK)
         right_col.grid(row=0, column=1, sticky="nsew", padx=(Theme.S_MD, 0))
+        self._right_col = right_col
 
         self._build_queue_section(right_col)
 
@@ -2905,7 +3474,7 @@ class VideoSubtitleRemoverApp:
         self._build_footer(main_container)
 
     def _build_header(self, parent):
-        """Compact, balanced app header. Brand left, live status chips right."""
+        """Minimal app header with short guidance and a few live status signals."""
         header = self._create_surface(parent)
         header.pack(fill="x")
 
@@ -2914,74 +3483,69 @@ class VideoSubtitleRemoverApp:
 
         left = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         left.pack(side="left", fill="both", expand=True)
+        self._header_left = left
 
-        brand_row = tk.Frame(left, bg=Theme.BG_SECONDARY)
-        brand_row.pack(anchor="w")
-
-        if PIL_AVAILABLE:
-            for icon_path in (get_app_dir() / "icon.png", get_app_dir() / "banner.png"):
-                if icon_path.exists():
-                    try:
-                        brand_img = Image.open(icon_path)
-                        if brand_img.width > 44 or brand_img.height > 44:
-                            brand_img.thumbnail((44, 44), Image.LANCZOS)
-                        self._brand_photo = ImageTk.PhotoImage(brand_img)
-                        tk.Label(brand_row, image=self._brand_photo,
-                                 bg=Theme.BG_SECONDARY).pack(side="left", padx=(0, 14))
-                        break
-                    except Exception:
-                        pass
-
-        title_stack = tk.Frame(brand_row, bg=Theme.BG_SECONDARY)
-        title_stack.pack(side="left")
-
-        title_line = tk.Frame(title_stack, bg=Theme.BG_SECONDARY)
-        title_line.pack(anchor="w")
-
-        tk.Label(title_line, text="Video Subtitle Remover",
+        tk.Label(left, text="Video Subtitle Remover",
                  font=f(Theme.F_DISPLAY, "bold"), bg=Theme.BG_SECONDARY,
-                 fg=Theme.TEXT_PRIMARY).pack(side="left")
-
-        # PRO pill -- rounded look via extra padding
-        pro_pill = tk.Frame(title_line, bg=Theme.GREEN_MUTED, highlightthickness=1,
-                            highlightbackground=Theme.GREEN_HOVER)
-        pro_pill.pack(side="left", padx=(Theme.S_MD, 0), pady=(4, 0))
-        tk.Label(pro_pill, text="PRO", font=f(Theme.F_META, "bold"),
-                 bg=Theme.GREEN_MUTED, fg=Theme.GREEN_PRIMARY,
-                 padx=8, pady=2).pack()
-
-        tk.Label(title_line, text=f"v{APP_VERSION}", font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(
-                     side="left", padx=(Theme.S_SM, 0), pady=(4, 0))
-
-        tk.Label(title_stack,
-                 text="Remove burnt-in subtitles and text overlays while keeping the full frame intact.",
-                 font=f(Theme.F_BODY), bg=Theme.BG_SECONDARY,
-                 fg=Theme.TEXT_SECONDARY).pack(anchor="w", pady=(6, 0))
+                 fg=Theme.TEXT_PRIMARY).pack(anchor="w")
+        tk.Label(left, text=f"Version {APP_VERSION}",
+                 font=f(Theme.F_META, "bold"), bg=Theme.BG_SECONDARY,
+                 fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
+        tk.Label(
+            left,
+            text="Add files, review one sample, then run the batch.",
+            font=f(Theme.F_BODY),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(anchor="w", pady=(8, 0))
 
         right = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         right.pack(side="right", anchor="n")
+        self._header_right = right
 
         gpu_short = truncate_middle(self.gpus[0]["name"], 26) if self.gpus else "CPU mode"
         gpu_fg = Theme.SUCCESS if self.gpus else Theme.WARNING
-        has_neural = "LaMa (neural)" in self.ai_engines["inpainting"]
         det_short = self.ai_engines["detection"][0] if self.ai_engines["detection"] else "OpenCV fallback"
-        inp_short = "LaMa AI" if has_neural else "OpenCV fallback"
+        audio_short = "FFmpeg ready" if self.ffmpeg_ready else "No FFmpeg"
+        audio_fg = Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING
 
         chips = tk.Frame(right, bg=Theme.BG_SECONDARY)
         chips.pack(anchor="e")
+        self._header_chips = chips
 
         self._create_chip(chips, "Device", gpu_short, gpu_fg, Theme.BG_CARD).pack(side="left")
         self._create_chip(chips, "Detection", det_short, Theme.INFO, Theme.BG_CARD).pack(
             side="left", padx=(Theme.S_SM, 0))
-        self._create_chip(chips, "Fill", inp_short, Theme.SUCCESS if has_neural else Theme.WARNING,
-                          Theme.BG_CARD).pack(side="left", padx=(Theme.S_SM, 0))
+        self._create_chip(chips, "Audio", audio_short, audio_fg, Theme.BG_CARD).pack(
+            side="left", padx=(Theme.S_SM, 0))
 
         # About / help
-        help_btn = ModernButton(right, text="About", width=76,
+        help_btn = ModernButton(right, text="Help", width=80,
                                 command=self._show_about, style="ghost",
                                 size="sm", icon="?")
         help_btn.pack(anchor="e", pady=(Theme.S_SM, 0))
+        self._header_help_btn = help_btn
+
+        self._header_guidance_panel = tk.Frame(right, bg=Theme.BG_SECONDARY)
+        self._header_guidance_panel.pack(anchor="e", fill="x", pady=(Theme.S_SM, 0))
+        self.header_guidance_title = tk.Label(
+            self._header_guidance_panel,
+            text="Build your batch",
+            font=f(Theme.F_TITLE, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        )
+        self.header_guidance_title.pack(anchor="w")
+        self.header_guidance_body = tk.Label(
+            self._header_guidance_panel,
+            text="Import files or choose a folder to start.",
+            font=f(Theme.F_BODY_SM),
+            wraplength=300,
+            justify="left",
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        )
+        self.header_guidance_body.pack(anchor="w", fill="x", pady=(4, 0))
 
     def _build_input_section(self, parent):
         """Workspace section: drop zone + output location."""
@@ -2992,10 +3556,10 @@ class VideoSubtitleRemoverApp:
             section,
             eyebrow="Workspace",
             title="Import media",
-            hint="Drop videos or images, or pick a folder. Originals are never modified.",
+            hint="Add videos or images. Originals are never modified.",
         )
 
-        self.drop_area = DragDropFrame(section, self._on_files_dropped, height=170)
+        self.drop_area = DragDropFrame(section, self._on_files_dropped, height=142)
         self.drop_area.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_MD))
 
         out_surface = self._create_card(section)
@@ -3041,8 +3605,8 @@ class VideoSubtitleRemoverApp:
         self._section_title(
             section,
             eyebrow="Processing",
-            title="Setup and detection",
-            hint="Pick a profile and confirm detection. Open detailed controls only when tuning quality or speed.",
+            title="Processing",
+            hint="Pick a profile, confirm the region, then start the batch.",
         )
 
         settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
@@ -3190,6 +3754,16 @@ class VideoSubtitleRemoverApp:
             variable=self.preserve_audio_var,
         )
         self.preserve_audio_check.pack(anchor="w", pady=(Theme.S_SM, 0))
+        if not self.ffmpeg_ready:
+            tk.Label(
+                checks_frame,
+                text="FFmpeg is not available, so outputs will be saved without original audio until it is installed.",
+                font=f(Theme.F_META),
+                bg=Theme.BG_CARD,
+                fg=Theme.WARNING,
+                wraplength=520,
+                justify="left",
+            ).pack(anchor="w", pady=(Theme.S_XS, 0))
 
         # Region surface -- raised card-within-card
         region_surface = tk.Frame(workflow_panel, bg=Theme.BG_TERTIARY,
@@ -3502,12 +4076,10 @@ class VideoSubtitleRemoverApp:
         heading = tk.Frame(header, bg=Theme.BG_SECONDARY)
         heading.pack(side="left", fill="x", expand=True)
 
-        tk.Label(heading, text="QUEUE", font=f(Theme.F_EYEBROW, "bold"),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w")
-        tk.Label(heading, text="Batch list",
+        tk.Label(heading, text="Queue",
                  font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(heading, text="Review each item and launch the batch when ready.",
+        tk.Label(heading, text="Review the list, then start the batch when ready.",
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
 
@@ -3516,10 +4088,9 @@ class VideoSubtitleRemoverApp:
         count_cluster.pack(side="right", anchor="n")
 
         def _mk_stat_pill(fg=Theme.TEXT_SECONDARY, bg=Theme.BG_TERTIARY):
-            pill = tk.Frame(count_cluster, bg=bg, highlightthickness=1,
-                            highlightbackground=Theme.BORDER_SUBTLE)
+            pill = tk.Frame(count_cluster, bg=Theme.BG_SECONDARY)
             lbl = tk.Label(pill, text="", font=f(Theme.F_META, "bold"),
-                           bg=bg, fg=fg, padx=9, pady=3)
+                           bg=bg, fg=fg, padx=8, pady=2)
             lbl.pack()
             return pill, lbl
 
@@ -3587,6 +4158,14 @@ class VideoSubtitleRemoverApp:
             font=f(Theme.F_BODY_SM), relief="flat", bd=6,
             highlightthickness=0)
         self._queue_filter_entry.pack(side="left", fill="x", expand=True)
+        self._queue_filter_entry.bind(
+            "<FocusIn>",
+            lambda e: self._queue_filter_frame.config(highlightbackground=Theme.BORDER_FOCUS),
+        )
+        self._queue_filter_entry.bind(
+            "<FocusOut>",
+            lambda e: self._queue_filter_frame.config(highlightbackground=Theme.BORDER),
+        )
         self._queue_filter_clear = ModernButton(
             filter_inner, text="Clear", width=68,
             command=lambda: self._queue_filter_var.set(""),
@@ -3634,19 +4213,52 @@ class VideoSubtitleRemoverApp:
         preview_text = tk.Frame(preview_header, bg=Theme.BG_CARD)
         preview_text.pack(side="left", fill="x", expand=True)
 
-        tk.Label(preview_text, text="PREVIEW", font=f(Theme.F_EYEBROW, "bold"),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(anchor="w")
-        self.preview_title_label = tk.Label(preview_text, text="Inspect the first frame",
+        self.preview_title_label = tk.Label(preview_text, text="Preview a sample frame",
                                             font=f(Theme.F_TITLE, "bold"),
                                             bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY)
-        self.preview_title_label.pack(anchor="w", pady=(2, 0))
+        self.preview_title_label.pack(anchor="w")
         self.preview_meta_label = tk.Label(
             preview_text,
-            text="Select a queued item. Use Detect to review the mask before processing.",
+            text="Select a queued item and review the mask before processing.",
             font=f(Theme.F_META), wraplength=360,
             justify="left", bg=Theme.BG_CARD,
             fg=Theme.TEXT_MUTED)
         self.preview_meta_label.pack(anchor="w", pady=(4, 0))
+
+        preview_actions = tk.Frame(preview_header, bg=Theme.BG_CARD)
+        preview_actions.pack(side="right", anchor="ne")
+        self.preview_status_chip = tk.Label(
+            preview_actions,
+            text="Waiting",
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_MUTED,
+            padx=10,
+            pady=4,
+        )
+        self.preview_status_chip.pack(side="left", padx=(0, Theme.S_SM))
+        self.preview_mask_btn = ModernButton(
+            preview_actions,
+            text="Review mask",
+            width=108,
+            command=self._open_selected_mask_preview,
+            style="ghost",
+            size="sm",
+        )
+        self.preview_mask_btn.pack(side="left")
+        Tooltip(self.preview_mask_btn,
+                "Run detection on the selected item and show the first-frame mask.")
+        self.preview_zoom_btn = ModernButton(
+            preview_actions,
+            text="Full size",
+            width=92,
+            command=self._open_preview_zoom,
+            style="ghost",
+            size="sm",
+        )
+        self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self.preview_zoom_btn,
+                "Open the selected source frame in a larger viewer.")
 
         self._preview_label = tk.Label(self._preview_frame, bg=Theme.BG_CARD,
                                        text="", font=f(Theme.F_META),
@@ -3683,13 +4295,13 @@ class VideoSubtitleRemoverApp:
         self.clear_btn.pack(side="right", padx=(0, Theme.S_SM))
 
         self._set_preview_placeholder(
-            "Inspect the first frame",
-            "Select a queued item to review the media before processing. Detect shows the subtitle mask so you can confirm the region.",
+            "Preview a sample frame",
+            "Select a queued item to inspect it before processing.",
         )
         self._refresh_action_states()
 
     def _build_queue_empty_state(self):
-        """Refined empty state: icon + headline + one-liner."""
+        """Queue empty state with short, clear guidance."""
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
         self.empty_container.pack(pady=(Theme.S_3XL + 20, Theme.S_LG), fill="x")
 
@@ -3701,16 +4313,58 @@ class VideoSubtitleRemoverApp:
         for x in (14, 30, 46):
             icon.create_rectangle(x - 5, 20, x + 5, 40,
                                   fill=Theme.BG_TERTIARY, outline="")
-        icon.create_oval(20, 54, 40, 74, outline=Theme.GREEN_HOVER, width=0)
 
         tk.Label(self.empty_container, text="Your queue is empty",
                  font=f(Theme.F_TITLE, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(pady=(Theme.S_MD, 4))
         tk.Label(self.empty_container,
-                 text="Drop media on the left, or use Choose files to start a batch.",
+                 text="Add files on the left to start a batch.",
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  wraplength=340, justify="center").pack()
+
+    def _ensure_filter_empty_state(self):
+        """Create the queue filter empty state on demand."""
+        if hasattr(self, "_filter_empty_container") and self._filter_empty_container.winfo_exists():
+            return
+        self._filter_empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
+
+        icon = tk.Canvas(self._filter_empty_container, width=52, height=52,
+                         bg=Theme.BG_SECONDARY, highlightthickness=0)
+        icon.pack()
+        icon.create_oval(10, 10, 34, 34, outline=Theme.BORDER_STRONG, width=2)
+        icon.create_line(30, 30, 42, 42, fill=Theme.BORDER_STRONG, width=2)
+
+        self._filter_empty_title = tk.Label(
+            self._filter_empty_container,
+            text="No queued items match this search",
+            font=f(Theme.F_TITLE, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
+        )
+        self._filter_empty_title.pack(pady=(Theme.S_MD, 4))
+        self._filter_empty_body = tk.Label(
+            self._filter_empty_container,
+            text="Clear the filter or search for part of a filename.",
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+            wraplength=340,
+            justify="center",
+        )
+        self._filter_empty_body.pack()
+        ModernButton(
+            self._filter_empty_container,
+            text="Clear filter",
+            width=110,
+            command=lambda: self._queue_filter_var.set(""),
+            style="ghost",
+            size="sm",
+        ).pack(pady=(Theme.S_MD, 0))
+
+    def _hide_filter_empty_state(self):
+        if hasattr(self, "_filter_empty_container") and self._filter_empty_container.winfo_exists():
+            self._filter_empty_container.pack_forget()
 
     def _bind_mousewheel(self, event):
         self._mousewheel_bound = True
@@ -3791,7 +4445,7 @@ class VideoSubtitleRemoverApp:
 
         open_log_btn = ModernButton(
             log_header, text="Open log file", width=118,
-            command=lambda: os.startfile(str(LOG_FILE)) if LOG_FILE.exists() else None,
+            command=self._open_log_file,
             style="ghost", size="sm")
         open_log_btn.pack(side="right")
 
@@ -3860,13 +4514,33 @@ class VideoSubtitleRemoverApp:
             self._log_handler.reset_counts()
         self._update_status("Activity log cleared")
 
+    def _open_log_file(self):
+        """Reveal the current log file in the system shell."""
+        if not LOG_FILE.exists():
+            self._update_status("The log file is not available yet", "warning")
+            return
+        try:
+            os.startfile(str(LOG_FILE))
+            self._update_status("Opened the log file", "info")
+        except Exception:
+            self._update_status("The log file could not be opened", "warning")
+
+    def _open_settings_folder(self):
+        try:
+            os.startfile(str(LOG_DIR))
+            self._update_status("Opened the settings folder", "info")
+        except Exception:
+            self._update_status("The settings folder could not be opened", "warning")
+
     def _build_footer(self, parent):
         """Footer status bar with a colored dot + message and a right-side hint."""
         footer = tk.Frame(parent, bg=Theme.BG_DARK)
         footer.pack(fill="x", pady=(Theme.S_SM, 0))
+        self._footer = footer
 
         left = tk.Frame(footer, bg=Theme.BG_DARK)
         left.pack(side="left")
+        self._footer_left = left
 
         # Status dot
         self.status_dot = tk.Canvas(left, width=10, height=10, bg=Theme.BG_DARK,
@@ -3882,7 +4556,7 @@ class VideoSubtitleRemoverApp:
 
         self.status_hint = tk.Label(
             footer,
-            text="Tip: pick a queued item then click Detect to confirm the subtitle mask.",
+            text="Tip: pick a queued item, review the mask, then start the batch when the framing looks right.",
             font=f(Theme.F_META),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_MUTED,
@@ -3991,26 +4665,132 @@ class VideoSubtitleRemoverApp:
         except Exception as exc:
             self._update_status(f"Import failed: {exc}", "error")
 
+    def _prompt_preset_details(self) -> Optional[Tuple[str, str]]:
+        """Open a themed modal for naming and describing a user preset."""
+        result = {"value": None}
+
+        dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
+        dialog.title("Save preset")
+        dialog.configure(bg=Theme.BG_OVERLAY)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+
+        outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
+        outer.pack()
+        body = tk.Frame(outer, bg=Theme.BG_SECONDARY)
+        body.pack()
+
+        content = tk.Frame(body, bg=Theme.BG_SECONDARY)
+        content.pack(padx=28, pady=(24, 14))
+
+        tk.Label(content, text="Save the current setup as a preset",
+                 font=f(Theme.F_HEADING, "bold"),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
+        tk.Label(content,
+                 text="Use a short name you will recognize later. Saving to an existing user preset name will update it.",
+                 font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                 justify="left", wraplength=420).pack(anchor="w", pady=(6, Theme.S_LG))
+
+        form = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        form.pack(fill="x")
+
+        def entry_row(label_text: str, initial: str = ""):
+            row = tk.Frame(form, bg=Theme.BG_SECONDARY)
+            row.pack(fill="x", pady=(0, Theme.S_MD))
+            tk.Label(row, text=label_text, font=f(Theme.F_BODY_SM),
+                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
+            entry = tk.Entry(
+                row, bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                insertbackground=Theme.TEXT_PRIMARY,
+                font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                highlightthickness=1, highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER_FOCUS,
+            )
+            entry.pack(fill="x", pady=(Theme.S_XS, 0))
+            entry.insert(0, initial)
+            return entry
+
+        name_entry = entry_row("Preset name")
+        desc_entry = entry_row("Description", "User preset")
+
+        helper = tk.Label(content, text="Built-in preset names are reserved.",
+                          font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                          fg=Theme.TEXT_MUTED)
+        helper.pack(anchor="w")
+
+        error_label = tk.Label(content, text="", font=f(Theme.F_META, "bold"),
+                               bg=Theme.BG_SECONDARY, fg=Theme.ERROR)
+        error_label.pack(anchor="w", pady=(Theme.S_SM, 0))
+
+        actions = tk.Frame(body, bg=Theme.BG_CARD)
+        actions.pack(fill="x")
+        actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
+        actions_inner.pack(side="right", padx=16, pady=14)
+
+        def _cancel():
+            dialog.grab_release()
+            dialog.destroy()
+
+        def _submit():
+            name = name_entry.get().strip()
+            description = desc_entry.get().strip() or "User preset"
+            if not name:
+                error_label.config(text="Give this preset a short name.")
+                name_entry.focus_set()
+                return
+            if name in BUILTIN_PRESETS:
+                error_label.config(text="Built-in preset names are reserved.")
+                name_entry.focus_set()
+                return
+            result["value"] = (name, description)
+            dialog.grab_release()
+            dialog.destroy()
+
+        ModernButton(actions_inner, text="Cancel", width=96,
+                     command=_cancel, style="ghost", size="md").pack(side="left")
+        ModernButton(actions_inner, text="Save preset", width=120,
+                     command=_submit, style="primary", size="md").pack(
+                         side="left", padx=(Theme.S_SM, 0))
+
+        dialog.bind("<Escape>", lambda e: _cancel())
+        dialog.bind("<Return>", lambda e: _submit())
+        dialog.protocol("WM_DELETE_WINDOW", _cancel)
+
+        dialog.update_idletasks()
+        try:
+            px = self.root.winfo_rootx()
+            py = self.root.winfo_rooty()
+            pw = self.root.winfo_width()
+            ph = self.root.winfo_height()
+            dw = dialog.winfo_reqwidth()
+            dh = dialog.winfo_reqheight()
+            dialog.geometry(f"+{px + (pw - dw) // 2}+{py + (ph - dh) // 3}")
+        except Exception:
+            pass
+
+        dialog.deiconify()
+        dialog.grab_set()
+        name_entry.focus_set()
+        dialog.wait_window()
+        return result["value"]
+
     def _save_preset_dialog(self):
         """Prompt for a name + description and save a user preset."""
         try:
-            from tkinter import simpledialog
-            name = simpledialog.askstring(
-                "Save preset", "Preset name:", parent=self.root)
-            if not name:
+            details = self._prompt_preset_details()
+            if not details:
                 return
-            if name in BUILTIN_PRESETS:
-                self._update_status("Built-in preset names are reserved", "warning")
-                return
-            description = simpledialog.askstring(
-                "Save preset", f"Short description for '{name}':",
-                parent=self.root) or "User preset"
+            name, description = details
+            existing_user = name in _load_user_presets()
             self._sync_config_from_ui()
             if save_user_preset(name, description, self.config):
                 # Refresh combo
                 self.preset_combo['values'] = ["(custom)"] + [n for n, _ in list_presets()]
                 self.preset_var.set(name)
-                self._update_status(f"Saved preset '{name}'", "success")
+                verb = "Updated" if existing_user else "Saved"
+                self._update_status(f"{verb} preset '{name}'", "success")
             else:
                 self._update_status(f"Could not save preset '{name}'", "error")
         except Exception as exc:
@@ -4111,7 +4891,7 @@ class VideoSubtitleRemoverApp:
              "info").pack(side="left", fill="both", expand=True,
                           padx=(0, Theme.S_SM))
         card("2", "Inspect the region",
-             "Select a queued item and click Detect to confirm the subtitle "
+             "Select a queued item and review the mask to confirm the subtitle "
              "mask before running the batch.",
              "warning").pack(side="left", fill="both", expand=True,
                              padx=(0, Theme.S_SM))
@@ -4231,7 +5011,8 @@ class VideoSubtitleRemoverApp:
         win.deiconify()
 
     def _show_batch_summary(self, complete: int, errors: int,
-                            cancelled: int, elapsed: str):
+                            cancelled: int, elapsed: str,
+                            quality_summary: Optional[dict] = None):
         """Themed summary modal shown when a batch finishes."""
         total = complete + errors + cancelled
         is_clean = errors == 0 and cancelled == 0
@@ -4261,6 +5042,12 @@ class VideoSubtitleRemoverApp:
                      font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(
                          anchor="w", pady=(2, 0))
+        summary_note = ("Outputs are ready to review."
+                        if is_clean else
+                        "Completed outputs are ready. Review the outliers or open the log for details.")
+        tk.Label(content, text=summary_note, font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
+                 wraplength=420, justify="left").pack(anchor="w", pady=(Theme.S_SM, 0))
 
         # Stat row (compact pills)
         stats = tk.Frame(content, bg=Theme.BG_SECONDARY)
@@ -4269,10 +5056,24 @@ class VideoSubtitleRemoverApp:
         def stat(parent, label, count, fg, bg):
             p = tk.Frame(parent, bg=bg, highlightthickness=1,
                          highlightbackground=Theme.BORDER_SUBTLE)
-            tk.Label(p, text=str(count), font=f(Theme.F_HEADING, "bold"),
-                     bg=bg, fg=fg, padx=18, pady=(10, 0)).pack()
-            tk.Label(p, text=label, font=f(Theme.F_META, "bold"),
-                     bg=bg, fg=Theme.TEXT_MUTED, padx=18, pady=(0, 10)).pack()
+            tk.Label(
+                p,
+                text=str(count),
+                font=f(Theme.F_HEADING, "bold"),
+                bg=bg,
+                fg=fg,
+                padx=18,
+                pady=0,
+            ).pack(pady=(10, 0))
+            tk.Label(
+                p,
+                text=label,
+                font=f(Theme.F_META, "bold"),
+                bg=bg,
+                fg=Theme.TEXT_MUTED,
+                padx=18,
+                pady=0,
+            ).pack(pady=(0, 10))
             return p
 
         stat(stats, "COMPLETED", complete, Theme.SUCCESS, Theme.SUCCESS_BG).pack(
@@ -4281,6 +5082,43 @@ class VideoSubtitleRemoverApp:
             side="left", padx=(Theme.S_SM, 0))
         stat(stats, "STOPPED", cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
             side="left", padx=(Theme.S_SM, 0))
+
+        if quality_summary:
+            quality_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
+                                    highlightbackground=Theme.BORDER_SUBTLE)
+            quality_card.pack(fill="x", pady=(Theme.S_LG, 0))
+
+            tk.Label(
+                quality_card,
+                text="Sampled quality check",
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_CARD,
+                fg=Theme.TEXT_PRIMARY,
+            ).pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_MD, 0))
+
+            items_measured = int(quality_summary.get("items", 0) or 0)
+            samples = int(quality_summary.get("samples", 0) or 0)
+            tk.Label(
+                quality_card,
+                text=(
+                    f"Measured {items_measured} completed item"
+                    f"{'s' if items_measured != 1 else ''} across {samples} sampled frame"
+                    f"{'s' if samples != 1 else ''}. Higher is generally better."
+                ),
+                font=f(Theme.F_META),
+                bg=Theme.BG_CARD,
+                fg=Theme.TEXT_MUTED,
+                wraplength=420,
+                justify="left",
+            ).pack(anchor="w", padx=Theme.S_LG, pady=(4, Theme.S_MD))
+
+            metrics = tk.Frame(quality_card, bg=Theme.BG_CARD)
+            metrics.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+
+            stat(metrics, "AVG PSNR", f"{quality_summary['psnr']:.2f} dB",
+                 Theme.INFO, Theme.INFO_BG).pack(side="left")
+            stat(metrics, "AVG SSIM", f"{quality_summary['ssim']:.4f}",
+                 Theme.SUCCESS, Theme.SUCCESS_BG).pack(side="left", padx=(Theme.S_SM, 0))
 
         # Actions row
         actions = tk.Frame(body, bg=Theme.BG_CARD)
@@ -4296,10 +5134,22 @@ class VideoSubtitleRemoverApp:
             self._open_output_folder()
             _close()
 
+        def _retry_failed_and_close():
+            self._retry_failed()
+            _close()
+
         if complete > 0:
             ModernButton(actions_inner, text="Open output", width=132,
                          command=_open_output_and_close,
                          style="accent", size="md", icon="^").pack(side="left")
+        if errors > 0:
+            ModernButton(actions_inner, text="Open log", width=104,
+                         command=self._open_log_file,
+                         style="ghost", size="md").pack(side="left", padx=(Theme.S_SM, 0))
+        if errors > 0 or cancelled > 0:
+            ModernButton(actions_inner, text="Retry failed", width=110,
+                         command=_retry_failed_and_close,
+                         style="ghost", size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text="Close", width=92,
                      command=_close, style="primary", size="md").pack(
                          side="left", padx=(Theme.S_SM, 0))
@@ -4372,6 +5222,9 @@ class VideoSubtitleRemoverApp:
         fact("Inpainting engines", inp_label, Theme.SUCCESS)
         fact("Compute", gpu_label,
              Theme.SUCCESS if self.gpus else Theme.WARNING)
+        fact("FFmpeg", "Ready" if self.ffmpeg_ready else "Missing",
+             Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING)
+        fact("Shortcuts", "Ctrl+O import   |   Ctrl+Enter start   |   Ctrl+L activity")
         fact("Settings", str(SETTINGS_FILE))
         fact("Log file", str(LOG_FILE))
 
@@ -4381,23 +5234,10 @@ class VideoSubtitleRemoverApp:
         actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
         actions_inner.pack(side="right", padx=16, pady=14)
 
-        def _open_log():
-            if LOG_FILE.exists():
-                try:
-                    os.startfile(str(LOG_FILE))
-                except Exception:
-                    pass
-
-        def _open_settings_folder():
-            try:
-                os.startfile(str(LOG_DIR))
-            except Exception:
-                pass
-
         ModernButton(actions_inner, text="Open log", width=110,
-                     command=_open_log, style="ghost", size="md").pack(side="left")
+                     command=self._open_log_file, style="ghost", size="md").pack(side="left")
         ModernButton(actions_inner, text="Settings folder", width=140,
-                     command=_open_settings_folder, style="ghost",
+                     command=self._open_settings_folder, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text="Close", width=90,
                      command=dialog.destroy,
@@ -4452,22 +5292,38 @@ class VideoSubtitleRemoverApp:
         if d:
             self._output_dir = Path(d)
             self._update_output_label()
-            self._update_status("Custom output location selected", "success")
+            refreshed = self._refresh_idle_output_paths()
+            if refreshed:
+                self._update_queue_display()
+            message = "Custom output location selected"
+            if refreshed:
+                message += f". Updated {refreshed} idle output path{'s' if refreshed != 1 else ''}"
+            self._update_status(message, "success")
             logger.info(f"Output directory: {self._output_dir}")
 
     def _reset_output_dir(self):
         """Reset output directory to default (input_dir/output/)."""
         self._output_dir = None
         self._update_output_label()
-        self._update_status("Output location reset to the default per-folder workflow")
+        refreshed = self._refresh_idle_output_paths()
+        if refreshed:
+            self._update_queue_display()
+        message = "Output location reset to the default per-folder workflow"
+        if refreshed:
+            message += f". Updated {refreshed} idle output path{'s' if refreshed != 1 else ''}"
+        self._update_status(message)
 
     def _open_region_selector(self):
         """Open a window to draw a subtitle region rectangle on the first frame."""
-        # Get first file from queue or ask user to pick one
+        # Use the selected queue item first, then fall back to the first queued file.
         source_path = None
-        for item in self.queue:
-            source_path = item.file_path
-            break
+        selected = self._get_selected_queue_item()
+        if selected:
+            source_path = selected.file_path
+        else:
+            for item in self.queue:
+                source_path = item.file_path
+                break
 
         if not source_path:
             source_path = filedialog.askopenfilename(
@@ -4594,113 +5450,189 @@ class VideoSubtitleRemoverApp:
         except (ValueError, TypeError):
             return default
 
+    @staticmethod
+    def _normalized_path_key(path: str | Path) -> str:
+        """Return a case-folded absolute path for reliable Windows comparisons."""
+        try:
+            return str(Path(path).resolve(strict=False)).casefold()
+        except TypeError:
+            return str(Path(path).resolve()).casefold()
+        except OSError:
+            return str(Path(path).absolute()).casefold()
+
+    @staticmethod
+    def _new_import_stats() -> dict:
+        return {
+            "added": 0,
+            "duplicate": 0,
+            "missing": 0,
+            "unsupported": 0,
+            "queue_full": 0,
+            "folders": 0,
+            "supported_in_folders": 0,
+        }
+
+    def _merge_import_stats(self, base: dict, extra: dict):
+        for key, value in extra.items():
+            base[key] = base.get(key, 0) + value
+
+    def _occupied_output_paths(self, exclude_item_id: Optional[str] = None) -> set[str]:
+        with self.queue_lock:
+            return {
+                self._normalized_path_key(item.output_path)
+                for item in self.queue
+                if item.id != exclude_item_id
+            }
+
+    def _make_unique_output_path(self, desired: Path,
+                                 exclude_item_id: Optional[str] = None) -> Path:
+        """Avoid overwriting existing files or reserved queue outputs."""
+        occupied = self._occupied_output_paths(exclude_item_id=exclude_item_id)
+        candidate = desired
+        counter = 2
+        while candidate.exists() or self._normalized_path_key(candidate) in occupied:
+            candidate = desired.with_name(f"{desired.stem}({counter}){desired.suffix}")
+            counter += 1
+        return candidate
+
+    def _suggest_output_path(self, file_path: str, *,
+                             output_dir: Optional[Path] = None,
+                             exclude_item_id: Optional[str] = None) -> Path:
+        input_path = Path(file_path)
+        target_dir = output_dir if output_dir is not None else (
+            self._output_dir or (input_path.parent / "output")
+        )
+        desired = target_dir / f"{input_path.stem}_no_sub{input_path.suffix}"
+        return self._make_unique_output_path(desired, exclude_item_id=exclude_item_id)
+
+    def _refresh_idle_output_paths(self) -> int:
+        """Recompute output paths for idle items that still follow the live output rule."""
+        refreshed = 0
+        with self.queue_lock:
+            idle_items = [
+                item for item in self.queue
+                if item.status == ProcessingStatus.IDLE and not item.output_path_locked
+            ]
+        for item in idle_items:
+            new_path = self._suggest_output_path(item.file_path, exclude_item_id=item.id)
+            if self._normalized_path_key(item.output_path) != self._normalized_path_key(new_path):
+                item.output_path = str(new_path)
+                refreshed += 1
+        return refreshed
+
+    def _announce_import_summary(self, stats: dict):
+        """Surface one calm import summary instead of a burst of per-file notices."""
+        added = stats.get("added", 0)
+        duplicate = stats.get("duplicate", 0)
+        missing = stats.get("missing", 0)
+        unsupported = stats.get("unsupported", 0)
+        queue_full = stats.get("queue_full", 0)
+        folders = stats.get("folders", 0)
+        supported_in_folders = stats.get("supported_in_folders", 0)
+
+        if added > 0:
+            parts = [f"Added {added} item{'s' if added != 1 else ''} to the queue"]
+            if duplicate:
+                parts.append(f"skipped {duplicate} duplicate{'s' if duplicate != 1 else ''}")
+            if queue_full:
+                parts.append("queue reached the 500-item limit")
+            detail = ". ".join(parts)
+            self._update_status(detail, "success")
+            logger.info(detail)
+            return
+
+        if queue_full:
+            self._update_status("The queue is already full (500 items max)", "warning")
+            logger.warning("Queue full while importing items")
+            return
+
+        if folders and supported_in_folders == 0:
+            self._update_status("No supported videos or images were found in the selected folder", "warning")
+            logger.warning("No supported files found while importing folder selection")
+            return
+
+        if duplicate and not (missing or unsupported):
+            self._update_status("Everything selected is already in the queue", "info")
+            logger.info("Import skipped because every selected item was already queued")
+            return
+
+        if unsupported and not (duplicate or missing):
+            self._update_status("Only supported video and image formats can be queued", "warning")
+            logger.warning("Import skipped because the selection only contained unsupported files")
+            return
+
+        if missing and not (duplicate or unsupported):
+            self._update_status("Some selected files could not be found", "warning")
+            logger.warning("Import skipped because selected files were missing")
+            return
+
+        self._update_status("Nothing new was added to the queue", "warning")
+        logger.warning("Import completed without adding new queue items")
+
     def _on_files_dropped(self, files: List[str]):
         """Handle dropped files."""
+        stats = self._new_import_stats()
         for file_path in files:
             if Path(file_path).is_dir():
-                self._add_folder_to_queue(file_path)
+                self._merge_import_stats(stats, self._add_folder_to_queue(file_path))
             else:
-                self._add_to_queue(file_path)
+                result = self._add_to_queue(file_path)
+                stats[result] = stats.get(result, 0) + 1
+        self._announce_import_summary(stats)
 
     def _add_folder_to_queue(self, folder_path: str):
         """Recursively add all supported files from a folder."""
         folder = Path(folder_path)
-        count = 0
+        stats = self._new_import_stats()
+        stats["folders"] = 1
         for f in sorted(folder.rglob("*")):
             if f.is_file() and (is_video_file(str(f)) or is_image_file(str(f))):
-                self._add_to_queue(str(f))
-                count += 1
-        if count:
-            self._update_status(f"Added {count} item{'s' if count != 1 else ''} from {folder.name}", "success")
-            logger.info(f"Added {count} files from folder: {folder.name}")
-        else:
-            self._update_status("No supported videos or images were found in that folder", "warning")
-            logger.warning(f"No supported files found in: {folder_path}")
+                stats["supported_in_folders"] += 1
+                result = self._add_to_queue(str(f))
+                stats[result] = stats.get(result, 0) + 1
+                if result == "queue_full":
+                    break
+        return stats
 
     def _add_to_queue(self, file_path: str):
         """Add a file to the processing queue."""
         # Check file exists and is valid
         if not Path(file_path).is_file():
-            self._update_status("That file could not be found", "warning")
             logger.warning(f"File not found: {file_path}")
-            return
+            return "missing"
         if not (is_video_file(file_path) or is_image_file(file_path)):
-            self._update_status("Only supported video and image formats can be queued", "warning")
             logger.warning(f"Unsupported file type: {file_path}")
-            return
+            return "unsupported"
 
         # Queue size limit
         if len(self.queue) >= 500:
-            self._update_status("The queue is full (500 items max)", "warning")
             logger.warning("Queue full (500 items max)")
-            return
+            return "queue_full"
 
         # Prevent duplicate files in queue
-        normalized = str(Path(file_path).resolve())
+        normalized = self._normalized_path_key(file_path)
         with self.queue_lock:
             for existing in self.queue:
-                if str(Path(existing.file_path).resolve()) == normalized:
-                    self._update_status(f"{Path(file_path).name} is already in the queue", "warning")
-                    logger.warning(f"Already in queue: {Path(file_path).name}")
-                    return
+                if self._normalized_path_key(existing.file_path) == normalized:
+                    logger.info(f"Already in queue: {Path(file_path).name}")
+                    return "duplicate"
 
         # Generate unique ID
         item_id = f"{int(time.time() * 1000)}_{len(self.queue)}"
 
-        # Generate output path (auto-increment to avoid overwriting)
-        # Dir creation deferred to processing time
-        input_path = Path(file_path)
-        output_dir = self._output_dir or (input_path.parent / "output")
-        output_path = output_dir / f"{input_path.stem}_no_sub{input_path.suffix}"
-        counter = 2
-        while output_path.exists():
-            output_path = output_dir / f"{input_path.stem}_no_sub({counter}){input_path.suffix}"
-            counter += 1
+        # Generate an output path that stays unique against both disk and the
+        # rest of the queued items.
+        output_path = self._suggest_output_path(file_path)
 
-        # Create config copy
-        config = ProcessingConfig(
-            mode=self.config.mode,
-            use_gpu=self.config.use_gpu,
-            gpu_id=self.config.gpu_id,
-            sttn_skip_detection=self.skip_detection_var.get(),
-            sttn_neighbor_stride=self.config.sttn_neighbor_stride,
-            sttn_reference_length=self.config.sttn_reference_length,
-            sttn_max_load_num=self.config.sttn_max_load_num,
-            lama_super_fast=self.lama_fast_var.get(),
-            preserve_audio=self.preserve_audio_var.get(),
-            output_quality=self.config.output_quality,
-            detection_lang=self.lang_var.get(),
-            detection_threshold=getattr(self.config, '_detection_threshold_pct', 50) / 100.0,
-            subtitle_area=self.config.subtitle_area,
-            time_start=self._safe_float(self.time_start_entry.get()),
-            time_end=self._safe_float(self.time_end_entry.get()),
-            detection_frame_skip=self.config.detection_frame_skip,
-            mask_dilate_px=self.config.mask_dilate_px,
-            mask_feather_px=self.config.mask_feather_px,
-            edge_ring_px=self.config.edge_ring_px,
-            tbe_flow_warp=getattr(self, 'flow_warp_var', tk.BooleanVar(value=False)).get(),
-            tbe_scene_cut_split=getattr(self, 'scene_split_var', tk.BooleanVar(value=True)).get(),
-            auto_band=getattr(self, 'auto_band_var', tk.BooleanVar(value=False)).get(),
-            export_srt=getattr(self, 'export_srt_var', tk.BooleanVar(value=False)).get(),
-            export_mask_video=getattr(self, 'export_mask_var', tk.BooleanVar(value=False)).get(),
-            adaptive_batch=getattr(self, 'adaptive_batch_var', tk.BooleanVar(value=True)).get(),
-            kalman_tracking=getattr(self, 'kalman_var', tk.BooleanVar(value=True)).get(),
-            phash_skip_enable=getattr(self, 'phash_var', tk.BooleanVar(value=True)).get(),
-            colour_tune_enable=getattr(self, 'colour_tune_var', tk.BooleanVar(value=False)).get(),
-            colour_tune_tolerance=self.config.colour_tune_tolerance,
-            auto_exposure_threshold=self.config.auto_exposure_threshold,
-            deinterlace=self.config.deinterlace,
-            deinterlace_auto=getattr(self, 'deinterlace_var', tk.BooleanVar(value=True)).get(),
-            keyframe_detection=getattr(self, 'keyframe_var', tk.BooleanVar(value=False)).get(),
-            quality_report=getattr(self, 'quality_report_var', tk.BooleanVar(value=False)).get(),
-            use_hw_encode=self.hw_encode_var.get(),
-        )
+        # Create config copy from the latest UI state.
+        config = self._make_processing_snapshot()
 
         # Create queue item
         item = QueueItem(
             id=item_id,
             file_path=file_path,
             output_path=str(output_path),
+            output_path_locked=False,
             config=config,
             message="Ready to process"
         )
@@ -4708,8 +5640,10 @@ class VideoSubtitleRemoverApp:
         with self.queue_lock:
             self.queue.append(item)
         self._update_queue_display()
-        self._update_status(f"Added {Path(file_path).name} to the queue", "success")
+        if len(self.queue) == 1 and not self.is_processing:
+            self._show_preview(item)
         logger.info(f"Queued: {Path(file_path).name} ({get_file_info(file_path)})")
+        return "added"
 
     def _open_sort_menu(self):
         """Pop up a themed sort menu anchored to the sort button."""
@@ -4809,11 +5743,22 @@ class VideoSubtitleRemoverApp:
         if not new_path:
             return
 
-        item.output_path = new_path
+        resolved_path = self._make_unique_output_path(
+            Path(new_path),
+            exclude_item_id=item.id,
+        )
+        item.output_path = str(resolved_path)
+        item.output_path_locked = True
         if item.id in self.queue_widgets:
             self.queue_widgets[item.id].update_item(item)
-        self._update_status(
-            f"Output renamed to {Path(new_path).name}", "success")
+        if self._normalized_path_key(new_path) != self._normalized_path_key(resolved_path):
+            self._update_status(
+                f"Output renamed to {resolved_path.name} to avoid an overwrite",
+                "success",
+            )
+        else:
+            self._update_status(
+                f"Output renamed to {resolved_path.name}", "success")
 
     def _remove_from_queue(self, item_id: str):
         """Remove an item from the queue."""
@@ -4896,10 +5841,11 @@ class VideoSubtitleRemoverApp:
             for widget in self.queue_frame.winfo_children():
                 widget.destroy()
             self.queue_widgets.clear()
+            self._hide_filter_empty_state()
             self._build_queue_empty_state()
             self._set_preview_placeholder(
-                "Inspect the first frame",
-                "Select a queued item to review the media before processing. Detect shows the subtitle mask so you can confirm the region.",
+                "Preview a sample frame",
+                "Select a queued item to inspect it before processing. Review mask is the fastest way to confirm the subtitle region.",
             )
         else:
             # Remove empty label if present
@@ -4949,6 +5895,7 @@ class VideoSubtitleRemoverApp:
         """Hide/show queue widgets whose filename doesn't match the filter."""
         query = (self._queue_filter_var.get() or "").strip().lower()
         visible = 0
+        total = len(self.queue)
         for item in self.queue:
             widget = self.queue_widgets.get(item.id)
             if not widget:
@@ -4961,6 +5908,22 @@ class VideoSubtitleRemoverApp:
                 visible += 1
             else:
                 widget.pack_forget()
+        if query:
+            self.queue_count.config(text=f"{visible} of {total} shown")
+        else:
+            self.queue_count.config(text=f"{total} item{'s' if total != 1 else ''}")
+
+        if query and total and visible == 0:
+            self._ensure_filter_empty_state()
+            self._filter_empty_title.config(
+                text=f'No items match "{truncate_middle(query, 28)}"')
+            self._filter_empty_body.config(
+                text="Try a shorter filename search, or clear the filter to see the full batch again.")
+            if not self._filter_empty_container.winfo_ismapped():
+                self._filter_empty_container.pack(
+                    pady=(Theme.S_3XL, Theme.S_LG), fill="x")
+        else:
+            self._hide_filter_empty_state()
 
     def _update_status(self, message: str, tone: str = "neutral", toast: bool = False):
         """Update the footer status dot + message.
@@ -4989,9 +5952,14 @@ class VideoSubtitleRemoverApp:
 
     def _open_output_folder(self):
         """Open the output folder for the most recently completed item."""
-        completed = [i for i in self.queue if i.status == ProcessingStatus.COMPLETE]
-        if completed:
-            output_dir = str(Path(completed[-1].output_path).parent)
+        selected = self._get_selected_queue_item()
+        if selected and selected.status == ProcessingStatus.COMPLETE and Path(selected.output_path).exists():
+            target = selected
+        else:
+            completed = [i for i in self.queue if i.status == ProcessingStatus.COMPLETE]
+            target = completed[-1] if completed else None
+        if target:
+            output_dir = str(Path(target.output_path).parent)
             try:
                 os.startfile(output_dir)
                 self._update_status("Opened the output folder", "info")
@@ -5003,6 +5971,8 @@ class VideoSubtitleRemoverApp:
     def _show_preview(self, item: QueueItem, show_mask: bool = False):
         """Show thumbnail preview. Side-by-side before/after for completed items.
         If show_mask=True, run detection and overlay red boxes on the frame."""
+        self._preview_request_id += 1
+        preview_request_id = self._preview_request_id
         # Any switch cancels a running throbber so it can't overwrite later UI
         if not show_mask:
             self._stop_throbber()
@@ -5038,6 +6008,9 @@ class VideoSubtitleRemoverApp:
                 self.preview_meta_label.config(text="The selected file could not be read for preview.")
                 self._preview_label.config(text="Could not read file", image="")
                 return
+
+            badge = status_ui(item.status)
+            self.preview_status_chip.config(text=badge["label"], fg=badge["color"], bg=badge["bg"])
 
             try:
                 max_w = max(220, self._preview_frame.winfo_width() - 36)
@@ -5081,18 +6054,29 @@ class VideoSubtitleRemoverApp:
                         engine = det._engine_name
                         n = len(boxes)
                         def _update_ui():
+                            if (preview_request_id != self._preview_request_id
+                                    or self._selected_queue_item_id != item.id):
+                                return
                             self._stop_throbber()
                             self._preview_photo = ImageTk.PhotoImage(img)
                             self.preview_title_label.config(text=f"Detection mask for {Path(item.file_path).name}")
-                            self.preview_meta_label.config(
-                                text=f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
-                            )
+                            if sub_area:
+                                meta = "Manual region applied. Detection used your saved subtitle band."
+                            elif n:
+                                meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
+                            else:
+                                meta = ("No regions were found on the first frame. Try Set region, or lower the "
+                                        "Threshold in detailed controls.")
+                            self.preview_meta_label.config(text=meta)
                             self._preview_label.config(
                                 image=self._preview_photo,
                                 text=f"{engine}: {n} detected" if n else "No text detected")
                         self.root.after(0, _update_ui)
                     except Exception as exc:
                         def _show_error():
+                            if (preview_request_id != self._preview_request_id
+                                    or self._selected_queue_item_id != item.id):
+                                return
                             self._stop_throbber()
                             self.preview_title_label.config(text="Detection preview failed")
                             self.preview_meta_label.config(text="The detection preview could not be generated.")
@@ -5123,16 +6107,27 @@ class VideoSubtitleRemoverApp:
                 draw = ImageDraw.Draw(composite)
                 draw.line([(input_img.width + 1, 0), (input_img.width + 1, total_h)],
                           fill="#22c55e", width=2)
+                draw.rectangle((10, 10, 82, 28), fill=self._hex_to_rgb(Theme.BG_TERTIARY))
+                draw.text((18, 14), "Source", fill=self._hex_to_rgb(Theme.TEXT_SECONDARY))
+                draw.rectangle((input_img.width + 16, 10, input_img.width + 96, 28),
+                               fill=self._hex_to_rgb(Theme.SUCCESS_BG))
+                draw.text((input_img.width + 24, 14), "Cleaned",
+                          fill=self._hex_to_rgb(Theme.SUCCESS))
                 self._preview_photo = ImageTk.PhotoImage(composite)
                 self.preview_title_label.config(text=f"Before / after for {Path(item.file_path).name}")
-                self.preview_meta_label.config(text="Completed items show the source frame beside the cleaned result.")
+                meta = ("Completed items show the source frame beside the cleaned result so you can "
+                        "spot-check the cleanup immediately.")
+                quality_note = format_quality_report(item.quality_report)
+                if quality_note:
+                    meta += f" Quality check: {quality_note}."
+                self.preview_meta_label.config(text=meta)
                 self._preview_label.config(image=self._preview_photo, text="")
             else:
                 input_img.thumbnail((max_w, max_h), Image.LANCZOS)
                 self._preview_photo = ImageTk.PhotoImage(input_img)
                 self.preview_title_label.config(text=f"Source frame for {Path(item.file_path).name}")
                 self.preview_meta_label.config(
-                    text="Use Detect to confirm the mask, then start the batch when the framing looks right."
+                    text="Review mask to confirm the subtitle band, then start the batch when the framing looks right."
                 )
                 self._preview_label.config(image=self._preview_photo, text="")
         except Exception as e:
@@ -5153,6 +6148,7 @@ class VideoSubtitleRemoverApp:
                     item.progress = 0.0
                     item.message = "Ready to retry"
                     item.error = None
+                    item.quality_report = None
                     item.started_at = None
                     item.completed_at = None
                     count += 1
@@ -5209,11 +6205,33 @@ class VideoSubtitleRemoverApp:
             self._update_status("Add media to the queue before starting a batch", "warning")
             return
 
-        if self.is_processing:
-            self._stop_processing()
+        active_thread = self._has_active_processing_thread()
+        batch_busy = self.is_processing or active_thread
+        if batch_busy:
+            if self._stop_requested or self.cancel_event.is_set():
+                self._update_status(
+                    "Batch is already stopping. Please wait for the current item to wrap up.",
+                    "warning",
+                )
+                return
+            if active_thread:
+                self._stop_processing()
+            else:
+                self._update_status("Finalizing the previous batch...", "info")
             return
 
+        self._apply_current_settings_to_idle_items()
+        if self.preserve_audio_var.get() and not self.ffmpeg_ready:
+            has_video = any(is_video_file(item.file_path) for item in self.queue)
+            if has_video:
+                self._update_status(
+                    "FFmpeg is missing, so video outputs will be saved without original audio.",
+                    "warning",
+                    toast=True,
+                )
+
         self.is_processing = True
+        self._stop_requested = False
         self.cancel_event.clear()
         self._set_settings_locked(True)
         self.start_btn.set_style("danger")
@@ -5232,25 +6250,30 @@ class VideoSubtitleRemoverApp:
         self._start_elapsed_timer()
 
         # Start processing thread
-        threading.Thread(target=self._process_queue, daemon=True).start()
+        self._processing_thread = threading.Thread(target=self._process_queue, daemon=True)
+        self._processing_thread.start()
 
     def _stop_processing(self):
         """Stop the current processing."""
-        self.is_processing = False
+        if self._stop_requested:
+            self._update_status("Batch is already stopping...", "warning")
+            return
+        self._stop_requested = True
         self.cancel_event.set()
-        self._stop_elapsed_timer()
-        self._set_settings_locked(False)
-        self._cached_remover = None
-        self._cached_remover_key = None
 
         self.start_btn.set_style("primary")
-        self.start_btn.icon = ">"
-        self.start_btn.set_text("Start batch")
-        self.root.title(f"{APP_NAME} v{APP_VERSION}")
+        self.start_btn.icon = "x"
+        self.start_btn.set_text("Stopping...")
         self._refresh_action_states()
-        self._update_status("Batch processing stopped", "warning")
+        self._update_status(
+            "Stopping after the current step. Finished outputs stay on disk.",
+            "warning",
+        )
         if self._taskbar:
-            self._taskbar.clear()
+            self._taskbar.set_state(TaskbarProgress.STATE_PAUSED)
+
+    def _has_active_processing_thread(self) -> bool:
+        return self._processing_thread is not None and self._processing_thread.is_alive()
 
     def _start_elapsed_timer(self):
         """Start a timer that updates elapsed times on in-progress queue items."""
@@ -5311,8 +6334,11 @@ class VideoSubtitleRemoverApp:
         try:
             item.status = ProcessingStatus.LOADING
             item.started_at = datetime.now()
+            item.completed_at = None
             item.progress = 0.0
             item.message = "Initializing..."
+            item.error = None
+            item.quality_report = None
             self._update_item_display(item)
 
             from backend.processor import (
@@ -5419,6 +6445,8 @@ class VideoSubtitleRemoverApp:
                 remover = BackendRemover(backend_config)
                 self._cached_remover = remover
                 self._cached_remover_key = cache_key
+            if hasattr(remover, "last_quality_report"):
+                remover.last_quality_report = None
 
             def on_progress(progress: float, message: str):
                 if self.cancel_event.is_set():
@@ -5484,7 +6512,12 @@ class VideoSubtitleRemoverApp:
             if success:
                 item.status = ProcessingStatus.COMPLETE
                 item.progress = 1.0
+                item.error = None
+                item.quality_report = getattr(remover, "last_quality_report", None)
                 item.message = "Complete!"
+                quality_note = format_quality_report(item.quality_report, compact=True)
+                if quality_note:
+                    item.message = f"Complete - {quality_note}"
                 item.completed_at = datetime.now()
                 elapsed = (item.completed_at - item.started_at).total_seconds()
                 # Track for ETA rolling average
@@ -5493,6 +6526,7 @@ class VideoSubtitleRemoverApp:
             else:
                 item.status = ProcessingStatus.ERROR
                 item.message = "Processing failed"
+                item.quality_report = None
                 item.completed_at = datetime.now()
                 logger.error(f"Failed: {file_name}")
             self._update_item_display(item)
@@ -5500,6 +6534,8 @@ class VideoSubtitleRemoverApp:
         except InterruptedError:
             item.status = ProcessingStatus.CANCELLED
             item.message = "Cancelled"
+            item.error = None
+            item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
             logger.info(f"Cancelled: {Path(item.file_path).name}")
@@ -5507,6 +6543,7 @@ class VideoSubtitleRemoverApp:
             item.status = ProcessingStatus.ERROR
             item.error = str(e)
             item.message = f"Error: {str(e)}"
+            item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
             logger.error(f"Processing error for {item.file_path}: {e}")
@@ -5591,12 +6628,22 @@ class VideoSubtitleRemoverApp:
     def _on_processing_complete(self):
         """Handle processing completion."""
         self.is_processing = False
+        self._stop_requested = False
+        self._processing_thread = None
         self.cancel_event.clear()
         self._stop_elapsed_timer()
         self._set_settings_locked(False)
         # Clear cached remover so next batch picks up any setting changes
         self._cached_remover = None
         self._cached_remover_key = None
+        if self._shutdown_started:
+            if self._taskbar:
+                self._taskbar.clear()
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+            return
         self.start_btn.set_style("primary")
         self.start_btn.icon = ">"
         self.start_btn.set_text("Start batch")
@@ -5617,6 +6664,14 @@ class VideoSubtitleRemoverApp:
         if cancelled:
             summary += f", {cancelled} stopped"
         is_clean = errors == 0 and cancelled == 0
+        quality_summary = summarize_quality_reports(
+            [item.quality_report for item in self.queue if item.status == ProcessingStatus.COMPLETE]
+        )
+        if quality_summary:
+            summary += (
+                f" | avg PSNR {quality_summary['psnr']:.2f} dB"
+                f", avg SSIM {quality_summary['ssim']:.4f}"
+            )
         self._update_status(summary, "success" if is_clean else "warning")
         logger.info(summary)
         self._notify_completion(complete, errors)
@@ -5627,7 +6682,13 @@ class VideoSubtitleRemoverApp:
             if self._batch_started_at:
                 secs = (datetime.now() - self._batch_started_at).total_seconds()
                 elapsed = format_time(secs)
-            self._show_batch_summary(complete, errors, cancelled, elapsed)
+            self._show_batch_summary(
+                complete,
+                errors,
+                cancelled,
+                elapsed,
+                quality_summary=quality_summary,
+            )
 
     def _notify_completion(self, complete: int, errors: int):
         """Flash taskbar + play sound when batch processing finishes."""
