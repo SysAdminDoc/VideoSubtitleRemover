@@ -16,7 +16,7 @@ import tempfile
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple, List, Generator, Callable
+from typing import Any, Optional, Tuple, List, Generator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from abc import ABC, abstractmethod
@@ -141,8 +141,14 @@ def _coerce_bool(value, default: bool) -> bool:
 
 def _coerce_int(value, default: int, min_value: Optional[int] = None,
                 max_value: Optional[int] = None) -> int:
+    """Coerce to int, rejecting NaN / inf via the float round-trip."""
+    import math as _math
     try:
-        coerced = int(float(value))
+        f = float(value)
+        if not _math.isfinite(f):
+            coerced = default
+        else:
+            coerced = int(f)
     except (TypeError, ValueError):
         coerced = default
     if min_value is not None:
@@ -154,8 +160,13 @@ def _coerce_int(value, default: int, min_value: Optional[int] = None,
 
 def _coerce_float(value, default: float, min_value: Optional[float] = None,
                   max_value: Optional[float] = None) -> float:
+    """Coerce to float, rejecting NaN / inf. These propagate into ffmpeg
+    argv and cv2 frame-count math if allowed through; fall back to default."""
+    import math as _math
     try:
         coerced = float(value)
+        if not _math.isfinite(coerced):
+            coerced = default
     except (TypeError, ValueError):
         coerced = default
     if min_value is not None:
@@ -722,11 +733,24 @@ class _KalmanBox:
 
 
 def _box_from_state(state: np.ndarray) -> Tuple[int, int, int, int]:
-    cx, cy, w, h = state[:4]
+    """Reconstruct (x1, y1, x2, y2) from a Kalman state vector. Width and
+    height are clamped to >=1 so a noisy filter prediction never produces
+    an inverted box (x2 < x1 or y2 < y1), which would corrupt IoU scoring
+    and mask generation downstream."""
+    cx = float(state[0])
+    cy = float(state[1])
+    w = max(1.0, float(state[2]))
+    h = max(1.0, float(state[3]))
+    if not (np.isfinite(cx) and np.isfinite(cy)):
+        return (0, 0, 1, 1)
     x1 = int(round(cx - w / 2.0))
     y1 = int(round(cy - h / 2.0))
     x2 = int(round(cx + w / 2.0))
     y2 = int(round(cy + h / 2.0))
+    if x2 <= x1:
+        x2 = x1 + 1
+    if y2 <= y1:
+        y2 = y1 + 1
     return (x1, y1, x2, y2)
 
 
@@ -739,9 +763,12 @@ def _iou(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
     inter = iw * ih
     if inter == 0:
         return 0.0
-    area_a = max(1, (ax2 - ax1) * (ay2 - ay1))
-    area_b = max(1, (bx2 - bx1) * (by2 - by1))
-    return inter / float(area_a + area_b - inter)
+    area_a = max(0, (ax2 - ax1)) * max(0, (ay2 - ay1))
+    area_b = max(0, (bx2 - bx1)) * max(0, (by2 - by1))
+    union = area_a + area_b - inter
+    if union <= 0:
+        return 0.0
+    return inter / float(union)
 
 
 class SubtitleTracker:
@@ -852,10 +879,16 @@ def _expand_mask_by_color(frame: np.ndarray, mask: np.ndarray,
 def _edge_ring_color_correct(original: np.ndarray, filled: np.ndarray,
                               mask: np.ndarray, ring_px: int = 2) -> np.ndarray:
     """Sample a thin ring immediately outside the mask in both original and
-    filled frames, compute mean colour delta per channel across the ring, and
-    apply the offset to pixels inside the mask. Nulls the faint colour seam
-    that sometimes appears on gradient backgrounds after inpainting."""
-    if mask.max() == 0 or ring_px <= 0:
+    filled frames, compute the mean colour delta per channel across the ring,
+    and apply the offset to pixels inside the mask. Nulls the faint colour
+    seam that sometimes appears on gradient backgrounds after inpainting.
+
+    Robust against degenerate masks (fully saturated, fully empty, no ring,
+    non-finite sample means). Returns `filled` unchanged on any pathological
+    input rather than propagating NaN to the output."""
+    if filled is None or mask is None or ring_px <= 0:
+        return filled
+    if mask.size == 0 or mask.max() == 0:
         return filled
     mask_bool = mask > 0
     # Ring = dilate(mask) XOR mask -- the pixels immediately outside the mask
@@ -863,11 +896,17 @@ def _edge_ring_color_correct(original: np.ndarray, filled: np.ndarray,
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
     dilated = cv2.dilate(mask, kernel, iterations=1) > 0
     ring = dilated & ~mask_bool
-    if not ring.any():
+    ring_count = int(ring.sum())
+    # Require enough ring samples to make the mean meaningful; tiny rings
+    # (e.g. mask touching the frame border) produce noisy deltas that
+    # visibly shift the inpainted region.
+    if ring_count < 16:
         return filled
     orig_mean = original[ring].astype(np.float32).mean(axis=0)
     fill_mean = filled[ring].astype(np.float32).mean(axis=0)
     delta = orig_mean - fill_mean                            # (3,)
+    if not np.all(np.isfinite(delta)):
+        return filled
     if np.abs(delta).max() < 0.5:
         return filled
     out = filled.astype(np.float32)
@@ -896,18 +935,28 @@ def _detect_scene_cuts(frames: List[np.ndarray],
     return cuts
 
 
+def _farneback_winsize(h: int, w: int) -> int:
+    """Pick a Farneback window size proportional to frame dimensions. A
+    fixed winsize=21 over-smooths flow on 4K and under-resolves it on
+    sub-VGA clips. Scales to ~1/24 of the short edge, clamped to the
+    usable range."""
+    short_edge = max(1, min(h, w))
+    return int(max(9, min(33, short_edge // 24)))
+
+
 def _warp_to_reference(src: np.ndarray, ref: np.ndarray) -> np.ndarray:
     """Warp `src` so that its content aligns with `ref`, using Farneback dense
     optical flow on the luma channel. Used by flow-aware TBE to compensate
     for camera motion before aggregating temporal exposures."""
     src_gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
     ref_gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
+    h, w = src.shape[:2]
+    winsize = _farneback_winsize(h, w)
     flow = cv2.calcOpticalFlowFarneback(
         ref_gray, src_gray, None,
-        pyr_scale=0.5, levels=3, winsize=21, iterations=3,
+        pyr_scale=0.5, levels=3, winsize=winsize, iterations=3,
         poly_n=7, poly_sigma=1.5, flags=0,
     )
-    h, w = src.shape[:2]
     grid_x, grid_y = np.meshgrid(np.arange(w, dtype=np.float32),
                                   np.arange(h, dtype=np.float32))
     map_x = grid_x + flow[..., 0]
@@ -920,15 +969,19 @@ def _warp_to_reference(src: np.ndarray, ref: np.ndarray) -> np.ndarray:
 def _warp_mask_to_reference(src_mask: np.ndarray, src_frame: np.ndarray,
                               ref_frame: np.ndarray) -> np.ndarray:
     """Same flow but for a binary mask -- we need the mask to follow the warp
-    so that the unmasked/masked classification stays correct after warping."""
+    so that the unmasked/masked classification stays correct after warping.
+    The border defaults to 255 (masked) so pixels shifted off-frame are
+    treated conservatively as needing inpaint, never aggregated into the
+    background estimate."""
     src_gray = cv2.cvtColor(src_frame, cv2.COLOR_BGR2GRAY)
     ref_gray = cv2.cvtColor(ref_frame, cv2.COLOR_BGR2GRAY)
+    h, w = src_mask.shape[:2]
+    winsize = _farneback_winsize(h, w)
     flow = cv2.calcOpticalFlowFarneback(
         ref_gray, src_gray, None,
-        pyr_scale=0.5, levels=3, winsize=21, iterations=3,
+        pyr_scale=0.5, levels=3, winsize=winsize, iterations=3,
         poly_n=7, poly_sigma=1.5, flags=0,
     )
-    h, w = src_mask.shape[:2]
     grid_x, grid_y = np.meshgrid(np.arange(w, dtype=np.float32),
                                   np.arange(h, dtype=np.float32))
     map_x = grid_x + flow[..., 0]
@@ -970,7 +1023,8 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                     wm = _warp_mask_to_reference(m, f, ref_frame)
                     warped_frames.append(wf)
                     warped_masks.append(wm)
-                except Exception:
+                except Exception as exc:
+                    logger.debug(f"Flow warp fell back for frame {i}: {exc}")
                     warped_frames.append(f)
                     warped_masks.append(m)
         agg_frames = warped_frames
@@ -1008,7 +1062,8 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
         if flow_warp and t != (n // 2):
             try:
                 bg_for_t = _warp_to_reference(bg, frame)
-            except Exception:
+            except Exception as exc:
+                logger.debug(f"Flow back-warp fell back for frame {t}: {exc}")
                 bg_for_t = bg
         else:
             bg_for_t = bg
@@ -1271,50 +1326,80 @@ class AutoInpainter(BaseInpainter):
 
 def _ssim(a: np.ndarray, b: np.ndarray) -> float:
     """Structural Similarity between two BGR frames. Mean over the three
-    channels. Standard formulation (C1, C2 = (0.01*255)^2, (0.03*255)^2)."""
-    if a.shape != b.shape:
+    channels. Standard formulation (C1, C2 = (0.01*255)^2, (0.03*255)^2).
+    Flat-colour regions where the variance and covariance are all zero can
+    still drive (num/den) close to 0/0; we wrap in errstate + nan_to_num so
+    the report never yields NaN or inf.
+    """
+    if a is None or b is None or a.shape != b.shape or a.ndim < 2:
         return 0.0
     a32 = a.astype(np.float32)
     b32 = b.astype(np.float32)
+    if a.ndim == 2:
+        a32 = a32[..., None]
+        b32 = b32[..., None]
     C1 = (0.01 * 255) ** 2
     C2 = (0.03 * 255) ** 2
-    ssims = []
-    for c in range(a.shape[2]):
-        x = a32[..., c]
-        y = b32[..., c]
-        mu_x = cv2.GaussianBlur(x, (11, 11), 1.5)
-        mu_y = cv2.GaussianBlur(y, (11, 11), 1.5)
-        mu_x2 = mu_x * mu_x
-        mu_y2 = mu_y * mu_y
-        mu_xy = mu_x * mu_y
-        sig_x2 = cv2.GaussianBlur(x * x, (11, 11), 1.5) - mu_x2
-        sig_y2 = cv2.GaussianBlur(y * y, (11, 11), 1.5) - mu_y2
-        sig_xy = cv2.GaussianBlur(x * y, (11, 11), 1.5) - mu_xy
-        num = (2 * mu_xy + C1) * (2 * sig_xy + C2)
-        den = (mu_x2 + mu_y2 + C1) * (sig_x2 + sig_y2 + C2)
-        ssims.append(float(np.mean(num / den)))
-    return float(np.mean(ssims))
+    channels = a32.shape[2]
+    ssims: List[float] = []
+    with np.errstate(invalid='ignore', divide='ignore'):
+        for c in range(channels):
+            x = a32[..., c]
+            y = b32[..., c]
+            mu_x = cv2.GaussianBlur(x, (11, 11), 1.5)
+            mu_y = cv2.GaussianBlur(y, (11, 11), 1.5)
+            mu_x2 = mu_x * mu_x
+            mu_y2 = mu_y * mu_y
+            mu_xy = mu_x * mu_y
+            sig_x2 = cv2.GaussianBlur(x * x, (11, 11), 1.5) - mu_x2
+            sig_y2 = cv2.GaussianBlur(y * y, (11, 11), 1.5) - mu_y2
+            sig_xy = cv2.GaussianBlur(x * y, (11, 11), 1.5) - mu_xy
+            num = (2 * mu_xy + C1) * (2 * sig_xy + C2)
+            den = (mu_x2 + mu_y2 + C1) * (sig_x2 + sig_y2 + C2)
+            ratio = np.where(den > 0, num / np.maximum(den, 1e-12), 1.0)
+            ratio = np.nan_to_num(ratio, nan=1.0, posinf=1.0, neginf=0.0)
+            ssims.append(float(np.mean(ratio)))
+    if not ssims:
+        return 0.0
+    return float(np.clip(np.mean(ssims), 0.0, 1.0))
 
 
 def _probe_keyframe_indices(video_path: str) -> Optional[set]:
-    """Use ffprobe to list the frame indices of keyframes (I-frames) in a
-    video. Returns None if ffprobe is unavailable or the probe fails."""
+    """Use ffprobe to list the decode-order indices of keyframes (I-frames)
+    in a video. Returns None if ffprobe is unavailable or the probe fails.
+
+    Each non-blank line of ffprobe's `-show_entries frame=...` output with
+    `-select_streams v:0` corresponds to exactly one video frame in decode
+    order, which matches how cv2.VideoCapture walks the stream. We build a
+    set of line indices whose `key_frame` column is '1'. Blank lines and
+    malformed rows are skipped rather than shifting the index."""
     try:
         cmd = [
             'ffprobe', '-v', 'error', '-select_streams', 'v:0',
-            '-show_entries', 'frame=key_frame,pkt_pts_time,best_effort_timestamp_time',
+            '-show_entries', 'frame=key_frame',
             '-of', 'csv=print_section=0', video_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
+            if result.stderr:
+                logger.debug(f"ffprobe keyframe scan stderr: {result.stderr.strip()[:400]}")
             return None
         keyframe_indices = set()
-        for i, line in enumerate(result.stdout.strip().splitlines()):
-            parts = line.split(',')
-            if parts and parts[0].strip() == '1':
-                keyframe_indices.add(i)
+        frame_idx = 0
+        for raw in result.stdout.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            first = line.split(',', 1)[0].strip()
+            if first in ('0', '1'):
+                if first == '1':
+                    keyframe_indices.add(frame_idx)
+                frame_idx += 1
         return keyframe_indices if keyframe_indices else None
     except FileNotFoundError:
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("ffprobe keyframe scan timed out; falling back to pHash skip")
         return None
     except Exception as exc:
         logger.warning(f"ffprobe keyframe scan failed: {exc}")
@@ -1788,7 +1873,20 @@ class SubtitleRemover:
             # can read it without re-resolving.
             self._decode_path = decode_path
 
-            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            raw_fps = cap.get(cv2.CAP_PROP_FPS)
+            # cv2 returns 0.0 on failure and can return NaN on exotic codecs;
+            # both break downstream frame-to-time math, so coerce to a sane
+            # default rather than let the pipeline divide by zero or NaN.
+            try:
+                raw_fps = float(raw_fps)
+            except (TypeError, ValueError):
+                raw_fps = 0.0
+            if not np.isfinite(raw_fps) or raw_fps <= 0.0:
+                logger.warning("Invalid / missing FPS metadata; falling back to 30.0")
+                raw_fps = 30.0
+            # Clamp absurdly high values (some malformed containers report
+            # 1e6 FPS) so the writer doesn't stall on an impossible frame rate.
+            fps = float(min(raw_fps, 1000.0))
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
@@ -1796,18 +1894,31 @@ class SubtitleRemover:
             if width == 0 or height == 0:
                 raise ValueError(f"Invalid video dimensions: {width}x{height}")
 
-            # Time range support
+            # Time range support. Guard against NaN / inf / negative values
+            # coming from a malformed preset or CLI overlay -- never let them
+            # reach the ffmpeg command line or frame-count math.
+            def _sane_seconds(value: Any) -> float:
+                try:
+                    v = float(value)
+                except (TypeError, ValueError):
+                    return 0.0
+                if not np.isfinite(v) or v < 0.0:
+                    return 0.0
+                return v
+
+            time_start_s = _sane_seconds(self.config.time_start)
+            time_end_s = _sane_seconds(self.config.time_end)
             start_frame = 0
             end_frame = total_frames
-            if self.config.time_start > 0:
-                start_frame = min(total_frames - 1, int(self.config.time_start * fps))
+            if time_start_s > 0:
+                start_frame = max(0, min(total_frames - 1, int(time_start_s * fps)))
                 cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-            if self.config.time_end > 0:
-                end_frame = min(total_frames, int(self.config.time_end * fps))
+            if time_end_s > 0:
+                end_frame = max(0, min(total_frames, int(time_end_s * fps)))
             if end_frame <= start_frame:
                 raise ValueError(
-                    f"Invalid time range: end ({self.config.time_end}s) "
-                    f"must be after start ({self.config.time_start}s)")
+                    f"Invalid time range: end ({time_end_s}s) "
+                    f"must be after start ({time_start_s}s)")
             frames_to_process = end_frame - start_frame
 
             if start_frame > 0 or end_frame < total_frames:
@@ -1954,9 +2065,10 @@ class SubtitleRemover:
                                 result,
                                 frame_idx - len(results) + offset + 1,
                                 frames_to_process)
-                        except Exception:
-                            # never let a flaky preview hook break processing
-                            pass
+                        except Exception as exc:
+                            # Never let a flaky preview hook break processing,
+                            # but leave a breadcrumb so a broken UI is debuggable.
+                            logger.debug(f"on_preview_frame hook raised: {exc}")
                 if mask_writer is not None:
                     for m in masks:
                         mask_writer.write(m)

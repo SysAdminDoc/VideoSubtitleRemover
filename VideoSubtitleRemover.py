@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Video Subtitle Remover Pro
-A professional Windows application for AI-powered subtitle removal from videos and images.
-Based on: https://github.com/YaoFANGUK/video-subtitle-remover
+A professional Windows application for AI-powered subtitle removal from videos
+and images. Based on: https://github.com/YaoFANGUK/video-subtitle-remover
 
 Author: SysAdminDoc
-Version: 3.12.0
+See APP_VERSION for the running version -- the docstring deliberately omits
+a hardcoded number so there is a single source of truth.
 """
 
 import os
@@ -29,6 +30,8 @@ from datetime import datetime
 # =============================================================================
 
 APP_NAME = "Video Subtitle Remover Pro"
+# Single source of truth for the app's version string. Update here and it
+# propagates to the banner, header, logs, About dialog, and CHANGELOG cue.
 APP_VERSION = "3.12.0"
 APP_AUTHOR = "SysAdminDoc"
 
@@ -2638,8 +2641,18 @@ class TextWidgetHandler(logging.Handler):
 
     def emit(self, record):
         msg = self.format(record) + '\n'
+        # Skip cheaply if the widget has already been destroyed. tk.Text
+        # raises TclError on both `winfo_exists` and `after` after destroy,
+        # so we guard against both without re-entering a partially-torn-down
+        # interpreter.
         try:
+            if not int(self.text_widget.winfo_exists()):
+                return
             self.text_widget.after(0, self._append, msg, record.levelno)
+        except tk.TclError:
+            # The widget went away between our check and the schedule; drop
+            # silently because the root is shutting down.
+            pass
         except Exception:
             pass
 
@@ -6260,6 +6273,11 @@ class VideoSubtitleRemoverApp:
             return
         self._stop_requested = True
         self.cancel_event.set()
+        # Invalidate the cached remover so the next batch re-initialises with
+        # fresh state. A cancelled run may have left detector / inpainter /
+        # SRT buffers in an intermediate state.
+        self._cached_remover = None
+        self._cached_remover_key = None
 
         self.start_btn.set_style("primary")
         self.start_btn.icon = "x"
