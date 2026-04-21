@@ -1728,7 +1728,7 @@ class SubtitleRemover:
         cues and write to disk. Gaps of up to 0.5s are bridged."""
         if not self._srt_entries:
             return
-        fps = fps or 30.0
+        fps = fps if fps and fps > 1.0 else 30.0
         gap_tol = max(1, int(fps * 0.5))
 
         def ts(t: float) -> str:
@@ -1989,6 +1989,7 @@ class SubtitleRemover:
                     # Perceptual-hash adaptive mask reuse: skip detection when
                     # the frame is near-identical to the last detected one.
                     reuse_by_phash = False
+                    cur_hash = None  # may be set below; reused to avoid double-compute
                     if (self.config.phash_skip_enable and last_mask is not None
                             and last_hash is not None):
                         cur_hash = _phash(frame)
@@ -2042,7 +2043,9 @@ class SubtitleRemover:
                         )
                     last_mask = mask
                     if self.config.phash_skip_enable:
-                        last_hash = _phash(frame)
+                        # Reuse the hash computed above for the skip-check if
+                        # available; otherwise compute it now for the first time.
+                        last_hash = cur_hash if cur_hash is not None else _phash(frame)
                         last_hash_frame_idx = frame_idx
                     frames.append(frame)
                     masks.append(mask)
@@ -2259,6 +2262,9 @@ def _checkpoint_mark_done(ckpt_dir: Path, key: str):
 
 def _load_json_config(path: str) -> dict:
     """Load a JSON config file of {field: value} pairs for ProcessingConfig."""
+    size = os.path.getsize(path)
+    if size > 1 * 1024 * 1024:  # 1 MB sanity cap
+        raise ValueError(f"config file is too large ({size:,} bytes); expected a small JSON object")
     with open(path, "r", encoding="utf-8") as f:
         payload = json.load(f)
     if not isinstance(payload, dict):
@@ -2517,21 +2523,25 @@ def main():
         print(f"[batch] {len(inputs)} file(s) queued | out={out_dir} | resume={'on' if not args.no_resume else 'off'}")
         failures = 0
         reserved_outputs: set[str] = set()
-        for i, inp in enumerate(inputs, 1):
-            src = Path(inp)
-            outp = str(_choose_available_output_path(
-                out_dir / f"{src.stem}_no_sub{src.suffix}",
-                reserved_outputs,
-            ))
-            reserved_outputs.add(_path_key(outp))
-            print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
-            try:
-                ok = _process_one(inp, outp)
-            except Exception as exc:
-                logger.error(f"Failed on {src.name}: {exc}")
-                ok = False
-            if not ok:
-                failures += 1
+        try:
+            for i, inp in enumerate(inputs, 1):
+                src = Path(inp)
+                outp = str(_choose_available_output_path(
+                    out_dir / f"{src.stem}_no_sub{src.suffix}",
+                    reserved_outputs,
+                ))
+                reserved_outputs.add(_path_key(outp))
+                print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
+                try:
+                    ok = _process_one(inp, outp)
+                except Exception as exc:
+                    logger.error(f"Failed on {src.name}: {exc}")
+                    ok = False
+                if not ok:
+                    failures += 1
+        except KeyboardInterrupt:
+            print("\n[batch] Interrupted by user -- partial results kept on disk.")
+            sys.exit(130)
         succeeded = len(inputs) - failures
         print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded")
         if failures:
@@ -2541,7 +2551,11 @@ def main():
     # ---- Single-file mode ----
     print(f"[file] source={Path(args.input).name}")
     print(f"[file] output={args.output}")
-    success = _process_one(args.input, args.output)
+    try:
+        success = _process_one(args.input, args.output)
+    except KeyboardInterrupt:
+        print("\n[file] Interrupted by user.")
+        sys.exit(130)
     print(f"[file] {'completed' if success else 'failed'}")
     sys.exit(0 if success else 1)
 
