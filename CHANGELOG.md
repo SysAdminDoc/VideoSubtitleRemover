@@ -4,56 +4,88 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
-Premium polish and product-coherence repair pass across the desktop UI,
-runtime behavior, docs, packaging, and release tooling.
+### Fixed
 
-- **GUI workflow polish**: responsive shell behavior, stronger next-step
-  guidance, richer queue/preview states, clearer mask-review affordances,
-  and a themed preset-save dialog.
-- **Minimalist GUI pass**: the header, import area, queue list, and preview
-  surfaces now use fewer competing accents, shorter copy, calmer status
-  chips, and fewer duplicated row actions so core tasks are easier to find.
-- **Settings reliability**: queued idle items now refresh from the current
-  UI state when a batch starts, so late changes to language, region, and
-  quality settings are honored consistently.
-- **Runtime trust signals**: FFmpeg readiness is surfaced in the header,
-  About dialog, and processing warnings so audio-preservation behavior is
-  never ambiguous.
-- **Quality-report follow-through**: completed queue items, previews, and the
-  batch summary now surface sampled PSNR / SSIM metrics when quality checks
-  are enabled, matching the control's promise.
-- **Queue intake repair**: bulk imports now summarize added vs duplicate items
-  more calmly, and queued outputs stay collision-safe even when multiple idle
-  items target the same custom output location.
-- **Config hardening**: settings, presets, and CLI JSON overlays now validate
-  malformed values more defensively, use safer atomic writes for local JSON
-  persistence, and fall back cleanly from corrupted top-level payloads.
-- **Backend path safety**: CLI and batch outputs now create missing parent
-  directories, avoid same-name collisions inside shared batch output folders,
-  and reduce ffmpeg log capture noise during long-running encode steps.
-- **Output transaction safety**: final image, video, mask-video, and fallback
-  copy writes now stage into sibling temp files before replacing the final
-  destination, which avoids leaking partial outputs after failures or user
-  stops.
-- **Setup and launcher polish**: setup now prefers `requirements.txt`,
-  quietly launches the GUI with `pythonw`, and keeps the generated batch and
-  debug launchers aligned with the polished first-run experience.
-- **Packaging repair**: local and GitHub Actions builds now include more of
-  the real runtime shape, including branding assets, optional OCR imports, and
-  bundled docs in release folders.
-- **Docs alignment**: README version/license/workflow details now match the
-  current product behavior, and placeholder support folders now explain their
-  purpose clearly.
-- **Regression coverage**: added focused unittest coverage for config
-  normalization, defensive JSON loading, and output collision handling, and
-  the release workflow now runs those tests before packaging.
-- **Stop-flow hardening**: the desktop batch controls now treat Stop as a
-  safe stop request instead of an immediate restart opportunity, preventing
-  overlapping processing threads while a current item winds down.
-- **Preview and shutdown race repair**: background mask previews now ignore
-  stale results after the user switches items, and closing the app during a
-  batch waits briefly for active work to notice cancellation instead of
-  immediately tearing down the UI.
+- **Shutdown race condition**: `_shutdown_started` is now set only *after* the
+  user confirms the "Close while processing?" dialog, preventing a racing
+  `_on_processing_complete` callback from destroying the root window while the
+  confirmation modal was still open.
+- **Duplicate queue-item IDs**: replaced the millisecond-timestamp ID with
+  `uuid.uuid4()` so IDs are collision-proof even when many files are added
+  simultaneously.
+- **`_coerce_int` / `_coerce_float` NaN/inf**: both coercers now reject
+  non-finite floats (NaN, ±Inf) and fall back to the specified default, matching
+  the stricter guard already present in the backend.
+- **`from_dict` pre-sanitisation crash**: `subtitle_area` and `subtitle_areas`
+  in `ProcessingConfig.from_dict` now go through `_coerce_rect` /
+  `_coerce_rect_list` directly instead of raw `tuple()`/list-comprehension
+  conversions that could raise before `.normalized()` ran.
+- **pHash double-computation**: the perceptual hash is now computed once per
+  detection frame; the value is reused for `last_hash` instead of being
+  recomputed immediately after.
+- **`_write_srt` unsafe fps guard**: `fps or 30.0` replaced with
+  `fps if fps and fps > 1.0 else 30.0` to prevent absurd SRT timestamps from
+  a near-zero but non-falsy fps value.
+- **`_load_json_config` size guard**: added a 1 MB cap before parsing so an
+  accidentally large file cannot be loaded in full before the type check.
+- **CLI `KeyboardInterrupt`**: Ctrl-C during a batch or single-file run now
+  prints a clean message and exits with code 130 instead of showing a raw
+  traceback.
+- **`detect_ai_engines()` Surya detection**: broadened from `ImportError` to
+  `Exception` so a partially-installed Surya (runtime import errors) no longer
+  crashes engine probing.
+- **`TextWidgetHandler._append` after-destroy safety**: added a
+  `winfo_exists()` guard at the start of `_append` so log records scheduled
+  with `after(0, ...)` just before root teardown are silently dropped rather
+  than raising `TclError`.
+- **`_reveal_output` silent failure**: `os.startfile` errors are now logged as
+  warnings instead of being swallowed silently.
+- **`_start_elapsed_timer` double-start**: calls `_stop_elapsed_timer()` first
+  to cancel any existing tick loop before starting a new one.
+- **Headless CI guard**: `test_on_processing_complete_during_shutdown_skips_summary_ui`
+  is now skipped automatically on systems without a display.
+
+### UI/UX improvements
+
+- **Workflow step pills**: the header guidance panel now renders three compact
+  step pills (Import → Inspect → Run) that highlight the current stage as the
+  user moves through the workflow. The pills were wired to `_set_workflow_stage`
+  but never built; they are now constructed at startup.
+- **Section eyebrow labels**: `_section_title` now renders the `eyebrow`
+  parameter as a small-caps meta-label above the section title, adding the
+  intended two-level hierarchy (e.g. "WORKSPACE / Import media",
+  "PROCESSING / Settings"). Previously the parameter was accepted but silently
+  ignored.
+- **Settings section title deduplication**: the Processing settings section was
+  titled "PROCESSING / Processing". It is now "PROCESSING / Settings".
+- **Log badge ordering**: warn/error count badges in the activity-log header now
+  appear between the section title and the toggle button, where they belong.
+  Previously they were packed after the toggle button, putting them in the wrong
+  visual position.
+- **Log badge pluralization**: "1 warn" is now "1 warning"; counts > 1 use the
+  correct plural form for both warnings and errors.
+- **Queue item default message**: new queue items show "Ready to process" instead
+  of "Waiting…" for consistency with the `update_item()` fallback text.
+- **Status badge padding tokens**: `padx=10, pady=4` on queue item status badges
+  replaced with `padx=Theme.S_SM, pady=Theme.S_XS` (8 and 4 respectively) for
+  design-system consistency.
+- **Slider hint indent**: `padx=(Theme.S_LG + 128, Theme.S_LG)` (magic-number
+  approximation) simplified to `padx=(Theme.S_LG, Theme.S_LG)`.
+- **Queue empty-state spacing**: `pady=(Theme.S_3XL + 20, …)` magic number
+  replaced with `pady=(Theme.S_3XL, …)`.
+- **Footer hint text**: shortened from a 13-word instructional sentence to
+  "Add files, review a sample frame, then start." — concise and calm.
+- **Activity log height**: increased from 5 to 6 text rows for better context
+  visibility without dominating the layout.
+- **Progress bar height parity**: batch-level progress bar harmonised to
+  `height=5` to match item-level bars (was `height=6`).
+
+### Tests
+
+- Added `CoerceHardeningTests`: NaN/inf for `_coerce_int` and `_coerce_float`,
+  and non-iterable `subtitle_area` / `subtitle_areas` in `from_dict`.
+- Added `BackendWriteSrtTests`: zero fps and near-zero fps fallback to 30.
+- Added `LoadJsonConfigTests`: oversized config file is rejected before parsing.
 
 ## [v3.12.0] - 2026-04-17
 

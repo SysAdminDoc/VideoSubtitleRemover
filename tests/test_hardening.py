@@ -1,4 +1,6 @@
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -6,6 +8,13 @@ from types import SimpleNamespace
 
 import VideoSubtitleRemover as gui
 from backend import processor
+
+
+def _has_display() -> bool:
+    """Return True if a GUI display is available."""
+    if sys.platform == "win32":
+        return True
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
 class GuiConfigHardeningTests(unittest.TestCase):
@@ -60,6 +69,7 @@ class GuiConfigHardeningTests(unittest.TestCase):
             finally:
                 gui.SETTINGS_FILE = original
 
+    @unittest.skipUnless(_has_display(), "No display available -- skipping GUI test")
     def test_on_processing_complete_during_shutdown_skips_summary_ui(self):
         app = gui.VideoSubtitleRemoverApp()
         try:
@@ -174,6 +184,92 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertIsNone(band)
         self.assertIsNone(remover.config.subtitle_area)
         self.assertEqual(calls, ["clip-two.mp4"])
+
+
+class CoerceHardeningTests(unittest.TestCase):
+    """Tests for NaN/inf guard in _coerce_int/_coerce_float and
+    pre-sanitisation fixes in ProcessingConfig.from_dict."""
+
+    def test_coerce_int_rejects_nan(self):
+        result = gui._coerce_int(float("nan"), default=99)
+        self.assertEqual(result, 99)
+
+    def test_coerce_int_rejects_inf(self):
+        result = gui._coerce_int(float("inf"), default=7, min_value=0, max_value=100)
+        self.assertEqual(result, 7)
+
+    def test_coerce_float_rejects_nan(self):
+        result = gui._coerce_float(float("nan"), default=0.5, min_value=0.0, max_value=1.0)
+        self.assertEqual(result, 0.5)
+
+    def test_coerce_float_rejects_negative_inf(self):
+        result = gui._coerce_float(float("-inf"), default=0.5)
+        self.assertEqual(result, 0.5)
+
+    def test_from_dict_subtitle_areas_non_iterable_value_falls_back_to_none(self):
+        """subtitle_areas with a non-iterable root (e.g. integer) must not crash."""
+        cfg = gui.ProcessingConfig.from_dict({"subtitle_areas": 42})
+        self.assertIsNone(cfg.subtitle_areas)
+
+    def test_from_dict_subtitle_area_non_iterable_falls_back_to_none(self):
+        """subtitle_area with a scalar value must not crash."""
+        cfg = gui.ProcessingConfig.from_dict({"subtitle_area": "bad"})
+        self.assertIsNone(cfg.subtitle_area)
+
+
+class BackendWriteSrtTests(unittest.TestCase):
+    """Tests for _write_srt fps guard."""
+
+    def _make_remover_with_entries(self, entries):
+        """Construct a minimal SubtitleRemover-like object with SRT entries."""
+        cfg = processor.ProcessingConfig()
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = cfg
+        remover._srt_entries = entries
+        return remover
+
+    def test_write_srt_uses_fallback_fps_for_zero(self):
+        """fps=0.0 should fall back to 30.0 and not divide-by-zero."""
+        import tempfile, os
+        remover = self._make_remover_with_entries([(0, "Hello world")])
+        with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
+            path = f.name
+        try:
+            remover._write_srt(path, fps=0.0)
+            content = open(path, encoding="utf-8").read()
+            self.assertIn("00:00:00,033", content)  # frame 0 / 30 fps
+        finally:
+            os.unlink(path)
+
+    def test_write_srt_uses_fallback_fps_for_tiny_value(self):
+        """fps=0.001 (absurd) should also fall back to 30.0."""
+        import tempfile, os
+        remover = self._make_remover_with_entries([(0, "Test")])
+        with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
+            path = f.name
+        try:
+            remover._write_srt(path, fps=0.001)
+            content = open(path, encoding="utf-8").read()
+            # Should have sane timestamp, not a 1000-second-long cue
+            self.assertIn("00:00:00", content)
+            # The end timestamp at 30fps for frame 0 is 0.033s, nowhere near 1000s
+            self.assertNotIn("00:16:", content)
+        finally:
+            os.unlink(path)
+
+
+class LoadJsonConfigTests(unittest.TestCase):
+    def test_load_json_config_rejects_oversized_file(self):
+        """Files larger than 1 MB should raise ValueError without being parsed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            big = Path(tmpdir) / "big.json"
+            # Write >1 MB of valid JSON — use enough entries to exceed the cap
+            big.write_text("{" + ", ".join(f'"{i}": {i}' for i in range(150_000)) + "}",
+                           encoding="utf-8")
+            self.assertGreater(big.stat().st_size, 1 * 1024 * 1024,
+                               "test fixture must be >1 MB")
+            with self.assertRaises(ValueError):
+                processor._load_json_config(str(big))
 
 
 if __name__ == "__main__":
