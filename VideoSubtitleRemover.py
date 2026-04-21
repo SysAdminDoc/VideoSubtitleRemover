@@ -12,6 +12,8 @@ a hardcoded number so there is a single source of truth.
 import os
 import sys
 import json
+import math
+import uuid
 import threading
 import subprocess
 import time
@@ -444,7 +446,7 @@ class ProcessingConfig:
             sttn_reference_length=data.get("sttn_reference_length", 10),
             sttn_max_load_num=data.get("sttn_max_load_num", 30),
             lama_super_fast=data.get("lama_super_fast", False),
-            subtitle_area=tuple(data["subtitle_area"]) if data.get("subtitle_area") else None,
+            subtitle_area=_coerce_rect(data.get("subtitle_area")),
             detection_lang=data.get("detection_lang", "en"),
             detection_threshold=data.get("detection_threshold", 0.5),
             output_format=data.get("output_format", "mp4"),
@@ -462,7 +464,7 @@ class ProcessingConfig:
             tbe_scene_cut_split=data.get("tbe_scene_cut_split", True),
             tbe_scene_cut_threshold=data.get("tbe_scene_cut_threshold", 0.35),
             edge_ring_px=data.get("edge_ring_px", 2),
-            subtitle_areas=[tuple(r) for r in data["subtitle_areas"]] if data.get("subtitle_areas") else None,
+            subtitle_areas=_coerce_rect_list(data.get("subtitle_areas")),
             auto_band=data.get("auto_band", False),
             export_srt=data.get("export_srt", False),
             export_mask_video=data.get("export_mask_video", False),
@@ -521,7 +523,10 @@ def _coerce_bool(value, default: bool) -> bool:
 def _coerce_int(value, default: int, min_value: Optional[int] = None,
                 max_value: Optional[int] = None) -> int:
     try:
-        coerced = int(float(value))
+        f = float(value)
+        if not math.isfinite(f):
+            raise ValueError("non-finite float")
+        coerced = int(f)
     except (TypeError, ValueError):
         coerced = default
     if min_value is not None:
@@ -535,6 +540,8 @@ def _coerce_float(value, default: float, min_value: Optional[float] = None,
                   max_value: Optional[float] = None) -> float:
     try:
         coerced = float(value)
+        if not math.isfinite(coerced):
+            raise ValueError("non-finite float")
     except (TypeError, ValueError):
         coerced = default
     if min_value is not None:
@@ -983,7 +990,7 @@ def detect_ai_engines() -> dict:
     try:
         from surya.detection import DetectionPredictor  # noqa: F401
         engines["detection"].append("Surya")
-    except ImportError:
+    except Exception:
         pass
     try:
         import easyocr  # noqa: F401
@@ -2361,7 +2368,7 @@ class QueueItemWidget(tk.Frame):
         self.status_badge = tk.Label(self.top_row, text=badge["label"],
                                      font=f(Theme.F_META, "bold"),
                                      bg=badge["bg"], fg=badge["color"],
-                                     padx=10, pady=4)
+                                     padx=Theme.S_SM, pady=Theme.S_XS)
         self.status_badge.pack(side="right")
 
         # File info row (meta caption)
@@ -2387,7 +2394,7 @@ class QueueItemWidget(tk.Frame):
         self.bottom_row = tk.Frame(self.container, bg=self._surface_bg)
         self.bottom_row.pack(fill="x")
 
-        self.message_label = tk.Label(self.bottom_row, text=item.message or "Waiting...",
+        self.message_label = tk.Label(self.bottom_row, text=item.message or "Ready to process",
                                       font=f(Theme.F_BODY_SM), bg=self._surface_bg,
                                       fg=Theme.TEXT_SECONDARY, anchor="w")
         self.message_label.pack(side="left", fill="x", expand=True)
@@ -2466,8 +2473,8 @@ class QueueItemWidget(tk.Frame):
         if self.item.status == ProcessingStatus.COMPLETE and Path(self.item.output_path).exists():
             try:
                 os.startfile(str(Path(self.item.output_path).parent))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(f"Could not open output folder: {exc}")
 
     def _copy_source_path(self):
         """Copy the source file path to the clipboard."""
@@ -2657,6 +2664,11 @@ class TextWidgetHandler(logging.Handler):
             pass
 
     def _append(self, msg, levelno):
+        try:
+            if not int(self.text_widget.winfo_exists()):
+                return
+        except tk.TclError:
+            return
         self.text_widget.config(state="normal")
         tag = "info"
         if levelno >= logging.ERROR:
@@ -2818,35 +2830,45 @@ class VideoSubtitleRemoverApp:
         """Stop processing, save settings, and close."""
         if self._shutdown_started:
             return
+        # Guard against re-entry while the confirmation dialog is open.
+        # Without this, a second WM_DELETE_WINDOW could fire while the modal
+        # is shown (e.g. from an external window manager).
+        if getattr(self, '_close_dialog_open', False):
+            return
+        self._close_dialog_open = True
+        try:
+            active_thread = self._has_active_processing_thread()
+            if self.is_processing or active_thread:
+                n = sum(1 for it in self.queue
+                        if it.status in (ProcessingStatus.LOADING,
+                                         ProcessingStatus.DETECTING,
+                                         ProcessingStatus.PROCESSING,
+                                         ProcessingStatus.MERGING))
+                label = f"{n} active item{'s' if n != 1 else ''} will be cancelled."
+                if not show_confirm(
+                    self.root,
+                    title="Close while processing?",
+                    message="A batch is still running.",
+                    detail=label + " Completed outputs on disk are kept.",
+                    confirm_label="Close anyway",
+                    cancel_label="Keep working",
+                    tone="danger",
+                ):
+                    return
+                self.cancel_event.set()
+                self._stop_elapsed_timer()
+                self._stop_requested = True
+                self._update_status(
+                    "Closing after the current step stops safely...",
+                    "warning",
+                )
+                if self._taskbar:
+                    self._taskbar.set_state(TaskbarProgress.STATE_PAUSED)
+        finally:
+            self._close_dialog_open = False
+        # Set the flag AFTER confirmation so that _on_processing_complete
+        # callbacks scheduled before the dialog opened don't race-destroy root.
         self._shutdown_started = True
-        active_thread = self._has_active_processing_thread()
-        if self.is_processing or active_thread:
-            n = sum(1 for it in self.queue
-                    if it.status in (ProcessingStatus.LOADING,
-                                     ProcessingStatus.DETECTING,
-                                     ProcessingStatus.PROCESSING,
-                                     ProcessingStatus.MERGING))
-            label = f"{n} active item{'s' if n != 1 else ''} will be cancelled."
-            if not show_confirm(
-                self.root,
-                title="Close while processing?",
-                message="A batch is still running.",
-                detail=label + " Completed outputs on disk are kept.",
-                confirm_label="Close anyway",
-                cancel_label="Keep working",
-                tone="danger",
-            ):
-                self._shutdown_started = False
-                return
-            self.cancel_event.set()
-            self._stop_elapsed_timer()
-            self._stop_requested = True
-            self._update_status(
-                "Closing after the current step stops safely...",
-                "warning",
-            )
-            if self._taskbar:
-                self._taskbar.set_state(TaskbarProgress.STATE_PAUSED)
         self._sync_config_from_ui()
         # Persist window layout and panel states for next launch
         try:
@@ -3015,10 +3037,16 @@ class VideoSubtitleRemoverApp:
 
     def _section_title(self, parent, eyebrow: str, title: str, hint: str,
                        pad_x: int = 20, pad_top: int = 16):
-        """Consistent section header: title + hint line."""
+        """Consistent section header: eyebrow label + title + hint line."""
         bg = parent.cget("bg")
+        if eyebrow:
+            tk.Label(parent, text=eyebrow.upper(), font=f(Theme.F_EYEBROW, "bold"),
+                     bg=bg, fg=Theme.TEXT_MUTED).pack(
+                         anchor="w", padx=pad_x, pady=(pad_top, 0))
         tk.Label(parent, text=title, font=f(Theme.F_HEADING, "bold"),
-                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x, pady=(pad_top, 0))
+                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(
+                     anchor="w", padx=pad_x,
+                     pady=(2 if eyebrow else pad_top, 0))
         if hint:
             tk.Label(parent, text=hint, font=f(Theme.F_BODY_SM),
                      bg=bg, fg=Theme.TEXT_MUTED, wraplength=560,
@@ -3541,6 +3569,28 @@ class VideoSubtitleRemoverApp:
 
         self._header_guidance_panel = tk.Frame(right, bg=Theme.BG_SECONDARY)
         self._header_guidance_panel.pack(anchor="e", fill="x", pady=(Theme.S_SM, 0))
+
+        # Workflow step pills (Import → Inspect → Run)
+        pills_row = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
+        pills_row.pack(anchor="w", pady=(0, Theme.S_SM))
+        for idx, step_label in enumerate(("Import", "Inspect", "Run"), start=1):
+            pill_frame = tk.Frame(pills_row, bg=Theme.BG_CARD,
+                                  highlightthickness=1, highlightbackground=Theme.BORDER)
+            badge_lbl = tk.Label(pill_frame, text=str(idx),
+                                 font=f(Theme.F_META, "bold"),
+                                 bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
+                                 padx=5, pady=2)
+            badge_lbl.pack(side="left", padx=(5, 0), pady=4)
+            text_lbl = tk.Label(pill_frame, text=step_label,
+                                font=f(Theme.F_BODY_SM),
+                                bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY)
+            text_lbl.pack(side="left", padx=(Theme.S_XS, 8), pady=4)
+            pill_frame.pack(side="left",
+                            padx=(0 if idx == 1 else Theme.S_XS, 0))
+            self._workflow_pills.append({
+                "frame": pill_frame, "badge": badge_lbl, "text": text_lbl,
+            })
+
         self.header_guidance_title = tk.Label(
             self._header_guidance_panel,
             text="Build your batch",
@@ -3618,7 +3668,7 @@ class VideoSubtitleRemoverApp:
         self._section_title(
             section,
             eyebrow="Processing",
-            title="Processing",
+            title="Settings",
             hint="Pick a profile, confirm the region, then start the batch.",
         )
 
@@ -4063,7 +4113,7 @@ class VideoSubtitleRemoverApp:
             tk.Label(parent, text=hint, font=f(Theme.F_META),
                      bg=parent_bg, fg=Theme.TEXT_MUTED,
                      anchor="w", justify="left").pack(
-                         fill="x", padx=(Theme.S_LG + 128, Theme.S_LG),
+                         fill="x", padx=(Theme.S_LG, Theme.S_LG),
                          pady=(0, Theme.S_XS))
 
     def _toggle_advanced(self, event=None):
@@ -4144,7 +4194,7 @@ class VideoSubtitleRemoverApp:
         batch_bar_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         batch_bar_frame.pack(fill="x", padx=Theme.S_XL, pady=(4, Theme.S_SM))
 
-        self.batch_progress = ModernProgressBar(batch_bar_frame, width=300, height=6,
+        self.batch_progress = ModernProgressBar(batch_bar_frame, width=300, height=5,
                                                  fill=Theme.BLUE_PRIMARY)
         self.batch_progress.pack(fill="x")
         def _resize_batch(event):
@@ -4316,7 +4366,7 @@ class VideoSubtitleRemoverApp:
     def _build_queue_empty_state(self):
         """Queue empty state with short, clear guidance."""
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
-        self.empty_container.pack(pady=(Theme.S_3XL + 20, Theme.S_LG), fill="x")
+        self.empty_container.pack(pady=(Theme.S_3XL, Theme.S_LG), fill="x")
 
         icon = tk.Canvas(self.empty_container, width=60, height=60,
                          bg=Theme.BG_SECONDARY, highlightthickness=0)
@@ -4442,19 +4492,21 @@ class VideoSubtitleRemoverApp:
                  font=f(Theme.F_BODY, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w", pady=(2, 0))
 
-        # Level badges: warn / error counts (hidden when zero)
+        # Level badges: warn / error counts — packed in a row between title and toggle
+        self._badge_row = tk.Frame(log_header, bg=Theme.BG_SECONDARY)
+        self._badge_row.pack(side="left", padx=(Theme.S_MD, 0))
         self._log_warn_badge = tk.Label(
-            log_header, text="", font=f(Theme.F_META, "bold"),
+            self._badge_row, text="", font=f(Theme.F_META, "bold"),
             bg=Theme.WARNING_BG, fg=Theme.WARNING, padx=8, pady=3)
         self._log_error_badge = tk.Label(
-            log_header, text="", font=f(Theme.F_META, "bold"),
+            self._badge_row, text="", font=f(Theme.F_META, "bold"),
             bg=Theme.ERROR_BG, fg=Theme.ERROR, padx=8, pady=3)
 
         self._log_visible = True
         self._log_toggle_btn = ModernButton(log_header, text="Hide activity", width=120,
                                             command=self._toggle_log_panel,
                                             style="ghost", size="sm")
-        self._log_toggle_btn.pack(side="left", padx=(Theme.S_LG, 0))
+        self._log_toggle_btn.pack(side="left", padx=(Theme.S_MD, 0))
 
         open_log_btn = ModernButton(
             log_header, text="Open log file", width=118,
@@ -4472,7 +4524,7 @@ class VideoSubtitleRemoverApp:
                                   highlightbackground=Theme.BORDER_SUBTLE)
         self._log_body.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_SM, Theme.S_LG))
 
-        self.log_text = tk.Text(self._log_body, height=5, bg=Theme.BG_LOG,
+        self.log_text = tk.Text(self._log_body, height=6, bg=Theme.BG_LOG,
                                 fg=Theme.TEXT_SECONDARY, font=mono(Theme.F_BODY_SM),
                                 relief="flat", bd=8, state="disabled",
                                 wrap="word", insertbackground=Theme.TEXT_PRIMARY,
@@ -4503,16 +4555,18 @@ class VideoSubtitleRemoverApp:
             self._log_toggle_btn.set_text("Show activity")
 
     def _update_log_badges(self, warn_count: int, error_count: int):
-        """Show/hide warn/error count pills in the log header."""
+        """Show/hide warn/error count pills in the log header (always before toggle)."""
         try:
             if warn_count > 0:
-                self._log_warn_badge.config(text=f"{warn_count} warn")
-                self._log_warn_badge.pack(side="left", padx=(Theme.S_SM, 0))
+                self._log_warn_badge.config(
+                    text=f"{warn_count} warning{'s' if warn_count != 1 else ''}")
+                self._log_warn_badge.pack(side="left", padx=(0, Theme.S_XS))
             else:
                 self._log_warn_badge.pack_forget()
             if error_count > 0:
-                self._log_error_badge.config(text=f"{error_count} error")
-                self._log_error_badge.pack(side="left", padx=(Theme.S_SM, 0))
+                self._log_error_badge.config(
+                    text=f"{error_count} error{'s' if error_count != 1 else ''}")
+                self._log_error_badge.pack(side="left", padx=(0, Theme.S_XS))
             else:
                 self._log_error_badge.pack_forget()
         except Exception:
@@ -4569,7 +4623,7 @@ class VideoSubtitleRemoverApp:
 
         self.status_hint = tk.Label(
             footer,
-            text="Tip: pick a queued item, review the mask, then start the batch when the framing looks right.",
+            text="Add files, review a sample frame, then start.",
             font=f(Theme.F_META),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_MUTED,
@@ -5630,8 +5684,8 @@ class VideoSubtitleRemoverApp:
                     logger.info(f"Already in queue: {Path(file_path).name}")
                     return "duplicate"
 
-        # Generate unique ID
-        item_id = f"{int(time.time() * 1000)}_{len(self.queue)}"
+        # Generate a collision-proof unique ID for this queue slot
+        item_id = uuid.uuid4().hex
 
         # Generate an output path that stays unique against both disk and the
         # rest of the queued items.
@@ -6295,6 +6349,9 @@ class VideoSubtitleRemoverApp:
 
     def _start_elapsed_timer(self):
         """Start a timer that updates elapsed times on in-progress queue items."""
+        # Cancel any existing timer before starting a new one to avoid
+        # stacking multiple concurrent tick loops.
+        self._stop_elapsed_timer()
         def tick():
             if not self.is_processing:
                 return
