@@ -550,3 +550,35 @@ Research sources used to compile this roadmap, grouped by category:
 ### Mobile / platforms
 - [arthenica/ffmpeg-kit](https://github.com/arthenica/ffmpeg-kit) -- cross-platform FFmpeg wrappers
 - [Chaquopy](https://chaquo.com/chaquopy/) -- Python on Android
+
+## Open-Source Research (Round 2)
+
+### Related OSS Projects
+- https://github.com/YaoFANGUK/video-subtitle-remover — reference STTN/LAMA/ProPainter pipeline
+- https://github.com/YaoFANGUK/video-subtitle-extractor — companion OCR for SRT extraction
+- https://github.com/JollyToday/GhostCut_Remove_Video_Text — multilingual OCR + inpainting (EN/CN/JA/KO/AR)
+- https://github.com/rainwl/VideoRemoveText — lightweight LaMa + fixed ROI + color threshold
+- https://github.com/Rats20/EraseSubtitles — multilingual text detection + inpainting research
+- https://github.com/Keaneo/Scrubtitles — minimal script reference
+- https://github.com/advimman/lama — upstream LaMa inpainting weights
+- https://github.com/sczhou/ProPainter — upstream ProPainter (high-VRAM, best motion)
+- https://github.com/researchmm/STTN — upstream STTN reference
+
+### Features to Borrow
+- Multi-backend inpaint switch: sttn-auto / sttn-det / lama / propainter / opencv (YaoFANGUK VSR)
+- DirectML execution provider for AMD/Intel GPUs in addition to CUDA (YaoFANGUK VSR)
+- Docker images keyed by hardware variant (CUDA 11.8/12.6/12.8, DirectML, CPU) (YaoFANGUK VSR)
+- Paired extractor → remover workflow: OCR to SRT first, then remove (YaoFANGUK pair)
+- Fixed-ROI + color-threshold fast path for speed when text location is stable (rainwl)
+- Auto device pick: cuda → mps → cpu with CLI override (rainwl)
+- Multilingual text detection module covering CJK + Arabic scripts (GhostCut, EraseSubtitles)
+- Reference-frame picker UI so user can hint STTN which frames have clean background
+- VRAM budget slider that down-selects available backends at runtime
+- Batch mode for a folder of clips sharing the same subtitle ROI
+
+### Patterns & Architectures Worth Studying
+- Pluggable inpainter interface — each backend implements (detect, inpaint, dispose) so new models drop in (YaoFANGUK VSR)
+- First-run weight download with checksum verify, cache under %LOCALAPPDATA% (rainwl, LaMa)
+- ONNXRuntime + DirectML for non-NVIDIA GPUs rather than forcing CUDA (YaoFANGUK VSR)
+- Frame-sequence temp cache as PNG chunks so a crashed run resumes from last completed frame
+- Offload inference to a child process so GUI stays responsive and OOM doesn't kill the app
