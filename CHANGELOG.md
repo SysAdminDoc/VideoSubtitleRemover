@@ -6,6 +6,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Chyron vs subtitle classifier (`--keep-chyrons` / `--keep-subtitles`)**
+  -- `_KalmanBox.is_chyron(min_hits)` and `SubtitleTracker.categorize()`
+  classify each detection by lifetime: a Kalman track that has matched
+  in `>= chyron_min_hits` frames (default 90, ~3 s at 30 fps) is a
+  chyron (station logo, lower-third, breaking-news ticker); shorter-
+  lived tracks are dialogue subtitles. New `ProcessingConfig` fields
+  `remove_subtitles` and `remove_chyrons` (both default True for
+  backward compatibility) gate which class is sent to the inpaint
+  mask. The filter is a no-op when both are True, so v3.12 behaviour
+  is preserved. CLI: `--keep-chyrons`, `--keep-subtitles`,
+  `--chyron-min-hits N`.
 - **Frame-sequence input (DPX / EXR / PNG / JPG directories)** -- new
   `_FrameSequenceCapture` adapter mirrors the `cv2.VideoCapture` surface
   (`isOpened`, `read`, `set(POS_FRAMES)`, `get(FPS / WIDTH / HEIGHT /
