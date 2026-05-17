@@ -365,10 +365,17 @@ require model-weight downloads.
     captions morph per-syllable; the current detector sees them as
     constantly-new text. Treat the whole karaoke line as one moving object
     via optical-flow association and mask the union bounds.
-44. **Chyron vs subtitle distinction** -- news graphics (station logos,
-    persistent lower-thirds, breaking-news tickers) are conceptually
-    different from dialogue subtitles. Auto-classify each detected box
-    and let the user toggle which categories to remove.
+44. **[x] Chyron vs subtitle distinction** -- new
+    `_KalmanBox.is_chyron(min_hits)` + `SubtitleTracker.categorize()`
+    classify each detection by Kalman-track lifetime: tracks that have
+    matched in `>= chyron_min_hits` frames (default 90, ~3 s at 30 fps)
+    are chyrons; shorter-lived tracks are dialogue subtitles. New
+    `ProcessingConfig.remove_subtitles` and `remove_chyrons` (both
+    default True for backward compatibility) gate the inpaint mask.
+    CLI exposes `--keep-chyrons`, `--keep-subtitles`,
+    `--chyron-min-hits N`. Filter is a no-op when both removes are
+    True so v3.12 behaviour is preserved. Tests in
+    [tests/test_hardening.py](./tests/test_hardening.py) `ChyronClassifierTests`.
 45. **WhisperX-aided chyron classifier** -- pairs with #44: cross-reference
     `whisperx` word timestamps against detected boxes. Boxes with no
     nearby speech are likely chyrons / captions, not dialogue. Adds the
