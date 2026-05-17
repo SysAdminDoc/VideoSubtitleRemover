@@ -6,6 +6,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Prefetch / pipeline parallelism (`prefetch_decode`, default on)** --
+  new `_PrefetchReader` wraps `cv2.VideoCapture` with a daemon worker
+  thread that fills a bounded frame queue while the main thread runs
+  detection + inpainting. cv2 / numpy / onnxruntime release the GIL on
+  heavy calls so plain threading is enough to overlap I/O with compute.
+  Strict ownership rule: once the wrapper is active, the underlying cap
+  must not be touched directly (`.read()`/`.set()`/`.get()` on the raw
+  cap from the main thread would race the worker). Cleanup goes through
+  `reader.release()`, which sets a stop event, drains the queue so the
+  worker isn't blocked on `put()`, joins the thread, and then releases
+  the underlying cap. Exception path in `process_video` is wired through
+  the same path so a crash mid-batch never leaks the worker thread.
+  Toggle off via `--no-prefetch`. Queue size auto-derives from
+  `sttn_max_load_num * 2` (min 8); override with `--prefetch-queue N`.
 - **Structured JSON-line log option (`--json-log PATH`)** -- new
   `backend.processor.JsonLineLogHandler` writes one JSON record per line
   with `ts` (UTC ISO-8601), `level`, `logger`, `msg`, and optional `exc`
