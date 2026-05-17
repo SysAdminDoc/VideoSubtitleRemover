@@ -44,6 +44,18 @@ jobs:
           }
           python -m pip install pyinstaller
 
+      - name: Dependency vulnerability scan (pip-audit)
+        # Reports known CVEs in the installed runtime closure. Runs after
+        # the install step so it sees exactly what PyInstaller will bundle.
+        # Non-fatal during the transitional v3.13 cycle: pip-audit's vuln
+        # database can lag patched wheels by hours, and we don't want a
+        # flaky external feed to brick a release. Flip continue-on-error
+        # to false once the pin set in requirements.txt is stable.
+        continue-on-error: true
+        run: |
+          python -m pip install pip-audit
+          pip-audit --progress-spinner off
+
       - name: Run regression tests
         run: |
           python -m unittest discover -s tests -v

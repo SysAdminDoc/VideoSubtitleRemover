@@ -130,6 +130,18 @@ class ProcessingConfig:
     # audio mux; cost is one extra pass through libavfilter.
     loudnorm_target: float = 0.0
 
+    # Opt-in hardware-accelerated video decode hint for cv2.VideoCapture.
+    # "off" (default) preserves the existing software path; "auto"/"any"
+    # lets cv2 pick; "d3d11" / "vaapi" / "mfx" target a specific backend.
+    # _open_capture() falls back silently to software if HW returns empty
+    # frames (cv2/FFmpeg known issue).
+    decode_hw_accel: str = "off"
+
+    # When >1 input audio stream exists, mux all of them through to the
+    # output instead of dropping all but the first. Bluray/DVD rips
+    # routinely ship 3-5 language tracks.
+    multi_audio_passthrough: bool = True
+
 
 def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
@@ -300,6 +312,11 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.loudnorm_target = target
     else:
         config.loudnorm_target = 0.0
+    accel = _coerce_text(config.decode_hw_accel, "off", 16).lower()
+    if accel not in {"off", "auto", "any", "d3d11", "vaapi", "mfx"}:
+        accel = "off"
+    config.decode_hw_accel = accel
+    config.multi_audio_passthrough = _coerce_bool(config.multi_audio_passthrough, True)
     return config
 
 
@@ -1456,6 +1473,53 @@ def _deinterlace_to_temp(src: str, temp_dir: str) -> str:
     return dst
 
 
+def _open_capture(path: str, hw_accel: str = "off") -> "cv2.VideoCapture":
+    """Open a cv2.VideoCapture with an optional hardware-acceleration hint.
+
+    `hw_accel` is one of: "off" (default; status quo), "auto"/"any" (let
+    cv2 pick the best available backend), "d3d11" (Windows DXVA2/D3D11VA),
+    "vaapi" (Linux), or "mfx" (Intel Media SDK).
+
+    OpenCV 4.7+ has a known issue where the HW path can return None frames
+    against some FFmpeg builds (opencv/opencv#25185). To stay safe, we probe
+    one frame after open; if it fails we re-open with the software backend
+    and warn the user once. Caller treats the returned object as a plain
+    VideoCapture regardless of the path taken.
+    """
+    if hw_accel in (None, "", "off"):
+        return cv2.VideoCapture(path)
+    accel_map = {
+        "any": getattr(cv2, "VIDEO_ACCELERATION_ANY", 1),
+        "auto": getattr(cv2, "VIDEO_ACCELERATION_ANY", 1),
+        "d3d11": getattr(cv2, "VIDEO_ACCELERATION_D3D11", 2),
+        "vaapi": getattr(cv2, "VIDEO_ACCELERATION_VAAPI", 3),
+        "mfx": getattr(cv2, "VIDEO_ACCELERATION_MFX", 4),
+    }
+    accel_value = accel_map.get(hw_accel, accel_map["any"])
+    try:
+        cap = cv2.VideoCapture(
+            path,
+            cv2.CAP_FFMPEG,
+            [cv2.CAP_PROP_HW_ACCELERATION, accel_value],
+        )
+        if cap.isOpened():
+            ok, _frame = cap.read()
+            if ok:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                return cap
+            cap.release()
+            logger.warning(
+                f"HW-accelerated decode '{hw_accel}' opened but returned no "
+                f"frames (known cv2/FFmpeg issue); falling back to software."
+            )
+    except Exception as exc:
+        logger.warning(
+            f"HW-accelerated decode '{hw_accel}' raised {exc}; "
+            f"falling back to software."
+        )
+    return cv2.VideoCapture(path)
+
+
 def _detect_hw_encoder() -> Optional[str]:
     """Probe FFmpeg for hardware encoder availability. Returns encoder name or None."""
     try:
@@ -1879,7 +1943,7 @@ class SubtitleRemover:
                 else:
                     logger.warning("Keyframe probe failed, falling back to pHash skip")
 
-            cap = cv2.VideoCapture(decode_path)
+            cap = _open_capture(decode_path, self.config.decode_hw_accel)
             if not cap.isOpened():
                 raise ValueError(f"Could not open video: {decode_path}")
             # Stash the decode path so other routines (keyframe, audio merge)
@@ -2213,8 +2277,19 @@ class SubtitleRemover:
             cmd += [
                 '-c:a', 'aac',
                 '-map', '0:v:0',
-                '-map', '1:a:0?',
             ]
+            # Multi-track audio passthrough: '1:a?' selects every audio
+            # stream from the original input (re-encoded to AAC for mp4
+            # container compatibility). When the user disables it we keep
+            # the legacy single-track behaviour ('1:a:0?').
+            # Caveat: loudnorm in the simple single-pass form applies to
+            # the first selected audio stream only. Broadcast-grade
+            # multi-track loudnorm needs -filter_complex; left as
+            # follow-up.
+            if self.config.multi_audio_passthrough:
+                cmd += ['-map', '1:a?']
+            else:
+                cmd += ['-map', '1:a:0?']
             # Optional EBU R128 loudness normalisation. Single-pass; for
             # broadcast-grade accuracy a two-pass measure-then-apply would be
             # preferable, but the single-pass filter is good enough for the
@@ -2389,6 +2464,15 @@ def main():
     parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
                        help="EBU R128 loudness target in LUFS, e.g. -14 (YouTube), "
                             "-16 (Apple), -23 (broadcast). 0 disables.")
+    parser.add_argument("--decode-accel", default="off",
+                       choices=["off", "auto", "any", "d3d11", "vaapi", "mfx"],
+                       help="Hardware-decode hint for cv2.VideoCapture. Falls "
+                            "back silently to software if HW returns no frames "
+                            "(known cv2/FFmpeg interop issue).")
+    parser.add_argument("--single-audio", action="store_true",
+                       help="Mux only the first audio stream (legacy v3.12 "
+                            "behaviour). Default is now to pass through all "
+                            "audio tracks (matters for Bluray/DVD rips).")
     parser.add_argument("--skip-existing", action="store_true",
                        help="Skip any input whose output path already exists, "
                             "even without a checkpoint marker.")
@@ -2469,6 +2553,8 @@ def main():
         quality_report=args.quality_report,
         use_hw_encode=not args.no_hw_encode,
         loudnorm_target=args.loudnorm,
+        decode_hw_accel=args.decode_accel,
+        multi_audio_passthrough=not args.single_audio,
     )
     config = normalize_processing_config(config)
 
@@ -2547,6 +2633,8 @@ def main():
             "output_quality": config.output_quality,
             "use_hw_encode": config.use_hw_encode,
             "loudnorm_target": config.loudnorm_target,
+            "decode_hw_accel": config.decode_hw_accel,
+            "multi_audio_passthrough": config.multi_audio_passthrough,
             "export_srt": config.export_srt,
             "export_mask_video": config.export_mask_video,
         }
