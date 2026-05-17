@@ -258,6 +258,46 @@ class BackendWriteSrtTests(unittest.TestCase):
             os.unlink(path)
 
 
+class DecodeHwAccelCoerceTests(unittest.TestCase):
+    """decode_hw_accel must clamp to the allowed token set; anything else
+    silently disables the hint so we never pass garbage to cv2."""
+
+    def test_default_is_off(self):
+        cfg = processor.normalize_processing_config(processor.ProcessingConfig())
+        self.assertEqual(cfg.decode_hw_accel, "off")
+
+    def test_known_tokens_kept(self):
+        for token in ("off", "auto", "any", "d3d11", "vaapi", "mfx"):
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(decode_hw_accel=token)
+            )
+            self.assertEqual(cfg.decode_hw_accel, token)
+
+    def test_unknown_token_becomes_off(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(decode_hw_accel="cuda-experimental")
+        )
+        self.assertEqual(cfg.decode_hw_accel, "off")
+
+    def test_mixed_case_token_normalised(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(decode_hw_accel="D3D11")
+        )
+        self.assertEqual(cfg.decode_hw_accel, "d3d11")
+
+
+class MultiAudioPassthroughTests(unittest.TestCase):
+    def test_default_is_on(self):
+        cfg = processor.normalize_processing_config(processor.ProcessingConfig())
+        self.assertTrue(cfg.multi_audio_passthrough)
+
+    def test_explicit_off(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(multi_audio_passthrough=False)
+        )
+        self.assertFalse(cfg.multi_audio_passthrough)
+
+
 class LoudnormCoerceTests(unittest.TestCase):
     """normalize_processing_config must clamp loudnorm_target to valid
     LUFS, with 0.0 reserved as 'disabled'."""
