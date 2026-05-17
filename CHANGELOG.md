@@ -4,6 +4,34 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Pin `torch >= 2.10.0`** -- CVE-2026-24747 / CVE-2025-32434 are
+  `torch.load` `weights_only` RCEs reachable on PyTorch 2.9.1 and earlier.
+  `simple-lama-inpainting` loads weights via `torch.load`, so this is a
+  runtime concern. The CUDA + CPU install paths in `setup.py` and the
+  GitHub Actions workflow are bumped to `>=2.10.0` / `torchvision>=0.25.0`.
+  The torch-directml path stays on torch 2.4.x because no patched
+  torch-directml wheel exists yet; `setup.py` now warns the user when that
+  path is selected.
+- **Pin `opencv-python >= 4.12.0`** -- CVE-2025-53644 is an uninitialised
+  pointer in the JPEG reader that can become an arbitrary heap write on a
+  crafted file. Bumped in `requirements.txt` and the GHA build matrix.
+- **Pin `Pillow >= 11.3.0`** -- CVE-2026-25990 is a PSD loader out-of-bounds
+  write. We do not currently open PSDs, but Pillow is on the transitive
+  closure and a future image-format feature could expose it; pinning now is
+  cheap insurance.
+
+### Migration
+
+- **Settings-schema versioning (`vsr_settings_format`)** -- `settings.json`
+  now carries an integer schema version stamped by `to_dict()`. A new
+  `_migrate_settings()` shim runs before `from_dict` on load so a future
+  field rename can upgrade legacy payloads in place rather than silently
+  dropping user state. Settings written by a newer build are honoured as-is
+  (we don't downgrade). Format starts at `1`; `_migrate_settings()` learns
+  one new case per bump.
+
 ### Fixed
 
 - **Shutdown race condition**: `_shutdown_started` is now set only *after* the
