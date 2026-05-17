@@ -302,14 +302,15 @@ require model-weight downloads.
 
 ### CLI / batch
 
-36. **`--validate-config` dry-run** -- parse the JSON config / CLI flags,
-    print the resolved `ProcessingConfig`, and exit. Useful for shell
-    scripts that want to check their flags before launching a 12-hour
-    batch.
-37. **`--skip-existing` toggle independent of checkpointing** -- skip
-    output files that already exist, regardless of fingerprint. Lets users
-    re-run a glob against a partly-populated output dir without enabling
-    the full checkpoint machinery.
+36. **[x] `--validate-config` dry-run** -- prints the resolved
+    `ProcessingConfig` (after CLI flags + `--config` overlay normalisation)
+    as JSON and exits 0 without instantiating the detector / inpainter.
+    `--input` / `--output` are not required when this flag is set.
+    Wired in [backend/processor.py](./backend/processor.py) `main()`.
+37. **[x] `--skip-existing` toggle independent of checkpointing** -- skips
+    any input whose output path already exists, regardless of the checkpoint
+    store. Independent of `--no-resume`. Wired in `_process_one()` before
+    the checkpoint check so the cheaper path runs first.
 
 ### Acceleration
 
@@ -358,9 +359,12 @@ require model-weight downloads.
 46. **Multi-track audio passthrough** -- mux all N input audio streams
     unchanged (today we merge only the first). DVD / Bluray rips routinely
     ship 3-5 language tracks; current code silently drops them.
-47. **Loudness normalisation** -- optional `ffmpeg -af loudnorm=I=-16` pass
-    to bring batches to a consistent EBU R128 target. Useful for platform-
-    specific output (YouTube -14 LUFS, Apple -16 LUFS, broadcast -23 LUFS).
+47. **[x] Loudness normalisation** -- `ProcessingConfig.loudnorm_target`
+    LUFS field (default 0.0 = off, range clamped to [-70, -5]).
+    `_merge_audio` injects `-af loudnorm=I=<target>:TP=-1.5:LRA=11` during
+    mux when set. CLI exposes `--loudnorm <LUFS>`. Single-pass for speed;
+    broadcast-grade two-pass measure-then-apply can layer on top later.
+    GUI control still pending -- this is CLI-only for v3.13.
 
 ### Security
 
