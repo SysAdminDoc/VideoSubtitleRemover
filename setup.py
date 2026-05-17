@@ -167,22 +167,30 @@ def install_pytorch(gpu_info):
     pip = get_pip_command()
     
     try:
+        # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434
+        # (torch.load weights_only RCE in 2.9.1 and earlier).
         if gpu_info["nvidia"]:
             print(f"  Installing PyTorch with CUDA support...")
             subprocess.run([
                 pip, 'install',
-                'torch==2.7.0', 'torchvision==0.22.0',
+                'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cu118'
             ], check=True)
         elif gpu_info["amd"] or gpu_info["intel"]:
+            # torch-directml lags upstream torch; stay on the latest pair the
+            # 0.2.5.dev240914 wheel was validated against. The DirectML
+            # codepath does not exercise torch.load on untrusted files in our
+            # pipeline, but we still warn users to upgrade once a patched
+            # torch-directml ships.
             print(f"  Installing PyTorch with DirectML support...")
+            print(f"{Colors.YELLOW}  WARN: torch-directml pins torch 2.4.x; CVE-2026-24747 fix is unavailable on this path.{Colors.END}")
             subprocess.run([pip, 'install', 'torch==2.4.1', 'torchvision==0.19.1'], check=True)
             subprocess.run([pip, 'install', 'torch-directml==0.2.5.dev240914'], check=True)
         else:
             print(f"  Installing PyTorch CPU version...")
             subprocess.run([
                 pip, 'install',
-                'torch==2.7.0', 'torchvision==0.22.0',
+                'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], check=True)
         
