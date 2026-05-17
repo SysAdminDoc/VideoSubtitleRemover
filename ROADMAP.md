@@ -296,9 +296,17 @@ require model-weight downloads.
 34. **Proxy-file workflow** -- render a low-res proxy for GUI preview and
     tuning; apply the final pass at full resolution only when the user
     commits. Matches the way Premiere / DaVinci handle 4K-8K source.
-35. **Raw frame-sequence input** -- accept DPX / EXR / PNG sequences as
-    input (and output) for VFX pipelines that never touch an mp4. Wrap
-    the existing video codepath with a virtual "frames-as-video" adapter.
+35. **[partial] Raw frame-sequence input** -- new
+    `_FrameSequenceCapture` adapter walks a directory of PNG / JPG /
+    BMP / TIFF / WebP files in sorted filename order and exposes the
+    `cv2.VideoCapture` surface (`isOpened` / `read` / `set(POS_FRAMES)`
+    / `get(FPS / WIDTH / HEIGHT / FRAME_COUNT)` / `release`). First
+    frame fixes dimensions; mid-sequence size changes are letterboxed.
+    `_open_capture` detects directory inputs and routes accordingly;
+    `process_video` skips the audio merge when input is a directory.
+    `--input-fps FPS` sets the synthesised stream rate (default 24).
+    *Ingest only* for v3.13 -- output remains mp4. Sequence *output*
+    (writing a directory of PNGs back out) is queued as a follow-up.
 
 ### CLI / batch
 
@@ -454,11 +462,17 @@ require model-weight downloads.
 
 ### UX
 
-57. **Quality self-test sheet** -- for each finished file, sample 10 random
-    frames, render the mask region side-by-side (original / cleaned) into
-    a summary sheet, and show an inline "Quality: Good / Review" tag based
-    on the SSIM threshold we already compute in v3.12. Flags batches that
-    need re-runs without full manual review.
+57. **[x] Quality self-test sheet** -- new
+    `SubtitleRemover._write_quality_sheet()` extends
+    `_compute_quality_report` to render a side-by-side PNG next to
+    the output (`<output>.qualitysheet.png`). Each sampled frame
+    becomes one row (`original | cleaned`) with a caption
+    (`PSNR / SSIM`); a header strip carries mean metrics + a
+    `Good` / `Review` tag from the SSIM 0.95 threshold. New
+    `ProcessingConfig.quality_report_sheet` auto-enables
+    `quality_report` in normalisation so the overlay can't reach an
+    inconsistent state. CLI exposes `--quality-sheet`. Tests in
+    [tests/test_hardening.py](./tests/test_hardening.py) `QualitySheetTests`.
 58. **Drag-drop onto the app icon** -- register VSR as a file handler for
     the target video extensions so double-clicking an `.mp4` launches it
     straight into the queue. Depends on the installer in #51.

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -399,6 +400,99 @@ class SettingsMigrationTests(unittest.TestCase):
                 self.assertTrue(cfg.tbe_flow_warp)
             finally:
                 gui.SETTINGS_FILE = original
+
+
+class FrameSequenceCaptureTests(unittest.TestCase):
+    """_FrameSequenceCapture must mirror cv2.VideoCapture closely enough
+    that process_video does not notice the swap."""
+
+    def _make_seq_dir(self, n: int, size=(32, 48)):
+        """Returns a TemporaryDirectory holding `n` PNG frames numbered
+        00.png ... (n-1).png, each filled with the frame index value."""
+        import numpy as _np
+        import cv2 as _cv2
+        tmp = tempfile.mkdtemp(prefix="vsr-seq-")
+        h, w = size
+        for i in range(n):
+            arr = _np.full((h, w, 3), i + 10, dtype=_np.uint8)
+            ok = _cv2.imwrite(str(Path(tmp) / f"{i:03d}.png"), arr)
+            assert ok, f"could not write {i:03d}.png in {tmp}"
+        return tmp
+
+    def test_open_capture_routes_dir_to_frame_sequence_adapter(self):
+        tmp = self._make_seq_dir(5)
+        try:
+            cap = processor._open_capture(tmp, "off", input_fps=12.0)
+            self.assertIsInstance(cap, processor._FrameSequenceCapture)
+            self.assertTrue(cap.isOpened())
+            self.assertEqual(int(cap.get(processor.cv2.CAP_PROP_FRAME_COUNT)), 5)
+            self.assertEqual(cap.get(processor.cv2.CAP_PROP_FPS), 12.0)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_read_walks_files_in_sorted_order(self):
+        tmp = self._make_seq_dir(4)
+        try:
+            cap = processor._FrameSequenceCapture(tmp, fps=24.0)
+            seen = []
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                seen.append(int(frame.flat[0]))
+            self.assertEqual(seen, [10, 11, 12, 13])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_set_pos_frames_supports_seek(self):
+        tmp = self._make_seq_dir(6)
+        try:
+            cap = processor._FrameSequenceCapture(tmp, fps=24.0)
+            cap.set(processor.cv2.CAP_PROP_POS_FRAMES, 4)
+            ok, frame = cap.read()
+            self.assertTrue(ok)
+            self.assertEqual(int(frame.flat[0]), 14)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_empty_dir_raises(self):
+        tmp = tempfile.mkdtemp(prefix="vsr-empty-")
+        try:
+            with self.assertRaises(ValueError):
+                processor._FrameSequenceCapture(tmp)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class QualitySheetTests(unittest.TestCase):
+    """_write_quality_sheet must produce a single PNG with one row per
+    sampled pair and a header carrying the mean metrics + Good/Review tag."""
+
+    def test_sheet_written_with_expected_dimensions(self):
+        import numpy as _np
+        import cv2 as _cv2
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = str(Path(tmp) / "result.mp4")
+            # Three synthetic pairs.
+            pairs = []
+            for i in range(3):
+                a = _np.full((120, 160, 3), 100 + i, dtype=_np.uint8)
+                b = _np.full((120, 160, 3), 110 + i, dtype=_np.uint8)
+                pairs.append((i * 5, a, b, 35.0 + i, 0.96 - 0.01 * i))
+            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+            remover.config = processor.ProcessingConfig()
+            sheet_path = remover._write_quality_sheet(
+                out_path, pairs, mean_psnr=36.0, mean_ssim=0.95, tag="Good",
+            )
+            self.assertTrue(Path(sheet_path).exists())
+            sheet = _cv2.imread(sheet_path)
+            self.assertIsNotNone(sheet)
+            # Width should match a single pair-row (two scaled frames + gap).
+            # Height must include the header + N rows + N caption strips.
+            self.assertGreater(sheet.shape[0], 200)
+            self.assertGreater(sheet.shape[1], 200)
+            # Filename convention.
+            self.assertTrue(sheet_path.endswith(".qualitysheet.png"))
 
 
 class PrefetchReaderTests(unittest.TestCase):

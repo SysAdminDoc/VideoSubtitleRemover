@@ -6,6 +6,27 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Frame-sequence input (DPX / EXR / PNG / JPG directories)** -- new
+  `_FrameSequenceCapture` adapter mirrors the `cv2.VideoCapture` surface
+  (`isOpened`, `read`, `set(POS_FRAMES)`, `get(FPS / WIDTH / HEIGHT /
+  FRAME_COUNT)`, `release`) over a directory of images walked in sorted
+  filename order. First image fixes width / height; mid-sequence size
+  changes are letterboxed to that frame so the writer pipeline never
+  sees a dimension shift. Routed transparently through `_open_capture()`
+  and the `process_video` path. `process_video` silently bypasses the
+  audio merge when the input is a directory (no audio stream). New
+  `ProcessingConfig.input_fps` (default 24.0, clamped to [1, 240]);
+  `--input-fps FPS` CLI flag. Ingest-only for v3.13; output remains mp4
+  -- PNG/EXR sequence *output* is queued for a later release.
+- **Quality self-test sheet (`--quality-sheet`)** -- extends the existing
+  PSNR / SSIM numeric report with a side-by-side comparison PNG written
+  next to the output as `<output>.qualitysheet.png`. Each sampled frame
+  becomes one row (`original | cleaned`) with a caption showing the
+  per-frame PSNR/SSIM; a header strip carries mean PSNR, mean SSIM, and
+  a `Good` / `Review` tag derived from the SSIM 0.95 threshold. Implies
+  `--quality-report`; the `quality_report_sheet` config field
+  auto-enables `quality_report` in `normalize_processing_config` so a
+  config-file overlay can't reach an inconsistent state.
 - **Prefetch / pipeline parallelism (`prefetch_decode`, default on)** --
   new `_PrefetchReader` wraps `cv2.VideoCapture` with a daemon worker
   thread that fills a bounded frame queue while the main thread runs

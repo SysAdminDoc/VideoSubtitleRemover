@@ -208,6 +208,15 @@ class ProcessingConfig:
     prefetch_decode: bool = True
     prefetch_queue_size: int = 0   # 0 = auto (max(8, batch_size * 2))
 
+    # Frame-sequence input FPS. When `input_path` is a directory of
+    # images, treat them as one frame each at this rate.
+    input_fps: float = 24.0
+
+    # Also render a side-by-side PNG comparison sheet alongside the
+    # PSNR/SSIM numeric report so reviewers can scan visually instead of
+    # squinting at metrics. Implies `quality_report = True`.
+    quality_report_sheet: bool = False
+
 
 def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
@@ -385,6 +394,12 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.multi_audio_passthrough = _coerce_bool(config.multi_audio_passthrough, True)
     config.prefetch_decode = _coerce_bool(config.prefetch_decode, True)
     config.prefetch_queue_size = _coerce_int(config.prefetch_queue_size, 0, 0, 512)
+    config.input_fps = _coerce_float(config.input_fps, 24.0, 1.0, 240.0)
+    config.quality_report_sheet = _coerce_bool(config.quality_report_sheet, False)
+    if config.quality_report_sheet:
+        # The sheet is rendered from the same sample _compute_quality_report
+        # collects, so the numeric report must run for the sheet to exist.
+        config.quality_report = True
     return config
 
 
@@ -1541,8 +1556,90 @@ def _deinterlace_to_temp(src: str, temp_dir: str) -> str:
     return dst
 
 
-def _open_capture(path: str, hw_accel: str = "off") -> "cv2.VideoCapture":
-    """Open a cv2.VideoCapture with an optional hardware-acceleration hint.
+class _FrameSequenceCapture:
+    """cv2.VideoCapture-shaped adapter for a directory of images.
+
+    Walks the directory in sorted filename order, treats each image as a
+    single frame at a synthesised FPS. Mirrors enough of the
+    VideoCapture surface that `process_video` can use it transparently:
+    `.isOpened()`, `.read()`, `.set(CAP_PROP_POS_FRAMES, idx)`, and
+    `.get(CAP_PROP_*)` for FPS / WIDTH / HEIGHT / FRAME_COUNT.
+
+    Width / height come from the first image; mid-sequence size changes
+    are letterboxed to the first-frame dims so the encoder pipeline
+    never sees a dimension shift it can't handle. Useful for VFX
+    workflows that never touch an mp4 (DPX/EXR/PNG sequences).
+    """
+
+    SUPPORTED_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".webp"}
+
+    def __init__(self, dir_path: str, fps: float = 24.0):
+        self._dir = Path(dir_path)
+        if not self._dir.is_dir():
+            raise ValueError(f"Not a directory: {dir_path}")
+        self._files: List[Path] = sorted(
+            p for p in self._dir.iterdir()
+            if p.is_file() and p.suffix.lower() in self.SUPPORTED_EXTS
+        )
+        if not self._files:
+            raise ValueError(
+                f"No supported image files in {dir_path} "
+                f"(expected one of {sorted(self.SUPPORTED_EXTS)})"
+            )
+        first = cv2.imread(str(self._files[0]))
+        if first is None:
+            raise ValueError(f"Could not read first frame: {self._files[0]}")
+        self._h, self._w = first.shape[:2]
+        self._fps = max(1.0, float(fps))
+        self._pos = 0
+
+    def isOpened(self) -> bool:
+        return True
+
+    def get(self, prop):
+        if prop == cv2.CAP_PROP_FPS:
+            return self._fps
+        if prop == cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self._w)
+        if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self._h)
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return float(len(self._files))
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            return float(self._pos)
+        return 0.0
+
+    def set(self, prop, value) -> bool:
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            self._pos = max(0, min(len(self._files), int(value)))
+            return True
+        return False
+
+    def read(self) -> Tuple[bool, Optional[np.ndarray]]:
+        if self._pos >= len(self._files):
+            return False, None
+        frame = cv2.imread(str(self._files[self._pos]))
+        self._pos += 1
+        if frame is None:
+            return False, None
+        if frame.shape[:2] != (self._h, self._w):
+            frame = cv2.resize(
+                frame, (self._w, self._h), interpolation=cv2.INTER_AREA
+            )
+        return True, frame
+
+    def release(self) -> None:
+        # No external resources held; release is a no-op.
+        return None
+
+
+def _open_capture(path: str, hw_accel: str = "off", *,
+                  input_fps: float = 24.0):
+    """Open a frame source with an optional hardware-acceleration hint.
+
+    If `path` is a directory, returns a `_FrameSequenceCapture` adapter
+    that treats the contained images as frames at `input_fps`. Otherwise
+    opens a real `cv2.VideoCapture` with the requested HW-accel hint.
 
     `hw_accel` is one of: "off" (default; status quo), "auto"/"any" (let
     cv2 pick the best available backend), "d3d11" (Windows DXVA2/D3D11VA),
@@ -1554,6 +1651,10 @@ def _open_capture(path: str, hw_accel: str = "off") -> "cv2.VideoCapture":
     and warn the user once. Caller treats the returned object as a plain
     VideoCapture regardless of the path taken.
     """
+    # Directory input -> frame-sequence adapter; HW-accel hint does not apply.
+    if Path(path).is_dir():
+        logger.info(f"Frame-sequence input detected at {path} (fps={input_fps})")
+        return _FrameSequenceCapture(path, fps=input_fps)
     if hw_accel in (None, "", "off"):
         return cv2.VideoCapture(path)
     accel_map = {
@@ -1908,9 +2009,18 @@ class SubtitleRemover:
         there indicates a pipeline bug (mis-configured feather, dilation,
         or encoder settings).
 
-        Returns {'psnr': float, 'ssim': float, 'samples': int} or None.
+        When `quality_report_sheet` is set, also writes a side-by-side
+        comparison PNG (original | cleaned per sampled frame) to
+        `<output>.qualitysheet.png` so reviewers can scan visually
+        instead of squinting at numeric metrics.
+
+        Returns {'psnr', 'ssim', 'samples', 'tag', 'sheet'} or None.
         """
-        cap_in = cv2.VideoCapture(input_path)
+        # Frame-sequence input: re-use the adapter so we don't need ffmpeg
+        # to seek into a directory.
+        cap_in = (_FrameSequenceCapture(input_path, fps=self.config.input_fps)
+                  if Path(input_path).is_dir()
+                  else cv2.VideoCapture(input_path))
         cap_out = cv2.VideoCapture(output_path)
         if not cap_in.isOpened() or not cap_out.isOpened():
             try:
@@ -1930,6 +2040,9 @@ class SubtitleRemover:
 
             psnrs: List[float] = []
             ssims: List[float] = []
+            # Pairs kept for the optional sheet renderer. Each entry:
+            # (frame_idx, original_bgr, cleaned_bgr, psnr, ssim)
+            pairs: List[Tuple[int, np.ndarray, np.ndarray, float, float]] = []
             for idx in indices:
                 cap_in.set(cv2.CAP_PROP_POS_FRAMES, start_frame + idx)
                 ok_in, a = cap_in.read()
@@ -1940,18 +2053,84 @@ class SubtitleRemover:
                 if a.shape != b.shape:
                     b = cv2.resize(b, (a.shape[1], a.shape[0]),
                                     interpolation=cv2.INTER_AREA)
-                psnrs.append(cv2.PSNR(a, b))
-                ssims.append(_ssim(a, b))
+                p = cv2.PSNR(a, b)
+                s = _ssim(a, b)
+                psnrs.append(p)
+                ssims.append(s)
+                if self.config.quality_report_sheet:
+                    pairs.append((idx, a, b, p, s))
             if not psnrs:
                 return None
+            mean_ssim = float(np.mean(ssims))
+            mean_psnr = float(np.mean(psnrs))
+            # SSIM 0.95 is the common "visually indistinguishable" floor
+            # for compressed video. Below it, the inpaint likely needs a
+            # human eyeball. Tag is purely informational; doesn't gate.
+            tag = "Good" if mean_ssim >= 0.95 else "Review"
+            sheet_path = None
+            if self.config.quality_report_sheet and pairs:
+                try:
+                    sheet_path = self._write_quality_sheet(
+                        output_path, pairs, mean_psnr, mean_ssim, tag,
+                    )
+                except Exception as exc:
+                    logger.warning(f"Quality sheet write failed: {exc}")
             return {
-                'psnr': float(np.mean(psnrs)),
-                'ssim': float(np.mean(ssims)),
+                'psnr': mean_psnr,
+                'ssim': mean_ssim,
                 'samples': len(psnrs),
+                'tag': tag,
+                'sheet': sheet_path,
             }
         finally:
             cap_in.release()
             cap_out.release()
+
+    def _write_quality_sheet(self,
+                              output_path: str,
+                              pairs: List[Tuple[int, np.ndarray, np.ndarray, float, float]],
+                              mean_psnr: float,
+                              mean_ssim: float,
+                              tag: str,
+                              max_row_h: int = 240) -> str:
+        """Render the per-sample original | cleaned comparison sheet."""
+        sheet_path = str(Path(output_path).with_suffix("")) + ".qualitysheet.png"
+        gap = 6
+        rows = []
+        for idx, a, b, p, s in pairs:
+            h = a.shape[0]
+            scale = min(1.0, max_row_h / max(1, h))
+            new_h = int(round(h * scale))
+            new_w = int(round(a.shape[1] * scale))
+            ar = cv2.resize(a, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            br = cv2.resize(b, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            sep = np.full((new_h, gap, 3), 32, dtype=np.uint8)
+            row = np.concatenate([ar, sep, br], axis=1)
+            # Caption strip below the row.
+            caption_h = 26
+            caption = np.full((caption_h, row.shape[1], 3), 16, dtype=np.uint8)
+            text = f"Frame {idx}  PSNR={p:.2f} dB  SSIM={s:.4f}"
+            cv2.putText(caption, text, (8, 18), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.55, (220, 220, 220), 1, cv2.LINE_AA)
+            rows.append(np.concatenate([row, caption], axis=0))
+        # Stack rows top-to-bottom with a thin separator.
+        body = []
+        for i, r in enumerate(rows):
+            if i:
+                body.append(np.full((gap, r.shape[1], 3), 32, dtype=np.uint8))
+            body.append(r)
+        body_img = np.concatenate(body, axis=0)
+        # Header strip.
+        header_h = 56
+        header = np.full((header_h, body_img.shape[1], 3), 10, dtype=np.uint8)
+        title = f"VSR quality report  -  mean PSNR={mean_psnr:.2f} dB  mean SSIM={mean_ssim:.4f}  [{tag}]"
+        cv2.putText(header, title, (10, 36), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7, (245, 245, 245), 1, cv2.LINE_AA)
+        sep = np.full((gap, body_img.shape[1], 3), 48, dtype=np.uint8)
+        sheet = np.concatenate([header, sep, body_img], axis=0)
+        cv2.imwrite(sheet_path, sheet, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+        logger.info(f"Quality sheet written: {sheet_path}")
+        return sheet_path
 
     def _write_srt(self, path: str, fps: float, offset_frames: int = 0):
         """Collapse consecutive per-frame entries with the same text into SRT
@@ -2097,7 +2276,11 @@ class SubtitleRemover:
                 else:
                     logger.warning("Keyframe probe failed, falling back to pHash skip")
 
-            cap = _open_capture(decode_path, self.config.decode_hw_accel)
+            cap = _open_capture(
+                decode_path,
+                self.config.decode_hw_accel,
+                input_fps=self.config.input_fps,
+            )
             if not cap.isOpened():
                 raise ValueError(f"Could not open video: {decode_path}")
             # Stash the decode path so other routines (keyframe, audio merge)
@@ -2332,7 +2515,10 @@ class SubtitleRemover:
                 mask_writer.release()
 
             self._report_progress(0.9, "Merging audio...")
-            if self.config.preserve_audio:
+            # Frame-sequence inputs carry no audio stream; silently bypass
+            # the merge step so ffmpeg doesn't error on `-i <directory>`.
+            is_frame_sequence_input = Path(input_path).is_dir()
+            if self.config.preserve_audio and not is_frame_sequence_input:
                 self._merge_audio(input_path, temp_video, output_path)
             else:
                 self._reencode_or_copy(temp_video, output_path)
@@ -2352,10 +2538,13 @@ class SubtitleRemover:
                         input_path, output_path, start_frame, end_frame, fps)
                     if metrics:
                         self.last_quality_report = metrics
+                        tag_suffix = f" [{metrics['tag']}]" if metrics.get('tag') else ""
                         logger.info(
                             f"Quality report: PSNR={metrics['psnr']:.2f} dB, "
                             f"SSIM={metrics['ssim']:.4f} "
-                            f"({metrics['samples']} samples)")
+                            f"({metrics['samples']} samples){tag_suffix}")
+                        if metrics.get('sheet'):
+                            logger.info(f"Quality sheet: {metrics['sheet']}")
                 except Exception as exc:
                     logger.warning(f"Quality report failed: {exc}")
 
@@ -2641,6 +2830,13 @@ def main():
                        help="OCR only at video I-frames (ffprobe-probed)")
     parser.add_argument("--quality-report", action="store_true",
                        help="Compute PSNR/SSIM on a random frame sample after run")
+    parser.add_argument("--quality-sheet", action="store_true",
+                       help="Render a side-by-side comparison PNG alongside "
+                            "the numeric quality report. Implies "
+                            "--quality-report. Written to <output>.qualitysheet.png.")
+    parser.add_argument("--input-fps", type=float, default=24.0, metavar="FPS",
+                       help="FPS to use when the input is a directory of "
+                            "images (frame sequence). Ignored for video inputs.")
     parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
                        help="EBU R128 loudness target in LUFS, e.g. -14 (YouTube), "
                             "-16 (Apple), -23 (broadcast). 0 disables.")
@@ -2754,6 +2950,8 @@ def main():
         multi_audio_passthrough=not args.single_audio,
         prefetch_decode=not args.no_prefetch,
         prefetch_queue_size=args.prefetch_queue,
+        input_fps=args.input_fps,
+        quality_report_sheet=args.quality_sheet,
     )
     config = normalize_processing_config(config)
 
@@ -2836,6 +3034,8 @@ def main():
             "multi_audio_passthrough": config.multi_audio_passthrough,
             "prefetch_decode": config.prefetch_decode,
             "prefetch_queue_size": config.prefetch_queue_size,
+            "input_fps": config.input_fps,
+            "quality_report_sheet": config.quality_report_sheet,
             "export_srt": config.export_srt,
             "export_mask_video": config.export_mask_video,
         }
@@ -2879,7 +3079,9 @@ def main():
             base_subtitle_areas=base_subtitle_areas,
         )
         ext = Path(inp).suffix.lower()
-        if ext in video_exts:
+        # Directory inputs are frame sequences -- route them through the
+        # video pipeline (which now opens them via _FrameSequenceCapture).
+        if Path(inp).is_dir() or ext in video_exts:
             if args.auto_band:
                 band = _apply_auto_band_override(
                     remover,
