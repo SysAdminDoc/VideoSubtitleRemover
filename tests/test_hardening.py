@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -398,6 +399,140 @@ class SettingsMigrationTests(unittest.TestCase):
                 self.assertTrue(cfg.tbe_flow_warp)
             finally:
                 gui.SETTINGS_FILE = original
+
+
+class JsonLineLogHandlerTests(unittest.TestCase):
+    """JsonLineLogHandler must write exactly one JSON record per emit,
+    include the level / logger / msg / ts fields, and capture exception
+    text when the record carries exc_info."""
+
+    def test_emit_writes_one_json_record_per_line(self):
+        import io
+        sink = io.StringIO()
+        handler = processor.JsonLineLogHandler(sink)
+        record = logging.LogRecord(
+            "vsr_test", logging.WARNING, __file__, 42,
+            "hello %s", ("world",), None,
+        )
+        handler.emit(record)
+        lines = sink.getvalue().splitlines()
+        self.assertEqual(len(lines), 1)
+        payload = json.loads(lines[0])
+        self.assertEqual(payload["level"], "WARNING")
+        self.assertEqual(payload["msg"], "hello world")
+        self.assertEqual(payload["logger"], "vsr_test")
+        self.assertIn("ts", payload)
+        self.assertNotIn("exc", payload)
+
+    def test_emit_includes_exception_text_when_present(self):
+        import io
+        sink = io.StringIO()
+        handler = processor.JsonLineLogHandler(sink)
+        try:
+            raise RuntimeError("kaboom")
+        except RuntimeError:
+            record = logging.LogRecord(
+                "vsr_test", logging.ERROR, __file__, 42,
+                "fell over", (), sys.exc_info(),
+            )
+        handler.emit(record)
+        payload = json.loads(sink.getvalue())
+        self.assertIn("RuntimeError", payload["exc"])
+        self.assertIn("kaboom", payload["exc"])
+
+
+class ConfigFuzzTests(unittest.TestCase):
+    """Deterministic fuzz pass over ProcessingConfig.from_dict() (GUI) and
+    normalize_processing_config() (backend).
+
+    Formalises the invariant proved one-off by CoerceHardeningTests:
+    *no input shape crashes the loader*. We don't pull in Hypothesis to
+    keep the dependency closure minimal; a seeded random.Random walks the
+    cross product of (known field name) x (small pool of pathological
+    values) and asserts post-conditions on the normalised result.
+    """
+
+    BAD_VALUES = [
+        None, "", "garbage", "true", "false", "1.5e3", "-1", "NaN", "Inf",
+        0, 1, -1, 9999999, -9999999,
+        float("nan"), float("inf"), float("-inf"),
+        -1e30, 1e30,
+        [], {}, [None], [1, 2, 3, 4], (5, 6, 7, 8),
+        {"x": 1}, True, False,
+        "STTN", "lama", "AUTO", "pro painter", "cuda:0", "cpu", "directml",
+    ]
+
+    GUI_FIELDS = [
+        "mode", "use_gpu", "gpu_id",
+        "sttn_skip_detection", "sttn_neighbor_stride", "sttn_reference_length",
+        "sttn_max_load_num", "lama_super_fast",
+        "subtitle_area", "subtitle_areas", "detection_lang",
+        "detection_threshold", "detection_frame_skip",
+        "mask_dilate_px", "mask_feather_px", "edge_ring_px",
+        "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
+        "tbe_scene_cut_split", "tbe_scene_cut_threshold",
+        "auto_band", "export_srt", "export_mask_video",
+        "adaptive_batch", "auto_exposure_threshold",
+        "deinterlace", "deinterlace_auto", "keyframe_detection",
+        "quality_report", "kalman_tracking", "kalman_iou_threshold",
+        "kalman_max_age", "phash_skip_enable", "phash_skip_distance",
+        "colour_tune_enable", "colour_tune_tolerance",
+        "time_start", "time_end",
+        "preserve_audio", "output_format", "output_quality", "use_hw_encode",
+        "window_geometry", "adv_panel_open", "log_panel_open",
+        "onboarding_seen", "vsr_settings_format",
+    ]
+
+    BACKEND_FIELDS = GUI_FIELDS + [
+        "device", "loudnorm_target", "decode_hw_accel", "multi_audio_passthrough",
+    ]
+
+    def _random_payload(self, rng, fields, max_keys=8):
+        n = rng.randint(0, max_keys)
+        return {rng.choice(fields): rng.choice(self.BAD_VALUES) for _ in range(n)}
+
+    def test_gui_from_dict_normalize_never_crashes(self):
+        import random as _random
+        rng = _random.Random(0xC0FFEE)
+        for i in range(1500):
+            payload = self._random_payload(rng, self.GUI_FIELDS)
+            try:
+                cfg = gui.ProcessingConfig.from_dict(payload).normalized()
+            except Exception as exc:
+                self.fail(f"iter={i} payload={payload!r} raised {exc!r}")
+            # Numeric invariants -- finite + within declared bounds.
+            self.assertTrue(0.1 <= cfg.detection_threshold <= 0.9)
+            self.assertTrue(0 <= cfg.output_quality <= 51)
+            self.assertTrue(0 <= cfg.phash_skip_distance <= 64)
+            self.assertGreaterEqual(cfg.time_start, 0.0)
+            self.assertGreaterEqual(cfg.time_end, 0.0)
+            if cfg.time_end:
+                self.assertGreaterEqual(cfg.time_end, cfg.time_start)
+
+    def test_backend_normalize_never_crashes(self):
+        import random as _random
+        rng = _random.Random(0xBADF00D)
+        for i in range(1500):
+            payload = self._random_payload(rng, self.BACKEND_FIELDS)
+            try:
+                cfg = processor.ProcessingConfig()
+                # Apply the random payload field-by-field (mimics how the
+                # JSON overlay loader does it in main()).
+                for k, v in payload.items():
+                    if hasattr(cfg, k):
+                        setattr(cfg, k, v)
+                cfg = processor.normalize_processing_config(cfg)
+            except Exception as exc:
+                self.fail(f"iter={i} payload={payload!r} raised {exc!r}")
+            # Numeric invariants.
+            self.assertTrue(0.1 <= cfg.detection_threshold <= 1.0)
+            self.assertTrue(0 <= cfg.output_quality <= 51)
+            self.assertTrue(0 <= cfg.phash_skip_distance <= 64)
+            self.assertTrue(cfg.loudnorm_target == 0.0 or
+                            -70.0 <= cfg.loudnorm_target <= -5.0)
+            self.assertIn(cfg.decode_hw_accel,
+                          {"off", "auto", "any", "d3d11", "vaapi", "mfx"})
+            self.assertIsInstance(cfg.multi_audio_passthrough, bool)
 
 
 class LoadJsonConfigTests(unittest.TestCase):

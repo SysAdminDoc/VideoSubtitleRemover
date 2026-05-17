@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Structured JSON-line log option (`--json-log PATH`)** -- new
+  `backend.processor.JsonLineLogHandler` writes one JSON record per line
+  with `ts` (UTC ISO-8601), `level`, `logger`, `msg`, and optional `exc`
+  (formatted traceback when the record carries `exc_info`). The text log
+  in `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log` keeps writing in
+  parallel; this handler is purely additive. Useful for `jq` / `grep`
+  pipelines across days of batch jobs. CLI-only for v3.13; the GUI
+  toggle lands in a later release alongside the loudnorm GUI control.
 - **Multi-track audio passthrough (default on)** -- `_merge_audio` now
   emits `-map 1:a?` (all input audio streams) re-encoded to AAC instead
   of `-map 1:a:0?` (first only). Bluray/DVD rips routinely carry 3-5
