@@ -330,10 +330,20 @@ require model-weight downloads.
     at a time; re-expose the underlying model and pipe full batches (our
     batch size is 30) through a single forward pass. Dominant speedup for
     LAMA and ProPainter-hybrid.
-41. **Prefetch / pipeline parallelism** -- read frame N+1 on a worker thread
-    while frame N is being inpainted. The GIL is released in cv2 / numpy /
-    onnxruntime calls so simple threading is enough. Current code is
-    strictly serial; easy ~20% win.
+41. **[x] Prefetch / pipeline parallelism** -- new `_PrefetchReader`
+    wraps `cv2.VideoCapture` with a daemon worker thread feeding a
+    bounded queue (default `max(8, batch_size * 2)`). Strict ownership:
+    the wrapped cap is owned by the worker; main-thread `.set` / `.get`
+    / `.read` against the raw cap would race. Cleanup goes through
+    `reader.release()`, which sets a stop event, drains the queue so
+    the worker isn't blocked on `put()`, joins the thread, then
+    releases the underlying cap. The exception path in `process_video`
+    routes through the same release so a mid-batch crash never leaks
+    the thread. Toggle via `--no-prefetch`; queue size via
+    `--prefetch-queue N`. Tests in
+    [tests/test_hardening.py](./tests/test_hardening.py) `PrefetchReaderTests`
+    cover ordered delivery, release-with-full-queue, and post-EOF
+    idempotency.
 
 ### Specialised OCR
 
