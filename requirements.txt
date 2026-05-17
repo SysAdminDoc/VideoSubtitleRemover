@@ -2,15 +2,22 @@
 # ==========================================
 
 # Core
+# opencv-python >= 4.12.0 patches CVE-2025-53644 (uninitialised pointer in
+# JPEG read can become an arbitrary heap write on a crafted file).
+# Pillow >= 11.3.0 patches CVE-2026-25990 (PSD loader out-of-bounds write).
 numpy>=1.21.0
-opencv-python>=4.5.0
-Pillow>=9.0.0
+opencv-python>=4.12.0
+Pillow>=11.3.0
 
 # AI/ML Frameworks (choose based on your GPU)
 # ------------------------------------------
+# IMPORTANT: torch >= 2.10.0 is required.
+# CVE-2026-24747 / CVE-2025-32434: torch.load weights_only RCE in PyTorch
+# 2.9.1 and earlier. simple-lama-inpainting loads weights via torch.load,
+# so this is a runtime concern, not just a transitive-dependency one.
 
 # For NVIDIA GPUs (CUDA 11.8):
-# pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu118
+# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu118
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 
 # For AMD/Intel (DirectML):
@@ -18,7 +25,7 @@ Pillow>=9.0.0
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # For CPU only:
-# pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
+# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Text Detection (install at least one, listed in priority order)

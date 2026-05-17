@@ -42,6 +42,11 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
 
+# Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
+# semantics change. _migrate_settings() must learn the upgrade path so
+# users never silently lose state on an in-place upgrade.
+VSR_SETTINGS_FORMAT = 1
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -378,6 +383,7 @@ class ProcessingConfig:
             "adv_panel_open": self.adv_panel_open,
             "log_panel_open": self.log_panel_open,
             "onboarding_seen": self.onboarding_seen,
+            "vsr_settings_format": VSR_SETTINGS_FORMAT,
         }
 
     def normalized(self) -> 'ProcessingConfig':
@@ -639,6 +645,43 @@ def _write_json_atomic(path: Path, payload: dict):
 # SETTINGS PERSISTENCE
 # =============================================================================
 
+def _migrate_settings(data: dict) -> dict:
+    """Upgrade an on-disk settings payload to the current schema.
+
+    The settings file is a flat dict. A missing `vsr_settings_format` means
+    "anything from v3.12.0 or earlier" -- those builds shipped no version
+    tag and are treated as format 0. Each numbered case below documents the
+    field rename / coercion needed to reach the next format level. Unknown
+    future versions are accepted as-is on the assumption a newer build wrote
+    them; the coercer / `from_dict` will drop fields it does not recognise.
+    """
+    if not isinstance(data, dict):
+        return {}
+    version = data.get("vsr_settings_format")
+    try:
+        version = int(version) if version is not None else 0
+    except (TypeError, ValueError):
+        version = 0
+
+    if version > VSR_SETTINGS_FORMAT:
+        logger.info(
+            f"settings.json reports vsr_settings_format={version} "
+            f"(this build understands up to {VSR_SETTINGS_FORMAT}); "
+            f"unknown keys will be ignored."
+        )
+        return data
+
+    # version == 0 -> 1: no field renames; stamp the version so future
+    # migrations have a known floor. Add field-rename / coercion blocks
+    # below as the schema evolves.
+    if version < 1:
+        data = dict(data)
+        data["vsr_settings_format"] = 1
+        version = 1
+
+    return data
+
+
 def load_settings() -> ProcessingConfig:
     """Load saved settings from disk."""
     try:
@@ -646,6 +689,7 @@ def load_settings() -> ProcessingConfig:
             data = _read_json_object(SETTINGS_FILE, "settings")
             if not data:
                 return ProcessingConfig()
+            data = _migrate_settings(data)
             logger.info(f"Settings loaded from {SETTINGS_FILE}")
             return ProcessingConfig.from_dict(data)
     except Exception as e:
