@@ -258,6 +258,45 @@ class BackendWriteSrtTests(unittest.TestCase):
             os.unlink(path)
 
 
+class LoudnormCoerceTests(unittest.TestCase):
+    """normalize_processing_config must clamp loudnorm_target to valid
+    LUFS, with 0.0 reserved as 'disabled'."""
+
+    def test_zero_passes_through_as_disabled(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(loudnorm_target=0.0)
+        )
+        self.assertEqual(cfg.loudnorm_target, 0.0)
+
+    def test_in_range_youtube_target_kept(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(loudnorm_target=-14.0)
+        )
+        self.assertEqual(cfg.loudnorm_target, -14.0)
+
+    def test_in_range_broadcast_target_kept(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(loudnorm_target=-23.0)
+        )
+        self.assertEqual(cfg.loudnorm_target, -23.0)
+
+    def test_out_of_range_silently_disables(self):
+        """A value outside ffmpeg's loudnorm range (-70 to -5) is rejected
+        as 0.0 (off) rather than crashing the encode."""
+        for bad in (5.0, -100.0, -2.0):
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(loudnorm_target=bad)
+            )
+            self.assertEqual(cfg.loudnorm_target, 0.0, f"bad={bad}")
+
+    def test_nan_and_inf_become_zero(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(loudnorm_target=bad)
+            )
+            self.assertEqual(cfg.loudnorm_target, 0.0, f"bad={bad}")
+
+
 class SettingsMigrationTests(unittest.TestCase):
     """Tests for _migrate_settings(): legacy payloads must round-trip into
     a current-format ProcessingConfig without losing user state, and the

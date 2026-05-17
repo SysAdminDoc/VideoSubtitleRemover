@@ -124,6 +124,12 @@ class ProcessingConfig:
     output_quality: int = 23  # CRF value for x264
     use_hw_encode: bool = True  # try NVENC/QSV before falling back to libx264
 
+    # Optional EBU R128 loudness normalisation target (LUFS, e.g. -16.0).
+    # 0.0 disables. Common platform targets: YouTube -14, Apple -16,
+    # broadcast -23. Applied as an `ffmpeg -af loudnorm=I=...` pass during
+    # audio mux; cost is one extra pass through libavfilter.
+    loudnorm_target: float = 0.0
+
 
 def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
@@ -287,6 +293,13 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.output_format = _coerce_text(config.output_format, "mp4", 16).lower()
     config.output_quality = _coerce_int(config.output_quality, 23, 0, 51)
     config.use_hw_encode = _coerce_bool(config.use_hw_encode, True)
+    # loudnorm_target: 0.0 disables; otherwise clamp to the LUFS range
+    # ffmpeg's loudnorm filter actually accepts (-70 to -5 inclusive).
+    target = _coerce_float(config.loudnorm_target, 0.0)
+    if target == 0.0 or -70.0 <= target <= -5.0:
+        config.loudnorm_target = target
+    else:
+        config.loudnorm_target = 0.0
     return config
 
 
@@ -2201,6 +2214,16 @@ class SubtitleRemover:
                 '-c:a', 'aac',
                 '-map', '0:v:0',
                 '-map', '1:a:0?',
+            ]
+            # Optional EBU R128 loudness normalisation. Single-pass; for
+            # broadcast-grade accuracy a two-pass measure-then-apply would be
+            # preferable, but the single-pass filter is good enough for the
+            # platform-target use case (YouTube -14, Apple -16, broadcast -23).
+            if self.config.loudnorm_target != 0.0:
+                target = self.config.loudnorm_target
+                cmd += ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
+                logger.info(f"Applying EBU R128 loudnorm I={target} LUFS")
+            cmd += [
                 '-shortest',
                 str(temp_output),
             ]
@@ -2363,18 +2386,31 @@ def main():
                        help="OCR only at video I-frames (ffprobe-probed)")
     parser.add_argument("--quality-report", action="store_true",
                        help="Compute PSNR/SSIM on a random frame sample after run")
+    parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
+                       help="EBU R128 loudness target in LUFS, e.g. -14 (YouTube), "
+                            "-16 (Apple), -23 (broadcast). 0 disables.")
+    parser.add_argument("--skip-existing", action="store_true",
+                       help="Skip any input whose output path already exists, "
+                            "even without a checkpoint marker.")
+    parser.add_argument("--validate-config", action="store_true",
+                       help="Print the resolved ProcessingConfig as JSON and exit "
+                            "without processing anything. Useful for shell scripts "
+                            "that want to verify flags before launching a long batch.")
 
     args = parser.parse_args()
 
-    # Validate: either --input or --pattern must be given.
-    if not args.input and not args.pattern:
-        parser.error("one of --input or --pattern is required")
-    if args.input and args.pattern:
-        parser.error("--input and --pattern are mutually exclusive")
-    if args.pattern and not args.out_dir:
-        parser.error("--pattern requires --out-dir")
-    if args.input and not args.output:
-        parser.error("--input requires --output")
+    # Validate: either --input or --pattern must be given. `--validate-config`
+    # bypasses this so the user can dry-run flag combinations without supplying
+    # any file at all.
+    if not args.validate_config:
+        if not args.input and not args.pattern:
+            parser.error("one of --input or --pattern is required")
+        if args.input and args.pattern:
+            parser.error("--input and --pattern are mutually exclusive")
+        if args.pattern and not args.out_dir:
+            parser.error("--pattern requires --out-dir")
+        if args.input and not args.output:
+            parser.error("--input requires --output")
     if not 0.1 <= args.threshold <= 1.0:
         parser.error("--threshold must be between 0.1 and 1.0")
     if not 15 <= args.crf <= 35:
@@ -2397,6 +2433,8 @@ def main():
         parser.error("--phash-distance must be between 0 and 64")
     if args.colour_tolerance < 0:
         parser.error("--colour-tolerance must be zero or positive")
+    if args.loudnorm != 0.0 and not -70.0 <= args.loudnorm <= -5.0:
+        parser.error("--loudnorm must be 0 (off) or between -70 and -5 LUFS")
 
     config = ProcessingConfig(
         mode=InpaintMode(args.mode),
@@ -2430,6 +2468,7 @@ def main():
         keyframe_detection=args.keyframe_detect,
         quality_report=args.quality_report,
         use_hw_encode=not args.no_hw_encode,
+        loudnorm_target=args.loudnorm,
     )
     config = normalize_processing_config(config)
 
@@ -2460,6 +2499,60 @@ def main():
         except Exception as exc:
             parser.error(f"Could not load --config {args.config}: {exc}")
 
+    # `--validate-config` dry-run: print the resolved config and exit before
+    # we instantiate the (heavy) detector / inpainter stack. Exit code stays
+    # 0 so this is useful in shell pre-checks.
+    if args.validate_config:
+        resolved = {
+            "mode": config.mode.value,
+            "device": config.device,
+            "detection_lang": config.detection_lang,
+            "detection_threshold": config.detection_threshold,
+            "detection_frame_skip": config.detection_frame_skip,
+            "subtitle_area": list(config.subtitle_area) if config.subtitle_area else None,
+            "subtitle_areas": (
+                [list(r) for r in config.subtitle_areas]
+                if config.subtitle_areas else None
+            ),
+            "mask_dilate_px": config.mask_dilate_px,
+            "mask_feather_px": config.mask_feather_px,
+            "edge_ring_px": config.edge_ring_px,
+            "tbe_enable": config.tbe_enable,
+            "tbe_min_coverage": config.tbe_min_coverage,
+            "tbe_flow_warp": config.tbe_flow_warp,
+            "tbe_scene_cut_split": config.tbe_scene_cut_split,
+            "tbe_scene_cut_threshold": config.tbe_scene_cut_threshold,
+            "kalman_tracking": config.kalman_tracking,
+            "kalman_iou_threshold": config.kalman_iou_threshold,
+            "kalman_max_age": config.kalman_max_age,
+            "phash_skip_enable": config.phash_skip_enable,
+            "phash_skip_distance": config.phash_skip_distance,
+            "colour_tune_enable": config.colour_tune_enable,
+            "colour_tune_tolerance": config.colour_tune_tolerance,
+            "auto_exposure_threshold": config.auto_exposure_threshold,
+            "deinterlace": config.deinterlace,
+            "deinterlace_auto": config.deinterlace_auto,
+            "keyframe_detection": config.keyframe_detection,
+            "quality_report": config.quality_report,
+            "adaptive_batch": config.adaptive_batch,
+            "sttn_skip_detection": config.sttn_skip_detection,
+            "sttn_neighbor_stride": config.sttn_neighbor_stride,
+            "sttn_reference_length": config.sttn_reference_length,
+            "sttn_max_load_num": config.sttn_max_load_num,
+            "lama_super_fast": config.lama_super_fast,
+            "time_start": config.time_start,
+            "time_end": config.time_end,
+            "preserve_audio": config.preserve_audio,
+            "output_format": config.output_format,
+            "output_quality": config.output_quality,
+            "use_hw_encode": config.use_hw_encode,
+            "loudnorm_target": config.loudnorm_target,
+            "export_srt": config.export_srt,
+            "export_mask_video": config.export_mask_video,
+        }
+        print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
+        sys.exit(0)
+
     # Reusable remover -- loaded once and fed every input in the batch
     remover = SubtitleRemover(config)
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
@@ -2479,6 +2572,12 @@ def main():
     base_subtitle_areas = list(config.subtitle_areas) if config.subtitle_areas else None
 
     def _process_one(inp: str, outp: str) -> bool:
+        # --skip-existing wins over the checkpoint machinery so the user can
+        # re-run a glob against a partly-populated output dir without enabling
+        # the full checkpoint workflow.
+        if args.skip_existing and Path(outp).exists():
+            print(f"[skip] {Path(inp).name} (output exists)")
+            return True
         key = _checkpoint_key(inp, outp)
         if not args.no_resume and _checkpoint_is_done(ckpt_dir, key, outp):
             print(f"[skip] {Path(inp).name} (checkpoint)")

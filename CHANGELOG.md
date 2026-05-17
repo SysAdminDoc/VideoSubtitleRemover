@@ -4,6 +4,26 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`--validate-config` CLI dry-run** -- parse all CLI flags + the optional
+  `--config` JSON overlay, normalise the resolved `ProcessingConfig`,
+  print it as JSON, and exit 0 without instantiating the detector or
+  inpainter. Lets shell scripts verify flag combinations before launching
+  a long batch. `--input` / `--pattern` / `--output` / `--out-dir` are
+  not required when this flag is set.
+- **`--skip-existing` CLI toggle** -- skip any input whose output path
+  already exists, regardless of the checkpoint store. Independent of
+  `--no-resume`; useful when re-running a glob against a partly populated
+  output directory without enabling the full checkpoint workflow.
+- **EBU R128 loudness normalisation (`--loudnorm <LUFS>`)** --
+  `ProcessingConfig.loudnorm_target` defaults to 0.0 (off). When set to a
+  LUFS value in [-70, -5], the ffmpeg audio mux runs an extra
+  `-af loudnorm=I=<target>:TP=-1.5:LRA=11` pass during merge. Common
+  platform targets: YouTube -14, Apple -16, broadcast -23. Single-pass for
+  speed; broadcast-grade two-pass measure-then-apply may follow.
+  CLI-only for v3.13; the GUI control lands in a later release.
+
 ### Security
 
 - **Pin `torch >= 2.10.0`** -- CVE-2026-24747 / CVE-2025-32434 are
