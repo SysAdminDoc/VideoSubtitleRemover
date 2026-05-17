@@ -401,6 +401,84 @@ class SettingsMigrationTests(unittest.TestCase):
                 gui.SETTINGS_FILE = original
 
 
+class PrefetchReaderTests(unittest.TestCase):
+    """_PrefetchReader contract:
+    - returns the same frames in the same order as the underlying cap
+    - read() returns (False, None) after exhaustion or release
+    - release() stops the worker even when the queue is full
+    """
+
+    class _FakeCap:
+        """Minimal cv2.VideoCapture stand-in for unit tests. Returns
+        deterministic 'frames' (small numpy arrays) one per read until
+        n_frames is reached."""
+
+        def __init__(self, n_frames: int):
+            self._n = n_frames
+            self._i = 0
+            self._released = False
+            self._lock = __import__("threading").Lock()
+
+        def isOpened(self):
+            return not self._released
+
+        def read(self):
+            with self._lock:
+                if self._released or self._i >= self._n:
+                    return False, None
+                import numpy as _np
+                frame = _np.full((4, 4, 3), self._i, dtype=_np.uint8)
+                self._i += 1
+                return True, frame
+
+        def get(self, _prop):
+            return 0
+
+        def release(self):
+            with self._lock:
+                self._released = True
+
+    def test_read_yields_every_frame_in_order(self):
+        cap = self._FakeCap(n_frames=20)
+        reader = processor._PrefetchReader(cap, max_frames=20, queue_size=4)
+        try:
+            seen = []
+            while True:
+                ret, frame = reader.read()
+                if not ret:
+                    break
+                seen.append(int(frame.flat[0]))
+            self.assertEqual(seen, list(range(20)))
+        finally:
+            reader.release()
+
+    def test_release_stops_worker_with_full_queue(self):
+        # A worker that has filled the queue must still exit on release().
+        cap = self._FakeCap(n_frames=1000)
+        reader = processor._PrefetchReader(cap, max_frames=1000, queue_size=4)
+        # Don't consume; let the queue fill, then release.
+        import time as _time
+        _time.sleep(0.05)
+        reader.release()
+        # Thread must have stopped within the release() join window.
+        self.assertFalse(reader._thread.is_alive())
+
+    def test_read_after_exhaustion_is_idempotent(self):
+        cap = self._FakeCap(n_frames=3)
+        reader = processor._PrefetchReader(cap, max_frames=3, queue_size=2)
+        try:
+            for _ in range(3):
+                ret, _ = reader.read()
+                self.assertTrue(ret)
+            # After exhaustion, repeated reads keep returning (False, None).
+            for _ in range(5):
+                ret, frame = reader.read()
+                self.assertFalse(ret)
+                self.assertIsNone(frame)
+        finally:
+            reader.release()
+
+
 class JsonLineLogHandlerTests(unittest.TestCase):
     """JsonLineLogHandler must write exactly one JSON record per emit,
     include the level / logger / msg / ts fields, and capture exception
