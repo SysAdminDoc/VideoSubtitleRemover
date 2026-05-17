@@ -402,6 +402,38 @@ class SettingsMigrationTests(unittest.TestCase):
                 gui.SETTINGS_FILE = original
 
 
+class ChyronClassifierTests(unittest.TestCase):
+    """_KalmanBox.is_chyron + SubtitleTracker.categorize must classify a
+    long-lived track as 'chyron' and a short-lived one as 'subtitle'."""
+
+    def test_is_chyron_below_threshold(self):
+        box = processor._KalmanBox((10, 10, 50, 30))
+        # Fresh box: 1 hit
+        self.assertFalse(box.is_chyron(min_hits=90))
+
+    def test_is_chyron_above_threshold(self):
+        box = processor._KalmanBox((10, 10, 50, 30))
+        for _ in range(120):
+            box.update((10, 10, 50, 30))
+        self.assertTrue(box.is_chyron(min_hits=90))
+
+    def test_tracker_categorizes_persistent_track_as_chyron(self):
+        tr = processor.SubtitleTracker(iou_threshold=0.3, max_age=2)
+        for _ in range(120):
+            tr.update([(100, 100, 200, 130)])
+        cats = tr.categorize(min_chyron_hits=90)
+        # Should have exactly one persistent track classified as chyron.
+        self.assertEqual(len(cats), 1)
+        self.assertEqual(cats[0], "chyron")
+
+    def test_tracker_categorizes_brief_track_as_subtitle(self):
+        tr = processor.SubtitleTracker(iou_threshold=0.3, max_age=2)
+        for _ in range(10):
+            tr.update([(100, 100, 200, 130)])
+        cats = tr.categorize(min_chyron_hits=90)
+        self.assertEqual(cats, ["subtitle"])
+
+
 class FrameSequenceCaptureTests(unittest.TestCase):
     """_FrameSequenceCapture must mirror cv2.VideoCapture closely enough
     that process_video does not notice the swap."""

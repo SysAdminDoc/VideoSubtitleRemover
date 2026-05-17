@@ -217,6 +217,19 @@ class ProcessingConfig:
     # squinting at metrics. Implies `quality_report = True`.
     quality_report_sheet: bool = False
 
+    # Chyron classifier: persistent text boxes (station logos, lower-
+    # thirds, breaking-news tickers) are categorised separately from
+    # dialogue subtitles so users can keep one and remove the other.
+    # `chyron_min_hits` is the threshold in matched frames a Kalman
+    # track must accumulate before it's classified as a chyron; default
+    # 90 catches ~3 s at 30 fps, which is longer than a typical dialogue
+    # subtitle but well within the lifetime of a persistent graphic.
+    # Both `remove_*` default True for backward compatibility (v3.12
+    # removed every detected box unconditionally).
+    remove_subtitles: bool = True
+    remove_chyrons: bool = True
+    chyron_min_hits: int = 90
+
 
 def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
@@ -400,6 +413,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         # The sheet is rendered from the same sample _compute_quality_report
         # collects, so the numeric report must run for the sheet to exist.
         config.quality_report = True
+    config.remove_subtitles = _coerce_bool(config.remove_subtitles, True)
+    config.remove_chyrons = _coerce_bool(config.remove_chyrons, True)
+    config.chyron_min_hits = _coerce_int(config.chyron_min_hits, 90, 1, 100000)
     return config
 
 
@@ -840,6 +856,14 @@ class _KalmanBox:
         self.age = 0
         self.hits += 1
 
+    def is_chyron(self, min_hits: int) -> bool:
+        """A track is chyron-like when it has matched a detection in at
+        least `min_hits` frames -- station logos, lower-thirds, breaking-
+        news tickers persist; dialogue subtitles turn over every few
+        seconds. min_hits ~= fps * 3 catches typical persistent graphics
+        without false-positiving on long dialogue lines."""
+        return self.hits >= max(1, int(min_hits))
+
     @property
     def box(self) -> Tuple[int, int, int, int]:
         return _box_from_state(self.kf.statePost.flatten())
@@ -930,6 +954,16 @@ class SubtitleTracker:
         # Drop stale tracks
         self._tracks = [t for t in self._tracks if t.age <= self.max_age]
         return [t.box for t in self._tracks]
+
+    def categorize(self, min_chyron_hits: int) -> List[str]:
+        """Per-track category aligned with the last `update()` return value.
+        'chyron' for tracks that have matched at least `min_chyron_hits`
+        frames; 'subtitle' otherwise. Caller filters the box list against
+        this to honour `remove_chyrons` / `remove_subtitles` flags."""
+        return [
+            "chyron" if t.is_chyron(min_chyron_hits) else "subtitle"
+            for t in self._tracks
+        ]
 
 
 def _phash(frame: np.ndarray, size: int = 8) -> np.ndarray:
@@ -1869,7 +1903,10 @@ class SubtitleRemover:
         covering the densest band. Returns None if nothing useful was found.
         Bands are horizontal slabs of the frame height.
         """
-        cap = cv2.VideoCapture(video_path)
+        cap = _open_capture(
+            video_path, self.config.decode_hw_accel,
+            input_fps=self.config.input_fps,
+        )
         if not cap.isOpened():
             return None
         try:
@@ -2016,12 +2053,13 @@ class SubtitleRemover:
 
         Returns {'psnr', 'ssim', 'samples', 'tag', 'sheet'} or None.
         """
-        # Frame-sequence input: re-use the adapter so we don't need ffmpeg
-        # to seek into a directory.
-        cap_in = (_FrameSequenceCapture(input_path, fps=self.config.input_fps)
-                  if Path(input_path).is_dir()
-                  else cv2.VideoCapture(input_path))
-        cap_out = cv2.VideoCapture(output_path)
+        # `_open_capture` handles the dir-vs-file split and honours the
+        # HW-accel hint for video inputs.
+        cap_in = _open_capture(
+            input_path, self.config.decode_hw_accel,
+            input_fps=self.config.input_fps,
+        )
+        cap_out = _open_capture(output_path, self.config.decode_hw_accel)
         if not cap_in.isOpened() or not cap_out.isOpened():
             try:
                 cap_in.release()
@@ -2450,6 +2488,18 @@ class SubtitleRemover:
                             smoothed = tracker.update(list(detected_boxes))
                         else:
                             smoothed = list(detected_boxes)
+                        # Chyron / subtitle filter: when either remove flag is
+                        # off we drop the matching tracks before mask creation.
+                        # No-op when both are True (default v3.12 behaviour).
+                        if (tracker is not None
+                                and (not self.config.remove_chyrons
+                                     or not self.config.remove_subtitles)):
+                            cats = tracker.categorize(self.config.chyron_min_hits)
+                            smoothed = [
+                                b for b, c in zip(smoothed, cats)
+                                if (c == "chyron" and self.config.remove_chyrons)
+                                or (c == "subtitle" and self.config.remove_subtitles)
+                            ]
                         # If fixed boxes are set without skip_detection, union them
                         # with per-frame detections so users can pin a region AND
                         # still clean incidental text elsewhere.
@@ -2837,6 +2887,18 @@ def main():
     parser.add_argument("--input-fps", type=float, default=24.0, metavar="FPS",
                        help="FPS to use when the input is a directory of "
                             "images (frame sequence). Ignored for video inputs.")
+    parser.add_argument("--keep-chyrons", action="store_true",
+                       help="Leave persistent text (station logos, lower-thirds, "
+                            "tickers) in the output. Chyron classification: a "
+                            "Kalman track must match in >= --chyron-min-hits "
+                            "frames to qualify.")
+    parser.add_argument("--keep-subtitles", action="store_true",
+                       help="Leave non-persistent text (dialogue captions) in the "
+                            "output. Useful when paired with --keep-chyrons=off "
+                            "for chyron-only cleaning.")
+    parser.add_argument("--chyron-min-hits", type=int, default=90, metavar="N",
+                       help="Frames a Kalman track must match to be classified "
+                            "as a chyron. Default 90 (~3 s at 30 fps).")
     parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
                        help="EBU R128 loudness target in LUFS, e.g. -14 (YouTube), "
                             "-16 (Apple), -23 (broadcast). 0 disables.")
@@ -2952,6 +3014,9 @@ def main():
         prefetch_queue_size=args.prefetch_queue,
         input_fps=args.input_fps,
         quality_report_sheet=args.quality_sheet,
+        remove_subtitles=not args.keep_subtitles,
+        remove_chyrons=not args.keep_chyrons,
+        chyron_min_hits=args.chyron_min_hits,
     )
     config = normalize_processing_config(config)
 
@@ -3036,6 +3101,9 @@ def main():
             "prefetch_queue_size": config.prefetch_queue_size,
             "input_fps": config.input_fps,
             "quality_report_sheet": config.quality_report_sheet,
+            "remove_subtitles": config.remove_subtitles,
+            "remove_chyrons": config.remove_chyrons,
+            "chyron_min_hits": config.chyron_min_hits,
             "export_srt": config.export_srt,
             "export_mask_video": config.export_mask_video,
         }
