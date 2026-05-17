@@ -13,7 +13,9 @@ import cv2
 import datetime
 import numpy as np
 import logging
+import queue
 import tempfile
+import threading
 import shutil
 import subprocess
 import traceback
@@ -198,6 +200,14 @@ class ProcessingConfig:
     # routinely ship 3-5 language tracks.
     multi_audio_passthrough: bool = True
 
+    # Decouple cv2.VideoCapture.read() from the detect+inpaint critical
+    # path by running it on a worker thread that feeds a bounded queue.
+    # cv2 / numpy / onnxruntime release the GIL on heavy calls so simple
+    # threading is enough. Default on; toggle off if you suspect a
+    # decode-vs-process race or want strictly serial behaviour for debug.
+    prefetch_decode: bool = True
+    prefetch_queue_size: int = 0   # 0 = auto (max(8, batch_size * 2))
+
 
 def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
@@ -373,6 +383,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         accel = "off"
     config.decode_hw_accel = accel
     config.multi_audio_passthrough = _coerce_bool(config.multi_audio_passthrough, True)
+    config.prefetch_decode = _coerce_bool(config.prefetch_decode, True)
+    config.prefetch_queue_size = _coerce_int(config.prefetch_queue_size, 0, 0, 512)
     return config
 
 
@@ -1576,6 +1588,91 @@ def _open_capture(path: str, hw_accel: str = "off") -> "cv2.VideoCapture":
     return cv2.VideoCapture(path)
 
 
+class _PrefetchReader:
+    """Background frame reader that wraps a cv2.VideoCapture.
+
+    Exposes the same `.read()` / `.release()` shape as the underlying
+    capture so the main loop can swap one for the other with no other
+    changes. A daemon worker thread keeps a bounded queue full while the
+    main thread runs detection + inpainting; reads release the GIL inside
+    libavformat / FFmpeg, so plain threading is enough to overlap I/O
+    with compute.
+
+    Ownership rules: once a `_PrefetchReader` wraps a capture, the
+    caller MUST NOT touch the underlying cv2 object until `.release()`
+    has returned -- `.set()` / `.get()` / `.read()` on the wrapped cap
+    from the main thread will race the worker.
+    """
+
+    _STOP = object()  # sentinel pushed by the worker on EOF or stop
+
+    def __init__(self, cap, *, max_frames: int, queue_size: int = 16):
+        self._cap = cap
+        self._max = max(0, int(max_frames))
+        self._q: "queue.Queue" = queue.Queue(maxsize=max(2, int(queue_size)))
+        self._stop = threading.Event()
+        self._exhausted = False
+        self._thread = threading.Thread(
+            target=self._loop, name="vsr-prefetch", daemon=True,
+        )
+        self._thread.start()
+
+    def _loop(self) -> None:
+        try:
+            for _ in range(self._max):
+                if self._stop.is_set():
+                    break
+                ret, frame = self._cap.read()
+                if not ret:
+                    break
+                # Put with a poll loop so a hung consumer + stop_event
+                # combination doesn't deadlock the worker forever.
+                while not self._stop.is_set():
+                    try:
+                        self._q.put((True, frame), timeout=0.25)
+                        break
+                    except queue.Full:
+                        continue
+        except Exception as exc:  # pragma: no cover -- best-effort logging
+            logger.warning(f"Prefetch reader crashed: {exc}")
+        finally:
+            try:
+                self._q.put(self._STOP, timeout=1.0)
+            except queue.Full:
+                pass
+
+    def read(self) -> Tuple[bool, Optional[np.ndarray]]:
+        if self._exhausted:
+            return False, None
+        item = self._q.get()
+        if item is self._STOP:
+            self._exhausted = True
+            return False, None
+        return item
+
+    def release(self) -> None:
+        self._stop.set()
+        # Drain so the worker can push its sentinel without blocking.
+        try:
+            while True:
+                self._q.get_nowait()
+        except queue.Empty:
+            pass
+        self._thread.join(timeout=2.0)
+        try:
+            self._cap.release()
+        except Exception:
+            pass
+
+    # Pass-through metadata accessors so the main loop can still query
+    # FPS / dimensions before the worker starts consuming the cap.
+    def isOpened(self) -> bool:
+        return self._cap.isOpened()
+
+    def get(self, prop):
+        return self._cap.get(prop)
+
+
 def _detect_hw_encoder() -> Optional[str]:
     """Probe FFmpeg for hardware encoder availability. Returns encoder name or None."""
     try:
@@ -1960,6 +2057,7 @@ class SubtitleRemover:
     def process_video(self, input_path: str, output_path: str) -> bool:
         temp_dir = None
         cap = None
+        reader = None
         writer = None
         mask_writer = None
         temp_mask_path = None
@@ -2073,6 +2171,20 @@ class SubtitleRemover:
             frame_idx = 0
             batch_size = self.config.sttn_max_load_num
             frame_skip = self.config.detection_frame_skip
+
+            # Decoupled prefetch: wrap the capture in a worker that fills
+            # a bounded frame queue while the main thread runs detection +
+            # inpainting. cv2.VideoCapture must NOT be touched directly
+            # (.set / .get / .read) after this point -- the worker owns it.
+            # Seek + metadata reads above happen *before* the wrap, so this
+            # is safe; cleanup goes through `reader.release()`.
+            if self.config.prefetch_decode:
+                qsize = self.config.prefetch_queue_size or max(8, batch_size * 2)
+                reader = _PrefetchReader(cap, max_frames=frames_to_process,
+                                          queue_size=qsize)
+                logger.info(f"Prefetch decode on (queue={qsize})")
+            else:
+                reader = cap
             last_mask = None  # cached mask for frame-skip optimization
             fixed_mask = None  # cached mask for skip_detection mode
             self._srt_entries = []
@@ -2106,7 +2218,7 @@ class SubtitleRemover:
                 for _ in range(batch_size):
                     if start_frame + frame_idx >= end_frame:
                         break
-                    ret, frame = cap.read()
+                    ret, frame = reader.read()
                     if not ret:
                         break
 
@@ -2209,7 +2321,10 @@ class SubtitleRemover:
                     for m in masks:
                         mask_writer.write(m)
 
-            cap.release()
+            # reader.release() (or cap.release() when prefetch is off)
+            # also joins the worker thread and releases the underlying cap.
+            reader.release()
+            reader = None
             cap = None
             writer.release()
             writer = None
@@ -2264,7 +2379,16 @@ class SubtitleRemover:
                     mask_writer.release()
                 except Exception:
                     pass
-            if cap is not None:
+            # If a prefetch reader was set up, release it (which also stops
+            # the worker thread and releases the underlying cap). Otherwise
+            # release the raw cap. Tolerate either being unset on early
+            # failures.
+            if reader is not None:
+                try:
+                    reader.release()
+                except Exception:
+                    pass
+            elif cap is not None:
                 try:
                     cap.release()
                 except Exception:
@@ -2529,6 +2653,13 @@ def main():
                        help="Mux only the first audio stream (legacy v3.12 "
                             "behaviour). Default is now to pass through all "
                             "audio tracks (matters for Bluray/DVD rips).")
+    parser.add_argument("--no-prefetch", action="store_true",
+                       help="Disable the worker-thread frame prefetcher. "
+                            "Strictly serial read+process; use for debugging "
+                            "decode-vs-process races.")
+    parser.add_argument("--prefetch-queue", type=int, default=0, metavar="N",
+                       help="Bounded prefetch queue size in frames. "
+                            "0 = auto (max(8, batch_size * 2)).")
     parser.add_argument("--skip-existing", action="store_true",
                        help="Skip any input whose output path already exists, "
                             "even without a checkpoint marker.")
@@ -2621,6 +2752,8 @@ def main():
         loudnorm_target=args.loudnorm,
         decode_hw_accel=args.decode_accel,
         multi_audio_passthrough=not args.single_audio,
+        prefetch_decode=not args.no_prefetch,
+        prefetch_queue_size=args.prefetch_queue,
     )
     config = normalize_processing_config(config)
 
@@ -2701,6 +2834,8 @@ def main():
             "loudnorm_target": config.loudnorm_target,
             "decode_hw_accel": config.decode_hw_accel,
             "multi_audio_passthrough": config.multi_audio_passthrough,
+            "prefetch_decode": config.prefetch_decode,
+            "prefetch_queue_size": config.prefetch_queue_size,
             "export_srt": config.export_srt,
             "export_mask_video": config.export_mask_video,
         }
