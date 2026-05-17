@@ -412,9 +412,13 @@ require model-weight downloads.
     (#1). Defaults off.
     Source: [GlitchTip vs Sentry](https://www.bugsink.com/blog/glitchtip-vs-sentry-vs-bugsink/),
     [GlitchTip self-hosted](https://hamedsh.medium.com/glitchtip-a-lightweight-sentry-alternative-903bceb3e105).
-53. **Structured JSON log option** -- alongside the existing 5 MB rotating
-    text log, emit `vsr_pro.jsonl` when the user passes `--json-log`. Lets
-    power users grep / `jq` runs across days of batch jobs.
+53. **[x] Structured JSON log option** -- new
+    `backend.processor.JsonLineLogHandler` writes one JSON record per
+    line (`ts` UTC ISO-8601, `level`, `logger`, `msg`, optional `exc`).
+    The text log keeps writing in parallel; this handler is purely
+    additive. CLI exposes `--json-log PATH`. GUI toggle still pending.
+    Tests in
+    [tests/test_hardening.py](./tests/test_hardening.py) `JsonLineLogHandlerTests`.
 
 ### Testing
 
@@ -427,10 +431,16 @@ require model-weight downloads.
     submit 10-second problem clips + the settings they tried. Worst
     performers get folded into the regression harness; baseline fixes
     ship as a release note.
-56. **Coerce / config fuzz pass** -- formalise the NaN/inf / out-of-range
-    coverage we already added in v3.13 hardening (#3, #4) into a Hypothesis
-    fuzz suite over `ProcessingConfig.from_dict`. Catches the next class
-    of "user sent a string where we expected a float" bug before it ships.
+56. **[x] Coerce / config fuzz pass** -- new `ConfigFuzzTests` in
+    [tests/test_hardening.py](./tests/test_hardening.py) runs 1500
+    deterministic random payloads through the GUI `ProcessingConfig.from_dict`
+    + `.normalized()` and another 1500 through the backend
+    `normalize_processing_config()`. Seeded RNG (no Hypothesis dep) walks
+    the cross-product of (known field name) x (pathological value pool:
+    None, "", NaN, inf, very large int, lists, dicts, bool, hex string).
+    Post-conditions: never raises; numeric fields land in declared
+    bounds; `decode_hw_accel` lands in the allowed token set;
+    `loudnorm_target` is 0.0 or in [-70, -5].
 
 ### UX
 

@@ -10,11 +10,13 @@ import os
 import sys
 import json
 import cv2
+import datetime
 import numpy as np
 import logging
 import tempfile
 import shutil
 import subprocess
+import traceback
 from pathlib import Path
 from typing import Any, Optional, Tuple, List, Generator, Callable
 from dataclasses import dataclass, field
@@ -22,6 +24,60 @@ from enum import Enum
 from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
+
+
+class JsonLineLogHandler(logging.Handler):
+    """One JSON record per line, structured for jq / grep across long
+    batch runs.
+
+    Public so the GUI (which has its own logging.basicConfig) can opt in
+    by calling `attach_json_log()` from `VideoSubtitleRemover.py`. The
+    text log keeps writing in parallel; this handler is purely additive.
+    """
+
+    def __init__(self, stream):
+        super().__init__()
+        self._stream = stream
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            payload = {
+                "ts": datetime.datetime.fromtimestamp(
+                    record.created, tz=datetime.timezone.utc
+                ).isoformat(timespec="milliseconds"),
+                "level": record.levelname,
+                "logger": record.name,
+                "msg": record.getMessage(),
+            }
+            if record.exc_info:
+                payload["exc"] = "".join(
+                    traceback.format_exception(*record.exc_info)
+                ).rstrip()
+            line = json.dumps(payload, ensure_ascii=True) + "\n"
+            self._stream.write(line)
+            self._stream.flush()
+        except Exception:  # pragma: no cover -- best-effort logging
+            self.handleError(record)
+
+
+def attach_json_log(path: str) -> Optional[JsonLineLogHandler]:
+    """Append-mode JSON-lines log handler attached to the root logger.
+
+    Safe to call multiple times -- detects an already-attached handler
+    pointing at the same path and skips. Returns the handler so callers
+    can detach on shutdown if they want; returns None on open failure.
+    """
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        stream = open(path, "a", encoding="utf-8")
+    except OSError as exc:
+        logger.warning(f"Could not open JSON log {path}: {exc}")
+        return None
+    handler = JsonLineLogHandler(stream)
+    handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(handler)
+    logger.info(f"JSON log enabled at {path}")
+    return handler
 
 
 class InpaintMode(Enum):
@@ -2480,8 +2536,18 @@ def main():
                        help="Print the resolved ProcessingConfig as JSON and exit "
                             "without processing anything. Useful for shell scripts "
                             "that want to verify flags before launching a long batch.")
+    parser.add_argument("--json-log", metavar="PATH",
+                       help="Append a structured JSON-line log at PATH alongside "
+                            "the rotating text log. Each record is one line, "
+                            "jq-friendly. Useful for grepping across days of batch "
+                            "jobs.")
 
     args = parser.parse_args()
+
+    # Wire optional structured log before any work so the JSON sidecar
+    # captures every record from arg validation onward.
+    if args.json_log:
+        attach_json_log(args.json_log)
 
     # Validate: either --input or --pattern must be given. `--validate-config`
     # bypasses this so the user can dry-run flag combinations without supplying
