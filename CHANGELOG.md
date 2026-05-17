@@ -6,6 +6,24 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Multi-track audio passthrough (default on)** -- `_merge_audio` now
+  emits `-map 1:a?` (all input audio streams) re-encoded to AAC instead
+  of `-map 1:a:0?` (first only). Bluray/DVD rips routinely carry 3-5
+  language tracks; the legacy behaviour silently dropped all but the
+  first. New `ProcessingConfig.multi_audio_passthrough = True` field +
+  `--single-audio` CLI flag for the legacy behaviour. Caveat: the
+  simple single-pass loudnorm filter applies only to the first selected
+  audio stream; broadcast-grade multi-track loudnorm needs
+  `-filter_complex` and is deferred.
+- **Hardware-accelerated decode hint (`--decode-accel`)** -- new
+  `_open_capture()` helper supports `off` (default; status quo),
+  `auto`/`any`, `d3d11` (Windows DXVA2/D3D11VA), `vaapi` (Linux), or
+  `mfx` (Intel Media SDK). Probes one frame on open; if the HW path
+  returns no frames (known cv2/FFmpeg issue, opencv/opencv#25185) it
+  silently falls back to software decode with a warning. Wired into the
+  main video decode path in `SubtitleRemover.process_video`. Other
+  short-scan call sites (subtitle-band probe, quality-report sampler)
+  remain on the software path and are tracked as a follow-up.
 - **`--validate-config` CLI dry-run** -- parse all CLI flags + the optional
   `--config` JSON overlay, normalise the resolved `ProcessingConfig`,
   print it as JSON, and exit 0 without instantiating the detector or
@@ -26,6 +44,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **CI dependency vulnerability scan (`pip-audit`)** -- the GitHub Actions
+  workflow now installs `pip-audit` after the runtime stack and reports
+  known CVEs in the installed closure. Non-fatal during the v3.13
+  transition (`continue-on-error: true`); the gating switch flips to
+  fail-on-vuln once the pin set in `requirements.txt` is stable.
 - **Pin `torch >= 2.10.0`** -- CVE-2026-24747 / CVE-2025-32434 are
   `torch.load` `weights_only` RCEs reachable on PyTorch 2.9.1 and earlier.
   `simple-lama-inpainting` loads weights via `torch.load`, so this is a

@@ -314,10 +314,14 @@ require model-weight downloads.
 
 ### Acceleration
 
-38. **OpenCV `CAP_PROP_HW_ACCELERATION` opt-in** -- free decode win when
-    the user's FFmpeg build supports it. Falls back silently to software
-    decode if the call returns no frames (a known issue on some 4.7+
-    builds). Sets the foundation for #50.
+38. **[x] OpenCV `CAP_PROP_HW_ACCELERATION` opt-in** -- new
+    `_open_capture()` helper accepts `off` (default) / `auto` / `any` /
+    `d3d11` / `vaapi` / `mfx`. Probes one frame after open; on empty-frame
+    response (opencv/opencv#25185) silently re-opens with the software
+    backend and warns. Wired into the main `process_video` decode site;
+    the shorter scan sites (`detect_subtitle_band`, quality-report
+    sampler) stay on software pending separate validation. CLI exposes
+    `--decode-accel`.
     Source: [OpenCV hwaccel docs](https://docs.opencv.org/4.x/db/dc4/group__videoio__hwaccel.html).
 39. **INT8 quantisation of the OCR detector** -- RapidOCR ships FP32.
     Post-training quantisation via ONNX Runtime Quantizer should cut
@@ -356,9 +360,13 @@ require model-weight downloads.
 
 ### Audio
 
-46. **Multi-track audio passthrough** -- mux all N input audio streams
-    unchanged (today we merge only the first). DVD / Bluray rips routinely
-    ship 3-5 language tracks; current code silently drops them.
+46. **[x] Multi-track audio passthrough** -- `_merge_audio` now uses
+    `-map 1:a?` (all input audio streams) re-encoded to AAC. New
+    `ProcessingConfig.multi_audio_passthrough` defaults to True; the
+    legacy single-track behaviour is opt-in via `--single-audio`.
+    Caveat: single-pass loudnorm still applies to the first selected
+    stream only -- broadcast-grade multi-track loudnorm needs
+    `-filter_complex` and is queued as follow-up.
 47. **[x] Loudness normalisation** -- `ProcessingConfig.loudnorm_target`
     LUFS field (default 0.0 = off, range clamped to [-70, -5]).
     `_merge_audio` injects `-af loudnorm=I=<target>:TP=-1.5:LRA=11` during
@@ -368,10 +376,13 @@ require model-weight downloads.
 
 ### Security
 
-48. **Dependency vulnerability scan in CI** -- add `pip-audit` (or
-    `osv-scanner`) to the GitHub Actions release workflow. Fail the build
-    on a critical CVE in the runtime closure. Catches future PyTorch /
-    OpenCV / Pillow issues before they ship in the EXE.
+48. **[x] Dependency vulnerability scan in CI** -- `pip-audit` step added
+    to [.github/workflows/build.yml](./.github/workflows/build.yml) after
+    the install step, so it sees exactly what PyInstaller will bundle.
+    Non-fatal during the v3.13 transition (`continue-on-error: true`);
+    flip to fail-on-vuln once the pin set in `requirements.txt` is
+    stable. Catches future PyTorch / OpenCV / Pillow issues before they
+    ship in the EXE.
 49. **Model-weight hash verification on first download** -- when an opt-in
     mode (real ProPainter, MI-GAN, LaMa-ONNX, etc.) fetches weights, verify
     against a vendored SHA-256. Prevents silent supply-chain swaps and
