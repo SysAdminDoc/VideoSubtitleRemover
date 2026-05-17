@@ -258,6 +258,69 @@ class BackendWriteSrtTests(unittest.TestCase):
             os.unlink(path)
 
 
+class SettingsMigrationTests(unittest.TestCase):
+    """Tests for _migrate_settings(): legacy payloads must round-trip into
+    a current-format ProcessingConfig without losing user state, and the
+    output of save_settings()/to_dict() must carry the version stamp."""
+
+    def test_migrate_settings_stamps_missing_version(self):
+        legacy = {"mode": "STTN", "detection_lang": "ja"}
+        migrated = gui._migrate_settings(legacy)
+        self.assertEqual(migrated.get("vsr_settings_format"), gui.VSR_SETTINGS_FORMAT)
+        self.assertEqual(migrated["mode"], "STTN")
+        self.assertEqual(migrated["detection_lang"], "ja")
+
+    def test_migrate_settings_passes_through_current_version(self):
+        current = {"vsr_settings_format": gui.VSR_SETTINGS_FORMAT, "mode": "LAMA"}
+        migrated = gui._migrate_settings(current)
+        self.assertEqual(migrated["vsr_settings_format"], gui.VSR_SETTINGS_FORMAT)
+
+    def test_migrate_settings_accepts_future_version_without_loss(self):
+        """A settings file written by a newer build is honoured as-is so we
+        don't downgrade it on load."""
+        future = {"vsr_settings_format": gui.VSR_SETTINGS_FORMAT + 5, "mode": "AUTO"}
+        migrated = gui._migrate_settings(future)
+        self.assertEqual(migrated["vsr_settings_format"], gui.VSR_SETTINGS_FORMAT + 5)
+        self.assertEqual(migrated["mode"], "AUTO")
+
+    def test_migrate_settings_handles_non_dict(self):
+        self.assertEqual(gui._migrate_settings("oops"), {})
+        self.assertEqual(gui._migrate_settings(None), {})
+        self.assertEqual(gui._migrate_settings(["bad"]), {})
+
+    def test_migrate_settings_handles_garbage_version_field(self):
+        """A non-int version field should be treated as 0 and stamped."""
+        garbage = {"vsr_settings_format": "lolwat", "mode": "STTN"}
+        migrated = gui._migrate_settings(garbage)
+        self.assertEqual(migrated["vsr_settings_format"], gui.VSR_SETTINGS_FORMAT)
+
+    def test_to_dict_emits_current_version(self):
+        cfg = gui.ProcessingConfig()
+        payload = cfg.to_dict()
+        self.assertEqual(payload.get("vsr_settings_format"), gui.VSR_SETTINGS_FORMAT)
+
+    def test_load_settings_round_trips_legacy_file(self):
+        """A v3.12-era settings.json (no version field) loads, gets stamped,
+        and round-trips through from_dict without data loss."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = gui.SETTINGS_FILE
+            try:
+                gui.SETTINGS_FILE = Path(tmpdir) / "settings.json"
+                legacy = {
+                    "mode": "LAMA",
+                    "detection_lang": "ja",
+                    "subtitle_area": [10, 20, 100, 50],
+                    "tbe_flow_warp": True,
+                }
+                gui.SETTINGS_FILE.write_text(json.dumps(legacy), encoding="utf-8")
+                cfg = gui.load_settings()
+                self.assertEqual(cfg.mode, gui.InpaintMode.LAMA)
+                self.assertEqual(cfg.detection_lang, "ja")
+                self.assertTrue(cfg.tbe_flow_warp)
+            finally:
+                gui.SETTINGS_FILE = original
+
+
 class LoadJsonConfigTests(unittest.TestCase):
     def test_load_json_config_rejects_oversized_file(self):
         """Files larger than 1 MB should raise ValueError without being parsed."""
