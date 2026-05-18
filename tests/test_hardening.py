@@ -402,6 +402,50 @@ class SettingsMigrationTests(unittest.TestCase):
                 gui.SETTINGS_FILE = original
 
 
+class KaraokeGroupingTests(unittest.TestCase):
+    """_group_horizontal_line must fuse same-line boxes within the gap
+    threshold and leave separate-line boxes alone."""
+
+    def test_empty_input_returns_empty(self):
+        self.assertEqual(processor._group_horizontal_line([]), [])
+
+    def test_single_box_passes_through(self):
+        self.assertEqual(
+            processor._group_horizontal_line([(10, 10, 50, 30)]),
+            [(10, 10, 50, 30)],
+        )
+
+    def test_five_close_syllables_fuse_into_one(self):
+        # Five 30-px-wide syllables on the same line, 10-px gap each.
+        syllables = [(i * 40, 100, i * 40 + 30, 140) for i in range(5)]
+        merged = processor._group_horizontal_line(
+            syllables, x_gap_px=20, y_overlap_ratio=0.5,
+        )
+        self.assertEqual(len(merged), 1)
+        x1, y1, x2, y2 = merged[0]
+        self.assertEqual(x1, 0)
+        self.assertEqual(x2, 4 * 40 + 30)
+        self.assertEqual(y1, 100)
+        self.assertEqual(y2, 140)
+
+    def test_boxes_on_separate_lines_are_not_fused(self):
+        # Same x range, totally non-overlapping y.
+        a = (10, 10, 100, 40)
+        b = (10, 200, 100, 240)
+        merged = processor._group_horizontal_line(
+            [a, b], x_gap_px=20, y_overlap_ratio=0.5,
+        )
+        self.assertEqual(set(merged), {a, b})
+
+    def test_boxes_with_gap_larger_than_threshold_stay_separate(self):
+        a = (0, 100, 30, 140)
+        b = (100, 100, 130, 140)   # gap = 70 px
+        merged = processor._group_horizontal_line(
+            [a, b], x_gap_px=20, y_overlap_ratio=0.5,
+        )
+        self.assertEqual(set(merged), {a, b})
+
+
 class ChyronClassifierTests(unittest.TestCase):
     """_KalmanBox.is_chyron + SubtitleTracker.categorize must classify a
     long-lived track as 'chyron' and a short-lived one as 'subtitle'."""
