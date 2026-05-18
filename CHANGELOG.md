@@ -6,6 +6,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Karaoke / per-syllable grouping (`--karaoke-grouping`)** -- new
+  `_group_horizontal_line()` helper fuses OCR boxes on the same
+  horizontal text line into a single composite. Karaoke captions
+  render as many small per-syllable boxes that the rest of the
+  pipeline treats as independent lines; masking them individually
+  leaks the original highlighted text through the gaps between
+  syllables. Two boxes merge when their vertical extent overlaps by
+  at least `karaoke_y_overlap` (default 0.5) AND the horizontal gap
+  is at most `karaoke_x_gap_px` (default 20). The merge loop iterates
+  until no further merges happen, so five syllables fuse into one
+  rectangle in one call. Pure transformation; safe to apply before
+  the Kalman tracker so the smoothed track covers the fused span.
+  CLI: `--karaoke-grouping`, `--karaoke-x-gap PX`,
+  `--karaoke-y-overlap RATIO`.
 - **Chyron vs subtitle classifier (`--keep-chyrons` / `--keep-subtitles`)**
   -- `_KalmanBox.is_chyron(min_hits)` and `SubtitleTracker.categorize()`
   classify each detection by lifetime: a Kalman track that has matched
