@@ -230,6 +230,16 @@ class ProcessingConfig:
     remove_chyrons: bool = True
     chyron_min_hits: int = 90
 
+    # Karaoke / per-syllable grouping: OCR engines emit per-syllable
+    # boxes for animated karaoke captions; the gaps between them leak
+    # the original highlighted text through the mask. When enabled,
+    # boxes on the same horizontal line with at most `karaoke_x_gap_px`
+    # of horizontal separation are fused into one wide box before
+    # Kalman tracking runs.
+    karaoke_grouping: bool = False
+    karaoke_x_gap_px: int = 20
+    karaoke_y_overlap: float = 0.5   # 0..1 vertical overlap to call "same line"
+
 
 def _coerce_bool(value, default: bool) -> bool:
     if isinstance(value, bool):
@@ -416,6 +426,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.remove_subtitles = _coerce_bool(config.remove_subtitles, True)
     config.remove_chyrons = _coerce_bool(config.remove_chyrons, True)
     config.chyron_min_hits = _coerce_int(config.chyron_min_hits, 90, 1, 100000)
+    config.karaoke_grouping = _coerce_bool(config.karaoke_grouping, False)
+    config.karaoke_x_gap_px = _coerce_int(config.karaoke_x_gap_px, 20, 0, 1024)
+    config.karaoke_y_overlap = _coerce_float(config.karaoke_y_overlap, 0.5, 0.0, 1.0)
     return config
 
 
@@ -964,6 +977,69 @@ class SubtitleTracker:
             "chyron" if t.is_chyron(min_chyron_hits) else "subtitle"
             for t in self._tracks
         ]
+
+
+def _group_horizontal_line(
+    boxes: List[Tuple[int, int, int, int]],
+    x_gap_px: int = 20,
+    y_overlap_ratio: float = 0.5,
+) -> List[Tuple[int, int, int, int]]:
+    """Merge boxes that sit on the same horizontal text line into a
+    single composite.
+
+    Karaoke / per-syllable rendering produces many small adjacent boxes
+    that the rest of the pipeline treats as independent text lines.
+    When we mask them individually the gaps between syllables leak the
+    original highlighted text. Fusing them into one wide box closes the
+    gap so the inpainter sees a single continuous region.
+
+    Two boxes merge when their vertical extent overlaps by at least
+    `y_overlap_ratio` (same line) AND the horizontal gap between them
+    is at most `x_gap_px`. The merge loop iterates until no further
+    merges happen, so five syllables fuse into one rectangle in one
+    call. Pure transformation; safe to apply before Kalman so the
+    smoothed track also covers the fused span.
+    """
+    if not boxes or len(boxes) == 1:
+        return list(boxes)
+
+    def _y_overlap(a, b) -> float:
+        a_h = max(1, a[3] - a[1])
+        b_h = max(1, b[3] - b[1])
+        inter = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+        return inter / float(min(a_h, b_h))
+
+    def _x_gap(a, b) -> int:
+        # Positive when there is a gap, negative when they overlap.
+        return max(a[0], b[0]) - min(a[2], b[2])
+
+    merged = [tuple(b) for b in boxes]
+    changed = True
+    while changed:
+        changed = False
+        new_merged = []
+        used = set()
+        for i in range(len(merged)):
+            if i in used:
+                continue
+            a = merged[i]
+            ax1, ay1, ax2, ay2 = a
+            for j in range(i + 1, len(merged)):
+                if j in used:
+                    continue
+                b = merged[j]
+                if (_y_overlap((ax1, ay1, ax2, ay2), b) >= y_overlap_ratio
+                        and _x_gap((ax1, ay1, ax2, ay2), b) <= x_gap_px):
+                    ax1 = min(ax1, b[0])
+                    ay1 = min(ay1, b[1])
+                    ax2 = max(ax2, b[2])
+                    ay2 = max(ay2, b[3])
+                    used.add(j)
+                    changed = True
+            new_merged.append((ax1, ay1, ax2, ay2))
+            used.add(i)
+        merged = new_merged
+    return merged
 
 
 def _phash(frame: np.ndarray, size: int = 8) -> np.ndarray:
@@ -2483,6 +2559,15 @@ class SubtitleRemover:
                         continue
                     else:
                         detected_boxes = self.detector.detect(frame, self.config.detection_threshold)
+                        # Karaoke grouping: fuse per-syllable boxes on the
+                        # same line before tracking so Kalman sees one
+                        # composite per line, not one per syllable.
+                        if self.config.karaoke_grouping and detected_boxes:
+                            detected_boxes = _group_horizontal_line(
+                                detected_boxes,
+                                x_gap_px=self.config.karaoke_x_gap_px,
+                                y_overlap_ratio=self.config.karaoke_y_overlap,
+                            )
                         # Smooth jitter + fill single-frame misses via Kalman
                         if tracker is not None:
                             smoothed = tracker.update(list(detected_boxes))
@@ -2899,6 +2984,17 @@ def main():
     parser.add_argument("--chyron-min-hits", type=int, default=90, metavar="N",
                        help="Frames a Kalman track must match to be classified "
                             "as a chyron. Default 90 (~3 s at 30 fps).")
+    parser.add_argument("--karaoke-grouping", action="store_true",
+                       help="Fuse per-syllable OCR boxes on the same line into "
+                            "one composite before tracking. Closes the gap that "
+                            "leaks original karaoke text through the mask.")
+    parser.add_argument("--karaoke-x-gap", type=int, default=20, metavar="PX",
+                       help="Max horizontal gap (px) between boxes to count as "
+                            "the same karaoke line. Default 20.")
+    parser.add_argument("--karaoke-y-overlap", type=float, default=0.5,
+                       metavar="RATIO",
+                       help="Min vertical overlap ratio (0..1) to count as the "
+                            "same karaoke line. Default 0.5.")
     parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
                        help="EBU R128 loudness target in LUFS, e.g. -14 (YouTube), "
                             "-16 (Apple), -23 (broadcast). 0 disables.")
@@ -3017,6 +3113,9 @@ def main():
         remove_subtitles=not args.keep_subtitles,
         remove_chyrons=not args.keep_chyrons,
         chyron_min_hits=args.chyron_min_hits,
+        karaoke_grouping=args.karaoke_grouping,
+        karaoke_x_gap_px=args.karaoke_x_gap,
+        karaoke_y_overlap=args.karaoke_y_overlap,
     )
     config = normalize_processing_config(config)
 
@@ -3104,6 +3203,9 @@ def main():
             "remove_subtitles": config.remove_subtitles,
             "remove_chyrons": config.remove_chyrons,
             "chyron_min_hits": config.chyron_min_hits,
+            "karaoke_grouping": config.karaoke_grouping,
+            "karaoke_x_gap_px": config.karaoke_x_gap_px,
+            "karaoke_y_overlap": config.karaoke_y_overlap,
             "export_srt": config.export_srt,
             "export_mask_video": config.export_mask_video,
         }
