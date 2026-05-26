@@ -4,6 +4,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Tests
+
+- **TikTok preset synthetic A/B (RFP-EI-7).** New
+  `tests/test_tiktok_preset.py` generates three 9:16 deterministic
+  clips (caption at top / centre / bottom) and runs each through
+  the pipeline with `auto_band=True` and `=False`. Finding: with
+  the default OpenCV fallback detector,
+  `SubtitleRemover.detect_subtitle_band` returns None on every
+  position (the 30-frame probe needs a real OCR engine to cluster
+  detected boxes). The preset is therefore *correct as shipped*
+  for users with RapidOCR / PaddleOCR / EasyOCR installed and a
+  benign no-op otherwise -- switching the default to `False`
+  would penalise OCR-enabled installs without measurably helping
+  the no-OCR case. Real-source validation is still owed; the
+  documented finding lets us close the item without changing the
+  preset.
+
 ## [v3.15.0] -- 2026-05-25
 
 Backlog-drain pass: 30+ optional integrations land as opt-in adapters;
