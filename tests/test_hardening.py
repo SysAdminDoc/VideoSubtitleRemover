@@ -837,6 +837,77 @@ class FfmpegTimeoutBudgetTests(unittest.TestCase):
         self.assertLessEqual(t, 24 * 3600.0)
 
 
+class GuiToBackendFieldWiringTests(unittest.TestCase):
+    """B-1: the 13 v3.13 backend fields must round-trip through the GUI
+    dataclass without being silently dropped, and reach the backend
+    config when _process_item builds the BackendConfig."""
+
+    EXPECTED_GUI_FIELDS = (
+        "loudnorm_target", "multi_audio_passthrough", "decode_hw_accel",
+        "prefetch_decode", "prefetch_queue_size", "input_fps",
+        "quality_report_sheet", "remove_subtitles", "remove_chyrons",
+        "chyron_min_hits", "karaoke_grouping", "karaoke_x_gap_px",
+        "karaoke_y_overlap",
+    )
+
+    def test_all_thirteen_fields_declared_on_gui_dataclass(self):
+        cfg = gui.ProcessingConfig()
+        for name in self.EXPECTED_GUI_FIELDS:
+            self.assertTrue(
+                hasattr(cfg, name),
+                f"GUI ProcessingConfig is missing field {name!r}; was "
+                "removed or never wired through B-1.",
+            )
+
+    def test_all_thirteen_fields_persist_through_to_dict(self):
+        cfg = gui.ProcessingConfig(
+            loudnorm_target=-14.0,
+            multi_audio_passthrough=False,
+            decode_hw_accel="d3d11",
+            prefetch_decode=False,
+            prefetch_queue_size=24,
+            input_fps=30.0,
+            quality_report_sheet=True,
+            remove_subtitles=False,
+            remove_chyrons=False,
+            chyron_min_hits=120,
+            karaoke_grouping=True,
+            karaoke_x_gap_px=15,
+            karaoke_y_overlap=0.4,
+        )
+        payload = cfg.to_dict()
+        for name in self.EXPECTED_GUI_FIELDS:
+            self.assertIn(name, payload, f"{name} dropped from to_dict")
+        # Round trip back through from_dict
+        restored = gui.ProcessingConfig.from_dict(payload)
+        self.assertEqual(restored.loudnorm_target, -14.0)
+        self.assertEqual(restored.decode_hw_accel, "d3d11")
+        self.assertTrue(restored.karaoke_grouping)
+        self.assertEqual(restored.chyron_min_hits, 120)
+
+    def test_quality_sheet_implies_quality_report(self):
+        cfg = gui.ProcessingConfig(quality_report=False, quality_report_sheet=True)
+        cfg.normalized()
+        self.assertTrue(cfg.quality_report,
+                        "enabling the sheet must enable the numeric report")
+
+    def test_loudnorm_out_of_range_resets_to_zero(self):
+        cfg = gui.ProcessingConfig(loudnorm_target=99.0).normalized()
+        self.assertEqual(cfg.loudnorm_target, 0.0)
+        cfg = gui.ProcessingConfig(loudnorm_target=-200.0).normalized()
+        self.assertEqual(cfg.loudnorm_target, 0.0)
+
+    def test_decode_hw_accel_garbage_resets_to_off(self):
+        cfg = gui.ProcessingConfig(decode_hw_accel="cuda-experimental").normalized()
+        self.assertEqual(cfg.decode_hw_accel, "off")
+
+    def test_from_dict_unknown_keys_are_ignored(self):
+        cfg = gui.ProcessingConfig.from_dict(
+            {"mode": "STTN", "totally_unknown_field": 7}
+        )
+        self.assertEqual(cfg.mode, gui.InpaintMode.STTN)
+
+
 class CachedRemoverHotSwapNormalizationTests(unittest.TestCase):
     """I-2: hot-swap of `remover.config` must run through
     normalize_processing_config so a bad per-item override cannot reach the
