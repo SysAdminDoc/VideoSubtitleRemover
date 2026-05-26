@@ -344,6 +344,8 @@ class ProcessingConfig:
     whisper_model_size: str = "tiny"
     upscale_factor: int = 0              # RM-78 post-cleanup upscale (0/2/3/4)
     film_grain_strength: float = 0.0     # RM-80 additive film grain (0..0.5)
+    preserve_color_metadata: bool = True  # RM-73 partial
+    nle_sidecar: str = "off"             # RM-76 (off / edl / fcpxml)
 
     # Time range (video only, seconds)
     time_start: float = 0.0
@@ -475,6 +477,11 @@ class ProcessingConfig:
             upscale = 0
         self.upscale_factor = upscale
         self.film_grain_strength = _coerce_float(self.film_grain_strength, 0.0, 0.0, 0.5)
+        self.preserve_color_metadata = _coerce_bool(self.preserve_color_metadata, True)
+        sidecar = _coerce_text(self.nle_sidecar, "off", 16).lower()
+        if sidecar not in {"off", "edl", "fcpxml"}:
+            sidecar = "off"
+        self.nle_sidecar = sidecar
         self.time_start = max(0.0, _coerce_float(self.time_start, 0.0))
         self.time_end = max(0.0, _coerce_float(self.time_end, 0.0))
         if self.time_end and self.time_end < self.time_start:
@@ -7488,6 +7495,8 @@ class VideoSubtitleRemoverApp:
                 whisper_model_size=getattr(item.config, 'whisper_model_size', 'tiny'),
                 upscale_factor=getattr(item.config, 'upscale_factor', 0),
                 film_grain_strength=getattr(item.config, 'film_grain_strength', 0.0),
+                preserve_color_metadata=getattr(item.config, 'preserve_color_metadata', True),
+                nle_sidecar=getattr(item.config, 'nle_sidecar', 'off'),
                 subtitle_area=item.config.subtitle_area,
                 time_start=getattr(item.config, 'time_start', 0.0),
                 time_end=getattr(item.config, 'time_end', 0.0),

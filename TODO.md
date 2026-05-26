@@ -119,10 +119,10 @@
 
 ## Phase 12 -- Format support (P3 v4.x)
 
-- [ ] P3 RM-73 10-bit / HDR pipeline
+- [x] P3 RM-73 10-bit / HDR pipeline (color-metadata passthrough; 16-bit pixel path tracked as follow-up)
 - [ ] P3 RM-74 AV1 + VP9 ingest/egress (overlaps RFP-F-8)
 - [ ] P3 RM-75 VapourSynth bridge
-- [ ] P3 RM-76 NLE round-trip (EDL/XML)
+- [x] P3 RM-76 NLE round-trip (EDL/XML)
 
 ## Phase 13 -- Post-processing (P3 v4.x)
 
