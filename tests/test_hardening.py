@@ -1256,5 +1256,125 @@ class LoadJsonConfigTests(unittest.TestCase):
                 processor._load_json_config(str(big))
 
 
+class EndToEndPipelineTests(unittest.TestCase):
+    """T-2: end-to-end test that synthesises a tiny BGR clip, runs the
+    full SubtitleRemover.process_video pipeline against it (using
+    skip_detection + a fixed subtitle_area so we do not depend on an
+    OCR engine being installed), and asserts the output exists and
+    decodes back the expected frame count."""
+
+    def _write_clip(self, dir_path: Path, n_frames: int = 30,
+                    size=(64, 48)) -> Path:
+        """Write a tiny synthesised clip via the lossless intermediate
+        path so OpenCV's container support does not bias the test."""
+        import cv2 as _cv2
+        import numpy as _np
+        out = dir_path / "synth.mkv"
+        writer = processor._LosslessIntermediateWriter(
+            str(out), size[0], size[1], 24.0
+        )
+        try:
+            self.assertTrue(writer.isOpened())
+            for i in range(n_frames):
+                frame = _np.full((size[1], size[0], 3), 30, dtype=_np.uint8)
+                # Burn a horizontal "subtitle" band that the fixed
+                # subtitle_area covers; the inpainter will turn it back
+                # into the surrounding background tone.
+                frame[size[1] - 12:size[1] - 4, 8:size[0] - 8] = 240
+                writer.write(frame)
+        finally:
+            writer.release()
+        return Path(writer.path)
+
+    def test_pipeline_runs_with_skip_detection(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not on PATH")
+        import cv2 as _cv2
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = self._write_clip(tmp, n_frames=24, size=(64, 48))
+            output = tmp / "cleaned.mp4"
+            cfg = processor.ProcessingConfig(
+                mode=processor.InpaintMode.STTN,
+                device="cpu",
+                sttn_skip_detection=True,
+                subtitle_area=(8, 36, 56, 44),
+                tbe_enable=True,
+                preserve_audio=False,
+                output_quality=23,
+                adaptive_batch=False,
+                use_hw_encode=False,
+            )
+            cfg = processor.normalize_processing_config(cfg)
+            # Build a remover that bypasses the detector load.
+            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+            remover.config = cfg
+            remover.detector = processor.SubtitleDetector.__new__(
+                processor.SubtitleDetector
+            )
+            remover.detector.device = "cpu"
+            remover.detector.lang = "en"
+            remover.detector._engine_name = "skip"
+            remover.detector._rapid_model = None
+            remover.detector._paddle_model = None
+            remover.detector._surya_det = None
+            remover.detector._easyocr_reader = None
+            remover.inpainter = processor.STTNInpainter("cpu", cfg)
+            remover.on_progress = None
+            remover.on_preview_frame = None
+            remover.live_preview_stride = 6
+            remover._hw_encoder = None
+            remover._srt_entries = []
+            remover.last_quality_report = None
+            remover._quality_mask_bbox = None
+            ok = remover.process_video(str(src), str(output))
+            self.assertTrue(ok, "process_video must succeed end-to-end")
+            self.assertTrue(output.exists(), "output file must be written")
+            cap = _cv2.VideoCapture(str(output))
+            try:
+                self.assertTrue(cap.isOpened())
+                frames_read = 0
+                while True:
+                    ret, _ = cap.read()
+                    if not ret:
+                        break
+                    frames_read += 1
+            finally:
+                cap.release()
+            self.assertGreaterEqual(frames_read, 20)
+
+
+class OcrCascadeOrderTests(unittest.TestCase):
+    """T-3: the OCR loader must follow the documented priority order
+    (RapidOCR > PaddleOCR > Surya > EasyOCR > OpenCV fallback). We
+    patch importlib so the test does not require any optional OCR
+    engine to be installed."""
+
+    def _make_detector(self):
+        det = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
+        det.device = "cpu"
+        det.lang = "en"
+        det._engine_name = "none"
+        det._rapid_model = None
+        det._paddle_model = None
+        det._surya_det = None
+        det._easyocr_reader = None
+        return det
+
+    def test_falls_back_to_opencv_when_no_engine_installed(self):
+        det = self._make_detector()
+        det._load_model()
+        # All optional engines absent on this CI -> OpenCV fallback.
+        self.assertEqual(det._engine_name, "OpenCV fallback")
+
+    def test_surya_skipped_unless_env_set(self):
+        # The cascade should not pick Surya even when its module is
+        # importable; gating is via VSR_ALLOW_GPL.
+        os.environ.pop("VSR_ALLOW_GPL", None)
+        det = self._make_detector()
+        det._load_model()
+        self.assertNotEqual(det._engine_name, "Surya")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@
 <p align="center"><img src="icon.png" width="128" alt="Video Subtitle Remover"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.12.0-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.13.0-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20desktop-58A6FF?style=for-the-badge">
 </p>
@@ -12,7 +12,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.12.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.13.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
@@ -33,20 +33,30 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 
 ## Features
 
-- **Real Video Inpainting** — Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
-- **Real AI Inpainting** — LaMa neural network for still-frame and residual refinement (via `simple-lama-inpainting`)
-- **Multi-Engine Detection** — RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya > EasyOCR > OpenCV fallback chain (automatic)
-- **Seamless Boundaries** — Gaussian alpha feathering at every inpaint boundary, no visible cut lines
-- **12 Language Support** — English, Chinese, Japanese, Korean, French, German, Spanish, Portuguese, Russian, Arabic, Hindi, Italian
-- **GPU Acceleration** — NVIDIA CUDA, AMD/Intel DirectML, and CPU fallback
-- **Subtitle Region Selector** — Draw a rectangle on the first frame to target specific areas
-- **Batch Processing** — Queue files or drag entire folders for automated processing
-- **Before/After Preview** — Side-by-side comparison of completed items
-- **Premium Dark UI** — Cohesive design system with custom sliders, toggles, and status chips
-- **Guided Workflow** — Responsive layout, queue search, keyboard shortcuts, and clearer next-step guidance
-- **Audio Preservation** — Automatically preserves original audio via FFmpeg
-- **Settings Persistence** — All settings saved/restored between sessions
-- **CI/CD Releases** — Automated Windows builds via GitHub Actions, with documentation bundled into release zips
+- **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
+- **Real AI Inpainting** -- LaMa neural network for still-frame and residual refinement (via `simple-lama-inpainting`)
+- **AUTO Inpaint Routing** -- Per-batch routing between TBE and LaMa based on exposure score
+- **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
+- **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
+- **HEVC + AV1 Output** -- Pick H.264 / H.265 / AV1 from a dropdown; NVENC/QSV/AMF for HW encoding, libx265 / libsvtav1 software fallback
+- **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame; backend honours every rect
+- **Inpaint Preview** -- "Preview cleanup" button runs detect + inpaint on the selected frame so you can A/B settings before committing
+- **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
+- **~50 Language Support** -- English / Chinese / Japanese / Korean / European, plus Thai, Vietnamese, Polish, Greek, Ukrainian, Filipino, Hebrew, Czech, and more
+- **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
+- **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles
+- **Batch Processing** -- Queue files or drag entire folders; per-item cancellation
+- **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
+- **Quality Self-Test** -- PSNR / SSIM report with an ROI-cropped metric (measures the inpaint region, not the unchanged background) and an optional side-by-side comparison PNG
+- **CLI + Presets** -- `python -m backend.processor --pattern ... --preset "YouTube (default)"`; six built-in presets + user presets persisted to `%APPDATA%`
+- **Chyron vs Subtitle Filter** -- Keep persistent text (logos, lower-thirds) and remove dialogue, or vice versa
+- **Karaoke Grouping** -- Per-syllable boxes fuse into a single line mask so highlighted lyrics do not leak through the gaps
+- **Live Preview During Processing** -- 15 FPS throttled preview piped from the backend worker
+- **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
+- **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
+- **Premium Dark UI** -- Cohesive design system with custom sliders, toggles, status chips, taskbar progress, onboarding modal
+- **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
+- **CI/CD Releases** -- Automated Windows builds via GitHub Actions, pip-audit dependency scan included
 
 ## System Requirements
 
@@ -149,16 +159,34 @@ python -m backend.processor -i input.mp4 -o output.mp4 -m lama --lang en --crf 2
 |------|-------------|---------|
 | `-i`, `--input` | Input file path | Required |
 | `-o`, `--output` | Output file path | Required |
-| `-m`, `--mode` | Algorithm (sttn/lama/propainter) | sttn |
+| `--pattern` | Glob pattern for batch (e.g. `inputs/*.mp4`) | - |
+| `--out-dir` | Output directory for batch mode | - |
+| `--config` | JSON config overlay | - |
+| `--preset NAME` | Apply a built-in or user preset by name | - |
+| `--list-presets` | List every preset and exit | - |
+| `-m`, `--mode` | Algorithm (sttn/lama/propainter/auto) | sttn |
+| `--codec` | Output codec (h264/h265/av1) | h264 |
 | `-g`, `--gpu` | GPU device ID (-1 for CPU) | 0 |
 | `-l`, `--lang` | Detection language | en |
 | `--crf` | Output quality (15-35, lower=better) | 23 |
 | `--skip-detection` | Use manual region only | Off |
 | `--fast` | LAMA fast mode | Off |
 | `--no-audio` | Strip audio | Off |
+| `--single-audio` | Mux only first audio stream | Off |
+| `--loudnorm <LUFS>` | EBU R128 loudness target (0 disables) | 0 |
 | `--frame-skip N` | Reuse mask for N frames (0=every frame) | 0 |
 | `--mask-dilate N` | Expand masks by N pixels | 8 |
-| `--no-hw-encode` | Force software encoding (libx264) | Off |
+| `--no-hw-encode` | Force software encoding | Off |
+| `--decode-accel` | HW decode hint (off/auto/d3d11/vaapi/mfx) | off |
+| `--keep-chyrons` | Leave persistent text (logos / lower-thirds) | Off |
+| `--keep-subtitles` | Leave dialogue subtitles | Off |
+| `--karaoke-grouping` | Fuse per-syllable boxes on the same line | Off |
+| `--quality-report` | Compute PSNR/SSIM after each run | Off |
+| `--quality-sheet` | Side-by-side comparison PNG | Off |
+| `--validate-config` | Print resolved config and exit | Off |
+| `--skip-existing` | Skip files whose output already exists | Off |
+| `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
+| `--json-log PATH` | Append a structured JSON-line log | - |
 
 ## Configuration
 
@@ -172,11 +200,16 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Reference Length | STTN reference frames | 10 | 5-30 |
 | Max Load Frames | Batch size | 30 | 10-100 |
 | CRF Quality | Output quality (lower=better) | 23 | 15-35 |
+| Output Codec | H.264 / H.265 / AV1 | h264 | h264/h265/av1 |
 | Frame Skip | Reuse detection mask for N frames | 0 | 0-10 |
 | Mask Dilate | Expand detected regions (px) | 8 | 0-20 |
 | Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |
 | TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |
 | HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
+| HW Decode Hint | cv2 HW-accel hint with software fallback | off | off/auto/d3d11/vaapi/mfx |
+| Loudness Target | EBU R128 LUFS target (0 = off) | 0 | 0 or -70..-5 |
+| Multi-track Audio | Pass through every audio stream | On | On/Off |
+| Quality Sheet | Side-by-side PNG next to output | Off | On/Off |
 
 ## Troubleshooting
 
@@ -225,22 +258,33 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 
 ```
 VideoSubtitleRemover/
-├── VideoSubtitleRemover.py   # Main GUI application
-├── backend/
-│   ├── __init__.py           # Module exports
-│   └── processor.py          # Core processing (detection + inpainting)
-├── setup.py                  # First-time environment setup
-├── Run_VSR_Pro.bat           # Windows launcher
-├── Run_VSR_Pro_Debug.bat     # Windows launcher with a visible console
-├── build_exe.bat             # PyInstaller build script
-├── requirements.txt          # Python dependencies
-├── tests/                    # Focused regression coverage for hardened paths
-├── .github/workflows/
-│   └── build.yml             # CI/CD release workflow
-├── assets/                   # Application assets
-├── models/                   # AI model weights (auto-downloaded)
-└── output/                   # Default output location
+|-- VideoSubtitleRemover.py   # Main GUI application
+|-- backend/
+|   |-- __init__.py           # Module exports
+|   |-- processor.py          # Core processing (detection + inpainting + mux)
+|   |-- presets.py            # Shared preset library (GUI + CLI)
+|   `-- model_hashes.py       # Vendored SHA-256 weight hashes
+|-- docs/
+|   `-- architecture.md       # Pipeline map for new contributors
+|-- ROADMAP.md                # Shipped log + ordered backlog + research bench
+|-- TODO.md                   # Active checklist (single source of truth)
+|-- RESEARCH_FEATURE_PLAN.md  # Audit companion (historical analysis)
+|-- setup.py                  # First-time environment setup
+|-- Run_VSR_Pro.bat           # Windows launcher
+|-- Run_VSR_Pro_Debug.bat     # Windows launcher with a visible console
+|-- build_exe.bat             # PyInstaller build script
+|-- requirements.txt          # Python dependencies
+|-- tests/                    # Focused regression coverage for hardened paths
+|-- .github/workflows/
+|   `-- build.yml             # CI/CD release workflow + pip-audit
+|-- assets/                   # Application assets
+|-- models/                   # AI model weights (auto-downloaded)
+`-- output/                   # Default output location
 ```
+
+See [docs/architecture.md](docs/architecture.md) for a walkthrough of
+the detect -> tracker -> mask -> TBE -> refine -> mux pipeline and the
+"add a new feature" checklist.
 
 ## Credits
 
