@@ -4,6 +4,34 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **GUI: thirteen v3.13 backend fields are now reachable from the
+  Advanced panel.** Loudness normalisation target (LUFS, 0 = off),
+  multi-track audio passthrough toggle, hardware-decode hint dropdown
+  (off / auto / any / d3d11 / vaapi / mfx), worker-thread frame
+  prefetch toggle, chyron classifier (Remove dialogue subtitles /
+  Remove persistent text), karaoke grouping toggle, and the quality
+  report sheet toggle. Previously these were CLI-only -- the GUI built
+  a `BackendConfig` that simply didn't pass them through, so toggling
+  them in the GUI had no effect. New Advanced cards: "Editorial",
+  "Audio", "Performance". The Output card grew the quality-sheet
+  toggle next to the existing PSNR/SSIM report toggle.
+- **GUI: settings.json schema bumped 1 -> 2.** Older files round-trip
+  cleanly via `_migrate_settings`; new keys land at backend defaults so
+  pre-v3.13 behaviour is preserved for users who never touch them.
+
+### Changed
+
+- **GUI ProcessingConfig persistence is dataclass-driven.** `to_dict`
+  and `from_dict` now walk `dataclasses.fields(self)` rather than a
+  manual enumeration. The 13-field B-1 gap was rooted in three
+  enumerations (`to_dict`, `from_dict`, `normalized`) that all needed
+  to be edited in lockstep whenever a new field landed -- a structural
+  invitation for drift. New fields now persist by default; only
+  `normalized` still requires an explicit coercion entry (intentional:
+  it documents the safe range).
+
 ### Security
 
 - **Surya GPL opt-in gate** -- the OCR cascade no longer auto-loads Surya
