@@ -2229,6 +2229,16 @@ def _open_capture(path: str, hw_accel: str = "off", *,
     if Path(path).is_dir():
         logger.info(f"Frame-sequence input detected at {path} (fps={input_fps})")
         return _FrameSequenceCapture(path, fps=input_fps)
+    # RM-75: .vpy script -> evaluate via the VapourSynth bridge.
+    if path.lower().endswith(".vpy"):
+        try:
+            from backend.vapoursynth_bridge import try_open_vpy
+            cap = try_open_vpy(path)
+            if cap is not None:
+                logger.info(f"VapourSynth bridge active for {path}")
+                return cap
+        except Exception as exc:
+            logger.debug(f"VapourSynth bridge failed: {exc}")
     # RM-71: prefer PyNvVideoCodec when the user has opted in via env var
     # and the package is installed. Falls back transparently to
     # cv2.VideoCapture on any failure.
