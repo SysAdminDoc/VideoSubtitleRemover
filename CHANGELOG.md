@@ -4,6 +4,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Pre-detect denoise (RM-33, opt-in).** New
+  `backend/preprocess.fastdvdnet_denoise_frame` runs FastDVDnet on the
+  detection-frame stream when `VSR_FASTDVDNET` + torch are available,
+  falling back to OpenCV NLM otherwise. Output pixels stay untouched
+  -- the denoise only sharpens the OCR signal. CLI `--denoise-detect`.
+- **TransNetV2 deep scene-cut detector (RM-21, opt-in).** Slots into
+  the existing `_detect_scene_cuts` cascade ahead of the PySceneDetect
+  / histogram paths when `transnetv2` is `pip install`-ed and
+  `VSR_TRANSNETV2` names the model weights. CLI `--transnetv2`.
+- **AV1 / VP9 ingest validation (RM-74).** New `_probe_codec_for_log`
+  helper logs the source codec + dimensions at the top of every run
+  so users can reproduce a decode failure with the exact ffmpeg
+  invocation. AV1 egress is already covered by the `--codec av1`
+  output dropdown shipped in v3.14.
+
 ## [v3.14.0] -- 2026-05-25
 
 Backlog drain pass. Six previously-deferred optional integrations

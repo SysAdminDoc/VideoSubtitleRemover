@@ -371,6 +371,8 @@ class ProcessingConfig:
     tbe_scene_cut_split: bool = True    # split TBE batch at scene cuts
     tbe_scene_cut_threshold: float = 0.35
     tbe_scene_cut_use_pyscenedetect: bool = False  # RM-32 opt-in dep
+    tbe_scene_cut_use_transnetv2: bool = False     # RM-21 opt-in dep
+    detection_denoise: bool = False                # RM-33 opt-in dep
     edge_ring_px: int = 2               # post-inpaint colour-match ring width
 
     # v3.9 workflow features
@@ -499,6 +501,9 @@ class ProcessingConfig:
         self.tbe_scene_cut_threshold = _coerce_float(self.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
         self.tbe_scene_cut_use_pyscenedetect = _coerce_bool(
             self.tbe_scene_cut_use_pyscenedetect, False)
+        self.tbe_scene_cut_use_transnetv2 = _coerce_bool(
+            self.tbe_scene_cut_use_transnetv2, False)
+        self.detection_denoise = _coerce_bool(self.detection_denoise, False)
         self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 8)
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
@@ -7524,6 +7529,8 @@ class VideoSubtitleRemoverApp:
                 tbe_scene_cut_split=getattr(item.config, 'tbe_scene_cut_split', True),
                 tbe_scene_cut_threshold=getattr(item.config, 'tbe_scene_cut_threshold', 0.35),
                 tbe_scene_cut_use_pyscenedetect=getattr(item.config, 'tbe_scene_cut_use_pyscenedetect', False),
+                tbe_scene_cut_use_transnetv2=getattr(item.config, 'tbe_scene_cut_use_transnetv2', False),
+                detection_denoise=getattr(item.config, 'detection_denoise', False),
                 edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
                 subtitle_areas=getattr(item.config, 'subtitle_areas', None),
                 export_srt=getattr(item.config, 'export_srt', False),
