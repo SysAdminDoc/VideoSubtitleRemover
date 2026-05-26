@@ -440,6 +440,28 @@ def _surya_allowed() -> bool:
     return val in {"1", "true", "yes", "on"}
 
 
+def _probe_audio_stream_count(path: str) -> int:
+    """Return the number of audio streams in `path` via ffprobe.
+
+    Used by B-4 to build a per-stream loudnorm filter chain when more
+    than one audio track is present. Falls back to 1 on probe failure
+    so the simple single-pass filter path stays usable.
+    """
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error', '-select_streams', 'a',
+            '-show_entries', 'stream=index',
+            '-of', 'csv=p=0', path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if result.returncode == 0:
+            lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+            return max(1, len(lines))
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return 1
+
+
 def _probe_duration_seconds(path: str) -> float:
     """Return the container duration in seconds via ffprobe, or 0.0 if the
     probe fails. Used to budget ffmpeg subprocess timeouts so long videos
@@ -3134,26 +3156,47 @@ class SubtitleRemover:
                 '-c:a', 'aac',
                 '-map', '0:v:0',
             ]
-            # Multi-track audio passthrough: '1:a?' selects every audio
-            # stream from the original input (re-encoded to AAC for mp4
-            # container compatibility). When the user disables it we keep
-            # the legacy single-track behaviour ('1:a:0?').
-            # Caveat: loudnorm in the simple single-pass form applies to
-            # the first selected audio stream only. Broadcast-grade
-            # multi-track loudnorm needs -filter_complex; left as
-            # follow-up.
-            if self.config.multi_audio_passthrough:
-                cmd += ['-map', '1:a?']
+            target = self.config.loudnorm_target
+            loudnorm_active = target != 0.0
+            multi_active = self.config.multi_audio_passthrough
+            stream_count = (
+                _probe_audio_stream_count(original) if multi_active else 1
+            )
+            if loudnorm_active and multi_active and stream_count > 1:
+                # B-4: per-stream loudnorm via -filter_complex. Build one
+                # loudnorm branch per input audio stream, label each
+                # output (`[a0]`, `[a1]`, ...), and map every labelled
+                # output. Each stream gets the same LUFS target so the
+                # whole programme normalises uniformly.
+                lf = ";".join(
+                    f"[1:a:{i}]loudnorm=I={target}:TP=-1.5:LRA=11[a{i}]"
+                    for i in range(stream_count)
+                )
+                cmd += ['-filter_complex', lf]
+                for i in range(stream_count):
+                    cmd += ['-map', f'[a{i}]']
+                logger.info(
+                    f"Applying per-stream EBU R128 loudnorm I={target} LUFS "
+                    f"across {stream_count} audio tracks"
+                )
             else:
-                cmd += ['-map', '1:a:0?']
-            # Optional EBU R128 loudness normalisation. Single-pass; for
-            # broadcast-grade accuracy a two-pass measure-then-apply would be
-            # preferable, but the single-pass filter is good enough for the
-            # platform-target use case (YouTube -14, Apple -16, broadcast -23).
-            if self.config.loudnorm_target != 0.0:
-                target = self.config.loudnorm_target
-                cmd += ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
-                logger.info(f"Applying EBU R128 loudnorm I={target} LUFS")
+                # Multi-track audio passthrough: '1:a?' selects every
+                # audio stream from the original input (re-encoded to
+                # AAC for mp4 container compatibility). When the user
+                # disables it we keep the legacy single-track behaviour
+                # ('1:a:0?').
+                if multi_active:
+                    cmd += ['-map', '1:a?']
+                else:
+                    cmd += ['-map', '1:a:0?']
+                # Optional EBU R128 loudness normalisation. Single-pass;
+                # for broadcast-grade accuracy a two-pass
+                # measure-then-apply would be preferable, but the
+                # single-pass filter is good enough for the platform-
+                # target use case (YouTube -14, Apple -16, broadcast -23).
+                if loudnorm_active:
+                    cmd += ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
+                    logger.info(f"Applying EBU R128 loudnorm I={target} LUFS")
             cmd += [
                 '-shortest',
                 str(temp_output),
