@@ -60,8 +60,8 @@
 - [ ] P1 RFP-L-1 Split backend/processor.py into 7 modules
 - [x] P1 RFP-L-2 Plugin architecture for inpainters (concretises RM-81)
 - [x] P1 RFP-L-3 docs/architecture.md contributor map
-- [ ] P1 RM-25 LaMa via ONNX Runtime (opt-in, smaller install)
-- [ ] P1 RM-26 MI-GAN fast mode (mobile-grade single-frame)
+- [x] P1 RM-25 LaMa via ONNX Runtime (opt-in via VSR_LAMA_ONNX)
+- [x] P1 RM-26 MI-GAN fast mode (opt-in via VSR_MIGAN_ONNX)
 - [ ] P1 RM-27 Whisper fallback when OCR confidence floor is hit
 - [x] P1 RM-32 PySceneDetect-backed scene splitter (opt-in)
 
