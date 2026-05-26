@@ -1137,6 +1137,43 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class I18nScaffoldTests(unittest.TestCase):
+    """RM-97: gettext scaffold must pass strings through unchanged when
+    no catalog is bound, and bind cleanly when one is."""
+
+    def test_passthrough_without_catalog(self):
+        from backend import i18n
+        i18n.bind_locale(None)
+        self.assertEqual(i18n._("Start batch"), "Start batch")
+        self.assertFalse(i18n.is_translation_active())
+
+    def test_unknown_locale_falls_back(self):
+        from backend import i18n
+        # Bind a locale that almost certainly has no catalog shipped --
+        # the helper should swallow the FileNotFoundError and keep the
+        # NullTranslations in place.
+        i18n.bind_locale("zz")
+        self.assertEqual(i18n._("Start batch"), "Start batch")
+        self.assertFalse(i18n.is_translation_active())
+
+
+class A11yScaffoldTests(unittest.TestCase):
+    """RM-95: announce() must be safe to call when UIA / pywin32 is
+    unavailable. Returns silently rather than raising."""
+
+    def test_announce_noop_when_provider_missing(self):
+        from backend import a11y
+        # Force the probed cache to "no provider" so announce() takes
+        # the silent path without trying to import comtypes.
+        a11y._PROBED = True
+        a11y._PROVIDER = None
+        try:
+            a11y.announce("Hello, world", importance="normal")
+            a11y.announce("Critical!", importance="high")
+        except Exception as exc:
+            self.fail(f"announce raised: {exc}")
+
+
 class NleSidecarTests(unittest.TestCase):
     """RM-76: EDL and FCPXML writers must produce well-formed sidecars
     with the source / cleaned filenames and the processed time range."""
