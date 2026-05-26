@@ -6,6 +6,29 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **HEVC + AV1 output codec dropdown (F-8).** Output is no longer
+  H.264-only. New `ProcessingConfig.output_codec` (h264 / h265 / av1)
+  picks the matching HW encoder family (`hevc_nvenc`/`hevc_qsv`/
+  `hevc_amf` for h265, `av1_nvenc`/`av1_qsv`/`av1_amf` for AV1) with
+  `libx265` / `libsvtav1` software fallbacks. CLI exposes `--codec`;
+  the Output card grows a "Output codec" dropdown next to HW
+  encoding. Settings persist via the existing dataclass-driven
+  pipeline.
+- **Per-item cancellation (F-7).** Right-click a running queue item
+  -> "Cancel this item" sets a per-`QueueItem` cancel flag. The
+  worker's progress callback raises `InterruptedError` next tick so
+  the file is dropped, but the global `cancel_event` stays clear and
+  the remainder of the batch continues. Per-item flag is reset every
+  time `_process_item` re-enters so a retry works cleanly.
+- **Vendored SHA-256 weight verification (RM-49).** New
+  `backend/model_hashes.py` registers known-good hashes for opt-in
+  model downloads and a chunked verifier (`verify_weight_file`) safe
+  for multi-GB files. The LAMA loader scans the standard torch.hub
+  cache for `big-lama*.pt` on first init and warns -- but does not
+  refuse to load -- when the hash mismatches. Catches silent
+  supply-chain swaps and truncated downloads that would otherwise
+  surface as cryptic deep-model errors hours into a run.
+
 - **Region selector grows frame scrubbing + multi-rectangle drawing
   (F-1, F-2).** The selector window now carries a frame slider for
   video sources so users can pin the rect on a frame where the
