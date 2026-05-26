@@ -16,7 +16,7 @@
 - [x] P0 RFP-B-2 Surya GPL opt-in gate
 - [x] P0 RFP-EI-2 Software decode for quality-report output capture
 - [x] P0 RFP-F-6 Adaptive ffmpeg timeout for long videos
-- [ ] P0 RFP-B-1 Wire 13 missing backend fields through the GUI
+- [x] P0 RFP-B-1 Wire 13 missing backend fields through the GUI
 - [ ] P0 RFP-B-3 Quality report measures masked region only
 - [ ] P0 RFP-B-5 AutoInpainter unload LaMa after N consecutive TBE batches
 - [ ] P0 RFP-I-1 Lossless intermediate codec (eliminate double-encode)
@@ -41,7 +41,7 @@
 - [ ] P2 RFP-F-9 Pre-batch ETA probe
 - [ ] P2 RFP-F-10 `--preset NAME` CLI flag
 - [ ] P2 RFP-EI-1 Otsu fallback detection thresholds
-- [ ] P2 RFP-EI-5 dataclasses.asdict for ProcessingConfig
+- [x] P2 RFP-EI-5 dataclasses-driven ProcessingConfig persistence (shipped with B-1)
 - [ ] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in)
 - [ ] P2 RM-24 Vertical-text mode
 - [ ] P2 RM-39 INT8 quantisation of OCR detector
