@@ -4,6 +4,28 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [v3.14.0] -- 2026-05-25
+
+Backlog drain pass. Six previously-deferred optional integrations
+land as opt-in adapters; the existing pipeline keeps working
+byte-identical for users who do not opt in.
+
+### Added
+
+- **SwinIR restoration pass (RM-79, opt-in).** Pairs with
+  Real-ESRGAN: `swinir_restore=True` (CLI `--swinir`) routes the
+  post-cleanup output through whichever of `swinir-ncnn-vulkan`,
+  `realsr-ncnn-vulkan`, or `swinir` is on PATH. Skipped silently
+  when no binary is found.
+- **Synthetic reference-clip regression harness (RFP-T-1).** New
+  `tests/test_reference_clips.py` generates eight deterministic
+  synthetic clips (static dialogue / motion pan / dissolve cuts /
+  karaoke / persistent chyron / vertical text column / thin font /
+  gradient background), runs the full pipeline against each, and
+  asserts the run completes. CC0 real-world clip sourcing is the
+  next pass.
+- **APP_VERSION bumped to 3.14.0.**
+
 ### Changed
 
 - **Inpainter dispatch is now plugin-driven (RFP-L-2).** New
