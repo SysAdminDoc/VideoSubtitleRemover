@@ -333,6 +333,7 @@ class ProcessingConfig:
     preserve_audio: bool = True
     output_quality: int = 23  # CRF value (15-35, lower = better quality)
     use_hw_encode: bool = True  # try hardware encoding (NVENC/QSV/AMF)
+    output_codec: str = "h264"   # h264 (default) / h265 / av1
 
     # v3.13 -- exposed in GUI as of this build
     # Audio
@@ -431,6 +432,12 @@ class ProcessingConfig:
         self.preserve_audio = _coerce_bool(self.preserve_audio, True)
         self.output_quality = _coerce_int(self.output_quality, 23, 15, 35)
         self.use_hw_encode = _coerce_bool(self.use_hw_encode, True)
+        codec = _coerce_text(self.output_codec, "h264", 16).lower()
+        if codec in {"hevc", "h.265"}:
+            codec = "h265"
+        if codec not in {"h264", "h265", "av1"}:
+            codec = "h264"
+        self.output_codec = codec
         # v3.13 GUI-exposed knobs -- mirror the backend coercion bounds so
         # values that round-trip through settings.json land in the same
         # safe shape that normalize_processing_config enforces.
@@ -505,6 +512,11 @@ class QueueItem:
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
     quality_report: Optional[dict] = None
+    # F-7: per-item cancel flag. Set by the queue widget when the user
+    # asks to cancel just this entry. The progress callback in
+    # _process_item checks it alongside the global cancel_event so a
+    # single-item cancellation does NOT abort the rest of the batch.
+    cancel_requested: bool = False
 
 
 def _coerce_bool(value, default: bool) -> bool:
@@ -2430,7 +2442,7 @@ class QueueItemWidget(tk.Frame):
 
     def __init__(self, parent, item: QueueItem, on_remove: Callable,
                  on_select: Callable = None, on_rename: Callable = None,
-                 on_repeat: Callable = None,
+                 on_repeat: Callable = None, on_cancel_item: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER)
@@ -2440,6 +2452,7 @@ class QueueItemWidget(tk.Frame):
         self.on_select = on_select
         self.on_rename = on_rename
         self.on_repeat = on_repeat
+        self.on_cancel_item = on_cancel_item
         self.is_selected = False
         self._surface_bg = Theme.BG_CARD
         self._pulse_id = None
@@ -2567,6 +2580,12 @@ class QueueItemWidget(tk.Frame):
         if self.on_repeat is not None:
             menu.add_command(label="Repeat with these settings",
                              command=lambda: self.on_repeat(self.item.id))
+        # F-7: per-item cancel. Only meaningful while the item is
+        # actively running -- on IDLE entries we surface "Remove"
+        # below as the equivalent action.
+        if self.on_cancel_item is not None and is_active:
+            menu.add_command(label="Cancel this item",
+                             command=lambda: self.on_cancel_item(self.item.id))
         menu.add_separator()
         menu.add_command(label="Remove from queue",
                          command=lambda: self.on_remove(self.item.id),
@@ -3065,6 +3084,8 @@ class VideoSubtitleRemoverApp:
             self.config.remove_chyrons = self.remove_chyrons_var.get()
         if hasattr(self, 'karaoke_grouping_var'):
             self.config.karaoke_grouping = self.karaoke_grouping_var.get()
+        if hasattr(self, 'output_codec_var'):
+            self.config.output_codec = self.output_codec_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -4223,6 +4244,21 @@ class VideoSubtitleRemoverApp:
         )
         self.hw_encode_check.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(self.hw_encode_check, "If hardware encoding fails the app retries automatically with libx264.")
+
+        # F-8: output codec selector lives next to the HW-encode toggle.
+        codec_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        codec_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(codec_row, text="Output codec", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        self.output_codec_var = tk.StringVar(value=getattr(self.config, "output_codec", "h264"))
+        codec_combo = ttk.Combobox(
+            codec_row, textvariable=self.output_codec_var, width=10,
+            values=["h264", "h265", "av1"],
+            state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
+        )
+        codec_combo.pack(side="right")
+        Tooltip(codec_combo,
+                "h264 is universal; h265 and av1 cut bitrate ~50% on 4K. Uses NVENC/QSV/AMF when available.")
 
         self.adaptive_batch_var = tk.BooleanVar(value=self.config.adaptive_batch)
         adaptive_toggle = ModernToggle(
@@ -6271,6 +6307,27 @@ class VideoSubtitleRemoverApp:
         except OSError:
             return 0
 
+    def _cancel_queue_item(self, item_id: str):
+        """F-7: per-item cancellation. Sets the QueueItem's cancel flag;
+        _process_item's progress callback raises InterruptedError next
+        time it fires so the worker drops this file and moves on to the
+        next one. The global cancel_event stays untouched so the rest
+        of the batch survives."""
+        with self.queue_lock:
+            item = next((it for it in self.queue if it.id == item_id), None)
+        if item is None:
+            return
+        if item.status not in (ProcessingStatus.LOADING,
+                                ProcessingStatus.DETECTING,
+                                ProcessingStatus.PROCESSING,
+                                ProcessingStatus.MERGING):
+            self._update_status("That item is not running", "warning")
+            return
+        item.cancel_requested = True
+        self._update_status(
+            f"Cancelling {Path(item.file_path).name}", "warning", toast=True,
+        )
+
     def _repeat_item_with_settings(self, item_id: str):
         """RM-28: snapshot the named item's config and re-queue the same
         source file with a fresh IDLE entry. Lets users re-run a clip
@@ -6448,7 +6505,8 @@ class VideoSubtitleRemoverApp:
                     widget = QueueItemWidget(self.queue_frame, item, self._remove_from_queue,
                                              on_select=self._show_preview,
                                              on_rename=self._rename_output_for,
-                                             on_repeat=self._repeat_item_with_settings)
+                                             on_repeat=self._repeat_item_with_settings,
+                                             on_cancel_item=self._cancel_queue_item)
                     widget.pack(fill="x", pady=(0, 8))
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas
@@ -6943,6 +7001,7 @@ class VideoSubtitleRemoverApp:
             item.message = "Initializing..."
             item.error = None
             item.quality_report = None
+            item.cancel_requested = False  # F-7 reset on fresh attempt
             self._update_item_display(item)
 
             from backend.processor import (
@@ -7019,6 +7078,7 @@ class VideoSubtitleRemoverApp:
                 colour_tune_enable=getattr(item.config, 'colour_tune_enable', False),
                 colour_tune_tolerance=getattr(item.config, 'colour_tune_tolerance', 25),
                 use_hw_encode=getattr(item.config, 'use_hw_encode', True),
+                output_codec=getattr(item.config, 'output_codec', 'h264'),
                 # v3.13 GUI-exposed fields: previously CLI-only, now plumbed
                 # through so a GUI user can drive every backend feature.
                 loudnorm_target=getattr(item.config, 'loudnorm_target', 0.0),
@@ -7074,6 +7134,12 @@ class VideoSubtitleRemoverApp:
             def on_progress(progress: float, message: str):
                 if self.cancel_event.is_set():
                     raise InterruptedError("Processing cancelled")
+                # F-7: per-item cancel raises the same exception so
+                # process_video bails on THIS file; the outer
+                # _process_queue loop then advances to the next item
+                # because cancel_event was never set.
+                if getattr(item, "cancel_requested", False):
+                    raise InterruptedError("Item cancelled by user")
                 # Map backend progress to GUI status
                 if progress < 0.3:
                     item.status = ProcessingStatus.DETECTING
