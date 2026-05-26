@@ -1,0 +1,576 @@
+"""CLI entrypoint, checkpointing, and JSON config overlay loader.
+
+Extracted from processor.py as part of RFP-L-1. Provides:
+
+- ``main()``: the ``python -m backend.processor`` argparse + dispatch.
+- ``_default_checkpoint_dir`` / ``_checkpoint_key`` /
+  ``_checkpoint_is_done`` / ``_checkpoint_mark_done``: crash-resume
+  marker bookkeeping under ``%APPDATA%/VSR/checkpoints/``.
+- ``_load_json_config``: JSON config overlay loader.
+- ``_apply_auto_band_override``: per-file region reset + auto-band probe.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import shutil
+import sys
+from pathlib import Path
+
+from backend.io import _choose_available_output_path, _path_key, _write_text_atomic
+
+logger = logging.getLogger(__name__)
+
+
+def _default_checkpoint_dir() -> Path:
+    """Where to store per-file crash-resume markers."""
+    base = Path(os.environ.get("APPDATA", Path.home() / ".config")) / "VideoSubtitleRemoverPro" / "checkpoints"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _checkpoint_key(input_path: str, output_path: str) -> str:
+    """Stable identifier for a (input, output, size, mtime) pair. A
+    size/mtime change on the input invalidates the checkpoint so users
+    do not skip a freshly re-downloaded file by accident."""
+    try:
+        stat = os.stat(input_path)
+        fingerprint = f"{input_path}|{output_path}|{stat.st_size}|{int(stat.st_mtime)}"
+    except OSError:
+        fingerprint = f"{input_path}|{output_path}"
+    return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+
+
+def _checkpoint_is_done(ckpt_dir: Path, key: str, output_path: str) -> bool:
+    marker = ckpt_dir / f"{key}.done"
+    return marker.exists() and Path(output_path).exists()
+
+
+def _checkpoint_mark_done(ckpt_dir: Path, key: str):
+    marker = ckpt_dir / f"{key}.done"
+    try:
+        _write_text_atomic(marker, "ok")
+    except Exception as exc:
+        logger.warning(f"Could not write checkpoint {marker}: {exc}")
+
+
+def _load_json_config(path: str) -> dict:
+    """Load a JSON config file of {field: value} pairs for ProcessingConfig."""
+    size = os.path.getsize(path)
+    if size > 1 * 1024 * 1024:
+        raise ValueError(f"config file is too large ({size:,} bytes); expected a small JSON object")
+    with open(path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+    if not isinstance(payload, dict):
+        raise ValueError("config file must contain a top-level JSON object")
+    return payload
+
+
+def _apply_auto_band_override(remover, input_path: str, *, auto_band: bool,
+                              base_subtitle_area, base_subtitle_areas):
+    """Reset per-file region overrides before optionally probing a fresh band."""
+    remover.config.subtitle_area = base_subtitle_area
+    remover.config.subtitle_areas = list(base_subtitle_areas) if base_subtitle_areas else None
+    if not auto_band or base_subtitle_area or base_subtitle_areas:
+        return base_subtitle_area
+    band = remover.detect_subtitle_band(input_path)
+    remover.config.subtitle_area = band
+    return band
+
+
+def main():
+    """CLI entry point."""
+    import argparse
+    # Import here so the heavy backend (SubtitleRemover + cv2 + numpy)
+    # loads only when the CLI actually runs.
+    from backend.processor import (
+        ProcessingConfig, InpaintMode, SubtitleRemover,
+        attach_json_log, normalize_processing_config, _coerce_backend_mode,
+    )
+
+    parser = argparse.ArgumentParser(
+        description="Video Subtitle Remover Pro CLI",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python -m backend.processor -i input.mp4 -o output.mp4 -m sttn --lang en\n"
+            "  python -m backend.processor --pattern \"inputs/*.mp4\" --out-dir cleaned --mode auto"
+        ),
+    )
+    parser.add_argument("--input", "-i", help="Input file path")
+    parser.add_argument("--output", "-o", help="Output file path")
+    parser.add_argument("--pattern", help="Glob pattern for batch mode (e.g. 'inputs/*.mp4')")
+    parser.add_argument("--out-dir", help="Output directory for batch mode")
+    parser.add_argument("--config", help="JSON config file (key=value pairs overriding CLI defaults)")
+    parser.add_argument("--preset", metavar="NAME",
+                       help="Apply a built-in or user preset by name.")
+    parser.add_argument("--list-presets", action="store_true",
+                       help="Print every known preset and exit.")
+    parser.add_argument("--checkpoint-dir", default=None,
+                       help="Checkpoint dir for crash-resume (default: %%APPDATA%%/.../checkpoints)")
+    parser.add_argument("--no-resume", action="store_true",
+                       help="Ignore any existing checkpoint and reprocess every file")
+    parser.add_argument("--mode", "-m", default="sttn",
+                       choices=["sttn", "lama", "propainter", "auto", "migan"],
+                       help="Inpainting algorithm.")
+    parser.add_argument("--gpu", "-g", type=int, default=0, help="GPU device ID (-1 for CPU)")
+    parser.add_argument("--lang", "-l", default="en", help="Detection language")
+    parser.add_argument("--skip-detection", action="store_true",
+                       help="Skip automatic detection (STTN only)")
+    parser.add_argument("--fast", action="store_true", help="Fast mode (LAMA only)")
+    parser.add_argument("--no-audio", action="store_true", help="Don't preserve audio")
+    parser.add_argument("--crf", type=int, default=23, help="Output CRF quality (15-35)")
+    parser.add_argument("--start", type=float, default=0, help="Start time in seconds")
+    parser.add_argument("--end", type=float, default=0, help="End time in seconds (0=full)")
+    parser.add_argument("--threshold", type=float, default=0.5, help="Detection threshold (0.1-1.0)")
+    parser.add_argument("--vertical", action="store_true",
+                       help="Vertical-text mode (rotate frames 90 CCW before OCR).")
+    parser.add_argument("--whisper-fallback", action="store_true",
+                       help="Whisper-driven bottom-band default mask on OCR-empty frames.")
+    parser.add_argument("--upscale", type=int, default=0, choices=[0, 2, 3, 4],
+                       help="Post-cleanup upscale (Real-ESRGAN).")
+    parser.add_argument("--no-color-preserve", action="store_true",
+                       help="Do not re-tag the output with the source's color signalling.")
+    parser.add_argument("--nle-sidecar", default="off",
+                       choices=["off", "edl", "fcpxml"],
+                       help="Emit an EDL or FCPXML sidecar next to the output.")
+    parser.add_argument("--swinir", action="store_true",
+                       help="Post-cleanup SwinIR restoration pass.")
+    parser.add_argument("--seedvr2", action="store_true",
+                       help="Post-cleanup SeedVR2 restoration pass.")
+    parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
+                       help="Additive film grain after cleanup (0..0.5; 0 disables).")
+    parser.add_argument("--whisper-model", default="tiny",
+                       choices=["tiny", "base", "small", "medium",
+                                "large", "large-v2", "large-v3"],
+                       help="faster-whisper model size.")
+    parser.add_argument("--frame-skip", type=int, default=0,
+                       help="Reuse detection mask for N frames between detections")
+    parser.add_argument("--mask-dilate", type=int, default=8,
+                       help="Mask dilation in pixels (0=off)")
+    parser.add_argument("--no-hw-encode", action="store_true",
+                       help="Disable hardware encoding (force libx264)")
+    parser.add_argument("--codec", default="h264",
+                       choices=["h264", "h265", "av1"],
+                       help="Output video codec.")
+    parser.add_argument("--mask-feather", type=int, default=4,
+                       help="Gaussian edge feathering in pixels (0=off)")
+    parser.add_argument("--edge-ring", type=int, default=2,
+                       help="Edge-ring colour match width in pixels (0=off)")
+    parser.add_argument("--flow-warp", action="store_true",
+                       help="Farneback flow-warp TBE frames before aggregation")
+    parser.add_argument("--no-scene-split", action="store_true",
+                       help="Disable scene-cut splitting inside TBE batches")
+    parser.add_argument("--pyscenedetect", action="store_true",
+                       help="Prefer PySceneDetect AdaptiveDetector for scene cuts.")
+    parser.add_argument("--transnetv2", action="store_true",
+                       help="Prefer TransNetV2 (deep CNN) for scene-cut detection.")
+    parser.add_argument("--denoise-detect", action="store_true",
+                       help="Run a denoise pass on the detection-frame stream.")
+    parser.add_argument("--sam2-refine", action="store_true",
+                       help="SAM 2 mask refinement of detected boxes.")
+    parser.add_argument("--no-tbe", action="store_true",
+                       help="Disable Temporal Background Exposure (STTN/ProPainter use cv2)")
+    parser.add_argument("--no-adaptive-batch", action="store_true",
+                       help="Disable VRAM-probe-driven batch sizing")
+    parser.add_argument("--export-srt", action="store_true",
+                       help="Write an .srt sidecar with detected text")
+    parser.add_argument("--export-mask", action="store_true",
+                       help="Write a B/W .mask.mp4 debug video")
+    parser.add_argument("--auto-band", action="store_true",
+                       help="Auto-detect the dominant subtitle band before processing")
+    parser.add_argument("--no-kalman", action="store_true",
+                       help="Disable Kalman detection smoothing")
+    parser.add_argument("--no-phash", action="store_true",
+                       help="Disable perceptual-hash adaptive mask reuse")
+    parser.add_argument("--phash-distance", type=int, default=4,
+                       help="pHash Hamming distance threshold for mask reuse (0-64)")
+    parser.add_argument("--colour-tune", action="store_true",
+                       help="Grow the mask by dominant-colour match inside each box")
+    parser.add_argument("--colour-tolerance", type=int, default=25,
+                       help="Lab-space colour distance tolerance for colour-tune")
+    parser.add_argument("--auto-threshold", type=float, default=0.55,
+                       help="AUTO-mode exposure threshold (0-1)")
+    parser.add_argument("--deinterlace", action="store_true",
+                       help="Force ffmpeg yadif deinterlace before processing")
+    parser.add_argument("--no-deinterlace-detect", action="store_true",
+                       help="Skip the automatic ffprobe interlacing detection")
+    parser.add_argument("--keyframe-detect", action="store_true",
+                       help="OCR only at video I-frames (ffprobe-probed)")
+    parser.add_argument("--quality-report", action="store_true",
+                       help="Compute PSNR/SSIM on a random frame sample after run")
+    parser.add_argument("--quality-sheet", action="store_true",
+                       help="Render a side-by-side comparison PNG alongside the report.")
+    parser.add_argument("--input-fps", type=float, default=24.0, metavar="FPS",
+                       help="FPS for directory-of-images input.")
+    parser.add_argument("--keep-chyrons", action="store_true",
+                       help="Leave persistent text (logos, lower-thirds, tickers).")
+    parser.add_argument("--keep-subtitles", action="store_true",
+                       help="Leave non-persistent text (dialogue captions).")
+    parser.add_argument("--chyron-min-hits", type=int, default=90, metavar="N",
+                       help="Kalman-track frame count to classify as chyron.")
+    parser.add_argument("--karaoke-grouping", action="store_true",
+                       help="Fuse per-syllable OCR boxes on the same line.")
+    parser.add_argument("--karaoke-x-gap", type=int, default=20, metavar="PX",
+                       help="Max horizontal gap (px) between karaoke boxes.")
+    parser.add_argument("--karaoke-y-overlap", type=float, default=0.5,
+                       metavar="RATIO",
+                       help="Min vertical overlap ratio for karaoke line fusion.")
+    parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
+                       help="EBU R128 loudness target in LUFS.")
+    parser.add_argument("--decode-accel", default="off",
+                       choices=["off", "auto", "any", "d3d11", "vaapi", "mfx"],
+                       help="Hardware-decode hint for cv2.VideoCapture.")
+    parser.add_argument("--single-audio", action="store_true",
+                       help="Mux only the first audio stream.")
+    parser.add_argument("--no-prefetch", action="store_true",
+                       help="Disable the worker-thread frame prefetcher.")
+    parser.add_argument("--prefetch-queue", type=int, default=0, metavar="N",
+                       help="Bounded prefetch queue size in frames.")
+    parser.add_argument("--skip-existing", action="store_true",
+                       help="Skip inputs whose output path already exists.")
+    parser.add_argument("--validate-config", action="store_true",
+                       help="Print the resolved ProcessingConfig as JSON and exit.")
+    parser.add_argument("--json-log", metavar="PATH",
+                       help="Append a structured JSON-line log at PATH.")
+
+    args = parser.parse_args()
+
+    if args.json_log:
+        attach_json_log(args.json_log)
+
+    if args.list_presets:
+        from backend.presets import BUILTIN_PRESETS as _BUILTIN, load_user_presets as _load_user
+        rows = []
+        for name, payload in _BUILTIN.items():
+            rows.append(("built-in", name, payload.get("description", "")))
+        for name, payload in _load_user().items():
+            if name in _BUILTIN:
+                continue
+            desc = payload.get("description", "") if isinstance(payload, dict) else ""
+            rows.append(("user", name, desc))
+        width = max((len(n) for _, n, _ in rows), default=4)
+        for source, name, desc in rows:
+            print(f"[{source:<8}] {name.ljust(width)}  {desc}")
+        sys.exit(0)
+
+    if args.preset:
+        from backend.presets import preset_fields as _preset_fields
+        fields = _preset_fields(args.preset)
+        if fields is None:
+            parser.error(
+                f"unknown preset {args.preset!r}; run --list-presets to see options"
+            )
+        attr_to_default = {a.dest: a.default for a in parser._actions}
+        field_to_attr = {
+            "mode": "mode",
+            "detection_threshold": "threshold",
+            "mask_dilate_px": "mask_dilate",
+            "mask_feather_px": "mask_feather",
+            "edge_ring_px": "edge_ring",
+            "tbe_flow_warp": "flow_warp",
+            "tbe_scene_cut_split": None,
+            "colour_tune_enable": "colour_tune",
+            "colour_tune_tolerance": "colour_tolerance",
+            "kalman_tracking": None,
+            "phash_skip_enable": None,
+            "phash_skip_distance": "phash_distance",
+            "auto_band": None,
+            "detection_frame_skip": "frame_skip",
+        }
+        for fname, value in fields.items():
+            if fname == "mode":
+                if getattr(args, "mode", None) == attr_to_default.get("mode"):
+                    args.mode = str(value).lower().replace(" ", "")
+                continue
+            attr = field_to_attr.get(fname, fname)
+            if attr is None or not hasattr(args, attr):
+                continue
+            if getattr(args, attr) == attr_to_default.get(attr):
+                setattr(args, attr, value)
+        logger.info(f"Applied preset: {args.preset}")
+
+    if not args.validate_config:
+        if not args.input and not args.pattern:
+            parser.error("one of --input or --pattern is required")
+        if args.input and args.pattern:
+            parser.error("--input and --pattern are mutually exclusive")
+        if args.pattern and not args.out_dir:
+            parser.error("--pattern requires --out-dir")
+        if args.input and not args.output:
+            parser.error("--input requires --output")
+    if not 0.1 <= args.threshold <= 1.0:
+        parser.error("--threshold must be between 0.1 and 1.0")
+    if not 15 <= args.crf <= 35:
+        parser.error("--crf must be between 15 and 35")
+    if args.start < 0 or args.end < 0:
+        parser.error("--start and --end must be zero or positive")
+    if args.end and args.end < args.start:
+        parser.error("--end must be greater than or equal to --start")
+    if args.frame_skip < 0:
+        parser.error("--frame-skip must be zero or positive")
+    if args.mask_dilate < 0:
+        parser.error("--mask-dilate must be zero or positive")
+    if args.mask_feather < 0:
+        parser.error("--mask-feather must be zero or positive")
+    if args.edge_ring < 0:
+        parser.error("--edge-ring must be zero or positive")
+    if not 0.0 <= args.auto_threshold <= 1.0:
+        parser.error("--auto-threshold must be between 0 and 1")
+    if not 0 <= args.phash_distance <= 64:
+        parser.error("--phash-distance must be between 0 and 64")
+    if args.colour_tolerance < 0:
+        parser.error("--colour-tolerance must be zero or positive")
+    if args.loudnorm != 0.0 and not -70.0 <= args.loudnorm <= -5.0:
+        parser.error("--loudnorm must be 0 (off) or between -70 and -5 LUFS")
+
+    config = ProcessingConfig(
+        mode=InpaintMode(args.mode),
+        device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
+        sttn_skip_detection=args.skip_detection,
+        lama_super_fast=args.fast,
+        preserve_audio=not args.no_audio,
+        detection_lang=args.lang,
+        detection_threshold=args.threshold,
+        detection_vertical=args.vertical,
+        whisper_fallback=args.whisper_fallback,
+        whisper_model_size=args.whisper_model,
+        upscale_factor=args.upscale,
+        film_grain_strength=args.film_grain,
+        swinir_restore=args.swinir,
+        seedvr2_restore=args.seedvr2,
+        preserve_color_metadata=not args.no_color_preserve,
+        nle_sidecar=args.nle_sidecar,
+        output_quality=args.crf,
+        time_start=args.start,
+        time_end=args.end,
+        detection_frame_skip=args.frame_skip,
+        mask_dilate_px=args.mask_dilate,
+        mask_feather_px=args.mask_feather,
+        edge_ring_px=args.edge_ring,
+        tbe_enable=not args.no_tbe,
+        tbe_flow_warp=args.flow_warp,
+        tbe_scene_cut_split=not args.no_scene_split,
+        tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
+        tbe_scene_cut_use_transnetv2=args.transnetv2,
+        detection_denoise=args.denoise_detect,
+        sam2_refine=args.sam2_refine,
+        adaptive_batch=not args.no_adaptive_batch,
+        export_srt=args.export_srt,
+        export_mask_video=args.export_mask,
+        kalman_tracking=not args.no_kalman,
+        phash_skip_enable=not args.no_phash,
+        phash_skip_distance=args.phash_distance,
+        colour_tune_enable=args.colour_tune,
+        colour_tune_tolerance=args.colour_tolerance,
+        auto_exposure_threshold=args.auto_threshold,
+        deinterlace=args.deinterlace,
+        deinterlace_auto=not args.no_deinterlace_detect,
+        keyframe_detection=args.keyframe_detect,
+        quality_report=args.quality_report,
+        use_hw_encode=not args.no_hw_encode,
+        output_codec=args.codec,
+        loudnorm_target=args.loudnorm,
+        decode_hw_accel=args.decode_accel,
+        multi_audio_passthrough=not args.single_audio,
+        prefetch_decode=not args.no_prefetch,
+        prefetch_queue_size=args.prefetch_queue,
+        input_fps=args.input_fps,
+        quality_report_sheet=args.quality_sheet,
+        remove_subtitles=not args.keep_subtitles,
+        remove_chyrons=not args.keep_chyrons,
+        chyron_min_hits=args.chyron_min_hits,
+        karaoke_grouping=args.karaoke_grouping,
+        karaoke_x_gap_px=args.karaoke_x_gap,
+        karaoke_y_overlap=args.karaoke_y_overlap,
+    )
+    config = normalize_processing_config(config)
+
+    ffmpeg_ready = shutil.which("ffmpeg") is not None
+
+    if args.config:
+        try:
+            overlay = _load_json_config(args.config)
+            for k, v in overlay.items():
+                if k == "mode":
+                    mode_value = _coerce_backend_mode(v)
+                    if isinstance(v, str) and v.strip().casefold() in {
+                        "sttn", "lama", "propainter", "pro painter", "auto"
+                    }:
+                        config.mode = mode_value
+                    else:
+                        logger.warning(f"Ignoring unknown mode in config: {v}")
+                    continue
+                if hasattr(config, k):
+                    setattr(config, k, v)
+                else:
+                    logger.warning(f"Ignoring unknown config field: {k}")
+            config = normalize_processing_config(config)
+            logger.info(f"Loaded config overlay from {args.config}")
+        except Exception as exc:
+            parser.error(f"Could not load --config {args.config}: {exc}")
+
+    if args.validate_config:
+        resolved = {
+            "mode": config.mode.value,
+            "device": config.device,
+            "detection_lang": config.detection_lang,
+            "detection_threshold": config.detection_threshold,
+            "detection_frame_skip": config.detection_frame_skip,
+            "subtitle_area": list(config.subtitle_area) if config.subtitle_area else None,
+            "subtitle_areas": (
+                [list(r) for r in config.subtitle_areas]
+                if config.subtitle_areas else None
+            ),
+            "mask_dilate_px": config.mask_dilate_px,
+            "mask_feather_px": config.mask_feather_px,
+            "edge_ring_px": config.edge_ring_px,
+            "tbe_enable": config.tbe_enable,
+            "tbe_min_coverage": config.tbe_min_coverage,
+            "tbe_flow_warp": config.tbe_flow_warp,
+            "tbe_scene_cut_split": config.tbe_scene_cut_split,
+            "tbe_scene_cut_threshold": config.tbe_scene_cut_threshold,
+            "kalman_tracking": config.kalman_tracking,
+            "kalman_iou_threshold": config.kalman_iou_threshold,
+            "kalman_max_age": config.kalman_max_age,
+            "phash_skip_enable": config.phash_skip_enable,
+            "phash_skip_distance": config.phash_skip_distance,
+            "colour_tune_enable": config.colour_tune_enable,
+            "colour_tune_tolerance": config.colour_tune_tolerance,
+            "auto_exposure_threshold": config.auto_exposure_threshold,
+            "deinterlace": config.deinterlace,
+            "deinterlace_auto": config.deinterlace_auto,
+            "keyframe_detection": config.keyframe_detection,
+            "quality_report": config.quality_report,
+            "adaptive_batch": config.adaptive_batch,
+            "sttn_skip_detection": config.sttn_skip_detection,
+            "sttn_neighbor_stride": config.sttn_neighbor_stride,
+            "sttn_reference_length": config.sttn_reference_length,
+            "sttn_max_load_num": config.sttn_max_load_num,
+            "lama_super_fast": config.lama_super_fast,
+            "time_start": config.time_start,
+            "time_end": config.time_end,
+            "preserve_audio": config.preserve_audio,
+            "output_format": config.output_format,
+            "output_quality": config.output_quality,
+            "use_hw_encode": config.use_hw_encode,
+            "loudnorm_target": config.loudnorm_target,
+            "decode_hw_accel": config.decode_hw_accel,
+            "multi_audio_passthrough": config.multi_audio_passthrough,
+            "prefetch_decode": config.prefetch_decode,
+            "prefetch_queue_size": config.prefetch_queue_size,
+            "input_fps": config.input_fps,
+            "quality_report_sheet": config.quality_report_sheet,
+            "remove_subtitles": config.remove_subtitles,
+            "remove_chyrons": config.remove_chyrons,
+            "chyron_min_hits": config.chyron_min_hits,
+            "karaoke_grouping": config.karaoke_grouping,
+            "karaoke_x_gap_px": config.karaoke_x_gap_px,
+            "karaoke_y_overlap": config.karaoke_y_overlap,
+            "export_srt": config.export_srt,
+            "export_mask_video": config.export_mask_video,
+        }
+        print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
+        sys.exit(0)
+
+    remover = SubtitleRemover(config)
+    remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
+
+    print(
+        "[run] "
+        f"mode={config.mode.value} | device={config.device} | lang={config.detection_lang} | "
+        f"audio={'on' if config.preserve_audio else 'off'} | hw_encode={'on' if config.use_hw_encode else 'off'}"
+    )
+    if config.preserve_audio and not ffmpeg_ready:
+        print("[note] FFmpeg is not available, so outputs will be saved without original audio.")
+
+    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
+    ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else _default_checkpoint_dir()
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    base_subtitle_area = config.subtitle_area
+    base_subtitle_areas = list(config.subtitle_areas) if config.subtitle_areas else None
+
+    def _process_one(inp: str, outp: str) -> bool:
+        if args.skip_existing and Path(outp).exists():
+            print(f"[skip] {Path(inp).name} (output exists)")
+            return True
+        key = _checkpoint_key(inp, outp)
+        if not args.no_resume and _checkpoint_is_done(ckpt_dir, key, outp):
+            print(f"[skip] {Path(inp).name} (checkpoint)")
+            return True
+        _apply_auto_band_override(
+            remover,
+            inp,
+            auto_band=False,
+            base_subtitle_area=base_subtitle_area,
+            base_subtitle_areas=base_subtitle_areas,
+        )
+        ext = Path(inp).suffix.lower()
+        if Path(inp).is_dir() or ext in video_exts:
+            if args.auto_band:
+                band = _apply_auto_band_override(
+                    remover,
+                    inp,
+                    auto_band=True,
+                    base_subtitle_area=base_subtitle_area,
+                    base_subtitle_areas=base_subtitle_areas,
+                )
+                if band:
+                    print(f"[auto-band] {Path(inp).name}: {band}")
+                elif not (base_subtitle_area or base_subtitle_areas):
+                    print(f"[auto-band] {Path(inp).name}: no dominant band, full-frame")
+            ok = remover.process_video(inp, outp)
+        else:
+            ok = remover.process_image(inp, outp)
+        if ok:
+            _checkpoint_mark_done(ckpt_dir, key)
+        return ok
+
+    if args.pattern:
+        from glob import glob
+        inputs = sorted(glob(args.pattern, recursive=True))
+        inputs = [p for p in inputs if Path(p).is_file()]
+        if not inputs:
+            parser.error(f"No files matched pattern: {args.pattern}")
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[batch] {len(inputs)} file(s) queued | out={out_dir} | resume={'on' if not args.no_resume else 'off'}")
+        failures = 0
+        reserved_outputs: set = set()
+        try:
+            for i, inp in enumerate(inputs, 1):
+                src = Path(inp)
+                outp = str(_choose_available_output_path(
+                    out_dir / f"{src.stem}_no_sub{src.suffix}",
+                    reserved_outputs,
+                ))
+                reserved_outputs.add(_path_key(outp))
+                print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
+                try:
+                    ok = _process_one(inp, outp)
+                except Exception as exc:
+                    logger.error(f"Failed on {src.name}: {exc}")
+                    ok = False
+                if not ok:
+                    failures += 1
+        except KeyboardInterrupt:
+            print("\n[batch] Interrupted by user -- partial results kept on disk.")
+            sys.exit(130)
+        succeeded = len(inputs) - failures
+        print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded")
+        if failures:
+            print("[batch] Some items need attention. Review the errors above before retrying.")
+        sys.exit(0 if failures == 0 else 1)
+
+    print(f"[file] source={Path(args.input).name}")
+    print(f"[file] output={args.output}")
+    try:
+        success = _process_one(args.input, args.output)
+    except KeyboardInterrupt:
+        print("\n[file] Interrupted by user.")
+        sys.exit(130)
+    print(f"[file] {'completed' if success else 'failed'}")
+    sys.exit(0 if success else 1)
