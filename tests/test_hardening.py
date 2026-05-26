@@ -783,6 +783,80 @@ class ConfigFuzzTests(unittest.TestCase):
             self.assertIsInstance(cfg.multi_audio_passthrough, bool)
 
 
+class SuryaOptInTests(unittest.TestCase):
+    """B-2: Surya is GPL; the detector cascade must skip it unless the user
+    explicitly opts in via VSR_ALLOW_GPL."""
+
+    def setUp(self):
+        self._saved = os.environ.pop("VSR_ALLOW_GPL", None)
+
+    def tearDown(self):
+        os.environ.pop("VSR_ALLOW_GPL", None)
+        if self._saved is not None:
+            os.environ["VSR_ALLOW_GPL"] = self._saved
+
+    def test_surya_disallowed_by_default(self):
+        self.assertFalse(processor._surya_allowed())
+
+    def test_surya_allowed_when_env_set(self):
+        for token in ("1", "true", "yes", "on", "TRUE"):
+            os.environ["VSR_ALLOW_GPL"] = token
+            self.assertTrue(processor._surya_allowed(), f"token={token}")
+
+    def test_surya_disallowed_for_unknown_tokens(self):
+        for token in ("0", "false", "no", "off", "", "maybe"):
+            os.environ["VSR_ALLOW_GPL"] = token
+            self.assertFalse(processor._surya_allowed(), f"token={token}")
+
+
+class FfmpegTimeoutBudgetTests(unittest.TestCase):
+    """F-6: the ffmpeg subprocess timeout must scale with content length so
+    multi-hour videos do not silently fall back to copy-without-audio."""
+
+    def test_zero_duration_falls_back_to_safe_base(self):
+        # When ffprobe is unavailable the helper returns 0; the timeout
+        # should still leave a generous floor (base + 600s).
+        t = processor._ffmpeg_subprocess_timeout(0.0)
+        self.assertGreaterEqual(t, 600.0)
+        self.assertLess(t, 24 * 3600.0)
+
+    def test_one_hour_video_gets_factor_4_budget(self):
+        t = processor._ffmpeg_subprocess_timeout(3600.0)
+        # Factor 4 -> 14400s plus the 180s base.
+        self.assertGreaterEqual(t, 4 * 3600.0)
+
+    def test_eight_hour_video_gets_proportional_budget(self):
+        t = processor._ffmpeg_subprocess_timeout(8 * 3600.0)
+        # Must exceed the legacy 600s cap by a wide margin.
+        self.assertGreater(t, 8 * 3600.0)
+
+    def test_timeout_caps_at_24_hours(self):
+        # Even an absurd duration must not produce a runaway timeout that
+        # blocks the GUI forever.
+        t = processor._ffmpeg_subprocess_timeout(10 * 24 * 3600.0)
+        self.assertLessEqual(t, 24 * 3600.0)
+
+
+class CachedRemoverHotSwapNormalizationTests(unittest.TestCase):
+    """I-2: hot-swap of `remover.config` must run through
+    normalize_processing_config so a bad per-item override cannot reach the
+    pipeline. The GUI's _process_item now applies this; verify the contract
+    by exercising the normaliser on a payload that mimics a hot-swap."""
+
+    def test_hot_swap_payload_clamps_nan(self):
+        raw = processor.ProcessingConfig(
+            mode=processor.InpaintMode.STTN,
+            device="cuda:0",
+            loudnorm_target=float("nan"),
+            decode_hw_accel="not-a-token",
+            detection_threshold=float("inf"),
+        )
+        cfg = processor.normalize_processing_config(raw)
+        self.assertEqual(cfg.loudnorm_target, 0.0)
+        self.assertEqual(cfg.decode_hw_accel, "off")
+        self.assertTrue(0.1 <= cfg.detection_threshold <= 1.0)
+
+
 class LoadJsonConfigTests(unittest.TestCase):
     def test_load_json_config_rejects_oversized_file(self):
         """Files larger than 1 MB should raise ValueError without being parsed."""
