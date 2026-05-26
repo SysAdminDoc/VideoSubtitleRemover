@@ -433,6 +433,7 @@ class ProcessingConfig:
     log_panel_open: bool = True
     onboarding_seen: bool = False
     high_contrast: bool = False     # RM-96 alt theme palette
+    rtl_layout: bool = False        # RM-98 right-to-left UI mirror
 
     def to_dict(self) -> dict:
         """Persist every dataclass field automatically. Using
@@ -565,6 +566,7 @@ class ProcessingConfig:
         self.log_panel_open = _coerce_bool(self.log_panel_open, True)
         self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)
         self.high_contrast = _coerce_bool(self.high_contrast, False)
+        self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         return self
 
     @classmethod
@@ -2981,6 +2983,11 @@ class VideoSubtitleRemoverApp:
         # every Canvas / ttk style reads the swapped palette on first draw.
         if getattr(self.config, "high_contrast", False):
             apply_high_contrast_theme()
+        # RM-98: RTL layout mirror -- set the Tk option DB before widgets
+        # build so labels right-align and `pack(side="right")` becomes
+        # the dominant orientation. Full pack-side flipping for every
+        # widget is a much larger pass; this lands the framework.
+        self._rtl_layout = bool(getattr(self.config, "rtl_layout", False))
         # RM-97: bind a gettext catalog if one matches the user's locale.
         # No-op when no `.mo` file ships -- every UI string falls back to
         # the literal english form.
