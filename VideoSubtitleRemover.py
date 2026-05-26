@@ -1031,9 +1031,13 @@ def detect_ai_engines() -> dict:
         engines["detection"].append("PaddleOCR")
     except ImportError:
         pass
+    surya_opt_in = os.environ.get("VSR_ALLOW_GPL", "").strip().lower() in {"1", "true", "yes", "on"}
     try:
         from surya.detection import DetectionPredictor  # noqa: F401
-        engines["detection"].append("Surya")
+        if surya_opt_in:
+            engines["detection"].append("Surya")
+        else:
+            engines["detection"].append("Surya (GPL -- set VSR_ALLOW_GPL=1)")
     except Exception:
         pass
     try:
@@ -6556,10 +6560,14 @@ class VideoSubtitleRemoverApp:
                     logger.warning(f"Auto-band detection failed: {exc}")
 
             # Reuse cached remover if mode/device/lang match (avoids reloading
-            # OCR models and re-probing HW encoders for every queue item)
+            # OCR models and re-probing HW encoders for every queue item).
+            # The constructor normalises the config; on hot-swap we re-run
+            # normalisation explicitly so a NaN/inf/out-of-range value from a
+            # bad per-item override cannot reach the pipeline.
             if self._cached_remover is not None and self._cached_remover_key == cache_key:
                 remover = self._cached_remover
-                remover.config = backend_config
+                from backend.processor import normalize_processing_config as _normalize_backend_config
+                remover.config = _normalize_backend_config(backend_config)
             else:
                 remover = BackendRemover(backend_config)
                 self._cached_remover = remover
