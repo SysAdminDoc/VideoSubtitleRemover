@@ -432,6 +432,49 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     return config
 
 
+def _surya_allowed() -> bool:
+    """Return True when the user has explicitly opted into the GPL Surya
+    detector. Default off so an accidental `pip install surya-ocr` cannot
+    license-pollute an MIT-clean distribution."""
+    val = os.environ.get("VSR_ALLOW_GPL", "").strip().lower()
+    return val in {"1", "true", "yes", "on"}
+
+
+def _probe_duration_seconds(path: str) -> float:
+    """Return the container duration in seconds via ffprobe, or 0.0 if the
+    probe fails. Used to budget ffmpeg subprocess timeouts so long videos
+    don't get silently truncated to the legacy 10-minute cap."""
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1', path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if result.returncode == 0:
+            return max(0.0, float(result.stdout.strip()))
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return 0.0
+
+
+def _ffmpeg_subprocess_timeout(duration_seconds: float,
+                                base: float = 180.0,
+                                factor: float = 4.0,
+                                cap: float = 24 * 3600.0) -> float:
+    """Budget an ffmpeg subprocess timeout that scales with content length.
+
+    The legacy 600 s timeout silently strips audio on any video over ~1 hour
+    because encode-pass time grows roughly linearly with duration. We scale
+    a generous factor (4x realtime) on top of a fixed base so short clips
+    still get a reasonable ceiling and long clips do not get truncated.
+    `cap` is a sanity ceiling (24 h) so a corrupted probe cannot leave a
+    runaway ffmpeg blocking the GUI forever.
+    """
+    if duration_seconds <= 0:
+        return base + 600.0
+    return max(base, min(cap, base + duration_seconds * factor))
+
+
 def _ensure_output_parent(path: str):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -569,17 +612,33 @@ class SubtitleDetector:
         except Exception as e:
             logger.warning(f"PaddleOCR init failed: {e}")
 
-        # Try Surya OCR (fast, layout-aware, 90+ languages)
-        try:
-            from surya.detection import DetectionPredictor
-            self._surya_det = DetectionPredictor()
-            self._engine_name = "Surya"
-            logger.info("Surya text detection loaded")
-            return
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.warning(f"Surya init failed: {e}")
+        # Try Surya OCR (fast, layout-aware, 90+ languages). Surya is
+        # GPL-licensed, so we never auto-select it unless the user has
+        # explicitly opted in via the VSR_ALLOW_GPL env var. Distributing a
+        # PyInstaller bundle that loaded a GPL detector at runtime would put
+        # the MIT-clean release at risk.
+        if _surya_allowed():
+            try:
+                from surya.detection import DetectionPredictor
+                self._surya_det = DetectionPredictor()
+                self._engine_name = "Surya"
+                logger.info("Surya text detection loaded (GPL opt-in via VSR_ALLOW_GPL)")
+                return
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"Surya init failed: {e}")
+        else:
+            try:
+                import surya.detection  # noqa: F401
+                logger.warning(
+                    "Surya is installed but skipped: it is GPL-licensed and "
+                    "VSR ships MIT-clean. Set VSR_ALLOW_GPL=1 to opt in."
+                )
+            except ImportError:
+                pass
+            except Exception:
+                pass
 
         # Try EasyOCR
         try:
@@ -1662,7 +1721,8 @@ def _deinterlace_to_temp(src: str, temp_dir: str) -> str:
         '-c:v', 'libx264', '-crf', '16', '-preset', 'veryfast',
         '-c:a', 'copy', dst,
     ]
-    subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+    timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(src))
+    subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
     return dst
 
 
@@ -2135,7 +2195,11 @@ class SubtitleRemover:
             input_path, self.config.decode_hw_accel,
             input_fps=self.config.input_fps,
         )
-        cap_out = _open_capture(output_path, self.config.decode_hw_accel)
+        # Force software decode on the output: the quality-report sample is
+        # tiny (10 frames) and we want a deterministic decode path that
+        # cannot fall back inconsistently. Honour the user's HW-accel hint
+        # only for the source input above.
+        cap_out = _open_capture(output_path, "off")
         if not cap_in.isOpened() or not cap_out.isOpened():
             try:
                 cap_in.release()
@@ -2746,7 +2810,8 @@ class SubtitleRemover:
             cmd = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats', '-i', source]
             cmd += self._get_encode_args()
             cmd += ['-an', str(temp_output)]
-            subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+            timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(source))
+            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
             _promote_temp_output(temp_output, output)
         except subprocess.CalledProcessError as e:
             if self._hw_encoder:
@@ -2806,12 +2871,16 @@ class SubtitleRemover:
                 '-shortest',
                 str(temp_output),
             ]
-            subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+            # Adaptive timeout: scales with the duration of the original
+            # input so multi-hour videos do not silently lose audio when the
+            # mux pass takes longer than the legacy 10-minute fixed budget.
+            timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(original))
+            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
             _promote_temp_output(temp_output, output)
             encoder_name = self._hw_encoder or 'libx264'
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")
         except subprocess.TimeoutExpired:
-            logger.warning("FFmpeg audio merge timed out (>10min), copying video without audio")
+            logger.warning("FFmpeg audio merge timed out, copying video without audio")
             _copy_file_atomic(processed, output)
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
