@@ -29,7 +29,7 @@
 - [x] P1 RFP-B-4 Multi-track loudness normalisation (filter_complex)
 - [x] P1 RM-28 "Repeat with these settings" queue action
 - [x] P1 RM-29 Per-file overrides popover (mode / language / sensitivity / codec)
-- [ ] P1 RM-30 A/B flicker-scrubber in preview pane
+- [x] P1 RM-30 A/B flicker-scrubber in preview pane
 - [x] P1 RM-31 Subtitle-area drag-refinement in-GUI (shipped with F-1/F-2)
 - [x] P1 RM-49 Model-weight hash verification on first download
 
@@ -43,7 +43,7 @@
 - [x] P2 RFP-EI-1 Percentile fallback detection thresholds (was Otsu in plan; percentile is more robust on low-contrast)
 - [x] P2 RFP-EI-5 dataclasses-driven ProcessingConfig persistence (shipped with B-1)
 - [ ] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in)
-- [ ] P2 RM-24 Vertical-text mode
+- [x] P2 RM-24 Vertical-text mode
 - [ ] P2 RM-39 INT8 quantisation of OCR detector
 - [ ] P2 RM-40 Batched LaMa inference
 
@@ -78,7 +78,7 @@
 - [ ] P1 RM-51 NSIS or MSI installer
 - [ ] P2 RM-58 Drag-drop onto app icon (depends on RM-51)
 - [ ] P2 RM-95 Screen-reader / UIA support on Windows
-- [ ] P2 RM-96 High-contrast theme variant
+- [x] P2 RM-96 High-contrast theme variant
 - [ ] P2 RM-97 GUI localisation (gettext)
 - [ ] P2 RM-98 Right-to-left UI support (depends on RM-97)
 

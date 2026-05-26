@@ -110,6 +110,11 @@ class ProcessingConfig:
     detection_threshold: float = 0.5
     detection_lang: str = "en"
     detection_frame_skip: int = 0  # 0=detect every frame, N=reuse mask for N frames
+    # RM-24 vertical-text mode: when on, detectors that support a
+    # rotation flag are told to expect top-to-bottom text columns
+    # (Japanese tategaki, classical Chinese). Bounding boxes still come
+    # back axis-aligned so downstream masking is unchanged.
+    detection_vertical: bool = False
 
     # Mask settings
     mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
@@ -378,6 +383,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.detection_threshold = _coerce_float(config.detection_threshold, 0.5, 0.1, 1.0)
     config.detection_lang = _coerce_text(config.detection_lang, "en", 24).lower()
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)
+    config.detection_vertical = _coerce_bool(config.detection_vertical, False)
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.tbe_enable = _coerce_bool(config.tbe_enable, True)
@@ -593,9 +599,16 @@ def _copy_file_atomic(source: str, output: str):
 class SubtitleDetector:
     """Detects subtitle regions in video frames using text detection models."""
 
-    def __init__(self, device: str = "cuda:0", lang: str = "en"):
+    def __init__(self, device: str = "cuda:0", lang: str = "en",
+                 vertical: bool = False):
         self.device = device
         self.lang = lang
+        # RM-24: when vertical=True, frames are rotated 90 CCW before
+        # detection so horizontal-text-trained models still find
+        # top-to-bottom CJK text columns. Boxes are rotated back to the
+        # original frame's coordinate space before returning so callers
+        # need no awareness of the flip.
+        self.vertical = bool(vertical)
         self._engine_name = "none"
         self._rapid_model = None
         self._paddle_model = None
@@ -703,7 +716,33 @@ class SubtitleDetector:
         logger.warning("No OCR engine available, using OpenCV fallback detection")
 
     def detect(self, frame: np.ndarray, threshold: float = 0.5) -> List[Tuple[int, int, int, int]]:
-        """Detect text regions in a frame. Returns list of (x1, y1, x2, y2) boxes."""
+        """Detect text regions in a frame. Returns list of (x1, y1, x2, y2) boxes.
+
+        When `self.vertical` is set we rotate the frame 90 CCW before
+        running detection (so a vertically-stacked CJK column becomes a
+        horizontal line the model is trained on) and rotate every
+        returned box back into the original frame's coordinate space.
+        """
+        if self.vertical:
+            h, w = frame.shape[:2]
+            rotated = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            rotated_boxes = self._detect_axis_aligned(rotated, threshold)
+            # In the rotated frame, (rx1, ry1, rx2, ry2) maps back to
+            # the original via: x = ry, y = w - rx2 .. w - rx1.
+            out: List[Tuple[int, int, int, int]] = []
+            for (rx1, ry1, rx2, ry2) in rotated_boxes:
+                ox1 = max(0, ry1)
+                oy1 = max(0, w - rx2)
+                ox2 = min(h, ry2)
+                oy2 = min(w, w - rx1)
+                if ox2 > ox1 and oy2 > oy1:
+                    out.append((ox1, oy1, ox2, oy2))
+            return out
+        return self._detect_axis_aligned(frame, threshold)
+
+    def _detect_axis_aligned(self, frame: np.ndarray,
+                              threshold: float) -> List[Tuple[int, int, int, int]]:
+        """Dispatch to whichever engine loaded successfully."""
         if self._rapid_model is not None:
             return self._detect_rapid(frame, threshold)
         elif self._paddle_model is not None:
@@ -2241,7 +2280,8 @@ class SubtitleRemover:
         self.config = normalize_processing_config(config or ProcessingConfig())
         self.detector = SubtitleDetector(
             self.config.device,
-            lang=self.config.detection_lang
+            lang=self.config.detection_lang,
+            vertical=self.config.detection_vertical,
         )
         self.inpainter = self._create_inpainter()
         self.on_progress: Optional[Callable[[float, str], None]] = None
@@ -3377,6 +3417,10 @@ def main():
     parser.add_argument("--start", type=float, default=0, help="Start time in seconds")
     parser.add_argument("--end", type=float, default=0, help="End time in seconds (0=full)")
     parser.add_argument("--threshold", type=float, default=0.5, help="Detection threshold (0.1-1.0)")
+    parser.add_argument("--vertical", action="store_true",
+                       help="Vertical-text mode: rotate frames 90 CCW before "
+                            "OCR so JP tategaki / classical CN columns parse. "
+                            "Boxes rotate back to the original frame.")
     parser.add_argument("--frame-skip", type=int, default=0,
                        help="Reuse detection mask for N frames between detections (0=every frame)")
     parser.add_argument("--mask-dilate", type=int, default=8,
@@ -3607,6 +3651,7 @@ def main():
         preserve_audio=not args.no_audio,
         detection_lang=args.lang,
         detection_threshold=args.threshold,
+        detection_vertical=args.vertical,
         output_quality=args.crf,
         time_start=args.start,
         time_end=args.end,
