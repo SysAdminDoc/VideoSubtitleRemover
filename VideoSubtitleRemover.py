@@ -373,6 +373,7 @@ class ProcessingConfig:
     tbe_scene_cut_use_pyscenedetect: bool = False  # RM-32 opt-in dep
     tbe_scene_cut_use_transnetv2: bool = False     # RM-21 opt-in dep
     detection_denoise: bool = False                # RM-33 opt-in dep
+    sam2_refine: bool = False                      # RM-66 opt-in dep
     edge_ring_px: int = 2               # post-inpaint colour-match ring width
 
     # v3.9 workflow features
@@ -504,6 +505,7 @@ class ProcessingConfig:
         self.tbe_scene_cut_use_transnetv2 = _coerce_bool(
             self.tbe_scene_cut_use_transnetv2, False)
         self.detection_denoise = _coerce_bool(self.detection_denoise, False)
+        self.sam2_refine = _coerce_bool(self.sam2_refine, False)
         self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 8)
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
@@ -7532,6 +7534,7 @@ class VideoSubtitleRemoverApp:
                 tbe_scene_cut_use_pyscenedetect=getattr(item.config, 'tbe_scene_cut_use_pyscenedetect', False),
                 tbe_scene_cut_use_transnetv2=getattr(item.config, 'tbe_scene_cut_use_transnetv2', False),
                 detection_denoise=getattr(item.config, 'detection_denoise', False),
+                sam2_refine=getattr(item.config, 'sam2_refine', False),
                 edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
                 subtitle_areas=getattr(item.config, 'subtitle_areas', None),
                 export_srt=getattr(item.config, 'export_srt', False),
