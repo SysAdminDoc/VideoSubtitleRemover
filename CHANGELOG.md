@@ -6,6 +6,24 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Per-stream loudness normalisation for multi-track audio (B-4).**
+  When both `loudnorm_target` and `multi_audio_passthrough` are set and
+  the source has more than one audio stream, `_merge_audio` now builds
+  a `-filter_complex` pipeline with one `loudnorm=I=...` branch per
+  stream. Each track lands at the same LUFS target, so a Bluray rip
+  with main / commentary / dub tracks normalises uniformly instead of
+  applying the filter to track 0 only.
+- **Pre-batch ETA probe (F-9).** Starting a batch now runs a 30-frame
+  detect probe on the first queued video, scales the result by the
+  full duration, and seeds `_compute_eta` with the estimate. Users see
+  "about X left (estimated)" from the very first frame instead of an
+  empty string until the first item finishes.
+- **Expanded language picker (F-5).** The Subtitle Language dropdown
+  now covers ~50 languages (was 12). Curated friendly names lead the
+  list (English first), with the rest filling in by ISO code so users
+  with Thai / Vietnamese / Polish / Greek / Ukrainian / etc. footage
+  can pick a sensible engine code without modifying source.
+
 - **CLI `--preset NAME` flag + shared preset library (F-10).** Presets
   now live in `backend/presets.py` so the GUI's picker and
   `python -m backend.processor --preset NAME` resolve from the same
