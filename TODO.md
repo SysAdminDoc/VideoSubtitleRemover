@@ -44,7 +44,7 @@
 - [x] P2 RFP-EI-5 dataclasses-driven ProcessingConfig persistence (shipped with B-1)
 - [x] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in via transnetv2 + VSR_TRANSNETV2)
 - [x] P2 RM-24 Vertical-text mode
-- [ ] P2 RM-39 INT8 quantisation of OCR detector
+- [x] P2 RM-39 INT8 quantisation of OCR detector (scripts/quantize_ocr.py)
 - [x] P2 RM-40 Batched LaMa inference (opt-in via VSR_LAMA_BATCH=1)
 
 ## Phase 4 -- Tests + observability (P0 for T-1, P1 elsewhere)
@@ -113,7 +113,7 @@
 
 ## Phase 11 -- Acceleration (P3 v4.x)
 
-- [ ] P3 RM-70 TensorRT inpainter path
+- [x] P3 RM-70 TensorRT inpainter path (opt-in via VSR_TENSORRT + polygraphy)
 - [x] P3 RM-71 PyNvVideoCodec hardware decode (opt-in via VSR_PYNVVIDEOCODEC)
 - [x] P3 RM-72 RIFE-interpolated fast mode (opt-in via practical-rife)
 
@@ -126,7 +126,7 @@
 
 ## Phase 13 -- Post-processing (P3 v4.x)
 
-- [ ] P3 RM-77 SeedVR2 one-step video restoration
+- [x] P3 RM-77 SeedVR2 one-step video restoration (opt-in via VSR_SEEDVR2_CMD)
 - [x] P3 RM-78 Real-ESRGAN output upscale (opt-in via realesrgan-ncnn-vulkan)
 - [x] P3 RM-79 SwinIR restoration pass (opt-in via swinir/realsr-ncnn-vulkan binary)
 - [x] P3 RM-80 Film-grain re-synthesis (ffmpeg noise filter, opt-in)

@@ -133,6 +133,10 @@ class ProcessingConfig:
     # sources where the cleanup left subtle local blur. Defaults off;
     # requires a SwinIR / RealSR-ncnn-vulkan binary on PATH.
     swinir_restore: bool = False
+    # RM-77: SeedVR2 one-step video restoration. Heavy (16B params);
+    # opt-in via flag and either a pip-published `seedvr2` wrapper or
+    # VSR_SEEDVR2_CMD pointing at an external CLI.
+    seedvr2_restore: bool = False
     # RM-73 (partial): preserve source color signalling on the output
     # encode. Default True so HDR sources at least stay tagged as HDR
     # even though the pixel pipeline is still 8-bit BGR. Disable when
@@ -440,6 +444,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.film_grain_strength = _coerce_float(
         config.film_grain_strength, 0.0, 0.0, 0.5)
     config.swinir_restore = _coerce_bool(config.swinir_restore, False)
+    config.seedvr2_restore = _coerce_bool(config.seedvr2_restore, False)
     config.preserve_color_metadata = _coerce_bool(config.preserve_color_metadata, True)
     sidecar = _coerce_text(config.nle_sidecar, "off", 16).lower()
     if sidecar not in {"off", "edl", "fcpxml"}:
@@ -3670,6 +3675,16 @@ class SubtitleRemover:
                     logger.info("SwinIR restoration pass complete")
             except Exception as exc:
                 logger.warning(f"SwinIR pass failed: {exc}")
+        if self.config.seedvr2_restore:
+            try:
+                from backend.post_restore import seedvr2_restore
+                restored = os.path.join(temp_dir, "seedvr2.mp4")
+                produced = seedvr2_restore(output_path, restored)
+                if produced and Path(produced).is_file():
+                    _promote_temp_output(produced, output_path)
+                    logger.info("SeedVR2 restoration pass complete")
+            except Exception as exc:
+                logger.warning(f"SeedVR2 pass failed: {exc}")
         if self.config.film_grain_strength > 0.0:
             try:
                 from backend.post_restore import add_film_grain
@@ -3974,6 +3989,11 @@ def main():
                        help="Post-cleanup SwinIR restoration pass (opt-in). "
                             "Requires a SwinIR or RealSR-ncnn-vulkan binary "
                             "on PATH.")
+    parser.add_argument("--seedvr2", action="store_true",
+                       help="Post-cleanup SeedVR2 one-step restoration "
+                            "(opt-in, heavy: 16B params). Requires the "
+                            "upstream IceClear/SeedVR2 project on PATH or "
+                            "VSR_SEEDVR2_CMD set to a CLI entrypoint.")
     parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
                        help="Add additive film grain after cleanup. Strength "
                             "is a 0..0.5 fraction of full-scale; 0 disables. "
@@ -4241,6 +4261,7 @@ def main():
         upscale_factor=args.upscale,
         film_grain_strength=args.film_grain,
         swinir_restore=args.swinir,
+        seedvr2_restore=args.seedvr2,
         preserve_color_metadata=not args.no_color_preserve,
         nle_sidecar=args.nle_sidecar,
         output_quality=args.crf,

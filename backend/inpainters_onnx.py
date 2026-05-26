@@ -88,7 +88,23 @@ class LamaOnnxInpainter:
         self.device = device
         self.config = config
         model_path = os.environ.get("VSR_LAMA_ONNX", "")
-        providers = (
+        # RM-70: when TensorRT is enabled, prefer the cached engine via
+        # the TensorrtExecutionProvider before falling back to CUDA/CPU.
+        providers = []
+        try:
+            from backend.tensorrt_compile import (
+                is_tensorrt_enabled, maybe_compile_engine,
+            )
+            if is_tensorrt_enabled() and model_path and "cuda" in device:
+                engine = maybe_compile_engine(model_path)
+                if engine is not None:
+                    providers.append(("TensorrtExecutionProvider", {
+                        "trt_engine_cache_enable": True,
+                        "trt_engine_cache_path": str(engine.parent),
+                    }))
+        except Exception as exc:
+            logger.debug(f"TensorRT path skipped: {exc}")
+        providers += (
             ["CUDAExecutionProvider", "CPUExecutionProvider"]
             if "cuda" in device else ["CPUExecutionProvider"]
         )
