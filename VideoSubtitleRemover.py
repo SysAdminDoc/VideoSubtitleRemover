@@ -716,86 +716,11 @@ def save_settings(config: ProcessingConfig):
 
 PRESETS_FILE = LOG_DIR / "presets.json"
 
-# Built-in presets tuned for common content types. Only the fields that
-# matter for each recipe are set; everything else inherits from the current
-# config when the preset is applied (so user-tuned quality knobs survive).
-BUILTIN_PRESETS = {
-    "YouTube (default)": {
-        "description": "Balanced defaults for typical YouTube / streaming footage.",
-        "fields": {
-            "mode": "STTN",
-            "detection_threshold": 0.5,
-            "mask_dilate_px": 8,
-            "mask_feather_px": 4,
-            "edge_ring_px": 2,
-            "tbe_flow_warp": False,
-            "tbe_scene_cut_split": True,
-            "colour_tune_enable": False,
-            "kalman_tracking": True,
-            "phash_skip_enable": True,
-        },
-    },
-    "Anime / Animation": {
-        "description": "Flat backgrounds benefit from LAMA + tight feather.",
-        "fields": {
-            "mode": "LAMA",
-            "detection_threshold": 0.55,
-            "mask_dilate_px": 10,
-            "mask_feather_px": 3,
-            "edge_ring_px": 0,
-            "colour_tune_enable": True,
-            "colour_tune_tolerance": 30,
-        },
-    },
-    "Motion-heavy / Action": {
-        "description": "Enables flow-warped TBE + ProPainter for fast pans.",
-        "fields": {
-            "mode": "ProPainter",
-            "detection_threshold": 0.45,
-            "mask_dilate_px": 12,
-            "mask_feather_px": 6,
-            "edge_ring_px": 3,
-            "tbe_flow_warp": True,
-            "tbe_scene_cut_split": True,
-            "kalman_tracking": True,
-        },
-    },
-    "TikTok / Vertical short": {
-        "description": "9:16 short-form with bold burned-in captions.",
-        "fields": {
-            "mode": "STTN",
-            "detection_threshold": 0.4,
-            "mask_dilate_px": 14,
-            "mask_feather_px": 5,
-            "colour_tune_enable": True,
-            "auto_band": True,
-        },
-    },
-    "VHS / Low-res restore": {
-        "description": "Noisy SD footage; higher feather and tolerant pHash.",
-        "fields": {
-            "mode": "STTN",
-            "detection_threshold": 0.4,
-            "mask_dilate_px": 10,
-            "mask_feather_px": 6,
-            "edge_ring_px": 4,
-            "phash_skip_enable": True,
-            "phash_skip_distance": 8,
-            "kalman_tracking": True,
-        },
-    },
-    "News / Chyron (bottom-third)": {
-        "description": "Lower-third graphics; auto-band + STTN + tight mask.",
-        "fields": {
-            "mode": "STTN",
-            "detection_threshold": 0.5,
-            "auto_band": True,
-            "mask_dilate_px": 6,
-            "mask_feather_px": 3,
-            "kalman_tracking": True,
-        },
-    },
-}
+# F-10: built-in presets live in backend/presets.py so the CLI's
+# --preset flag and the GUI's preset picker resolve from the same source.
+# The shared module also exposes resolve_preset/preset_fields helpers we
+# could swap in here over time -- for now we just import the table.
+from backend.presets import BUILTIN_PRESETS
 
 
 def _load_user_presets() -> dict:
@@ -2409,6 +2334,7 @@ class QueueItemWidget(tk.Frame):
 
     def __init__(self, parent, item: QueueItem, on_remove: Callable,
                  on_select: Callable = None, on_rename: Callable = None,
+                 on_repeat: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER)
@@ -2417,6 +2343,7 @@ class QueueItemWidget(tk.Frame):
         self.on_remove = on_remove
         self.on_select = on_select
         self.on_rename = on_rename
+        self.on_repeat = on_repeat
         self.is_selected = False
         self._surface_bg = Theme.BG_CARD
         self._pulse_id = None
@@ -2537,6 +2464,13 @@ class QueueItemWidget(tk.Frame):
                          state="normal" if rename_allowed else "disabled")
         menu.add_command(label="Copy source path",
                          command=self._copy_source_path)
+        # RM-28: re-queue the same source with the snapshot of settings
+        # that was active on this item. Useful when re-running with a
+        # tweaked global config but you still want exactly the same
+        # per-file overrides as a previous run.
+        if self.on_repeat is not None:
+            menu.add_command(label="Repeat with these settings",
+                             command=lambda: self.on_repeat(self.item.id))
         menu.add_separator()
         menu.add_command(label="Remove from queue",
                          command=lambda: self.on_remove(self.item.id),
@@ -5983,6 +5917,40 @@ class VideoSubtitleRemoverApp:
         except OSError:
             return 0
 
+    def _repeat_item_with_settings(self, item_id: str):
+        """RM-28: snapshot the named item's config and re-queue the same
+        source file with a fresh IDLE entry. Lets users re-run a clip
+        with exactly the per-file settings that already worked once,
+        even after the global UI state has changed."""
+        with self.queue_lock:
+            template = next((it for it in self.queue if it.id == item_id), None)
+        if template is None:
+            self._update_status("Item not found in queue", "warning")
+            return
+        # Snapshot via to_dict / from_dict so any future field churn does
+        # not need an explicit copy update here.
+        snapshot = ProcessingConfig.from_dict(template.config.to_dict())
+        # Build a fresh output path (unique vs the original).
+        desired = self._suggest_output_path(template.file_path)
+        new_item = QueueItem(
+            id=str(uuid.uuid4()),
+            file_path=template.file_path,
+            output_path=str(desired),
+            config=snapshot,
+            output_path_locked=False,
+            status=ProcessingStatus.IDLE,
+            progress=0.0,
+            message="Ready to process",
+        )
+        with self.queue_lock:
+            self.queue.append(new_item)
+        self._update_queue_display()
+        self._refresh_action_states()
+        self._update_status(
+            f"Re-queued {Path(template.file_path).name} with the same settings",
+            "info", toast=True,
+        )
+
     def _rename_output_for(self, item_id: str):
         """Open a file picker to customize the output path of a queued item.
 
@@ -6125,7 +6093,8 @@ class VideoSubtitleRemoverApp:
                 if item.id not in self.queue_widgets:
                     widget = QueueItemWidget(self.queue_frame, item, self._remove_from_queue,
                                              on_select=self._show_preview,
-                                             on_rename=self._rename_output_for)
+                                             on_rename=self._rename_output_for,
+                                             on_repeat=self._repeat_item_with_settings)
                     widget.pack(fill="x", pady=(0, 8))
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas

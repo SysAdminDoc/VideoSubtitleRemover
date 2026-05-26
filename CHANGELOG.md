@@ -6,6 +6,28 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **CLI `--preset NAME` flag + shared preset library (F-10).** Presets
+  now live in `backend/presets.py` so the GUI's picker and
+  `python -m backend.processor --preset NAME` resolve from the same
+  table. CLI flags typed alongside `--preset` still win on a conflict
+  (the preset only fills attrs whose argparse value is still the
+  parser default). New companion flag `--list-presets` prints every
+  known preset (built-in + user) and exits.
+- **"Repeat with these settings" queue action (RM-28).** Right-click a
+  queue item -> "Repeat with these settings" re-queues the same source
+  with a snapshot of that item's `ProcessingConfig`. Useful when you
+  have tweaked the global UI knobs but want to re-run an earlier file
+  with the exact settings that worked the first time.
+
+### Improved
+
+- **OpenCV fallback detector catches mid-tone subtitles (EI-1).** The
+  legacy fixed thresholds at 200 / 55 missed semi-transparent banners
+  and dimly-lit captions whose luminance sat in the 55-200 dead zone.
+  The fallback now picks thresholds from the frame's 5th / 95th
+  percentile, clamped so a near-flat source cannot collapse both
+  thresholds and mark the entire frame.
+
 - **Lossless FFV1 intermediate (I-1).** The temp file written between
   the inpaint pass and the final ffmpeg encode used to be `mp4v`
   inside `.mp4` -- a full generation of lossy compression sitting in
