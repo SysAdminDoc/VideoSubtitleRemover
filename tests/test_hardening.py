@@ -1280,6 +1280,25 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class NsisInstallerArtefactTests(unittest.TestCase):
+    """RM-51: the NSIS installer script ships in installer/vsr.nsi so
+    the GHA build workflow can pick it up. Sanity-check the file
+    exists and names the expected app + version constants so a future
+    rename does not break the build."""
+
+    def test_nsi_file_present_with_expected_definitions(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        nsi = root / "installer" / "vsr.nsi"
+        self.assertTrue(nsi.is_file(), "installer/vsr.nsi missing")
+        text = nsi.read_text(encoding="utf-8")
+        self.assertIn("Video Subtitle Remover Pro", text)
+        self.assertIn("VideoSubtitleRemoverPro.exe", text)
+        self.assertIn("VERSIONMAJOR", text)
+        # RM-58: the file-extension verb registration.
+        self.assertIn("OpenWithVSR", text)
+
+
 class ProxyWorkflowTests(unittest.TestCase):
     """RM-34: ensure_proxy must return None when ffmpeg is absent and
     use a deterministic cache filename otherwise."""
