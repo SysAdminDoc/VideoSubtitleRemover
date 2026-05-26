@@ -34,7 +34,7 @@ from datetime import datetime
 APP_NAME = "Video Subtitle Remover Pro"
 # Single source of truth for the app's version string. Update here and it
 # propagates to the banner, header, logs, About dialog, and CHANGELOG cue.
-APP_VERSION = "3.12.0"
+APP_VERSION = "3.13.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
