@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [v3.13.0] -- 2026-05-25
+
 ### Added
 
 - **HEVC + AV1 output codec dropdown (F-8).** Output is no longer
