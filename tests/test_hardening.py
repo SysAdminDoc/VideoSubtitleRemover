@@ -1280,6 +1280,46 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class TensorrtCompileTests(unittest.TestCase):
+    """RM-70: cache helper must produce a deterministic path and
+    silently return None when polygraphy / TensorRT are missing."""
+
+    def setUp(self):
+        os.environ.pop("VSR_TENSORRT", None)
+
+    def test_disabled_by_default(self):
+        from backend.tensorrt_compile import is_tensorrt_enabled
+        self.assertFalse(is_tensorrt_enabled())
+
+    def test_cached_engine_path_is_deterministic(self):
+        from backend.tensorrt_compile import cached_engine_path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            onnx = Path(tmpdir) / "model.onnx"
+            onnx.write_bytes(b"\x00" * 32)
+            p1 = cached_engine_path(str(onnx))
+            p2 = cached_engine_path(str(onnx))
+            self.assertEqual(p1, p2)
+            self.assertTrue(p1.name.endswith(".engine"))
+
+    def test_compile_returns_none_when_disabled(self):
+        from backend.tensorrt_compile import maybe_compile_engine
+        self.assertIsNone(maybe_compile_engine("/tmp/non.onnx"))
+
+
+class SeedVr2AdapterTests(unittest.TestCase):
+    """RM-77: SeedVR2 wrapper must return None when neither the pip
+    package nor VSR_SEEDVR2_CMD is set."""
+
+    def test_returns_none_without_deps(self):
+        os.environ.pop("VSR_SEEDVR2_CMD", None)
+        from backend.post_restore import seedvr2_restore
+        with tempfile.TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "in.mp4"
+            src.write_bytes(b"\x00" * 16)
+            dst = Path(tmpdir) / "out.mp4"
+            self.assertIsNone(seedvr2_restore(str(src), str(dst)))
+
+
 class SegmentationAdapterTests(unittest.TestCase):
     """RM-66/67/68/69: every adapter must return the input unchanged
     (or None) when its optional dep is absent."""
