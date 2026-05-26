@@ -1137,6 +1137,45 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class InpainterRegistryTests(unittest.TestCase):
+    """RFP-L-2: every built-in mode must be registered; resolve()
+    returns the registered builder; missing modes raise KeyError so
+    the caller can fall back."""
+
+    def test_builtins_registered(self):
+        from backend import inpainter_registry
+        for mode in ("sttn", "lama", "propainter", "auto"):
+            self.assertTrue(inpainter_registry.is_registered(mode),
+                            f"mode {mode!r} must be registered")
+
+    def test_resolve_returns_callable(self):
+        from backend import inpainter_registry
+        builder = inpainter_registry.resolve("sttn")
+        self.assertTrue(callable(builder))
+
+    def test_resolve_unknown_raises(self):
+        from backend import inpainter_registry
+        with self.assertRaises(KeyError):
+            inpainter_registry.resolve("not-a-real-mode")
+
+    def test_register_replaces_existing(self):
+        from backend import inpainter_registry
+        original = inpainter_registry.resolve("sttn")
+        try:
+            sentinel = object()
+            inpainter_registry.register("sttn", lambda d, c: sentinel)
+            self.assertIs(inpainter_registry.resolve("sttn")(None, None), sentinel)
+        finally:
+            inpainter_registry.register("sttn", original)
+
+    def test_unregister_returns_status(self):
+        from backend import inpainter_registry
+        sentinel = object()
+        inpainter_registry.register("test-plugin", lambda d, c: sentinel)
+        self.assertTrue(inpainter_registry.unregister("test-plugin"))
+        self.assertFalse(inpainter_registry.unregister("test-plugin"))
+
+
 class VerticalTextDetectionTests(unittest.TestCase):
     """RM-24: vertical-text mode wraps the detector with a rotate-detect-
     rotate-back layer. Boxes from the rotated frame must come back in

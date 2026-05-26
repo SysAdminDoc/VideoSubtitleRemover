@@ -58,7 +58,7 @@
 ## Phase 5 -- Larger bets (P1 long-horizon)
 
 - [ ] P1 RFP-L-1 Split backend/processor.py into 7 modules
-- [ ] P1 RFP-L-2 Plugin architecture for inpainters (concretises RM-81)
+- [x] P1 RFP-L-2 Plugin architecture for inpainters (concretises RM-81)
 - [x] P1 RFP-L-3 docs/architecture.md contributor map
 - [ ] P1 RM-25 LaMa via ONNX Runtime (opt-in, smaller install)
 - [ ] P1 RM-26 MI-GAN fast mode (mobile-grade single-frame)

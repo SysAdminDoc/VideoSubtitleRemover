@@ -4,6 +4,22 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Inpainter dispatch is now plugin-driven (RFP-L-2).** New
+  `backend/inpainter_registry.py` exposes
+  `register(name, builder)` / `resolve(name)` /
+  `is_registered(name)` / `list_modes()` / `unregister(name)`. The
+  four built-in inpainters (STTN / LAMA / ProPainter / AUTO)
+  register themselves at processor import time; `_create_inpainter`
+  resolves through the registry instead of an if-elif chain.
+  External backends (LaMa-ONNX, MI-GAN, real ProPainter,
+  DiffuEraser, etc.) can now land as standalone modules that
+  import `register` and a `BaseInpainter` subclass -- no edit to
+  the dispatch needed. Re-registering a name replaces the
+  previous builder, so a drop-in faster implementation can shadow
+  a default.
+
 ### Added
 
 - **Vertical text mode (RM-24).** Japanese tategaki and classical
