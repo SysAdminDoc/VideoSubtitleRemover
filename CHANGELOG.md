@@ -4,6 +4,33 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **`backend/processor.py` split into 7 modules (RFP-L-1).** The
+  3,400-line monolith now lives as a 1,923-line shim that re-exports
+  every previously-public name from focused sub-modules:
+  - `backend.detection` -- `SubtitleDetector`, OCR cascade,
+    Florence-2/Qwen2.5-VL/Surya routing, percentile OpenCV fallback.
+  - `backend.tracking` -- `_KalmanBox`, `SubtitleTracker`, pHash
+    helpers, karaoke per-line fusion.
+  - `backend.io` -- `_open_capture`, `_PrefetchReader`,
+    `_LosslessIntermediateWriter`, `_FrameSequenceCapture`, all
+    ffprobe / atomic-file helpers, deinterlace.
+  - `backend.encoder` -- `_detect_hw_encoder` only (the encode-args
+    builder remains on `SubtitleRemover` because it reads `self`).
+  - `backend.quality` -- `_ssim` (the report writer stays on the class
+    for the same reason).
+  - `backend.inpainters` -- subpackage with `_common.py` (BaseInpainter,
+    feather/edge-ring helpers, scene-cut cascade, Farneback warp,
+    TBE primitive) + `sttn.py` / `lama.py` / `propainter.py` /
+    `auto.py`. Built-ins register themselves via the existing plugin
+    registry.
+  - `backend.cli` -- argparse + `main()`, preset overlay loader,
+    checkpoint helpers, `_apply_auto_band_override`.
+  Every legacy `from backend.processor import X` import path keeps
+  working unchanged. `python -m backend.processor` now delegates to
+  `backend.cli.main`. All 164 tests pass.
+
 ### Tests
 
 - **TikTok preset synthetic A/B (RFP-EI-7).** New
