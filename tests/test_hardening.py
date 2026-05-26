@@ -727,12 +727,19 @@ class ConfigFuzzTests(unittest.TestCase):
         "colour_tune_enable", "colour_tune_tolerance",
         "time_start", "time_end",
         "preserve_audio", "output_format", "output_quality", "use_hw_encode",
+        # v3.13 GUI-exposed fields (B-1 + F-8).
+        "loudnorm_target", "multi_audio_passthrough",
+        "decode_hw_accel", "prefetch_decode", "prefetch_queue_size",
+        "input_fps", "quality_report_sheet",
+        "remove_subtitles", "remove_chyrons", "chyron_min_hits",
+        "karaoke_grouping", "karaoke_x_gap_px", "karaoke_y_overlap",
+        "output_codec",
         "window_geometry", "adv_panel_open", "log_panel_open",
         "onboarding_seen", "vsr_settings_format",
     ]
 
     BACKEND_FIELDS = GUI_FIELDS + [
-        "device", "loudnorm_target", "decode_hw_accel", "multi_audio_passthrough",
+        "device",
     ]
 
     def _random_payload(self, rng, fields, max_keys=8):
@@ -756,6 +763,15 @@ class ConfigFuzzTests(unittest.TestCase):
             self.assertGreaterEqual(cfg.time_end, 0.0)
             if cfg.time_end:
                 self.assertGreaterEqual(cfg.time_end, cfg.time_start)
+            # B-1 + F-8 invariants on the newly exposed fields.
+            self.assertTrue(cfg.loudnorm_target == 0.0
+                            or -70.0 <= cfg.loudnorm_target <= -5.0)
+            self.assertIn(cfg.decode_hw_accel,
+                          {"off", "auto", "any", "d3d11", "vaapi", "mfx"})
+            self.assertIn(cfg.output_codec, {"h264", "h265", "av1"})
+            self.assertIsInstance(cfg.multi_audio_passthrough, bool)
+            self.assertGreaterEqual(cfg.input_fps, 1.0)
+            self.assertLessEqual(cfg.input_fps, 240.0)
 
     def test_backend_normalize_never_crashes(self):
         import random as _random

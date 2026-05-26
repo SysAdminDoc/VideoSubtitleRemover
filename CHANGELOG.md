@@ -4,6 +4,32 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Detection slider relabelled "Sensitivity" (EI-3).** The underlying
+  knob is unchanged (10-90% confidence floor); the new label removes
+  the inversion users had to remember ("threshold" goes DOWN to detect
+  more text). New hint: "Higher catches more text (lower confidence
+  floor). Lower is stricter."
+
+### Performance
+
+- **Live preview worker-side throttle (EI-4).** The backend's
+  `on_preview_frame` callback now drops conversions when the previous
+  one fired within the last 1/15 s, so the worker stops burning CPU on
+  cv2.resize + PIL.Image.fromarray that the receiver was going to
+  throttle away anyway.
+
+### Tests
+
+- **ConfigFuzzTests expanded** to cover every v3.13 GUI-exposed field
+  (loudnorm_target, multi_audio_passthrough, decode_hw_accel,
+  prefetch_decode, prefetch_queue_size, input_fps, quality_report_sheet,
+  remove_subtitles, remove_chyrons, chyron_min_hits, karaoke_grouping,
+  karaoke_x_gap_px, karaoke_y_overlap, output_codec). 1500 random
+  payloads on each path; post-conditions assert loudnorm range,
+  decode_hw_accel token set, output_codec set, input_fps bounds.
+
 ## [v3.13.0] -- 2026-05-25
 
 ### Added
