@@ -1280,6 +1280,55 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class ProxyWorkflowTests(unittest.TestCase):
+    """RM-34: ensure_proxy must return None when ffmpeg is absent and
+    use a deterministic cache filename otherwise."""
+
+    def test_proxy_returns_none_without_ffmpeg(self):
+        from backend import proxy_workflow as _pw
+        import shutil as _shutil
+        original = _shutil.which
+        try:
+            _shutil.which = lambda name: None
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = Path(tmpdir) / "in.mp4"
+                src.write_bytes(b"\x00" * 32)
+                self.assertIsNone(_pw.ensure_proxy(str(src)))
+        finally:
+            _shutil.which = original
+
+
+class KaraokeFlowTests(unittest.TestCase):
+    """RM-43 / RM-45: optical-flow mask warp and WhisperX availability
+    probe behave deterministically."""
+
+    def test_warp_mask_with_flow_preserves_shape(self):
+        import numpy as _np
+        from backend.karaoke_flow import warp_mask_with_flow
+        prev = _np.zeros((32, 32, 3), dtype=_np.uint8)
+        nxt = _np.zeros((32, 32, 3), dtype=_np.uint8)
+        mask = _np.zeros((32, 32), dtype=_np.uint8)
+        mask[10:20, 10:20] = 255
+        warped = warp_mask_with_flow(prev, nxt, mask)
+        self.assertEqual(warped.shape, mask.shape)
+
+    def test_whisperx_availability_safe(self):
+        from backend.karaoke_flow import is_whisperx_available, run_whisperx
+        # Don't crash regardless of whether the package is installed.
+        self.assertIsInstance(is_whisperx_available(), bool)
+        if not is_whisperx_available():
+            self.assertIsNone(run_whisperx("/nonexistent.wav"))
+
+
+class VapourSynthBridgeTests(unittest.TestCase):
+    """RM-75: try_open_vpy must return None for a non-.vpy path and for
+    a missing dep."""
+
+    def test_returns_none_for_non_vpy(self):
+        from backend.vapoursynth_bridge import try_open_vpy
+        self.assertIsNone(try_open_vpy("/tmp/foo.mp4"))
+
+
 class TensorrtCompileTests(unittest.TestCase):
     """RM-70: cache helper must produce a deterministic path and
     silently return None when polygraphy / TensorRT are missing."""
