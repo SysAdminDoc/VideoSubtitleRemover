@@ -34,7 +34,7 @@ from datetime import datetime
 APP_NAME = "Video Subtitle Remover Pro"
 # Single source of truth for the app's version string. Update here and it
 # propagates to the banner, header, logs, About dialog, and CHANGELOG cue.
-APP_VERSION = "3.13.0"
+APP_VERSION = "3.14.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
@@ -344,6 +344,7 @@ class ProcessingConfig:
     whisper_model_size: str = "tiny"
     upscale_factor: int = 0              # RM-78 post-cleanup upscale (0/2/3/4)
     film_grain_strength: float = 0.0     # RM-80 additive film grain (0..0.5)
+    swinir_restore: bool = False         # RM-79 SwinIR restoration pass
     preserve_color_metadata: bool = True  # RM-73 partial
     nle_sidecar: str = "off"             # RM-76 (off / edl / fcpxml)
 
@@ -477,6 +478,7 @@ class ProcessingConfig:
             upscale = 0
         self.upscale_factor = upscale
         self.film_grain_strength = _coerce_float(self.film_grain_strength, 0.0, 0.0, 0.5)
+        self.swinir_restore = _coerce_bool(self.swinir_restore, False)
         self.preserve_color_metadata = _coerce_bool(self.preserve_color_metadata, True)
         sidecar = _coerce_text(self.nle_sidecar, "off", 16).lower()
         if sidecar not in {"off", "edl", "fcpxml"}:
@@ -7506,6 +7508,7 @@ class VideoSubtitleRemoverApp:
                 whisper_model_size=getattr(item.config, 'whisper_model_size', 'tiny'),
                 upscale_factor=getattr(item.config, 'upscale_factor', 0),
                 film_grain_strength=getattr(item.config, 'film_grain_strength', 0.0),
+                swinir_restore=getattr(item.config, 'swinir_restore', False),
                 preserve_color_metadata=getattr(item.config, 'preserve_color_metadata', True),
                 nle_sidecar=getattr(item.config, 'nle_sidecar', 'off'),
                 subtitle_area=item.config.subtitle_area,

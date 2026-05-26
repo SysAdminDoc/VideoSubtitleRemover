@@ -79,6 +79,41 @@ def realesrgan_upscale(input_path: str, output_path: str,
     return None
 
 
+def swinir_restore(input_path: str, output_path: str,
+                    task: str = "classical_sr",
+                    scale: int = 2) -> Optional[str]:
+    """RM-79: SwinIR restoration. Pairs with Real-ESRGAN as an
+    alternative single-image-restoration backend. Prefers the
+    `realsr-ncnn-vulkan` family of binaries (which ship a SwinIR
+    variant) when present on PATH; otherwise logs and returns None.
+
+    SwinIR weights are large enough that we do NOT auto-download; the
+    user is expected to install the binary distribution separately.
+    """
+    binaries = ("swinir-ncnn-vulkan", "realsr-ncnn-vulkan", "swinir")
+    binary = next((b for b in binaries if shutil.which(b)), None)
+    if binary is None:
+        logger.info(
+            "No SwinIR binary found on PATH (looked for "
+            f"{', '.join(binaries)}). Skipping restoration pass."
+        )
+        return None
+    try:
+        cmd = [binary, "-i", input_path, "-o", output_path, "-s", str(scale)]
+        if "swinir" in binary and task:
+            cmd += ["-t", task]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
+        if result.returncode == 0 and Path(output_path).is_file():
+            logger.info(f"SwinIR restoration complete ({binary})")
+            return output_path
+        logger.warning(
+            f"{binary} exit {result.returncode}: {(result.stderr or '')[:400]}"
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning(f"SwinIR pass failed: {exc}")
+    return None
+
+
 def add_film_grain(input_path: str, output_path: str,
                     strength: float = 0.04) -> Optional[str]:
     """RM-80: cheap additive film grain.

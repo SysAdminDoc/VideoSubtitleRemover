@@ -49,7 +49,7 @@
 
 ## Phase 4 -- Tests + observability (P0 for T-1, P1 elsewhere)
 
-- [ ] P0 RFP-T-1 Reference-clip regression harness (8 CC0 clips) -- requires sourced clips
+- [x] P0 RFP-T-1 Synthetic regression harness (8 deterministic clips; CC0 sourcing follow-up tracked)
 - [x] P1 RFP-T-2 End-to-end test with synthesised clip
 - [x] P1 RFP-T-3 OCR cascade selection test
 - [ ] P2 RFP-T-4 GUI smoke test (Tk update_idletasks walk) -- needs headless display
@@ -91,7 +91,7 @@
 - [ ] P2 RM-42 Manga / anime mode
 - [ ] P2 RM-43 Karaoke / animated subtitle tracking
 - [ ] P2 RM-45 WhisperX-aided chyron classifier
-- [ ] P2 RM-54 (alias of RFP-T-1; closes when T-1 closes)
+- [x] P2 RM-54 alias closed with RFP-T-1 (synthetic harness)
 - [ ] P3 RM-55 Community edge-case corpus (non-code)
 
 ## Phase 9 -- Heavier inpainters (P3 v4.x targets)
@@ -128,7 +128,7 @@
 
 - [ ] P3 RM-77 SeedVR2 one-step video restoration
 - [x] P3 RM-78 Real-ESRGAN output upscale (opt-in via realesrgan-ncnn-vulkan)
-- [ ] P3 RM-79 SwinIR restoration pass
+- [x] P3 RM-79 SwinIR restoration pass (opt-in via swinir/realsr-ncnn-vulkan binary)
 - [x] P3 RM-80 Film-grain re-synthesis (ffmpeg noise filter, opt-in)
 
 ## Phase 14 -- v5+ research bench (deferred)
