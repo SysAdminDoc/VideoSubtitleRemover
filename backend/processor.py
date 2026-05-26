@@ -129,6 +129,10 @@ class ProcessingConfig:
     # disabled; positive values invoke the ffmpeg noise pass.
     upscale_factor: int = 0
     film_grain_strength: float = 0.0
+    # RM-79: SwinIR restoration as an alternative to Real-ESRGAN for
+    # sources where the cleanup left subtle local blur. Defaults off;
+    # requires a SwinIR / RealSR-ncnn-vulkan binary on PATH.
+    swinir_restore: bool = False
     # RM-73 (partial): preserve source color signalling on the output
     # encode. Default True so HDR sources at least stay tagged as HDR
     # even though the pixel pipeline is still 8-bit BGR. Disable when
@@ -424,6 +428,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.upscale_factor = 0
     config.film_grain_strength = _coerce_float(
         config.film_grain_strength, 0.0, 0.0, 0.5)
+    config.swinir_restore = _coerce_bool(config.swinir_restore, False)
     config.preserve_color_metadata = _coerce_bool(config.preserve_color_metadata, True)
     sidecar = _coerce_text(config.nle_sidecar, "off", 16).lower()
     if sidecar not in {"off", "edl", "fcpxml"}:
@@ -3460,6 +3465,16 @@ class SubtitleRemover:
                     )
             except Exception as exc:
                 logger.warning(f"Real-ESRGAN pass failed: {exc}")
+        if self.config.swinir_restore:
+            try:
+                from backend.post_restore import swinir_restore
+                restored = os.path.join(temp_dir, "swinir.mp4")
+                produced = swinir_restore(output_path, restored)
+                if produced and Path(produced).is_file():
+                    _promote_temp_output(produced, output_path)
+                    logger.info("SwinIR restoration pass complete")
+            except Exception as exc:
+                logger.warning(f"SwinIR pass failed: {exc}")
         if self.config.film_grain_strength > 0.0:
             try:
                 from backend.post_restore import add_film_grain
@@ -3760,6 +3775,10 @@ def main():
                             "output so a Premiere / DaVinci editor can "
                             "hand-conform the cleaned clip into the same "
                             "timecode slot as the source.")
+    parser.add_argument("--swinir", action="store_true",
+                       help="Post-cleanup SwinIR restoration pass (opt-in). "
+                            "Requires a SwinIR or RealSR-ncnn-vulkan binary "
+                            "on PATH.")
     parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
                        help="Add additive film grain after cleanup. Strength "
                             "is a 0..0.5 fraction of full-scale; 0 disables. "
@@ -4009,6 +4028,7 @@ def main():
         whisper_model_size=args.whisper_model,
         upscale_factor=args.upscale,
         film_grain_strength=args.film_grain,
+        swinir_restore=args.swinir,
         preserve_color_metadata=not args.no_color_preserve,
         nle_sidecar=args.nle_sidecar,
         output_quality=args.crf,
