@@ -4154,10 +4154,10 @@ class VideoSubtitleRemoverApp:
         det_frame.pack(fill="x", pady=(0, Theme.S_SM))
         self._card_header(det_frame, "Detection", "Precision tuning")
 
-        self._create_slider(det_frame, "Threshold", 10, 90,
+        self._create_slider(det_frame, "Sensitivity", 10, 90,
                             int(self.config.detection_threshold * 100),
                             "_detection_threshold_pct",
-                            hint="Lower detects more text, higher reduces false positives.")
+                            hint="Higher catches more text (lower confidence floor). Lower is stricter.")
         self._create_slider(det_frame, "Frame skip", 0, 10,
                             self.config.detection_frame_skip, "detection_frame_skip",
                             hint="Reuse the last mask for N frames to speed up long videos.")
@@ -7158,10 +7158,20 @@ class VideoSubtitleRemoverApp:
             # Live preview: pipe the latest inpainted frame into the preview
             # pane. The backend emits frames on its worker thread, so we
             # marshal to the Tk main loop via root.after.
+            #
+            # EI-4: also throttle on wall-clock so the worker does not
+            # queue PIL conversions faster than the Tk thread can absorb
+            # ImageTk.PhotoImage calls (~50 ms on 4K). The receiver still
+            # throttles to ~15 FPS, but throttling in the worker too
+            # avoids burning CPU on conversions that get dropped.
+            preview_throttle_state = {"last_ts": 0.0}
             def on_preview_frame(frame, cur_idx, total):
                 if self.cancel_event.is_set():
                     return
-                # Down-sample into the PIL buffer size the preview pane uses
+                now = time.monotonic()
+                if (now - preview_throttle_state["last_ts"]) < (1.0 / 15.0):
+                    return
+                preview_throttle_state["last_ts"] = now
                 try:
                     max_w, max_h = 520, 320
                     h, w = frame.shape[:2]
