@@ -1137,6 +1137,47 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class WhisperFallbackTests(unittest.TestCase):
+    """RM-27: Whisper fallback adapter must degrade gracefully when the
+    optional dep is missing, and the segments_to_frame_spans helper must
+    merge overlapping spans deterministically."""
+
+    def test_is_available_handles_missing_dep(self):
+        # The test environment has no faster-whisper installed; the
+        # helper must return False instead of raising ImportError.
+        from backend import whisper_fallback as _wf
+        self.assertFalse(_wf.is_available())
+
+    def test_run_whisper_segments_returns_none_without_dep(self):
+        from backend import whisper_fallback as _wf
+        result = _wf.run_whisper_segments("/nonexistent.wav")
+        self.assertIsNone(result)
+
+    def test_extract_audio_returns_none_for_missing_file(self):
+        from backend import whisper_fallback as _wf
+        # ffmpeg may not be on PATH in CI; either branch should return
+        # None for a non-existent source.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = _wf.extract_audio_to_temp("/nonexistent.mp4", tmpdir)
+            self.assertIsNone(result)
+
+    def test_segments_to_frame_spans_merges_overlaps(self):
+        from backend import whisper_fallback as _wf
+        segments = [
+            (0.0, 1.0, "a"),
+            (0.5, 2.0, "b"),  # overlaps with previous
+            (5.0, 6.0, "c"),
+        ]
+        spans = _wf.segments_to_frame_spans(segments, fps=24.0)
+        self.assertEqual(len(spans), 2)
+        self.assertEqual(spans[0], (0, 48))  # 0..2s at 24 fps
+        self.assertEqual(spans[1], (120, 144))
+
+    def test_segments_to_frame_spans_handles_invalid_fps(self):
+        from backend import whisper_fallback as _wf
+        self.assertEqual(_wf.segments_to_frame_spans([(0.0, 1.0, "a")], fps=0.0), [])
+
+
 class OnnxInpaintersTests(unittest.TestCase):
     """RM-25 / RM-26: ONNX backends must register only when their env
     vars are set, and the inpainter must fall back to cv2 when the
