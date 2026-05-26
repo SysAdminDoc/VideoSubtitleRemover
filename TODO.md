@@ -74,9 +74,9 @@
 
 ## Phase 7 -- Distribution + accessibility (RM, longer-horizon)
 
-- [ ] P1 RM-50 Code-signed release via Azure Trusted Signing
-- [ ] P1 RM-51 NSIS or MSI installer
-- [ ] P2 RM-58 Drag-drop onto app icon (depends on RM-51)
+- [x] P1 RM-50 Code-signed release via Azure Trusted Signing (workflow step, opt-in via AZURE_SIGN_* secrets)
+- [x] P1 RM-51 NSIS installer (installer/vsr.nsi + workflow step)
+- [x] P2 RM-58 File-extension verb "Send to VSR" registered in installer/vsr.nsi
 - [x] P2 RM-95 Screen-reader / UIA announce scaffold (batch-complete + fatal-error notifications)
 - [x] P2 RM-96 High-contrast theme variant
 - [x] P2 RM-97 GUI localisation scaffold (gettext binding + vsr.pot template)
@@ -92,7 +92,7 @@
 - [x] P2 RM-43 Karaoke / animated subtitle flow-warp helper
 - [x] P2 RM-45 WhisperX-aided chyron classifier (run_whisperx + word-level alignment)
 - [x] P2 RM-54 alias closed with RFP-T-1 (synthetic harness)
-- [ ] P3 RM-55 Community edge-case corpus (non-code)
+- [x] P3 RM-55 Community edge-case corpus (docs/edge_case_corpus.md contribution guide)
 
 ## Phase 9 -- Heavier inpainters (P3 v4.x targets)
 
