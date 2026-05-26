@@ -45,7 +45,14 @@ SETTINGS_FILE = LOG_DIR / "settings.json"
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
 # semantics change. _migrate_settings() must learn the upgrade path so
 # users never silently lose state on an in-place upgrade.
-VSR_SETTINGS_FORMAT = 1
+# Format 1 -> 2 (B-1, v3.13 GUI wiring pass): added loudnorm_target,
+# multi_audio_passthrough, decode_hw_accel, prefetch_decode,
+# prefetch_queue_size, input_fps, quality_report_sheet,
+# remove_subtitles, remove_chyrons, chyron_min_hits, karaoke_grouping,
+# karaoke_x_gap_px, karaoke_y_overlap. All have backend-default values
+# so a missing key in a format-1 file resolves to the same behaviour
+# users saw before the bump -- no field-rename migration needed.
+VSR_SETTINGS_FORMAT = 2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -327,6 +334,26 @@ class ProcessingConfig:
     output_quality: int = 23  # CRF value (15-35, lower = better quality)
     use_hw_encode: bool = True  # try hardware encoding (NVENC/QSV/AMF)
 
+    # v3.13 -- exposed in GUI as of this build
+    # Audio
+    loudnorm_target: float = 0.0           # 0=off, otherwise LUFS in [-70,-5]
+    multi_audio_passthrough: bool = True   # mux every audio stream
+    # Performance / decode
+    decode_hw_accel: str = "off"           # off/auto/any/d3d11/vaapi/mfx
+    prefetch_decode: bool = True           # worker-thread frame prefetcher
+    prefetch_queue_size: int = 0           # 0=auto (max(8, batch_size*2))
+    input_fps: float = 24.0                # FPS for directory-of-images input
+    # Quality
+    quality_report_sheet: bool = False     # render side-by-side PNG
+    # Editorial filters (chyron classifier)
+    remove_subtitles: bool = True
+    remove_chyrons: bool = True
+    chyron_min_hits: int = 90              # Kalman hits to classify as chyron
+    # Karaoke per-syllable grouping
+    karaoke_grouping: bool = False
+    karaoke_x_gap_px: int = 20
+    karaoke_y_overlap: float = 0.5
+
     # UI state (persisted across sessions; not part of processing config)
     window_geometry: str = ""  # e.g. "1240x860+100+60"
     adv_panel_open: bool = False
@@ -334,57 +361,27 @@ class ProcessingConfig:
     onboarding_seen: bool = False
 
     def to_dict(self) -> dict:
-        return {
-            "mode": self.mode.value,
-            "use_gpu": self.use_gpu,
-            "gpu_id": self.gpu_id,
-            "sttn_skip_detection": self.sttn_skip_detection,
-            "sttn_neighbor_stride": self.sttn_neighbor_stride,
-            "sttn_reference_length": self.sttn_reference_length,
-            "sttn_max_load_num": self.sttn_max_load_num,
-            "lama_super_fast": self.lama_super_fast,
-            "subtitle_area": list(self.subtitle_area) if self.subtitle_area else None,
-            "detection_lang": self.detection_lang,
-            "detection_threshold": self.detection_threshold,
-            "output_format": self.output_format,
-            "preserve_audio": self.preserve_audio,
-            "output_quality": self.output_quality,
-            "time_start": self.time_start,
-            "time_end": self.time_end,
-            "detection_frame_skip": self.detection_frame_skip,
-            "mask_dilate_px": self.mask_dilate_px,
-            "mask_feather_px": self.mask_feather_px,
-            "tbe_enable": self.tbe_enable,
-            "tbe_min_coverage": self.tbe_min_coverage,
-            "tbe_use_median": self.tbe_use_median,
-            "tbe_flow_warp": self.tbe_flow_warp,
-            "tbe_scene_cut_split": self.tbe_scene_cut_split,
-            "tbe_scene_cut_threshold": self.tbe_scene_cut_threshold,
-            "edge_ring_px": self.edge_ring_px,
-            "subtitle_areas": [list(r) for r in self.subtitle_areas] if self.subtitle_areas else None,
-            "auto_band": self.auto_band,
-            "export_srt": self.export_srt,
-            "export_mask_video": self.export_mask_video,
-            "adaptive_batch": self.adaptive_batch,
-            "auto_exposure_threshold": self.auto_exposure_threshold,
-            "deinterlace": self.deinterlace,
-            "deinterlace_auto": self.deinterlace_auto,
-            "keyframe_detection": self.keyframe_detection,
-            "quality_report": self.quality_report,
-            "kalman_tracking": self.kalman_tracking,
-            "kalman_iou_threshold": self.kalman_iou_threshold,
-            "kalman_max_age": self.kalman_max_age,
-            "phash_skip_enable": self.phash_skip_enable,
-            "phash_skip_distance": self.phash_skip_distance,
-            "colour_tune_enable": self.colour_tune_enable,
-            "colour_tune_tolerance": self.colour_tune_tolerance,
-            "use_hw_encode": self.use_hw_encode,
-            "window_geometry": self.window_geometry,
-            "adv_panel_open": self.adv_panel_open,
-            "log_panel_open": self.log_panel_open,
-            "onboarding_seen": self.onboarding_seen,
-            "vsr_settings_format": VSR_SETTINGS_FORMAT,
-        }
+        """Persist every dataclass field automatically. Using
+        `dataclasses.fields` means new fields land in settings.json without
+        any further edits here -- the v3.13 GUI gap (13 backend fields
+        unreachable from the GUI) was rooted in a manual enumeration that
+        was easy to forget to update."""
+        from dataclasses import fields as _dc_fields
+        payload: dict = {}
+        for field_def in _dc_fields(self):
+            value = getattr(self, field_def.name)
+            if isinstance(value, InpaintMode):
+                payload[field_def.name] = value.value
+            elif field_def.name == "subtitle_area":
+                payload[field_def.name] = list(value) if value else None
+            elif field_def.name == "subtitle_areas":
+                payload[field_def.name] = (
+                    [list(r) for r in value] if value else None
+                )
+            else:
+                payload[field_def.name] = value
+        payload["vsr_settings_format"] = VSR_SETTINGS_FORMAT
+        return payload
 
     def normalized(self) -> 'ProcessingConfig':
         """Coerce persisted or imported values into a safe, UI-friendly shape."""
@@ -434,6 +431,31 @@ class ProcessingConfig:
         self.preserve_audio = _coerce_bool(self.preserve_audio, True)
         self.output_quality = _coerce_int(self.output_quality, 23, 15, 35)
         self.use_hw_encode = _coerce_bool(self.use_hw_encode, True)
+        # v3.13 GUI-exposed knobs -- mirror the backend coercion bounds so
+        # values that round-trip through settings.json land in the same
+        # safe shape that normalize_processing_config enforces.
+        target = _coerce_float(self.loudnorm_target, 0.0)
+        if target == 0.0 or -70.0 <= target <= -5.0:
+            self.loudnorm_target = target
+        else:
+            self.loudnorm_target = 0.0
+        accel = _coerce_text(self.decode_hw_accel, "off", 16).lower()
+        if accel not in {"off", "auto", "any", "d3d11", "vaapi", "mfx"}:
+            accel = "off"
+        self.decode_hw_accel = accel
+        self.multi_audio_passthrough = _coerce_bool(self.multi_audio_passthrough, True)
+        self.prefetch_decode = _coerce_bool(self.prefetch_decode, True)
+        self.prefetch_queue_size = _coerce_int(self.prefetch_queue_size, 0, 0, 512)
+        self.input_fps = _coerce_float(self.input_fps, 24.0, 1.0, 240.0)
+        self.quality_report_sheet = _coerce_bool(self.quality_report_sheet, False)
+        if self.quality_report_sheet:
+            self.quality_report = True
+        self.remove_subtitles = _coerce_bool(self.remove_subtitles, True)
+        self.remove_chyrons = _coerce_bool(self.remove_chyrons, True)
+        self.chyron_min_hits = _coerce_int(self.chyron_min_hits, 90, 1, 100000)
+        self.karaoke_grouping = _coerce_bool(self.karaoke_grouping, False)
+        self.karaoke_x_gap_px = _coerce_int(self.karaoke_x_gap_px, 20, 0, 1024)
+        self.karaoke_y_overlap = _coerce_float(self.karaoke_y_overlap, 0.5, 0.0, 1.0)
         self.window_geometry = _coerce_text(self.window_geometry, "", 64)
         self.adv_panel_open = _coerce_bool(self.adv_panel_open, False)
         self.log_panel_open = _coerce_bool(self.log_panel_open, True)
@@ -442,57 +464,30 @@ class ProcessingConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> 'ProcessingConfig':
-        mode = data.get("mode", InpaintMode.STTN.value)
-        return cls(
-            mode=mode,
-            use_gpu=data.get("use_gpu", True),
-            gpu_id=data.get("gpu_id", 0),
-            sttn_skip_detection=data.get("sttn_skip_detection", False),
-            sttn_neighbor_stride=data.get("sttn_neighbor_stride", 10),
-            sttn_reference_length=data.get("sttn_reference_length", 10),
-            sttn_max_load_num=data.get("sttn_max_load_num", 30),
-            lama_super_fast=data.get("lama_super_fast", False),
-            subtitle_area=_coerce_rect(data.get("subtitle_area")),
-            detection_lang=data.get("detection_lang", "en"),
-            detection_threshold=data.get("detection_threshold", 0.5),
-            output_format=data.get("output_format", "mp4"),
-            preserve_audio=data.get("preserve_audio", True),
-            output_quality=data.get("output_quality", 23),
-            time_start=data.get("time_start", 0.0),
-            time_end=data.get("time_end", 0.0),
-            detection_frame_skip=data.get("detection_frame_skip", 0),
-            mask_dilate_px=data.get("mask_dilate_px", 8),
-            mask_feather_px=data.get("mask_feather_px", 4),
-            tbe_enable=data.get("tbe_enable", True),
-            tbe_min_coverage=data.get("tbe_min_coverage", 3),
-            tbe_use_median=data.get("tbe_use_median", True),
-            tbe_flow_warp=data.get("tbe_flow_warp", False),
-            tbe_scene_cut_split=data.get("tbe_scene_cut_split", True),
-            tbe_scene_cut_threshold=data.get("tbe_scene_cut_threshold", 0.35),
-            edge_ring_px=data.get("edge_ring_px", 2),
-            subtitle_areas=_coerce_rect_list(data.get("subtitle_areas")),
-            auto_band=data.get("auto_band", False),
-            export_srt=data.get("export_srt", False),
-            export_mask_video=data.get("export_mask_video", False),
-            adaptive_batch=data.get("adaptive_batch", True),
-            auto_exposure_threshold=data.get("auto_exposure_threshold", 0.55),
-            deinterlace=data.get("deinterlace", False),
-            deinterlace_auto=data.get("deinterlace_auto", True),
-            keyframe_detection=data.get("keyframe_detection", False),
-            quality_report=data.get("quality_report", False),
-            kalman_tracking=data.get("kalman_tracking", True),
-            kalman_iou_threshold=data.get("kalman_iou_threshold", 0.3),
-            kalman_max_age=data.get("kalman_max_age", 2),
-            phash_skip_enable=data.get("phash_skip_enable", True),
-            phash_skip_distance=data.get("phash_skip_distance", 4),
-            colour_tune_enable=data.get("colour_tune_enable", False),
-            colour_tune_tolerance=data.get("colour_tune_tolerance", 25),
-            use_hw_encode=data.get("use_hw_encode", True),
-            window_geometry=data.get("window_geometry", ""),
-            adv_panel_open=data.get("adv_panel_open", False),
-            log_panel_open=data.get("log_panel_open", True),
-            onboarding_seen=data.get("onboarding_seen", False),
-        ).normalized()
+        """Reconstruct a config from a settings.json payload. Walks
+        `dataclasses.fields` so every declared field is restored. Unknown
+        keys are ignored; missing keys fall back to the dataclass default.
+        Rect fields go through the dedicated coercers before normalisation
+        so a non-iterable payload (`{"subtitle_area": 42}`) never crashes
+        the loader -- the regression case covered by from_dict tests."""
+        if not isinstance(data, dict):
+            data = {}
+        from dataclasses import fields as _dc_fields
+        kwargs: dict = {}
+        for field_def in _dc_fields(cls):
+            name = field_def.name
+            if name not in data:
+                continue
+            raw = data.get(name)
+            if name == "mode":
+                kwargs[name] = raw  # _coerce_gui_mode applied in normalize
+            elif name == "subtitle_area":
+                kwargs[name] = _coerce_rect(raw)
+            elif name == "subtitle_areas":
+                kwargs[name] = _coerce_rect_list(raw)
+            else:
+                kwargs[name] = raw
+        return cls(**kwargs).normalized()
 
 
 @dataclass
@@ -678,6 +673,15 @@ def _migrate_settings(data: dict) -> dict:
         data = dict(data)
         data["vsr_settings_format"] = 1
         version = 1
+
+    # version 1 -> 2: B-1 wired the 13 v3.13 backend fields through the
+    # GUI. The new keys default to the backend's existing defaults so a
+    # legacy payload missing them resolves to the v3.12 behaviour; we
+    # only need to bump the version tag here.
+    if version < 2:
+        data = dict(data)
+        data["vsr_settings_format"] = 2
+        version = 2
 
     return data
 
@@ -2987,6 +2991,23 @@ class VideoSubtitleRemoverApp:
             self.config.keyframe_detection = self.keyframe_var.get()
         if hasattr(self, 'quality_report_var'):
             self.config.quality_report = self.quality_report_var.get()
+        # v3.13 GUI-exposed toggles
+        if hasattr(self, 'quality_sheet_var'):
+            self.config.quality_report_sheet = self.quality_sheet_var.get()
+        if hasattr(self, 'multi_audio_var'):
+            self.config.multi_audio_passthrough = self.multi_audio_var.get()
+        if hasattr(self, 'loudnorm_var'):
+            self.config.loudnorm_target = self._safe_float(self.loudnorm_var.get(), 0.0)
+        if hasattr(self, 'decode_accel_var'):
+            self.config.decode_hw_accel = self.decode_accel_var.get()
+        if hasattr(self, 'prefetch_var'):
+            self.config.prefetch_decode = self.prefetch_var.get()
+        if hasattr(self, 'remove_subs_var'):
+            self.config.remove_subtitles = self.remove_subs_var.get()
+        if hasattr(self, 'remove_chyrons_var'):
+            self.config.remove_chyrons = self.remove_chyrons_var.get()
+        if hasattr(self, 'karaoke_grouping_var'):
+            self.config.karaoke_grouping = self.karaoke_grouping_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -4122,6 +4143,110 @@ class VideoSubtitleRemoverApp:
 
         tk.Label(time_inner, text="0 uses the full clip", font=f(Theme.F_META),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left", padx=(Theme.S_MD, 0))
+
+        # ---- v3.13 GUI-exposed knobs ------------------------------------
+        # Editorial: chyron vs subtitle filter + karaoke grouping
+        editorial_frame = self._create_card(self.adv_panel)
+        editorial_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
+        self._card_header(editorial_frame, "Editorial", "Filter what gets removed")
+
+        self.remove_subs_var = tk.BooleanVar(value=self.config.remove_subtitles)
+        remove_subs_toggle = ModernToggle(
+            editorial_frame,
+            text="Remove dialogue subtitles (short-lived OCR tracks)",
+            variable=self.remove_subs_var,
+        )
+        remove_subs_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        Tooltip(remove_subs_toggle, "Tracks the chyron classifier marks as dialogue subtitles.")
+
+        self.remove_chyrons_var = tk.BooleanVar(value=self.config.remove_chyrons)
+        remove_chyrons_toggle = ModernToggle(
+            editorial_frame,
+            text="Remove persistent text (logos, tickers, lower-thirds)",
+            variable=self.remove_chyrons_var,
+        )
+        remove_chyrons_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(remove_chyrons_toggle, "Kalman tracks lasting longer than ~3s are treated as chyrons.")
+
+        self.karaoke_grouping_var = tk.BooleanVar(value=self.config.karaoke_grouping)
+        karaoke_toggle = ModernToggle(
+            editorial_frame,
+            text="Karaoke grouping: fuse per-syllable boxes on the same line",
+            variable=self.karaoke_grouping_var,
+        )
+        karaoke_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
+        Tooltip(karaoke_toggle, "Stops karaoke captions leaking original text through the gaps between syllables.")
+
+        # Audio card: loudnorm target + multi-track passthrough
+        audio_frame = self._create_card(self.adv_panel)
+        audio_frame.pack(fill="x", pady=(0, Theme.S_SM))
+        self._card_header(audio_frame, "Audio", "Loudness + tracks")
+
+        self.multi_audio_var = tk.BooleanVar(value=self.config.multi_audio_passthrough)
+        multi_audio_toggle = ModernToggle(
+            audio_frame,
+            text="Pass through every audio stream (Bluray/DVD multi-track)",
+            variable=self.multi_audio_var,
+        )
+        multi_audio_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        Tooltip(multi_audio_toggle, "Mux every audio stream from the source. Off keeps only the first track.")
+
+        loudnorm_row = tk.Frame(audio_frame, bg=Theme.BG_CARD)
+        loudnorm_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
+        tk.Label(loudnorm_row, text="EBU R128 loudness target", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        self.loudnorm_var = tk.StringVar(value=str(self.config.loudnorm_target or 0.0))
+        loudnorm_entry = tk.Entry(
+            loudnorm_row, width=7, bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY, font=f(Theme.F_BODY_SM),
+            insertbackground=Theme.TEXT_PRIMARY,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS,
+            relief="flat", bd=6, textvariable=self.loudnorm_var)
+        loudnorm_entry.pack(side="left", padx=(Theme.S_SM, Theme.S_MD))
+        tk.Label(loudnorm_row,
+                 text="LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23.",
+                 font=f(Theme.F_META),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left")
+
+        # Performance card: decode HW accel + prefetch
+        perf_frame = self._create_card(self.adv_panel)
+        perf_frame.pack(fill="x", pady=(0, Theme.S_SM))
+        self._card_header(perf_frame, "Performance", "Decode pipeline")
+
+        accel_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
+        accel_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        tk.Label(accel_row, text="Hardware-decode hint", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        self.decode_accel_var = tk.StringVar(value=self.config.decode_hw_accel or "off")
+        accel_combo = ttk.Combobox(
+            accel_row, textvariable=self.decode_accel_var, width=10,
+            values=["off", "auto", "any", "d3d11", "vaapi", "mfx"],
+            state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
+        )
+        accel_combo.pack(side="right")
+        Tooltip(accel_combo, "Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames.")
+
+        self.prefetch_var = tk.BooleanVar(value=self.config.prefetch_decode)
+        prefetch_toggle = ModernToggle(
+            perf_frame,
+            text="Worker-thread frame prefetch (overlap decode and inpaint)",
+            variable=self.prefetch_var,
+        )
+        prefetch_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
+        Tooltip(prefetch_toggle, "Decouples cv2.VideoCapture.read() from the detect+inpaint critical path. On by default.")
+
+        # Quality sheet toggle (lives under Output but kept separate so we
+        # don't disturb the existing Output card layout)
+        self.quality_sheet_var = tk.BooleanVar(value=self.config.quality_report_sheet)
+        quality_sheet_toggle = ModernToggle(
+            quality_frame,
+            text="Quality report sheet (side-by-side PNG comparison)",
+            variable=self.quality_sheet_var,
+        )
+        quality_sheet_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        Tooltip(quality_sheet_toggle, "Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report.")
 
         self._update_region_label_display()
         self._update_mode_options()
@@ -6538,6 +6663,21 @@ class VideoSubtitleRemoverApp:
                 colour_tune_enable=getattr(item.config, 'colour_tune_enable', False),
                 colour_tune_tolerance=getattr(item.config, 'colour_tune_tolerance', 25),
                 use_hw_encode=getattr(item.config, 'use_hw_encode', True),
+                # v3.13 GUI-exposed fields: previously CLI-only, now plumbed
+                # through so a GUI user can drive every backend feature.
+                loudnorm_target=getattr(item.config, 'loudnorm_target', 0.0),
+                multi_audio_passthrough=getattr(item.config, 'multi_audio_passthrough', True),
+                decode_hw_accel=getattr(item.config, 'decode_hw_accel', 'off'),
+                prefetch_decode=getattr(item.config, 'prefetch_decode', True),
+                prefetch_queue_size=getattr(item.config, 'prefetch_queue_size', 0),
+                input_fps=getattr(item.config, 'input_fps', 24.0),
+                quality_report_sheet=getattr(item.config, 'quality_report_sheet', False),
+                remove_subtitles=getattr(item.config, 'remove_subtitles', True),
+                remove_chyrons=getattr(item.config, 'remove_chyrons', True),
+                chyron_min_hits=getattr(item.config, 'chyron_min_hits', 90),
+                karaoke_grouping=getattr(item.config, 'karaoke_grouping', False),
+                karaoke_x_gap_px=getattr(item.config, 'karaoke_x_gap_px', 20),
+                karaoke_y_overlap=getattr(item.config, 'karaoke_y_overlap', 0.5),
             )
 
             # Auto subtitle-band detection -- run before the main pass so we
