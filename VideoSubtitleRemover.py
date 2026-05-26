@@ -2969,6 +2969,17 @@ class VideoSubtitleRemoverApp:
         # every Canvas / ttk style reads the swapped palette on first draw.
         if getattr(self.config, "high_contrast", False):
             apply_high_contrast_theme()
+        # RM-97: bind a gettext catalog if one matches the user's locale.
+        # No-op when no `.mo` file ships -- every UI string falls back to
+        # the literal english form.
+        try:
+            import locale as _locale
+            _user_locale = (_locale.getlocale()[0] or "").split("_")[0]
+            from backend.i18n import bind_locale as _bind_locale
+            if _user_locale and _user_locale != "en":
+                _bind_locale(_user_locale)
+        except Exception:
+            pass
         self.queue: List[QueueItem] = []
         self.queue_widgets: dict = {}
         self.is_processing = False
@@ -7913,6 +7924,20 @@ class VideoSubtitleRemoverApp:
 
     def _notify_completion(self, complete: int, errors: int):
         """Flash taskbar + play sound when batch processing finishes."""
+        # RM-95: screen-reader announcement so NVDA / Narrator users
+        # learn the batch finished without polling the activity log.
+        try:
+            from backend.a11y import announce
+            if errors == 0:
+                announce(f"Batch complete. {complete} items processed.")
+            else:
+                announce(
+                    f"Batch finished with {errors} errors. "
+                    f"{complete} items processed.",
+                    importance="high",
+                )
+        except Exception:
+            pass
         # Flash the taskbar icon to draw attention
         try:
             import ctypes
