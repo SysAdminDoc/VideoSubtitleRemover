@@ -1057,6 +1057,7 @@ _CURATED_LANG_NAMES: Tuple[Tuple[str, str], ...] = (
     ("ch", "Chinese"),
     ("japan", "Japanese"),
     ("ja", "Japanese"),
+    ("manga", "Manga / Anime (vertical JP via manga-ocr)"),
     ("ko", "Korean"),
     ("korean", "Korean"),
     ("fr", "French"),
