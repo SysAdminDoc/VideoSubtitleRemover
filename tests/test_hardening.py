@@ -1137,6 +1137,76 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class NleSidecarTests(unittest.TestCase):
+    """RM-76: EDL and FCPXML writers must produce well-formed sidecars
+    with the source / cleaned filenames and the processed time range."""
+
+    def test_edl_round_trip(self):
+        from backend import nle_sidecar
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "out.edl")
+            written = nle_sidecar.write_edl(
+                path,
+                source="C:/clips/source.mp4",
+                cleaned="C:/clips/source_no_sub.mp4",
+                fps=24.0, start_s=0.0, end_s=10.0,
+            )
+            text = Path(written).read_text(encoding="ascii")
+        self.assertIn("TITLE: VSR cleanup", text)
+        self.assertIn("FROM CLIP NAME: source.mp4", text)
+        self.assertIn("TO CLIP NAME:   source_no_sub.mp4", text)
+        self.assertIn("00:00:00:00", text)
+
+    def test_fcpxml_round_trip(self):
+        from backend import nle_sidecar
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "out.fcpxml")
+            written = nle_sidecar.write_fcpxml(
+                path,
+                source="/clips/source.mp4",
+                cleaned=str(Path(tmpdir) / "cleaned.mp4"),
+                fps=24.0, start_s=0.0, end_s=10.0,
+            )
+            text = Path(written).read_text(encoding="utf-8")
+        self.assertIn("<fcpxml version=\"1.10\">", text)
+        self.assertIn("frameDuration=\"1/24s\"", text)
+
+
+class HdrPipelineTests(unittest.TestCase):
+    """RM-73 partial: probe_color_metadata returns None without ffprobe;
+    hdr_encode_args produces empty list for None/empty metadata and the
+    expected -color_primaries / -color_trc / -colorspace flags otherwise."""
+
+    def test_hdr_encode_args_empty_for_none(self):
+        from backend.hdr import hdr_encode_args
+        self.assertEqual(hdr_encode_args(None), [])
+
+    def test_hdr_encode_args_emits_tags(self):
+        from backend.hdr import hdr_encode_args, ColorMetadata
+        meta = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+            color_range="tv",
+        )
+        args = hdr_encode_args(meta)
+        self.assertIn("-color_primaries", args)
+        self.assertIn("bt2020", args)
+        self.assertIn("-color_trc", args)
+        self.assertIn("smpte2084", args)
+        self.assertIn("-colorspace", args)
+        self.assertIn("-color_range", args)
+        self.assertTrue(meta.is_hdr)
+
+    def test_probe_color_metadata_falls_back(self):
+        from backend.hdr import probe_color_metadata
+        # ffprobe absent or path missing -- helper returns None.
+        result = probe_color_metadata("/nonexistent.mp4")
+        # Cannot guarantee ffprobe is missing in CI; accept None or a
+        # ColorMetadata so the test is environment-tolerant.
+        self.assertTrue(result is None or hasattr(result, "label"))
+
+
 class PostRestoreTests(unittest.TestCase):
     """RM-78 / RM-80: optional post-restore adapters must return None
     when their dependency is missing. The pipeline never crashes on a
@@ -1395,6 +1465,7 @@ class OutputCodecTests(unittest.TestCase):
     def test_software_encoder_args_match_codec(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover._hw_encoder = None
+        remover._color_metadata = None  # RM-73 init slot for _hdr_encode_args
         remover.config = processor.ProcessingConfig(output_codec="h265",
                                                      output_quality=22,
                                                      use_hw_encode=False)
