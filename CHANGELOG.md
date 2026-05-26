@@ -22,6 +22,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **PySceneDetect-backed scene cut detector (RM-32, opt-in).** New
+  `tbe_scene_cut_use_pyscenedetect` field; when on and `scenedetect`
+  is `pip install`-ed, the TBE batch-splitter uses PySceneDetect's
+  AdaptiveDetector instead of the built-in histogram correlator.
+  Handles dissolves and flashes that mis-fire on the histogram path.
+  Defaults off; the histogram path stays the zero-dep default.
+
 - **Vertical text mode (RM-24).** Japanese tategaki and classical
   Chinese subtitle columns now detect cleanly. The detector wrapper
   rotates each frame 90 CCW before invoking whichever engine is

@@ -1137,6 +1137,27 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class PySceneDetectAdapterTests(unittest.TestCase):
+    """RM-32: PySceneDetect adapter must return None when the optional
+    dep is absent, and the histogram path stays the default."""
+
+    def test_adapter_returns_none_without_dep(self):
+        import numpy as _np
+        frames = [_np.zeros((10, 10, 3), dtype=_np.uint8) for _ in range(3)]
+        # The CI environment doesn't have scenedetect installed; the
+        # adapter must return None instead of raising.
+        result = processor._detect_scene_cuts_pyscenedetect(frames)
+        self.assertIsNone(result)
+
+    def test_default_path_is_histogram(self):
+        import numpy as _np
+        frames = [_np.full((10, 10, 3), v, dtype=_np.uint8) for v in (50, 50, 200, 200)]
+        cuts = processor._detect_scene_cuts(frames, threshold=0.5)
+        # The 50 -> 200 step is a cut; cuts must include index 0 and 2.
+        self.assertIn(0, cuts)
+        self.assertIn(2, cuts)
+
+
 class InpainterRegistryTests(unittest.TestCase):
     """RFP-L-2: every built-in mode must be registered; resolve()
     returns the registered builder; missing modes raise KeyError so
