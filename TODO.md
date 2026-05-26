@@ -62,7 +62,7 @@
 - [x] P1 RFP-L-3 docs/architecture.md contributor map
 - [x] P1 RM-25 LaMa via ONNX Runtime (opt-in via VSR_LAMA_ONNX)
 - [x] P1 RM-26 MI-GAN fast mode (opt-in via VSR_MIGAN_ONNX)
-- [ ] P1 RM-27 Whisper fallback when OCR confidence floor is hit
+- [x] P1 RM-27 Whisper fallback when OCR returns no boxes inside a speech span
 - [x] P1 RM-32 PySceneDetect-backed scene splitter (opt-in)
 
 ## Phase 6 -- Polish (P3)

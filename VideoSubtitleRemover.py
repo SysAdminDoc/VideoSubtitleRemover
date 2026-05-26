@@ -340,6 +340,8 @@ class ProcessingConfig:
     detection_lang: str = "en"
     detection_threshold: float = 0.5
     detection_vertical: bool = False    # RM-24 vertical-text mode
+    whisper_fallback: bool = False       # RM-27 Whisper-driven mask fallback
+    whisper_model_size: str = "tiny"
 
     # Time range (video only, seconds)
     time_start: float = 0.0
@@ -461,6 +463,11 @@ class ProcessingConfig:
         self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
         self.detection_vertical = _coerce_bool(self.detection_vertical, False)
+        self.whisper_fallback = _coerce_bool(self.whisper_fallback, False)
+        wm = _coerce_text(self.whisper_model_size, "tiny", 16).lower()
+        if wm not in {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}:
+            wm = "tiny"
+        self.whisper_model_size = wm
         self.time_start = max(0.0, _coerce_float(self.time_start, 0.0))
         self.time_end = max(0.0, _coerce_float(self.time_end, 0.0))
         if self.time_end and self.time_end < self.time_start:
@@ -7470,6 +7477,8 @@ class VideoSubtitleRemoverApp:
                 detection_lang=lang,
                 detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
                 detection_vertical=getattr(item.config, 'detection_vertical', False),
+                whisper_fallback=getattr(item.config, 'whisper_fallback', False),
+                whisper_model_size=getattr(item.config, 'whisper_model_size', 'tiny'),
                 subtitle_area=item.config.subtitle_area,
                 time_start=getattr(item.config, 'time_start', 0.0),
                 time_end=getattr(item.config, 'time_end', 0.0),

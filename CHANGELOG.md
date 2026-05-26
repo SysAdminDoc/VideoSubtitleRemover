@@ -22,6 +22,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Whisper-driven mask fallback (RM-27, opt-in).** When
+  `whisper_fallback` is on AND `faster-whisper` is `pip install`-ed,
+  `process_video` extracts the audio track, runs Whisper once per
+  file, and applies a default bottom-band mask to frames whose OCR
+  returned no boxes but whose timecode falls inside a speech span.
+  Catches anti-aliased / motion-blurred / decorative subtitles the
+  OCR cascade misses. New `backend/whisper_fallback.py` module;
+  CLI `--whisper-fallback` and `--whisper-model {tiny|base|small|
+  medium|large|large-v2|large-v3}`. The audio extraction temp dir
+  is cleaned up in the same finally block as the main temp dir.
+
 - **LaMa-ONNX inpainter backend (RM-25, opt-in).** Set
   `VSR_LAMA_ONNX=<path to lama_fp32.onnx>` and `pip install
   onnxruntime` / `onnxruntime-gpu` to swap the default PyTorch LaMa
