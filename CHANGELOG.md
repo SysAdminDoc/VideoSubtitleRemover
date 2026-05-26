@@ -22,6 +22,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **GUI localisation scaffold (RM-97).** New `backend/i18n.py`
+  exposes `bind_locale(lang)` + `_("...")` so a future translation
+  catalog can drop into `locale/<lang>/LC_MESSAGES/vsr.mo` and bind
+  on startup without further code changes. Locale auto-detection
+  uses `locale.getlocale()`; non-`en` users get a translated UI
+  whenever a catalog ships. A `locale/vsr.pot` template seeds the
+  first wave of strings translators can target.
+- **UIA screen-reader announce scaffold (RM-95).** New
+  `backend/a11y.py` exposes `announce(text, importance)` that fires
+  a Windows UIA notification readable by NVDA / Narrator. Probed
+  lazily via comtypes; silent no-op on non-Windows / missing deps.
+  Wired into `_notify_completion` so screen-reader users learn the
+  batch finished (and how many errors landed) without polling the
+  activity log.
+
 - **HDR / colorspace metadata passthrough (RM-73 partial).** New
   `backend/hdr.py` probes the source's color signalling via ffprobe
   (`color_primaries`, `color_transfer`, `color_space`, `color_range`)

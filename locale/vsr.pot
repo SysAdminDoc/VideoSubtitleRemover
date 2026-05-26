@@ -1,0 +1,161 @@
+# Video Subtitle Remover Pro -- translation template
+# Copyright (C) 2026 SysAdminDoc
+# This file is distributed under the same MIT license as the project.
+#
+# To add a new language:
+#   1. Copy this file to locale/<lang>/LC_MESSAGES/vsr.po (e.g. ja, pt_BR).
+#   2. Translate the msgstr lines.
+#   3. Compile with `msgfmt vsr.po -o vsr.mo`.
+#   4. Drop the .mo next to the .po. The GUI auto-binds on startup
+#      when the user's locale matches.
+#
+# Keys below are the first wave of strings extracted from the GUI; a
+# follow-up commit will route every label through gettext('_') so this
+# template stays exhaustive.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: VSR 3.13.0\n"
+"Report-Msgid-Bugs-To: github.com/SysAdminDoc/VideoSubtitleRemover/issues\n"
+"POT-Creation-Date: 2026-05-25 12:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Start batch"
+msgstr ""
+
+msgid "Stop batch"
+msgstr ""
+
+msgid "Stopping..."
+msgstr ""
+
+msgid "Add files"
+msgstr ""
+
+msgid "Choose folder"
+msgstr ""
+
+msgid "Set region"
+msgstr ""
+
+msgid "Reset"
+msgstr ""
+
+msgid "Preview cleanup"
+msgstr ""
+
+msgid "A/B compare"
+msgstr ""
+
+msgid "Review mask"
+msgstr ""
+
+msgid "Full size"
+msgstr ""
+
+msgid "Override settings for this file..."
+msgstr ""
+
+msgid "Repeat with these settings"
+msgstr ""
+
+msgid "Cancel this item"
+msgstr ""
+
+msgid "Remove from queue"
+msgstr ""
+
+msgid "Ready to process"
+msgstr ""
+
+msgid "Complete!"
+msgstr ""
+
+msgid "Processing failed"
+msgstr ""
+
+msgid "Cancelled"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Profile"
+msgstr ""
+
+msgid "Workflow"
+msgstr ""
+
+msgid "Detection"
+msgstr ""
+
+msgid "Output"
+msgstr ""
+
+msgid "Audio"
+msgstr ""
+
+msgid "Performance"
+msgstr ""
+
+msgid "Editorial"
+msgstr ""
+
+msgid "Video range"
+msgstr ""
+
+msgid "Algorithm"
+msgstr ""
+
+msgid "Compute device"
+msgstr ""
+
+msgid "Subtitle language"
+msgstr ""
+
+msgid "Sensitivity"
+msgstr ""
+
+msgid "Mask dilate"
+msgstr ""
+
+msgid "Mask feather"
+msgstr ""
+
+msgid "Output codec"
+msgstr ""
+
+msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
+msgstr ""
+
+msgid "Preserve the source audio track"
+msgstr ""
+
+msgid "Pass through every audio stream (Bluray/DVD multi-track)"
+msgstr ""
+
+msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
+msgstr ""
+
+msgid "High-contrast theme (restart required)"
+msgstr ""
+
+msgid "Quality report sheet (side-by-side PNG comparison)"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+msgid "About"
+msgstr ""
