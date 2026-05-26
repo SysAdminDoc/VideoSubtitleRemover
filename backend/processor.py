@@ -1672,6 +1672,13 @@ class ProPainterInpainter(BaseInpainter):
         return out
 
 
+# RFP-L-2: each built-in inpainter registers itself below so the
+# dispatch in SubtitleRemover._create_inpainter no longer needs an
+# if-elif chain. Opt-in third-party backends can `register()` from
+# their own module to inject a new mode without modifying core code.
+from backend import inpainter_registry as _inpainter_registry
+
+
 class AutoInpainter(BaseInpainter):
     """Per-batch routing between TBE (fast, temporal) and LaMa (robust,
     spatial). Computes a coverage score on the batch -- how many masked
@@ -2095,6 +2102,17 @@ class _PrefetchReader:
         return self._cap.get(prop)
 
 
+# Register the four built-in inpainters with the plugin registry so the
+# dispatch in SubtitleRemover._create_inpainter is data-driven rather
+# than a hardcoded if/elif chain. New backends can land as standalone
+# modules that import `inpainter_registry.register` and a BaseInpainter
+# subclass.
+_inpainter_registry.register("sttn", lambda device, config: STTNInpainter(device, config))
+_inpainter_registry.register("lama", lambda device, config: LAMAInpainter(device, config))
+_inpainter_registry.register("propainter", lambda device, config: ProPainterInpainter(device, config))
+_inpainter_registry.register("auto", lambda device, config: AutoInpainter(device, config))
+
+
 class _LosslessIntermediateWriter:
     """Streams BGR frames to ffmpeg via stdin and writes a lossless FFV1
     intermediate (`.mkv` container).
@@ -2399,15 +2417,19 @@ class SubtitleRemover:
             cap.release()
 
     def _create_inpainter(self) -> BaseInpainter:
-        if self.config.mode == InpaintMode.STTN:
-            return STTNInpainter(self.config.device, self.config)
-        elif self.config.mode == InpaintMode.LAMA:
-            return LAMAInpainter(self.config.device, self.config)
-        elif self.config.mode == InpaintMode.PROPAINTER:
-            return ProPainterInpainter(self.config.device, self.config)
-        elif self.config.mode == InpaintMode.AUTO:
-            return AutoInpainter(self.config.device, self.config)
-        return STTNInpainter(self.config.device, self.config)
+        """RFP-L-2: dispatch through the plugin registry. A new backend
+        becomes available as soon as it registers itself; we no longer
+        need to edit this dispatch to add an InpaintMode value (though
+        the enum still gates the GUI / CLI for safety)."""
+        try:
+            builder = _inpainter_registry.resolve(self.config.mode.value)
+        except KeyError:
+            logger.warning(
+                f"No inpainter registered for {self.config.mode.value!r}; "
+                f"falling back to STTN"
+            )
+            builder = _inpainter_registry.resolve("sttn")
+        return builder(self.config.device, self.config)
 
     def _report_progress(self, progress: float, message: str):
         if self.on_progress:
