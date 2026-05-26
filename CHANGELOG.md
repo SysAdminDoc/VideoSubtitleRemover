@@ -6,6 +6,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Diffusion inpainter scaffolds (RM-59/60/61/62/63/64/65, opt-in).**
+  New `backend/inpainters_diffusion.py` registers seven optional
+  video-inpainter backends with the plugin registry:
+  - `propainter-real` (sczhou/ProPainter ICCV 2023 reference)
+  - `diffueraser` (lixiaowen-xw/DiffuEraser 2025)
+  - `vace` (ali-vilab/VACE 1.3B MV2V)
+  - `videopainter`
+  - `cococo` (text-guided, prompt via `VSR_COCOCO_PROMPT`)
+  - `eraserdit` (research-stage track)
+  - `floed` (flow-guided efficient diffusion)
+  Each registers ONLY when its enable env var is set; missing
+  packages route through the existing TBE primitive so the pipeline
+  never crashes. Each becomes addressable via `--mode <name>` once
+  the user opts in.
+
 - **PyNvVideoCodec GPU-resident decode (RM-71, opt-in).** New
   `backend/decode_accel._PyNvVideoCapture` wraps NVIDIA's
   PyNvVideoCodec with a cv2.VideoCapture-shaped facade. Activated

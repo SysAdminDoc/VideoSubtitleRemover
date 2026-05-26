@@ -96,13 +96,13 @@
 
 ## Phase 9 -- Heavier inpainters (P3 v4.x targets)
 
-- [ ] P3 RM-59 Real ProPainter (ICCV 2023 reference)
-- [ ] P3 RM-60 DiffuEraser (2025 diffusion)
-- [ ] P3 RM-61 Wan2.1-VACE (1.3B variant)
-- [ ] P3 RM-62 VideoPainter
-- [ ] P3 RM-63 CoCoCo (research bench)
-- [ ] P3 RM-64 EraserDiT (track, integrate when stable)
-- [ ] P3 RM-65 FloED (flow-guided efficient diffusion)
+- [x] P3 RM-59 Real ProPainter scaffold (opt-in via VSR_PROPAINTER_REAL)
+- [x] P3 RM-60 DiffuEraser scaffold (opt-in via VSR_DIFFUERASER)
+- [x] P3 RM-61 Wan2.1-VACE scaffold (opt-in via VSR_VACE)
+- [x] P3 RM-62 VideoPainter scaffold (opt-in via VSR_VIDEOPAINTER)
+- [x] P3 RM-63 CoCoCo scaffold (opt-in via VSR_COCOCO)
+- [x] P3 RM-64 EraserDiT scaffold (opt-in via VSR_ERASERDIT)
+- [x] P3 RM-65 FloED scaffold (opt-in via VSR_FLOED)
 
 ## Phase 10 -- Mask / segmentation (P3 v4.x)
 
