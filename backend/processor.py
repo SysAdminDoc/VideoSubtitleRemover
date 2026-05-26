@@ -2368,6 +2368,14 @@ try:
 except Exception as _exc:
     logger.debug(f"ONNX inpainters module did not load: {_exc}")
 
+# RM-59 / RM-60 / RM-61 / RM-62 / RM-63 / RM-64 / RM-65: opt-in
+# diffusion inpainter scaffolds. Each is registered ONLY when the user
+# has set its enable env var; otherwise the import is a no-op.
+try:
+    from backend import inpainters_diffusion as _inpainters_diffusion  # noqa: F401
+except Exception as _exc:
+    logger.debug(f"Diffusion inpainters module did not load: {_exc}")
+
 
 class _LosslessIntermediateWriter:
     """Streams BGR frames to ffmpeg via stdin and writes a lossless FFV1
