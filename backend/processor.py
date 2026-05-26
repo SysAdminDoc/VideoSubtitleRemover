@@ -779,13 +779,36 @@ class SubtitleDetector:
             return self._fallback_detection(frame)
 
     def _fallback_detection(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
-        """Fallback detection using image processing when no OCR is available."""
+        """Fallback detection using image processing when no OCR is available.
+
+        EI-1: hardcoded 200 / 55 thresholds missed grey or mid-tone
+        subtitles (semi-transparent banners, dimly-lit captions). We now
+        pick thresholds from the frame's intensity percentiles so the
+        operator scales with the actual luminance distribution. The
+        bright threshold sits at the 95th percentile, the dark
+        threshold at the 5th. Clamped to [220, 240] / [15, 35] so we do
+        not flag the entire frame on a low-contrast source where the
+        percentile band is itself near the middle.
+        """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         h, w = frame.shape[:2]
 
-        # Detect both bright-on-dark and dark-on-bright text
-        _, thresh_bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-        _, thresh_dark = cv2.threshold(gray, 55, 255, cv2.THRESH_BINARY_INV)
+        # Percentile-based thresholds with a sane min-contrast clamp so a
+        # near-flat source cannot collapse both thresholds into the same
+        # mid value and mark the whole frame.
+        p_bright = float(np.percentile(gray, 95))
+        p_dark = float(np.percentile(gray, 5))
+        # Bright threshold: clamp BELOW the 95th percentile so we still
+        # mark the brightest 5% even on a low-contrast source. Stay
+        # comfortably above the median (>= median + 20) so the operator
+        # is meaningful.
+        median = float(np.median(gray))
+        bright_thresh = int(max(median + 20, min(245, p_bright - 1)))
+        dark_thresh = int(min(median - 20, max(10, p_dark + 1)))
+        bright_thresh = max(0, min(255, bright_thresh))
+        dark_thresh = max(0, min(255, dark_thresh))
+        _, thresh_bright = cv2.threshold(gray, bright_thresh, 255, cv2.THRESH_BINARY)
+        _, thresh_dark = cv2.threshold(gray, dark_thresh, 255, cv2.THRESH_BINARY_INV)
         combined = cv2.bitwise_or(thresh_bright, thresh_dark)
 
         # Morphological close to merge nearby character regions
@@ -3237,6 +3260,12 @@ def main():
     parser.add_argument("--pattern", help="Glob pattern for batch mode (e.g. 'inputs/*.mp4')")
     parser.add_argument("--out-dir", help="Output directory for batch mode")
     parser.add_argument("--config", help="JSON config file (key=value pairs overriding CLI defaults)")
+    parser.add_argument("--preset", metavar="NAME",
+                       help="Apply a built-in or user preset by name. Listed by "
+                            "--list-presets. Resolved before CLI flags so the CLI "
+                            "always wins on a conflict.")
+    parser.add_argument("--list-presets", action="store_true",
+                       help="Print every known preset (built-in + user) and exit.")
     parser.add_argument("--checkpoint-dir", default=None,
                        help="Checkpoint dir for crash-resume (default: %%APPDATA%%/.../checkpoints)")
     parser.add_argument("--no-resume", action="store_true",
@@ -3366,6 +3395,72 @@ def main():
     # captures every record from arg validation onward.
     if args.json_log:
         attach_json_log(args.json_log)
+
+    # --list-presets short-circuits everything else.
+    if args.list_presets:
+        from backend.presets import BUILTIN_PRESETS as _BUILTIN, load_user_presets as _load_user
+        rows = []
+        for name, payload in _BUILTIN.items():
+            rows.append(("built-in", name, payload.get("description", "")))
+        for name, payload in _load_user().items():
+            if name in _BUILTIN:
+                continue
+            desc = payload.get("description", "") if isinstance(payload, dict) else ""
+            rows.append(("user", name, desc))
+        width = max((len(n) for _, n, _ in rows), default=4)
+        for source, name, desc in rows:
+            print(f"[{source:<8}] {name.ljust(width)}  {desc}")
+        sys.exit(0)
+
+    # F-10: resolve --preset BEFORE the CLI flags overlay so a flag
+    # explicitly typed on the command line still wins on a conflict.
+    # The preset's `fields` dict is applied through argparse's existing
+    # defaults: we patch attributes on `args` whose default values
+    # weren't supplanted by an explicit flag. This way the existing
+    # `config = ProcessingConfig(... args.X ...)` block below picks up
+    # preset values automatically without a second code path.
+    if args.preset:
+        from backend.presets import preset_fields as _preset_fields
+        fields = _preset_fields(args.preset)
+        if fields is None:
+            parser.error(
+                f"unknown preset {args.preset!r}; run --list-presets to see options"
+            )
+        # Map preset field names to argparse attr names. Most match
+        # one-to-one; the legacy CLI uses different attr names for a
+        # handful of fields. We honour the parser default sentinel so
+        # only attrs the user did NOT pass on the command line are
+        # overridden by the preset.
+        attr_to_default = {a.dest: a.default for a in parser._actions}
+        field_to_attr = {
+            "mode": "mode",
+            "detection_threshold": "threshold",
+            "mask_dilate_px": "mask_dilate",
+            "mask_feather_px": "mask_feather",
+            "edge_ring_px": "edge_ring",
+            "tbe_flow_warp": "flow_warp",
+            "tbe_scene_cut_split": None,        # negative flag (--no-scene-split)
+            "colour_tune_enable": "colour_tune",
+            "colour_tune_tolerance": "colour_tolerance",
+            "kalman_tracking": None,            # negative flag (--no-kalman)
+            "phash_skip_enable": None,          # negative flag (--no-phash)
+            "phash_skip_distance": "phash_distance",
+            "auto_band": None,                  # GUI-only today
+            "detection_frame_skip": "frame_skip",
+        }
+        for fname, value in fields.items():
+            if fname == "mode":
+                # Preset uses GUI labels (e.g. "STTN" / "Auto" / "ProPainter").
+                # The CLI parser expects lowercase choices.
+                if getattr(args, "mode", None) == attr_to_default.get("mode"):
+                    args.mode = str(value).lower().replace(" ", "")
+                continue
+            attr = field_to_attr.get(fname, fname)
+            if attr is None or not hasattr(args, attr):
+                continue
+            if getattr(args, attr) == attr_to_default.get(attr):
+                setattr(args, attr, value)
+        logger.info(f"Applied preset: {args.preset}")
 
     # Validate: either --input or --pattern must be given. `--validate-config`
     # bypasses this so the user can dry-run flag combinations without supplying
