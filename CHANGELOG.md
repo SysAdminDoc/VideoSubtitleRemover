@@ -6,6 +6,22 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Quality report includes inpaint-region (ROI) PSNR/SSIM (B-3).** The
+  v3.12 quality report was computed over the entire frame, so unchanged
+  pixels (typically 80-95% of the area) dominated the metric and could
+  hide a bad inpaint behind a strong-looking overall score. The pipeline
+  now accumulates the union-mask bbox while processing and the report
+  returns both a whole-frame metric and an ROI-cropped metric. The
+  Good/Review tag is now driven by the ROI score when available. ROI
+  output: `{'roi_psnr': float, 'roi_ssim': float, 'roi_bbox': [x1,y1,x2,y2]}`
+  alongside the existing whole-frame fields.
+- **AutoInpainter unloads idle LaMa (B-5).** When the AUTO routing has
+  stayed on the TBE path for `LAMA_IDLE_UNLOAD_AFTER` consecutive
+  batches (50, ~1500 frames at batch=30), the lazily-loaded
+  `LAMAInpainter` reference is dropped and `torch.cuda.empty_cache()`
+  is called. A later hard batch re-loads on demand. Long videos that
+  hit one hard batch early no longer permanently pin ~1.5 GB VRAM.
+
 - **GUI: thirteen v3.13 backend fields are now reachable from the
   Advanced panel.** Loudness normalisation target (LUFS, 0 = off),
   multi-track audio passthrough toggle, hardware-decode hint dropdown

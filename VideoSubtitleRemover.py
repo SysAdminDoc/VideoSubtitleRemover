@@ -1104,7 +1104,11 @@ def truncate_middle(text: str, max_length: int = 56) -> str:
 
 
 def format_quality_report(metrics: Optional[dict], compact: bool = False) -> str:
-    """Format a PSNR / SSIM quality-report payload for the UI."""
+    """Format a PSNR / SSIM quality-report payload for the UI.
+
+    When the backend returns a `roi_psnr`/`roi_ssim` pair (B-3), surface the
+    inpaint-region score first -- that is the metric users actually care
+    about. The whole-frame score is reported alongside as context."""
     if not metrics:
         return ""
     try:
@@ -1113,7 +1117,25 @@ def format_quality_report(metrics: Optional[dict], compact: bool = False) -> str
     except (TypeError, ValueError):
         return ""
 
+    roi_psnr_raw = metrics.get("roi_psnr")
+    roi_ssim_raw = metrics.get("roi_ssim")
+    roi_psnr = None
+    roi_ssim = None
+    try:
+        if roi_psnr_raw is not None:
+            roi_psnr = float(roi_psnr_raw)
+        if roi_ssim_raw is not None:
+            roi_ssim = float(roi_ssim_raw)
+    except (TypeError, ValueError):
+        roi_psnr = None
+        roi_ssim = None
+
     if compact:
+        if roi_psnr is not None and roi_ssim is not None:
+            return (
+                f"inpaint PSNR {roi_psnr:.1f} dB - SSIM {roi_ssim:.4f} "
+                f"(frame SSIM {ssim:.4f})"
+            )
         return f"PSNR {psnr:.1f} dB - SSIM {ssim:.4f}"
 
     samples = metrics.get("samples")
@@ -1125,6 +1147,11 @@ def format_quality_report(metrics: Optional[dict], compact: bool = False) -> str
     suffix = ""
     if sample_count > 0:
         suffix = f" across {sample_count} sampled frame{'s' if sample_count != 1 else ''}"
+    if roi_psnr is not None and roi_ssim is not None:
+        return (
+            f"inpaint region PSNR {roi_psnr:.2f} dB and SSIM {roi_ssim:.4f}, "
+            f"whole frame PSNR {psnr:.2f} dB and SSIM {ssim:.4f}{suffix}"
+        )
     return f"PSNR {psnr:.2f} dB and SSIM {ssim:.4f}{suffix}"
 
 
