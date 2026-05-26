@@ -6,6 +6,26 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **VLM OCR detector cascade (RM-22, RM-23).** New
+  `backend/ocr_vlm.py` registers four optional detectors fronting the
+  default RapidOCR -> PaddleOCR -> Surya -> EasyOCR cascade. Pick one
+  via `VSR_VLM_OCR={florence2|qwen25vl|paddleocr-vl}`:
+  - **Florence-2** (microsoft/Florence-2-base) layout-aware OCR with
+    `<OCR_WITH_REGION>` quad boxes.
+  - **Qwen2.5-VL** (Qwen/Qwen2.5-VL-2B-Instruct) -- leads
+    OmniDocBench as of April 2026. Prompts the model for a JSON box
+    list.
+  - **PaddleOCR-VL** -- exposes PaddleOCR 3.0+'s `paddleocr_vl`
+    profile when the install ships it; falls back to PP-OCRv5
+    otherwise.
+- **Manga / anime mode (RM-42).** Setting `detection_lang="manga"`
+  routes through manga-ocr + comic-text-detector (if installed) to
+  pick up irregular speech-bubble shapes and vertical Japanese.
+  Falls back to an Otsu-derived single-bubble crop when
+  comic-text-detector isn't installed so the mode degrades
+  gracefully. The Subtitle Language picker now lists "Manga / Anime"
+  as a selectable language.
+
 - **Pre-detect denoise (RM-33, opt-in).** New
   `backend/preprocess.fastdvdnet_denoise_frame` runs FastDVDnet on the
   detection-frame stream when `VSR_FASTDVDNET` + torch are available,
