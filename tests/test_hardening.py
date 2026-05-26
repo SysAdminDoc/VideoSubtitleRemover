@@ -1137,6 +1137,42 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class PostRestoreTests(unittest.TestCase):
+    """RM-78 / RM-80: optional post-restore adapters must return None
+    when their dependency is missing. The pipeline never crashes on a
+    half-broken install."""
+
+    def test_realesrgan_skip_when_binary_missing(self):
+        from backend import post_restore as _pr
+        import shutil as _shutil
+        original = _shutil.which
+        try:
+            _shutil.which = lambda name: None
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = Path(tmpdir) / "in.mp4"
+                src.write_bytes(b"\x00" * 16)  # placeholder
+                dst = str(Path(tmpdir) / "out.mp4")
+                result = _pr.realesrgan_upscale(str(src), dst, scale=2)
+            self.assertIsNone(result)
+        finally:
+            _shutil.which = original
+
+    def test_film_grain_skip_when_ffmpeg_missing(self):
+        from backend import post_restore as _pr
+        import shutil as _shutil
+        original = _shutil.which
+        try:
+            _shutil.which = lambda name: None
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src = Path(tmpdir) / "in.mp4"
+                src.write_bytes(b"\x00" * 16)
+                dst = str(Path(tmpdir) / "out.mp4")
+                result = _pr.add_film_grain(str(src), dst, strength=0.04)
+            self.assertIsNone(result)
+        finally:
+            _shutil.which = original
+
+
 class WhisperFallbackTests(unittest.TestCase):
     """RM-27: Whisper fallback adapter must degrade gracefully when the
     optional dep is missing, and the segments_to_frame_spans helper must

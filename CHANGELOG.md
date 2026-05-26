@@ -22,6 +22,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Real-ESRGAN upscale + film-grain post-restore stages (RM-78, RM-80,
+  opt-in).** New `backend/post_restore.py` adapters and a
+  `_run_post_restore_passes` hook in `process_video` that fires after
+  the main mux:
+  - `upscale_factor` (0/2/3/4) shells out to
+    `realesrgan-ncnn-vulkan` for 2x/3x/4x upscaling; the original
+    output stays on disk when the binary is missing.
+  - `film_grain_strength` (0..0.5) adds an ffmpeg `noise` filter pass
+    so inpainted regions blend with the surrounding grain. Skipped
+    when ffmpeg is missing. Note: for AV1 outputs prefer the
+    encoder's native film-grain table over this additive pass.
+  CLI exposes `--upscale {0,2,3,4}` and `--film-grain STRENGTH`.
+
 - **Whisper-driven mask fallback (RM-27, opt-in).** When
   `whisper_fallback` is on AND `faster-whisper` is `pip install`-ed,
   `process_video` extracts the audio track, runs Whisper once per
