@@ -3581,6 +3581,10 @@ class VideoSubtitleRemoverApp:
         can_preview = bool(selected and PIL_AVAILABLE)
         self.preview_mask_btn.set_enabled(bool(selected) and not self.is_processing)
         self.preview_zoom_btn.set_enabled(can_preview)
+        if hasattr(self, "preview_inpaint_btn"):
+            self.preview_inpaint_btn.set_enabled(
+                bool(selected) and not self.is_processing
+            )
         self._preview_label.config(cursor="hand2" if can_preview else "")
 
         if selected:
@@ -3601,6 +3605,126 @@ class VideoSubtitleRemoverApp:
         item = self._get_selected_queue_item()
         if item:
             self._show_preview(item, show_mask=True)
+
+    def _open_selected_inpaint_preview(self):
+        """F-3: run a single-frame detect + inpaint pass on the selected
+        item and render the result in the preview pane. Lets users A/B
+        settings without committing a full batch run."""
+        item = self._get_selected_queue_item()
+        if item is None:
+            self._update_status("Select a queue item first", "warning")
+            return
+        if self.is_processing:
+            self._update_status("Pause the batch before previewing", "warning")
+            return
+        if not PIL_AVAILABLE:
+            self._update_status("Pillow required for inpaint preview", "warning")
+            return
+
+        self.preview_title_label.config(text=f"Inpainting {Path(item.file_path).name}")
+        self.preview_meta_label.config(text="Running detect + inpaint on the first frame...")
+        self._preview_label.config(image="", text="")
+        self._preview_photo = None
+        self._start_throbber()
+        self._preview_label.update_idletasks()
+        self._preview_request_id += 1
+        request_id = self._preview_request_id
+        snapshot_cfg = ProcessingConfig.from_dict(item.config.to_dict())
+        source_path = item.file_path
+
+        def _worker():
+            import cv2 as _cv2
+            try:
+                from backend.processor import (
+                    SubtitleRemover as _Remover,
+                    ProcessingConfig as _BackendCfg,
+                    InpaintMode as _BackendMode,
+                )
+                if is_image_file(source_path):
+                    frame = _cv2.imread(source_path)
+                elif is_video_file(source_path):
+                    cap = _cv2.VideoCapture(source_path)
+                    try:
+                        ret, frame = cap.read()
+                    finally:
+                        cap.release()
+                    if not ret:
+                        frame = None
+                else:
+                    frame = None
+                if frame is None:
+                    self.root.after(0, lambda: (
+                        self._stop_throbber(),
+                        self.preview_title_label.config(text="Preview unavailable"),
+                        self.preview_meta_label.config(text="The selected file could not be read."),
+                    ))
+                    return
+
+                # Build a backend config snapshot from the item.
+                mode_map = {
+                    "Auto": _BackendMode.AUTO,
+                    "STTN": _BackendMode.STTN,
+                    "LAMA": _BackendMode.LAMA,
+                    "ProPainter": _BackendMode.PROPAINTER,
+                }
+                backend_cfg = _BackendCfg(
+                    mode=mode_map.get(snapshot_cfg.mode.value, _BackendMode.STTN),
+                    device="cpu" if not snapshot_cfg.use_gpu else f"cuda:{snapshot_cfg.gpu_id}",
+                    detection_lang=snapshot_cfg.detection_lang,
+                    detection_threshold=snapshot_cfg.detection_threshold,
+                    subtitle_area=snapshot_cfg.subtitle_area,
+                    subtitle_areas=snapshot_cfg.subtitle_areas,
+                    mask_dilate_px=snapshot_cfg.mask_dilate_px,
+                    mask_feather_px=snapshot_cfg.mask_feather_px,
+                    tbe_enable=snapshot_cfg.tbe_enable,
+                )
+                remover = _Remover(backend_cfg)
+                # Single-frame inpaint -- detect, build mask, inpaint.
+                fixed = (snapshot_cfg.subtitle_areas
+                          or ([snapshot_cfg.subtitle_area] if snapshot_cfg.subtitle_area else None))
+                if fixed:
+                    boxes = list(fixed)
+                else:
+                    boxes = remover.detector.detect(
+                        frame, snapshot_cfg.detection_threshold)
+                if not boxes:
+                    # No detection -- show the source with a hint.
+                    pil = Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
+                    self.root.after(0, lambda: self._apply_inpaint_preview(
+                        pil, "No text detected on the first frame", request_id, item.id))
+                    return
+                mask = remover._create_mask(frame.shape, boxes)
+                [filled] = remover.inpainter.inpaint([frame], [mask])
+                pil = Image.fromarray(_cv2.cvtColor(filled, _cv2.COLOR_BGR2RGB))
+                meta = (f"Cleanup preview using {snapshot_cfg.mode.value}; "
+                        f"{len(boxes)} region{'s' if len(boxes) != 1 else ''} masked.")
+                self.root.after(0, lambda: self._apply_inpaint_preview(
+                    pil, meta, request_id, item.id))
+            except Exception as exc:
+                logger.warning(f"Inpaint preview failed: {exc}")
+                self.root.after(0, lambda: (
+                    self._stop_throbber(),
+                    self.preview_title_label.config(text="Inpaint preview failed"),
+                    self.preview_meta_label.config(text=str(exc)),
+                ))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_inpaint_preview(self, pil_img, meta_text, request_id, item_id):
+        if (request_id != self._preview_request_id
+                or self._selected_queue_item_id != item_id):
+            return
+        try:
+            self._stop_throbber()
+            max_w = max(220, self._preview_frame.winfo_width() - 36)
+            max_h = 158
+            pil_img.thumbnail((max_w, max_h), Image.LANCZOS)
+            self._preview_photo = ImageTk.PhotoImage(pil_img)
+            self._preview_label.config(image=self._preview_photo, text="")
+            self.preview_title_label.config(text="Inpaint preview")
+            self.preview_meta_label.config(text=meta_text)
+        except Exception:
+            pass
 
     def _build_ui(self):
         """Build the main user interface with balanced spacing rhythm."""
@@ -4542,6 +4666,20 @@ class VideoSubtitleRemoverApp:
         self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_zoom_btn,
                 "Open the selected source frame in a larger viewer.")
+        # F-3: cheap inpaint preview for the first frame of the selected
+        # item. Runs detect + inpaint once and renders the result inline
+        # so users can A/B settings before committing the batch.
+        self.preview_inpaint_btn = ModernButton(
+            preview_actions,
+            text="Preview cleanup",
+            width=128,
+            command=self._open_selected_inpaint_preview,
+            style="ghost",
+            size="sm",
+        )
+        self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self.preview_inpaint_btn,
+                "Run detect + inpaint on the first frame of the selected item.")
 
         self._preview_label = tk.Label(self._preview_frame, bg=Theme.BG_CARD,
                                        text="", font=f(Theme.F_META),
@@ -5601,8 +5739,16 @@ class VideoSubtitleRemoverApp:
         self._update_status(message)
 
     def _open_region_selector(self):
-        """Open a window to draw a subtitle region rectangle on the first frame."""
-        # Use the selected queue item first, then fall back to the first queued file.
+        """Open a region-selector window with frame scrubbing (F-1) and
+        multi-rectangle drawing (F-2).
+
+        Drag = primary rect (or new rect when "Add another" was clicked).
+        The frame slider re-loads the chosen frame so users can target a
+        non-zero timecode for clips that open on a black intro card. The
+        backend already accepts a `subtitle_areas` list; once the user
+        clicks "Save" we write a single rect to `subtitle_area` (back-
+        compat) AND the full rect list to `subtitle_areas`.
+        """
         source_path = None
         selected = self._get_selected_queue_item()
         if selected:
@@ -5619,109 +5765,231 @@ class VideoSubtitleRemoverApp:
             )
         if not source_path:
             return
+        if not PIL_AVAILABLE:
+            self._update_status("Pillow required for region selector")
+            return
 
-        # Load first frame
+        import cv2 as _cv2
+
+        is_video = is_video_file(source_path)
+        cap = _cv2.VideoCapture(source_path) if is_video else None
+        if is_video and not cap.isOpened():
+            logger.error("Could not open video for region selection")
+            return
         try:
-            import cv2 as _cv2
-            if is_video_file(source_path):
-                cap = _cv2.VideoCapture(source_path)
-                try:
-                    ret, frame = cap.read()
-                    if not ret:
-                        logger.error("Could not read video frame for region selection")
-                        return
-                finally:
-                    cap.release()
+            if is_video:
+                frame_count = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
+                fps = cap.get(_cv2.CAP_PROP_FPS) or 30.0
+                if fps <= 0:
+                    fps = 30.0
+                ret, frame = cap.read()
+                if not ret:
+                    logger.error("Could not read video frame for region selection")
+                    return
             else:
                 frame = _cv2.imread(source_path)
                 if frame is None:
                     logger.error("Could not read image for region selection")
                     return
+                frame_count, fps = 1, 30.0
+
+            orig_h, orig_w = frame.shape[:2]
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+            max_w = min(900, int(screen_w * 0.8))
+            max_h = min(540, int(screen_h * 0.7))
+            scale = min(max_w / orig_w, max_h / orig_h, 1.0)
+            disp_w, disp_h = int(orig_w * scale), int(orig_h * scale)
+
+            # Selector state: every saved rect lives in `rects` (image-
+            # space coordinates). Drag creates the current rect; on
+            # release it joins the list. Adding another rect re-arms the
+            # canvas for the next drag.
+            rects: List[Tuple[int, int, int, int]] = []
+            preload = self.config.subtitle_areas or (
+                [self.config.subtitle_area] if self.config.subtitle_area else []
+            )
+            rects.extend([tuple(r) for r in preload if r])
+
+            win = tk.Toplevel(self.root)
+            win.title("Choose subtitle region")
+            win.configure(bg=Theme.BG_OVERLAY)
+            win.resizable(False, False)
+
+            canvas = tk.Canvas(win, width=disp_w, height=disp_h, highlightthickness=0,
+                               bg=Theme.BG_DARK, cursor="cross")
+            canvas.pack()
+            canvas_image_id = canvas.create_image(0, 0, anchor="nw")
+            canvas._photo = None
+
+            rect_ids: List[int] = []
+            drag_id = [None]
+            drag_start = [0, 0]
+
+            def _frame_to_pil(bgr):
+                rgb = _cv2.cvtColor(bgr, _cv2.COLOR_BGR2RGB)
+                return Image.fromarray(rgb).resize((disp_w, disp_h), Image.LANCZOS)
+
+            def _draw_image(bgr):
+                pil = _frame_to_pil(bgr)
+                canvas._photo = ImageTk.PhotoImage(pil)
+                canvas.itemconfig(canvas_image_id, image=canvas._photo)
+
+            def _draw_saved_rects():
+                for rid in rect_ids:
+                    canvas.delete(rid)
+                rect_ids.clear()
+                for (x1, y1, x2, y2) in rects:
+                    rect_ids.append(canvas.create_rectangle(
+                        x1 * scale, y1 * scale, x2 * scale, y2 * scale,
+                        outline=Theme.GREEN_PRIMARY, width=2,
+                        stipple="gray25", fill=Theme.GREEN_PRIMARY,
+                    ))
+
+            def _seek_video(frame_idx: int):
+                if not is_video or cap is None:
+                    return
+                frame_idx = max(0, min(frame_count - 1, int(frame_idx)))
+                cap.set(_cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                ok, f = cap.read()
+                if ok:
+                    _draw_image(f)
+                    _draw_saved_rects()
+
+            _draw_image(frame)
+            _draw_saved_rects()
+
+            # Drawing handlers.
+            def on_press(event):
+                drag_start[0], drag_start[1] = event.x, event.y
+                if drag_id[0]:
+                    canvas.delete(drag_id[0])
+                drag_id[0] = canvas.create_rectangle(
+                    event.x, event.y, event.x, event.y,
+                    outline=Theme.BLUE_PRIMARY, width=2,
+                    stipple="gray12", fill=Theme.BLUE_PRIMARY,
+                )
+
+            def on_drag(event):
+                if drag_id[0]:
+                    canvas.coords(drag_id[0], drag_start[0], drag_start[1], event.x, event.y)
+
+            def on_release(event):
+                x1 = int(min(drag_start[0], event.x) / scale)
+                y1 = int(min(drag_start[1], event.y) / scale)
+                x2 = int(max(drag_start[0], event.x) / scale)
+                y2 = int(max(drag_start[1], event.y) / scale)
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(orig_w, x2), min(orig_h, y2)
+                if (x2 - x1) > 10 and (y2 - y1) > 5:
+                    rects.append((x1, y1, x2, y2))
+                if drag_id[0] is not None:
+                    canvas.delete(drag_id[0])
+                    drag_id[0] = None
+                _draw_saved_rects()
+
+            canvas.bind("<ButtonPress-1>", on_press)
+            canvas.bind("<B1-Motion>", on_drag)
+            canvas.bind("<ButtonRelease-1>", on_release)
+
+            # Frame slider for videos.
+            if is_video and frame_count > 1:
+                slider_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
+                slider_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
+                tk.Label(slider_row, text="Frame",
+                         font=f(Theme.F_BODY_SM),
+                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+                ts_label = tk.Label(slider_row, text="00:00:00",
+                                    font=f(Theme.F_META),
+                                    bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED)
+                ts_label.pack(side="right")
+
+                def _on_slider(value):
+                    try:
+                        idx = int(float(value))
+                    except (TypeError, ValueError):
+                        return
+                    _seek_video(idx)
+                    secs = idx / fps
+                    hh = int(secs // 3600); mm = int((secs % 3600) // 60); ss = int(secs % 60)
+                    ts_label.config(text=f"{hh:02d}:{mm:02d}:{ss:02d}")
+
+                slider = tk.Scale(
+                    win, from_=0, to=frame_count - 1, orient="horizontal",
+                    command=_on_slider, length=disp_w - 24,
+                    bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY,
+                    troughcolor=Theme.BG_TERTIARY,
+                    activebackground=Theme.BLUE_PRIMARY,
+                    highlightthickness=0, showvalue=False,
+                )
+                slider.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+
+            # Action row: Add another, Clear all, Save.
+            actions = tk.Frame(win, bg=Theme.BG_OVERLAY)
+            actions.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_MD))
+
+            def _clear_all():
+                rects.clear()
+                _draw_saved_rects()
+
+            def _save_and_close():
+                # Single-rect back-compat field stores the union or the
+                # first rect; multi-rect field carries the full list.
+                if rects:
+                    self.config.subtitle_areas = [tuple(r) for r in rects]
+                    self.config.subtitle_area = rects[0]
+                    self._update_status(
+                        f"Saved {len(rects)} subtitle region{'s' if len(rects) != 1 else ''}",
+                        "success",
+                    )
+                else:
+                    self.config.subtitle_areas = None
+                    self.config.subtitle_area = None
+                    self._update_status("Cleared manual subtitle regions", "info")
+                self._update_region_label_display()
+                win.destroy()
+
+            ModernButton(actions, text="Clear all", command=_clear_all,
+                         style="ghost", size="sm", width=92).pack(side="left")
+            ModernButton(actions, text="Save", command=_save_and_close,
+                         style="primary", size="sm", width=92).pack(
+                             side="right")
+            ModernButton(actions, text="Cancel", command=win.destroy,
+                         style="ghost", size="sm", width=92).pack(
+                             side="right", padx=(0, Theme.S_SM))
+
+            hint_frame = tk.Frame(win, bg=Theme.BG_OVERLAY)
+            hint_frame.pack(fill="x", pady=(0, Theme.S_MD))
+            tk.Label(hint_frame,
+                     text="Drag to add a region. Drag again for multi-region.",
+                     font=f(Theme.F_BODY_SM, "bold"),
+                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
+            tk.Label(hint_frame,
+                     text="Scrub the slider to pick a frame where the subtitle is visible.",
+                     font=f(Theme.F_META),
+                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
+
+            # The cap must outlive this function so slider scrubs work
+            # while the (non-blocking) modal stays open. Release it when
+            # the window is closed instead of at function return.
+            def _release_cap():
+                if cap is not None:
+                    try:
+                        cap.release()
+                    except Exception:
+                        pass
+
+            win.bind("<Destroy>", lambda e: _release_cap() if e.widget is win else None)
+            win.bind("<Escape>", lambda e: win.destroy())
+            win.transient(self.root)
+            win.grab_set()
         except Exception as e:
             logger.error(f"Region selector error: {e}")
-            return
-
-        if not PIL_AVAILABLE:
-            self._update_status("Pillow required for region selector")
-            return
-
-        frame_rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
-        orig_h, orig_w = frame_rgb.shape[:2]
-
-        # Scale to fit screen (80% of screen size max)
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        max_w = min(800, int(screen_w * 0.8))
-        max_h = min(500, int(screen_h * 0.7))
-        scale = min(max_w / orig_w, max_h / orig_h, 1.0)
-        disp_w, disp_h = int(orig_w * scale), int(orig_h * scale)
-
-        img = Image.fromarray(frame_rgb).resize((disp_w, disp_h), Image.LANCZOS)
-
-        # Create Toplevel window
-        win = tk.Toplevel(self.root)
-        win.title("Choose subtitle region")
-        win.configure(bg=Theme.BG_OVERLAY)
-        win.resizable(False, False)
-        win.geometry(f"{disp_w}x{disp_h + 64}")
-
-        photo = ImageTk.PhotoImage(img)
-        canvas = tk.Canvas(win, width=disp_w, height=disp_h, highlightthickness=0,
-                           bg=Theme.BG_DARK, cursor="cross")
-        canvas.pack()
-        canvas.create_image(0, 0, anchor="nw", image=photo)
-        canvas._photo = photo  # prevent GC
-
-        rect_id = [None]
-        start = [0, 0]
-
-        def on_press(event):
-            start[0], start[1] = event.x, event.y
-            if rect_id[0]:
-                canvas.delete(rect_id[0])
-            # Draw a fill hint + outline for premium feel
-            rect_id[0] = canvas.create_rectangle(
-                event.x, event.y, event.x, event.y,
-                outline=Theme.GREEN_PRIMARY, width=2,
-                stipple="gray25", fill=Theme.GREEN_PRIMARY,
-            )
-
-        def on_drag(event):
-            if rect_id[0]:
-                canvas.coords(rect_id[0], start[0], start[1], event.x, event.y)
-
-        def on_release(event):
-            x1 = int(min(start[0], event.x) / scale)
-            y1 = int(min(start[1], event.y) / scale)
-            x2 = int(max(start[0], event.x) / scale)
-            y2 = int(max(start[1], event.y) / scale)
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(orig_w, x2), min(orig_h, y2)
-            if (x2 - x1) > 10 and (y2 - y1) > 5:
-                self.config.subtitle_area = (x1, y1, x2, y2)
-                self._update_region_label_display()
-                self._update_status("Manual subtitle region saved", "success")
-                logger.info(f"Subtitle region set: ({x1}, {y1}, {x2}, {y2})")
-            win.destroy()
-
-        canvas.bind("<ButtonPress-1>", on_press)
-        canvas.bind("<B1-Motion>", on_drag)
-        canvas.bind("<ButtonRelease-1>", on_release)
-        win.bind("<Escape>", lambda e: win.destroy())
-
-        hint_frame = tk.Frame(win, bg=Theme.BG_OVERLAY)
-        hint_frame.pack(fill="x", pady=Theme.S_MD)
-        tk.Label(hint_frame,
-                 text="Drag across the subtitle area.",
-                 font=f(Theme.F_BODY_SM, "bold"),
-                 bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
-        tk.Label(hint_frame,
-                 text="Press Escape to cancel without saving.",
-                 font=f(Theme.F_META),
-                 bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
-
-        win.transient(self.root)
-        win.grab_set()
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
 
     def _reset_region(self):
         """Reset subtitle region to auto-detect."""
