@@ -130,6 +130,11 @@ class ProcessingConfig:
     tbe_flow_warp: bool = False   # Farneback flow-warp frames before aggregating (motion-heavy)
     tbe_scene_cut_split: bool = True   # split TBE batch at scene cuts
     tbe_scene_cut_threshold: float = 0.35   # histogram delta to call a cut
+    # RM-32: prefer the PySceneDetect AdaptiveDetector when installed
+    # (handles dissolves and flashes the histogram heuristic
+    # mis-fires on). Defaults off so installations without the dep
+    # keep the existing behaviour byte-identical.
+    tbe_scene_cut_use_pyscenedetect: bool = False
     edge_ring_px: int = 2         # post-inpaint colour match ring width (0 disables)
 
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
@@ -392,6 +397,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.tbe_flow_warp = _coerce_bool(config.tbe_flow_warp, False)
     config.tbe_scene_cut_split = _coerce_bool(config.tbe_scene_cut_split, True)
     config.tbe_scene_cut_threshold = _coerce_float(config.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
+    config.tbe_scene_cut_use_pyscenedetect = _coerce_bool(
+        config.tbe_scene_cut_use_pyscenedetect, False)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)
@@ -1293,13 +1300,63 @@ def _edge_ring_color_correct(original: np.ndarray, filled: np.ndarray,
     return out.astype(np.uint8)
 
 
+def _detect_scene_cuts_pyscenedetect(frames: List[np.ndarray]) -> Optional[List[int]]:
+    """RM-32: optional PySceneDetect-backed scene cut detection.
+
+    PySceneDetect's AdaptiveDetector handles dissolves and flashes the
+    histogram heuristic mis-fires on. We feed it frames via its
+    VideoStream wrapper but PySceneDetect normally reads from a file
+    path, so we route the existing frame list through its in-memory
+    SceneManager.process_frames interface. Returns the cut indices, or
+    None when PySceneDetect is unavailable / errors out so the caller
+    falls back to the histogram path.
+    """
+    try:
+        from scenedetect import SceneManager  # type: ignore
+        from scenedetect.detectors import AdaptiveDetector  # type: ignore
+    except ImportError:
+        return None
+    try:
+        sm = SceneManager()
+        sm.add_detector(AdaptiveDetector())
+        # PySceneDetect 0.7+ accepts frame-by-frame ingestion when we
+        # call .process_frame directly. We don't have a VideoStream
+        # but the detector only needs `(frame_num, frame)` so we
+        # synthesise that.
+        for i, f in enumerate(frames):
+            sm._process_frame(i, f, callback=None)  # type: ignore[attr-defined]
+        scene_list = sm.get_scene_list()
+        if not scene_list:
+            return [0]
+        cuts = [0]
+        for entry, _exit in scene_list:
+            idx = int(entry.get_frames())
+            if idx > 0 and idx < len(frames):
+                cuts.append(idx)
+        return sorted(set(cuts))
+    except Exception as exc:
+        logger.debug(f"PySceneDetect path failed: {exc}")
+        return None
+
+
 def _detect_scene_cuts(frames: List[np.ndarray],
-                        threshold: float = 0.35) -> List[int]:
+                        threshold: float = 0.35,
+                        prefer_pyscenedetect: bool = False) -> List[int]:
     """Return indices where a scene cut begins (inclusive). Uses histogram
     correlation on the luma channel -- cheap, robust for our TBE window of
-    ~30 frames. Index 0 is always a segment start."""
+    ~30 frames. Index 0 is always a segment start.
+
+    When `prefer_pyscenedetect` is True and the optional dep is
+    installed, we delegate to PySceneDetect's AdaptiveDetector which
+    handles dissolves correctly. Falls through to the histogram path
+    on any failure.
+    """
     if len(frames) <= 1:
         return [0]
+    if prefer_pyscenedetect:
+        psd = _detect_scene_cuts_pyscenedetect(frames)
+        if psd is not None:
+            return psd
     cuts = [0]
     prev_hist = None
     for i, f in enumerate(frames):
@@ -1473,7 +1530,8 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  edge_ring_px: int = 2,
                                  flow_warp: bool = False,
                                  scene_cut_split: bool = True,
-                                 scene_cut_threshold: float = 0.35) -> List[np.ndarray]:
+                                 scene_cut_threshold: float = 0.35,
+                                 scene_cut_use_pyscenedetect: bool = False) -> List[np.ndarray]:
     """Video-inpainting primitive: for each pixel inside a frame's mask,
     look across the batch for frames where the same pixel is unmasked and
     reconstruct the true background from those exposures. Optionally splits
@@ -1484,7 +1542,10 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
     if not scene_cut_split or len(frames) <= 1:
         segments = [(0, len(frames))]
     else:
-        cuts = _detect_scene_cuts(frames, scene_cut_threshold)
+        cuts = _detect_scene_cuts(
+            frames, scene_cut_threshold,
+            prefer_pyscenedetect=scene_cut_use_pyscenedetect,
+        )
         segments = []
         for i, start in enumerate(cuts):
             end = cuts[i + 1] if i + 1 < len(cuts) else len(frames)
@@ -1527,6 +1588,7 @@ class STTNInpainter(BaseInpainter):
                 flow_warp=self.config.tbe_flow_warp,
                 scene_cut_split=self.config.tbe_scene_cut_split,
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
+                scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
             )
         # Single-frame batch: fall back to cv2 with feathered blend
         out = []
@@ -1642,6 +1704,7 @@ class ProPainterInpainter(BaseInpainter):
                 flow_warp=self.config.tbe_flow_warp,
                 scene_cut_split=self.config.tbe_scene_cut_split,
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
+                scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
             )
             # Residual refinement with LaMa for pixels still visually rough
             if self._lama is not None:
@@ -3463,6 +3526,11 @@ def main():
                        help="Farneback flow-warp TBE frames before aggregation")
     parser.add_argument("--no-scene-split", action="store_true",
                        help="Disable scene-cut splitting inside TBE batches")
+    parser.add_argument("--pyscenedetect", action="store_true",
+                       help="Prefer PySceneDetect's AdaptiveDetector over the "
+                            "built-in histogram cut detector (opt-in dep: "
+                            "`pip install scenedetect`). Handles dissolves "
+                            "and flashes the histogram heuristic mis-fires on.")
     parser.add_argument("--no-tbe", action="store_true",
                        help="Disable Temporal Background Exposure (STTN/ProPainter use cv2)")
     parser.add_argument("--no-adaptive-batch", action="store_true",
@@ -3684,6 +3752,7 @@ def main():
         tbe_enable=not args.no_tbe,
         tbe_flow_warp=args.flow_warp,
         tbe_scene_cut_split=not args.no_scene_split,
+        tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
         adaptive_batch=not args.no_adaptive_batch,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,
