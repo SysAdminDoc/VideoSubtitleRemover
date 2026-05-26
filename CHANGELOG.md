@@ -4,7 +4,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [v3.15.0] -- 2026-05-25
+
+Backlog-drain pass: 30+ optional integrations land as opt-in adapters;
+the default pipeline is byte-identical for users who do not opt in.
+
 ### Added
+
+- **GUI smoke test (RFP-T-4).** New `tests/test_gui_smoke.py` drives
+  the major flows headlessly via `root.withdraw()` so the full-widget
+  construction path runs in CI. Skipped on non-display CI runners.
+- **Opt-in GlitchTip crash reporter (RM-52).** New
+  `backend/crash_reporter.py` installs a `sentry_sdk` excepthook
+  when BOTH `VSR_GLITCHTIP_DSN` and `VSR_CRASH_REPORTS=1` are set.
+  Strict consent gate; path-scrubbing `before_send` strips Windows
+  and POSIX absolute paths so layout info never leaks. Default
+  off, drops cleanly to no-op when `sentry-sdk` is missing.
+- **APP_VERSION bumped to 3.15.0** + README badges.
 
 - **NSIS installer (RM-51).** New `installer/vsr.nsi` wraps the
   PyInstaller `--onedir` build into a one-click setup EXE with

@@ -2,7 +2,7 @@
 <p align="center"><img src="icon.png" width="128" alt="Video Subtitle Remover"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.14.0-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.15.0-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20desktop-58A6FF?style=for-the-badge">
 </p>
@@ -12,7 +12,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.14.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.15.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)

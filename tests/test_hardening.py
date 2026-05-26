@@ -1280,6 +1280,43 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class CrashReporterScaffoldTests(unittest.TestCase):
+    """RM-52: opt-in crash reporting must be OFF unless both env vars
+    are set, and the path scrubber must hide local layout info."""
+
+    def setUp(self):
+        self._saved = {
+            "VSR_GLITCHTIP_DSN": os.environ.pop("VSR_GLITCHTIP_DSN", None),
+            "VSR_CRASH_REPORTS": os.environ.pop("VSR_CRASH_REPORTS", None),
+        }
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+    def test_disabled_by_default(self):
+        from backend.crash_reporter import is_enabled, install
+        self.assertFalse(is_enabled())
+        self.assertFalse(install())
+
+    def test_partial_consent_is_not_enough(self):
+        from backend.crash_reporter import is_enabled
+        os.environ["VSR_CRASH_REPORTS"] = "1"
+        self.assertFalse(is_enabled(), "DSN missing -> still disabled")
+        os.environ.pop("VSR_CRASH_REPORTS", None)
+        os.environ["VSR_GLITCHTIP_DSN"] = "https://example/0"
+        self.assertFalse(is_enabled(), "consent flag missing -> still disabled")
+
+    def test_path_scrub_drops_windows_paths(self):
+        from backend.crash_reporter import _path_scrub
+        sample = "File \"C:\\Users\\xxx\\repos\\VSR\\backend\\processor.py\", line 1"
+        scrubbed = _path_scrub(sample)
+        self.assertNotIn("Users", scrubbed)
+        self.assertIn("<path>", scrubbed)
+
+
 class NsisInstallerArtefactTests(unittest.TestCase):
     """RM-51: the NSIS installer script ships in installer/vsr.nsi so
     the GHA build workflow can pick it up. Sanity-check the file

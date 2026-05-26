@@ -34,7 +34,7 @@ from datetime import datetime
 APP_NAME = "Video Subtitle Remover Pro"
 # Single source of truth for the app's version string. Update here and it
 # propagates to the banner, header, logs, About dialog, and CHANGELOG cue.
-APP_VERSION = "3.14.0"
+APP_VERSION = "3.15.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
@@ -80,6 +80,15 @@ def crash_handler(exc_type, exc_value, exc_tb):
 
 
 sys.excepthook = crash_handler
+
+# RM-52: opt-in crash reporting. Strictly off unless the user sets BOTH
+# VSR_GLITCHTIP_DSN AND VSR_CRASH_REPORTS=1. The install() call is a
+# no-op when either is missing, so default installs never phone home.
+try:
+    from backend.crash_reporter import install as _install_crash_reporter
+    _install_crash_reporter()
+except Exception:
+    pass
 
 # GUI Imports
 try:
