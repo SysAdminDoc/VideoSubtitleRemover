@@ -84,11 +84,11 @@
 
 ## Phase 8 -- Detection / inpainting future (P2 research-heavy)
 
-- [ ] P2 RM-22 Florence-2 / Qwen2.5-VL experimental detector (opt-in)
-- [ ] P2 RM-23 PaddleOCR-VL 0.9B detector tier (opt-in)
+- [x] P2 RM-22 Florence-2 / Qwen2.5-VL detector (opt-in via VSR_VLM_OCR)
+- [x] P2 RM-23 PaddleOCR-VL 0.9B detector tier (opt-in via VSR_VLM_OCR=paddleocr-vl)
 - [x] P2 RM-33 Pre-detect denoise (FastDVDnet + cv2 NLM fallback, opt-in)
 - [ ] P2 RM-34 Proxy-file workflow
-- [ ] P2 RM-42 Manga / anime mode
+- [x] P2 RM-42 Manga / anime mode (lang="manga" routes to manga-ocr + comic-text-detector when installed)
 - [ ] P2 RM-43 Karaoke / animated subtitle tracking
 - [ ] P2 RM-45 WhisperX-aided chyron classifier
 - [x] P2 RM-54 alias closed with RFP-T-1 (synthetic harness)
