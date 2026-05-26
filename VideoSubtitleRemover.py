@@ -186,6 +186,65 @@ class Theme:
     R_XL = 12
 
 
+def apply_high_contrast_theme():
+    """RM-96: Swap the design tokens for a higher-contrast palette.
+
+    Idempotent and reversible -- the original values are cached on
+    Theme._defaults so apply_default_theme() can restore them. The
+    custom Canvas widgets read Theme constants on every draw, so an
+    in-place swap takes effect after the next redraw cycle.
+    """
+    if not hasattr(Theme, "_defaults"):
+        Theme._defaults = {
+            k: v for k, v in Theme.__dict__.items()
+            if not k.startswith("_") and isinstance(v, str)
+        }
+    Theme.BG_DARK = "#000000"
+    Theme.BG_SECONDARY = "#000000"
+    Theme.BG_CARD = "#0c0c0c"
+    Theme.BG_CARD_HOVER = "#1a1a1a"
+    Theme.BG_CARD_SELECTED = "#1f1f1f"
+    Theme.BG_TERTIARY = "#1a1a1a"
+    Theme.BG_RAISED = "#262626"
+    Theme.BG_LOG = "#000000"
+    Theme.BG_OVERLAY = "#000000"
+    Theme.GREEN_PRIMARY = "#00ff7f"
+    Theme.GREEN_HOVER = "#00cc66"
+    Theme.GREEN_PRESS = "#00994d"
+    Theme.GREEN_MUTED = "#003319"
+    Theme.BLUE_PRIMARY = "#00d4ff"
+    Theme.BLUE_HOVER = "#00b3d9"
+    Theme.BLUE_PRESS = "#0099b3"
+    Theme.BLUE_MUTED = "#002633"
+    Theme.TEXT_PRIMARY = "#ffffff"
+    Theme.TEXT_SECONDARY = "#ffffff"
+    Theme.TEXT_MUTED = "#dcdcdc"
+    Theme.TEXT_DISABLED = "#888888"
+    Theme.SUCCESS = "#00ff7f"
+    Theme.SUCCESS_BG = "#003319"
+    Theme.WARNING = "#ffff00"
+    Theme.WARNING_BG = "#332f00"
+    Theme.ERROR = "#ff5555"
+    Theme.ERROR_BG = "#330000"
+    Theme.INFO = "#00d4ff"
+    Theme.INFO_BG = "#002633"
+    Theme.BORDER = "#ffffff"
+    Theme.BORDER_STRONG = "#ffffff"
+    Theme.BORDER_SUBTLE = "#aaaaaa"
+    Theme.BORDER_FOCUS = "#ffff00"
+    Theme.PROGRESS_BG = "#1a1a1a"
+    Theme.PROGRESS_FILL = "#00d4ff"
+
+
+def apply_default_theme():
+    """Restore the original Theme palette saved by apply_high_contrast_theme."""
+    defaults = getattr(Theme, "_defaults", None)
+    if not defaults:
+        return
+    for k, v in defaults.items():
+        setattr(Theme, k, v)
+
+
 def f(size: int, weight: str = "normal") -> tuple:
     """Shortcut to build a Segoe UI font tuple."""
     if weight == "bold":
@@ -280,6 +339,7 @@ class ProcessingConfig:
     # Detection settings
     detection_lang: str = "en"
     detection_threshold: float = 0.5
+    detection_vertical: bool = False    # RM-24 vertical-text mode
 
     # Time range (video only, seconds)
     time_start: float = 0.0
@@ -360,6 +420,7 @@ class ProcessingConfig:
     adv_panel_open: bool = False
     log_panel_open: bool = True
     onboarding_seen: bool = False
+    high_contrast: bool = False     # RM-96 alt theme palette
 
     def to_dict(self) -> dict:
         """Persist every dataclass field automatically. Using
@@ -398,6 +459,7 @@ class ProcessingConfig:
         self.subtitle_areas = _coerce_rect_list(self.subtitle_areas)
         self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
+        self.detection_vertical = _coerce_bool(self.detection_vertical, False)
         self.time_start = max(0.0, _coerce_float(self.time_start, 0.0))
         self.time_end = max(0.0, _coerce_float(self.time_end, 0.0))
         if self.time_end and self.time_end < self.time_start:
@@ -467,6 +529,7 @@ class ProcessingConfig:
         self.adv_panel_open = _coerce_bool(self.adv_panel_open, False)
         self.log_panel_open = _coerce_bool(self.log_panel_open, True)
         self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)
+        self.high_contrast = _coerce_bool(self.high_contrast, False)
         return self
 
     @classmethod
@@ -2878,6 +2941,10 @@ class VideoSubtitleRemoverApp:
 
         # State
         self.config = load_settings()
+        # RM-96: high-contrast theme applies BEFORE widget construction so
+        # every Canvas / ttk style reads the swapped palette on first draw.
+        if getattr(self.config, "high_contrast", False):
+            apply_high_contrast_theme()
         self.queue: List[QueueItem] = []
         self.queue_widgets: dict = {}
         self.is_processing = False
@@ -3094,6 +3161,10 @@ class VideoSubtitleRemoverApp:
             self.config.karaoke_grouping = self.karaoke_grouping_var.get()
         if hasattr(self, 'output_codec_var'):
             self.config.output_codec = self.output_codec_var.get()
+        if hasattr(self, 'vertical_text_var'):
+            self.config.detection_vertical = self.vertical_text_var.get()
+        if hasattr(self, 'high_contrast_var'):
+            self.config.high_contrast = self.high_contrast_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -3614,6 +3685,13 @@ class VideoSubtitleRemoverApp:
             self.preview_inpaint_btn.set_enabled(
                 bool(selected) and not self.is_processing
             )
+        if hasattr(self, "preview_ab_btn"):
+            ab_ready = bool(
+                selected
+                and selected.status == ProcessingStatus.COMPLETE
+                and Path(selected.output_path).exists()
+            )
+            self.preview_ab_btn.set_enabled(ab_ready)
         self._preview_label.config(cursor="hand2" if can_preview else "")
 
         if selected:
@@ -3634,6 +3712,151 @@ class VideoSubtitleRemoverApp:
         item = self._get_selected_queue_item()
         if item:
             self._show_preview(item, show_mask=True)
+
+    def _open_ab_scrubber(self):
+        """RM-30: open a Toplevel that lets the user scrub frames AND
+        wipe a vertical seam left/right to compare the original vs the
+        cleaned output side-by-side at any frame.
+
+        The window opens both video captures, holds them open for the
+        duration of the modal, and composes a single image per scrub.
+        """
+        item = self._get_selected_queue_item()
+        if item is None or item.status != ProcessingStatus.COMPLETE:
+            self._update_status("Select a completed item first", "warning")
+            return
+        in_path = item.file_path
+        out_path = item.output_path
+        if not Path(out_path).exists():
+            self._update_status("Output file is missing", "warning")
+            return
+        if not PIL_AVAILABLE:
+            self._update_status("Pillow required for A/B compare", "warning")
+            return
+
+        import cv2 as _cv2
+        cap_a = _cv2.VideoCapture(in_path)
+        cap_b = _cv2.VideoCapture(out_path)
+        if not cap_a.isOpened() or not cap_b.isOpened():
+            cap_a.release(); cap_b.release()
+            self._update_status("Could not open input/output for compare", "warning")
+            return
+
+        n_a = int(cap_a.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
+        n_b = int(cap_b.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
+        n_total = max(1, min(n_a, n_b))
+        fps = cap_a.get(_cv2.CAP_PROP_FPS) or 30.0
+        if fps <= 0:
+            fps = 30.0
+        max_w = min(1024, int(self.root.winfo_screenwidth() * 0.7))
+        max_h = min(576, int(self.root.winfo_screenheight() * 0.6))
+
+        win = tk.Toplevel(self.root)
+        win.title(f"A/B compare: {Path(in_path).name}")
+        win.configure(bg=Theme.BG_OVERLAY)
+        win.resizable(False, False)
+
+        canvas = tk.Canvas(win, width=max_w, height=max_h,
+                            highlightthickness=0, bg=Theme.BG_DARK)
+        canvas.pack()
+        image_id = canvas.create_image(0, 0, anchor="nw")
+        canvas._photo = None
+
+        state = {"frame_idx": 0, "seam": max_w // 2}
+
+        def _render():
+            cap_a.set(_cv2.CAP_PROP_POS_FRAMES, state["frame_idx"])
+            ok_a, fa = cap_a.read()
+            cap_b.set(_cv2.CAP_PROP_POS_FRAMES, min(n_b - 1, state["frame_idx"]))
+            ok_b, fb = cap_b.read()
+            if not (ok_a and ok_b):
+                return
+            if fa.shape != fb.shape:
+                fb = _cv2.resize(fb, (fa.shape[1], fa.shape[0]),
+                                  interpolation=_cv2.INTER_AREA)
+            h, w = fa.shape[:2]
+            scale = min(max_w / w, max_h / h, 1.0)
+            dw, dh = int(w * scale), int(h * scale)
+            seam = max(0, min(dw, state["seam"]))
+            fa_r = _cv2.resize(fa, (dw, dh), interpolation=_cv2.INTER_AREA)
+            fb_r = _cv2.resize(fb, (dw, dh), interpolation=_cv2.INTER_AREA)
+            composite = fa_r.copy()
+            composite[:, seam:] = fb_r[:, seam:]
+            # Draw a 2-pixel green seam line for the wipe boundary.
+            if 0 < seam < dw:
+                _cv2.line(composite, (seam, 0), (seam, dh - 1), (0, 255, 0), 2)
+            rgb = _cv2.cvtColor(composite, _cv2.COLOR_BGR2RGB)
+            pil = Image.fromarray(rgb)
+            canvas._photo = ImageTk.PhotoImage(pil)
+            canvas.itemconfig(image_id, image=canvas._photo)
+
+        # Frame slider (vertical -- below the image).
+        slider_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
+        slider_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
+        tk.Label(slider_row, text="Frame", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        ts_label = tk.Label(slider_row, text="00:00:00",
+                            font=f(Theme.F_META),
+                            bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED)
+        ts_label.pack(side="right")
+
+        def _on_frame(value):
+            try:
+                state["frame_idx"] = max(0, min(n_total - 1, int(float(value))))
+            except (TypeError, ValueError):
+                return
+            secs = state["frame_idx"] / fps
+            hh = int(secs // 3600); mm = int((secs % 3600) // 60); ss = int(secs % 60)
+            ts_label.config(text=f"{hh:02d}:{mm:02d}:{ss:02d}")
+            _render()
+
+        frame_slider = tk.Scale(
+            win, from_=0, to=n_total - 1, orient="horizontal",
+            command=_on_frame, showvalue=False, length=max_w - 24,
+            bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY,
+            troughcolor=Theme.BG_TERTIARY,
+            activebackground=Theme.BLUE_PRIMARY, highlightthickness=0,
+        )
+        frame_slider.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+
+        # Seam slider (wipe boundary).
+        seam_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
+        seam_row.pack(fill="x", padx=Theme.S_MD, pady=(0, 0))
+        tk.Label(seam_row, text="Wipe", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        tk.Label(seam_row, text="source <-> cleaned",
+                 font=f(Theme.F_META),
+                 bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="right")
+
+        def _on_seam(value):
+            try:
+                state["seam"] = max(0, min(max_w, int(float(value))))
+            except (TypeError, ValueError):
+                return
+            _render()
+
+        seam_slider = tk.Scale(
+            win, from_=0, to=max_w, orient="horizontal",
+            command=_on_seam, showvalue=False, length=max_w - 24,
+            bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY,
+            troughcolor=Theme.BG_TERTIARY,
+            activebackground=Theme.GREEN_PRIMARY, highlightthickness=0,
+        )
+        seam_slider.set(state["seam"])
+        seam_slider.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
+
+        def _close():
+            try:
+                cap_a.release(); cap_b.release()
+            except Exception:
+                pass
+            win.destroy()
+
+        win.bind("<Escape>", lambda e: _close())
+        win.protocol("WM_DELETE_WINDOW", _close)
+        win.transient(self.root)
+        win.grab_set()
+        _render()
 
     def _open_selected_inpaint_preview(self):
         """F-3: run a single-frame detect + inpaint pass on the selected
@@ -4230,8 +4453,18 @@ class VideoSubtitleRemoverApp:
             text="Colour-tuned mask expansion",
             variable=self.colour_tune_var,
         )
-        colour_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
+        colour_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(colour_toggle, "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering.")
+
+        # RM-24: vertical-text toggle for Japanese tategaki / classical CN.
+        self.vertical_text_var = tk.BooleanVar(value=getattr(self.config, "detection_vertical", False))
+        vertical_toggle = ModernToggle(
+            det_frame,
+            text="Vertical text mode (Japanese tategaki / classical Chinese)",
+            variable=self.vertical_text_var,
+        )
+        vertical_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
+        Tooltip(vertical_toggle, "Rotates each frame 90 CCW before OCR so columnar CJK reads as a line. Boxes rotate back to the source frame.")
 
         tk.Frame(det_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
@@ -4460,8 +4693,20 @@ class VideoSubtitleRemoverApp:
             text="Quality report sheet (side-by-side PNG comparison)",
             variable=self.quality_sheet_var,
         )
-        quality_sheet_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        quality_sheet_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
         Tooltip(quality_sheet_toggle, "Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report.")
+
+        # RM-96: high-contrast theme toggle. Takes effect on next launch
+        # because re-skinning every live widget mid-session would force
+        # a tree-wide redraw the design tokens were not built for.
+        self.high_contrast_var = tk.BooleanVar(value=getattr(self.config, "high_contrast", False))
+        hc_toggle = ModernToggle(
+            quality_frame,
+            text="High-contrast theme (restart required)",
+            variable=self.high_contrast_var,
+        )
+        hc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        Tooltip(hc_toggle, "Alternative palette tuned for low-vision users. Persists across sessions.")
 
         self._update_region_label_display()
         self._update_mode_options()
@@ -4724,6 +4969,18 @@ class VideoSubtitleRemoverApp:
         self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_inpaint_btn,
                 "Run detect + inpaint on the first frame of the selected item.")
+        # RM-30: A/B flicker scrubber for completed items.
+        self.preview_ab_btn = ModernButton(
+            preview_actions,
+            text="A/B compare",
+            width=108,
+            command=self._open_ab_scrubber,
+            style="ghost",
+            size="sm",
+        )
+        self.preview_ab_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self.preview_ab_btn,
+                "Open a frame slider that wipes between source and cleaned output.")
 
         self._preview_label = tk.Label(self._preview_frame, bg=Theme.BG_CARD,
                                        text="", font=f(Theme.F_META),
@@ -7194,7 +7451,8 @@ class VideoSubtitleRemoverApp:
 
             backend_mode = mode_map.get(item.config.mode.value, BackendInpaintMode.STTN)
             lang = getattr(item.config, 'detection_lang', 'en')
-            cache_key = (backend_mode, device, lang)
+            vertical = bool(getattr(item.config, 'detection_vertical', False))
+            cache_key = (backend_mode, device, lang, vertical)
 
             backend_config = BackendConfig(
                 mode=backend_mode,
@@ -7208,6 +7466,7 @@ class VideoSubtitleRemoverApp:
                 output_quality=item.config.output_quality,
                 detection_lang=lang,
                 detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
+                detection_vertical=getattr(item.config, 'detection_vertical', False),
                 subtitle_area=item.config.subtitle_area,
                 time_start=getattr(item.config, 'time_start', 0.0),
                 time_end=getattr(item.config, 'time_end', 0.0),
