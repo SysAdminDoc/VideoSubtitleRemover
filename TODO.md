@@ -52,12 +52,12 @@
 - [x] P0 RFP-T-1 Synthetic regression harness (8 deterministic clips; CC0 sourcing follow-up tracked)
 - [x] P1 RFP-T-2 End-to-end test with synthesised clip
 - [x] P1 RFP-T-3 OCR cascade selection test
-- [ ] P2 RFP-T-4 GUI smoke test (Tk update_idletasks walk) -- needs headless display
-- [ ] P2 RM-52 Opt-in crash reporting via GlitchTip (deferred -- privacy review needed)
+- [x] P2 RFP-T-4 GUI smoke test (tests/test_gui_smoke.py; skipped on non-display CI)
+- [x] P2 RM-52 Opt-in GlitchTip crash reporter (backend/crash_reporter.py; double consent gate + path scrub)
 
 ## Phase 5 -- Larger bets (P1 long-horizon)
 
-- [ ] P1 RFP-L-1 Split backend/processor.py into 7 modules
+- [ ] P1 RFP-L-1 Split backend/processor.py into 7 modules (deferred -- 3000-line refactor with many internal call sites; needs its own focused PR with rollback safety)
 - [x] P1 RFP-L-2 Plugin architecture for inpainters (concretises RM-81)
 - [x] P1 RFP-L-3 docs/architecture.md contributor map
 - [x] P1 RM-25 LaMa via ONNX Runtime (opt-in via VSR_LAMA_ONNX)
