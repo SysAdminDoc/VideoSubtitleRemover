@@ -6,6 +6,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Region selector grows frame scrubbing + multi-rectangle drawing
+  (F-1, F-2).** The selector window now carries a frame slider for
+  video sources so users can pin the rect on a frame where the
+  subtitle is actually visible -- the legacy "always frame 0" path
+  silently failed on every clip with a black intro card. Every drag
+  appends a rect to the list; "Clear all" removes them; "Save" writes
+  every rect to `subtitle_areas` (plus the first rect to
+  `subtitle_area` for backward compatibility with single-rect callers).
+- **One-click cleanup preview (F-3).** The Preview panel grew a
+  "Preview cleanup" button that runs detect + inpaint on the first
+  frame of the selected queue item in a background thread and renders
+  the result inline. Users can A/B detection thresholds, mask dilation,
+  and mode choices without committing a full batch run.
+
 - **Per-stream loudness normalisation for multi-track audio (B-4).**
   When both `loudnorm_target` and `multi_audio_passthrough` are set and
   the source has more than one audio stream, `_merge_audio` now builds

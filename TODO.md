@@ -23,14 +23,14 @@
 
 ## Phase 2 -- Workflow features (P1)
 
-- [ ] P1 RFP-F-1 Region selector frame scrubbing
-- [ ] P1 RFP-F-2 Multi-rectangle region drawing (surface subtitle_areas)
-- [ ] P1 RFP-F-3 Inpaint-preview on a sample frame
+- [x] P1 RFP-F-1 Region selector frame scrubbing
+- [x] P1 RFP-F-2 Multi-rectangle region drawing (surface subtitle_areas)
+- [x] P1 RFP-F-3 Inpaint-preview on a sample frame
 - [x] P1 RFP-B-4 Multi-track loudness normalisation (filter_complex)
 - [x] P1 RM-28 "Repeat with these settings" queue action
 - [ ] P1 RM-29 Per-file overrides surface
 - [ ] P1 RM-30 A/B flicker-scrubber in preview pane
-- [ ] P1 RM-31 Subtitle-area drag-refinement in-GUI (overlaps F-1/F-2)
+- [x] P1 RM-31 Subtitle-area drag-refinement in-GUI (shipped with F-1/F-2)
 - [ ] P1 RM-49 Model-weight hash verification on first download
 
 ## Phase 3 -- Polish (P2)
