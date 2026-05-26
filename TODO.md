@@ -70,7 +70,7 @@
 - [x] P3 RFP-EI-3 Detection threshold slider direction + rename
 - [x] P3 RFP-EI-4 Live preview worker-side throttle (PIL conversion already off-thread)
 - [x] P3 RFP-EI-6 Output-path collision guard already covered via `_make_unique_output_path`
-- [ ] P3 RFP-EI-7 TikTok preset auto-band tuning (needs real-source A/B)
+- [x] P3 RFP-EI-7 TikTok preset synthetic A/B (auto_band kept ON; real-source validation owed)
 
 ## Phase 7 -- Distribution + accessibility (RM, longer-horizon)
 
