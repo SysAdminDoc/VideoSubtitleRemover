@@ -1079,6 +1079,48 @@ class AutoInpainterUnloadTests(unittest.TestCase):
         self.assertIsNone(auto._lama, "LaMa must be released after streak hits the threshold")
 
 
+class MultiTrackLoudnormFilterTests(unittest.TestCase):
+    """B-4: when both loudnorm and multi-track passthrough are active and
+    the source has multiple audio streams, _merge_audio must build a
+    -filter_complex pipeline instead of relying on the single-pass
+    `-af loudnorm`. We exercise the audio-stream probe helper here
+    (the full _merge_audio orchestration needs real ffmpeg + a video)."""
+
+    def test_audio_stream_count_falls_back_to_one_when_ffprobe_missing(self):
+        # The helper must not crash when ffprobe is absent. Returning 1
+        # means _merge_audio takes the legacy single-stream path.
+        import shutil as _shutil
+        original = _shutil.which
+        try:
+            _shutil.which = lambda name: None
+            count = processor._probe_audio_stream_count("/non-existent.mkv")
+            # ffprobe absent -> falls back to 1.
+            self.assertEqual(count, 1)
+        finally:
+            _shutil.which = original
+
+
+class LanguagePickerTests(unittest.TestCase):
+    """F-5: lang picker must expose more than the legacy 12 languages
+    while keeping the curated English-first ordering."""
+
+    def test_language_list_starts_with_english(self):
+        langs = gui._build_language_list()
+        self.assertEqual(langs[0][0], "en")
+        self.assertEqual(langs[0][1], "English")
+
+    def test_language_list_includes_extra_codes(self):
+        codes = {code for code, _ in gui._build_language_list()}
+        # Languages outside the legacy 12-language set.
+        for new_code in ("th", "vi", "pl", "tr", "uk", "el"):
+            self.assertIn(new_code, codes, f"expected {new_code} in expanded list")
+
+    def test_language_list_deduplicates(self):
+        codes = [code for code, _ in gui._build_language_list()]
+        self.assertEqual(len(codes), len(set(codes)),
+                         "language picker must not contain duplicate codes")
+
+
 class PresetLibraryTests(unittest.TestCase):
     """F-10: built-in presets must be shared between the GUI and the CLI
     so `python -m backend.processor --preset NAME` resolves to the same
