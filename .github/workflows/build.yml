@@ -111,13 +111,77 @@ jobs:
             }
           }
 
-      - name: Package release
+      - name: Package release ZIP
         run: |
           Compress-Archive -Path dist\VideoSubtitleRemoverPro\* -DestinationPath VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip
         shell: pwsh
 
+      # RM-51: NSIS installer build. The `installer/vsr.nsi` script
+      # wraps the PyInstaller output into a one-click EXE with Start
+      # Menu / Desktop shortcuts, an Uninstall entry, and a "Send to
+      # VSR" file-extension verb (RM-58).
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install -y nsis
+        continue-on-error: true
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          if (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') {
+            & 'C:\Program Files (x86)\NSIS\makensis.exe' installer\vsr.nsi
+          } else {
+            Write-Host "NSIS not found; skipping installer build."
+          }
+        continue-on-error: true
+
+      # RM-50: optional code-signing via Azure Trusted Signing. Activated
+      # only when the AZURE_SIGN_TENANT_ID secret is set. Falls through
+      # silently for fork builds without the cert provisioned.
+      - name: Sign EXE + installer with Azure Trusted Signing
+        if: env.AZURE_SIGN_TENANT_ID != ''
+        shell: pwsh
+        env:
+          AZURE_SIGN_TENANT_ID: ${{ secrets.AZURE_SIGN_TENANT_ID }}
+          AZURE_SIGN_CLIENT_ID: ${{ secrets.AZURE_SIGN_CLIENT_ID }}
+          AZURE_SIGN_CLIENT_SECRET: ${{ secrets.AZURE_SIGN_CLIENT_SECRET }}
+          AZURE_SIGN_ENDPOINT: ${{ secrets.AZURE_SIGN_ENDPOINT }}
+          AZURE_SIGN_ACCOUNT: ${{ secrets.AZURE_SIGN_ACCOUNT }}
+          AZURE_SIGN_PROFILE: ${{ secrets.AZURE_SIGN_PROFILE }}
+        run: |
+          dotnet tool install --global AzureSignTool
+          $exe = 'dist\VideoSubtitleRemoverPro\VideoSubtitleRemoverPro.exe'
+          $installer = 'VideoSubtitleRemoverPro-Setup.exe'
+          $targets = @($exe)
+          if (Test-Path $installer) { $targets += $installer }
+          foreach ($t in $targets) {
+            azuresigntool sign `
+              --azure-key-vault-url $env:AZURE_SIGN_ENDPOINT `
+              --azure-key-vault-tenant-id $env:AZURE_SIGN_TENANT_ID `
+              --azure-key-vault-client-id $env:AZURE_SIGN_CLIENT_ID `
+              --azure-key-vault-client-secret $env:AZURE_SIGN_CLIENT_SECRET `
+              --azure-key-vault-certificate $env:AZURE_SIGN_PROFILE `
+              --description "Video Subtitle Remover Pro" `
+              --description-url "https://github.com/SysAdminDoc/VideoSubtitleRemover" `
+              --timestamp-rfc3161 "http://timestamp.acs.microsoft.com" `
+              --timestamp-digest sha256 `
+              --file-digest sha256 `
+              $t
+          }
+        continue-on-error: true
+
       - name: Upload release
         run: |
-          gh release create ${{ github.event.inputs.version }} VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip --title "VideoSubtitleRemoverPro ${{ github.event.inputs.version }}" --notes "Automated build for ${{ github.event.inputs.version }}" --generate-notes
+          $assets = @('VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip')
+          if (Test-Path 'VideoSubtitleRemoverPro-Setup.exe') {
+            Rename-Item 'VideoSubtitleRemoverPro-Setup.exe' "VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-Setup.exe"
+            $assets += "VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-Setup.exe"
+          }
+          gh release create ${{ github.event.inputs.version }} `
+            $assets `
+            --title "VideoSubtitleRemoverPro ${{ github.event.inputs.version }}" `
+            --notes "Automated build for ${{ github.event.inputs.version }}" `
+            --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh

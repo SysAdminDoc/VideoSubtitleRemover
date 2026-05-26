@@ -6,6 +6,27 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **NSIS installer (RM-51).** New `installer/vsr.nsi` wraps the
+  PyInstaller `--onedir` build into a one-click setup EXE with
+  Start Menu + Desktop shortcuts, an Add/Remove Programs entry,
+  and uninstall support. GitHub Actions workflow installs NSIS
+  via Chocolatey and builds the installer on every release.
+- **"Send to VSR" file-extension verb (RM-58).** The installer
+  registers a Shell verb on .mp4 / .avi / .mkv / .mov / .wmv /
+  .flv / .webm / .m4v / .mpeg / .mpg so right-clicking a video
+  in Explorer offers "Send to Video Subtitle Remover". We do NOT
+  hijack the default Open verb -- that would surprise users.
+- **Azure Trusted Signing in the release workflow (RM-50).**
+  Workflow grew an opt-in signing step gated on the
+  `AZURE_SIGN_TENANT_ID` secret. Forks without the secrets see
+  the step skip cleanly. SmartScreen reputation accumulates against
+  a stable signed identity.
+- **Community edge-case corpus contributor guide (RM-55).** New
+  `docs/edge_case_corpus.md` documents the submission flow,
+  acceptance criteria (single failure mode, CC0 / public domain,
+  <20s clips), and the baseline-compile recipe so contributors can
+  expand the regression harness.
+
 - **Proxy-file workflow (RM-34).** New
   `backend/proxy_workflow.ensure_proxy(path, height, crf)` builds a
   cached low-res (default 480p) proxy via ffmpeg for fast preview /
