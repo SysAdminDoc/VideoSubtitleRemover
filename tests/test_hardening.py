@@ -1280,6 +1280,26 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class PreprocessAdaptersTests(unittest.TestCase):
+    """RM-33 / RM-21: pre-detect denoise + TransNetV2 scene-cut adapter
+    must degrade gracefully when their optional deps are missing."""
+
+    def test_fastdvdnet_falls_back_to_cv2_nlm(self):
+        import numpy as _np
+        os.environ.pop("VSR_FASTDVDNET", None)
+        from backend.preprocess import fastdvdnet_denoise_frame
+        frame = _np.full((32, 32, 3), 128, dtype=_np.uint8)
+        out = fastdvdnet_denoise_frame(frame)
+        self.assertEqual(out.shape, frame.shape)
+
+    def test_transnetv2_returns_none_without_dep(self):
+        import numpy as _np
+        os.environ.pop("VSR_TRANSNETV2", None)
+        from backend.preprocess import transnetv2_scene_cuts
+        frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(4)]
+        self.assertIsNone(transnetv2_scene_cuts(frames))
+
+
 class WhisperFallbackTests(unittest.TestCase):
     """RM-27: Whisper fallback adapter must degrade gracefully when the
     optional dep is missing, and the segments_to_frame_spans helper must

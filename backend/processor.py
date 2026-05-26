@@ -162,6 +162,14 @@ class ProcessingConfig:
     # mis-fires on). Defaults off so installations without the dep
     # keep the existing behaviour byte-identical.
     tbe_scene_cut_use_pyscenedetect: bool = False
+    # RM-21: deep TransNetV2 scene-cut detector. When on AND the
+    # `transnetv2` package + VSR_TRANSNETV2 weight path are set, we
+    # try the deep detector before falling back to PySceneDetect /
+    # histogram. Independent of `tbe_scene_cut_use_pyscenedetect`.
+    tbe_scene_cut_use_transnetv2: bool = False
+    # RM-33: optional denoise pass on the detection frame stream only;
+    # output pixels are untouched. Helps OCR on VHS / phone clips.
+    detection_denoise: bool = False
     edge_ring_px: int = 2         # post-inpaint colour match ring width (0 disables)
 
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
@@ -444,6 +452,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.tbe_scene_cut_threshold = _coerce_float(config.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
     config.tbe_scene_cut_use_pyscenedetect = _coerce_bool(
         config.tbe_scene_cut_use_pyscenedetect, False)
+    config.tbe_scene_cut_use_transnetv2 = _coerce_bool(
+        config.tbe_scene_cut_use_transnetv2, False)
+    config.detection_denoise = _coerce_bool(config.detection_denoise, False)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)
@@ -509,6 +520,28 @@ def _surya_allowed() -> bool:
     license-pollute an MIT-clean distribution."""
     val = os.environ.get("VSR_ALLOW_GPL", "").strip().lower()
     return val in {"1", "true", "yes", "on"}
+
+
+def _probe_codec_for_log(path: str) -> Optional[str]:
+    """RM-74: read the video codec for the diagnostic log banner.
+
+    Returns "<codec_name> @ <width>x<height>" or None when ffprobe is
+    unavailable. The line lets users see exactly which codec the
+    decoder is fed before anything goes wrong on AV1 / VP9 / HEVC
+    sources.
+    """
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=codec_name,width,height,r_frame_rate',
+            '-of', 'csv=p=0', path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().splitlines()[0]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
 
 
 def _probe_audio_stream_count(path: str) -> int:
@@ -1386,18 +1419,27 @@ def _detect_scene_cuts_pyscenedetect(frames: List[np.ndarray]) -> Optional[List[
 
 def _detect_scene_cuts(frames: List[np.ndarray],
                         threshold: float = 0.35,
-                        prefer_pyscenedetect: bool = False) -> List[int]:
+                        prefer_pyscenedetect: bool = False,
+                        prefer_transnetv2: bool = False) -> List[int]:
     """Return indices where a scene cut begins (inclusive). Uses histogram
     correlation on the luma channel -- cheap, robust for our TBE window of
     ~30 frames. Index 0 is always a segment start.
 
-    When `prefer_pyscenedetect` is True and the optional dep is
-    installed, we delegate to PySceneDetect's AdaptiveDetector which
-    handles dissolves correctly. Falls through to the histogram path
-    on any failure.
+    Detector cascade when multiple opt-ins are set:
+    1. TransNetV2 (deep, slowest but most accurate)
+    2. PySceneDetect AdaptiveDetector
+    3. Built-in histogram (zero-dep default)
     """
     if len(frames) <= 1:
         return [0]
+    if prefer_transnetv2:
+        try:
+            from backend.preprocess import transnetv2_scene_cuts
+            tn = transnetv2_scene_cuts(frames)
+            if tn is not None:
+                return tn
+        except Exception as exc:
+            logger.debug(f"TransNetV2 cascade failed: {exc}")
     if prefer_pyscenedetect:
         psd = _detect_scene_cuts_pyscenedetect(frames)
         if psd is not None:
@@ -1576,7 +1618,8 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  flow_warp: bool = False,
                                  scene_cut_split: bool = True,
                                  scene_cut_threshold: float = 0.35,
-                                 scene_cut_use_pyscenedetect: bool = False) -> List[np.ndarray]:
+                                 scene_cut_use_pyscenedetect: bool = False,
+                                 scene_cut_use_transnetv2: bool = False) -> List[np.ndarray]:
     """Video-inpainting primitive: for each pixel inside a frame's mask,
     look across the batch for frames where the same pixel is unmasked and
     reconstruct the true background from those exposures. Optionally splits
@@ -1590,6 +1633,7 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
         cuts = _detect_scene_cuts(
             frames, scene_cut_threshold,
             prefer_pyscenedetect=scene_cut_use_pyscenedetect,
+            prefer_transnetv2=scene_cut_use_transnetv2,
         )
         segments = []
         for i, start in enumerate(cuts):
@@ -1634,6 +1678,7 @@ class STTNInpainter(BaseInpainter):
                 scene_cut_split=self.config.tbe_scene_cut_split,
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
+                scene_cut_use_transnetv2=self.config.tbe_scene_cut_use_transnetv2,
             )
         # Single-frame batch: fall back to cv2 with feathered blend
         out = []
@@ -1750,6 +1795,7 @@ class ProPainterInpainter(BaseInpainter):
                 scene_cut_split=self.config.tbe_scene_cut_split,
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
+                scene_cut_use_transnetv2=self.config.tbe_scene_cut_use_transnetv2,
             )
             # Residual refinement with LaMa for pixels still visually rough
             if self._lama is not None:
@@ -2964,6 +3010,22 @@ class SubtitleRemover:
             # pipeline is still 8-bit BGR; the tag passthrough at least
             # keeps downstream players from accidentally tone-mapping a
             # tone-mapped output.
+            # RM-74: explicit AV1 / VP9 ingest validation. cv2 4.12+
+            # decodes both via the ffmpeg backend on every supported
+            # platform, but the codec field varies enough in the wild
+            # that we log it explicitly. Lets the user reproduce a
+            # decode failure with the same ffmpeg invocation when
+            # something goes wrong.
+            if not Path(input_path).is_dir():
+                try:
+                    from backend.hdr import probe_color_metadata as _probe
+                    _meta = _probe(input_path)  # only used for the codec probe
+                    _codec_line = _probe_codec_for_log(input_path)
+                    if _codec_line:
+                        logger.info(f"Source codec: {_codec_line}")
+                except Exception:
+                    pass
+
             if (self.config.preserve_color_metadata
                     and not Path(input_path).is_dir()):
                 try:
@@ -3206,7 +3268,22 @@ class SubtitleRemover:
                         frame_idx += 1
                         continue
                     else:
-                        detected_boxes = self.detector.detect(frame, self.config.detection_threshold)
+                        # RM-33: optionally denoise the detection-side
+                        # frame copy before OCR. Output pixels stay
+                        # unchanged because the inpainter still runs
+                        # against `frame`, not `det_frame`.
+                        if self.config.detection_denoise:
+                            try:
+                                from backend.preprocess import fastdvdnet_denoise_frame
+                                det_frame = fastdvdnet_denoise_frame(frame)
+                            except Exception as exc:
+                                logger.debug(
+                                    f"Detection denoise fell back: {exc}"
+                                )
+                                det_frame = frame
+                        else:
+                            det_frame = frame
+                        detected_boxes = self.detector.detect(det_frame, self.config.detection_threshold)
                         # Karaoke grouping: fuse per-syllable boxes on the
                         # same line before tracking so Kalman sees one
                         # composite per line, not one per syllable.
@@ -3813,6 +3890,17 @@ def main():
                             "built-in histogram cut detector (opt-in dep: "
                             "`pip install scenedetect`). Handles dissolves "
                             "and flashes the histogram heuristic mis-fires on.")
+    parser.add_argument("--transnetv2", action="store_true",
+                       help="Prefer TransNetV2 (deep CNN) for scene-cut "
+                            "detection. Requires `pip install transnetv2` and "
+                            "VSR_TRANSNETV2 set to the model weights path. "
+                            "Beats the histogram heuristic on F1.")
+    parser.add_argument("--denoise-detect", action="store_true",
+                       help="Run a denoise pass on the detection-frame "
+                            "stream before OCR. Output pixels are not "
+                            "modified. Helps VHS rips / low-light phone "
+                            "clips. Uses FastDVDnet when VSR_FASTDVDNET "
+                            "+ torch are available, else cv2 NLM.")
     parser.add_argument("--no-tbe", action="store_true",
                        help="Disable Temporal Background Exposure (STTN/ProPainter use cv2)")
     parser.add_argument("--no-adaptive-batch", action="store_true",
@@ -4042,6 +4130,8 @@ def main():
         tbe_flow_warp=args.flow_warp,
         tbe_scene_cut_split=not args.no_scene_split,
         tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
+        tbe_scene_cut_use_transnetv2=args.transnetv2,
+        detection_denoise=args.denoise_detect,
         adaptive_batch=not args.no_adaptive_batch,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,

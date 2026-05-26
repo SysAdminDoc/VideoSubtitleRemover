@@ -42,7 +42,7 @@
 - [x] P2 RFP-F-10 `--preset NAME` CLI flag
 - [x] P2 RFP-EI-1 Percentile fallback detection thresholds (was Otsu in plan; percentile is more robust on low-contrast)
 - [x] P2 RFP-EI-5 dataclasses-driven ProcessingConfig persistence (shipped with B-1)
-- [ ] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in)
+- [x] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in via transnetv2 + VSR_TRANSNETV2)
 - [x] P2 RM-24 Vertical-text mode
 - [ ] P2 RM-39 INT8 quantisation of OCR detector
 - [ ] P2 RM-40 Batched LaMa inference
@@ -86,7 +86,7 @@
 
 - [ ] P2 RM-22 Florence-2 / Qwen2.5-VL experimental detector (opt-in)
 - [ ] P2 RM-23 PaddleOCR-VL 0.9B detector tier (opt-in)
-- [ ] P2 RM-33 Pre-detect denoise (FastDVDnet)
+- [x] P2 RM-33 Pre-detect denoise (FastDVDnet + cv2 NLM fallback, opt-in)
 - [ ] P2 RM-34 Proxy-file workflow
 - [ ] P2 RM-42 Manga / anime mode
 - [ ] P2 RM-43 Karaoke / animated subtitle tracking
@@ -120,7 +120,7 @@
 ## Phase 12 -- Format support (P3 v4.x)
 
 - [x] P3 RM-73 10-bit / HDR pipeline (color-metadata passthrough; 16-bit pixel path tracked as follow-up)
-- [ ] P3 RM-74 AV1 + VP9 ingest/egress (overlaps RFP-F-8)
+- [x] P3 RM-74 AV1 + VP9 ingest validation (codec banner) + AV1 egress via RFP-F-8
 - [ ] P3 RM-75 VapourSynth bridge
 - [x] P3 RM-76 NLE round-trip (EDL/XML)
 
