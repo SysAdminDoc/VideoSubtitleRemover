@@ -6,6 +6,24 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Vertical text mode (RM-24).** Japanese tategaki and classical
+  Chinese subtitle columns now detect cleanly. The detector wrapper
+  rotates each frame 90 CCW before invoking whichever engine is
+  loaded, then rotates the returned boxes back into the source
+  frame's coordinate space. New `ProcessingConfig.detection_vertical`
+  field, CLI `--vertical`, and a Detection-card toggle in the GUI.
+- **High-contrast theme variant (RM-96).** A low-vision-friendly
+  palette (pure black surfaces, pure white text, saturated accent
+  colours, yellow focus ring) toggleable from the Output card and
+  persisted in settings. Applies on next launch because re-skinning
+  every live widget mid-session would force a tree-wide redraw the
+  design tokens were not built for.
+- **A/B flicker-scrubber preview (RM-30).** Completed items grow an
+  "A/B compare" preview button that opens a Toplevel with a frame
+  slider AND a vertical-wipe slider so users can compare the source
+  and cleaned outputs side-by-side at any frame. Both captures stay
+  open for the duration of the modal and are released on close.
+
 - **Per-file overrides popover (RM-29).** Right-click an idle queue
   item -> "Override settings for this file..." opens a themed modal
   that edits the item's own `ProcessingConfig` snapshot. Surfaced

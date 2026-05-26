@@ -1137,6 +1137,62 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class VerticalTextDetectionTests(unittest.TestCase):
+    """RM-24: vertical-text mode wraps the detector with a rotate-detect-
+    rotate-back layer. Boxes from the rotated frame must come back in
+    the original frame's coordinate space."""
+
+    def _make_detector(self, vertical: bool):
+        det = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
+        det.device = "cpu"
+        det.lang = "en"
+        det.vertical = vertical
+        det._engine_name = "stub"
+        det._rapid_model = None
+        det._paddle_model = None
+        det._surya_det = None
+        det._surya_processor = None
+        det._easyocr_reader = None
+        return det
+
+    def test_vertical_false_short_circuits(self):
+        import numpy as _np
+        det = self._make_detector(vertical=False)
+        det._detect_axis_aligned = lambda f, t: [(10, 20, 30, 40)]
+        frame = _np.zeros((100, 200, 3), dtype=_np.uint8)
+        self.assertEqual(det.detect(frame, 0.5), [(10, 20, 30, 40)])
+
+    def test_vertical_rotates_boxes_back(self):
+        import numpy as _np
+        det = self._make_detector(vertical=True)
+        # Original frame 200w x 100h. After 90 CCW the rotated frame is
+        # 100w x 200h. A box at (rx1=10, ry1=20, rx2=40, ry2=60) in the
+        # rotated frame maps back to:
+        # ox = ry -> x in [20, 60]
+        # oy = w - rx2 .. w - rx1 -> y in [200 - 40, 200 - 10] = [160, 190]
+        det._detect_axis_aligned = lambda f, t: [(10, 20, 40, 60)]
+        frame = _np.zeros((100, 200, 3), dtype=_np.uint8)
+        result = det.detect(frame, 0.5)
+        self.assertEqual(result, [(20, 160, 60, 190)])
+
+
+class HighContrastThemeTests(unittest.TestCase):
+    """RM-96: apply_high_contrast_theme must swap the palette in place
+    and apply_default_theme must restore it byte-identical."""
+
+    def test_swap_and_restore(self):
+        original_bg = gui.Theme.BG_DARK
+        original_text = gui.Theme.TEXT_PRIMARY
+        try:
+            gui.apply_high_contrast_theme()
+            self.assertEqual(gui.Theme.BG_DARK, "#000000")
+            self.assertEqual(gui.Theme.TEXT_PRIMARY, "#ffffff")
+        finally:
+            gui.apply_default_theme()
+        self.assertEqual(gui.Theme.BG_DARK, original_bg)
+        self.assertEqual(gui.Theme.TEXT_PRIMARY, original_text)
+
+
 class OutputCodecTests(unittest.TestCase):
     """F-8: output_codec must coerce to one of h264 / h265 / av1 and
     drive the right software encoder when no HW encoder is available."""
