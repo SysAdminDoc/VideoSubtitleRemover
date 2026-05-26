@@ -57,7 +57,7 @@
 
 ## Phase 5 -- Larger bets (P1 long-horizon)
 
-- [ ] P1 RFP-L-1 Split backend/processor.py into 7 modules (deferred -- 3000-line refactor with many internal call sites; needs its own focused PR with rollback safety)
+- [x] P1 RFP-L-1 Split backend/processor.py into 7 modules (v3.16.0; processor.py now a 1923-line shim re-exporting from backend.detection / .tracking / .io / .encoder / .quality / .inpainters / .cli)
 - [x] P1 RFP-L-2 Plugin architecture for inpainters (concretises RM-81)
 - [x] P1 RFP-L-3 docs/architecture.md contributor map
 - [x] P1 RM-25 LaMa via ONNX Runtime (opt-in via VSR_LAMA_ONNX)
