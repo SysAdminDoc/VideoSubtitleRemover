@@ -1563,18 +1563,51 @@ class AutoInpainter(BaseInpainter):
     pixels are unmasked in at least one other frame -- and picks TBE for
     well-exposed batches, LaMa otherwise. Keeps both inpainters loaded
     lazily so single-use batches don't pay for the other path.
+
+    B-5: when LaMa has been idle for `lama_unload_after_n_tbe` consecutive
+    TBE batches, drop the reference so the weight tensor can be GC'd /
+    moved off the GPU. A later hard batch re-loads on demand.
     """
+
+    # Number of consecutive TBE-routed batches after which we drop a
+    # previously-lazy-loaded LaMa. Long videos that hit one hard batch
+    # early otherwise pinned ~1.5 GB VRAM for the rest of the run.
+    LAMA_IDLE_UNLOAD_AFTER = 50
 
     def __init__(self, device: str = "cuda:0", config: ProcessingConfig = None):
         self.device = device
         self.config = config or ProcessingConfig()
         self._sttn = STTNInpainter(device, self.config)
         self._lama: Optional[LAMAInpainter] = None
+        # Consecutive TBE batches since the last LaMa-routed batch. Used
+        # to decide when to unload LaMa to reclaim VRAM.
+        self._tbe_streak: int = 0
 
     def _ensure_lama(self) -> LAMAInpainter:
         if self._lama is None:
             self._lama = LAMAInpainter(self.device, self.config)
         return self._lama
+
+    def _maybe_unload_lama(self) -> None:
+        if self._lama is None:
+            return
+        if self._tbe_streak < self.LAMA_IDLE_UNLOAD_AFTER:
+            return
+        logger.info(
+            f"AUTO: unloading idle LaMa after {self._tbe_streak} TBE batches"
+        )
+        self._lama = None
+        try:
+            import gc as _gc
+            _gc.collect()
+        except Exception:
+            pass
+        try:
+            import torch as _torch
+            if hasattr(_torch, "cuda") and _torch.cuda.is_available():
+                _torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     @staticmethod
     def _exposure_score(masks: List[np.ndarray]) -> float:
@@ -1597,8 +1630,11 @@ class AutoInpainter(BaseInpainter):
         score = self._exposure_score(masks)
         if score >= threshold:
             logger.debug(f"AUTO: TBE path (exposure={score:.2f} >= {threshold:.2f})")
+            self._tbe_streak += 1
+            self._maybe_unload_lama()
             return self._sttn.inpaint(frames, masks)
         logger.debug(f"AUTO: LaMa path (exposure={score:.2f} < {threshold:.2f})")
+        self._tbe_streak = 0
         return self._ensure_lama().inpaint(frames, masks)
 
 
@@ -1987,6 +2023,12 @@ class SubtitleRemover:
         # v3.12 quality report -- populated at end of process_video when
         # config.quality_report is on. None until the first run completes.
         self.last_quality_report: Optional[dict] = None
+        # B-3: union-mask bbox accumulated while processing. The quality
+        # report metric (PSNR/SSIM) used to be measured over the whole
+        # frame, so the unchanged 80-95% of pixels dominated the score and
+        # an awful inpaint could still report 'Good'. We track the bbox of
+        # the union mask and the metric runs against that ROI only.
+        self._quality_mask_bbox: Optional[Tuple[int, int, int, int]] = None
 
         if self.config.use_hw_encode:
             self._hw_encoder = _detect_hw_encoder()
@@ -2173,6 +2215,30 @@ class SubtitleRemover:
                 pass
         return ""
 
+    def _accumulate_quality_bbox(self, mask: np.ndarray) -> None:
+        """Update the union-mask bbox used by the quality report ROI.
+
+        Tracking just the bbox keeps memory flat across long videos -- a
+        full per-frame mask stack would be O(frames * H * W). The metric
+        only needs a crop window large enough to contain every masked
+        pixel ever seen, so the bbox is sufficient.
+        """
+        if mask is None or mask.size == 0 or mask.max() == 0:
+            return
+        ys, xs = np.where(mask > 0)
+        if ys.size == 0:
+            return
+        y1, y2 = int(ys.min()), int(ys.max()) + 1
+        x1, x2 = int(xs.min()), int(xs.max()) + 1
+        if self._quality_mask_bbox is None:
+            self._quality_mask_bbox = (x1, y1, x2, y2)
+        else:
+            ox1, oy1, ox2, oy2 = self._quality_mask_bbox
+            self._quality_mask_bbox = (
+                min(ox1, x1), min(oy1, y1),
+                max(ox2, x2), max(oy2, y2),
+            )
+
     def _compute_quality_report(self, input_path: str, output_path: str,
                                   start_frame: int, end_frame: int,
                                   fps: float, n_samples: int = 10) -> Optional[dict]:
@@ -2218,6 +2284,17 @@ class SubtitleRemover:
 
             psnrs: List[float] = []
             ssims: List[float] = []
+            roi_psnrs: List[float] = []
+            roi_ssims: List[float] = []
+            # B-3: ROI-cropped metric uses the accumulated union-mask
+            # bbox. Falls back to the whole-frame metric when the ROI is
+            # too small (< 32px on either axis) for SSIM to be stable.
+            roi = self._quality_mask_bbox
+            roi_ready = (
+                roi is not None
+                and (roi[2] - roi[0]) >= 32
+                and (roi[3] - roi[1]) >= 32
+            )
             # Pairs kept for the optional sheet renderer. Each entry:
             # (frame_idx, original_bgr, cleaned_bgr, psnr, ssim)
             pairs: List[Tuple[int, np.ndarray, np.ndarray, float, float]] = []
@@ -2235,16 +2312,36 @@ class SubtitleRemover:
                 s = _ssim(a, b)
                 psnrs.append(p)
                 ssims.append(s)
+                # ROI metric: same frame, but cropped to the union-mask
+                # bbox so the score reflects the inpaint quality instead
+                # of the unchanged background.
+                if roi_ready:
+                    x1, y1, x2, y2 = roi
+                    x1 = max(0, min(a.shape[1] - 1, x1))
+                    x2 = max(x1 + 1, min(a.shape[1], x2))
+                    y1 = max(0, min(a.shape[0] - 1, y1))
+                    y2 = max(y1 + 1, min(a.shape[0], y2))
+                    a_roi = a[y1:y2, x1:x2]
+                    b_roi = b[y1:y2, x1:x2]
+                    if a_roi.size and a_roi.shape == b_roi.shape:
+                        try:
+                            roi_psnrs.append(float(cv2.PSNR(a_roi, b_roi)))
+                            roi_ssims.append(_ssim(a_roi, b_roi))
+                        except Exception:
+                            pass
                 if self.config.quality_report_sheet:
                     pairs.append((idx, a, b, p, s))
             if not psnrs:
                 return None
             mean_ssim = float(np.mean(ssims))
             mean_psnr = float(np.mean(psnrs))
+            roi_mean_ssim = float(np.mean(roi_ssims)) if roi_ssims else None
+            roi_mean_psnr = float(np.mean(roi_psnrs)) if roi_psnrs else None
             # SSIM 0.95 is the common "visually indistinguishable" floor
-            # for compressed video. Below it, the inpaint likely needs a
-            # human eyeball. Tag is purely informational; doesn't gate.
-            tag = "Good" if mean_ssim >= 0.95 else "Review"
+            # for compressed video. Tag now uses the ROI score when
+            # available -- that's the signal users actually care about.
+            tag_ssim = roi_mean_ssim if roi_mean_ssim is not None else mean_ssim
+            tag = "Good" if tag_ssim >= 0.95 else "Review"
             sheet_path = None
             if self.config.quality_report_sheet and pairs:
                 try:
@@ -2256,6 +2353,9 @@ class SubtitleRemover:
             return {
                 'psnr': mean_psnr,
                 'ssim': mean_ssim,
+                'roi_psnr': roi_mean_psnr,
+                'roi_ssim': roi_mean_ssim,
+                'roi_bbox': list(roi) if roi else None,
                 'samples': len(psnrs),
                 'tag': tag,
                 'sheet': sheet_path,
@@ -2549,6 +2649,9 @@ class SubtitleRemover:
             last_mask = None  # cached mask for frame-skip optimization
             fixed_mask = None  # cached mask for skip_detection mode
             self._srt_entries = []
+            # B-3: reset the union-mask bbox so the report ROI reflects
+            # only the current video's detections.
+            self._quality_mask_bbox = None
 
             # v3.10: Kalman tracker for detection smoothing
             tracker = (SubtitleTracker(self.config.kalman_iou_threshold,
@@ -2660,6 +2763,12 @@ class SubtitleRemover:
                             self._collect_srt_entry(frame, frame_idx, detected_boxes)
 
                     mask = self._create_mask(frame.shape, boxes)
+                    # B-3: accumulate the union-mask bbox for the quality
+                    # report ROI. We track the bbox (not the per-frame mask
+                    # stack) to keep memory flat; the bbox is enough to
+                    # crop input and output for the metric pass.
+                    if self.config.quality_report:
+                        self._accumulate_quality_bbox(mask)
                     # Colour-tuned expansion -- grow the mask to match the
                     # dominant text colour inside each detected box.
                     if self.config.colour_tune_enable and boxes:

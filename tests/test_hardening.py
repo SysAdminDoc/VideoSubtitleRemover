@@ -928,6 +928,90 @@ class CachedRemoverHotSwapNormalizationTests(unittest.TestCase):
         self.assertTrue(0.1 <= cfg.detection_threshold <= 1.0)
 
 
+class QualityReportMaskedRoiTests(unittest.TestCase):
+    """B-3: union-mask bbox accumulator + ROI-cropped PSNR/SSIM metric so
+    a bad inpaint is no longer masked by 80-95% of unchanged pixels."""
+
+    def _bare_remover(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig()
+        remover._quality_mask_bbox = None
+        return remover
+
+    def test_accumulator_ignores_empty_mask(self):
+        import numpy as _np
+        r = self._bare_remover()
+        r._accumulate_quality_bbox(_np.zeros((10, 10), dtype=_np.uint8))
+        self.assertIsNone(r._quality_mask_bbox)
+
+    def test_accumulator_tracks_single_box(self):
+        import numpy as _np
+        r = self._bare_remover()
+        mask = _np.zeros((100, 200), dtype=_np.uint8)
+        mask[20:40, 50:120] = 255
+        r._accumulate_quality_bbox(mask)
+        self.assertEqual(r._quality_mask_bbox, (50, 20, 120, 40))
+
+    def test_accumulator_unions_across_frames(self):
+        import numpy as _np
+        r = self._bare_remover()
+        m1 = _np.zeros((100, 200), dtype=_np.uint8)
+        m1[20:40, 50:120] = 255
+        m2 = _np.zeros((100, 200), dtype=_np.uint8)
+        m2[60:90, 30:80] = 255
+        r._accumulate_quality_bbox(m1)
+        r._accumulate_quality_bbox(m2)
+        self.assertEqual(r._quality_mask_bbox, (30, 20, 120, 90))
+
+
+class AutoInpainterUnloadTests(unittest.TestCase):
+    """B-5: AutoInpainter must drop the lazily-loaded LaMa after enough
+    consecutive TBE batches to reclaim VRAM on long, mostly-easy videos."""
+
+    def _auto_inpainter(self):
+        cfg = processor.ProcessingConfig(mode=processor.InpaintMode.AUTO)
+        cfg = processor.normalize_processing_config(cfg)
+        return processor.AutoInpainter(device="cpu", config=cfg)
+
+    def test_streak_resets_on_lama_route(self):
+        auto = self._auto_inpainter()
+        auto._tbe_streak = 5
+        # Stub _lama and STTN inpaint to avoid heavy model loads.
+        auto._lama = object()
+        auto._sttn.inpaint = lambda f, m: f  # type: ignore[assignment]
+        # Force LaMa route by feeding a fully-covered mask (zero exposure).
+        import numpy as _np
+        frame = _np.zeros((4, 4, 3), dtype=_np.uint8)
+        mask = _np.full((4, 4), 255, dtype=_np.uint8)
+        # Patch _ensure_lama to return a stub that returns frames as-is
+        class _StubLama:
+            def inpaint(self, frames, masks):
+                return frames
+        auto._lama = _StubLama()
+        _ = auto.inpaint([frame, frame], [mask, mask])
+        self.assertEqual(auto._tbe_streak, 0)
+
+    def test_lama_unloaded_after_streak_threshold(self):
+        auto = self._auto_inpainter()
+        # Shorten the threshold for the test so we don't synthesise 50
+        # batches; we mutate the class constant directly.
+        auto.LAMA_IDLE_UNLOAD_AFTER = 3
+        class _StubLama:
+            def inpaint(self, frames, masks):
+                return frames
+        auto._lama = _StubLama()
+        # Force TBE path: fully exposed (no overlap between masked frames).
+        import numpy as _np
+        frame = _np.zeros((4, 4, 3), dtype=_np.uint8)
+        m1 = _np.zeros((4, 4), dtype=_np.uint8); m1[0, 0] = 255
+        m2 = _np.zeros((4, 4), dtype=_np.uint8); m2[3, 3] = 255
+        # Stub STTN inpaint to skip the heavy TBE path.
+        auto._sttn.inpaint = lambda f, m: f  # type: ignore[assignment]
+        for _ in range(3):
+            _ = auto.inpaint([frame, frame], [m1, m2])
+        self.assertIsNone(auto._lama, "LaMa must be released after streak hits the threshold")
+
+
 class LoadJsonConfigTests(unittest.TestCase):
     def test_load_json_config_rejects_oversized_file(self):
         """Files larger than 1 MB should raise ValueError without being parsed."""
