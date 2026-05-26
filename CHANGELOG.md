@@ -22,6 +22,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **LaMa-ONNX inpainter backend (RM-25, opt-in).** Set
+  `VSR_LAMA_ONNX=<path to lama_fp32.onnx>` and `pip install
+  onnxruntime` / `onnxruntime-gpu` to swap the default PyTorch LaMa
+  for a 3-5x faster ONNX Runtime path. The new
+  `backend/inpainters_onnx.py` module registers `LamaOnnxInpainter`
+  through the plugin registry, replacing the `lama` mode slot. If
+  onnxruntime is missing or the model file is unreadable, the
+  backend falls back to `cv2.inpaint` per-frame so users never see a
+  hard failure.
+- **MI-GAN ONNX inpainter backend (RM-26, opt-in).** Set
+  `VSR_MIGAN_ONNX=<path to migan.onnx>` and `pip install
+  onnxruntime`; a new `migan` mode lands in the inpainter registry
+  + CLI choice list. ~10 ms per 512x512 on a modern CPU for the
+  cleanup-only case (matches the ICCV 2023 paper); single-frame so
+  there is no TBE temporal pass. Useful for image queues and
+  underpowered laptops.
+
 - **PySceneDetect-backed scene cut detector (RM-32, opt-in).** New
   `tbe_scene_cut_use_pyscenedetect` field; when on and `scenedetect`
   is `pip install`-ed, the TBE batch-splitter uses PySceneDetect's

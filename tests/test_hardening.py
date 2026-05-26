@@ -1137,6 +1137,48 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class OnnxInpaintersTests(unittest.TestCase):
+    """RM-25 / RM-26: ONNX backends must register only when their env
+    vars are set, and the inpainter must fall back to cv2 when the
+    ONNX session is unavailable."""
+
+    def setUp(self):
+        self._saved = {
+            "VSR_LAMA_ONNX": os.environ.pop("VSR_LAMA_ONNX", None),
+            "VSR_MIGAN_ONNX": os.environ.pop("VSR_MIGAN_ONNX", None),
+        }
+        # Re-run registration with our cleared env so the registry
+        # reflects the disabled state for this test.
+        from backend import inpainters_onnx as _o
+        _o.maybe_register()
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+        # Restore registry to whatever the env vars dictate.
+        from backend import inpainters_onnx as _o
+        _o.maybe_register()
+
+    def test_inpainter_without_session_falls_back(self):
+        import numpy as _np
+        from backend.inpainters_onnx import LamaOnnxInpainter
+        cfg = processor.ProcessingConfig()
+        inp = LamaOnnxInpainter(device="cpu", config=cfg)
+        self.assertIsNone(inp._session)
+        frame = _np.full((32, 32, 3), 100, dtype=_np.uint8)
+        mask = _np.zeros((32, 32), dtype=_np.uint8)
+        mask[10:20, 10:20] = 255
+        out = inp.inpaint([frame], [mask])
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].shape, frame.shape)
+
+    def test_no_register_when_env_missing(self):
+        from backend.inpainters_onnx import maybe_register
+        self.assertEqual(maybe_register(), [])
+
+
 class PySceneDetectAdapterTests(unittest.TestCase):
     """RM-32: PySceneDetect adapter must return None when the optional
     dep is absent, and the histogram path stays the default."""

@@ -88,6 +88,7 @@ class InpaintMode(Enum):
     LAMA = "lama"
     PROPAINTER = "propainter"
     AUTO = "auto"   # per-batch routing between TBE (easy) and LaMa (hard)
+    MIGAN = "migan"  # opt-in ONNX backend (RM-26)
 
 
 @dataclass
@@ -354,6 +355,8 @@ def _coerce_backend_mode(value) -> InpaintMode:
             "propainter": InpaintMode.PROPAINTER,
             "pro painter": InpaintMode.PROPAINTER,
             "auto": InpaintMode.AUTO,
+            "migan": InpaintMode.MIGAN,
+            "mi-gan": InpaintMode.MIGAN,
         }
         if normalized in mode_map:
             return mode_map[normalized]
@@ -2175,6 +2178,14 @@ _inpainter_registry.register("lama", lambda device, config: LAMAInpainter(device
 _inpainter_registry.register("propainter", lambda device, config: ProPainterInpainter(device, config))
 _inpainter_registry.register("auto", lambda device, config: AutoInpainter(device, config))
 
+# RM-25 / RM-26: optional ONNX backends (LaMa-ONNX, MI-GAN). Import
+# triggers `maybe_register()` which checks env vars and only patches
+# the registry when the user has opted in.
+try:
+    from backend import inpainters_onnx as _inpainters_onnx  # noqa: F401
+except Exception as _exc:
+    logger.debug(f"ONNX inpainters module did not load: {_exc}")
+
 
 class _LosslessIntermediateWriter:
     """Streams BGR frames to ffmpeg via stdin and writes a lossless FFV1
@@ -3490,8 +3501,9 @@ def main():
     parser.add_argument("--no-resume", action="store_true",
                        help="Ignore any existing checkpoint and reprocess every file")
     parser.add_argument("--mode", "-m", default="sttn",
-                       choices=["sttn", "lama", "propainter", "auto"],
-                       help="Inpainting algorithm (auto routes per batch)")
+                       choices=["sttn", "lama", "propainter", "auto", "migan"],
+                       help="Inpainting algorithm (auto routes per batch; "
+                            "migan requires VSR_MIGAN_ONNX + onnxruntime).")
     parser.add_argument("--gpu", "-g", type=int, default=0, help="GPU device ID (-1 for CPU)")
     parser.add_argument("--lang", "-l", default="en", help="Detection language (en, ch, ja, ko, etc.)")
     parser.add_argument("--skip-detection", action="store_true",
