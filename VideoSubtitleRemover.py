@@ -342,6 +342,8 @@ class ProcessingConfig:
     detection_vertical: bool = False    # RM-24 vertical-text mode
     whisper_fallback: bool = False       # RM-27 Whisper-driven mask fallback
     whisper_model_size: str = "tiny"
+    upscale_factor: int = 0              # RM-78 post-cleanup upscale (0/2/3/4)
+    film_grain_strength: float = 0.0     # RM-80 additive film grain (0..0.5)
 
     # Time range (video only, seconds)
     time_start: float = 0.0
@@ -468,6 +470,11 @@ class ProcessingConfig:
         if wm not in {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}:
             wm = "tiny"
         self.whisper_model_size = wm
+        upscale = _coerce_int(self.upscale_factor, 0, 0, 4)
+        if upscale not in (0, 2, 3, 4):
+            upscale = 0
+        self.upscale_factor = upscale
+        self.film_grain_strength = _coerce_float(self.film_grain_strength, 0.0, 0.0, 0.5)
         self.time_start = max(0.0, _coerce_float(self.time_start, 0.0))
         self.time_end = max(0.0, _coerce_float(self.time_end, 0.0))
         if self.time_end and self.time_end < self.time_start:
@@ -7479,6 +7486,8 @@ class VideoSubtitleRemoverApp:
                 detection_vertical=getattr(item.config, 'detection_vertical', False),
                 whisper_fallback=getattr(item.config, 'whisper_fallback', False),
                 whisper_model_size=getattr(item.config, 'whisper_model_size', 'tiny'),
+                upscale_factor=getattr(item.config, 'upscale_factor', 0),
+                film_grain_strength=getattr(item.config, 'film_grain_strength', 0.0),
                 subtitle_area=item.config.subtitle_area,
                 time_start=getattr(item.config, 'time_start', 0.0),
                 time_end=getattr(item.config, 'time_end', 0.0),

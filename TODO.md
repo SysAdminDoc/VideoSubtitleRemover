@@ -127,9 +127,9 @@
 ## Phase 13 -- Post-processing (P3 v4.x)
 
 - [ ] P3 RM-77 SeedVR2 one-step video restoration
-- [ ] P3 RM-78 Real-ESRGAN output upscale
+- [x] P3 RM-78 Real-ESRGAN output upscale (opt-in via realesrgan-ncnn-vulkan)
 - [ ] P3 RM-79 SwinIR restoration pass
-- [ ] P3 RM-80 Film-grain re-synthesis
+- [x] P3 RM-80 Film-grain re-synthesis (ffmpeg noise filter, opt-in)
 
 ## Phase 14 -- v5+ research bench (deferred)
 

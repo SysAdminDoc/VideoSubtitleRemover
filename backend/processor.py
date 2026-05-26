@@ -122,6 +122,13 @@ class ProcessingConfig:
     # anti-aliased / motion-blurred subtitles the OCR cascade misses.
     whisper_fallback: bool = False
     whisper_model_size: str = "tiny"   # tiny / base / small / medium
+    # RM-78 / RM-80 optional post-restore passes. Each runs after the
+    # main encode + audio mux. Real-ESRGAN scale 0 = disabled; values
+    # 2 or 4 invoke the upscale stage (requires the
+    # realesrgan-ncnn-vulkan binary on PATH). Film-grain strength 0 =
+    # disabled; positive values invoke the ffmpeg noise pass.
+    upscale_factor: int = 0
+    film_grain_strength: float = 0.0
 
     # Mask settings
     mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
@@ -403,6 +410,11 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     if model_size not in {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}:
         model_size = "tiny"
     config.whisper_model_size = model_size
+    config.upscale_factor = _coerce_int(config.upscale_factor, 0, 0, 8)
+    if config.upscale_factor not in (0, 2, 3, 4):
+        config.upscale_factor = 0
+    config.film_grain_strength = _coerce_float(
+        config.film_grain_strength, 0.0, 0.0, 0.5)
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.tbe_enable = _coerce_bool(config.tbe_enable, True)
@@ -3278,6 +3290,12 @@ class SubtitleRemover:
                 srt_path = str(Path(output_path).with_suffix('.srt'))
                 self._write_srt(srt_path, fps, start_frame)
 
+            # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
+            # upscale, film-grain re-synthesis). Run after the main mux
+            # so the user-visible output is the post-processed file;
+            # each adapter degrades gracefully when its dep is missing.
+            self._run_post_restore_passes(output_path, temp_dir)
+
             # Quality report: PSNR/SSIM across a sample of unmasked regions
             if self.config.quality_report:
                 try:
@@ -3340,6 +3358,44 @@ class SubtitleRemover:
                     shutil.rmtree(_wda, ignore_errors=True)
             except Exception:
                 pass
+
+    def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
+        """RM-78 / RM-80: run optional post-restore passes against the
+        finalised output in place. Each adapter is a no-op when its
+        dep is missing; the original output is preserved on every
+        failure path so users always have a result.
+        """
+        if self.config.upscale_factor in (2, 3, 4):
+            try:
+                from backend.post_restore import realesrgan_upscale
+                upscaled = os.path.join(temp_dir, "upscaled.mp4")
+                produced = realesrgan_upscale(
+                    output_path, upscaled,
+                    scale=int(self.config.upscale_factor),
+                )
+                if produced and Path(produced).is_file():
+                    _promote_temp_output(produced, output_path)
+                    logger.info(
+                        f"Real-ESRGAN x{self.config.upscale_factor} pass complete"
+                    )
+            except Exception as exc:
+                logger.warning(f"Real-ESRGAN pass failed: {exc}")
+        if self.config.film_grain_strength > 0.0:
+            try:
+                from backend.post_restore import add_film_grain
+                grain_out = os.path.join(temp_dir, "grainy.mp4")
+                produced = add_film_grain(
+                    output_path, grain_out,
+                    strength=self.config.film_grain_strength,
+                )
+                if produced and Path(produced).is_file():
+                    _promote_temp_output(produced, output_path)
+                    logger.info(
+                        f"Film-grain pass complete "
+                        f"(strength={self.config.film_grain_strength:.3f})"
+                    )
+            except Exception as exc:
+                logger.warning(f"Film-grain pass failed: {exc}")
 
     def _get_encode_args(self) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
@@ -3593,6 +3649,15 @@ def main():
                             "Whisper-detected speech span, default-mask the "
                             "bottom band so the subtitle position is still "
                             "cleaned. Requires `pip install faster-whisper`.")
+    parser.add_argument("--upscale", type=int, default=0, choices=[0, 2, 3, 4],
+                       help="Post-cleanup upscale via Real-ESRGAN (0=off, "
+                            "2/3/4 = scale factor). Requires "
+                            "realesrgan-ncnn-vulkan on PATH.")
+    parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
+                       help="Add additive film grain after cleanup. Strength "
+                            "is a 0..0.5 fraction of full-scale; 0 disables. "
+                            "Pairs well with low-bitrate H.264 outputs that "
+                            "look unnaturally smooth around inpainted regions.")
     parser.add_argument("--whisper-model", default="tiny",
                        choices=["tiny", "base", "small", "medium",
                                 "large", "large-v2", "large-v3"],
@@ -3835,6 +3900,8 @@ def main():
         detection_vertical=args.vertical,
         whisper_fallback=args.whisper_fallback,
         whisper_model_size=args.whisper_model,
+        upscale_factor=args.upscale,
+        film_grain_strength=args.film_grain,
         output_quality=args.crf,
         time_start=args.start,
         time_end=args.end,
