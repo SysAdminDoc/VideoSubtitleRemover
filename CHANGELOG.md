@@ -4,6 +4,38 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Surya GPL opt-in gate** -- the OCR cascade no longer auto-loads Surya
+  even when it is pip-installed. Surya is GPL-licensed; loading it at
+  runtime in a PyInstaller bundle put the MIT-clean release at risk.
+  Users who want Surya must set `VSR_ALLOW_GPL=1` in the environment.
+  When the gate is closed but Surya is installed, the loader logs a
+  warning explaining the env var. `detect_ai_engines()` in the GUI now
+  labels it `"Surya (GPL -- set VSR_ALLOW_GPL=1)"` so the About dialog
+  reflects the gated state.
+
+### Fixed
+
+- **Cached-remover hot-swap missed normalisation** -- when a queue item
+  reused a cached `SubtitleRemover` (same mode / device / language) the
+  GUI assigned the new `BackendConfig` directly to `remover.config`,
+  bypassing `normalize_processing_config`. A NaN/inf or out-of-range
+  per-item override could then leak into the pipeline. The hot-swap now
+  routes through the normaliser the constructor uses on cold start.
+- **Quality-report output capture honoured HW-accel hint** -- the 10-
+  frame PSNR/SSIM sample pass opened the just-written output through
+  `decode_hw_accel`, which can fall back inconsistently against a fresh
+  H.264 mp4. The output capture now forces software decode; the input
+  capture still honours the user's hint.
+- **ffmpeg subprocess timeout truncated long videos** -- the audio mux,
+  yadif deinterlace, and reencode-or-copy paths all used a fixed 600 s
+  timeout. Videos over ~1 hour silently fell back to "copy without
+  audio" once the encode pass ran longer than 10 minutes. The timeout is
+  now adaptive: `_ffmpeg_subprocess_timeout(duration)` returns
+  `base + duration * 4` with a 24-hour ceiling and a 600-s floor when
+  ffprobe is unavailable.
+
 ### Added
 
 - **Karaoke / per-syllable grouping (`--karaoke-grouping`)** -- new
