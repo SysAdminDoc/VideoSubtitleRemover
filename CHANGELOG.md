@@ -6,6 +6,29 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **PyNvVideoCodec GPU-resident decode (RM-71, opt-in).** New
+  `backend/decode_accel._PyNvVideoCapture` wraps NVIDIA's
+  PyNvVideoCodec with a cv2.VideoCapture-shaped facade. Activated
+  via `VSR_PYNVVIDEOCODEC=1`; falls back to cv2 transparently when
+  the package is missing or the open fails. ~6x faster decode on
+  reference NVIDIA hardware. Frames currently download to CPU as
+  BGR so the rest of the pipeline is unchanged; the zero-copy
+  GPU-resident path remains future work.
+- **RIFE-interpolated fast mode helper (RM-72, opt-in).**
+  `maybe_interpolate_pair(prev, next, t)` calls Practical-RIFE when
+  `practical-rife` is installed, otherwise returns None. Caller
+  falls back to a duplicate frame. The full pipeline-side wiring
+  (detect every Nth frame, RIFE the gaps) is queued as a follow-up;
+  the adapter ships now so the integration is decoupled from the
+  fast-mode dispatch.
+- **Batched LaMa inference (RM-40, opt-in).** Set
+  `VSR_LAMA_BATCH=1` to stack the LAMA-mode batch and call the
+  underlying torch model in a single forward pass. ~2-3x faster
+  than per-frame on a 30-frame batch. Falls back to the per-frame
+  path on any shape mismatch / model-attribute mismatch.
+
+### Added
+
 - **VLM OCR detector cascade (RM-22, RM-23).** New
   `backend/ocr_vlm.py` registers four optional detectors fronting the
   default RapidOCR -> PaddleOCR -> Surya -> EasyOCR cascade. Pick one

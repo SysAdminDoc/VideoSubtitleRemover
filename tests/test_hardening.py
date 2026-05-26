@@ -1280,6 +1280,24 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class DecodeAccelTests(unittest.TestCase):
+    """RM-71 / RM-72: PyNvVideoCodec and RIFE adapters must return None
+    when their optional deps are missing."""
+
+    def test_pynv_returns_none_without_dep(self):
+        from backend.decode_accel import try_open_pynv
+        cap = try_open_pynv("/nonexistent.mp4")
+        self.assertIsNone(cap)
+
+    def test_rife_returns_none_without_dep(self):
+        import numpy as _np
+        from backend.decode_accel import maybe_interpolate_pair, is_rife_available
+        a = _np.zeros((8, 8, 3), dtype=_np.uint8)
+        b = _np.full((8, 8, 3), 255, dtype=_np.uint8)
+        if not is_rife_available():
+            self.assertIsNone(maybe_interpolate_pair(a, b, 0.5))
+
+
 class VlmOcrAdapterTests(unittest.TestCase):
     """RM-22 / RM-23 / RM-42: maybe_build_vlm_detector must return None
     by default (no env var, default lang) and the adapter classes must
