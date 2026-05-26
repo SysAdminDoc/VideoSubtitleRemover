@@ -964,6 +964,73 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         self.assertEqual(r._quality_mask_bbox, (30, 20, 120, 90))
 
 
+class LosslessIntermediateWriterTests(unittest.TestCase):
+    """I-1: the intermediate writer must roundtrip frames losslessly when
+    ffmpeg is available (FFV1 in .mkv) and degrade gracefully to the
+    legacy mp4v writer when it is not."""
+
+    def _have_ffmpeg(self):
+        return shutil.which("ffmpeg") is not None
+
+    def test_writer_round_trips_frames_losslessly(self):
+        if not self._have_ffmpeg():
+            self.skipTest("ffmpeg not on PATH")
+        import numpy as _np
+        import cv2 as _cv2
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "intermediate.mkv")
+            w, h, fps = 32, 24, 12.0
+            writer = processor._LosslessIntermediateWriter(path, w, h, fps)
+            self.assertTrue(writer.isOpened())
+            self.assertTrue(writer.lossless,
+                            "FFV1 path should engage when ffmpeg is present")
+            frames = []
+            for i in range(10):
+                # Each frame is uniformly coloured with (i, i*2, i*3) so a
+                # lossless round-trip yields bit-identical values back.
+                arr = _np.empty((h, w, 3), dtype=_np.uint8)
+                arr[:] = (i, (i * 2) % 256, (i * 3) % 256)
+                frames.append(arr)
+                writer.write(arr)
+            writer.release()
+            self.assertTrue(Path(path).exists())
+            cap = _cv2.VideoCapture(path)
+            seen = []
+            try:
+                while True:
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
+                    seen.append(frame)
+            finally:
+                cap.release()
+            self.assertEqual(len(seen), len(frames))
+            # Lossless: per-frame max channel delta is 0 for FFV1 + bgr24.
+            for i, (src, decoded) in enumerate(zip(frames, seen)):
+                delta = int(_np.abs(src.astype(_np.int16) - decoded.astype(_np.int16)).max())
+                self.assertEqual(delta, 0,
+                                 f"frame {i} expected lossless roundtrip, got delta={delta}")
+
+    def test_writer_fallback_when_ffmpeg_path_is_blank(self):
+        # Simulate a missing ffmpeg by patching shutil.which inside the
+        # processor module. The writer must open the cv2 fallback and stay
+        # functional rather than raising.
+        import shutil as _shutil
+        original_which = _shutil.which
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "intermediate.mkv")
+            try:
+                _shutil.which = lambda name: None
+                writer = processor._LosslessIntermediateWriter(path, 16, 12, 24.0)
+                # Fallback path renames .mkv to .mp4 because mp4v in .mkv
+                # is rarely playable on consumer builds.
+                self.assertFalse(writer.lossless)
+                self.assertTrue(writer.path.endswith(".mp4"))
+                writer.release()
+            finally:
+                _shutil.which = original_which
+
+
 class AutoInpainterUnloadTests(unittest.TestCase):
     """B-5: AutoInpainter must drop the lazily-loaded LaMa after enough
     consecutive TBE batches to reclaim VRAM on long, mostly-easy videos."""
