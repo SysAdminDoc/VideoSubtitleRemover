@@ -943,6 +943,102 @@ def is_image_file(path: str) -> bool:
     return Path(path).suffix.lower() in image_extensions
 
 
+# F-5: curated friendly names for languages the project always shipped
+# with. Languages the active engine adds beyond this list inherit the
+# raw code as their display name.
+_CURATED_LANG_NAMES: Tuple[Tuple[str, str], ...] = (
+    ("en", "English"),
+    ("ch", "Chinese"),
+    ("japan", "Japanese"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("korean", "Korean"),
+    ("fr", "French"),
+    ("french", "French"),
+    ("de", "German"),
+    ("german", "German"),
+    ("es", "Spanish"),
+    ("spanish", "Spanish"),
+    ("pt", "Portuguese"),
+    ("portuguese", "Portuguese"),
+    ("ru", "Russian"),
+    ("ar", "Arabic"),
+    ("arabic", "Arabic"),
+    ("hi", "Hindi"),
+    ("it", "Italian"),
+    ("italian", "Italian"),
+    ("nl", "Dutch"),
+    ("pl", "Polish"),
+    ("tr", "Turkish"),
+    ("vi", "Vietnamese"),
+    ("th", "Thai"),
+    ("uk", "Ukrainian"),
+    ("sv", "Swedish"),
+    ("no", "Norwegian"),
+    ("da", "Danish"),
+    ("fi", "Finnish"),
+    ("cs", "Czech"),
+    ("hu", "Hungarian"),
+    ("ro", "Romanian"),
+    ("el", "Greek"),
+    ("he", "Hebrew"),
+    ("id", "Indonesian"),
+    ("ms", "Malay"),
+    ("fil", "Filipino"),
+)
+
+
+def _engine_supported_languages() -> List[str]:
+    """Best-effort list of language codes the active OCR cascade can
+    drive. We do not import the engines just to read their lang lists
+    (heavy); we ask each module for a constant if it exposes one.
+    """
+    codes: List[str] = []
+    # PaddleOCR exposes a published list of 80+ codes; we hard-code a
+    # subset shared across PaddleOCR / RapidOCR / EasyOCR rather than
+    # importing the engine to read its config.
+    paddle_compatible = [
+        "en", "ch", "chinese_cht", "japan", "korean", "ka",
+        "fr", "german", "it", "es", "pt", "ru", "ar", "hi",
+        "nl", "no", "pl", "tr", "th", "vi", "uk", "be",
+        "bg", "hr", "cs", "da", "et", "fi", "hu", "is",
+        "lv", "lt", "mt", "ro", "sk", "sl", "sv", "id", "ms",
+        "fa", "he", "el",
+    ]
+    codes.extend(paddle_compatible)
+    return codes
+
+
+def _build_language_list() -> List[Tuple[str, str]]:
+    """Return [(code, friendly_name)] pairs to populate the lang picker.
+
+    Curated friendly names take precedence; engine-supported codes that
+    aren't in the curated table fall through with the raw code as their
+    label so the picker still surfaces them.
+    """
+    pretty: Dict[str, str] = {}
+    for code, name in _CURATED_LANG_NAMES:
+        pretty.setdefault(code, name)
+    out: List[Tuple[str, str]] = []
+    seen: set = set()
+    # English first (always the default).
+    out.append(("en", "English"))
+    seen.add("en")
+    # Curated order next so the picker leads with familiar options.
+    for code, name in _CURATED_LANG_NAMES:
+        if code in seen:
+            continue
+        seen.add(code)
+        out.append((code, name))
+    # Any extra engine-declared codes the curated list missed.
+    for code in _engine_supported_languages():
+        if code in seen:
+            continue
+        seen.add(code)
+        out.append((code, pretty.get(code, code.upper())))
+    return out
+
+
 def detect_ai_engines() -> dict:
     """Probe which AI engines are available."""
     engines = {"detection": [], "inpainting": []}
@@ -3788,21 +3884,11 @@ class VideoSubtitleRemoverApp:
         tk.Label(lang_row, text="Subtitle language", font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
-        # Language codes mapped to friendly display names
-        self._lang_display = [
-            ("en", "English"),
-            ("ch", "Chinese"),
-            ("ja", "Japanese"),
-            ("ko", "Korean"),
-            ("fr", "French"),
-            ("de", "German"),
-            ("es", "Spanish"),
-            ("pt", "Portuguese"),
-            ("ru", "Russian"),
-            ("ar", "Arabic"),
-            ("hi", "Hindi"),
-            ("it", "Italian"),
-        ]
+        # F-5: language list = the union of curated friendly names and
+        # any extra codes the active OCR engine declares it supports.
+        # PaddleOCR / RapidOCR ship 100+ languages; we expose the union
+        # so users can pick e.g. Thai or Polish without modifying code.
+        self._lang_display = _build_language_list()
         self._lang_labels = [f"{name} ({code})" for code, name in self._lang_display]
         self._lang_by_label = {label: code for label, (code, _) in
                                zip(self._lang_labels, self._lang_display)}
@@ -6474,6 +6560,12 @@ class VideoSubtitleRemoverApp:
         self.start_btn.icon = "x"
         self.start_btn.set_text("Stop batch")
         self._batch_times = []
+        # F-9: probe the first queued video so the very first ETA tick
+        # has a real number instead of "" until the first item finishes.
+        try:
+            self._probe_eta_seconds = self._probe_batch_eta()
+        except Exception:
+            self._probe_eta_seconds = 0.0
         self._batch_started_at = datetime.now()
         self._refresh_action_states()
         self._update_status("Batch processing started", "info")
@@ -6826,15 +6918,87 @@ class VideoSubtitleRemoverApp:
             self._taskbar = None
 
     def _compute_eta(self, current: int, total: int) -> str:
-        """Estimate time-remaining based on rolling average per-item time."""
+        """Estimate time-remaining based on rolling average per-item time.
+
+        F-9: when no items have completed yet we fall back to the
+        pre-batch probe estimate (`_probe_eta_seconds`) so users get a
+        sensible "about X left" line from the very first frame instead
+        of an empty string until the first item finishes.
+        """
         remaining = total - current
-        if remaining <= 0 or not self._batch_times:
+        if remaining <= 0:
             return ""
-        # Use a recency-weighted average of the last few items
-        recent = self._batch_times[-5:]
-        avg = sum(recent) / len(recent)
-        eta_seconds = avg * remaining
-        return format_time(eta_seconds)
+        if self._batch_times:
+            recent = self._batch_times[-5:]
+            avg = sum(recent) / len(recent)
+            eta_seconds = avg * remaining
+            return format_time(eta_seconds)
+        probe = getattr(self, "_probe_eta_seconds", 0.0) or 0.0
+        if probe > 0:
+            return format_time(probe * remaining) + " (estimated)"
+        return ""
+
+    def _probe_batch_eta(self) -> float:
+        """F-9: cheap pre-batch ETA probe. Reads a 30-frame slice from
+        the first queued video, runs detect + inpaint on that slice,
+        scales the wall-time by the video's frame count divided by the
+        probe size. Returns the estimated per-item seconds (or 0 if the
+        probe can't run -- e.g. only images in the queue).
+
+        Runs synchronously off the main thread so the GUI stays
+        responsive; we always cap the probe at ~10 s so launch latency
+        stays low even on slow CPUs.
+        """
+        first_video = None
+        for item in self.queue:
+            if is_video_file(item.file_path) and item.status == ProcessingStatus.IDLE:
+                first_video = item
+                break
+        if first_video is None:
+            return 0.0
+        try:
+            import cv2 as _cv2
+            cap = _cv2.VideoCapture(first_video.file_path)
+            try:
+                if not cap.isOpened():
+                    return 0.0
+                total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
+                fps = cap.get(_cv2.CAP_PROP_FPS) or 30.0
+                if fps <= 0:
+                    fps = 30.0
+                duration = total_frames / fps
+                probe_frames = min(30, total_frames)
+                if probe_frames <= 0:
+                    return 0.0
+                from backend.processor import SubtitleDetector
+                detector = self._preview_detector
+                lang = first_video.config.detection_lang or "en"
+                if detector is None or self._preview_detector_lang != lang:
+                    detector = SubtitleDetector(lang=lang)
+                    self._preview_detector = detector
+                    self._preview_detector_lang = lang
+                threshold = getattr(first_video.config, "detection_threshold", 0.5)
+                t0 = time.monotonic()
+                for _ in range(probe_frames):
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
+                    detector.detect(frame, threshold)
+                elapsed = time.monotonic() - t0
+            finally:
+                cap.release()
+        except Exception as exc:
+            logger.debug(f"Pre-batch ETA probe failed: {exc}")
+            return 0.0
+        if elapsed <= 0 or probe_frames <= 0:
+            return 0.0
+        # Scale to the full video duration. Add a fudge factor for the
+        # inpaint pass and ffmpeg mux which the detect-only probe does
+        # not see. 1.8x leaves room for slower inpainters without
+        # over-estimating to the point of being useless.
+        per_frame_detect = elapsed / probe_frames
+        est_per_video = per_frame_detect * total_frames * 1.8 + max(2.0, duration * 0.05)
+        return est_per_video
 
     def _update_batch_progress(self, current: int, total: int):
         """Update the overall batch progress bar, percent label, and title."""

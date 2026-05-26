@@ -26,7 +26,7 @@
 - [ ] P1 RFP-F-1 Region selector frame scrubbing
 - [ ] P1 RFP-F-2 Multi-rectangle region drawing (surface subtitle_areas)
 - [ ] P1 RFP-F-3 Inpaint-preview on a sample frame
-- [ ] P1 RFP-B-4 Multi-track loudness normalisation (filter_complex)
+- [x] P1 RFP-B-4 Multi-track loudness normalisation (filter_complex)
 - [x] P1 RM-28 "Repeat with these settings" queue action
 - [ ] P1 RM-29 Per-file overrides surface
 - [ ] P1 RM-30 A/B flicker-scrubber in preview pane
@@ -35,10 +35,10 @@
 
 ## Phase 3 -- Polish (P2)
 
-- [ ] P2 RFP-F-5 Open up the language picker
+- [x] P2 RFP-F-5 Open up the language picker
 - [ ] P2 RFP-F-7 Per-item cancellation
 - [ ] P2 RFP-F-8 HEVC / AV1 output codec dropdown
-- [ ] P2 RFP-F-9 Pre-batch ETA probe
+- [x] P2 RFP-F-9 Pre-batch ETA probe
 - [x] P2 RFP-F-10 `--preset NAME` CLI flag
 - [x] P2 RFP-EI-1 Percentile fallback detection thresholds (was Otsu in plan; percentile is more robust on low-contrast)
 - [x] P2 RFP-EI-5 dataclasses-driven ProcessingConfig persistence (shipped with B-1)
