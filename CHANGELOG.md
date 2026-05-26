@@ -6,6 +6,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Lossless FFV1 intermediate (I-1).** The temp file written between
+  the inpaint pass and the final ffmpeg encode used to be `mp4v`
+  inside `.mp4` -- a full generation of lossy compression sitting in
+  front of the user-visible H.264/NVENC final encode. Every output was
+  effectively gen-2 lossy. The new `_LosslessIntermediateWriter` pipes
+  raw BGR frames through a Popen-spawned `ffmpeg -c:v ffv1` writing
+  `.mkv`, so the final encode pass is the only lossy step. When
+  ffmpeg is missing the writer falls back to the legacy `mp4v` path
+  with a logged warning, so installations without ffmpeg keep working
+  at the old quality. Verified by `LosslessIntermediateWriterTests`
+  that the FFV1 round-trip is bit-identical for FFV1-eligible
+  installations.
+
 - **Quality report includes inpaint-region (ROI) PSNR/SSIM (B-3).** The
   v3.12 quality report was computed over the entire frame, so unchanged
   pixels (typically 80-95% of the area) dominated the metric and could

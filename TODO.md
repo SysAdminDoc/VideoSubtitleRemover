@@ -19,7 +19,7 @@
 - [x] P0 RFP-B-1 Wire 13 missing backend fields through the GUI
 - [x] P0 RFP-B-3 Quality report measures masked region only
 - [x] P0 RFP-B-5 AutoInpainter unload LaMa after N consecutive TBE batches
-- [ ] P0 RFP-I-1 Lossless intermediate codec (eliminate double-encode)
+- [x] P0 RFP-I-1 Lossless intermediate codec (eliminate double-encode)
 
 ## Phase 2 -- Workflow features (P1)
 
