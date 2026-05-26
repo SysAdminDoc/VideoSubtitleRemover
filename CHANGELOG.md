@@ -6,6 +6,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **SAM 2 / SAM 3 / MatAnyone 2 / CoTracker3 adapters
+  (RM-66/67/68/69, opt-in).** New `backend/segmentation.py` exposes:
+  - `refine_mask_with_sam2(frame, boxes, base_mask)` -- prompted box
+    -> text-shaped mask, integrated into `_create_mask` so enabling
+    `sam2_refine` (CLI `--sam2-refine`) replaces the padded rect mask
+    with the SAM 2 output. Tighter mask = less inpaint area.
+  - `segment_text_with_sam3(frame)` -- text-prompt mask via SAM 3
+    when `VSR_SAM3=1` + the `sam3` package is installed.
+  - `matte_frame(frame, hint_mask)` -- MatAnyone 2 soft alpha matte
+    for thin moving subtitle lines.
+  - `track_points(frames, points)` -- CoTracker3 helper for callers
+    that need to confirm a karaoke caret stays on the same line.
+
 - **Diffusion inpainter scaffolds (RM-59/60/61/62/63/64/65, opt-in).**
   New `backend/inpainters_diffusion.py` registers seven optional
   video-inpainter backends with the plugin registry:
