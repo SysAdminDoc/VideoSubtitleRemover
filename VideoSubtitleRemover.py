@@ -2443,6 +2443,7 @@ class QueueItemWidget(tk.Frame):
     def __init__(self, parent, item: QueueItem, on_remove: Callable,
                  on_select: Callable = None, on_rename: Callable = None,
                  on_repeat: Callable = None, on_cancel_item: Callable = None,
+                 on_override: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER)
@@ -2453,6 +2454,7 @@ class QueueItemWidget(tk.Frame):
         self.on_rename = on_rename
         self.on_repeat = on_repeat
         self.on_cancel_item = on_cancel_item
+        self.on_override = on_override
         self.is_selected = False
         self._surface_bg = Theme.BG_CARD
         self._pulse_id = None
@@ -2586,6 +2588,12 @@ class QueueItemWidget(tk.Frame):
         if self.on_cancel_item is not None and is_active:
             menu.add_command(label="Cancel this item",
                              command=lambda: self.on_cancel_item(self.item.id))
+        # RM-29: open the per-file override dialog so users can change
+        # mode / language / sensitivity for a single queued item
+        # without touching the global settings.
+        if self.on_override is not None and self.item.status == ProcessingStatus.IDLE:
+            menu.add_command(label="Override settings for this file...",
+                             command=lambda: self.on_override(self.item.id))
         menu.add_separator()
         menu.add_command(label="Remove from queue",
                          command=lambda: self.on_remove(self.item.id),
@@ -6307,6 +6315,157 @@ class VideoSubtitleRemoverApp:
         except OSError:
             return 0
 
+    def _open_per_file_overrides(self, item_id: str):
+        """RM-29: themed popover that edits a single queue item's
+        ProcessingConfig without touching the global UI state.
+
+        Only the most-asked fields are surfaced (mode, language,
+        sensitivity, output codec). The rest of the config carries over
+        from the snapshot taken when the item was queued.
+        """
+        item = next((it for it in self.queue if it.id == item_id), None)
+        if item is None or item.status != ProcessingStatus.IDLE:
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Override settings: {Path(item.file_path).name}")
+        dialog.configure(bg=Theme.BG_OVERLAY)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+
+        outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
+        outer.pack()
+        body = tk.Frame(outer, bg=Theme.BG_SECONDARY)
+        body.pack()
+
+        content = tk.Frame(body, bg=Theme.BG_SECONDARY)
+        content.pack(padx=24, pady=(20, 12))
+
+        tk.Label(content, text="Per-file overrides",
+                 font=f(Theme.F_HEADING, "bold"),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
+        tk.Label(content,
+                 text="These apply to this queued item only and survive a global settings change.",
+                 font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
+                 wraplength=380, justify="left").pack(anchor="w", pady=(2, Theme.S_LG))
+
+        # Mode picker.
+        mode_var = tk.StringVar(value=item.config.mode.value)
+        tk.Label(content, text="Mode", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
+        mode_picker = SegmentedPicker(
+            content,
+            options=[(m.value, m.value) for m in InpaintMode],
+            value=mode_var.get(),
+            command=lambda v: mode_var.set(v),
+            bg=Theme.BG_SECONDARY,
+        )
+        mode_picker.pack(fill="x", pady=(2, Theme.S_MD))
+
+        # Detection language.
+        lang_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        lang_row.pack(fill="x", pady=(0, Theme.S_SM))
+        tk.Label(lang_row, text="Subtitle language", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        lang_codes = [code for code, _ in self._lang_display]
+        lang_var = tk.StringVar(value=item.config.detection_lang)
+        lang_combo = ttk.Combobox(
+            lang_row, textvariable=lang_var, width=18,
+            values=self._lang_labels,
+            state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
+        )
+        # Match the friendly label for the current code.
+        for label, (code, _) in zip(self._lang_labels, self._lang_display):
+            if code == lang_var.get():
+                lang_combo.set(label)
+                break
+        lang_combo.pack(side="right")
+
+        # Sensitivity slider (1-9 maps to 0.1-0.9).
+        sens_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        sens_row.pack(fill="x", pady=(Theme.S_SM, Theme.S_SM))
+        sens_var = tk.IntVar(value=int(round(item.config.detection_threshold * 100)))
+        tk.Label(sens_row, text="Sensitivity", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        sens_label = tk.Label(sens_row, text=f"{sens_var.get()}%",
+                              font=f(Theme.F_BODY_SM, "bold"),
+                              bg=Theme.BG_SECONDARY, fg=Theme.BLUE_PRIMARY)
+        sens_label.pack(side="right")
+
+        def _on_sens(value):
+            try:
+                sens_var.set(int(value))
+                sens_label.config(text=f"{int(value)}%")
+            except (TypeError, ValueError):
+                pass
+
+        sens_slider = tk.Scale(
+            content, from_=10, to=90, orient="horizontal",
+            command=_on_sens, showvalue=False, length=380,
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+            troughcolor=Theme.BG_TERTIARY,
+            activebackground=Theme.BLUE_PRIMARY,
+            highlightthickness=0,
+        )
+        sens_slider.set(sens_var.get())
+        sens_slider.pack(fill="x", pady=(0, Theme.S_MD))
+
+        # Output codec.
+        codec_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        codec_row.pack(fill="x", pady=(0, Theme.S_SM))
+        tk.Label(codec_row, text="Output codec", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        codec_var = tk.StringVar(value=getattr(item.config, "output_codec", "h264"))
+        ttk.Combobox(
+            codec_row, textvariable=codec_var, width=8,
+            values=["h264", "h265", "av1"],
+            state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
+        ).pack(side="right")
+
+        # Action buttons.
+        actions = tk.Frame(body, bg=Theme.BG_CARD)
+        actions.pack(fill="x")
+        actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
+        actions_inner.pack(side="right", padx=16, pady=14)
+
+        def _save():
+            try:
+                item.config.mode = InpaintMode(mode_var.get())
+            except ValueError:
+                pass
+            label = lang_combo.get()
+            new_code = self._lang_by_label.get(label, item.config.detection_lang)
+            item.config.detection_lang = new_code
+            item.config.detection_threshold = sens_var.get() / 100.0
+            item.config.output_codec = codec_var.get()
+            item.config.normalized()
+            if item.id in self.queue_widgets:
+                self.queue_widgets[item.id].update_item(item)
+            self._update_status(
+                f"Overrides saved for {Path(item.file_path).name}",
+                "success",
+            )
+            dialog.destroy()
+
+        ModernButton(actions_inner, text="Cancel", command=dialog.destroy,
+                     style="ghost", size="md", width=96).pack(side="left")
+        ModernButton(actions_inner, text="Save", command=_save,
+                     style="primary", size="md", width=96).pack(
+                         side="left", padx=(Theme.S_SM, 0))
+
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.update_idletasks()
+        try:
+            px, py = self.root.winfo_rootx(), self.root.winfo_rooty()
+            pw, ph = self.root.winfo_width(), self.root.winfo_height()
+            dw, dh = dialog.winfo_reqwidth(), dialog.winfo_reqheight()
+            dialog.geometry(f"+{px + (pw - dw) // 2}+{py + (ph - dh) // 3}")
+        except Exception:
+            pass
+
     def _cancel_queue_item(self, item_id: str):
         """F-7: per-item cancellation. Sets the QueueItem's cancel flag;
         _process_item's progress callback raises InterruptedError next
@@ -6506,7 +6665,8 @@ class VideoSubtitleRemoverApp:
                                              on_select=self._show_preview,
                                              on_rename=self._rename_output_for,
                                              on_repeat=self._repeat_item_with_settings,
-                                             on_cancel_item=self._cancel_queue_item)
+                                             on_cancel_item=self._cancel_queue_item,
+                                             on_override=self._open_per_file_overrides)
                     widget.pack(fill="x", pady=(0, 8))
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas

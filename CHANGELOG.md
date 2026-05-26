@@ -4,6 +4,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-file overrides popover (RM-29).** Right-click an idle queue
+  item -> "Override settings for this file..." opens a themed modal
+  that edits the item's own `ProcessingConfig` snapshot. Surfaced
+  fields: mode (segmented picker), detection language, sensitivity
+  slider, output codec. Overrides survive a global UI change because
+  every queue item already carries its own config dataclass; the
+  popover writes back to `item.config` and runs `.normalized()` so
+  bad values never reach the worker.
+
 ### Changed
 
 - **Detection slider relabelled "Sensitivity" (EI-3).** The underlying
