@@ -27,7 +27,7 @@
 - [ ] P1 RFP-F-2 Multi-rectangle region drawing (surface subtitle_areas)
 - [ ] P1 RFP-F-3 Inpaint-preview on a sample frame
 - [ ] P1 RFP-B-4 Multi-track loudness normalisation (filter_complex)
-- [ ] P1 RM-28 "Repeat last job" shortcut
+- [x] P1 RM-28 "Repeat with these settings" queue action
 - [ ] P1 RM-29 Per-file overrides surface
 - [ ] P1 RM-30 A/B flicker-scrubber in preview pane
 - [ ] P1 RM-31 Subtitle-area drag-refinement in-GUI (overlaps F-1/F-2)
@@ -39,8 +39,8 @@
 - [ ] P2 RFP-F-7 Per-item cancellation
 - [ ] P2 RFP-F-8 HEVC / AV1 output codec dropdown
 - [ ] P2 RFP-F-9 Pre-batch ETA probe
-- [ ] P2 RFP-F-10 `--preset NAME` CLI flag
-- [ ] P2 RFP-EI-1 Otsu fallback detection thresholds
+- [x] P2 RFP-F-10 `--preset NAME` CLI flag
+- [x] P2 RFP-EI-1 Percentile fallback detection thresholds (was Otsu in plan; percentile is more robust on low-contrast)
 - [x] P2 RFP-EI-5 dataclasses-driven ProcessingConfig persistence (shipped with B-1)
 - [ ] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in)
 - [ ] P2 RM-24 Vertical-text mode

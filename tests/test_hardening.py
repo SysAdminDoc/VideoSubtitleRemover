@@ -1079,6 +1079,59 @@ class AutoInpainterUnloadTests(unittest.TestCase):
         self.assertIsNone(auto._lama, "LaMa must be released after streak hits the threshold")
 
 
+class PresetLibraryTests(unittest.TestCase):
+    """F-10: built-in presets must be shared between the GUI and the CLI
+    so `python -m backend.processor --preset NAME` resolves to the same
+    payload the GUI's picker would apply."""
+
+    def test_builtin_presets_exposed(self):
+        from backend import presets
+        self.assertIn("YouTube (default)", presets.BUILTIN_PRESETS)
+        self.assertIn("Anime / Animation", presets.BUILTIN_PRESETS)
+
+    def test_preset_fields_returns_dict_or_none(self):
+        from backend import presets
+        fields = presets.preset_fields("YouTube (default)")
+        self.assertIsInstance(fields, dict)
+        self.assertEqual(fields["mode"], "STTN")
+        self.assertIsNone(presets.preset_fields("not-a-real-preset"))
+
+    def test_list_preset_names_returns_builtins(self):
+        from backend import presets
+        names = presets.list_preset_names()
+        self.assertIn("YouTube (default)", names)
+        self.assertIn("News / Chyron (bottom-third)", names)
+
+    def test_gui_uses_shared_builtin_table(self):
+        # The GUI module must import the same dict so a future change to
+        # the table cannot drift between the GUI's picker and the CLI's
+        # --preset resolver.
+        from backend import presets
+        self.assertIs(gui.BUILTIN_PRESETS, presets.BUILTIN_PRESETS)
+
+
+class OtsuFallbackDetectionTests(unittest.TestCase):
+    """EI-1: the OpenCV fallback detector must catch mid-tone subtitle
+    luminance the fixed 200 / 55 thresholds missed."""
+
+    def test_fallback_finds_grey_text_on_grey(self):
+        import numpy as _np
+        import cv2 as _cv2
+        # Mid-tone grey frame with slightly darker grey text-shaped strip
+        # in the bottom band -- both within the [55, 200] dead zone of
+        # the old fixed thresholds.
+        frame = _np.full((180, 320, 3), 130, dtype=_np.uint8)
+        frame[150:170, 40:280] = 100  # darker grey "subtitle"
+        detector = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
+        detector._engine_name = "OpenCV fallback"
+        detector._rapid_model = None
+        detector._paddle_model = None
+        detector._surya_det = None
+        detector._easyocr_reader = None
+        boxes = detector._fallback_detection(frame)
+        self.assertTrue(boxes, "Otsu fallback must detect the mid-tone band")
+
+
 class LoadJsonConfigTests(unittest.TestCase):
     def test_load_json_config_rejects_oversized_file(self):
         """Files larger than 1 MB should raise ValueError without being parsed."""
