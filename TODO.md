@@ -45,7 +45,7 @@
 - [x] P2 RM-21 TransNetV2 deep scene-cut detector (opt-in via transnetv2 + VSR_TRANSNETV2)
 - [x] P2 RM-24 Vertical-text mode
 - [ ] P2 RM-39 INT8 quantisation of OCR detector
-- [ ] P2 RM-40 Batched LaMa inference
+- [x] P2 RM-40 Batched LaMa inference (opt-in via VSR_LAMA_BATCH=1)
 
 ## Phase 4 -- Tests + observability (P0 for T-1, P1 elsewhere)
 
@@ -114,8 +114,8 @@
 ## Phase 11 -- Acceleration (P3 v4.x)
 
 - [ ] P3 RM-70 TensorRT inpainter path
-- [ ] P3 RM-71 PyNvVideoCodec hardware decode
-- [ ] P3 RM-72 RIFE-interpolated fast mode
+- [x] P3 RM-71 PyNvVideoCodec hardware decode (opt-in via VSR_PYNVVIDEOCODEC)
+- [x] P3 RM-72 RIFE-interpolated fast mode (opt-in via practical-rife)
 
 ## Phase 12 -- Format support (P3 v4.x)
 
