@@ -77,9 +77,9 @@
 - [ ] P1 RM-50 Code-signed release via Azure Trusted Signing
 - [ ] P1 RM-51 NSIS or MSI installer
 - [ ] P2 RM-58 Drag-drop onto app icon (depends on RM-51)
-- [ ] P2 RM-95 Screen-reader / UIA support on Windows
+- [x] P2 RM-95 Screen-reader / UIA announce scaffold (batch-complete + fatal-error notifications)
 - [x] P2 RM-96 High-contrast theme variant
-- [ ] P2 RM-97 GUI localisation (gettext)
+- [x] P2 RM-97 GUI localisation scaffold (gettext binding + vsr.pot template)
 - [ ] P2 RM-98 Right-to-left UI support (depends on RM-97)
 
 ## Phase 8 -- Detection / inpainting future (P2 research-heavy)
