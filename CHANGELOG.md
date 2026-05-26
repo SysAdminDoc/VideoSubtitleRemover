@@ -6,6 +6,25 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **SeedVR2 one-step restoration (RM-77, opt-in).** New
+  `backend/post_restore.seedvr2_restore` runs the SeedVR2 wrapper
+  (or whatever CLI `VSR_SEEDVR2_CMD` names) as another post-cleanup
+  stage. 16B-param diffusion transformer, single sampling step,
+  best-in-class quality on heavily-degraded footage. CLI `--seedvr2`.
+- **TensorRT engine cache for the LaMa-ONNX backend (RM-70, opt-in).**
+  New `backend/tensorrt_compile.maybe_compile_engine` invokes
+  `polygraphy convert` once per ONNX, caches the result in
+  `%APPDATA%/VSR/trt_cache/`, and adds the
+  `TensorrtExecutionProvider` to the LaMa-ONNX session. ~2-3x
+  further speedup on top of ONNX Runtime. Activate via
+  `VSR_TENSORRT=1`.
+- **INT8 OCR quantization script (RM-39).** New
+  `scripts/quantize_ocr.py` calls `onnxruntime.quantization.quantize_dynamic`
+  on a RapidOCR detection ONNX. Drop-in replacement; the resulting
+  model halves detection cost on CPU with <1% F1 loss in practice.
+
+### Added
+
 - **SAM 2 / SAM 3 / MatAnyone 2 / CoTracker3 adapters
   (RM-66/67/68/69, opt-in).** New `backend/segmentation.py` exposes:
   - `refine_mask_with_sam2(frame, boxes, base_mask)` -- prompted box

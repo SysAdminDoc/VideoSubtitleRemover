@@ -79,6 +79,51 @@ def realesrgan_upscale(input_path: str, output_path: str,
     return None
 
 
+def seedvr2_restore(input_path: str, output_path: str,
+                     adapter: str = "seedvr2") -> Optional[str]:
+    """RM-77 SeedVR2 one-step video restoration.
+
+    SeedVR2 ships as a 16B-param diffusion transformer with adversarial
+    post-training -- single sampling step. Best-in-class quality on
+    heavy-degradation footage but the install footprint is large (the
+    user is expected to clone IceClear/SeedVR2 separately and either
+    set `VSR_SEEDVR2_CMD` to the CLI entrypoint or install a
+    pip-published wrapper named `seedvr2`).
+
+    Returns the path on success, None on missing-dep / failure.
+    """
+    cmd_env = os.environ.get("VSR_SEEDVR2_CMD", "")
+    if cmd_env:
+        try:
+            cmd = cmd_env.split() + ["-i", input_path, "-o", output_path]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=14400)
+            if result.returncode == 0 and Path(output_path).is_file():
+                logger.info(f"SeedVR2 restoration complete via {cmd_env}")
+                return output_path
+            logger.warning(
+                f"VSR_SEEDVR2_CMD exit {result.returncode}: {(result.stderr or '')[:400]}"
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            logger.warning(f"VSR_SEEDVR2_CMD failed: {exc}")
+    try:
+        from seedvr2 import SeedVR2  # type: ignore
+    except ImportError:
+        logger.info(
+            "SeedVR2 wrapper not importable; install via the upstream "
+            "IceClear/SeedVR2 project or set VSR_SEEDVR2_CMD to a CLI "
+            "entrypoint that accepts `-i INPUT -o OUTPUT`."
+        )
+        return None
+    try:
+        model = SeedVR2(adapter=adapter)
+        produced = model.restore(input_path, output_path)
+        if produced and Path(produced).is_file():
+            return produced
+    except Exception as exc:
+        logger.warning(f"SeedVR2 wrapper failed: {exc}")
+    return None
+
+
 def swinir_restore(input_path: str, output_path: str,
                     task: str = "classical_sr",
                     scale: int = 2) -> Optional[str]:
