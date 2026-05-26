@@ -116,6 +116,12 @@ class ProcessingConfig:
     # (Japanese tategaki, classical Chinese). Bounding boxes still come
     # back axis-aligned so downstream masking is unchanged.
     detection_vertical: bool = False
+    # RM-27 Whisper fallback: when on AND the optional faster-whisper
+    # dep is installed, frames whose OCR yields no boxes get a default
+    # bottom-band mask during Whisper-detected speech intervals. Catches
+    # anti-aliased / motion-blurred subtitles the OCR cascade misses.
+    whisper_fallback: bool = False
+    whisper_model_size: str = "tiny"   # tiny / base / small / medium
 
     # Mask settings
     mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
@@ -392,6 +398,11 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.detection_lang = _coerce_text(config.detection_lang, "en", 24).lower()
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)
     config.detection_vertical = _coerce_bool(config.detection_vertical, False)
+    config.whisper_fallback = _coerce_bool(config.whisper_fallback, False)
+    model_size = _coerce_text(config.whisper_model_size, "tiny", 16).lower()
+    if model_size not in {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}:
+        model_size = "tiny"
+    config.whisper_model_size = model_size
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.tbe_enable = _coerce_bool(config.tbe_enable, True)
@@ -3030,6 +3041,40 @@ class SubtitleRemover:
             # only the current video's detections.
             self._quality_mask_bbox = None
 
+            # RM-27 Whisper fallback: pre-compute frame spans where
+            # Whisper detected speech. When OCR returns no boxes for a
+            # frame inside one of these spans we apply a default
+            # bottom-band mask so the subtitle band still gets
+            # inpainted. Done once per file so we don't pay model load
+            # for every batch.
+            whisper_spans: List[Tuple[int, int]] = []
+            whisper_audio_dir: Optional[str] = None
+            if self.config.whisper_fallback and not Path(input_path).is_dir():
+                try:
+                    import tempfile as _tmp_mod
+                    from backend import whisper_fallback as _wf
+                    if _wf.is_available():
+                        whisper_audio_dir = _tmp_mod.mkdtemp(prefix="vsr_whisper_")
+                        audio_path = _wf.extract_audio_to_temp(
+                            input_path, whisper_audio_dir
+                        )
+                        if audio_path:
+                            segments = _wf.run_whisper_segments(
+                                audio_path,
+                                model_size=self.config.whisper_model_size,
+                                language=(self.config.detection_lang or None),
+                            )
+                            if segments:
+                                whisper_spans = _wf.segments_to_frame_spans(
+                                    segments, fps
+                                )
+                                logger.info(
+                                    f"Whisper fallback active: "
+                                    f"{len(whisper_spans)} speech spans"
+                                )
+                except Exception as exc:
+                    logger.debug(f"Whisper fallback setup failed: {exc}")
+
             # v3.10: Kalman tracker for detection smoothing
             tracker = (SubtitleTracker(self.config.kalman_iou_threshold,
                                          self.config.kalman_max_age)
@@ -3138,6 +3183,23 @@ class SubtitleRemover:
                             boxes = smoothed
                         if self.config.export_srt:
                             self._collect_srt_entry(frame, frame_idx, detected_boxes)
+
+                    # RM-27: when OCR returned no boxes for this frame
+                    # AND Whisper found speech in this timecode, mask a
+                    # default bottom band so the inpaint pass still
+                    # cleans the subtitle position. Catches frames the
+                    # OCR cascade missed but the audio confirms have
+                    # dialogue.
+                    if (not boxes and whisper_spans
+                            and self.config.whisper_fallback):
+                        absolute = start_frame + frame_idx
+                        for span_s, span_e in whisper_spans:
+                            if span_s <= absolute < span_e:
+                                h_full, w_full = frame.shape[:2]
+                                band_top = int(h_full * 0.80)
+                                boxes = [(int(w_full * 0.05), band_top,
+                                          int(w_full * 0.95), h_full - 4)]
+                                break
 
                     mask = self._create_mask(frame.shape, boxes)
                     # B-3: accumulate the union-mask bbox for the quality
@@ -3270,6 +3332,14 @@ class SubtitleRemover:
             _cleanup_temp_output(temp_mask_path)
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
+            # RM-27: Whisper audio temp dir is created lazily inside the
+            # main try block; clean it up here only if it was set.
+            try:
+                _wda = locals().get("whisper_audio_dir", None)
+                if _wda and os.path.exists(_wda):
+                    shutil.rmtree(_wda, ignore_errors=True)
+            except Exception:
+                pass
 
     def _get_encode_args(self) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
@@ -3518,6 +3588,15 @@ def main():
                        help="Vertical-text mode: rotate frames 90 CCW before "
                             "OCR so JP tategaki / classical CN columns parse. "
                             "Boxes rotate back to the original frame.")
+    parser.add_argument("--whisper-fallback", action="store_true",
+                       help="When OCR returns nothing on a frame inside a "
+                            "Whisper-detected speech span, default-mask the "
+                            "bottom band so the subtitle position is still "
+                            "cleaned. Requires `pip install faster-whisper`.")
+    parser.add_argument("--whisper-model", default="tiny",
+                       choices=["tiny", "base", "small", "medium",
+                                "large", "large-v2", "large-v3"],
+                       help="faster-whisper model size for --whisper-fallback.")
     parser.add_argument("--frame-skip", type=int, default=0,
                        help="Reuse detection mask for N frames between detections (0=every frame)")
     parser.add_argument("--mask-dilate", type=int, default=8,
@@ -3754,6 +3833,8 @@ def main():
         detection_lang=args.lang,
         detection_threshold=args.threshold,
         detection_vertical=args.vertical,
+        whisper_fallback=args.whisper_fallback,
+        whisper_model_size=args.whisper_model,
         output_quality=args.crf,
         time_start=args.start,
         time_end=args.end,
