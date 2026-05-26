@@ -106,10 +106,10 @@
 
 ## Phase 10 -- Mask / segmentation (P3 v4.x)
 
-- [ ] P3 RM-66 SAM 2 mask refinement
-- [ ] P3 RM-67 SAM 3 text-prompt segmentation
-- [ ] P3 RM-68 MatAnyone 2 (video matting)
-- [ ] P3 RM-69 CoTracker3 point tracking
+- [x] P3 RM-66 SAM 2 mask refinement (opt-in via VSR_SAM2_CHECKPOINT)
+- [x] P3 RM-67 SAM 3 text-prompt segmentation scaffold (VSR_SAM3=1)
+- [x] P3 RM-68 MatAnyone 2 matting helper (VSR_MATANYONE=1)
+- [x] P3 RM-69 CoTracker3 point-tracking helper (VSR_COTRACKER=1)
 
 ## Phase 11 -- Acceleration (P3 v4.x)
 

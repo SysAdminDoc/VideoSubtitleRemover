@@ -1280,6 +1280,51 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class SegmentationAdapterTests(unittest.TestCase):
+    """RM-66/67/68/69: every adapter must return the input unchanged
+    (or None) when its optional dep is absent."""
+
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in (
+            "VSR_SAM2_CHECKPOINT", "VSR_SAM2_CONFIG", "VSR_SAM3",
+            "VSR_MATANYONE", "VSR_COTRACKER",
+        )}
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+    def test_sam2_refine_returns_base_mask(self):
+        import numpy as _np
+        from backend.segmentation import refine_mask_with_sam2
+        frame = _np.zeros((32, 32, 3), dtype=_np.uint8)
+        mask = _np.zeros((32, 32), dtype=_np.uint8)
+        mask[10:20, 10:20] = 255
+        out = refine_mask_with_sam2(frame, [(10, 10, 20, 20)], mask)
+        _np.testing.assert_array_equal(out, mask)
+
+    def test_sam3_returns_none_without_dep(self):
+        import numpy as _np
+        from backend.segmentation import segment_text_with_sam3
+        self.assertIsNone(segment_text_with_sam3(_np.zeros((32, 32, 3), dtype=_np.uint8)))
+
+    def test_matte_returns_none_without_dep(self):
+        import numpy as _np
+        from backend.segmentation import matte_frame
+        self.assertIsNone(matte_frame(
+            _np.zeros((32, 32, 3), dtype=_np.uint8),
+            _np.zeros((32, 32), dtype=_np.uint8),
+        ))
+
+    def test_cotracker_returns_none_without_dep(self):
+        import numpy as _np
+        from backend.segmentation import track_points
+        frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
+        self.assertIsNone(track_points(frames, [(4, 4)]))
+
+
 class DiffusionInpainterScaffoldTests(unittest.TestCase):
     """RM-59/60/61/62/63/64/65: each scaffolded diffusion backend must
     fall back to TBE when its optional dep is missing rather than

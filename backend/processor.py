@@ -170,6 +170,9 @@ class ProcessingConfig:
     # RM-33: optional denoise pass on the detection frame stream only;
     # output pixels are untouched. Helps OCR on VHS / phone clips.
     detection_denoise: bool = False
+    # RM-66: opt-in SAM 2 mask refinement. Tighter mask = less inpaint
+    # area = cleaner output. Requires VSR_SAM2_CHECKPOINT + sam2 pkg.
+    sam2_refine: bool = False
     edge_ring_px: int = 2         # post-inpaint colour match ring width (0 disables)
 
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
@@ -455,6 +458,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.tbe_scene_cut_use_transnetv2 = _coerce_bool(
         config.tbe_scene_cut_use_transnetv2, False)
     config.detection_denoise = _coerce_bool(config.detection_denoise, False)
+    config.sam2_refine = _coerce_bool(config.sam2_refine, False)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)
@@ -2704,7 +2708,7 @@ class SubtitleRemover:
             self.on_progress(progress, message)
 
     def _create_mask(self, frame_shape: Tuple[int, int], boxes: List[Tuple[int, int, int, int]],
-                     padding: int = 5) -> np.ndarray:
+                     padding: int = 5, frame: Optional[np.ndarray] = None) -> np.ndarray:
         h, w = frame_shape[:2]
         mask = np.zeros((h, w), dtype=np.uint8)
         for x1, y1, x2, y2 in boxes:
@@ -2720,6 +2724,18 @@ class SubtitleRemover:
             kernel = cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE, (dilate_px * 2 + 1, dilate_px * 2 + 1))
             mask = cv2.dilate(mask, kernel, iterations=1)
+
+        # RM-66: optional SAM 2 mask refinement. When the user has set
+        # VSR_SAM2_CHECKPOINT we replace each box's coarse rectangle
+        # with the SAM 2 segmentation prompted by that box. Tighter
+        # mask = less inpaint area = cleaner output. Skips when the
+        # caller didn't pass `frame` (SAM 2 needs pixels).
+        if frame is not None and boxes and self.config.sam2_refine:
+            try:
+                from backend.segmentation import refine_mask_with_sam2
+                mask = refine_mask_with_sam2(frame, boxes, mask, self.config.device)
+            except Exception as exc:
+                logger.debug(f"SAM 2 refinement skipped: {exc}")
 
         return mask
 
@@ -3045,7 +3061,7 @@ class SubtitleRemover:
                 return True
 
             self._report_progress(0.5, f"Removing {len(boxes)} text regions...")
-            mask = self._create_mask(image.shape, boxes)
+            mask = self._create_mask(image.shape, boxes, frame=image)
             [result] = self.inpainter.inpaint([image], [mask])
 
             self._report_progress(0.9, "Saving result...")
@@ -3439,7 +3455,7 @@ class SubtitleRemover:
                                           int(w_full * 0.95), h_full - 4)]
                                 break
 
-                    mask = self._create_mask(frame.shape, boxes)
+                    mask = self._create_mask(frame.shape, boxes, frame=frame)
                     # B-3: accumulate the union-mask bbox for the quality
                     # report ROI. We track the bbox (not the per-frame mask
                     # stack) to keep memory flat; the bbox is enough to
@@ -4003,6 +4019,12 @@ def main():
                             "modified. Helps VHS rips / low-light phone "
                             "clips. Uses FastDVDnet when VSR_FASTDVDNET "
                             "+ torch are available, else cv2 NLM.")
+    parser.add_argument("--sam2-refine", action="store_true",
+                       help="Refine detected boxes through SAM 2 to "
+                            "produce text-shaped masks instead of the "
+                            "padded rectangles. Tighter masks = less "
+                            "inpaint area. Requires VSR_SAM2_CHECKPOINT "
+                            "(and VSR_SAM2_CONFIG) plus the sam2 package.")
     parser.add_argument("--no-tbe", action="store_true",
                        help="Disable Temporal Background Exposure (STTN/ProPainter use cv2)")
     parser.add_argument("--no-adaptive-batch", action="store_true",
@@ -4234,6 +4256,7 @@ def main():
         tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
         tbe_scene_cut_use_transnetv2=args.transnetv2,
         detection_denoise=args.denoise_detect,
+        sam2_refine=args.sam2_refine,
         adaptive_batch=not args.no_adaptive_batch,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,
