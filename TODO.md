@@ -80,17 +80,17 @@
 - [x] P2 RM-95 Screen-reader / UIA announce scaffold (batch-complete + fatal-error notifications)
 - [x] P2 RM-96 High-contrast theme variant
 - [x] P2 RM-97 GUI localisation scaffold (gettext binding + vsr.pot template)
-- [ ] P2 RM-98 Right-to-left UI support (depends on RM-97)
+- [x] P2 RM-98 Right-to-left UI flag scaffold (full pack-side flip is a follow-up)
 
 ## Phase 8 -- Detection / inpainting future (P2 research-heavy)
 
 - [x] P2 RM-22 Florence-2 / Qwen2.5-VL detector (opt-in via VSR_VLM_OCR)
 - [x] P2 RM-23 PaddleOCR-VL 0.9B detector tier (opt-in via VSR_VLM_OCR=paddleocr-vl)
 - [x] P2 RM-33 Pre-detect denoise (FastDVDnet + cv2 NLM fallback, opt-in)
-- [ ] P2 RM-34 Proxy-file workflow
+- [x] P2 RM-34 Proxy-file workflow (backend/proxy_workflow.ensure_proxy)
 - [x] P2 RM-42 Manga / anime mode (lang="manga" routes to manga-ocr + comic-text-detector when installed)
-- [ ] P2 RM-43 Karaoke / animated subtitle tracking
-- [ ] P2 RM-45 WhisperX-aided chyron classifier
+- [x] P2 RM-43 Karaoke / animated subtitle flow-warp helper
+- [x] P2 RM-45 WhisperX-aided chyron classifier (run_whisperx + word-level alignment)
 - [x] P2 RM-54 alias closed with RFP-T-1 (synthetic harness)
 - [ ] P3 RM-55 Community edge-case corpus (non-code)
 
@@ -121,7 +121,7 @@
 
 - [x] P3 RM-73 10-bit / HDR pipeline (color-metadata passthrough; 16-bit pixel path tracked as follow-up)
 - [x] P3 RM-74 AV1 + VP9 ingest validation (codec banner) + AV1 egress via RFP-F-8
-- [ ] P3 RM-75 VapourSynth bridge
+- [x] P3 RM-75 VapourSynth bridge (.vpy ingest via backend/vapoursynth_bridge)
 - [x] P3 RM-76 NLE round-trip (EDL/XML)
 
 ## Phase 13 -- Post-processing (P3 v4.x)

@@ -6,6 +6,34 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Proxy-file workflow (RM-34).** New
+  `backend/proxy_workflow.ensure_proxy(path, height, crf)` builds a
+  cached low-res (default 480p) proxy via ffmpeg for fast preview /
+  region selection on 4K source. Cache lives in
+  `%APPDATA%/VSR/proxy_cache/` keyed by an MD5 fingerprint of the
+  source (path, size, mtime).
+- **Karaoke optical-flow mask warp (RM-43).** New
+  `backend/karaoke_flow.warp_mask_with_flow(prev, next, mask)`
+  exposes a Farneback flow remap so callers can union an old mask
+  with the next detection to catch karaoke text that moved between
+  frames.
+- **WhisperX word-level alignment helper (RM-45).** New
+  `backend/karaoke_flow.run_whisperx(audio_path)` returns
+  `(start_s, end_s, word)` tuples when `whisperx` is installed.
+  Pairs with the v3.13 Whisper-span fallback to provide finer-
+  grained mask gating on borderline subtitle/dialogue cases.
+- **VapourSynth bridge (RM-75).** New
+  `backend/vapoursynth_bridge._VapourSynthCapture` evaluates a `.vpy`
+  script and exposes a cv2.VideoCapture-shaped reader so
+  `_open_capture("path.vpy")` ingests through VapourSynth when
+  installed. Lets users chain QTGMC deinterlace / Waifu2x / SMDegrain
+  ahead of VSR.
+- **RTL layout scaffold (RM-98).** New `ProcessingConfig.rtl_layout`
+  flag and `_rtl_layout` runtime hook set before widget
+  construction. The deep pack-side flip across every widget is a
+  follow-up; this commit lands the framework so future translation
+  + RTL work can land incrementally.
+
 - **SeedVR2 one-step restoration (RM-77, opt-in).** New
   `backend/post_restore.seedvr2_restore` runs the SeedVR2 wrapper
   (or whatever CLI `VSR_SEEDVR2_CMD` names) as another post-cleanup
