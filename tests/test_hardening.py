@@ -1280,6 +1280,44 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class DiffusionInpainterScaffoldTests(unittest.TestCase):
+    """RM-59/60/61/62/63/64/65: each scaffolded diffusion backend must
+    fall back to TBE when its optional dep is missing rather than
+    crash. The default registry never sees them unless the user has
+    opted in via env vars."""
+
+    def setUp(self):
+        self._saved = {k: os.environ.pop(k, None) for k in (
+            "VSR_PROPAINTER_REAL", "VSR_DIFFUERASER", "VSR_VACE",
+            "VSR_VIDEOPAINTER", "VSR_COCOCO", "VSR_ERASERDIT", "VSR_FLOED",
+        )}
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+    def test_maybe_register_no_ops_without_env(self):
+        from backend import inpainters_diffusion as _id
+        self.assertEqual(_id.maybe_register(), [])
+
+    def test_scaffold_falls_back_to_tbe(self):
+        from backend.inpainters_diffusion import _DiffuEraserBackend
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(tbe_enable=True)
+        )
+        b = _DiffuEraserBackend(device="cpu", config=cfg)
+        import numpy as _np
+        frames = [_np.full((16, 16, 3), 60, dtype=_np.uint8) for _ in range(3)]
+        masks = [_np.zeros((16, 16), dtype=_np.uint8) for _ in range(3)]
+        masks[1][4:8, 4:8] = 255
+        out = b.inpaint(frames, masks)
+        self.assertEqual(len(out), 3)
+        for f in out:
+            self.assertEqual(f.shape, (16, 16, 3))
+
+
 class DecodeAccelTests(unittest.TestCase):
     """RM-71 / RM-72: PyNvVideoCodec and RIFE adapters must return None
     when their optional deps are missing."""
