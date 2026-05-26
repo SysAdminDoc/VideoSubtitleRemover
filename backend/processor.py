@@ -182,6 +182,13 @@ class ProcessingConfig:
     output_quality: int = 23  # CRF value for x264
     use_hw_encode: bool = True  # try NVENC/QSV before falling back to libx264
 
+    # F-8: output codec selector. "h264" (default) matches the legacy
+    # behaviour; "h265" / "hevc" picks libx265 / hevc_nvenc; "av1"
+    # picks libsvtav1 / av1_nvenc. Higher-efficiency codecs let users
+    # keep manageable bitrates on 4K HDR sources where the previous
+    # H.264-only pipeline ballooned the output.
+    output_codec: str = "h264"
+
     # Optional EBU R128 loudness normalisation target (LUFS, e.g. -16.0).
     # 0.0 disables. Common platform targets: YouTube -14, Apple -16,
     # broadcast -23. Applied as an `ffmpeg -af loudnorm=I=...` pass during
@@ -403,6 +410,12 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.output_format = _coerce_text(config.output_format, "mp4", 16).lower()
     config.output_quality = _coerce_int(config.output_quality, 23, 0, 51)
     config.use_hw_encode = _coerce_bool(config.use_hw_encode, True)
+    codec = _coerce_text(config.output_codec, "h264", 16).lower()
+    if codec in {"hevc", "h.265"}:
+        codec = "h265"
+    if codec not in {"h264", "h265", "av1"}:
+        codec = "h264"
+    config.output_codec = codec
     # loudnorm_target: 0.0 disables; otherwise clamp to the LUFS range
     # ffmpeg's loudnorm filter actually accepts (-70 to -5 inclusive).
     target = _coerce_float(config.loudnorm_target, 0.0)
@@ -1500,6 +1513,24 @@ class LAMAInpainter(BaseInpainter):
             from simple_lama_inpainting import SimpleLama
             self._lama = SimpleLama()
             logger.info("LaMa neural inpainting model loaded (simple-lama-inpainting)")
+            # RM-49: best-effort SHA-256 check of the on-disk weights.
+            # Scans the standard torch.hub cache directories for
+            # `big-lama.pt` and compares against the vendored hash.
+            # A mismatch logs a warning; we do not refuse to use the
+            # already-loaded model because that would punish users on
+            # a network where the upstream CDN has rotated weights
+            # newer than our table.
+            try:
+                from backend.model_hashes import (
+                    candidate_weight_dirs as _cands,
+                    verify_weight_file as _verify,
+                )
+                for cache_dir in _cands():
+                    for path in cache_dir.glob("**/big-lama*.pt"):
+                        _verify(path)
+                        break
+            except Exception as exc:
+                logger.debug(f"Weight verification skipped: {exc}")
         except ImportError:
             logger.warning("simple-lama-inpainting not installed, LAMA will use OpenCV fallback. "
                           "Install with: pip install simple-lama-inpainting")
@@ -2173,14 +2204,24 @@ class _LosslessIntermediateWriter:
             self._fallback = None
 
 
-def _detect_hw_encoder() -> Optional[str]:
-    """Probe FFmpeg for hardware encoder availability. Returns encoder name or None."""
+def _detect_hw_encoder(codec: str = "h264") -> Optional[str]:
+    """Probe FFmpeg for hardware encoder availability. Returns encoder name or None.
+
+    F-8: `codec` lets callers ask for the HW encoder family that
+    matches the user's chosen output codec. Defaults to h264 so legacy
+    callers keep their behaviour.
+    """
+    family = {
+        "h264": ("h264_nvenc", "h264_qsv", "h264_amf"),
+        "h265": ("hevc_nvenc", "hevc_qsv", "hevc_amf"),
+        "av1":  ("av1_nvenc",  "av1_qsv",  "av1_amf"),
+    }.get(codec, ("h264_nvenc", "h264_qsv", "h264_amf"))
     try:
         result = subprocess.run(
             ['ffmpeg', '-hide_banner', '-encoders'],
             capture_output=True, text=True, timeout=10
         )
-        for encoder in ('h264_nvenc', 'h264_qsv', 'h264_amf'):
+        for encoder in family:
             if encoder in result.stdout:
                 logger.info(f"Hardware encoder available: {encoder}")
                 return encoder
@@ -2224,7 +2265,7 @@ class SubtitleRemover:
         self._quality_mask_bbox: Optional[Tuple[int, int, int, int]] = None
 
         if self.config.use_hw_encode:
-            self._hw_encoder = _detect_hw_encoder()
+            self._hw_encoder = _detect_hw_encoder(self.config.output_codec)
 
         # Adaptive batch sizing -- probe free VRAM, scale sttn_max_load_num.
         # Defaults to the user-configured value on probe failure.
@@ -3107,7 +3148,17 @@ class SubtitleRemover:
                 return ['-c:v', self._hw_encoder,
                         '-quality', 'balanced',
                         '-rc', 'cqp', '-qp', str(self.config.output_quality)]
-        # Software fallback
+        # F-8: software fallback honours the chosen output codec.
+        codec = self.config.output_codec
+        if codec == "h265":
+            return ['-c:v', 'libx265', '-crf', str(self.config.output_quality),
+                    '-preset', 'medium']
+        if codec == "av1":
+            # SVT-AV1's CRF range tops out at 63; clamp our [0-51] scale
+            # into the encoder's valid window. -preset 8 is the
+            # speed/quality midpoint for libsvtav1.
+            crf = min(63, self.config.output_quality)
+            return ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
         return ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                 '-preset', 'medium']
 
@@ -3332,6 +3383,12 @@ def main():
                        help="Mask dilation in pixels for cleaner removal (0=off)")
     parser.add_argument("--no-hw-encode", action="store_true",
                        help="Disable hardware encoding (force libx264)")
+    parser.add_argument("--codec", default="h264",
+                       choices=["h264", "h265", "av1"],
+                       help="Output video codec. h264 (default) maximises "
+                            "compatibility; h265 / av1 cut bitrate ~50%% on 4K. "
+                            "HEVC + AV1 use NVENC/QSV/AMF when available with "
+                            "libx265 / libsvtav1 software fallback.")
     parser.add_argument("--mask-feather", type=int, default=4,
                        help="Gaussian edge feathering in pixels (0=off)")
     parser.add_argument("--edge-ring", type=int, default=2,
@@ -3574,6 +3631,7 @@ def main():
         keyframe_detection=args.keyframe_detect,
         quality_report=args.quality_report,
         use_hw_encode=not args.no_hw_encode,
+        output_codec=args.codec,
         loudnorm_target=args.loudnorm,
         decode_hw_accel=args.decode_accel,
         multi_audio_passthrough=not args.single_audio,
