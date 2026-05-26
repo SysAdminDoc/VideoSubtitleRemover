@@ -1980,6 +1980,154 @@ class _PrefetchReader:
         return self._cap.get(prop)
 
 
+class _LosslessIntermediateWriter:
+    """Streams BGR frames to ffmpeg via stdin and writes a lossless FFV1
+    intermediate (`.mkv` container).
+
+    Replaces the legacy `cv2.VideoWriter_fourcc(*'mp4v')` intermediate used
+    in v3.12 and earlier. The previous pipeline double-encoded every
+    output (mp4v intermediate -> libx264/NVENC final), so the inpainted
+    regions users were inspecting carried two generations of lossy
+    compression artefacts. FFV1 is mathematically lossless, so the final
+    encode pass is the only lossy step.
+
+    The writer exposes a `write(frame)` / `release()` shape identical to
+    `cv2.VideoWriter` so callers do not have to special-case the
+    intermediate; if `ffmpeg` is unavailable on PATH or the Popen fails,
+    we fall back to the legacy mp4v writer with a logged warning so the
+    pipeline keeps working (just at the old quality).
+    """
+
+    def __init__(self, path: str, width: int, height: int, fps: float):
+        self._path = path
+        self._width = int(width)
+        self._height = int(height)
+        # Avoid passing 0 / NaN to ffmpeg; downstream raw-stream rate must
+        # be positive.
+        try:
+            fps_f = float(fps)
+        except (TypeError, ValueError):
+            fps_f = 30.0
+        if not np.isfinite(fps_f) or fps_f <= 0.0:
+            fps_f = 30.0
+        self._fps = fps_f
+        self._proc: Optional[subprocess.Popen] = None
+        self._fallback: Optional[cv2.VideoWriter] = None
+        self._opened = False
+        self._lossless = False
+        self._open()
+
+    def _open(self):
+        if shutil.which("ffmpeg") is None:
+            self._open_fallback("ffmpeg not on PATH")
+            return
+        try:
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
+                "-f", "rawvideo", "-pix_fmt", "bgr24",
+                "-s", f"{self._width}x{self._height}",
+                "-r", f"{self._fps:.6f}",
+                "-i", "-",
+                "-c:v", "ffv1", "-level", "3", "-coder", "1",
+                "-context", "1", "-g", "1", "-slices", "16",
+                "-slicecrc", "1",
+                self._path,
+            ]
+            self._proc = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            )
+            self._opened = True
+            self._lossless = True
+            logger.info(
+                f"Intermediate writer: FFV1 lossless via ffmpeg stdin "
+                f"({self._width}x{self._height} @ {self._fps:.2f} fps)"
+            )
+        except Exception as exc:
+            self._open_fallback(f"ffmpeg Popen failed: {exc}")
+
+    def _open_fallback(self, reason: str) -> None:
+        logger.warning(
+            f"Lossless intermediate unavailable ({reason}); "
+            f"falling back to mp4v writer."
+        )
+        # Legacy fallback path also lives in .mkv to avoid forcing callers
+        # to know about the codec choice. cv2.VideoWriter accepts the
+        # extension agnostic of the codec on most builds.
+        # Use the original extension so the downstream reader knows what
+        # to expect; mp4v inside mkv may not play back, so we pick mp4.
+        fallback_path = self._path
+        if fallback_path.lower().endswith(".mkv"):
+            fallback_path = fallback_path[:-4] + ".mp4"
+            self._path = fallback_path
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self._fallback = cv2.VideoWriter(
+            fallback_path, fourcc, self._fps, (self._width, self._height)
+        )
+        self._opened = self._fallback.isOpened()
+        self._lossless = False
+
+    @property
+    def path(self) -> str:
+        return self._path
+
+    @property
+    def lossless(self) -> bool:
+        return self._lossless
+
+    def isOpened(self) -> bool:
+        return self._opened
+
+    def write(self, frame: np.ndarray) -> None:
+        if frame is None:
+            return
+        if self._proc is not None and self._proc.stdin is not None:
+            try:
+                self._proc.stdin.write(frame.tobytes())
+            except (BrokenPipeError, OSError) as exc:
+                # ffmpeg died mid-stream. Drain stderr for diagnostics and
+                # promote the failure so process_video can decide whether
+                # to abort the file.
+                stderr_excerpt = ""
+                if self._proc.stderr is not None:
+                    try:
+                        stderr_excerpt = self._proc.stderr.read().decode(
+                            "utf-8", errors="replace")[-400:]
+                    except Exception:
+                        pass
+                logger.error(
+                    f"FFV1 ffmpeg stdin broke after writing frames: {exc}"
+                    + (f"\nffmpeg stderr: {stderr_excerpt}" if stderr_excerpt else "")
+                )
+                raise
+        elif self._fallback is not None:
+            self._fallback.write(frame)
+
+    def release(self) -> None:
+        if self._proc is not None:
+            try:
+                if self._proc.stdin is not None:
+                    self._proc.stdin.close()
+            except Exception:
+                pass
+            try:
+                self._proc.wait(timeout=300)
+            except subprocess.TimeoutExpired:
+                logger.warning("FFV1 ffmpeg flush timeout; killing")
+                self._proc.kill()
+                try:
+                    self._proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+            self._proc = None
+        if self._fallback is not None:
+            try:
+                self._fallback.release()
+            except Exception:
+                pass
+            self._fallback = None
+
+
 def _detect_hw_encoder() -> Optional[str]:
     """Probe FFmpeg for hardware encoder availability. Returns encoder name or None."""
     try:
@@ -2622,10 +2770,17 @@ class SubtitleRemover:
             # Re-use the deinterlace temp_dir if one was created, else fresh
             if temp_dir is None:
                 temp_dir = tempfile.mkdtemp(prefix="vsr_")
-            temp_video = os.path.join(temp_dir, "temp_video.mp4")
-
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(temp_video, fourcc, fps, (width, height))
+            # I-1: lossless FFV1 intermediate inside .mkv. The previous
+            # mp4v intermediate cost a full generation of lossy
+            # compression before the final ffmpeg encode pass. The
+            # writer falls back to mp4v + .mp4 when ffmpeg is missing
+            # so the pipeline still produces output, just at the old
+            # quality.
+            temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
+            writer = _LosslessIntermediateWriter(
+                temp_video_target, width, height, fps
+            )
+            temp_video = writer.path
             if not writer.isOpened():
                 raise ValueError(f"Could not create video writer for: {temp_video}")
 
