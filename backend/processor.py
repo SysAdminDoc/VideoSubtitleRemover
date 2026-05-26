@@ -129,6 +129,15 @@ class ProcessingConfig:
     # disabled; positive values invoke the ffmpeg noise pass.
     upscale_factor: int = 0
     film_grain_strength: float = 0.0
+    # RM-73 (partial): preserve source color signalling on the output
+    # encode. Default True so HDR sources at least stay tagged as HDR
+    # even though the pixel pipeline is still 8-bit BGR. Disable when
+    # the source has incorrect / misleading tags.
+    preserve_color_metadata: bool = True
+    # RM-76 NLE round-trip sidecars. None = off; "edl" or "fcpxml"
+    # writes a sibling sidecar next to the output naming the source
+    # and the processed range.
+    nle_sidecar: str = "off"
 
     # Mask settings
     mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
@@ -415,6 +424,11 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.upscale_factor = 0
     config.film_grain_strength = _coerce_float(
         config.film_grain_strength, 0.0, 0.0, 0.5)
+    config.preserve_color_metadata = _coerce_bool(config.preserve_color_metadata, True)
+    sidecar = _coerce_text(config.nle_sidecar, "off", 16).lower()
+    if sidecar not in {"off", "edl", "fcpxml"}:
+        sidecar = "off"
+    config.nle_sidecar = sidecar
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.tbe_enable = _coerce_bool(config.tbe_enable, True)
@@ -2418,6 +2432,10 @@ class SubtitleRemover:
         # an awful inpaint could still report 'Good'. We track the bbox of
         # the union mask and the metric runs against that ROI only.
         self._quality_mask_bbox: Optional[Tuple[int, int, int, int]] = None
+        # RM-73 partial: source color signalling, populated lazily inside
+        # process_video once we know the input path. Used by _get_encode_args
+        # to preserve HDR / BT.2020 tagging on the output.
+        self._color_metadata = None
 
         if self.config.use_hw_encode:
             self._hw_encoder = _detect_hw_encoder(self.config.output_codec)
@@ -2936,6 +2954,30 @@ class SubtitleRemover:
             else:
                 decode_path = input_path
 
+            # RM-73 partial: probe source color signalling once so HDR
+            # / BT.2020 tags can be preserved on the output. The pixel
+            # pipeline is still 8-bit BGR; the tag passthrough at least
+            # keeps downstream players from accidentally tone-mapping a
+            # tone-mapped output.
+            if (self.config.preserve_color_metadata
+                    and not Path(input_path).is_dir()):
+                try:
+                    from backend.hdr import probe_color_metadata
+                    meta = probe_color_metadata(input_path)
+                    if meta is not None:
+                        self._color_metadata = meta
+                        if meta.is_hdr:
+                            logger.info(
+                                f"HDR source detected: {meta.label} -- "
+                                f"current pipeline is 8-bit BGR; output will "
+                                f"carry the source color tags but pixels are "
+                                f"tone-mapped to SDR."
+                            )
+                        else:
+                            logger.info(f"Color signalling: {meta.label}")
+                except Exception as exc:
+                    logger.debug(f"Color-metadata probe failed: {exc}")
+
             # Optional keyframe-driven detection: get the set of I-frame
             # indices once, OCR only those, propagate masks between.
             keyframe_set: Optional[set] = None
@@ -3296,6 +3338,10 @@ class SubtitleRemover:
             # each adapter degrades gracefully when its dep is missing.
             self._run_post_restore_passes(output_path, temp_dir)
 
+            # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
+            self._write_nle_sidecar(input_path, output_path,
+                                     start_frame, end_frame, fps)
+
             # Quality report: PSNR/SSIM across a sample of unmasked regions
             if self.config.quality_report:
                 try:
@@ -3359,6 +3405,40 @@ class SubtitleRemover:
             except Exception:
                 pass
 
+    def _write_nle_sidecar(self, input_path: str, output_path: str,
+                             start_frame: int, end_frame: int,
+                             fps: float) -> None:
+        """RM-76: emit an EDL or FCPXML sidecar next to the output so an
+        NLE operator can hand-conform the cleaned clip into a Premiere
+        / DaVinci timeline at the same timecode."""
+        mode = self.config.nle_sidecar
+        if mode not in ("edl", "fcpxml"):
+            return
+        try:
+            from backend import nle_sidecar
+        except Exception as exc:
+            logger.debug(f"NLE sidecar module unavailable: {exc}")
+            return
+        try:
+            if fps <= 0:
+                fps = 30.0
+            start_s = max(0.0, start_frame / fps)
+            end_s = max(start_s + 1.0 / fps, end_frame / fps)
+            base = str(Path(output_path).with_suffix(""))
+            if mode == "edl":
+                path = nle_sidecar.write_edl(
+                    base + ".edl", input_path, output_path,
+                    fps, start_s, end_s,
+                )
+            else:
+                path = nle_sidecar.write_fcpxml(
+                    base + ".fcpxml", input_path, output_path,
+                    fps, start_s, end_s,
+                )
+            logger.info(f"NLE {mode.upper()} sidecar written: {path}")
+        except Exception as exc:
+            logger.warning(f"NLE sidecar write failed: {exc}")
+
     def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
         """RM-78 / RM-80: run optional post-restore passes against the
         finalised output in place. Each adapter is a no-op when its
@@ -3401,28 +3481,44 @@ class SubtitleRemover:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
         if self._hw_encoder and self.config.use_hw_encode:
             if 'nvenc' in self._hw_encoder:
-                return ['-c:v', self._hw_encoder, '-preset', 'p4',
+                base = ['-c:v', self._hw_encoder, '-preset', 'p4',
                         '-cq', str(self.config.output_quality)]
             elif 'qsv' in self._hw_encoder:
-                return ['-c:v', self._hw_encoder,
+                base = ['-c:v', self._hw_encoder,
                         '-global_quality', str(self.config.output_quality)]
             elif 'amf' in self._hw_encoder:
-                return ['-c:v', self._hw_encoder,
+                base = ['-c:v', self._hw_encoder,
                         '-quality', 'balanced',
                         '-rc', 'cqp', '-qp', str(self.config.output_quality)]
+            else:
+                base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
+                        '-preset', 'medium']
+            return base + self._hdr_encode_args()
         # F-8: software fallback honours the chosen output codec.
         codec = self.config.output_codec
         if codec == "h265":
-            return ['-c:v', 'libx265', '-crf', str(self.config.output_quality),
+            base = ['-c:v', 'libx265', '-crf', str(self.config.output_quality),
                     '-preset', 'medium']
-        if codec == "av1":
+        elif codec == "av1":
             # SVT-AV1's CRF range tops out at 63; clamp our [0-51] scale
             # into the encoder's valid window. -preset 8 is the
             # speed/quality midpoint for libsvtav1.
             crf = min(63, self.config.output_quality)
-            return ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
-        return ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
-                '-preset', 'medium']
+            base = ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
+        else:
+            base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
+                    '-preset', 'medium']
+        return base + self._hdr_encode_args()
+
+    def _hdr_encode_args(self) -> List[str]:
+        """RM-73 partial: re-tag the output with source color signalling."""
+        if not self.config.preserve_color_metadata or self._color_metadata is None:
+            return []
+        try:
+            from backend.hdr import hdr_encode_args
+            return hdr_encode_args(self._color_metadata)
+        except Exception:
+            return []
 
     def _reencode_or_copy(self, source: str, output: str):
         """Re-encode with preferred encoder or just copy if FFmpeg unavailable."""
@@ -3653,6 +3749,17 @@ def main():
                        help="Post-cleanup upscale via Real-ESRGAN (0=off, "
                             "2/3/4 = scale factor). Requires "
                             "realesrgan-ncnn-vulkan on PATH.")
+    parser.add_argument("--no-color-preserve", action="store_true",
+                       help="Do not re-tag the output with the source's "
+                            "color signalling (BT.709 / BT.2020 / PQ / HLG). "
+                            "Default behaviour preserves HDR / colourspace "
+                            "metadata even though the pixel pipeline is 8-bit.")
+    parser.add_argument("--nle-sidecar", default="off",
+                       choices=["off", "edl", "fcpxml"],
+                       help="Emit an EDL or FCPXML sidecar next to the "
+                            "output so a Premiere / DaVinci editor can "
+                            "hand-conform the cleaned clip into the same "
+                            "timecode slot as the source.")
     parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
                        help="Add additive film grain after cleanup. Strength "
                             "is a 0..0.5 fraction of full-scale; 0 disables. "
@@ -3902,6 +4009,8 @@ def main():
         whisper_model_size=args.whisper_model,
         upscale_factor=args.upscale,
         film_grain_strength=args.film_grain,
+        preserve_color_metadata=not args.no_color_preserve,
+        nle_sidecar=args.nle_sidecar,
         output_quality=args.crf,
         time_start=args.start,
         time_end=args.end,

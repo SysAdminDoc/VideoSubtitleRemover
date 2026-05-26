@@ -22,6 +22,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **HDR / colorspace metadata passthrough (RM-73 partial).** New
+  `backend/hdr.py` probes the source's color signalling via ffprobe
+  (`color_primaries`, `color_transfer`, `color_space`, `color_range`)
+  and re-tags the output encode with the same flags, even though the
+  pixel pipeline is still 8-bit BGR. HDR sources land in the log
+  banner ("Detected: bt2020 / smpte2084 -- output tagged as HDR but
+  pixels tone-mapped"). The full 16-bit pixel pipeline is queued as a
+  follow-up; this slice at least stops the output from being
+  mis-tagged. New `preserve_color_metadata` config + `--no-color-preserve`
+  CLI flag.
+- **NLE round-trip sidecar (RM-76).** New
+  `backend/nle_sidecar.py` writes a 1-event CMX 3600 EDL or a
+  minimal FCPXML 1.10 stub next to the output naming the source,
+  cleaned filename, and processed time range. Lets a DaVinci /
+  Premiere editor hand-conform the cleaned clip at the same timecode.
+  `--nle-sidecar {off|edl|fcpxml}` CLI flag + GUI mirror.
+
 - **Real-ESRGAN upscale + film-grain post-restore stages (RM-78, RM-80,
   opt-in).** New `backend/post_restore.py` adapters and a
   `_run_post_restore_passes` hook in `process_video` that fires after
