@@ -28,7 +28,7 @@
 - [x] P1 RFP-F-3 Inpaint-preview on a sample frame
 - [x] P1 RFP-B-4 Multi-track loudness normalisation (filter_complex)
 - [x] P1 RM-28 "Repeat with these settings" queue action
-- [ ] P1 RM-29 Per-file overrides surface
+- [x] P1 RM-29 Per-file overrides popover (mode / language / sensitivity / codec)
 - [ ] P1 RM-30 A/B flicker-scrubber in preview pane
 - [x] P1 RM-31 Subtitle-area drag-refinement in-GUI (shipped with F-1/F-2)
 - [x] P1 RM-49 Model-weight hash verification on first download
