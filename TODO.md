@@ -49,17 +49,17 @@
 
 ## Phase 4 -- Tests + observability (P0 for T-1, P1 elsewhere)
 
-- [ ] P0 RFP-T-1 Reference-clip regression harness (8 synthetic clips)
-- [ ] P1 RFP-T-2 End-to-end test with synthesised clip
-- [ ] P1 RFP-T-3 OCR cascade selection test
-- [ ] P2 RFP-T-4 GUI smoke test (Tk update_idletasks walk)
+- [ ] P0 RFP-T-1 Reference-clip regression harness (8 CC0 clips) -- requires sourced clips
+- [x] P1 RFP-T-2 End-to-end test with synthesised clip
+- [x] P1 RFP-T-3 OCR cascade selection test
+- [ ] P2 RFP-T-4 GUI smoke test (Tk update_idletasks walk) -- needs headless display
 - [ ] P2 RM-52 Opt-in crash reporting via GlitchTip (deferred -- privacy review needed)
 
 ## Phase 5 -- Larger bets (P1 long-horizon)
 
 - [ ] P1 RFP-L-1 Split backend/processor.py into 7 modules
 - [ ] P1 RFP-L-2 Plugin architecture for inpainters (concretises RM-81)
-- [ ] P1 RFP-L-3 docs/architecture.md contributor map
+- [x] P1 RFP-L-3 docs/architecture.md contributor map
 - [ ] P1 RM-25 LaMa via ONNX Runtime (opt-in, smaller install)
 - [ ] P1 RM-26 MI-GAN fast mode (mobile-grade single-frame)
 - [ ] P1 RM-27 Whisper fallback when OCR confidence floor is hit
@@ -67,9 +67,9 @@
 
 ## Phase 6 -- Polish (P3)
 
-- [ ] P3 RFP-EI-3 Detection threshold slider direction + rename
-- [ ] P3 RFP-EI-4 Live preview off-thread PIL conversion
-- [ ] P3 RFP-EI-6 Output-path collision guard on manual edit
+- [x] P3 RFP-EI-3 Detection threshold slider direction + rename
+- [x] P3 RFP-EI-4 Live preview worker-side throttle (PIL conversion already off-thread)
+- [x] P3 RFP-EI-6 Output-path collision guard already covered via `_make_unique_output_path`
 - [ ] P3 RFP-EI-7 TikTok preset auto-band tuning (needs real-source A/B)
 
 ## Phase 7 -- Distribution + accessibility (RM, longer-horizon)
