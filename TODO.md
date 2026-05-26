@@ -63,7 +63,7 @@
 - [ ] P1 RM-25 LaMa via ONNX Runtime (opt-in, smaller install)
 - [ ] P1 RM-26 MI-GAN fast mode (mobile-grade single-frame)
 - [ ] P1 RM-27 Whisper fallback when OCR confidence floor is hit
-- [ ] P1 RM-32 PySceneDetect-backed scene splitter (opt-in)
+- [x] P1 RM-32 PySceneDetect-backed scene splitter (opt-in)
 
 ## Phase 6 -- Polish (P3)
 

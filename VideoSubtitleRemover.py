@@ -363,6 +363,7 @@ class ProcessingConfig:
     tbe_flow_warp: bool = False         # Farneback flow-warp before TBE aggregation
     tbe_scene_cut_split: bool = True    # split TBE batch at scene cuts
     tbe_scene_cut_threshold: float = 0.35
+    tbe_scene_cut_use_pyscenedetect: bool = False  # RM-32 opt-in dep
     edge_ring_px: int = 2               # post-inpaint colour-match ring width
 
     # v3.9 workflow features
@@ -473,6 +474,8 @@ class ProcessingConfig:
         self.tbe_flow_warp = _coerce_bool(self.tbe_flow_warp, False)
         self.tbe_scene_cut_split = _coerce_bool(self.tbe_scene_cut_split, True)
         self.tbe_scene_cut_threshold = _coerce_float(self.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
+        self.tbe_scene_cut_use_pyscenedetect = _coerce_bool(
+            self.tbe_scene_cut_use_pyscenedetect, False)
         self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 8)
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
@@ -7479,6 +7482,7 @@ class VideoSubtitleRemoverApp:
                 tbe_flow_warp=getattr(item.config, 'tbe_flow_warp', False),
                 tbe_scene_cut_split=getattr(item.config, 'tbe_scene_cut_split', True),
                 tbe_scene_cut_threshold=getattr(item.config, 'tbe_scene_cut_threshold', 0.35),
+                tbe_scene_cut_use_pyscenedetect=getattr(item.config, 'tbe_scene_cut_use_pyscenedetect', False),
                 edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
                 subtitle_areas=getattr(item.config, 'subtitle_areas', None),
                 export_srt=getattr(item.config, 'export_srt', False),
