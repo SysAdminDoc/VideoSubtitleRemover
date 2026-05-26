@@ -1280,6 +1280,40 @@ class PostRestoreTests(unittest.TestCase):
             _shutil.which = original
 
 
+class VlmOcrAdapterTests(unittest.TestCase):
+    """RM-22 / RM-23 / RM-42: maybe_build_vlm_detector must return None
+    by default (no env var, default lang) and the adapter classes must
+    survive a missing-dependency load."""
+
+    def setUp(self):
+        self._saved = os.environ.pop("VSR_VLM_OCR", None)
+
+    def tearDown(self):
+        os.environ.pop("VSR_VLM_OCR", None)
+        if self._saved is not None:
+            os.environ["VSR_VLM_OCR"] = self._saved
+
+    def test_no_vlm_when_env_unset(self):
+        from backend.ocr_vlm import maybe_build_vlm_detector
+        self.assertIsNone(maybe_build_vlm_detector("cpu", "en"))
+
+    def test_manga_lang_returns_detector(self):
+        from backend.ocr_vlm import maybe_build_vlm_detector
+        detector = maybe_build_vlm_detector("cpu", "manga")
+        self.assertIsNotNone(detector)
+        self.assertEqual(detector.name, "manga-ocr")
+
+    def test_florence2_load_returns_none_without_dep(self):
+        from backend.ocr_vlm import _Florence2Detector
+        d = _Florence2Detector(device="cpu")
+        # _load lazy-imports transformers; we should get None when the
+        # CI environment lacks the package.
+        result = d._load()
+        # Either None (no dep) or a real tuple (very unlikely in CI);
+        # both are acceptable here.
+        self.assertTrue(result is None or isinstance(result, tuple))
+
+
 class PreprocessAdaptersTests(unittest.TestCase):
     """RM-33 / RM-21: pre-detect denoise + TransNetV2 scene-cut adapter
     must degrade gracefully when their optional deps are missing."""

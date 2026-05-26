@@ -707,7 +707,22 @@ class SubtitleDetector:
         return 'cuda' in self.device or self.device == 'directml'
 
     def _load_model(self):
-        """Load detection model: RapidOCR > PaddleOCR > Surya > EasyOCR > OpenCV fallback."""
+        """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
+        EasyOCR > OpenCV fallback."""
+        # RM-22 / RM-23 / RM-42: when the user has set VSR_VLM_OCR or
+        # passed lang="manga" we route through a VLM detector first.
+        # Falls through to the default cascade on any load failure.
+        try:
+            from backend.ocr_vlm import maybe_build_vlm_detector
+            vlm = maybe_build_vlm_detector(self.device, self.lang)
+            if vlm is not None:
+                self._vlm_detector = vlm
+                self._engine_name = f"VLM ({vlm.name})"
+                logger.info(f"VLM OCR detector active: {vlm.name}")
+                return
+        except Exception as exc:
+            logger.debug(f"VLM detector probe failed: {exc}")
+        self._vlm_detector = None
         # Try RapidOCR first -- PP-OCR via ONNX Runtime, 4-5x faster than PaddleOCR
         # and free of the memory-leak issues that plague the official paddlepaddle build.
         try:
@@ -828,6 +843,12 @@ class SubtitleDetector:
     def _detect_axis_aligned(self, frame: np.ndarray,
                               threshold: float) -> List[Tuple[int, int, int, int]]:
         """Dispatch to whichever engine loaded successfully."""
+        vlm = getattr(self, "_vlm_detector", None)
+        if vlm is not None:
+            try:
+                return vlm.detect(frame, threshold)
+            except Exception as exc:
+                logger.warning(f"VLM detector errored, falling back: {exc}")
         if self._rapid_model is not None:
             return self._detect_rapid(frame, threshold)
         elif self._paddle_model is not None:
