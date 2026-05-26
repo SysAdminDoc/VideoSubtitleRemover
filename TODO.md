@@ -31,13 +31,13 @@
 - [ ] P1 RM-29 Per-file overrides surface
 - [ ] P1 RM-30 A/B flicker-scrubber in preview pane
 - [x] P1 RM-31 Subtitle-area drag-refinement in-GUI (shipped with F-1/F-2)
-- [ ] P1 RM-49 Model-weight hash verification on first download
+- [x] P1 RM-49 Model-weight hash verification on first download
 
 ## Phase 3 -- Polish (P2)
 
 - [x] P2 RFP-F-5 Open up the language picker
-- [ ] P2 RFP-F-7 Per-item cancellation
-- [ ] P2 RFP-F-8 HEVC / AV1 output codec dropdown
+- [x] P2 RFP-F-7 Per-item cancellation
+- [x] P2 RFP-F-8 HEVC / AV1 output codec dropdown
 - [x] P2 RFP-F-9 Pre-batch ETA probe
 - [x] P2 RFP-F-10 `--preset NAME` CLI flag
 - [x] P2 RFP-EI-1 Percentile fallback detection thresholds (was Otsu in plan; percentile is more robust on low-contrast)

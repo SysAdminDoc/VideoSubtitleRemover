@@ -1121,6 +1121,74 @@ class LanguagePickerTests(unittest.TestCase):
                          "language picker must not contain duplicate codes")
 
 
+class OutputCodecTests(unittest.TestCase):
+    """F-8: output_codec must coerce to one of h264 / h265 / av1 and
+    drive the right software encoder when no HW encoder is available."""
+
+    def test_default_is_h264(self):
+        cfg = processor.normalize_processing_config(processor.ProcessingConfig())
+        self.assertEqual(cfg.output_codec, "h264")
+
+    def test_hevc_alias_normalises_to_h265(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(output_codec="hevc")
+        )
+        self.assertEqual(cfg.output_codec, "h265")
+
+    def test_unknown_codec_resets_to_h264(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(output_codec="vp9")
+        )
+        self.assertEqual(cfg.output_codec, "h264")
+
+    def test_software_encoder_args_match_codec(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._hw_encoder = None
+        remover.config = processor.ProcessingConfig(output_codec="h265",
+                                                     output_quality=22,
+                                                     use_hw_encode=False)
+        args = remover._get_encode_args()
+        self.assertIn("libx265", args)
+        remover.config.output_codec = "av1"
+        args = remover._get_encode_args()
+        self.assertIn("libsvtav1", args)
+
+
+class ModelHashVerificationTests(unittest.TestCase):
+    """RM-49: verify_weight_file should return True for a match,
+    False for a mismatch, and True (with a debug log) when no vendored
+    hash exists for the filename."""
+
+    def test_verify_match(self):
+        from backend.model_hashes import verify_weight_file, hash_file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "weights.pt"
+            p.write_bytes(b"hello world")
+            expected = hash_file(p)
+            self.assertTrue(verify_weight_file(p, expected_hash=expected))
+
+    def test_verify_mismatch(self):
+        from backend.model_hashes import verify_weight_file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "weights.pt"
+            p.write_bytes(b"hello world")
+            self.assertFalse(verify_weight_file(p, expected_hash="0" * 64))
+
+    def test_verify_unknown_filename_returns_true(self):
+        from backend.model_hashes import verify_weight_file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "not-tracked.bin"
+            p.write_bytes(b"some bytes")
+            # No vendored hash entry; verifier returns True (no-op).
+            self.assertTrue(verify_weight_file(p))
+
+    def test_verify_missing_file_returns_false(self):
+        from backend.model_hashes import verify_weight_file
+        result = verify_weight_file(Path("/nonexistent/weights.pt"),
+                                      expected_hash="0" * 64)
+        self.assertFalse(result)
+
+
 class PresetLibraryTests(unittest.TestCase):
     """F-10: built-in presets must be shared between the GUI and the CLI
     so `python -m backend.processor --preset NAME` resolves to the same
