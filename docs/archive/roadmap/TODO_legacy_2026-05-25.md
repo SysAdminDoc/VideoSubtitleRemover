@@ -1,8 +1,13 @@
 # Active Backlog (single source of truth)
 
-> Consolidates the open items from [ROADMAP.md](./ROADMAP.md) and
-> [RESEARCH_FEATURE_PLAN.md](./RESEARCH_FEATURE_PLAN.md). Shipped items
-> live in [CHANGELOG.md](./CHANGELOG.md). When an item closes, check it
+> Archived 2026-06-01. Every checklist item in this file was already checked
+> off before archiving. Current shipped-work summary lives in
+> [COMPLETED.md](../../../COMPLETED.md), and current planning lives in
+> [ROADMAP.md](../../../ROADMAP.md).
+
+> Consolidates the open items from [ROADMAP.md](../../../ROADMAP.md) and
+> [RESEARCH_FEATURE_PLAN.md](../research/RESEARCH_FEATURE_PLAN_2026-05-25.md). Shipped items
+> live in [CHANGELOG.md](../../../CHANGELOG.md). When an item closes, check it
 > off here AND log the ship details in CHANGELOG under `[Unreleased]`.
 >
 > Priority key: P0 (next release blocker) > P1 (high value) > P2 (nice) > P3 (polish).
@@ -137,7 +142,7 @@ ROADMAP items 81-100 stay deferred (plugin marketplace, multi-GPU,
 REST server, Tauri shell, translation pipeline, streaming mode,
 WebGPU, font-aware inpainting, logo mode, AI chat, performance
 dashboard, mobile ports). All tracked in
-[ROADMAP.md "Under consideration"](./ROADMAP.md#under-consideration-v5);
+[ROADMAP.md "Under consideration"](../../../ROADMAP.md#under-consideration-v5);
 not duplicated here.
 
 ---

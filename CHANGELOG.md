@@ -6,6 +6,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Planning docs consolidated.** Root planning now flows through
+  `ROADMAP.md`, `COMPLETED.md`, and `RESEARCH_REPORT.md`; the completed
+  2026-05-25 audit and exhausted checklist moved under `docs/archive/`.
 - **`backend/processor.py` split into 7 modules (RFP-L-1).** The
   3,400-line monolith now lives as a 1,923-line shim that re-exports
   every previously-public name from focused sub-modules:
