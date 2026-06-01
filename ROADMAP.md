@@ -2,20 +2,31 @@
 
 > Living document. Shipped log + ordered backlog + research bench.
 > Items ranked by value, not calendar date.
-> Version line: **v3.13 planning cycle**, revised 2026-05-17.
+> Version line: **v3.15.0 shipped; v3.16 processor split in Unreleased**,
+> revised 2026-06-01.
 
 Reading order:
 
 1. [Shipped](#shipped) -- what is in the released binary today
-2. [Now](#now-v313-in-flight) -- in-flight work in `Unreleased`
+2. [Now](#now-unreleased-v316-processor-split) -- in-flight work in `Unreleased`
 3. [Next](#next-v314--v40) -- ordered near-term backlog
 4. [Later](#later-v4x) -- mid-term, usually needs new dependencies or weights
 5. [Under consideration](#under-consideration-v5) -- speculative / research-bench
-6. [Rejected](#explicitly-not-on-the-roadmap) -- consciously out of scope
+6. [Rejected](#explicitly-not-on-the-roadmap) -- consciously deferred
 7. [Themes](#themes) -- the categories every Now/Next item maps to
 8. [Appendix: sources](#appendix-sources) -- every external reference
 
 ---
+
+## Planning map
+
+- [COMPLETED.md](./COMPLETED.md) is the shipped-work summary.
+- [RESEARCH_REPORT.md](./RESEARCH_REPORT.md) is the current research synthesis.
+- [CHANGELOG.md](./CHANGELOG.md) is the detailed release log.
+- [docs/archive/research/RESEARCH_FEATURE_PLAN_2026-05-25.md](./docs/archive/research/RESEARCH_FEATURE_PLAN_2026-05-25.md)
+  is the archived audit that fed the backlog-drain work.
+- [docs/archive/roadmap/TODO_legacy_2026-05-25.md](./docs/archive/roadmap/TODO_legacy_2026-05-25.md)
+  is the archived completed checklist.
 
 ## Project philosophy (non-negotiable)
 
@@ -44,7 +55,26 @@ flagged in the [rejected](#explicitly-not-on-the-roadmap) section.
 
 ## Shipped
 
-### v3.12.0 (current release, 2026-04-17)
+### v3.15.0 (current release, 2026-05-25)
+
+- **Distribution and release hardening** -- NSIS installer, optional Azure
+  Trusted Signing, Explorer "Send to VSR" verb, and GUI smoke coverage.
+- **Research adapters and workflow helpers** -- opt-in proxy workflow,
+  karaoke optical-flow helper, WhisperX helper, VapourSynth bridge, RTL
+  scaffold, SeedVR2, TensorRT, OCR quantisation, segmentation helpers,
+  diffusion inpainter scaffolds, VLM OCR, manga/anime mode, FastDVDnet,
+  TransNetV2, and codec logging.
+- **Observability and corpus docs** -- opt-in GlitchTip crash reporting and
+  the community edge-case corpus guide.
+
+### v3.14.0 (2026-05-25)
+
+- **Backlog drain** -- plugin-driven inpainter dispatch, synthetic reference
+  clips, localisation and UIA scaffolds, HDR metadata passthrough, NLE
+  sidecars, Real-ESRGAN, SwinIR, film grain, Whisper fallback, and related
+  optional integrations.
+
+### v3.12.0 (2026-04-17)
 
 - **AUTO inpaint mode / per-batch quality tier** -- new `InpaintMode.AUTO`
   routes each TBE batch between temporal (TBE) and spatial (LaMa) inpainting
@@ -142,13 +172,15 @@ processing, right-click mask preview, CLI flags. See the
 
 ---
 
-## Now (v3.13, in flight)
+## Now (Unreleased: v3.16 processor split)
 
-These are the items already partially landed in the `Unreleased` section of
-[CHANGELOG.md](./CHANGELOG.md). v3.13 is a hardening + UX-polish release;
-the goal is to ship them as a single tag rather than dribbling each fix.
+The active `Unreleased` item is the backend processor split recorded in
+[CHANGELOG.md](./CHANGELOG.md): `backend/processor.py` is now a compatibility
+shim over focused detection, tracking, I/O, quality, inpainter, and CLI modules.
+The former v3.13 checklist below is closed and retained as historical planning
+evidence.
 
-### Hardening (already landed on `main`)
+### Closed v3.13 hardening set
 
 1. **Shutdown race fix** -- `_shutdown_started` is set only after user
    confirms close-while-processing, so the racing `_on_processing_complete`
@@ -169,7 +201,7 @@ the goal is to ship them as a single tag rather than dribbling each fix.
    `Exception` so a partially installed Surya doesn't crash engine probing.
 8. **CLI Ctrl-C** -- clean exit code 130 instead of a raw traceback.
 
-### UI/UX polish (already landed)
+### Closed v3.13 UI/UX polish set
 
 9. **Workflow step pills** (Import / Inspect / Run) now actually render and
    highlight the current stage.
@@ -181,14 +213,14 @@ the goal is to ship them as a single tag rather than dribbling each fix.
     sample frame, then start."
 13. **Activity-log height** 5 -> 6 rows; progress-bar height parity at 5 px.
 
-### Tests (already landed)
+### Closed v3.13 test set
 
 14. **`CoerceHardeningTests`** -- NaN/inf for `_coerce_int` / `_coerce_float`,
     non-iterable `subtitle_area` / `subtitle_areas` in `from_dict`.
 15. **`BackendWriteSrtTests`** -- zero fps and near-zero fps fall back to 30.
 16. **`LoadJsonConfigTests`** -- oversized config file rejected before parse.
 
-### Still to do before v3.13 tag
+### Closed before v3.13 tag
 
 17. **[x] Pin torch >= 2.10 to dodge CVE-2026-24747** -- `torch.load`
     weights_only RCE; 2.9.1 and earlier are vulnerable. Bumped in

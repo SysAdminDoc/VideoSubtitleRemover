@@ -261,14 +261,21 @@ VideoSubtitleRemover/
 |-- VideoSubtitleRemover.py   # Main GUI application
 |-- backend/
 |   |-- __init__.py           # Module exports
-|   |-- processor.py          # Core processing (detection + inpainting + mux)
+|   |-- processor.py          # Legacy import/CLI compatibility shim
+|   |-- detection.py          # OCR cascade and detector routing
+|   |-- tracking.py           # Kalman, pHash, karaoke helpers
+|   |-- io.py                 # Capture, ffprobe, intermediate writers
+|   |-- cli.py                # Command-line entry point
+|   |-- inpainters/           # Built-in STTN/LaMa/ProPainter/AUTO paths
 |   |-- presets.py            # Shared preset library (GUI + CLI)
 |   `-- model_hashes.py       # Vendored SHA-256 weight hashes
 |-- docs/
-|   `-- architecture.md       # Pipeline map for new contributors
-|-- ROADMAP.md                # Shipped log + ordered backlog + research bench
-|-- TODO.md                   # Active checklist (single source of truth)
-|-- RESEARCH_FEATURE_PLAN.md  # Audit companion (historical analysis)
+|   |-- architecture.md       # Pipeline map for new contributors
+|   |-- edge_case_corpus.md   # Community regression-corpus guide
+|   `-- archive/              # Retired audits and completed checklists
+|-- ROADMAP.md                # Active planning and research bench
+|-- COMPLETED.md              # Shipped-work summary
+|-- RESEARCH_REPORT.md        # Current research synthesis
 |-- setup.py                  # First-time environment setup
 |-- Run_VSR_Pro.bat           # Windows launcher
 |-- Run_VSR_Pro_Debug.bat     # Windows launcher with a visible console
@@ -285,6 +292,12 @@ VideoSubtitleRemover/
 See [docs/architecture.md](docs/architecture.md) for a walkthrough of
 the detect -> tracker -> mask -> TBE -> refine -> mux pipeline and the
 "add a new feature" checklist.
+
+Planning entry points:
+[ROADMAP.md](ROADMAP.md) for active planning,
+[COMPLETED.md](COMPLETED.md) for shipped-work summary, and
+[RESEARCH_REPORT.md](RESEARCH_REPORT.md) for current research synthesis.
+Retired audits and completed checklists live under [docs/archive/](docs/archive/).
 
 ## Credits
 

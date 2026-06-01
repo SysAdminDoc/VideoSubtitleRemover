@@ -1,6 +1,11 @@
 # Project Research and Feature Plan
 
-> Companion to [ROADMAP.md](./ROADMAP.md). The roadmap is already a strong
+> Archived 2026-06-01. This audit was consolidated into
+> [RESEARCH_REPORT.md](../../../RESEARCH_REPORT.md) and
+> [ROADMAP.md](../../../ROADMAP.md). It is retained as historical evidence
+> for the 2026-05-25 backlog-drain work and is not the active planning source.
+
+> Companion to [ROADMAP.md](../../../ROADMAP.md). The roadmap is already a strong
 > ordered backlog; this document does NOT re-list its items. Instead it
 > records what an end-to-end audit (2026-05-25, against `e057c41`) found
 > that the roadmap does **not** already track: bugs, wiring gaps between
@@ -122,12 +127,12 @@ from a `wc -l` equivalent against `e057c41`):
   + skip-existing + loudnorm, CVE pins / settings versioning.
 
 External sources reviewed in the roadmap (not re-listed; see
-[ROADMAP.md "Appendix: sources"](./ROADMAP.md#appendix-sources)).
+[ROADMAP.md "Appendix: sources"](../../../ROADMAP.md#appendix-sources)).
 
 Areas that could not be verified without runtime:
 
 - Actual end-to-end output quality on a real clip (no sample assets in
-  repo; running PyInstaller / setup.py + a long video is out of scope
+  repo; running PyInstaller / setup.py + a long video was not practical
   for a static audit). All quality claims marked "Needs live validation".
 - Whether `cv2.VideoCapture(path, cv2.CAP_FFMPEG, [...HW_ACCELERATION...])`
   actually works on this Windows + OpenCV 4.12 build (depends on the
@@ -1176,7 +1181,7 @@ Missing:
 
 ### Phase 0 -- Tagged in v3.13 (already shipped, listed for completeness)
 
-See [ROADMAP.md "Now (v3.13, in flight)"](./ROADMAP.md#now-v313-in-flight)
+See [ROADMAP.md "Closed v3.13 hardening set"](../../../ROADMAP.md#closed-v313-hardening-set)
 items 1-20, 36-41, 44, 46-48, 53, 56-57. No work needed here.
 
 ### Phase 1 -- Quality + correctness lift (P0 items)

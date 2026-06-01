@@ -3,7 +3,7 @@
 This document walks the pipeline a frame travels through, names every
 module it touches, and points new contributors at the right file for a
 given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
-[TODO.md](../TODO.md).
+[COMPLETED.md](../COMPLETED.md).
 
 > Concrete and up to date as of the post-`eae6672` autonomous pass.
 > Keep this in sync when modules move.
@@ -17,7 +17,13 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |-- VideoSubtitleRemover.py     # Tk GUI: window, queue, settings, preview.
 |-- backend/
 |   |-- __init__.py             # Lazy re-exports SubtitleRemover etc.
-|   |-- processor.py            # Detect + inpaint + encode + audio mux.
+|   |-- processor.py            # Legacy re-export shim + CLI delegation.
+|   |-- detection.py            # OCR cascade and detector routing.
+|   |-- tracking.py             # Kalman, pHash, karaoke grouping.
+|   |-- io.py                   # Capture, ffprobe, intermediates.
+|   |-- cli.py                  # argparse entry point.
+|   |-- quality.py              # Shared quality helpers.
+|   |-- inpainters/             # Built-in STTN/LaMa/ProPainter/AUTO paths.
 |   |-- presets.py              # Shared preset library (GUI <-> CLI).
 |   `-- model_hashes.py         # Vendored SHA-256 hashes + verifier.
 |-- tests/
@@ -36,9 +42,11 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
   model, the preview pane, the region selector, the settings dialog,
   and the progress / batch wiring. Pure GUI. The only "backend"
   reach-in is the BackendConfig adapter inside `_process_item`.
-- **`backend/processor.py`** owns the actual pipeline: detection
-  cascade, Kalman tracker, TBE, LaMa / ProPainter inpainters,
-  intermediate writer, ffmpeg orchestration, CLI entry point.
+- **`backend/processor.py`** preserves the legacy public import surface and
+  delegates `python -m backend.processor` to `backend.cli.main`.
+- **`backend/detection.py`**, **`backend/tracking.py`**, **`backend/io.py`**,
+  **`backend/quality.py`**, and **`backend/inpainters/`** own the focused
+  pipeline pieces that used to live in the processor monolith.
 - **`backend/presets.py`** holds the one place a preset definition
   is allowed to live. The GUI imports `BUILTIN_PRESETS` from here;
   the CLI's `--preset NAME` flag resolves through the same table.
