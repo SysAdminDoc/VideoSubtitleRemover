@@ -2021,9 +2021,27 @@ class OcrCascadeOrderTests(unittest.TestCase):
         return det
 
     def test_falls_back_to_opencv_when_no_engine_installed(self):
+        from unittest import mock
+
         det = self._make_detector()
-        det._load_model()
-        # All optional engines absent on this CI -> OpenCV fallback.
+        # Honour the class docstring: force every optional OCR engine to
+        # look absent so the cascade deterministically reaches the OpenCV
+        # fallback. Without this the test passes only on a bare machine and
+        # fails in CI/release builds, which install rapidocr/easyocr/etc.
+        # (a None entry in sys.modules makes the import raise ImportError).
+        absent = {
+            name: None
+            for name in (
+                "rapidocr",
+                "rapidocr_onnxruntime",
+                "paddleocr",
+                "surya",
+                "surya.detection",
+                "easyocr",
+            )
+        }
+        with mock.patch.dict(sys.modules, absent):
+            det._load_model()
         self.assertEqual(det._engine_name, "OpenCV fallback")
 
     def test_surya_skipped_unless_env_set(self):

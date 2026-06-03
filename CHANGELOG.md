@@ -23,6 +23,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `torch==2.7.0` while `requirements.txt` / `setup.py` require
   `torch>=2.10.0` (CVE-2026-24747 fix). Aligned the README to the floor
   pin and split NVIDIA into 20/30/40-series (cu118) vs 50-series (cu128).
+- **OCR-cascade fallback test isolation.** `OcrCascadeOrderTests.`
+  `test_falls_back_to_opencv_when_no_engine_installed` asserted the
+  "OpenCV fallback" engine but never patched out the optional OCR
+  engines, so it passed only on a bare machine and failed the release
+  build (which installs RapidOCR/EasyOCR). The test now nulls the engine
+  modules in `sys.modules` so the cascade deterministically falls
+  through, matching the class docstring's stated intent.
 
 ### Docs
 
