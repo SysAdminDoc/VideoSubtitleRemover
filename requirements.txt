@@ -16,9 +16,20 @@ Pillow>=11.3.0
 # 2.9.1 and earlier. simple-lama-inpainting loads weights via torch.load,
 # so this is a runtime concern, not just a transitive-dependency one.
 
-# For NVIDIA GPUs (CUDA 11.8):
+# Python compatibility: torch 2.7+ supports Python 3.9-3.13. The CUDA
+# index you pick must match your GPU generation (see below). Mixing an
+# old torch pin with a too-new Python is the usual "no wheel found" error.
+
+# For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada, CUDA 11.8):
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu118
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+
+# For NVIDIA RTX 50-series (Blackwell, sm_120 -- e.g. RTX 5070/5080/5090):
+# Blackwell needs CUDA 12.8 wheels (torch 2.7+). The cu118/cu121 builds
+# have no Blackwell kernels and will error or fall back to CPU.
+# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
+# pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+# (Run_VSR_Pro.bat / setup.py auto-detect 50-series and pick cu128 for you.)
 
 # For AMD/Intel (DirectML):
 # pip install torch-directml==0.2.5.dev240914

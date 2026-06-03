@@ -64,7 +64,8 @@ def detect_gpu():
         "amd": False,
         "intel": False,
         "name": None,
-        "cuda_version": None
+        "cuda_version": None,
+        "blackwell": False
     }
     
     # Check NVIDIA
@@ -76,7 +77,18 @@ def detect_gpu():
         if result.returncode == 0 and result.stdout.strip():
             gpu_info["nvidia"] = True
             gpu_info["name"] = result.stdout.strip().split('\n')[0]
-            
+
+            # Blackwell (RTX 50-series, sm_120) needs CUDA 12.8 + torch 2.7+.
+            # cu118/cu121 wheels carry no Blackwell kernels, so they error
+            # ("no kernel image is available for execution on the device")
+            # or silently fall back to CPU. Detect by name so the installer
+            # can route these cards to the cu128 wheel index.
+            name_lower = gpu_info["name"].lower()
+            if any(model in name_lower for model in
+                   (" 5050", " 5060", " 5070", " 5080", " 5090",
+                    "rtx 50", "rtx pro 6000", "b100", "b200", "gb200")):
+                gpu_info["blackwell"] = True
+
             # Get CUDA version
             result2 = subprocess.run(
                 ['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'],
@@ -111,6 +123,8 @@ def detect_gpu():
     if gpu_info["nvidia"]:
         print(f"  [OK] NVIDIA GPU detected: {gpu_info['name']}")
         print(f"    Driver version: {gpu_info['cuda_version']}")
+        if gpu_info["blackwell"]:
+            print(f"    Blackwell (RTX 50-series) detected -- using CUDA 12.8 wheels")
     elif gpu_info["amd"]:
         print(f"  [OK] AMD GPU detected: {gpu_info['name']}")
         print(f"    Will use DirectML")
@@ -169,7 +183,17 @@ def install_pytorch(gpu_info):
     try:
         # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434
         # (torch.load weights_only RCE in 2.9.1 and earlier).
-        if gpu_info["nvidia"]:
+        if gpu_info["nvidia"] and gpu_info["blackwell"]:
+            # Blackwell (RTX 50-series, sm_120) requires CUDA 12.8 wheels.
+            # The cu128 index ships torch >= 2.7 with Blackwell kernels;
+            # cu118/cu121 builds fail or fall back to CPU on these cards.
+            print(f"  Installing PyTorch with CUDA 12.8 (Blackwell) support...")
+            subprocess.run([
+                pip, 'install',
+                'torch>=2.10.0', 'torchvision>=0.25.0',
+                '--index-url', 'https://download.pytorch.org/whl/cu128'
+            ], check=True)
+        elif gpu_info["nvidia"]:
             print(f"  Installing PyTorch with CUDA support...")
             subprocess.run([
                 pip, 'install',
@@ -208,7 +232,17 @@ def install_paddlepaddle(gpu_info):
     pip = get_pip_command()
     
     try:
-        if gpu_info["nvidia"]:
+        if gpu_info["nvidia"] and gpu_info["blackwell"]:
+            # Blackwell needs a CUDA 12.x PaddlePaddle build. cu126 is the
+            # newest stable paddle index; the cu118 build has no sm_120
+            # kernels. If PaddleOCR cannot load, detection automatically
+            # falls back to RapidOCR (ONNX) which is GPU-agnostic.
+            print(f"  Installing PaddlePaddle GPU (CUDA 12.6) version...")
+            subprocess.run([
+                pip, 'install', 'paddlepaddle-gpu==3.0.0',
+                '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cu126/'
+            ], check=True)
+        elif gpu_info["nvidia"]:
             print(f"  Installing PaddlePaddle GPU version...")
             subprocess.run([
                 pip, 'install', 'paddlepaddle-gpu==3.0.0',
