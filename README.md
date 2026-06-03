@@ -2,7 +2,7 @@
 <p align="center"><img src="icon.png" width="128" alt="Video Subtitle Remover"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.15.0-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.16.0-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20desktop-58A6FF?style=for-the-badge">
 </p>
@@ -12,7 +12,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.15.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.16.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.10+-blue)
@@ -65,7 +65,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 | OS | Windows 10 | Windows 11 |
 | CPU | Intel i5 / AMD Ryzen 5 | Intel i7 / AMD Ryzen 7 |
 | RAM | 8 GB | 16+ GB |
-| GPU | Any (CPU mode) | NVIDIA RTX 2060+ |
+| GPU | Any (CPU mode) | NVIDIA RTX 2060+ (RTX 50-series supported via CUDA 12.8) |
 | VRAM | - | 6+ GB |
 | Python | 3.10 | 3.12 |
 
@@ -90,11 +90,13 @@ cd VideoSubtitleRemover
 python -m venv venv
 .\venv\Scripts\activate
 
-# Install PyTorch (choose one):
-# NVIDIA:
-pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu118
+# Install PyTorch (choose one -- torch 2.7+ supports Python 3.9-3.13):
+# NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada):
+pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu118
+# NVIDIA RTX 50-series (Blackwell -- 5070/5080/5090, needs CUDA 12.8):
+pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
 # CPU:
-pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cpu
+pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
 
 # Install dependencies
 pip install -r requirements.txt
@@ -212,6 +214,51 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Quality Sheet | Side-by-side PNG next to output | Off | On/Off |
 
 ## Troubleshooting
+
+<details>
+<summary><b>RTX 50-series (Blackwell): "no kernel image is available" or CPU-only</b></summary>
+
+RTX 50-series cards (5070 / 5080 / 5090, compute capability sm_120) need
+**CUDA 12.8** wheels, i.e. **PyTorch 2.7 or newer** from the `cu128` index.
+The older `cu118` / `cu121` builds contain no Blackwell kernels and will
+either raise `no kernel image is available for execution on the device`
+or silently fall back to CPU.
+
+`Run_VSR_Pro.bat` / `setup.py` now auto-detect 50-series cards and install
+the `cu128` build. To fix an existing environment manually:
+
+```powershell
+.\venv\Scripts\activate
+pip uninstall -y torch torchvision
+pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
+```
+
+torch 2.7+ supports Python 3.9-3.13, so a recent Python is fine. If
+PaddleOCR fails to load on Blackwell, detection automatically falls back
+to RapidOCR (ONNX Runtime), which is GPU-generation agnostic.
+
+</details>
+
+<details>
+<summary><b>Colors shift / look washed out (TV vs full color range)</b></summary>
+
+The upstream project re-encodes the output without carrying the source's
+color signalling, so a **limited / TV-range (BT.601/709)** clip can come
+back looking washed out or with shifted colors. This fork preserves the
+source's `color_primaries`, `color_transfer`, `color_space`, and
+**`color_range`** tags onto the final encode (`preserve_color_metadata`,
+on by default; CLI `--no-color-preserve` to disable). Decoding is handled
+by OpenCV's FFmpeg backend, which applies the correct YUV->RGB conversion
+for the signalled range, and the same tags are re-applied on write so
+players interpret the result the same way as the source.
+
+Note: the internal pixel pipeline is still 8-bit BGR, so true 10-bit HDR
+sources are tone-mapped to SDR (the output is tagged correctly but not
+10-bit). For standard SDR limited-range content, colors are preserved. If
+you still see a mismatch, attach the `ffprobe` color fields of your source
+to a bug report.
+
+</details>
 
 <details>
 <summary><b>CUDA out of memory</b></summary>

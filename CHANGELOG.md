@@ -2,6 +2,37 @@
 
 All notable changes to VideoSubtitleRemover will be documented in this file.
 
+## [3.16.0]
+
+### Added
+
+- **Blackwell (RTX 50-series) GPU install path.** `setup.py` /
+  `Run_VSR_Pro.bat` now detect 50-series cards (5050/5060/5070/5080/5090,
+  RTX PRO 6000, B100/B200/GB200 by name) and install PyTorch from the
+  CUDA 12.8 (`cu128`) wheel index, plus PaddlePaddle from the `cu126`
+  index. Blackwell is compute capability sm_120 and has no kernels in the
+  cu118/cu121 builds the default NVIDIA path uses, so older pins error
+  with `no kernel image is available for execution on the device` or
+  silently fall back to CPU. `requirements.txt` and the README now
+  document the cu128 path and the manual fix for an existing environment,
+  and note torch 2.7+ supports Python 3.9-3.13.
+
+### Fixed
+
+- **README PyTorch pin drift.** The manual-install block pinned
+  `torch==2.7.0` while `requirements.txt` / `setup.py` require
+  `torch>=2.10.0` (CVE-2026-24747 fix). Aligned the README to the floor
+  pin and split NVIDIA into 20/30/40-series (cu118) vs 50-series (cu128).
+
+### Docs
+
+- **TV / limited color-range behavior documented.** Added a README
+  troubleshooting entry explaining that this fork preserves the source's
+  `color_range` (and primaries/transfer/matrix) tags on the final encode
+  via `preserve_color_metadata` (RM-73), unlike upstream which drops them
+  and can wash out limited-range clips. Clarified that the 8-bit BGR
+  pipeline still tone-maps true 10-bit HDR to SDR.
+
 ## [Unreleased]
 
 ### Changed
