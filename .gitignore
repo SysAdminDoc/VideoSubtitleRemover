@@ -41,3 +41,7 @@ models/*.bin
 .env.local
 .python-version
 CLAUDE.md
+
+# Markdown files local-only (except README)
+*.md
+!README.md
