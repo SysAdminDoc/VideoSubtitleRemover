@@ -25,6 +25,7 @@ LADDER_NOT_APPLICABLE = "not-applicable"
 SSIM_FLOOR = 0.95
 VMAF_FLOOR = 90.0
 TEMPORAL_FLICKER_CEILING = 0.08
+RESIDUAL_TEXT_SCORE_CEILING = 0.025
 
 
 def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
@@ -62,6 +63,12 @@ def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
         reasons.append(
             f"temporal flicker {flicker:.4f} above "
             f"{TEMPORAL_FLICKER_CEILING:.4f}"
+        )
+    residual = _number(metrics.get("residual_text_score"))
+    if residual is not None and residual > RESIDUAL_TEXT_SCORE_CEILING:
+        reasons.append(
+            f"residual text score {residual:.4f} above "
+            f"{RESIDUAL_TEXT_SCORE_CEILING:.4f}"
         )
 
     previews = _preview_paths(metrics)

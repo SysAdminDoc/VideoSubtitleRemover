@@ -94,6 +94,54 @@ def temporal_flicker_score(
     return float(np.mean(diffs))
 
 
+def residual_text_score(frame: np.ndarray) -> Optional[float]:
+    """Return a cheap 0..1 text-residue score for a cleaned ROI.
+
+    This is intentionally dependency-free. It is not a replacement for OCR; it
+    flags sharp high-contrast strokes that commonly remain when subtitle text
+    was under-masked or when an inpaint fallback left outlines behind.
+    """
+    if frame is None or frame.size == 0:
+        return None
+    if frame.ndim == 3:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    elif frame.ndim == 2:
+        gray = frame
+    else:
+        return None
+    h, w = gray.shape[:2]
+    if h < 8 or w < 8:
+        return None
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    median = float(np.median(blurred))
+    contrast = cv2.absdiff(blurred, np.full_like(blurred, int(round(median))))
+    _, mask = cv2.threshold(
+        contrast, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU
+    )
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_RECT,
+        (max(1, w // 96), max(1, h // 96)),
+    )
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    edges = cv2.Canny(blurred, 50, 150)
+    contour_area = 0.0
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
+        x, y, cw, ch = cv2.boundingRect(contour)
+        if cw < 3 or ch < 3:
+            continue
+        if ch > h * 0.65:
+            continue
+        aspect = cw / max(1.0, float(ch))
+        if aspect < 0.15 or aspect > 30.0:
+            continue
+        contour_area += float(cw * ch)
+    area = float(max(1, h * w))
+    edge_density = float(np.count_nonzero(edges)) / area
+    contour_density = contour_area / area
+    return float(min(1.0, max(edge_density, contour_density)))
+
+
 def _prepare_flicker_frame(frame: np.ndarray) -> Optional[np.ndarray]:
     if frame is None or frame.size == 0:
         return None

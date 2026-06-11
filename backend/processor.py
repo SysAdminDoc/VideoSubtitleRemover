@@ -68,7 +68,12 @@ from backend.io import (
     _LosslessIntermediateWriter,
 )
 from backend.encoder import _detect_hw_encoder
-from backend.quality import _ssim, compute_vmaf, temporal_flicker_score
+from backend.quality import (
+    _ssim,
+    compute_vmaf,
+    residual_text_score,
+    temporal_flicker_score,
+)
 from backend.quality_gate import evaluate_quality_gate
 from backend.tracking import (
     _KalmanBox,
@@ -961,6 +966,7 @@ class SubtitleRemover:
             roi_psnrs: List[float] = []
             roi_ssims: List[float] = []
             temporal_samples: List[Tuple[int, np.ndarray]] = []
+            residual_scores: List[float] = []
             # B-3: ROI-cropped metric uses the accumulated union-mask
             # bbox. Falls back to the whole-frame metric when the ROI is
             # too small (< 32px on either axis) for SSIM to be stable.
@@ -995,6 +1001,10 @@ class SubtitleRemover:
                     b_roi = b[y1:y2, x1:x2]
                     if b_roi.size:
                         temporal_samples.append((idx, b_roi.copy()))
+                        if idx in metric_index_set:
+                            residual = residual_text_score(b_roi)
+                            if residual is not None:
+                                residual_scores.append(residual)
                 if idx not in metric_index_set:
                     continue
                 p = cv2.PSNR(a, b)
@@ -1020,6 +1030,9 @@ class SubtitleRemover:
             roi_mean_ssim = float(np.mean(roi_ssims)) if roi_ssims else None
             roi_mean_psnr = float(np.mean(roi_psnrs)) if roi_psnrs else None
             flicker_score = temporal_flicker_score(temporal_samples)
+            residual_mean_score = (
+                float(np.mean(residual_scores)) if residual_scores else None
+            )
             segment_duration = max(0.1, min(30.0, span / max(fps, 1.0)))
             segment_start = start_frame / max(fps, 1.0)
             vmaf = compute_vmaf(
@@ -1059,6 +1072,7 @@ class SubtitleRemover:
                 'roi_vmaf': roi_vmaf,
                 'roi_bbox': list(roi) if roi else None,
                 'temporal_flicker_score': flicker_score,
+                'residual_text_score': residual_mean_score,
                 'samples': len(psnrs),
                 'tag': tag,
                 'sheet': sheet_path,
