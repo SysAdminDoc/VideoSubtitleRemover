@@ -1906,7 +1906,9 @@ class BatchReportTests(unittest.TestCase):
             markdown = md_path.read_text(encoding="utf-8")
 
         self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
-        self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
+        self.assertEqual(payload["counts"], {"review-needed": 1})
+        self.assertEqual(payload["files"][0]["status"], "review-needed")
+        self.assertIn("quality gate review needed", payload["files"][0]["message"])
         self.assertEqual(payload["files"][0]["source_width"], 1920)
         self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
         self.assertGreater(payload["files"][0]["estimated_seconds"], 0)
@@ -1919,7 +1921,7 @@ class BatchReportTests(unittest.TestCase):
             payload["files"][0]["quality_gate"]["previewFramePaths"],
             ["clip.qualitysheet.png"],
         )
-        self.assertIn("| hardcoded-processed | clip.mkv | clip_no_sub.mkv |", markdown)
+        self.assertIn("| review-needed | clip.mkv | clip_no_sub.mkv |", markdown)
         self.assertIn("review (manual-review)", markdown)
 
 
