@@ -241,44 +241,121 @@ class SubtitleDetector:
     def _detect_rapid(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         try:
             output = self._rapid_model(frame)
-            results = None
-            if output is None:
-                return []
-            if isinstance(output, tuple) and len(output) >= 1:
-                results = output[0]
-            else:
-                boxes_attr = getattr(output, 'boxes', None)
-                scores_attr = getattr(output, 'scores', None)
-                if boxes_attr is not None:
-                    boxes = []
-                    for i, poly in enumerate(boxes_attr):
-                        conf = float(scores_attr[i]) if scores_attr is not None else 1.0
-                        if conf >= threshold:
-                            pts = np.array(poly, dtype=np.int32)
-                            x1, y1 = pts.min(axis=0)
-                            x2, y2 = pts.max(axis=0)
-                            boxes.append((int(x1), int(y1), int(x2), int(y2)))
-                    return boxes
-                return []
-
-            if not results:
-                return []
-            boxes = []
-            for entry in results:
-                if len(entry) < 3:
-                    continue
-                poly, _text, conf = entry[0], entry[1], entry[2]
-                if conf is None:
-                    conf = 1.0
-                if float(conf) >= threshold:
-                    pts = np.array(poly, dtype=np.int32)
-                    x1, y1 = pts.min(axis=0)
-                    x2, y2 = pts.max(axis=0)
-                    boxes.append((int(x1), int(y1), int(x2), int(y2)))
-            return boxes
+            return self._rapid_output_to_boxes(output, threshold)
         except Exception as e:
             logger.error(f"RapidOCR detection error: {e}")
             return self._fallback_detection(frame)
+
+    @classmethod
+    def _rapid_output_to_boxes(cls, output, threshold: float) -> List[Tuple[int, int, int, int]]:
+        if output is None:
+            return []
+        results = output[0] if isinstance(output, tuple) and output else output
+        structured = cls._rapid_structured_boxes(results, threshold)
+        if structured is not None:
+            return structured
+        if not results:
+            return []
+        boxes: List[Tuple[int, int, int, int]] = []
+        for entry in results:
+            parsed = cls._rapid_entry_to_box(entry, threshold)
+            if parsed is not None:
+                boxes.append(parsed)
+        return boxes
+
+    @classmethod
+    def _rapid_structured_boxes(cls, results, threshold: float) -> Optional[List[Tuple[int, int, int, int]]]:
+        polys = cls._rapid_field(
+            results,
+            "boxes", "dt_polys", "dt_boxes", "polys", "det_polys",
+        )
+        if polys is None:
+            return None
+        scores = cls._rapid_field(
+            results,
+            "scores", "rec_scores", "text_scores", "cls_scores",
+        )
+        boxes: List[Tuple[int, int, int, int]] = []
+        for index, poly in enumerate(polys):
+            conf = cls._rapid_score_at(scores, index)
+            if conf >= threshold:
+                parsed = cls._poly_to_box(poly)
+                if parsed is not None:
+                    boxes.append(parsed)
+        return boxes
+
+    @staticmethod
+    def _rapid_field(results, *names):
+        if isinstance(results, dict):
+            for name in names:
+                if name in results:
+                    return results.get(name)
+            return None
+        for name in names:
+            value = getattr(results, name, None)
+            if value is not None:
+                return value
+        return None
+
+    @classmethod
+    def _rapid_entry_to_box(cls, entry, threshold: float) -> Optional[Tuple[int, int, int, int]]:
+        if isinstance(entry, dict):
+            poly = cls._rapid_field(entry, "box", "bbox", "poly", "points", "dt_poly")
+            conf = cls._rapid_score_at(
+                [cls._rapid_field(entry, "score", "confidence", "conf", "rec_score")],
+                0,
+            )
+        else:
+            try:
+                if len(entry) < 1:
+                    return None
+                poly = entry[0]
+                conf = entry[2] if len(entry) >= 3 else 1.0
+            except TypeError:
+                poly = cls._rapid_field(entry, "box", "bbox", "poly", "points", "dt_poly")
+                conf = cls._rapid_field(entry, "score", "confidence", "conf", "rec_score")
+        if conf is None:
+            conf = 1.0
+        try:
+            if float(conf) < threshold:
+                return None
+        except (TypeError, ValueError):
+            return None
+        return cls._poly_to_box(poly)
+
+    @staticmethod
+    def _rapid_score_at(scores, index: int) -> float:
+        if scores is None:
+            return 1.0
+        try:
+            score = scores[index]
+        except (IndexError, KeyError, TypeError):
+            return 1.0
+        if isinstance(score, dict):
+            score = score.get("score", score.get("confidence", score.get("conf")))
+        elif isinstance(score, (list, tuple)) and score:
+            score = score[-1]
+        if score is None:
+            return 1.0
+        try:
+            return float(score)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _poly_to_box(poly) -> Optional[Tuple[int, int, int, int]]:
+        try:
+            pts = np.array(poly, dtype=np.float32)
+        except (TypeError, ValueError):
+            return None
+        if pts.ndim != 2 or pts.shape[0] == 0 or pts.shape[1] < 2:
+            return None
+        xy = pts[:, :2]
+        x1, y1 = xy.min(axis=0)
+        x2, y2 = xy.max(axis=0)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return (int(x1), int(y1), int(x2), int(y2))
 
     def _detect_paddle(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         try:

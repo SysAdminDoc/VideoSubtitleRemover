@@ -159,7 +159,9 @@ The app automatically selects the best available engine:
 On AMD/Intel systems, setup installs `onnxruntime-directml`. When ONNX
 Runtime reports `DmlExecutionProvider`, RapidOCR is initialized with its
 DirectML provider settings; unsupported RapidOCR versions or missing
-providers fall back to CPU automatically. Opt-in ONNX inpainters inspect
+providers fall back to CPU automatically. RapidOCR legacy tuple output and
+current structured object/dict output are both normalized to the same
+axis-aligned detector boxes. Opt-in ONNX inpainters inspect
 their model `opset_import` metadata before creating a DirectML session; if
 the default ONNX opset is newer than DirectML's supported ceiling, VSR uses
 the CPU provider instead of failing at session creation.
