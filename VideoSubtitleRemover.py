@@ -8410,6 +8410,16 @@ class VideoSubtitleRemoverApp:
         except Exception:
             pass
 
+    def _queue_argv_files(self):
+        """RM-58: queue files passed via sys.argv (e.g. 'Send to VSR')."""
+        for arg in sys.argv[1:]:
+            try:
+                p = Path(arg)
+                if p.is_file() and (is_video_file(str(p)) or is_image_file(str(p))):
+                    self._add_to_queue(str(p.resolve()))
+            except Exception:
+                pass
+
     def _check_for_update(self):
         """RM-116: opt-in startup update check against GitHub Releases."""
         try:
@@ -8469,6 +8479,7 @@ class VideoSubtitleRemoverApp:
 
         logger.info(f"{APP_NAME} v{APP_VERSION} started")
         logger.info(f"Log file: {LOG_FILE}")
+        self._queue_argv_files()
         if self.config.json_log_enabled:
             try:
                 from backend.processor import attach_json_log
