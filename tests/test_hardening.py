@@ -1755,6 +1755,89 @@ class WhisperFallbackTests(unittest.TestCase):
             result = _wf.extract_audio_to_temp("/nonexistent.mp4", tmpdir)
             self.assertIsNone(result)
 
+    def test_ffmpeg_whisper_available_detects_filter(self):
+        from unittest import mock
+        from backend import whisper_fallback as _wf
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout=" .. whisper           A->A       Transcribe audio using whisper.cpp.\n",
+            stderr="",
+        )
+        with mock.patch.object(_wf.shutil, "which", return_value="ffmpeg"):
+            with mock.patch.object(_wf.subprocess, "run", return_value=completed):
+                self.assertTrue(_wf.ffmpeg_whisper_available())
+
+    def test_ffmpeg_whisper_filter_escapes_windows_paths(self):
+        from backend import whisper_fallback as _wf
+        expr = _wf._build_ffmpeg_whisper_filter(
+            r"C:\models\ggml-base.en.bin",
+            r"C:\Temp\whisper.srt",
+            language="en",
+            queue_seconds=3.0,
+        )
+        self.assertIn(r"model=C\:\\models\\ggml-base.en.bin", expr)
+        self.assertIn(r"destination=C\:\\Temp\\whisper.srt", expr)
+
+    def test_parse_srt_segments(self):
+        from backend import whisper_fallback as _wf
+        srt = (
+            "1\n"
+            "00:00:01,250 --> 00:00:02,500\n"
+            "Hello world\n\n"
+            "2\n"
+            "00:00:03,000 --> 00:00:04,000\n"
+            "Second line\n"
+        )
+        self.assertEqual(
+            _wf.parse_srt_segments(srt),
+            [(1.25, 2.5, "Hello world"), (3.0, 4.0, "Second line")],
+        )
+
+    def test_run_ffmpeg_whisper_segments_parses_mocked_srt(self):
+        from unittest import mock
+        from backend import whisper_fallback as _wf
+
+        def fake_run(cmd, check, capture_output, timeout):
+            filt = cmd[cmd.index("-af") + 1]
+            dest = filt.split(":destination=", 1)[1]
+            dest_path = Path(_wf._unescape_filter_value(dest))
+            dest_path.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\nspeech\n",
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "input.mp4"
+            media.write_bytes(b"fake")
+            model = Path(tmpdir) / "ggml-base.en.bin"
+            model.write_bytes(b"fake")
+            with mock.patch.object(_wf, "ffmpeg_whisper_available", return_value=True):
+                with mock.patch.object(_wf.subprocess, "run", side_effect=fake_run):
+                    self.assertEqual(
+                        _wf.run_ffmpeg_whisper_segments(
+                            str(media), str(model), language="en"
+                        ),
+                        [(0.0, 1.0, "speech")],
+                    )
+
+    def test_processing_config_normalizes_whisper_backend_fields(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(
+                whisper_backend="faster_whisper",
+                whisper_model_path="x" * 600,
+                whisper_queue_seconds=0.0,
+            )
+        )
+        self.assertEqual(cfg.whisper_backend, "faster-whisper")
+        self.assertEqual(len(cfg.whisper_model_path), 512)
+        self.assertEqual(cfg.whisper_queue_seconds, 0.02)
+
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(whisper_backend="not-real")
+        )
+        self.assertEqual(cfg.whisper_backend, "faster-whisper")
+
     def test_segments_to_frame_spans_merges_overlaps(self):
         from backend import whisper_fallback as _wf
         segments = [

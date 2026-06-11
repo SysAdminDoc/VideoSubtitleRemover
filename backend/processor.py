@@ -196,12 +196,17 @@ class ProcessingConfig:
     # (Japanese tategaki, classical Chinese). Bounding boxes still come
     # back axis-aligned so downstream masking is unchanged.
     detection_vertical: bool = False
-    # RM-27 Whisper fallback: when on AND the optional faster-whisper
-    # dep is installed, frames whose OCR yields no boxes get a default
-    # bottom-band mask during Whisper-detected speech intervals. Catches
-    # anti-aliased / motion-blurred subtitles the OCR cascade misses.
+    # RM-27 / #120 Whisper fallback: when on AND an optional Whisper
+    # backend is available, frames whose OCR yields no boxes get a
+    # default bottom-band mask during Whisper-detected speech intervals.
+    # Catches anti-aliased / motion-blurred subtitles the OCR cascade
+    # misses. The default backend is faster-whisper; FFmpeg's native
+    # whisper filter is opt-in and needs a local whisper.cpp ggml model.
     whisper_fallback: bool = False
+    whisper_backend: str = "faster-whisper"
     whisper_model_size: str = "tiny"   # tiny / base / small / medium
+    whisper_model_path: str = ""
+    whisper_queue_seconds: float = 3.0
     # RM-78 / RM-80 optional post-restore passes. Each runs after the
     # main encode + audio mux. Real-ESRGAN scale 0 = disabled; values
     # 2 or 4 invoke the upscale stage (requires the
@@ -514,10 +519,19 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)
     config.detection_vertical = _coerce_bool(config.detection_vertical, False)
     config.whisper_fallback = _coerce_bool(config.whisper_fallback, False)
+    backend = _coerce_text(config.whisper_backend, "faster-whisper", 32).lower()
+    if backend in {"faster", "faster_whisper"}:
+        backend = "faster-whisper"
+    if backend not in {"faster-whisper", "ffmpeg"}:
+        backend = "faster-whisper"
+    config.whisper_backend = backend
     model_size = _coerce_text(config.whisper_model_size, "tiny", 16).lower()
     if model_size not in {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}:
         model_size = "tiny"
     config.whisper_model_size = model_size
+    config.whisper_model_path = _coerce_text(config.whisper_model_path, "", 512)
+    config.whisper_queue_seconds = _coerce_float(
+        config.whisper_queue_seconds, 3.0, 0.02, 3600.0)
     config.upscale_factor = _coerce_int(config.upscale_factor, 0, 0, 8)
     if config.upscale_factor not in (0, 2, 3, 4):
         config.upscale_factor = 0
@@ -1364,7 +1378,22 @@ class SubtitleRemover:
                 try:
                     import tempfile as _tmp_mod
                     from backend import whisper_fallback as _wf
-                    if _wf.is_available():
+                    if self.config.whisper_backend == "ffmpeg":
+                        segments = _wf.run_ffmpeg_whisper_segments(
+                            input_path,
+                            model_path=self.config.whisper_model_path,
+                            language=(self.config.detection_lang or None),
+                            queue_seconds=self.config.whisper_queue_seconds,
+                        )
+                        if segments:
+                            whisper_spans = _wf.segments_to_frame_spans(
+                                segments, fps
+                            )
+                            logger.info(
+                                f"FFmpeg Whisper fallback active: "
+                                f"{len(whisper_spans)} speech spans"
+                            )
+                    elif _wf.is_available():
                         whisper_audio_dir = _tmp_mod.mkdtemp(prefix="vsr_whisper_")
                         audio_path = _wf.extract_audio_to_temp(
                             input_path, whisper_audio_dir
