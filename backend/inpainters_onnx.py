@@ -59,6 +59,7 @@ def _maybe_session(model_path: str, providers=None):
     try:
         if providers is None:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = _providers_after_opset_audit(model_path, providers)
         return ort.InferenceSession(model_path, providers=providers)
     except Exception as exc:
         logger.warning(f"Failed to load ONNX session {model_path!r}: {exc}")
@@ -72,6 +73,42 @@ def _providers_for_device(device: str) -> List:
     if "cuda" in device:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
+
+
+def _provider_name(provider) -> str:
+    if isinstance(provider, tuple):
+        return str(provider[0])
+    return str(provider)
+
+
+def _providers_after_opset_audit(model_path: str, providers: List) -> List:
+    """Drop DirectML for ONNX files declaring unsupported default opsets."""
+    if not any(_provider_name(p) == "DmlExecutionProvider" for p in providers):
+        return providers
+    try:
+        from backend.onnx_model_info import (
+            DIRECTML_MAX_ONNX_OPSET,
+            directml_incompatible_opsets,
+        )
+        incompatible = directml_incompatible_opsets(model_path)
+    except Exception as exc:
+        logger.warning(
+            f"Could not inspect ONNX opsets for {model_path!r}; "
+            f"DirectML session creation may fail: {exc}"
+        )
+        return providers
+    if not incompatible:
+        return providers
+    detail = ", ".join(
+        f"{item.domain or 'ai.onnx'}={item.version}" for item in incompatible
+    )
+    logger.warning(
+        f"ONNX model {model_path!r} declares opset {detail}, above "
+        f"DirectML EP's supported ONNX opset <= {DIRECTML_MAX_ONNX_OPSET}; "
+        "using CPU provider instead."
+    )
+    filtered = [p for p in providers if _provider_name(p) != "DmlExecutionProvider"]
+    return filtered or ["CPUExecutionProvider"]
 
 
 def _ensure_multiple_of(value: int, multiple: int) -> int:
