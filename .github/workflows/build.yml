@@ -282,14 +282,18 @@ jobs:
           }
 
           $expectedVersion = $versionTag.TrimStart("v")
-          $appSource = Get-Content "VideoSubtitleRemover.py" -Raw
+          # APP_VERSION is defined in gui/config.py (single source of
+          # truth after the RM-114 module split) and re-exported by
+          # VideoSubtitleRemover.py and gui/__init__.py.
+          $versionSource = "gui/config.py"
+          $appSource = Get-Content $versionSource -Raw
           if ($appSource -notmatch 'APP_VERSION\s*=\s*"([^"]+)"') {
-            throw "Could not find APP_VERSION in VideoSubtitleRemover.py"
+            throw "Could not find APP_VERSION in $versionSource"
           }
           $appVersion = $Matches[1]
           $appVersionMatches = $appVersion -eq $expectedVersion
           $verification.versionChecks += [ordered]@{
-            path = "VideoSubtitleRemover.py"
+            path = $versionSource
             expected = $expectedVersion
             actual = $appVersion
             matched = $appVersionMatches
@@ -335,6 +339,25 @@ jobs:
             throw "Hidden import manifest missing."
           }
           $verification.hiddenImports = Get-Content "release-hidden-imports.json" -Raw | ConvertFrom-Json
+
+          # RM-106: record bundled/system ffmpeg version for CVE triage.
+          $ffmpegPath = Get-Command ffmpeg -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if ($ffmpegPath) {
+            $ffmpegRaw = (& ffmpeg -version 2>&1 | Select-Object -First 1) -replace '^\s+',''
+            $ffmpegBuild = ""
+            if ($ffmpegRaw -match 'ffmpeg version\s+(\S+)') { $ffmpegBuild = $Matches[1] }
+            $verification.ffmpeg = [ordered]@{
+              path = $ffmpegPath
+              version = $ffmpegBuild
+              banner = $ffmpegRaw
+            }
+          } else {
+            $verification.ffmpeg = [ordered]@{
+              path = ""
+              version = ""
+              banner = "ffmpeg not found on PATH"
+            }
+          }
 
           $signingConfigured = "${{ steps.signing.outputs.has_signing }}" -eq "true"
           if ($signingConfigured) {
