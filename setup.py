@@ -284,8 +284,8 @@ def install_dependencies():
 
         core_packages = [
             'numpy>=1.21.0',
-            'opencv-python>=4.5.0',
-            'Pillow>=9.0.0',
+            'opencv-python>=4.12.0',
+            'Pillow>=12.1.1',
             'rapidocr>=2.0.0',
             'easyocr>=1.7.0',
             'simple-lama-inpainting>=0.1.0',
