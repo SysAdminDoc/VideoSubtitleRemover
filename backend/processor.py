@@ -180,6 +180,34 @@ class InpaintMode(Enum):
     MIGAN = "migan"  # opt-in ONNX backend (RM-26)
 
 
+class RegisteredMode:
+    """Carrier for inpaint modes that exist only in the plugin registry
+    (opt-in ONNX/diffusion backends such as `diffueraser` or
+    `propainter-real`). Quacks like an InpaintMode member where the
+    pipeline needs one (.value / .name) without widening the enum,
+    which gates the GUI for safety."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: str):
+        self.value = value.strip().lower()
+
+    @property
+    def name(self) -> str:
+        return self.value.upper()
+
+    def __repr__(self) -> str:
+        return f"RegisteredMode({self.value!r})"
+
+    def __eq__(self, other):
+        if isinstance(other, RegisteredMode):
+            return self.value == other.value
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(("RegisteredMode", self.value))
+
+
 @dataclass
 class ProcessingConfig:
     """Configuration for subtitle removal."""
@@ -479,23 +507,46 @@ def _coerce_rect_list(value) -> Optional[List[Tuple[int, int, int, int]]]:
     return rects or None
 
 
-def _coerce_backend_mode(value) -> InpaintMode:
-    if isinstance(value, InpaintMode):
+_MODE_ALIASES = {
+    "sttn": InpaintMode.STTN,
+    "lama": InpaintMode.LAMA,
+    "propainter": InpaintMode.PROPAINTER,
+    "pro painter": InpaintMode.PROPAINTER,
+    "auto": InpaintMode.AUTO,
+    "migan": InpaintMode.MIGAN,
+    "mi-gan": InpaintMode.MIGAN,
+}
+
+
+def _coerce_backend_mode(value):
+    if isinstance(value, (InpaintMode, RegisteredMode)):
         return value
     if isinstance(value, str):
         normalized = value.strip().casefold()
-        mode_map = {
-            "sttn": InpaintMode.STTN,
-            "lama": InpaintMode.LAMA,
-            "propainter": InpaintMode.PROPAINTER,
-            "pro painter": InpaintMode.PROPAINTER,
-            "auto": InpaintMode.AUTO,
-            "migan": InpaintMode.MIGAN,
-            "mi-gan": InpaintMode.MIGAN,
-        }
-        if normalized in mode_map:
-            return mode_map[normalized]
+        if normalized in _MODE_ALIASES:
+            return _MODE_ALIASES[normalized]
+        # Opt-in backends (ONNX / diffusion scaffolds) register extra
+        # mode names at import time; honour any registered name instead
+        # of silently coercing it to STTN.
+        from backend import inpainter_registry as _reg
+        if _reg.is_registered(normalized):
+            return RegisteredMode(normalized)
+        logger.warning(f"Unknown inpaint mode {value!r}; falling back to STTN")
     return InpaintMode.STTN
+
+
+def is_known_backend_mode(value) -> bool:
+    """True when _coerce_backend_mode would honour `value` rather than
+    falling back to STTN."""
+    if isinstance(value, (InpaintMode, RegisteredMode)):
+        return True
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in _MODE_ALIASES:
+            return True
+        from backend import inpainter_registry as _reg
+        return _reg.is_registered(normalized)
+    return False
 
 
 def _coerce_backend_device(value) -> str:
