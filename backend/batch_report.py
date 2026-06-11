@@ -327,6 +327,7 @@ def _quality_report_record(metrics: dict) -> dict:
         "vmaf",
         "roi_vmaf",
         "roi_bbox",
+        "temporal_flicker_score",
         "sheet",
     )
     return {key: metrics.get(key) for key in keys if key in metrics}

@@ -68,7 +68,7 @@ from backend.io import (
     _LosslessIntermediateWriter,
 )
 from backend.encoder import _detect_hw_encoder
-from backend.quality import _ssim, compute_vmaf
+from backend.quality import _ssim, compute_vmaf, temporal_flicker_score
 from backend.quality_gate import evaluate_quality_gate
 from backend.tracking import (
     _KalmanBox,
@@ -949,12 +949,18 @@ class SubtitleRemover:
             span = max(1, end_frame - start_frame)
             out_total = int(cap_out.get(cv2.CAP_PROP_FRAME_COUNT)) or span
             rng = np.random.default_rng(seed=42)
-            indices = sorted(set(rng.integers(0, span, size=n_samples).tolist()))
+            metric_indices = sorted(set(rng.integers(0, span, size=n_samples).tolist()))
+            metric_index_set = set(metric_indices)
+            flicker_indices = sorted(set(
+                metric_indices
+                + [idx + 1 for idx in metric_indices if idx + 1 < span]
+            ))
 
             psnrs: List[float] = []
             ssims: List[float] = []
             roi_psnrs: List[float] = []
             roi_ssims: List[float] = []
+            temporal_samples: List[Tuple[int, np.ndarray]] = []
             # B-3: ROI-cropped metric uses the accumulated union-mask
             # bbox. Falls back to the whole-frame metric when the ROI is
             # too small (< 32px on either axis) for SSIM to be stable.
@@ -967,7 +973,7 @@ class SubtitleRemover:
             # Pairs kept for the optional sheet renderer. Each entry:
             # (frame_idx, original_bgr, cleaned_bgr, psnr, ssim)
             pairs: List[Tuple[int, np.ndarray, np.ndarray, float, float]] = []
-            for idx in indices:
+            for idx in flicker_indices:
                 cap_in.set(cv2.CAP_PROP_POS_FRAMES, start_frame + idx)
                 ok_in, a = cap_in.read()
                 cap_out.set(cv2.CAP_PROP_POS_FRAMES, min(out_total - 1, idx))
@@ -977,13 +983,8 @@ class SubtitleRemover:
                 if a.shape != b.shape:
                     b = cv2.resize(b, (a.shape[1], a.shape[0]),
                                     interpolation=cv2.INTER_AREA)
-                p = cv2.PSNR(a, b)
-                s = _ssim(a, b)
-                psnrs.append(p)
-                ssims.append(s)
-                # ROI metric: same frame, but cropped to the union-mask
-                # bbox so the score reflects the inpaint quality instead
-                # of the unchanged background.
+                a_roi = None
+                b_roi = None
                 if roi_ready:
                     x1, y1, x2, y2 = roi
                     x1 = max(0, min(a.shape[1] - 1, x1))
@@ -992,6 +993,18 @@ class SubtitleRemover:
                     y2 = max(y1 + 1, min(a.shape[0], y2))
                     a_roi = a[y1:y2, x1:x2]
                     b_roi = b[y1:y2, x1:x2]
+                    if b_roi.size:
+                        temporal_samples.append((idx, b_roi.copy()))
+                if idx not in metric_index_set:
+                    continue
+                p = cv2.PSNR(a, b)
+                s = _ssim(a, b)
+                psnrs.append(p)
+                ssims.append(s)
+                # ROI metric: same frame, but cropped to the union-mask
+                # bbox so the score reflects the inpaint quality instead
+                # of the unchanged background.
+                if a_roi is not None and b_roi is not None:
                     if a_roi.size and a_roi.shape == b_roi.shape:
                         try:
                             roi_psnrs.append(float(cv2.PSNR(a_roi, b_roi)))
@@ -1006,6 +1019,7 @@ class SubtitleRemover:
             mean_psnr = float(np.mean(psnrs))
             roi_mean_ssim = float(np.mean(roi_ssims)) if roi_ssims else None
             roi_mean_psnr = float(np.mean(roi_psnrs)) if roi_psnrs else None
+            flicker_score = temporal_flicker_score(temporal_samples)
             segment_duration = max(0.1, min(30.0, span / max(fps, 1.0)))
             segment_start = start_frame / max(fps, 1.0)
             vmaf = compute_vmaf(
@@ -1044,6 +1058,7 @@ class SubtitleRemover:
                 'vmaf': vmaf,
                 'roi_vmaf': roi_vmaf,
                 'roi_bbox': list(roi) if roi else None,
+                'temporal_flicker_score': flicker_score,
                 'samples': len(psnrs),
                 'tag': tag,
                 'sheet': sheet_path,

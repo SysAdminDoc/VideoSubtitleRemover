@@ -1400,6 +1400,7 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
 
         self.assertEqual(metrics["vmaf"], 95.0)
         self.assertEqual(metrics["roi_vmaf"], 93.0)
+        self.assertEqual(metrics["temporal_flicker_score"], 0.0)
         self.assertEqual(metrics["quality_gate"]["status"], "passed")
 
 
@@ -1419,6 +1420,26 @@ class QualityGateTests(unittest.TestCase):
         })
         self.assertEqual(gate["status"], "passed")
         self.assertEqual(gate["ladderStep"], "none")
+
+    def test_temporal_flicker_score_uses_adjacent_samples_only(self):
+        import numpy as _np
+        from backend.quality import temporal_flicker_score
+        black = _np.zeros((16, 16, 3), dtype=_np.uint8)
+        white = _np.full((16, 16, 3), 255, dtype=_np.uint8)
+        self.assertIsNone(temporal_flicker_score([(0, black), (4, white)]))
+        self.assertEqual(temporal_flicker_score([(0, black), (1, white)]), 1.0)
+
+    def test_review_when_temporal_flicker_is_high(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+            "temporal_flicker_score": 0.2,
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertIn("temporal flicker", gate["reason"])
 
     def test_review_when_roi_metric_fails_and_sheet_is_preview(self):
         from backend.quality_gate import evaluate_quality_gate
