@@ -132,15 +132,10 @@ class SubtitleDetector:
         except Exception as e:
             logger.warning(f"RapidOCR init failed: {e}")
 
-        # PaddleOCR PP-OCRv5
+        # PaddleOCR PP-OCRv5 (2.x/3.x handled by paddle_compat)
         try:
-            from paddleocr import PaddleOCR
-            self._paddle_model = PaddleOCR(
-                use_angle_cls=False,
-                lang=self.lang,
-                use_gpu='cuda' in self.device,
-                show_log=False
-            )
+            from backend.paddle_compat import build_paddleocr
+            self._paddle_model = build_paddleocr(self.lang, self.device)
             self._engine_name = "PaddleOCR"
             logger.info(f"PaddleOCR loaded (lang={self.lang})")
             return
@@ -359,16 +354,8 @@ class SubtitleDetector:
 
     def _detect_paddle(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         try:
-            results = self._paddle_model.ocr(frame, cls=False)
-            boxes = []
-            if results and results[0]:
-                for line in results[0]:
-                    if line[1][1] >= threshold:
-                        pts = np.array(line[0], dtype=np.int32)
-                        x1, y1 = pts.min(axis=0)
-                        x2, y2 = pts.max(axis=0)
-                        boxes.append((int(x1), int(y1), int(x2), int(y2)))
-            return boxes
+            from backend.paddle_compat import extract_paddle_boxes
+            return extract_paddle_boxes(self._paddle_model, frame, threshold)
         except Exception as e:
             logger.error(f"PaddleOCR detection error: {e}")
             return self._fallback_detection(frame)
