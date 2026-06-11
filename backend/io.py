@@ -20,6 +20,7 @@ The module imports ``backend.processor`` symbols lazily where needed
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import queue
@@ -27,6 +28,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -39,6 +41,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # ffprobe helpers
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SubtitleStreamInfo:
+    index: int
+    codec_name: str = ""
+    language: str = ""
+    title: str = ""
+    default: bool = False
+    forced: bool = False
 
 
 def _probe_codec_for_log(path: str) -> Optional[str]:
@@ -72,6 +84,65 @@ def _probe_audio_stream_count(path: str) -> int:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return 1
+
+
+def _probe_subtitle_streams(path: str) -> List[SubtitleStreamInfo]:
+    """Return embedded subtitle stream metadata via ffprobe JSON output."""
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error', '-select_streams', 's',
+            '-show_entries',
+            'stream=index,codec_name,codec_type:stream_tags=language,title:'
+            'stream_disposition=default,forced',
+            '-of', 'json', path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if result.returncode != 0:
+            if result.stderr:
+                logger.debug(
+                    f"ffprobe subtitle stream probe stderr: "
+                    f"{result.stderr.strip()[:400]}"
+                )
+            return []
+        payload = json.loads(result.stdout or "{}")
+        streams = payload.get("streams", [])
+        if not isinstance(streams, list):
+            return []
+        parsed: List[SubtitleStreamInfo] = []
+        for stream in streams:
+            if not isinstance(stream, dict):
+                continue
+            try:
+                index = int(stream.get("index"))
+            except (TypeError, ValueError):
+                continue
+            tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
+            disposition = (
+                stream.get("disposition")
+                if isinstance(stream.get("disposition"), dict)
+                else {}
+            )
+            parsed.append(SubtitleStreamInfo(
+                index=index,
+                codec_name=str(stream.get("codec_name") or ""),
+                language=str(tags.get("language") or ""),
+                title=str(tags.get("title") or ""),
+                default=_ffprobe_bool(disposition.get("default")),
+                forced=_ffprobe_bool(disposition.get("forced")),
+            ))
+        return parsed
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+
+
+def _ffprobe_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
 
 
 def _probe_duration_seconds(path: str) -> float:
