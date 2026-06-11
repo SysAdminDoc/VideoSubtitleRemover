@@ -3537,5 +3537,72 @@ class OcrCascadeOrderTests(unittest.TestCase):
         self.assertNotEqual(det._engine_name, "Surya")
 
 
+class UpdateCheckTests(unittest.TestCase):
+    """RM-116: optional startup update check."""
+
+    def test_parse_version_standard(self):
+        from backend.update_check import _parse_version
+        self.assertEqual(_parse_version("v3.16.1"), (3, 16, 1))
+        self.assertEqual(_parse_version("3.16.1"), (3, 16, 1))
+
+    def test_parse_version_garbage(self):
+        from backend.update_check import _parse_version
+        self.assertIsNone(_parse_version(""))
+        self.assertIsNone(_parse_version("latest"))
+
+    def test_no_callback_when_current_is_latest(self):
+        from unittest.mock import MagicMock, patch
+        from backend.update_check import check_for_update
+        cb = MagicMock()
+        fake_resp = io.BytesIO(json.dumps({
+            "tag_name": "v3.16.1",
+            "html_url": "https://example.com/releases/v3.16.1",
+        }).encode())
+        fake_resp.status = 200
+        fake_resp.__enter__ = lambda s: s
+        fake_resp.__exit__ = lambda s, *a: None
+        with patch("backend.update_check.urlopen", return_value=fake_resp):
+            check_for_update("3.16.1", cb)
+            import time; time.sleep(0.5)
+        cb.assert_not_called()
+
+    def test_callback_when_newer_available(self):
+        from unittest.mock import MagicMock, patch
+        from backend.update_check import check_for_update
+        cb = MagicMock()
+        fake_resp = io.BytesIO(json.dumps({
+            "tag_name": "v4.0.0",
+            "html_url": "https://example.com/releases/v4.0.0",
+        }).encode())
+        fake_resp.status = 200
+        fake_resp.__enter__ = lambda s: s
+        fake_resp.__exit__ = lambda s, *a: None
+        with patch("backend.update_check.urlopen", return_value=fake_resp):
+            check_for_update("3.16.1", cb)
+            import time; time.sleep(0.5)
+        cb.assert_called_once_with("v4.0.0", "https://example.com/releases/v4.0.0")
+
+    def test_no_crash_on_network_error(self):
+        from unittest.mock import MagicMock, patch
+        from backend.update_check import check_for_update
+        cb = MagicMock()
+        with patch("backend.update_check.urlopen", side_effect=OSError("offline")):
+            check_for_update("3.16.1", cb)
+            import time; time.sleep(0.5)
+        cb.assert_not_called()
+
+    def test_config_field_defaults_off(self):
+        cfg = gui.ProcessingConfig()
+        self.assertFalse(cfg.update_check)
+
+    def test_config_round_trip(self):
+        cfg = gui.ProcessingConfig()
+        cfg.update_check = True
+        d = cfg.to_dict()
+        self.assertTrue(d["update_check"])
+        cfg2 = gui.ProcessingConfig.from_dict(d)
+        self.assertTrue(cfg2.update_check)
+
+
 if __name__ == "__main__":
     unittest.main()
