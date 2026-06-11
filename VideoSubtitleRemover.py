@@ -9,50 +9,25 @@ See APP_VERSION for the running version -- the docstring deliberately omits
 a hardcoded number so there is a single source of truth.
 """
 
-import os
-import sys
-import json
-import math
-import uuid
-import threading
-import subprocess
-import time
-import tempfile
 import logging
 import logging.handlers
+import sys
 import traceback
-from pathlib import Path
-from typing import Optional, List, Tuple, Callable
-from dataclasses import dataclass, field
-from enum import Enum
-from datetime import datetime
+# Kept for the back-compat surface: callers and tests reach
+# `VideoSubtitleRemover.datetime` as a module attribute.
+from datetime import datetime  # noqa: F401
+
+# App identity and paths live in gui.config -- the single source of
+# truth since the RM-114 extraction. gui.theme / gui.config import no
+# tkinter, so this is safe before the GUI availability guard below.
+from gui.config import (
+    APP_NAME, APP_VERSION, APP_AUTHOR,
+    LOG_DIR, LOG_FILE, SETTINGS_FILE,
+)
 
 # =============================================================================
 # LOGGING SETUP -- file + stream, crash handler
 # =============================================================================
-
-APP_NAME = "Video Subtitle Remover Pro"
-# Single source of truth for the app's version string. Update here and it
-# propagates to the banner, header, logs, About dialog, and CHANGELOG cue.
-APP_VERSION = "3.16.1"
-APP_AUTHOR = "SysAdminDoc"
-
-LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-LOG_FILE = LOG_DIR / "vsr_pro.log"
-SETTINGS_FILE = LOG_DIR / "settings.json"
-
-# Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
-# semantics change. _migrate_settings() must learn the upgrade path so
-# users never silently lose state on an in-place upgrade.
-# Format 1 -> 2 (B-1, v3.13 GUI wiring pass): added loudnorm_target,
-# multi_audio_passthrough, decode_hw_accel, prefetch_decode,
-# prefetch_queue_size, input_fps, quality_report_sheet,
-# remove_subtitles, remove_chyrons, chyron_min_hits, karaoke_grouping,
-# karaoke_x_gap_px, karaoke_y_overlap. All have backend-default values
-# so a missing key in a format-1 file resolves to the same behaviour
-# users saw before the bump -- no field-rename migration needed.
-VSR_SETTINGS_FORMAT = 2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -96,37 +71,32 @@ try:
 except Exception:
     pass
 
-# GUI Imports
+# GUI availability guard -- fail with a readable message, not a traceback.
 try:
-    import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
-    from tkinter import font as tkfont
+    import tkinter as tk  # noqa: F401
 except ImportError:
     logger.error("Tkinter not found. Please install Python with Tkinter support.")
     sys.exit(1)
 
 try:
-    from PIL import Image, ImageTk, ImageDraw, ImageFilter
+    from PIL import Image, ImageTk  # noqa: F401
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
     logger.warning("Pillow not installed. Image preview will be limited.")
 
 # =============================================================================
-# CONFIGURATION & CONSTANTS
+# RM-114 back-compat surface
 # =============================================================================
+# Everything the monolith used to define is re-exported here so legacy
+# callers (`import VideoSubtitleRemover; VideoSubtitleRemover.X`) keep
+# resolving. The canonical re-export list lives in gui/__init__.py --
+# add new names there first.
 
-from gui.theme import (  # noqa: E402  -- RM-114 extraction
+from gui import (  # noqa: E402, F401
     Theme, apply_high_contrast_theme, apply_default_theme, f, mono,
-)
-
-# =============================================================================
-# CONFIG, ENUMS, SETTINGS, PRESETS -- RM-114: imported from gui.config
-# =============================================================================
-
-from gui.config import (  # noqa: E402
     InpaintMode, ProcessingStatus, STATUS_UI, VSR_SETTINGS_FORMAT,
-    ProcessingConfig, QueueItem,
+    ProcessingConfig, QueueItem, BUILTIN_PRESETS,
     _coerce_bool, _coerce_int, _coerce_float, _coerce_text,
     _coerce_rect, _coerce_rect_list, _coerce_gui_mode,
     _read_json_object, _write_json_atomic,
@@ -134,10 +104,6 @@ from gui.config import (  # noqa: E402
     PRESETS_FILE, list_presets, apply_preset,
     save_user_preset, delete_user_preset, export_preset, import_preset,
     status_ui,
-)
-
-
-from gui.utils import (  # noqa: E402
     get_app_dir, detect_gpu, format_time, format_size,
     is_video_file, is_image_file,
     _CURATED_LANG_NAMES, _engine_supported_languages, _build_language_list,
@@ -145,25 +111,16 @@ from gui.utils import (  # noqa: E402
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
     _queue_item_info_text, truncate_middle,
     format_quality_report, summarize_quality_reports,
+    VideoSubtitleRemoverApp,
 )
 
-
-
-# =============================================================================
-# CUSTOM WIDGETS -- RM-114: imported from gui.widgets
-# =============================================================================
-
-from gui.widgets import (  # noqa: E402
+from gui.widgets import (  # noqa: E402, F401
     _get_dpi_scale, _scaled,
     Tooltip, ModernButton, ModernProgressBar, ModernToggle,
     ModernSlider, show_confirm, TaskbarProgress, make_themed_menu,
     Toast, SegmentedPicker, DragDropFrame, QueueItemWidget,
     TextWidgetHandler,
 )
-
-
-
-from gui.app import VideoSubtitleRemoverApp  # noqa: E402
 
 
 def main():
