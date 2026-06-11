@@ -3167,6 +3167,50 @@ class OutputCodecTests(unittest.TestCase):
         self.assertIn("libsvtav1", args)
 
 
+class ExtendedMetricsTests(unittest.TestCase):
+    """RM-102: temporal quality metric expansion."""
+
+    def test_compute_extended_metrics_returns_empty_without_pyiqa(self):
+        import numpy as _np
+        from unittest import mock
+        from backend.quality import compute_extended_metrics
+        with mock.patch.dict("sys.modules", {"pyiqa": None}):
+            result = compute_extended_metrics([
+                (_np.zeros((32, 32, 3), _np.uint8),
+                 _np.ones((32, 32, 3), _np.uint8))])
+            self.assertEqual(result, {})
+
+    def test_temporal_consistency_score_perfect(self):
+        import numpy as _np
+        from backend.quality import temporal_consistency_score
+        frame = _np.full((32, 32, 3), 128, dtype=_np.uint8)
+        score = temporal_consistency_score([frame, frame, frame])
+        self.assertIsNotNone(score)
+        self.assertGreater(score, 0.99)
+
+    def test_temporal_consistency_score_insufficient_frames(self):
+        import numpy as _np
+        from backend.quality import temporal_consistency_score
+        self.assertIsNone(temporal_consistency_score([]))
+        self.assertIsNone(temporal_consistency_score(
+            [_np.zeros((8, 8, 3), _np.uint8)]))
+
+    def test_quality_report_schema_includes_extended_fields(self):
+        report = {
+            'psnr': 35.0, 'ssim': 0.97,
+            'roi_psnr': 30.0, 'roi_ssim': 0.92,
+            'vmaf': None, 'roi_vmaf': None,
+            'roi_bbox': [10, 20, 100, 50],
+            'temporal_flicker_score': 0.01,
+            'temporal_consistency': 0.98,
+            'residual_text_score': 0.02,
+            'lpips': None, 'dists': None,
+            'samples': 10, 'tag': 'Good', 'sheet': None,
+        }
+        for key in ('temporal_consistency', 'lpips', 'dists'):
+            self.assertIn(key, report)
+
+
 class ModelHashVerificationTests(unittest.TestCase):
     """RM-49: verify_weight_file should return True for a match,
     False for a mismatch, and True (with a debug log) when no vendored
