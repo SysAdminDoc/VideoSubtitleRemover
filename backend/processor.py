@@ -1917,8 +1917,33 @@ class SubtitleRemover:
         except Exception:
             return []
 
+    def _salvage_intermediate(self, source: str, output: str) -> str:
+        """Copy the lossless intermediate to a container-correct path.
+
+        The intermediate is an FFV1 (or cv2-fallback) MKV. Copying its
+        bytes into the user's requested ``.mp4`` path produces a
+        mislabeled, often unplayable file that is then reported as
+        success. When the requested extension does not match, salvage
+        next to the requested path with the real extension and warn.
+        """
+        src_ext = Path(source).suffix.lower()
+        out_ext = Path(output).suffix.lower()
+        if src_ext == out_ext:
+            _copy_file_atomic(source, output)
+            return output
+        salvage = str(Path(output).with_suffix(src_ext))
+        _copy_file_atomic(source, salvage)
+        logger.warning(
+            f"Encoding to '{output}' was not possible; saved the "
+            f"unencoded intermediate as '{salvage}' instead, because "
+            f"its stream lives in a '{src_ext}' container and renaming "
+            f"it to '{out_ext}' would produce a broken file."
+        )
+        return salvage
+
     def _reencode_or_copy(self, source: str, output: str):
-        """Re-encode with preferred encoder or just copy if FFmpeg unavailable."""
+        """Re-encode with preferred encoder, or salvage the intermediate
+        if FFmpeg is unavailable or keeps failing."""
         temp_output = _allocate_temp_output_path(output)
         try:
             _ensure_output_parent(output)
@@ -1934,9 +1959,9 @@ class SubtitleRemover:
                 self._hw_encoder = None
                 self._reencode_or_copy(source, output)
                 return
-            _copy_file_atomic(source, output)
+            self._salvage_intermediate(source, output)
         except Exception:
-            _copy_file_atomic(source, output)
+            self._salvage_intermediate(source, output)
         finally:
             _cleanup_temp_output(temp_output)
 
@@ -2016,8 +2041,10 @@ class SubtitleRemover:
             encoder_name = self._hw_encoder or 'libx264'
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")
         except subprocess.TimeoutExpired:
-            logger.warning("FFmpeg audio merge timed out, copying video without audio")
-            _copy_file_atomic(processed, output)
+            # Do not re-run ffmpeg after a duration-adaptive timeout --
+            # salvage the intermediate into a container-correct path.
+            logger.warning("FFmpeg audio merge timed out, saving video without audio")
+            self._salvage_intermediate(processed, output)
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
             if self._hw_encoder:
@@ -2025,11 +2052,14 @@ class SubtitleRemover:
                 self._hw_encoder = None
                 self._merge_audio(original, processed, output)
                 return
-            logger.warning(f"Audio merge failed: {e}, copying video without audio")
-            _copy_file_atomic(processed, output)
+            # The merge often fails on the AUDIO side (bad stream, odd
+            # layout); a video-only encode to the requested container is
+            # usually still possible and beats a mislabeled raw copy.
+            logger.warning(f"Audio merge failed: {e}, encoding video without audio")
+            self._reencode_or_copy(processed, output)
         except FileNotFoundError:
-            logger.warning("FFmpeg not found, copying video without audio")
-            _copy_file_atomic(processed, output)
+            logger.warning("FFmpeg not found, saving video without audio")
+            self._salvage_intermediate(processed, output)
         finally:
             _cleanup_temp_output(temp_output)
 
