@@ -1401,6 +1401,7 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         self.assertEqual(metrics["vmaf"], 95.0)
         self.assertEqual(metrics["roi_vmaf"], 93.0)
         self.assertEqual(metrics["temporal_flicker_score"], 0.0)
+        self.assertEqual(metrics["residual_text_score"], 0.0)
         self.assertEqual(metrics["quality_gate"]["status"], "passed")
 
 
@@ -1429,6 +1430,25 @@ class QualityGateTests(unittest.TestCase):
         self.assertIsNone(temporal_flicker_score([(0, black), (4, white)]))
         self.assertEqual(temporal_flicker_score([(0, black), (1, white)]), 1.0)
 
+    def test_residual_text_score_flags_text_like_roi(self):
+        import cv2 as _cv2
+        import numpy as _np
+        from backend.quality import residual_text_score
+        flat = _np.full((80, 220, 3), 128, dtype=_np.uint8)
+        text = flat.copy()
+        _cv2.putText(
+            text,
+            "SUBTITLE",
+            (12, 50),
+            _cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            (255, 255, 255),
+            2,
+            _cv2.LINE_AA,
+        )
+        self.assertEqual(residual_text_score(flat), 0.0)
+        self.assertGreater(residual_text_score(text), 0.025)
+
     def test_review_when_temporal_flicker_is_high(self):
         from backend.quality_gate import evaluate_quality_gate
         gate = evaluate_quality_gate({
@@ -1440,6 +1460,18 @@ class QualityGateTests(unittest.TestCase):
         })
         self.assertEqual(gate["status"], "review")
         self.assertIn("temporal flicker", gate["reason"])
+
+    def test_review_when_residual_text_score_is_high(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+            "residual_text_score": 0.1,
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertIn("residual text score", gate["reason"])
 
     def test_review_when_roi_metric_fails_and_sheet_is_preview(self):
         from backend.quality_gate import evaluate_quality_gate
