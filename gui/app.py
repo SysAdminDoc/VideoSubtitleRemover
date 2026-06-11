@@ -657,6 +657,9 @@ class VideoSubtitleRemoverApp:
             self.retry_btn.set_enabled((not batch_busy) and has_retry)
         if hasattr(self, "clear_btn"):
             self.clear_btn.set_enabled((not batch_busy) and has_queue)
+        if hasattr(self, "repeat_btn"):
+            self.repeat_btn.set_enabled(
+                (not batch_busy) and self._last_completed_config() is not None)
         if hasattr(self, "batch_label") and not batch_busy:
             pending = sum(1 for item in self.queue if item.status == ProcessingStatus.IDLE)
             if pending:
@@ -2216,6 +2219,11 @@ class VideoSubtitleRemoverApp:
                                       command=self._retry_failed,
                                       style="ghost", size="lg")
         self.retry_btn.pack(side="right")
+
+        self.repeat_btn = ModernButton(btn_frame, text="Repeat last", width=120,
+                                      command=self._repeat_last_job,
+                                      style="ghost", size="lg")
+        self.repeat_btn.pack(side="right")
 
         self.clear_btn = ModernButton(btn_frame, text="Clear queue", width=120,
                                      command=self._clear_queue,
@@ -4582,6 +4590,54 @@ class VideoSubtitleRemoverApp:
             self._update_status(f"Reset {count} item{'s' if count != 1 else ''} for retry", "success")
         else:
             self._update_status("There are no failed items to retry", "warning")
+
+    def _last_completed_config(self) -> "ProcessingConfig | None":
+        """Return the config snapshot from the most recently completed
+        queue item, or None if no item has completed this session."""
+        best = None
+        for item in self.queue:
+            if item.status == ProcessingStatus.COMPLETE and item.completed_at:
+                if best is None or item.completed_at > best.completed_at:
+                    best = item
+        return best.config if best else None
+
+    def _repeat_last_job(self):
+        """Open a file picker and enqueue the selected files with the
+        config from the most recently completed job."""
+        if self.is_processing:
+            self._update_status("Stop the active batch first", "warning")
+            return
+        source_config = self._last_completed_config()
+        if source_config is None:
+            self._update_status("No completed job to repeat", "warning")
+            return
+        paths = filedialog.askopenfilenames(
+            title="Select files to process with the last job's settings",
+            filetypes=[
+                ("All Supported",
+                 "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;"
+                 "*.mpeg;*.mpg;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp"),
+            ],
+        )
+        if not paths:
+            return
+        added = 0
+        for p in paths:
+            result = self._add_to_queue(p)
+            if result == "added":
+                with self.queue_lock:
+                    new_item = self.queue[-1]
+                    new_item.config = ProcessingConfig.from_dict(
+                        source_config.to_dict())
+                added += 1
+        if added:
+            self._update_queue_display()
+            self._update_status(
+                f"Queued {added} file{'s' if added != 1 else ''} "
+                f"with the last job's settings",
+                "success", toast=True,
+            )
+        self._refresh_action_states()
 
     def _set_settings_locked(self, locked: bool):
         """Lock or unlock settings controls during processing."""
