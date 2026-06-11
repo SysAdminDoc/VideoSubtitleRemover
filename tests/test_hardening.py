@@ -289,6 +289,43 @@ class DecodeHwAccelCoerceTests(unittest.TestCase):
 
 
 class DirectMlProviderTests(unittest.TestCase):
+    @staticmethod
+    def _pb_varint(value):
+        out = bytearray()
+        while True:
+            byte = value & 0x7F
+            value >>= 7
+            if value:
+                out.append(byte | 0x80)
+            else:
+                out.append(byte)
+                return bytes(out)
+
+    @classmethod
+    def _pb_field_varint(cls, field_number, value):
+        return cls._pb_varint((field_number << 3) | 0) + cls._pb_varint(value)
+
+    @classmethod
+    def _pb_field_bytes(cls, field_number, payload):
+        return (
+            cls._pb_varint((field_number << 3) | 2)
+            + cls._pb_varint(len(payload))
+            + payload
+        )
+
+    @classmethod
+    def _minimal_onnx_model(cls, *opsets):
+        chunks = []
+        for domain, version in opsets:
+            payload = cls._pb_field_varint(2, version)
+            if domain:
+                payload = (
+                    cls._pb_field_bytes(1, domain.encode("utf-8"))
+                    + payload
+                )
+            chunks.append(cls._pb_field_bytes(8, payload))
+        return b"".join(chunks)
+
     def test_gui_detects_directml_via_onnxruntime_provider(self):
         from unittest import mock
         fake_ort = SimpleNamespace(
@@ -319,6 +356,39 @@ class DirectMlProviderTests(unittest.TestCase):
             _providers_for_device("directml"),
             ["DmlExecutionProvider", "CPUExecutionProvider"],
         )
+
+    def test_onnx_opset_parser_reads_default_and_custom_domains(self):
+        from backend.onnx_model_info import read_onnx_opset_imports
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "model.onnx"
+            model.write_bytes(self._minimal_onnx_model(("", 20), ("ai.onnx.ml", 3)))
+            imports = read_onnx_opset_imports(model)
+        self.assertEqual(
+            [(item.domain, item.version) for item in imports],
+            [("", 20), ("ai.onnx.ml", 3)],
+        )
+
+    def test_directml_provider_dropped_for_unsupported_default_opset(self):
+        from backend.inpainters_onnx import _providers_after_opset_audit
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "model.onnx"
+            model.write_bytes(self._minimal_onnx_model(("", 21)))
+            providers = _providers_after_opset_audit(
+                str(model),
+                ["DmlExecutionProvider", "CPUExecutionProvider"],
+            )
+        self.assertEqual(providers, ["CPUExecutionProvider"])
+
+    def test_directml_provider_kept_for_supported_default_opset(self):
+        from backend.inpainters_onnx import _providers_after_opset_audit
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "model.onnx"
+            model.write_bytes(self._minimal_onnx_model(("", 20)))
+            providers = _providers_after_opset_audit(
+                str(model),
+                ["DmlExecutionProvider", "CPUExecutionProvider"],
+            )
+        self.assertEqual(providers, ["DmlExecutionProvider", "CPUExecutionProvider"])
 
     def test_easyocr_gpu_flag_is_cuda_only(self):
         det = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
