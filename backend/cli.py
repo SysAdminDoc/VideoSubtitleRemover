@@ -95,23 +95,70 @@ def _soft_subtitle_action(args):
     return None
 
 
-def _print_soft_subtitle_plan(input_path: str, action_label: str) -> None:
+def _soft_subtitle_stream_record(stream) -> dict:
+    return {
+        "index": stream.index,
+        "codec_name": stream.codec_name or "",
+        "language": stream.language or "",
+        "title": stream.title or "",
+        "default": bool(stream.default),
+        "forced": bool(stream.forced),
+    }
+
+
+def _build_soft_subtitle_plan_record(input_path: str, action_label: str) -> dict:
     streams = _probe_subtitle_streams(input_path)
-    source = Path(input_path).name
+    return {
+        "input": str(input_path),
+        "input_name": Path(input_path).name,
+        "action": action_label,
+        "has_soft_subtitles": bool(streams),
+        "subtitle_stream_count": len(streams),
+        "subtitle_streams": [
+            _soft_subtitle_stream_record(stream)
+            for stream in streams
+        ],
+    }
+
+
+def _write_soft_subtitle_plan_json(path: str, action_label: str,
+                                   records: list[dict]) -> None:
+    payload = {
+        "schema": "vsr.soft_subtitle_preflight.v1",
+        "action": action_label,
+        "count": len(records),
+        "files": records,
+    }
+    _write_text_atomic(
+        Path(path),
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+    )
+
+
+def _print_soft_subtitle_plan_record(record: dict) -> None:
+    streams = record["subtitle_streams"]
+    source = record["input_name"]
+    action_label = record["action"]
     if not streams:
         print(f"[soft-subtitles] {source}: no embedded subtitle streams | action={action_label}")
         return
     print(f"[soft-subtitles] {source}: {len(streams)} stream(s) | action={action_label}")
     for stream in streams:
-        language = stream.language or "-"
-        title = stream.title or "-"
-        default = "yes" if stream.default else "no"
-        forced = "yes" if stream.forced else "no"
+        language = stream["language"] or "-"
+        title = stream["title"] or "-"
+        default = "yes" if stream["default"] else "no"
+        forced = "yes" if stream["forced"] else "no"
         print(
             "  "
-            f"stream={stream.index} | codec={stream.codec_name or '-'} | "
+            f"stream={stream['index']} | codec={stream['codec_name'] or '-'} | "
             f"lang={language} | title={title} | default={default} | forced={forced}"
         )
+
+
+def _print_soft_subtitle_plan(input_path: str, action_label: str) -> dict:
+    record = _build_soft_subtitle_plan_record(input_path, action_label)
+    _print_soft_subtitle_plan_record(record)
+    return record
 
 
 def _run_soft_subtitle_only(input_path: str, output_path: str,
@@ -283,6 +330,8 @@ def main():
                        help="Skip inputs whose output path already exists.")
     parser.add_argument("--soft-subtitle-dry-run", action="store_true",
                        help="Print embedded subtitle tracks and planned action, then exit.")
+    parser.add_argument("--soft-subtitle-plan-json", metavar="PATH",
+                       help="Write soft-subtitle dry-run preflight details as JSON.")
     parser.add_argument("--strip-soft-subtitles", action="store_true",
                        help="Fast remux that removes embedded subtitle tracks without OCR.")
     parser.add_argument("--keep-soft-subtitles", action="store_true",
@@ -326,6 +375,8 @@ def main():
             "--strip-soft-subtitles, --keep-soft-subtitles, and "
             "--burned-in-only are mutually exclusive"
         )
+    if args.soft_subtitle_plan_json and not args.soft_subtitle_dry_run:
+        parser.error("--soft-subtitle-plan-json requires --soft-subtitle-dry-run")
     soft_action = _soft_subtitle_action(args)
     dry_run_only = args.soft_subtitle_dry_run
 
@@ -565,6 +616,7 @@ def main():
             soft_action.value if soft_action is not None
             else ("burned-in-cleanup" if args.burned_in_only else "inspect")
         )
+        records = []
         if args.pattern:
             from glob import glob
             inputs = sorted(glob(args.pattern, recursive=True))
@@ -572,9 +624,16 @@ def main():
             if not inputs:
                 parser.error(f"No files matched pattern: {args.pattern}")
             for inp in inputs:
-                _print_soft_subtitle_plan(inp, planned)
+                records.append(_print_soft_subtitle_plan(inp, planned))
         else:
-            _print_soft_subtitle_plan(args.input, planned)
+            records.append(_print_soft_subtitle_plan(args.input, planned))
+        if args.soft_subtitle_plan_json:
+            _write_soft_subtitle_plan_json(
+                args.soft_subtitle_plan_json,
+                planned,
+                records,
+            )
+            print(f"[soft-subtitles] wrote plan {args.soft_subtitle_plan_json}")
         sys.exit(0)
 
     if soft_action is not None:

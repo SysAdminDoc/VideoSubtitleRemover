@@ -1647,6 +1647,68 @@ class CliSoftSubtitleTests(unittest.TestCase):
         )
         self.assertIn("action=strip", stdout)
 
+    def test_soft_subtitle_dry_run_writes_json_plan(self):
+        from unittest import mock
+        from backend import cli as _cli
+
+        stream = processor.SubtitleStreamInfo(
+            index=2,
+            codec_name="subrip",
+            language="eng",
+            title="SDH",
+            default=True,
+            forced=False,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            first = work / "first.mkv"
+            second = work / "second.mkv"
+            plan = work / "soft-plan.json"
+            first.write_bytes(b"not a real video")
+            second.write_bytes(b"not a real video")
+
+            with mock.patch.object(
+                _cli, "_probe_subtitle_streams", return_value=[stream],
+            ):
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    side_effect=AssertionError("heavy backend should not load"),
+                ):
+                    code, stdout, _stderr = self._run_cli([
+                        "--pattern", str(work / "*.mkv"),
+                        "--soft-subtitle-dry-run",
+                        "--strip-soft-subtitles",
+                        "--soft-subtitle-plan-json", str(plan),
+                    ])
+
+            payload = json.loads(plan.read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertIn("wrote plan", stdout)
+        self.assertEqual(payload["schema"], "vsr.soft_subtitle_preflight.v1")
+        self.assertEqual(payload["action"], "strip")
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(
+            [record["input_name"] for record in payload["files"]],
+            ["first.mkv", "second.mkv"],
+        )
+        self.assertTrue(payload["files"][0]["has_soft_subtitles"])
+        self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
+        self.assertEqual(
+            payload["files"][0]["subtitle_streams"][0]["language"],
+            "eng",
+        )
+
+    def test_soft_subtitle_plan_json_requires_dry_run(self):
+        code, _stdout, stderr = self._run_cli([
+            "--input", "movie.mkv",
+            "--output", "out.mkv",
+            "--strip-soft-subtitles",
+            "--soft-subtitle-plan-json", "plan.json",
+        ])
+        self.assertEqual(code, 2)
+        self.assertIn("requires --soft-subtitle-dry-run", stderr)
+
     def test_soft_subtitle_modes_are_mutually_exclusive(self):
         code, _stdout, stderr = self._run_cli([
             "--input", "movie.mkv",
