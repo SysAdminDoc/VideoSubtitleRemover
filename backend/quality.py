@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -61,6 +61,59 @@ def _ssim(a: np.ndarray, b: np.ndarray) -> float:
     if not ssims:
         return 0.0
     return float(np.clip(np.mean(ssims), 0.0, 1.0))
+
+
+def temporal_flicker_score(
+    samples: Sequence[Tuple[int, np.ndarray]],
+    *,
+    max_frame_gap: int = 1,
+) -> Optional[float]:
+    """Mean adjacent-frame absolute delta for sampled ROI frames.
+
+    The score is normalized to 0..1. Only adjacent sample indices are compared
+    by default so sparse random quality samples do not confuse ordinary motion
+    with flicker.
+    """
+    if len(samples) < 2:
+        return None
+    prepared: list[Tuple[int, np.ndarray]] = []
+    for idx, frame in samples:
+        arr = _prepare_flicker_frame(frame)
+        if arr is not None:
+            prepared.append((int(idx), arr))
+    if len(prepared) < 2:
+        return None
+    diffs: List[float] = []
+    last_idx, last = prepared[0]
+    for idx, cur in prepared[1:]:
+        if idx - last_idx <= max_frame_gap:
+            diffs.append(float(np.mean(np.abs(cur - last)) / 255.0))
+        last_idx, last = idx, cur
+    if not diffs:
+        return None
+    return float(np.mean(diffs))
+
+
+def _prepare_flicker_frame(frame: np.ndarray) -> Optional[np.ndarray]:
+    if frame is None or frame.size == 0:
+        return None
+    if frame.ndim == 3:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    elif frame.ndim == 2:
+        gray = frame
+    else:
+        return None
+    h, w = gray.shape[:2]
+    if h <= 0 or w <= 0:
+        return None
+    scale = min(1.0, 96.0 / max(h, w))
+    if scale < 1.0:
+        gray = cv2.resize(
+            gray,
+            (max(1, int(round(w * scale))), max(1, int(round(h * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+    return gray.astype(np.float32)
 
 
 def ffmpeg_libvmaf_available(ffmpeg: str = "ffmpeg") -> bool:
