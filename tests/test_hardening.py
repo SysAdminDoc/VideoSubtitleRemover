@@ -1529,6 +1529,18 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
         promote.assert_called_once_with(temp_path, final_path)
         clean.assert_called_once_with(temp_path)
 
+    def test_remux_rejects_same_input_and_output_path(self):
+        from unittest import mock
+        from backend import remux as _remux
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            media = Path(tmpdir) / "movie.mkv"
+            media.write_bytes(b"not a real video")
+            with mock.patch.object(_remux, "_allocate_temp_output_path") as allocate:
+                with self.assertRaises(ValueError):
+                    _remux.remux_soft_subtitles(str(media), str(media))
+        allocate.assert_not_called()
+
     @unittest.skipUnless(
         shutil.which("ffmpeg") and shutil.which("ffprobe"),
         "ffmpeg/ffprobe unavailable",
