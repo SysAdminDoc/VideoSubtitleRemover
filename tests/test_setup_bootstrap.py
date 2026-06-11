@@ -77,6 +77,39 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertNotIn("https://download.pytorch.org/whl/cu118", args)
         self.assertNotIn("https://download.pytorch.org/whl/cu128", args)
 
+    def test_amd_intel_branch_keeps_torch_cpu_and_avoids_torch_directml(self):
+        gpu_info = {
+            "nvidia": False,
+            "amd": True,
+            "intel": False,
+            "blackwell": False,
+            "cuda_disabled_by_python": False,
+        }
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                ok = self.setup_mod.install_pytorch(gpu_info)
+
+        self.assertTrue(ok)
+        calls = [" ".join(call.args[0]) for call in run.call_args_list]
+        self.assertTrue(any("torch>=2.10.0" in call for call in calls))
+        self.assertTrue(any("https://download.pytorch.org/whl/cpu" in call for call in calls))
+        self.assertFalse(any("torch-directml" in call for call in calls))
+
+    def test_amd_intel_dependencies_install_onnxruntime_directml(self):
+        gpu_info = {
+            "nvidia": False,
+            "amd": True,
+            "intel": False,
+        }
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                ok = self.setup_mod.install_dependencies(gpu_info)
+
+        self.assertTrue(ok)
+        calls = [" ".join(call.args[0]) for call in run.call_args_list]
+        self.assertTrue(any("onnxruntime-directml>=1.18.0" in call for call in calls))
+        self.assertFalse(any("torch-directml" in call for call in calls))
+
 
 if __name__ == "__main__":
     unittest.main()

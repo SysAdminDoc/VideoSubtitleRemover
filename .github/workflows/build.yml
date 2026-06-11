@@ -61,7 +61,7 @@ jobs:
           Install-Required "LaMa inpainter" @("simple-lama-inpainting")
           Install-Required "EasyOCR fallback" @("easyocr")
           Install-Optional "PaddleOCR" @("paddleocr>=3.0.0") "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
-          Install-Optional "torch-directml" @("torch-directml==0.2.5.dev240914") "torch-directml install skipped; release will rely on CUDA/CPU builds."
+          Install-Optional "ONNX Runtime DirectML" @("onnxruntime-directml>=1.18.0") "ONNX Runtime DirectML install skipped; release will rely on CUDA/CPU builds."
           Install-Required "PyInstaller" @("pyinstaller")
 
       - name: Dependency vulnerability scan (pip-audit)
@@ -120,7 +120,7 @@ jobs:
           Add-HiddenImportIfAvailable "rapidocr_onnxruntime"
           Add-HiddenImportIfAvailable "paddleocr"
           Add-HiddenImportIfAvailable "easyocr"
-          Add-HiddenImportIfAvailable "torch_directml"
+          Add-HiddenImportIfAvailable "onnxruntime"
 
           python -m PyInstaller --noconfirm --onedir --windowed @iconArgs --name "VideoSubtitleRemoverPro" @dataArgs @hiddenImports VideoSubtitleRemover.py
 

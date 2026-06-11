@@ -28,7 +28,9 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
             self.assertIn(f'Install-Required "{group}"', self.workflow)
 
         self.assertIn('Install-Optional "PaddleOCR"', self.workflow)
-        self.assertIn('Install-Optional "torch-directml"', self.workflow)
+        self.assertIn('Install-Optional "ONNX Runtime DirectML"', self.workflow)
+        self.assertNotIn('Install-Optional "torch-directml"', self.workflow)
+        self.assertNotIn("torch_directml", self.workflow)
 
     def test_native_command_try_catch_is_not_used_for_pip_installs(self):
         self.assertNotIn("try {\n            python -m pip install", self.workflow)

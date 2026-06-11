@@ -48,7 +48,7 @@ class SubtitleDetector:
         self._load_model()
 
     def _is_gpu_device(self) -> bool:
-        return 'cuda' in self.device or self.device == 'directml'
+        return 'cuda' in self.device
 
     def _load_model(self):
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >

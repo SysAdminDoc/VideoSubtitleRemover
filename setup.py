@@ -250,15 +250,13 @@ def install_pytorch(gpu_info):
                 '--index-url', 'https://download.pytorch.org/whl/cu118'
             ], check=True)
         elif gpu_info["amd"] or gpu_info["intel"]:
-            # torch-directml lags upstream torch; stay on the latest pair the
-            # 0.2.5.dev240914 wheel was validated against. The DirectML
-            # codepath does not exercise torch.load on untrusted files in our
-            # pipeline, but we still warn users to upgrade once a patched
-            # torch-directml ships.
-            print(f"  Installing PyTorch with DirectML support...")
-            print(f"{Colors.YELLOW}  WARN: torch-directml pins torch 2.4.x; CVE-2026-24747 fix is unavailable on this path.{Colors.END}")
-            subprocess.run([pip, 'install', 'torch==2.4.1', 'torchvision==0.19.1'], check=True)
-            subprocess.run([pip, 'install', 'torch-directml==0.2.5.dev240914'], check=True)
+            print(f"  Installing PyTorch CPU runtime for AMD/Intel fallback paths...")
+            print(f"  DirectML acceleration is provided by ONNX Runtime, not torch-directml.")
+            subprocess.run([
+                pip, 'install',
+                'torch>=2.10.0', 'torchvision>=0.25.0',
+                '--index-url', 'https://download.pytorch.org/whl/cpu'
+            ], check=True)
         else:
             print(f"  Installing PyTorch CPU version...")
             subprocess.run([
@@ -312,7 +310,7 @@ def install_paddlepaddle(gpu_info):
         return True
 
 
-def install_dependencies():
+def install_dependencies(gpu_info=None):
     """Install remaining dependencies."""
     print(f"\n{Colors.BLUE}[6/6]{Colors.END} Installing other dependencies...")
     
@@ -322,33 +320,40 @@ def install_dependencies():
         print("  Refreshing packaging tools...")
         subprocess.run([pip, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'], check=True)
 
+        installed_from_requirements = False
         if REQUIREMENTS_FILE.exists():
             print(f"  Installing dependencies from {REQUIREMENTS_FILE}...")
             try:
                 subprocess.run([pip, 'install', '-r', str(REQUIREMENTS_FILE)], check=True)
                 print(f"  [OK] Requirements installed")
-                return True
+                installed_from_requirements = True
             except subprocess.CalledProcessError:
                 print(f"  Requirements install hit an optional dependency issue, falling back to the core stack...")
 
-        core_packages = [
-            'numpy>=1.21.0',
-            'opencv-python>=4.12.0',
-            'Pillow>=12.1.1',
-            'rapidocr>=2.0.0',
-            'easyocr>=1.7.0',
-            'simple-lama-inpainting>=0.1.0',
-        ]
+        if not installed_from_requirements:
+            core_packages = [
+                'numpy>=1.21.0',
+                'opencv-python>=4.12.0',
+                'Pillow>=12.1.1',
+                'rapidocr>=2.0.0',
+                'easyocr>=1.7.0',
+                'simple-lama-inpainting>=0.1.0',
+            ]
 
-        for package in core_packages:
-            print(f"  Installing {package}...")
-            subprocess.run([pip, 'install', package], check=True)
+            for package in core_packages:
+                print(f"  Installing {package}...")
+                subprocess.run([pip, 'install', package], check=True)
 
-        try:
-            subprocess.run([pip, 'install', 'paddleocr>=3.0.0'], check=True)
-            print(f"  [OK] PaddleOCR installed")
-        except subprocess.CalledProcessError:
-            print(f"  Note: PaddleOCR skipped (RapidOCR / EasyOCR will be used instead)")
+            try:
+                subprocess.run([pip, 'install', 'paddleocr>=3.0.0'], check=True)
+                print(f"  [OK] PaddleOCR installed")
+            except subprocess.CalledProcessError:
+                print(f"  Note: PaddleOCR skipped (RapidOCR / EasyOCR will be used instead)")
+
+        if gpu_info and (gpu_info.get("amd") or gpu_info.get("intel")):
+            print("  Installing ONNX Runtime DirectML provider...")
+            subprocess.run([pip, 'install', 'onnxruntime-directml>=1.18.0'], check=True)
+            print(f"  [OK] ONNX Runtime DirectML installed")
 
         print(f"  [OK] All dependencies installed")
         return True
@@ -559,7 +564,7 @@ def main():
     install_paddlepaddle(gpu_info)
     
     # Step 6: Install other dependencies
-    if not install_dependencies():
+    if not install_dependencies(gpu_info):
         sys.exit(1)
     
     # Check FFmpeg
