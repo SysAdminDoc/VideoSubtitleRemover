@@ -335,7 +335,8 @@ class DirectMlProviderTests(unittest.TestCase):
                 "DmlExecutionProvider", "CPUExecutionProvider"
             ]
         )
-        with mock.patch.object(gui.subprocess, "run", side_effect=FileNotFoundError):
+        from gui import utils as _gui_utils
+        with mock.patch.object(_gui_utils.subprocess, "run", side_effect=FileNotFoundError):
             with mock.patch.dict(sys.modules, {"onnxruntime": fake_ort}):
                 gpus = gui.detect_gpu()
 
@@ -348,7 +349,8 @@ class DirectMlProviderTests(unittest.TestCase):
         fake_ort = SimpleNamespace(
             get_available_providers=lambda: ["CPUExecutionProvider"]
         )
-        with mock.patch.object(gui.subprocess, "run", side_effect=FileNotFoundError):
+        from gui import utils as _gui_utils
+        with mock.patch.object(_gui_utils.subprocess, "run", side_effect=FileNotFoundError):
             with mock.patch.dict(sys.modules, {"onnxruntime": fake_ort}):
                 self.assertEqual(gui.detect_gpu(), [])
 
