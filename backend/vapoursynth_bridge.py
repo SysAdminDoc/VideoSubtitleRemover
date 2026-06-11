@@ -1,18 +1,21 @@
 """VapourSynth bridge.
 
 RM-75: a thin adapter that lets advanced users slot VSR into a larger
-post pipeline. The user passes a `.vpy` script as input; we evaluate
-it via the VapourSynth Python API and expose a `cv2.VideoCapture`-
-shaped reader so the rest of `process_video` does not need to know
-about the bridge.
+post pipeline. The user passes a trusted `.vpy` script as input; when
+`VSR_VAPOURSYNTH=1` is set we evaluate it via the VapourSynth Python
+API and expose a `cv2.VideoCapture`-shaped reader so the rest of
+`process_video` does not need to know about the bridge.
 
-This is opt-in; users without VapourSynth installed see a graceful
-fallback when `_open_capture` is asked to handle a `.vpy` file.
+This is opt-in at two levels: users must enable the env gate because
+`.vpy` files are Python scripts, and users without VapourSynth installed
+see a graceful fallback when `_open_capture` is asked to handle a `.vpy`
+file.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -20,6 +23,12 @@ import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+def _vapoursynth_enabled() -> bool:
+    return os.environ.get("VSR_VAPOURSYNTH", "").strip().lower() in _TRUE_VALUES
 
 
 class _VapourSynthCapture:
@@ -125,6 +134,12 @@ class _VapourSynthCapture:
 def try_open_vpy(path: str):
     """Return a _VapourSynthCapture when the open succeeded, else None."""
     if not path.lower().endswith(".vpy"):
+        return None
+    if not _vapoursynth_enabled():
+        logger.info(
+            "VapourSynth .vpy input disabled; set VSR_VAPOURSYNTH=1 "
+            "to execute trusted scripts."
+        )
         return None
     cap = _VapourSynthCapture(path)
     return cap if cap.isOpened() else None

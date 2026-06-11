@@ -1420,9 +1420,35 @@ class VapourSynthBridgeTests(unittest.TestCase):
     """RM-75: try_open_vpy must return None for a non-.vpy path and for
     a missing dep."""
 
+    def setUp(self):
+        self._saved_env = os.environ.pop("VSR_VAPOURSYNTH", None)
+
+    def tearDown(self):
+        os.environ.pop("VSR_VAPOURSYNTH", None)
+        if self._saved_env is not None:
+            os.environ["VSR_VAPOURSYNTH"] = self._saved_env
+
     def test_returns_none_for_non_vpy(self):
         from backend.vapoursynth_bridge import try_open_vpy
         self.assertIsNone(try_open_vpy("/tmp/foo.mp4"))
+
+    def test_vpy_script_not_executed_without_env_gate(self):
+        from backend.vapoursynth_bridge import try_open_vpy
+        with tempfile.TemporaryDirectory() as tmpdir:
+            marker = Path(tmpdir) / "executed.txt"
+            script = Path(tmpdir) / "input.vpy"
+            script.write_text(
+                "from pathlib import Path\n"
+                f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            self.assertIsNone(try_open_vpy(str(script)))
+            self.assertFalse(marker.exists())
+
+    def test_env_gate_accepts_truthy_token(self):
+        from backend.vapoursynth_bridge import _vapoursynth_enabled
+        os.environ["VSR_VAPOURSYNTH"] = "yes"
+        self.assertTrue(_vapoursynth_enabled())
 
 
 class TensorrtCompileTests(unittest.TestCase):
