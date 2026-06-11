@@ -280,11 +280,11 @@ def _cv2_inpaint_single(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def _apply_feather_blend(original, filled, masks, config):
-    """Reuse the processor's feather-blend at every boundary."""
+    """Reuse the shared feather-blend at every boundary."""
     if config is None:
         return list(filled)
     try:
-        from backend.processor import _feather_blend, _edge_ring_color_correct
+        from backend.inpainters import _feather_blend, _edge_ring_color_correct
     except Exception:
         return list(filled)
     out = []
