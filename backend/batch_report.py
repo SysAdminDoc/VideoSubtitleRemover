@@ -127,13 +127,14 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
                         kind: str,
                         started_at: _dt.datetime,
                         completed_at: Optional[_dt.datetime] = None) -> tuple[Path, Path]:
-    completed = completed_at or _dt.datetime.now(_dt.timezone.utc)
+    started = _as_utc(started_at)
+    completed = _as_utc(completed_at or _dt.datetime.now(_dt.timezone.utc))
     payload = {
         "schema": "vsr.batch_summary.v1",
         "kind": kind,
-        "started_at": _iso(started_at),
+        "started_at": _iso(started),
         "completed_at": _iso(completed),
-        "elapsed_seconds": round(max(0.0, (completed - started_at).total_seconds()), 3),
+        "elapsed_seconds": round(max(0.0, (completed - started).total_seconds()), 3),
         "count": len(records),
         "counts": _counts(records),
         "files": records,
@@ -227,9 +228,14 @@ def _counts(records: list[dict]) -> dict:
 
 
 def _iso(value: _dt.datetime) -> str:
+    value = _as_utc(value)
+    return value.isoformat(timespec="seconds")
+
+
+def _as_utc(value: _dt.datetime) -> _dt.datetime:
     if value.tzinfo is None:
-        value = value.replace(tzinfo=_dt.timezone.utc)
-    return value.astimezone(_dt.timezone.utc).isoformat(timespec="seconds")
+        return value.replace(tzinfo=_dt.timezone.utc)
+    return value.astimezone(_dt.timezone.utc)
 
 
 def _markdown_summary(payload: dict) -> str:

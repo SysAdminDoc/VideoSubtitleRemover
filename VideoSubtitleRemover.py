@@ -3115,6 +3115,7 @@ class VideoSubtitleRemoverApp:
         self._taskbar = None  # created after the root is fully realized
         self._batch_times: List[float] = []  # seconds per item for ETA
         self._batch_started_at: Optional[datetime] = None
+        self._batch_report_records: dict = {}
         self._preview_request_id = 0
         self._throbber_id = None
         self._throbber_phase = 0
@@ -7571,6 +7572,7 @@ class VideoSubtitleRemoverApp:
         except Exception:
             self._probe_eta_seconds = 0.0
         self._batch_started_at = datetime.now()
+        self._prepare_batch_report_records()
         self._refresh_action_states()
         self._update_status("Batch processing started", "info")
         # Kick off Windows taskbar progress in indeterminate until first tick
@@ -7634,6 +7636,123 @@ class VideoSubtitleRemoverApp:
         if self._elapsed_timer_id:
             self.root.after_cancel(self._elapsed_timer_id)
             self._elapsed_timer_id = None
+
+    def _batch_report_device(self, item: QueueItem) -> str:
+        if not getattr(item.config, "use_gpu", False):
+            return "cpu"
+        for gpu in self.gpus:
+            if gpu.get("index") == item.config.gpu_id:
+                if gpu.get("type") == "DirectML":
+                    return "directml"
+                break
+        return f"cuda:{item.config.gpu_id}"
+
+    def _prepare_batch_report_records(self):
+        """Build preflight report records for the queue without processing frames."""
+        from backend.batch_report import make_batch_item_record
+
+        with self.queue_lock:
+            items = [
+                item for item in self.queue
+                if item.status not in (
+                    ProcessingStatus.COMPLETE,
+                    ProcessingStatus.ERROR,
+                    ProcessingStatus.CANCELLED,
+                )
+            ]
+        records = {}
+        for item in items:
+            soft_action = (
+                item.soft_subtitle_action
+                if item.soft_subtitle_action in {"strip", "keep_all"}
+                else None
+            )
+            try:
+                records[item.id] = make_batch_item_record(
+                    item.file_path,
+                    item.output_path,
+                    config={
+                        "mode": item.config.mode.value,
+                        "device": self._batch_report_device(item),
+                        "output_codec": getattr(item.config, "output_codec", "h264"),
+                    },
+                    soft_action=soft_action,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Batch preflight report failed for {Path(item.file_path).name}: {exc}"
+                )
+        self._batch_report_records = records
+
+    def _finalize_batch_report_records(self) -> List[dict]:
+        from backend.batch_report import (
+            STATUS_CANCELLED,
+            STATUS_FAILED,
+            STATUS_HARDCODED_PROCESSED,
+            STATUS_SOFT_REMUXED,
+            finish_batch_item,
+        )
+
+        records = getattr(self, "_batch_report_records", {}) or {}
+        if not records:
+            return []
+        by_id = {item.id: item for item in self.queue}
+        finished: List[dict] = []
+        for item_id, record in records.items():
+            item = by_id.get(item_id)
+            if item is None:
+                continue
+            elapsed = None
+            if item.started_at and item.completed_at:
+                elapsed = (item.completed_at - item.started_at).total_seconds()
+            if item.status == ProcessingStatus.COMPLETE:
+                status = (
+                    STATUS_SOFT_REMUXED
+                    if item.soft_subtitle_action in {"strip", "keep_all"}
+                    else STATUS_HARDCODED_PROCESSED
+                )
+                message = item.message or "Complete"
+            elif item.status == ProcessingStatus.ERROR:
+                status = STATUS_FAILED
+                message = item.error or item.message or "Processing failed"
+            elif item.status == ProcessingStatus.CANCELLED:
+                status = STATUS_CANCELLED
+                message = item.message or "Cancelled"
+            else:
+                status = STATUS_CANCELLED
+                message = item.message or "Not processed"
+            finish_batch_item(
+                record,
+                status,
+                message=message,
+                elapsed_seconds=elapsed,
+            )
+            finished.append(record)
+        return finished
+
+    def _write_batch_report_files(self) -> List[Path]:
+        from backend.batch_report import write_batch_reports
+
+        records = self._finalize_batch_report_records()
+        if not records:
+            return []
+        started_at = self._batch_started_at or datetime.now()
+        grouped: dict[Path, List[dict]] = {}
+        for record in records:
+            out_dir = Path(record.get("output") or ".").parent
+            grouped.setdefault(out_dir, []).append(record)
+        written: List[Path] = []
+        for out_dir, group in grouped.items():
+            json_path, md_path = write_batch_reports(
+                out_dir,
+                group,
+                kind="gui-batch",
+                started_at=started_at,
+                completed_at=datetime.now(),
+            )
+            written.extend([json_path, md_path])
+            logger.info(f"Batch report written: {json_path}")
+        return written
 
     def _process_queue(self):
         """Process all items in the queue."""
@@ -8149,6 +8268,7 @@ class VideoSubtitleRemoverApp:
         # Clear cached remover so next batch picks up any setting changes
         self._cached_remover = None
         self._cached_remover_key = None
+        report_paths = self._write_batch_report_files()
         if self._shutdown_started:
             if self._taskbar:
                 self._taskbar.clear()
@@ -8187,6 +8307,11 @@ class VideoSubtitleRemoverApp:
             )
         self._update_status(summary, "success" if is_clean else "warning")
         logger.info(summary)
+        if report_paths:
+            logger.info(
+                "Batch reports: "
+                + ", ".join(str(path) for path in report_paths)
+            )
         self._notify_completion(complete, errors)
         # Surface a themed summary modal for meaningful batches
         total = complete + errors + cancelled
