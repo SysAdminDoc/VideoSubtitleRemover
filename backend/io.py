@@ -567,6 +567,11 @@ class _LosslessIntermediateWriter:
                     self._proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     pass
+            if self._proc.stderr is not None:
+                try:
+                    self._proc.stderr.close()
+                except Exception:
+                    pass
             self._proc = None
         if self._fallback is not None:
             try:

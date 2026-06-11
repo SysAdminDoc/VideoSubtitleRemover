@@ -6,6 +6,7 @@ cascade used by STTN / ProPainter / AUTO.
 from __future__ import annotations
 
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
@@ -269,7 +270,13 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
     if use_median and n <= 64:
         weighted = np.where(unmasked[..., None], frame_stack, np.nan)
         with np.errstate(all='ignore'):
-            bg = np.nanmedian(weighted, axis=0)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="All-NaN slice encountered",
+                    category=RuntimeWarning,
+                )
+                bg = np.nanmedian(weighted, axis=0)
         bg = np.nan_to_num(bg, nan=0.0)
     else:
         sum_vals = (frame_stack * unmasked[..., None]).sum(axis=0)
