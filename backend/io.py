@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -490,15 +491,30 @@ class _PrefetchReader:
         except Exception as exc:
             logger.warning(f"Prefetch reader crashed: {exc}")
         finally:
-            try:
-                self._q.put(self._STOP, timeout=1.0)
-            except queue.Full:
-                pass
+            # The sentinel must never be dropped while a consumer is
+            # alive: a slow inpaint batch keeps the queue full for far
+            # longer than any fixed timeout, and a lost sentinel makes
+            # the next read() block forever. Only give up once release()
+            # has signalled stop (it drains the queue itself).
+            while True:
+                try:
+                    self._q.put(self._STOP, timeout=0.25)
+                    break
+                except queue.Full:
+                    if self._stop.is_set():
+                        break
 
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         if self._exhausted:
             return False, None
-        item = self._q.get()
+        while True:
+            try:
+                item = self._q.get(timeout=1.0)
+                break
+            except queue.Empty:
+                if not self._thread.is_alive() and self._q.empty():
+                    self._exhausted = True
+                    return False, None
         if item is self._STOP:
             self._exhausted = True
             return False, None
@@ -506,12 +522,22 @@ class _PrefetchReader:
 
     def release(self) -> None:
         self._stop.set()
-        try:
-            while True:
-                self._q.get_nowait()
-        except queue.Empty:
-            pass
-        self._thread.join(timeout=2.0)
+        deadline = time.monotonic() + 5.0
+        while self._thread.is_alive() and time.monotonic() < deadline:
+            try:
+                while True:
+                    self._q.get_nowait()
+            except queue.Empty:
+                pass
+            self._thread.join(timeout=0.25)
+        if self._thread.is_alive():
+            # Worker may be blocked inside cv2.VideoCapture.read() on a
+            # slow source; releasing the capture under it can segfault.
+            logger.warning(
+                "Prefetch reader did not stop within 5s; leaving the "
+                "capture open rather than releasing it mid-read."
+            )
+            return
         try:
             self._cap.release()
         except Exception:
