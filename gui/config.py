@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # -- App identity -----------------------------------------------------------
 
 APP_NAME = "Video Subtitle Remover Pro"
-APP_VERSION = "3.16.1"
+APP_VERSION = "3.17.0"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
