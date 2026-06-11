@@ -908,9 +908,15 @@ class Toast:
             ry = self.root.winfo_rooty()
             rw = self.root.winfo_width()
             rh = self.root.winfo_height()
-            # Stack toasts upward from the bottom-right
+            # Stack toasts upward from the bottom-right. During _build
+            # self is not yet in _active, so every active toast is a
+            # predecessor; on restack only the toasts before self are.
+            if self in Toast._active:
+                predecessors = Toast._active[:Toast._active.index(self)]
+            else:
+                predecessors = list(Toast._active)
             offset = sum((t._win.winfo_reqheight() + 8)
-                         for t in Toast._active[:-1] if t._win)
+                         for t in predecessors if t._win)
             x = rx + rw - w - 20
             y = ry + rh - h - 52 - offset
             self._win.wm_geometry(f"+{x}+{y}")
@@ -1604,17 +1610,15 @@ class TextWidgetHandler(logging.Handler):
 
     def emit(self, record):
         msg = self.format(record) + '\n'
-        # Skip cheaply if the widget has already been destroyed. tk.Text
-        # raises TclError on both `winfo_exists` and `after` after destroy,
-        # so we guard against both without re-entering a partially-torn-down
-        # interpreter.
+        # emit() runs on whichever thread issued the log record, so no
+        # synchronous widget query (winfo_exists) is allowed here --
+        # only `after`, which is thread-safe on threaded Tcl builds.
+        # _append re-checks existence on the main loop.
         try:
-            if not int(self.text_widget.winfo_exists()):
-                return
             self.text_widget.after(0, self._append, msg, record.levelno)
         except tk.TclError:
-            # The widget went away between our check and the schedule; drop
-            # silently because the root is shutting down.
+            # The widget went away; drop silently because the root is
+            # shutting down.
             pass
         except Exception:
             pass

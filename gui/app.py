@@ -5492,6 +5492,14 @@ class VideoSubtitleRemoverApp:
     def _show_update_toast(self, tag, url):
         try:
             Toast.show(self.root, f"Update available: {tag}", "info")
+            if url:
+                # The toast is transient; surface the release link where
+                # the user can actually reach it.
+                logger.info(f"Update {tag} available: {url}")
+                self._update_status(
+                    f"Update {tag} available -- link in the log panel",
+                    "info",
+                )
         except Exception:
             pass
 
