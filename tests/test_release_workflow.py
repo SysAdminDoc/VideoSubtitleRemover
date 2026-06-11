@@ -67,6 +67,8 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("hiddenImports", self.workflow)
         self.assertIn("python -m pip list --format=json", self.workflow)
         self.assertIn("dependencies", self.workflow)
+        self.assertIn("adapterSecurity", self.workflow)
+        self.assertIn("backend.adapter_manifest import release_manifest_status", self.workflow)
         self.assertIn("APP_VERSION $appVersion does not match release tag", self.workflow)
         self.assertIn("README.md", self.workflow)
         self.assertIn("CHANGELOG.md", self.workflow)

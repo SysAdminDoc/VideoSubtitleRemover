@@ -238,6 +238,7 @@ jobs:
             bundledDocs = @()
             dependencies = @()
             hiddenImports = @()
+            adapterSecurity = @()
             versionChecks = @()
             smokeLaunch = [ordered]@{
               attempted = $false
@@ -326,6 +327,9 @@ jobs:
               version = $dep.version
             }
           }
+
+          $adapterPayload = python -c "import json; from backend.adapter_manifest import release_manifest_status; print(json.dumps(release_manifest_status()))"
+          $verification.adapterSecurity = $adapterPayload | ConvertFrom-Json
 
           if (-not (Test-Path "release-hidden-imports.json")) {
             throw "Hidden import manifest missing."

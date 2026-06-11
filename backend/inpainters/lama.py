@@ -38,14 +38,27 @@ class LAMAInpainter(BaseInpainter):
             logger.info("LaMa neural inpainting model loaded (simple-lama-inpainting)")
             # RM-49: best-effort SHA-256 check of the on-disk weights.
             try:
+                from backend.adapter_manifest import (
+                    log_adapter_verification as _log_adapter,
+                    verify_adapter_path as _verify_adapter,
+                )
                 from backend.model_hashes import (
                     candidate_weight_dirs as _cands,
-                    verify_weight_file as _verify,
                 )
+                verified = True
                 for cache_dir in _cands():
                     for path in cache_dir.glob("**/big-lama*.pt"):
-                        _verify(path)
+                        result = _verify_adapter("simple-lama", str(path))
+                        _log_adapter(result)
+                        if not result.allowed:
+                            verified = False
                         break
+                if not verified:
+                    self._lama = None
+                    logger.warning(
+                        "LaMa neural inpainting disabled because cached "
+                        "weights failed manifest verification."
+                    )
             except Exception as exc:
                 logger.debug(f"Weight verification skipped: {exc}")
         except ImportError:
