@@ -454,6 +454,7 @@ class ProcessingConfig:
     rtl_layout: bool = False        # RM-98 right-to-left UI mirror
     update_check: bool = False       # RM-116 opt-in startup version check
     json_log_enabled: bool = False   # RM-53 structured JSON-lines log
+    output_frames: bool = False      # RM-35 frame-sequence output
 
     def to_dict(self) -> dict:
         """Persist every dataclass field automatically. Using
@@ -598,6 +599,7 @@ class ProcessingConfig:
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         self.update_check = _coerce_bool(self.update_check, False)
         self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)
+        self.output_frames = _coerce_bool(self.output_frames, False)
         return self
 
     @classmethod

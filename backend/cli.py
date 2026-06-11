@@ -339,6 +339,8 @@ def main():
                        help="Render a side-by-side comparison PNG alongside the report.")
     parser.add_argument("--input-fps", type=float, default=24.0, metavar="FPS",
                        help="FPS for directory-of-images input.")
+    parser.add_argument("--output-frames", action="store_true",
+                       help="Write cleaned frames as individual PNGs instead of a video.")
     parser.add_argument("--keep-chyrons", action="store_true",
                        help="Leave persistent text (logos, lower-thirds, tickers).")
     parser.add_argument("--keep-subtitles", action="store_true",
@@ -544,6 +546,7 @@ def main():
         prefetch_decode=not args.no_prefetch,
         prefetch_queue_size=args.prefetch_queue,
         input_fps=args.input_fps,
+        output_frames=args.output_frames,
         quality_report_sheet=args.quality_sheet,
         remove_subtitles=not args.keep_subtitles,
         remove_chyrons=not args.keep_chyrons,

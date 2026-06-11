@@ -66,6 +66,7 @@ from backend.io import (
     _open_capture,
     _PrefetchReader,
     _LosslessIntermediateWriter,
+    _FrameSequenceWriter,
 )
 from backend.encoder import _detect_hw_encoder
 from backend.quality import (
@@ -1387,13 +1388,23 @@ class SubtitleRemover:
             # writer falls back to mp4v + .mp4 when ffmpeg is missing
             # so the pipeline still produces output, just at the old
             # quality.
-            temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
-            writer = _LosslessIntermediateWriter(
-                temp_video_target, width, height, fps
-            )
-            temp_video = writer.path
-            if not writer.isOpened():
-                raise ValueError(f"Could not create video writer for: {temp_video}")
+            use_frame_output = getattr(self.config, "output_frames", False)
+            if use_frame_output:
+                frame_out_dir = output_path
+                if not frame_out_dir.endswith(os.sep):
+                    frame_out_dir = str(Path(output_path).with_suffix(""))
+                writer = _FrameSequenceWriter(frame_out_dir)
+                temp_video = None
+            else:
+                temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
+                writer = _LosslessIntermediateWriter(
+                    temp_video_target, width, height, fps
+                )
+                temp_video = writer.path
+                if not writer.isOpened():
+                    raise ValueError(
+                        f"Could not create video writer for: {temp_video}"
+                    )
 
             frame_idx = 0
             batch_size = self.config.sttn_max_load_num
@@ -1670,13 +1681,16 @@ class SubtitleRemover:
                 mask_writer.release()
 
             self._report_progress(0.9, "Merging audio...")
-            # Frame-sequence inputs carry no audio stream; silently bypass
-            # the merge step so ffmpeg doesn't error on `-i <directory>`.
-            is_frame_sequence_input = Path(input_path).is_dir()
-            if self.config.preserve_audio and not is_frame_sequence_input:
-                self._merge_audio(input_path, temp_video, output_path)
+            if use_frame_output:
+                logger.info(
+                    f"Frame-sequence output written to {frame_out_dir}"
+                )
             else:
-                self._reencode_or_copy(temp_video, output_path)
+                is_frame_sequence_input = Path(input_path).is_dir()
+                if self.config.preserve_audio and not is_frame_sequence_input:
+                    self._merge_audio(input_path, temp_video, output_path)
+                else:
+                    self._reencode_or_copy(temp_video, output_path)
             if mask_writer is not None and mask_path and temp_mask_path:
                 _promote_temp_output(temp_mask_path, mask_path)
                 temp_mask_path = None
