@@ -205,3 +205,37 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
+
+      - name: Check winget submission readiness
+        id: winget
+        shell: pwsh
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          $hasToken = -not [string]::IsNullOrWhiteSpace($env:WINGET_CREATE_GITHUB_TOKEN)
+          "has_token=$($hasToken.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Submit winget manifest update
+        if: ${{ steps.winget.outputs.has_token == 'true' }}
+        shell: pwsh
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          $versionTag = "${{ github.event.inputs.version }}"
+          $manifestVersion = $versionTag.TrimStart([char[]]@('v', 'V'))
+          $packageId = "SysAdminDoc.VideoSubtitleRemoverPro"
+          $installerName = "VideoSubtitleRemoverPro-$versionTag-Setup.exe"
+          if (-not (Test-Path $installerName)) {
+            Write-Host "NSIS installer was not produced; skipping winget submission."
+            exit 0
+          }
+
+          $installerUrl = "https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/download/$versionTag/$installerName"
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe update $packageId `
+            --urls "$installerUrl|x64|machine" `
+            --version $manifestVersion `
+            --release-notes-url "https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/tag/$versionTag" `
+            --submit `
+            --token $env:WINGET_CREATE_GITHUB_TOKEN `
+            --no-open

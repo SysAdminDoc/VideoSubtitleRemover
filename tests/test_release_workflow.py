@@ -35,6 +35,19 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
     def test_native_command_try_catch_is_not_used_for_pip_installs(self):
         self.assertNotIn("try {\n            python -m pip install", self.workflow)
 
+    def test_winget_submission_is_secret_gated_and_non_interactive(self):
+        self.assertIn("id: winget", self.workflow)
+        self.assertIn("WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_PAT }}", self.workflow)
+        self.assertIn("steps.winget.outputs.has_token == 'true'", self.workflow)
+        self.assertIn("wingetcreate.exe update $packageId", self.workflow)
+        self.assertIn('$packageId = "SysAdminDoc.VideoSubtitleRemoverPro"', self.workflow)
+        self.assertIn("VideoSubtitleRemoverPro-$versionTag-Setup.exe", self.workflow)
+        self.assertIn("releases/download/$versionTag/$installerName", self.workflow)
+        self.assertIn('--urls "$installerUrl|x64|machine"', self.workflow)
+        self.assertIn("--submit", self.workflow)
+        self.assertIn("--token $env:WINGET_CREATE_GITHUB_TOKEN", self.workflow)
+        self.assertIn("--no-open", self.workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
