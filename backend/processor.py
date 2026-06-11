@@ -158,6 +158,12 @@ def attach_json_log(path: str) -> Optional[JsonLineLogHandler]:
     pointing at the same path and skips. Returns the handler so callers
     can detach on shutdown if they want; returns None on open failure.
     """
+    target = str(Path(path))
+    root = logging.getLogger()
+    for existing in root.handlers:
+        if (isinstance(existing, JsonLineLogHandler)
+                and getattr(existing, "_json_log_path", None) == target):
+            return existing
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         stream = open(path, "a", encoding="utf-8")
@@ -165,8 +171,9 @@ def attach_json_log(path: str) -> Optional[JsonLineLogHandler]:
         logger.warning(f"Could not open JSON log {path}: {exc}")
         return None
     handler = JsonLineLogHandler(stream)
+    handler._json_log_path = target
     handler.setLevel(logging.INFO)
-    logging.getLogger().addHandler(handler)
+    root.addHandler(handler)
     logger.info(f"JSON log enabled at {path}")
     return handler
 
@@ -677,6 +684,44 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     return config
 
 
+def _available_host_ram_gb() -> Optional[float]:
+    """Best-effort available physical memory in GB; None when no probe
+    works. Used to keep the adaptive TBE batch within host RAM."""
+    try:
+        import psutil  # type: ignore
+        return psutil.virtual_memory().available / (1024 ** 3)
+    except Exception:
+        pass
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MemoryStatusEx(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = _MemoryStatusEx()
+            stat.dwLength = ctypes.sizeof(_MemoryStatusEx)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return stat.ullAvailPhys / (1024 ** 3)
+        else:
+            page = os.sysconf("SC_PAGE_SIZE")
+            avail = os.sysconf("SC_AVPHYS_PAGES")
+            return page * avail / (1024 ** 3)
+    except Exception:
+        pass
+    return None
+
+
 # RFP-L-2: each built-in inpainter registers itself below so the
 # dispatch in SubtitleRemover._create_inpainter no longer needs an
 # if-elif chain. Opt-in third-party backends can `register()` from
@@ -761,6 +806,15 @@ class SubtitleRemover:
                 safety = 6.0  # GB reserved for model + OS
                 budget_gb = max(1.0, free_gb - safety)
                 estimated_frames = int(budget_gb * 1024 / 50.0)
+                # The TBE path stacks the whole batch as float32 numpy in
+                # HOST RAM (~100 MB per 1080p frame incl. nanmedian
+                # scratch), so a large-VRAM GPU must not push the batch
+                # past what system memory can actually hold.
+                host_gb = _available_host_ram_gb()
+                if host_gb is not None:
+                    host_budget_gb = max(1.0, host_gb - 4.0)
+                    estimated_frames = min(
+                        estimated_frames, int(host_budget_gb * 1024 / 100.0))
                 target = max(8, min(512, estimated_frames))
                 if target != self.config.sttn_max_load_num:
                     logger.info(
@@ -1279,7 +1333,7 @@ class SubtitleRemover:
             logger.info("Image processing cancelled")
             raise
         except Exception as e:
-            logger.error(f"Image processing error: {e}")
+            logger.error(f"Image processing error: {e}", exc_info=True)
             return False
 
     def process_video(self, input_path: str, output_path: str) -> bool:
@@ -1794,7 +1848,7 @@ class SubtitleRemover:
             logger.info("Video processing cancelled")
             raise
         except Exception as e:
-            logger.error(f"Video processing error: {e}")
+            logger.error(f"Video processing error: {e}", exc_info=True)
             return False
         finally:
             if writer is not None:
