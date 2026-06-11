@@ -13,6 +13,7 @@ Skips automatically on:
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
 import unittest
@@ -112,6 +113,49 @@ class GuiSmokeTests(unittest.TestCase):
 
             self.assertEqual(item.soft_subtitle_action, "strip")
             self.assertIn("Fast strip", item.message)
+
+        finally:
+            app.root.destroy()
+
+    def test_batch_report_files_written_for_completed_queue(self):
+        app = self._make_app()
+        try:
+            from backend import batch_report as _br
+
+            source = Path(self._tmpdir.name) / "batch-source.mp4"
+            output_dir = Path(self._tmpdir.name) / "batch-out"
+            output = output_dir / "batch-source_no_sub.mp4"
+            source.write_bytes(b"not a real video")
+            output_dir.mkdir(exist_ok=True)
+            item = self._g.QueueItem(
+                id="batch-report",
+                file_path=str(source),
+                output_path=str(output),
+                config=self._g.ProcessingConfig(),
+            )
+            app.queue.append(item)
+            app._batch_started_at = self._g.datetime.now()
+
+            with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,64,48,24/1"):
+                with mock.patch.object(_br, "_probe_duration_seconds", return_value=2.0):
+                    with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[]):
+                        app._prepare_batch_report_records()
+
+            item.status = self._g.ProcessingStatus.COMPLETE
+            item.message = "Complete!"
+            item.started_at = self._g.datetime.now()
+            item.completed_at = self._g.datetime.now()
+
+            paths = app._write_batch_report_files()
+            payload = json.loads(
+                (output_dir / "vsr-batch-summary.json").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(len(paths), 2)
+            self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
+            self.assertEqual(payload["kind"], "gui-batch")
+            self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
+            self.assertEqual(payload["files"][0]["input_name"], source.name)
 
         finally:
             app.root.destroy()
