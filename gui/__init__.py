@@ -70,3 +70,5 @@ from gui.utils import (  # noqa: F401
     summarize_quality_reports,
     truncate_middle,
 )
+
+from gui.app import VideoSubtitleRemoverApp  # noqa: F401
