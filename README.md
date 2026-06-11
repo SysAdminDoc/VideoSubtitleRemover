@@ -211,8 +211,8 @@ checkpointed, remuxed, processed, or failed files. When quality reports are
 enabled, batch summaries also include a `passed`, `review`, or `unknown`
 quality gate using ROI metrics, a cheap residual-text score, and an
 adjacent-frame temporal flicker score, plus any quality-sheet preview path for
-review-needed outputs; skipped and remux-only rows are marked
-`not_applicable`.
+review-needed outputs. A failed gate changes the batch row status to
+`review-needed`; skipped and remux-only rows are marked `not_applicable`.
 
 | Flag | Description | Default |
 |------|-------------|---------|

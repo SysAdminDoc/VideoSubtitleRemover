@@ -28,6 +28,7 @@ from backend.batch_report import (
     STATUS_FAILED,
     STATUS_HARDCODED_PROCESSED,
     STATUS_PENDING,
+    STATUS_REVIEW_NEEDED,
     STATUS_SKIPPED_EXISTING,
     STATUS_SOFT_REMUXED,
     choose_batch_output_path,
@@ -906,10 +907,17 @@ def main():
         if interrupted:
             sys.exit(130)
         failures = sum(1 for record in records if record.get("status") == STATUS_FAILED)
+        reviews = sum(
+            1 for record in records
+            if record.get("status") == STATUS_REVIEW_NEEDED
+        )
         succeeded = len(inputs) - failures
-        print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded")
+        suffix = f", {reviews} review-needed" if reviews else ""
+        print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded{suffix}")
         if failures:
             print("[batch] Some items need attention. Review the errors above before retrying.")
+        if reviews:
+            print("[batch] Some outputs need manual review. See vsr-batch-summary for quality-gate details.")
         sys.exit(0 if failures == 0 else 1)
 
     print(f"[file] source={Path(args.input).name}")

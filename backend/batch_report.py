@@ -34,6 +34,7 @@ STATUS_SKIPPED_EXISTING = "skipped-existing"
 STATUS_CHECKPOINT_DONE = "checkpoint-done"
 STATUS_SOFT_REMUXED = "soft-subtitle-remuxed"
 STATUS_HARDCODED_PROCESSED = "hardcoded-processed"
+STATUS_REVIEW_NEEDED = "review-needed"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
 
@@ -130,7 +131,17 @@ def finish_batch_item(record: dict, status: str, *,
         record["elapsed_seconds"] = round(max(0.0, float(elapsed_seconds)), 3)
     if quality_report is not None:
         record["quality_report"] = _quality_report_record(quality_report)
-        record["quality_gate"] = _quality_gate_record(quality_report)
+        gate = _quality_gate_record(quality_report)
+        record["quality_gate"] = gate
+        if (
+            status == STATUS_HARDCODED_PROCESSED
+            and gate.get("status") == "review"
+        ):
+            record["status"] = STATUS_REVIEW_NEEDED
+            if message:
+                record["message"] = f"{message}; quality gate review needed"
+            else:
+                record["message"] = "Quality gate review needed"
     elif status == STATUS_HARDCODED_PROCESSED:
         record["quality_gate"] = quality_gate_unknown("quality report not enabled")
     elif status in {STATUS_SKIPPED_EXISTING, STATUS_CHECKPOINT_DONE, STATUS_SOFT_REMUXED}:
