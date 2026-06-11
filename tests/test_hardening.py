@@ -1102,6 +1102,86 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         r._accumulate_quality_bbox(m2)
         self.assertEqual(r._quality_mask_bbox, (30, 20, 120, 90))
 
+    def test_libvmaf_available_detects_filter(self):
+        from unittest import mock
+        from backend import quality as _q
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout=" .. libvmaf           VV->V      Calculate the VMAF between two video streams.\n",
+            stderr="",
+        )
+        with mock.patch.object(_q.shutil, "which", return_value="ffmpeg"):
+            with mock.patch.object(_q.subprocess, "run", return_value=completed):
+                self.assertTrue(_q.ffmpeg_libvmaf_available())
+
+    def test_compute_vmaf_parses_mocked_log(self):
+        from unittest import mock
+        from backend import quality as _q
+
+        def fake_run(cmd, check, capture_output, timeout):
+            filt = cmd[cmd.index("-lavfi") + 1]
+            log_path = Path(_q._unescape_filter_value(filt.split("log_path=", 1)[1]))
+            log_path.write_text(
+                json.dumps({"pooled_metrics": {"vmaf": {"mean": 91.25}}}),
+                encoding="utf-8",
+            )
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ref = Path(tmpdir) / "ref.mp4"
+            dist = Path(tmpdir) / "dist.mp4"
+            ref.write_bytes(b"ref")
+            dist.write_bytes(b"dist")
+            with mock.patch.object(_q, "ffmpeg_libvmaf_available", return_value=True):
+                with mock.patch.object(_q.subprocess, "run", side_effect=fake_run):
+                    self.assertEqual(
+                        _q.compute_vmaf(
+                            str(ref), str(dist), duration_seconds=1.0,
+                            roi=(2, 3, 12, 23),
+                        ),
+                        91.25,
+                    )
+
+    def test_quality_report_includes_vmaf_when_available(self):
+        from unittest import mock
+        import numpy as _np
+        r = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        r.config = processor.ProcessingConfig(quality_report=True)
+        r._quality_mask_bbox = (10, 10, 50, 50)
+        frame_in = _np.full((80, 96, 3), 128, dtype=_np.uint8)
+        frame_out = frame_in.copy()
+
+        class FakeCapture:
+            def __init__(self, frame):
+                self.frame = frame
+            def isOpened(self):
+                return True
+            def get(self, prop):
+                if prop == processor.cv2.CAP_PROP_FRAME_COUNT:
+                    return 4
+                return 0
+            def set(self, prop, value):
+                return True
+            def read(self):
+                return True, self.frame.copy()
+            def release(self):
+                return None
+
+        with mock.patch(
+            "backend.processor._open_capture",
+            side_effect=[FakeCapture(frame_in), FakeCapture(frame_out)],
+        ):
+            with mock.patch(
+                "backend.processor.compute_vmaf",
+                side_effect=[95.0, 93.0],
+            ):
+                metrics = r._compute_quality_report(
+                    "input.mp4", "output.mp4", 0, 4, 24.0, n_samples=2
+                )
+
+        self.assertEqual(metrics["vmaf"], 95.0)
+        self.assertEqual(metrics["roi_vmaf"], 93.0)
+
 
 class LosslessIntermediateWriterTests(unittest.TestCase):
     """I-1: the intermediate writer must roundtrip frames losslessly when
