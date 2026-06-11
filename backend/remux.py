@@ -17,6 +17,7 @@ from backend.io import (
     _allocate_temp_output_path,
     _cleanup_temp_output,
     _ffmpeg_subprocess_timeout,
+    _path_key,
     _probe_duration_seconds,
     _promote_temp_output,
 )
@@ -68,6 +69,8 @@ def remux_soft_subtitles(
     keep_stream_indices: Optional[Iterable[int]] = None,
 ) -> None:
     """Run a soft-subtitle remux through a sibling temp output path."""
+    if _path_key(input_path) == _path_key(output_path):
+        raise ValueError("soft-subtitle remux output must differ from input")
     if shutil.which("ffmpeg") is None:
         raise RuntimeError("ffmpeg is required for soft-subtitle remux")
     temp_output = _allocate_temp_output_path(output_path)
