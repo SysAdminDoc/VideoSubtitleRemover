@@ -453,6 +453,7 @@ class ProcessingConfig:
     high_contrast: bool = False     # RM-96 alt theme palette
     rtl_layout: bool = False        # RM-98 right-to-left UI mirror
     update_check: bool = False       # RM-116 opt-in startup version check
+    json_log_enabled: bool = False   # RM-53 structured JSON-lines log
 
     def to_dict(self) -> dict:
         """Persist every dataclass field automatically. Using
@@ -596,6 +597,7 @@ class ProcessingConfig:
         self.high_contrast = _coerce_bool(self.high_contrast, False)
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         self.update_check = _coerce_bool(self.update_check, False)
+        self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)
         return self
 
     @classmethod
@@ -3317,6 +3319,8 @@ class VideoSubtitleRemoverApp:
             self.config.high_contrast = self.high_contrast_var.get()
         if hasattr(self, 'update_check_var'):
             self.config.update_check = self.update_check_var.get()
+        if hasattr(self, 'json_log_var'):
+            self.config.json_log_enabled = self.json_log_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -4847,6 +4851,15 @@ class VideoSubtitleRemoverApp:
         )
         quality_sheet_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
         Tooltip(quality_sheet_toggle, "Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report.")
+
+        self.json_log_var = tk.BooleanVar(value=getattr(self.config, "json_log_enabled", False))
+        json_log_toggle = ModernToggle(
+            quality_frame,
+            text="Structured JSON log",
+            variable=self.json_log_var,
+        )
+        json_log_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
+        Tooltip(json_log_toggle, "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing.")
 
         # RM-96: high-contrast theme toggle. Takes effect on next launch
         # because re-skinning every live widget mid-session would force
@@ -8454,6 +8467,14 @@ class VideoSubtitleRemoverApp:
 
         logger.info(f"{APP_NAME} v{APP_VERSION} started")
         logger.info(f"Log file: {LOG_FILE}")
+        if self.config.json_log_enabled:
+            try:
+                from backend.processor import attach_json_log
+                json_path = str(LOG_DIR / "vsr_pro.jsonl")
+                attach_json_log(json_path)
+                logger.info(f"JSON log: {json_path}")
+            except Exception as exc:
+                logger.debug(f"JSON log setup failed: {exc}")
         if self.config.update_check:
             self._check_for_update()
         self.root.mainloop()
