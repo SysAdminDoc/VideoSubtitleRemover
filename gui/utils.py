@@ -382,3 +382,15 @@ def summarize_quality_reports(
         "items": count,
         "samples": total_samples,
     }
+
+
+def _queue_item_info_text(item) -> str:
+    parts = [get_file_info(item.file_path)]
+    if getattr(item, "soft_subtitle_streams", None):
+        parts.append(
+            _format_soft_subtitle_summary(item.soft_subtitle_streams))
+    elif (is_video_file(item.file_path)
+          and not getattr(item, "soft_subtitle_probe_done", False)):
+        parts.append("checking embedded subtitle tracks")
+    parts.append(truncate_middle(item.file_path, 68))
+    return "   -   ".join(part for part in parts if part)

@@ -55,6 +55,7 @@ from gui.utils import (  # noqa: F401
     _CURATED_LANG_NAMES,
     _engine_supported_languages,
     _format_soft_subtitle_summary,
+    _queue_item_info_text,
     _soft_subtitle_stream_record,
     detect_ai_engines,
     detect_ffmpeg,
