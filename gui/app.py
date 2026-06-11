@@ -492,7 +492,14 @@ class VideoSubtitleRemoverApp:
 
     def _update_region_label_display(self):
         """Refresh the region summary line."""
-        if self.config.subtitle_area:
+        areas = getattr(self.config, "subtitle_areas", None) or []
+        if len(areas) > 1:
+            self.region_label.config(
+                text=f"Manual regions: {len(areas)} fixed rectangles",
+                fg=Theme.TEXT_PRIMARY,
+            )
+            self.region_meta.config(text="Fixed mask regions", fg=Theme.SUCCESS)
+        elif self.config.subtitle_area:
             x1, y1, x2, y2 = self.config.subtitle_area
             self.region_label.config(
                 text=f"Manual region: ({x1}, {y1}) to ({x2}, {y2})",
@@ -503,7 +510,8 @@ class VideoSubtitleRemoverApp:
             self.region_label.config(text="Automatic subtitle detection", fg=Theme.TEXT_PRIMARY)
             self.region_meta.config(text="Recommended default", fg=Theme.TEXT_MUTED)
         if hasattr(self, "region_reset_btn"):
-            self.region_reset_btn.set_enabled(self.config.subtitle_area is not None and not self.is_processing)
+            has_manual = bool(areas) or self.config.subtitle_area is not None
+            self.region_reset_btn.set_enabled(has_manual and not self.is_processing)
 
     def _start_throbber(self):
         """Animate the preview area with a shimmer placeholder and moving dots
@@ -3280,6 +3288,7 @@ class VideoSubtitleRemoverApp:
         cap = _cv2.VideoCapture(source_path) if is_video else None
         if is_video and not cap.isOpened():
             logger.error("Could not open video for region selection")
+            cap.release()
             return
         try:
             if is_video:
@@ -3289,7 +3298,11 @@ class VideoSubtitleRemoverApp:
                     fps = 30.0
                 ret, frame = cap.read()
                 if not ret:
+                    # Early return bypasses both the except-release below
+                    # and the <Destroy> binding (not installed yet) --
+                    # release here or the capture leaks.
                     logger.error("Could not read video frame for region selection")
+                    cap.release()
                     return
             else:
                 frame = _cv2.imread(source_path)
@@ -3497,8 +3510,12 @@ class VideoSubtitleRemoverApp:
                     pass
 
     def _reset_region(self):
-        """Reset subtitle region to auto-detect."""
+        """Reset subtitle region to auto-detect. Clears BOTH region
+        fields -- the backend honours subtitle_areas as fixed masks, so
+        leaving it set would keep using the old rectangles while the UI
+        claims automatic detection."""
         self.config.subtitle_area = None
+        self.config.subtitle_areas = None
         self._update_region_label_display()
         self._update_status("Subtitle detection returned to automatic mode")
 
@@ -4402,7 +4419,11 @@ class VideoSubtitleRemoverApp:
                 frame_copy = raw_frame.copy()
                 lang = self.lang_var.get()
                 threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
-                sub_area = self.config.subtitle_area
+                # Match what processing will actually use: all manual
+                # regions when set, else the single back-compat rect.
+                sub_areas = list(getattr(self.config, "subtitle_areas", None) or [])
+                if not sub_areas and self.config.subtitle_area:
+                    sub_areas = [self.config.subtitle_area]
 
                 def _detect_bg():
                     try:
@@ -4412,8 +4433,8 @@ class VideoSubtitleRemoverApp:
                             self._preview_detector = SubtitleDetector(lang=lang)
                             self._preview_detector_lang = lang
                         det = self._preview_detector
-                        if sub_area:
-                            boxes = [sub_area]
+                        if sub_areas:
+                            boxes = sub_areas
                         else:
                             boxes = det.detect(frame_copy, threshold)
                         vis = frame_copy.copy()
