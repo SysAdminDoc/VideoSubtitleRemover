@@ -217,19 +217,17 @@ class _PaddleOcrVlDetector(_BaseVlmDetector):
 
     def _load(self):
         try:
-            from paddleocr import PaddleOCR  # type: ignore
+            import paddleocr  # noqa: F401  (availability probe)
         except ImportError:
             logger.info(
                 "paddleocr not available for PaddleOCR-VL; "
                 "install `pip install paddleocr>=3.0`."
             )
             return None
+        from backend.paddle_compat import build_paddleocr
         try:
-            return PaddleOCR(
-                use_angle_cls=False,
-                lang="en",
-                use_gpu="cuda" in self.device,
-                show_log=False,
+            return build_paddleocr(
+                "en", self.device,
                 ocr_version="PP-OCRv5",
                 ocr_lang_model="paddleocr_vl",
             )
@@ -240,27 +238,14 @@ class _PaddleOcrVlDetector(_BaseVlmDetector):
                 "Installed PaddleOCR does not expose the VL variant; "
                 "running standard PP-OCRv5."
             )
-            from paddleocr import PaddleOCR  # type: ignore
-            return PaddleOCR(
-                use_angle_cls=False, lang="en",
-                use_gpu="cuda" in self.device,
-                show_log=False,
-            )
+            return build_paddleocr("en", self.device)
         except Exception as exc:
             logger.warning(f"PaddleOCR-VL load failed: {exc}")
             return None
 
     def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
-        results = self._model.ocr(frame, cls=False)
-        boxes: List[Tuple[int, int, int, int]] = []
-        if results and results[0]:
-            for line in results[0]:
-                if line[1][1] >= threshold:
-                    pts = np.array(line[0], dtype=np.int32)
-                    x1, y1 = pts.min(axis=0)
-                    x2, y2 = pts.max(axis=0)
-                    boxes.append((int(x1), int(y1), int(x2), int(y2)))
-        return boxes
+        from backend.paddle_compat import extract_paddle_boxes
+        return extract_paddle_boxes(self._model, frame, threshold)
 
 
 class _MangaOcrDetector(_BaseVlmDetector):
