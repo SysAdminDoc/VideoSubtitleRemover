@@ -881,11 +881,16 @@ def main():
                         elapsed_seconds=time.monotonic() - started,
                     )
                 else:
+                    quality_report = (
+                        getattr(remover, "last_quality_report", None)
+                        if ok else None
+                    )
                     finish_batch_item(
                         record,
                         STATUS_HARDCODED_PROCESSED if ok else STATUS_FAILED,
                         message="Processed" if ok else "Processing failed",
                         elapsed_seconds=time.monotonic() - started,
+                        quality_report=quality_report,
                     )
         except KeyboardInterrupt:
             print("\n[batch] Interrupted by user -- partial results kept on disk.")

@@ -7726,6 +7726,11 @@ class VideoSubtitleRemoverApp:
                 status,
                 message=message,
                 elapsed_seconds=elapsed,
+                quality_report=(
+                    item.quality_report
+                    if status == STATUS_HARDCODED_PROCESSED
+                    else None
+                ),
             )
             finished.append(record)
         return finished

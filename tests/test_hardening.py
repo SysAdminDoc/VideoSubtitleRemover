@@ -1400,6 +1400,45 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
 
         self.assertEqual(metrics["vmaf"], 95.0)
         self.assertEqual(metrics["roi_vmaf"], 93.0)
+        self.assertEqual(metrics["quality_gate"]["status"], "passed")
+
+
+class QualityGateTests(unittest.TestCase):
+    """#108: existing quality metrics are converted into a stable batch
+    gate result before automatic fallback ladder work is added."""
+
+    def test_passes_when_roi_metrics_clear_thresholds(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.98,
+            "roi_ssim": 0.97,
+            "vmaf": 95.0,
+            "roi_vmaf": 92.0,
+        })
+        self.assertEqual(gate["status"], "passed")
+        self.assertEqual(gate["ladderStep"], "none")
+
+    def test_review_when_roi_metric_fails_and_sheet_is_preview(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Review",
+            "ssim": 0.99,
+            "roi_ssim": 0.90,
+            "sheet": "clip.qualitysheet.png",
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "manual-review")
+        self.assertIn("ROI SSIM", gate["reason"])
+        self.assertEqual(gate["previewFramePaths"], ["clip.qualitysheet.png"])
+
+    def test_unknown_without_metrics(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate(None)
+        self.assertEqual(gate["status"], "unknown")
+        self.assertEqual(gate["ladderStep"], "not-run")
 
 
 class LosslessIntermediateWriterTests(unittest.TestCase):
@@ -1793,6 +1832,14 @@ class BatchReportTests(unittest.TestCase):
                 _br.STATUS_HARDCODED_PROCESSED,
                 message="Processed",
                 elapsed_seconds=3.25,
+                quality_report={
+                    "tag": "Review",
+                    "samples": 3,
+                    "psnr": 31.0,
+                    "ssim": 0.99,
+                    "roi_ssim": 0.90,
+                    "sheet": "clip.qualitysheet.png",
+                },
             )
             started = _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc)
             json_path, md_path = _br.write_batch_reports(
@@ -1810,7 +1857,17 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["source_width"], 1920)
         self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
         self.assertGreater(payload["files"][0]["estimated_seconds"], 0)
+        self.assertEqual(payload["files"][0]["quality_gate"]["status"], "review")
+        self.assertEqual(
+            payload["files"][0]["quality_gate"]["ladderStep"],
+            "manual-review",
+        )
+        self.assertEqual(
+            payload["files"][0]["quality_gate"]["previewFramePaths"],
+            ["clip.qualitysheet.png"],
+        )
         self.assertIn("| hardcoded-processed | clip.mkv | clip_no_sub.mkv |", markdown)
+        self.assertIn("review (manual-review)", markdown)
 
 
 class CliSoftSubtitleTests(unittest.TestCase):

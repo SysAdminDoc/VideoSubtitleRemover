@@ -22,6 +22,11 @@ from backend.io import (
     _probe_subtitle_streams,
     _write_text_atomic,
 )
+from backend.quality_gate import (
+    evaluate_quality_gate,
+    quality_gate_not_applicable,
+    quality_gate_unknown,
+)
 
 
 STATUS_PENDING = "pending"
@@ -98,6 +103,8 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "subtitle_stream_count": len(streams),
         "subtitle_streams": [_subtitle_stream_record(stream) for stream in streams],
         "soft_action": soft_action or "",
+        "quality_report": None,
+        "quality_gate": quality_gate_unknown("quality gate has not run yet"),
     }
 
 
@@ -115,11 +122,25 @@ def planned_batch_status(*, output_exists: bool, skip_existing: bool,
 
 def finish_batch_item(record: dict, status: str, *,
                       message: str = "",
-                      elapsed_seconds: Optional[float] = None) -> dict:
+                      elapsed_seconds: Optional[float] = None,
+                      quality_report: Optional[dict] = None) -> dict:
     record["status"] = status
     record["message"] = message
     if elapsed_seconds is not None:
         record["elapsed_seconds"] = round(max(0.0, float(elapsed_seconds)), 3)
+    if quality_report is not None:
+        record["quality_report"] = _quality_report_record(quality_report)
+        record["quality_gate"] = _quality_gate_record(quality_report)
+    elif status == STATUS_HARDCODED_PROCESSED:
+        record["quality_gate"] = quality_gate_unknown("quality report not enabled")
+    elif status in {STATUS_SKIPPED_EXISTING, STATUS_CHECKPOINT_DONE, STATUS_SOFT_REMUXED}:
+        record["quality_gate"] = quality_gate_not_applicable(
+            "quality gate applies only to hardcoded cleanup outputs"
+        )
+    elif status in {STATUS_FAILED, STATUS_CANCELLED}:
+        record["quality_gate"] = quality_gate_not_applicable(
+            "quality gate did not run because processing did not complete"
+        )
     return record
 
 
@@ -247,8 +268,8 @@ def _markdown_summary(payload: dict) -> str:
         f"- Completed: {_escape_md(payload.get('completed_at', ''))}",
         f"- Files: {payload.get('count', 0)}",
         "",
-        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Message |",
-        "|---|---|---|---|---:|---|---:|---:|---|",
+        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Quality | Message |",
+        "|---|---|---|---|---:|---|---:|---:|---|---|",
     ]
     for record in payload.get("files", []):
         lines.append(
@@ -262,6 +283,7 @@ def _markdown_summary(payload: dict) -> str:
                 _escape_md(record.get("source_codec", "")),
                 str(record.get("subtitle_stream_count", 0)),
                 _format_seconds(record.get("elapsed_seconds")),
+                _format_quality_gate(record.get("quality_gate")),
                 _escape_md(record.get("message", "")),
             ])
             + " |"
@@ -285,3 +307,36 @@ def _format_seconds(value: Any) -> str:
     minutes = int(seconds // 60)
     rest = int(seconds % 60)
     return f"{minutes}m {rest}s"
+
+
+def _quality_gate_record(metrics: dict) -> dict:
+    gate = metrics.get("quality_gate")
+    if isinstance(gate, dict):
+        return gate
+    return evaluate_quality_gate(metrics)
+
+
+def _quality_report_record(metrics: dict) -> dict:
+    keys = (
+        "tag",
+        "samples",
+        "psnr",
+        "ssim",
+        "roi_psnr",
+        "roi_ssim",
+        "vmaf",
+        "roi_vmaf",
+        "roi_bbox",
+        "sheet",
+    )
+    return {key: metrics.get(key) for key in keys if key in metrics}
+
+
+def _format_quality_gate(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    status = str(value.get("status") or "")
+    step = str(value.get("ladderStep") or "")
+    if status and step and step not in {"none", "not-applicable"}:
+        return _escape_md(f"{status} ({step})")
+    return _escape_md(status)
