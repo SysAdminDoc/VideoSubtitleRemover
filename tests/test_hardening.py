@@ -1726,6 +1726,93 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
             self.assertEqual(_probe_codec_for_log(str(output)), source_codec)
 
 
+class BatchReportTests(unittest.TestCase):
+    def test_choose_batch_output_path_honors_skip_existing(self):
+        from backend.batch_report import choose_batch_output_path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "clip.mp4"
+            out_dir = work / "out"
+            out_dir.mkdir()
+            source.write_bytes(b"video")
+            existing = out_dir / "clip_no_sub.mp4"
+            existing.write_bytes(b"done")
+
+            collision_safe = choose_batch_output_path(
+                str(source),
+                out_dir,
+                "_no_sub",
+                set(),
+                skip_existing=False,
+            )
+            skip_target = choose_batch_output_path(
+                str(source),
+                out_dir,
+                "_no_sub",
+                set(),
+                skip_existing=True,
+            )
+
+        self.assertEqual(collision_safe.name, "clip_no_sub(2).mp4")
+        self.assertEqual(skip_target.name, "clip_no_sub.mp4")
+
+    def test_write_batch_reports_includes_preflight_and_result_status(self):
+        import datetime as _dt
+        from unittest import mock
+        from backend import batch_report as _br
+
+        stream = processor.SubtitleStreamInfo(
+            index=3,
+            codec_name="subrip",
+            language="eng",
+            title="CC",
+            default=True,
+            forced=False,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "clip.mkv"
+            output = work / "out" / "clip_no_sub.mkv"
+            source.write_bytes(b"video")
+            cfg = SimpleNamespace(
+                mode=processor.InpaintMode.AUTO,
+                device="cuda:0",
+                output_codec="h265",
+            )
+            with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,1920,1080,30000/1001"):
+                with mock.patch.object(_br, "_probe_duration_seconds", return_value=12.5):
+                    with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[stream]):
+                        record = _br.make_batch_item_record(
+                            str(source),
+                            str(output),
+                            config=cfg,
+                        )
+            _br.finish_batch_item(
+                record,
+                _br.STATUS_HARDCODED_PROCESSED,
+                message="Processed",
+                elapsed_seconds=3.25,
+            )
+            started = _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc)
+            json_path, md_path = _br.write_batch_reports(
+                output.parent,
+                [record],
+                kind="hardcoded-cleanup",
+                started_at=started,
+                completed_at=started + _dt.timedelta(seconds=4),
+            )
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            markdown = md_path.read_text(encoding="utf-8")
+
+        self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
+        self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
+        self.assertEqual(payload["files"][0]["source_width"], 1920)
+        self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
+        self.assertGreater(payload["files"][0]["estimated_seconds"], 0)
+        self.assertIn("| hardcoded-processed | clip.mkv | clip_no_sub.mkv |", markdown)
+
+
 class CliSoftSubtitleTests(unittest.TestCase):
     def _run_cli(self, args):
         from unittest import mock
@@ -1865,6 +1952,126 @@ class CliSoftSubtitleTests(unittest.TestCase):
         ])
         self.assertEqual(code, 2)
         self.assertIn("mutually exclusive", stderr)
+
+
+class CliBatchReportTests(unittest.TestCase):
+    def _run_cli(self, args):
+        from unittest import mock
+        from backend import cli as _cli
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(sys, "argv", ["vsr"] + args):
+            with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as caught:
+                    _cli.main()
+        return caught.exception.code, stdout.getvalue(), stderr.getvalue()
+
+    def _patch_preflight_probes(self):
+        from unittest import mock
+        from backend import batch_report as _br
+
+        return mock.patch.multiple(
+            _br,
+            _probe_codec_for_log=mock.Mock(return_value="h264,640,360,30/1"),
+            _probe_duration_seconds=mock.Mock(return_value=10.0),
+            _probe_subtitle_streams=mock.Mock(return_value=[]),
+        )
+
+    def test_pattern_skip_existing_writes_report_without_alt_processing(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mp4"
+            out_dir = work / "out"
+            ckpt = work / "ckpt"
+            src.write_bytes(b"video")
+            out_dir.mkdir()
+            (out_dir / "clip_no_sub.mp4").write_bytes(b"done")
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch("backend.processor.SubtitleRemover", return_value=fake_remover):
+                    code, stdout, stderr = self._run_cli([
+                        "--pattern", str(work / "*.mp4"),
+                        "--out-dir", str(out_dir),
+                        "--checkpoint-dir", str(ckpt),
+                        "--skip-existing",
+                    ])
+            payload = json.loads((out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_not_called()
+        self.assertIn("[skip] clip.mp4 (output exists)", stdout)
+        self.assertEqual(payload["files"][0]["status"], "skipped-existing")
+        self.assertEqual(payload["files"][0]["output_name"], "clip_no_sub.mp4")
+
+    def test_pattern_success_writes_processed_report(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mp4"
+            out_dir = work / "out"
+            ckpt = work / "ckpt"
+            src.write_bytes(b"video")
+            out_dir.mkdir()
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch("backend.processor.SubtitleRemover", return_value=fake_remover):
+                    code, stdout, stderr = self._run_cli([
+                        "--pattern", str(work / "*.mp4"),
+                        "--out-dir", str(out_dir),
+                        "--checkpoint-dir", str(ckpt),
+                        "--gpu", "-1",
+                    ])
+            payload = json.loads((out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8"))
+            markdown = (out_dir / "vsr-batch-summary.md").read_text(encoding="utf-8")
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_called_once()
+        self.assertIn("[batch] wrote report", stdout)
+        self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
+        self.assertEqual(payload["files"][0]["status"], "hardcoded-processed")
+        self.assertIn("clip_no_sub.mp4", markdown)
+
+    def test_soft_subtitle_pattern_writes_report(self):
+        from unittest import mock
+        from backend import cli as _cli
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mkv"
+            out_dir = work / "out"
+            src.write_bytes(b"video")
+            out_dir.mkdir()
+            with self._patch_preflight_probes():
+                with mock.patch.object(_cli, "_probe_subtitle_streams", return_value=[]):
+                    with mock.patch.object(_cli, "remux_soft_subtitles") as remux:
+                        with mock.patch(
+                            "backend.processor.SubtitleRemover",
+                            side_effect=AssertionError("heavy backend should not load"),
+                        ):
+                            code, stdout, stderr = self._run_cli([
+                                "--pattern", str(work / "*.mkv"),
+                                "--out-dir", str(out_dir),
+                                "--strip-soft-subtitles",
+                            ])
+            payload = json.loads((out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0, stderr)
+        remux.assert_called_once()
+        self.assertIn("[batch] wrote report", stdout)
+        self.assertEqual(payload["counts"], {"soft-subtitle-remuxed": 1})
+        self.assertEqual(payload["files"][0]["soft_action"], "strip")
 
 
 class LanguagePickerTests(unittest.TestCase):

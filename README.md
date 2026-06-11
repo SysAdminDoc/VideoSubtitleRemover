@@ -196,6 +196,12 @@ In the GUI, queued videos with embedded subtitle tracks show a track summary;
 right-click the item to fast strip, fast remux/keep, or continue with
 burned-in cleanup.
 
+Pattern batches write `vsr-batch-summary.json` and `vsr-batch-summary.md`
+to `--out-dir` when they finish. The report records each input, selected
+output path, codec/duration/subtitle preflight data, planned action, final
+status, and elapsed time for skipped, checkpointed, remuxed, processed, or
+failed files.
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-i`, `--input` | Input file path | Required |

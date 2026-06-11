@@ -13,15 +13,29 @@ Extracted from processor.py as part of RFP-L-1. Provides:
 from __future__ import annotations
 
 import hashlib
+import datetime
 import json
 import logging
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 
+from backend.batch_report import (
+    STATUS_CANCELLED,
+    STATUS_CHECKPOINT_DONE,
+    STATUS_FAILED,
+    STATUS_HARDCODED_PROCESSED,
+    STATUS_PENDING,
+    STATUS_SKIPPED_EXISTING,
+    STATUS_SOFT_REMUXED,
+    choose_batch_output_path,
+    finish_batch_item,
+    make_batch_item_record,
+    write_batch_reports,
+)
 from backend.io import (
-    _choose_available_output_path,
     _path_key,
     _probe_subtitle_streams,
     _write_text_atomic,
@@ -167,6 +181,28 @@ def _run_soft_subtitle_only(input_path: str, output_path: str,
     remux_soft_subtitles(input_path, output_path, action=action)
     print(f"[soft-subtitles] wrote {output_path}")
     return True
+
+
+def _cancel_pending_records(records: list[dict]) -> None:
+    for record in records:
+        if record.get("status") == STATUS_PENDING:
+            finish_batch_item(record, STATUS_CANCELLED, message="Interrupted")
+
+
+def _write_cli_batch_reports(out_dir: Path, records: list[dict], *,
+                             kind: str,
+                             started_at: datetime.datetime) -> None:
+    if not records:
+        return
+    json_path, md_path = write_batch_reports(
+        out_dir,
+        records,
+        kind=kind,
+        started_at=started_at,
+        completed_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    print(f"[batch] wrote report {json_path}")
+    print(f"[batch] wrote summary {md_path}")
 
 
 def main():
@@ -645,24 +681,73 @@ def main():
                 parser.error(f"No files matched pattern: {args.pattern}")
             out_dir = Path(args.out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
-            failures = 0
+            batch_started_at = datetime.datetime.now(datetime.timezone.utc)
+            records: list[dict] = []
+            interrupted = False
             reserved_outputs: set = set()
-            for i, inp in enumerate(inputs, 1):
-                src = Path(inp)
-                outp = str(_choose_available_output_path(
-                    out_dir / f"{src.stem}_soft_subtitles{src.suffix}",
-                    reserved_outputs,
-                ))
-                reserved_outputs.add(_path_key(outp))
-                print(f"\n[soft-subtitles] ({i}/{len(inputs)}) {src.name}")
-                try:
-                    if args.skip_existing and Path(outp).exists():
+            try:
+                for i, inp in enumerate(inputs, 1):
+                    src = Path(inp)
+                    outp = choose_batch_output_path(
+                        inp,
+                        out_dir,
+                        "_soft_subtitles",
+                        reserved_outputs,
+                        skip_existing=args.skip_existing,
+                    )
+                    reserved_outputs.add(_path_key(outp))
+                    record = make_batch_item_record(
+                        inp,
+                        str(outp),
+                        config={
+                            "mode": "soft-subtitles",
+                            "device": "cpu",
+                            "output_codec": "copy",
+                        },
+                        skip_existing=args.skip_existing,
+                        soft_action=soft_action.value,
+                    )
+                    records.append(record)
+                    print(f"\n[soft-subtitles] ({i}/{len(inputs)}) {src.name}")
+                    if record["planned_result"] == STATUS_SKIPPED_EXISTING:
                         print(f"[skip] {src.name} (output exists)")
+                        finish_batch_item(
+                            record,
+                            STATUS_SKIPPED_EXISTING,
+                            message="Output already exists",
+                        )
                         continue
-                    _run_soft_subtitle_only(inp, outp, soft_action)
-                except Exception as exc:
-                    logger.error(f"Soft-subtitle remux failed on {src.name}: {exc}")
-                    failures += 1
+                    started = time.monotonic()
+                    try:
+                        _run_soft_subtitle_only(inp, str(outp), soft_action)
+                        finish_batch_item(
+                            record,
+                            STATUS_SOFT_REMUXED,
+                            message=f"Soft subtitles {soft_action.value}",
+                            elapsed_seconds=time.monotonic() - started,
+                        )
+                    except Exception as exc:
+                        logger.error(f"Soft-subtitle remux failed on {src.name}: {exc}")
+                        finish_batch_item(
+                            record,
+                            STATUS_FAILED,
+                            message=str(exc),
+                            elapsed_seconds=time.monotonic() - started,
+                        )
+            except KeyboardInterrupt:
+                print("\n[soft-subtitles] Interrupted by user -- partial results kept on disk.")
+                _cancel_pending_records(records)
+                interrupted = True
+            finally:
+                _write_cli_batch_reports(
+                    out_dir,
+                    records,
+                    kind="soft-subtitles",
+                    started_at=batch_started_at,
+                )
+            if interrupted:
+                sys.exit(130)
+            failures = sum(1 for record in records if record.get("status") == STATUS_FAILED)
             sys.exit(0 if failures == 0 else 1)
         try:
             if args.skip_existing and Path(args.output).exists():
@@ -738,27 +823,84 @@ def main():
         out_dir = Path(args.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"[batch] {len(inputs)} file(s) queued | out={out_dir} | resume={'on' if not args.no_resume else 'off'}")
-        failures = 0
+        batch_started_at = datetime.datetime.now(datetime.timezone.utc)
+        records: list[dict] = []
+        interrupted = False
         reserved_outputs: set = set()
         try:
             for i, inp in enumerate(inputs, 1):
                 src = Path(inp)
-                outp = str(_choose_available_output_path(
-                    out_dir / f"{src.stem}_no_sub{src.suffix}",
+                outp = choose_batch_output_path(
+                    inp,
+                    out_dir,
+                    "_no_sub",
                     reserved_outputs,
-                ))
+                    skip_existing=args.skip_existing,
+                )
                 reserved_outputs.add(_path_key(outp))
+                key = _checkpoint_key(inp, str(outp))
+                checkpoint_done = (
+                    not args.no_resume
+                    and _checkpoint_is_done(ckpt_dir, key, str(outp))
+                )
+                record = make_batch_item_record(
+                    inp,
+                    str(outp),
+                    config=config,
+                    skip_existing=args.skip_existing,
+                    checkpoint_done=checkpoint_done,
+                )
+                records.append(record)
                 print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
+                if record["planned_result"] == STATUS_SKIPPED_EXISTING:
+                    print(f"[skip] {src.name} (output exists)")
+                    finish_batch_item(
+                        record,
+                        STATUS_SKIPPED_EXISTING,
+                        message="Output already exists",
+                    )
+                    continue
+                if record["planned_result"] == STATUS_CHECKPOINT_DONE:
+                    print(f"[skip] {src.name} (checkpoint)")
+                    finish_batch_item(
+                        record,
+                        STATUS_CHECKPOINT_DONE,
+                        message="Checkpoint already complete",
+                    )
+                    continue
+                started = time.monotonic()
                 try:
-                    ok = _process_one(inp, outp)
+                    ok = _process_one(inp, str(outp))
                 except Exception as exc:
                     logger.error(f"Failed on {src.name}: {exc}")
                     ok = False
-                if not ok:
-                    failures += 1
+                    finish_batch_item(
+                        record,
+                        STATUS_FAILED,
+                        message=str(exc),
+                        elapsed_seconds=time.monotonic() - started,
+                    )
+                else:
+                    finish_batch_item(
+                        record,
+                        STATUS_HARDCODED_PROCESSED if ok else STATUS_FAILED,
+                        message="Processed" if ok else "Processing failed",
+                        elapsed_seconds=time.monotonic() - started,
+                    )
         except KeyboardInterrupt:
             print("\n[batch] Interrupted by user -- partial results kept on disk.")
+            _cancel_pending_records(records)
+            interrupted = True
+        finally:
+            _write_cli_batch_reports(
+                out_dir,
+                records,
+                kind="hardcoded-cleanup",
+                started_at=batch_started_at,
+            )
+        if interrupted:
             sys.exit(130)
+        failures = sum(1 for record in records if record.get("status") == STATUS_FAILED)
         succeeded = len(inputs) - failures
         print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded")
         if failures:
