@@ -64,6 +64,18 @@ def _load_fastdvdnet(weight_path: str):
                 f"using cv2 NLM fallback."
             )
             return None
+        try:
+            from backend.adapter_manifest import (
+                log_adapter_verification,
+                verify_adapter_path,
+            )
+            verification = verify_adapter_path("fastdvdnet", weight_path)
+            log_adapter_verification(verification)
+            if not verification.allowed:
+                return None
+        except Exception as exc:
+            logger.warning(f"FastDVDnet weight verification failed: {exc}")
+            return None
         # The upstream FastDVDnet ships its own model definition; we
         # import the module if the user has it on PYTHONPATH. The repo
         # itself is intentionally NOT vendored to avoid the ~5 MB
@@ -152,6 +164,19 @@ def _load_transnetv2(weight_path: str):
                 f"TransNetV2 weight not found at {weight_path!r}"
             )
             return None
+        if weight_path:
+            try:
+                from backend.adapter_manifest import (
+                    log_adapter_verification,
+                    verify_adapter_path,
+                )
+                verification = verify_adapter_path("transnetv2", weight_path)
+                log_adapter_verification(verification)
+                if not verification.allowed:
+                    return None
+            except Exception as exc:
+                logger.warning(f"TransNetV2 weight verification failed: {exc}")
+                return None
         try:
             from transnetv2 import TransNetV2  # type: ignore
         except ImportError:

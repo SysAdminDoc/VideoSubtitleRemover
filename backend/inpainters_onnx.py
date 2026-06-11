@@ -42,7 +42,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def _maybe_session(model_path: str, providers=None):
+def _maybe_session(model_path: str, providers=None, adapter_name: str = "lama-onnx"):
     """Lazy-init an onnxruntime InferenceSession; returns None on any
     failure so the caller falls back to cv2."""
     try:
@@ -55,6 +55,18 @@ def _maybe_session(model_path: str, providers=None):
         return None
     if not Path(model_path).is_file():
         logger.warning(f"ONNX model not found at {model_path!r}")
+        return None
+    try:
+        from backend.adapter_manifest import (
+            log_adapter_verification,
+            verify_adapter_path,
+        )
+        verification = verify_adapter_path(adapter_name, model_path)
+        log_adapter_verification(verification)
+        if not verification.allowed:
+            return None
+    except Exception as exc:
+        logger.warning(f"Adapter security verification failed for {model_path!r}: {exc}")
         return None
     try:
         if providers is None:
@@ -151,7 +163,10 @@ class LamaOnnxInpainter:
         except Exception as exc:
             logger.debug(f"TensorRT path skipped: {exc}")
         providers += _providers_for_device(device)
-        self._session = _maybe_session(model_path, providers) if model_path else None
+        self._session = (
+            _maybe_session(model_path, providers, "lama-onnx")
+            if model_path else None
+        )
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self._session is None:
@@ -203,7 +218,10 @@ class MiGanInpainter:
         self.config = config
         model_path = os.environ.get("VSR_MIGAN_ONNX", "")
         providers = _providers_for_device(device)
-        self._session = _maybe_session(model_path, providers) if model_path else None
+        self._session = (
+            _maybe_session(model_path, providers, "migan-onnx")
+            if model_path else None
+        )
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self._session is None:

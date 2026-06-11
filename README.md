@@ -166,6 +166,13 @@ their model `opset_import` metadata before creating a DirectML session; if
 the default ONNX opset is newer than DirectML's supported ceiling, VSR uses
 the CPU provider instead of failing at session creation.
 
+Optional model paths such as `VSR_LAMA_ONNX`, `VSR_MIGAN_ONNX`,
+`VSR_FASTDVDNET`, and `VSR_TRANSNETV2` are checked against a local adapter
+manifest before loading. Known SHA-256 mismatches fall back instead of
+deserializing the file. Legacy adapters without a pinned hash still run, but
+new strict adapters can require a known hash unless
+`VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded in release evidence.
+
 ## CLI Usage
 
 Process files from the command line:
@@ -385,6 +392,7 @@ VideoSubtitleRemover/
 |   |-- cli.py                # Command-line entry point
 |   |-- inpainters/           # Built-in STTN/LaMa/ProPainter/AUTO paths
 |   |-- presets.py            # Shared preset library (GUI + CLI)
+|   |-- adapter_manifest.py   # Optional model provenance and hash policy
 |   `-- model_hashes.py       # Vendored SHA-256 weight hashes
 |-- docs/
 |   |-- architecture.md       # Pipeline map for new contributors
