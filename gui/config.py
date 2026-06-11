@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import sys
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -29,6 +30,16 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
 
+# Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
+# semantics change. _migrate_settings() must learn the upgrade path so
+# users never silently lose state on an in-place upgrade.
+# Format 1 -> 2 (B-1, v3.13 GUI wiring pass): added loudnorm_target,
+# multi_audio_passthrough, decode_hw_accel, prefetch_decode,
+# prefetch_queue_size, input_fps, quality_report_sheet,
+# remove_subtitles, remove_chyrons, chyron_min_hits, karaoke_grouping,
+# karaoke_x_gap_px, karaoke_y_overlap. All have backend-default values
+# so a missing key in a format-1 file resolves to the same behaviour
+# users saw before the bump -- no field-rename migration needed.
 VSR_SETTINGS_FORMAT = 2
 
 # -- Enums ------------------------------------------------------------------
@@ -410,10 +421,14 @@ class ProcessingConfig:
         if codec not in {"h264", "h265", "av1"}:
             codec = "h264"
         self.output_codec = codec
-        self.loudnorm_target = _coerce_float(
-            self.loudnorm_target, 0.0, -70.0, 0.0)
-        if self.loudnorm_target != 0.0 and self.loudnorm_target > -5.0:
-            self.loudnorm_target = -5.0
+        # Match backend semantics: 0.0 disables; anything outside the
+        # LUFS range ffmpeg's loudnorm accepts (-70..-5) resets to 0.0
+        # rather than clamping to a target the user never asked for.
+        target = _coerce_float(self.loudnorm_target, 0.0)
+        if target == 0.0 or -70.0 <= target <= -5.0:
+            self.loudnorm_target = target
+        else:
+            self.loudnorm_target = 0.0
         self.multi_audio_passthrough = _coerce_bool(
             self.multi_audio_passthrough, True)
         accel = _coerce_text(self.decode_hw_accel, "off", 16).lower()
@@ -572,14 +587,37 @@ def _migrate_settings(data: dict) -> dict:
     return data
 
 
+_DEFAULT_SETTINGS_FILE = SETTINGS_FILE
+
+
+def _settings_path() -> Path:
+    """Resolve the settings file at call time.
+
+    The monolith-era contract lets callers (tests, user scripts) rebind
+    ``VideoSubtitleRemover.SETTINGS_FILE`` to redirect settings I/O.
+    After the RM-114 extraction that name is a separate binding from
+    this module's global, so honour an override on either module:
+    a patched ``gui.config.SETTINGS_FILE`` wins, then a rebound
+    entry-point attribute, then the default.
+    """
+    if SETTINGS_FILE != _DEFAULT_SETTINGS_FILE:
+        return Path(SETTINGS_FILE)
+    mod = sys.modules.get("VideoSubtitleRemover")
+    override = getattr(mod, "SETTINGS_FILE", None) if mod is not None else None
+    if override is not None:
+        return Path(override)
+    return Path(SETTINGS_FILE)
+
+
 def load_settings() -> ProcessingConfig:
+    settings_file = _settings_path()
     try:
-        if SETTINGS_FILE.exists():
-            data = _read_json_object(SETTINGS_FILE, "settings")
+        if settings_file.exists():
+            data = _read_json_object(settings_file, "settings")
             if not data:
                 return ProcessingConfig()
             data = _migrate_settings(data)
-            logger.info(f"Settings loaded from {SETTINGS_FILE}")
+            logger.info(f"Settings loaded from {settings_file}")
             return ProcessingConfig.from_dict(data)
     except Exception as e:
         logger.warning(f"Could not load settings: {e}")
@@ -587,9 +625,10 @@ def load_settings() -> ProcessingConfig:
 
 
 def save_settings(config: ProcessingConfig):
+    settings_file = _settings_path()
     try:
-        _write_json_atomic(SETTINGS_FILE, config.normalized().to_dict())
-        logger.info(f"Settings saved to {SETTINGS_FILE}")
+        _write_json_atomic(settings_file, config.normalized().to_dict())
+        logger.info(f"Settings saved to {settings_file}")
     except Exception as e:
         logger.warning(f"Could not save settings: {e}")
 

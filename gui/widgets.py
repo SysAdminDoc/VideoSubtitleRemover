@@ -7,11 +7,12 @@ import logging
 import os
 import sys
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from gui.theme import Theme, f, mono
-from gui.config import ProcessingStatus, QueueItem, STATUS_UI
+from gui.config import ProcessingStatus, QueueItem, STATUS_UI, status_ui
 
 try:
     from PIL import Image, ImageTk
