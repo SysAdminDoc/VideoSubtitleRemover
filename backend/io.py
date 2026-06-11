@@ -5,8 +5,9 @@ touches the filesystem or shells out to ffmpeg/ffprobe but is not part
 of the per-frame inpainting pipeline:
 
 - ``_open_capture``: dispatch entry point used by ``SubtitleRemover``.
-  Routes directories to ``_FrameSequenceCapture``, ``.vpy`` to the
-  VapourSynth bridge, NVIDIA users to PyNvVideoCodec when opted in.
+  Routes directories to ``_FrameSequenceCapture``, trusted ``.vpy`` input
+  to the VapourSynth bridge when ``VSR_VAPOURSYNTH=1``, and NVIDIA users
+  to PyNvVideoCodec when opted in.
 - ``_FrameSequenceCapture`` / ``_PrefetchReader`` /
   ``_LosslessIntermediateWriter``: cv2.VideoCapture-shaped adapters.
 - ffprobe helpers (codec banner, audio stream count, duration,
@@ -322,8 +323,9 @@ class _FrameSequenceCapture:
 def _open_capture(path: str, hw_accel: str = "off", *,
                   input_fps: float = 24.0):
     """Open a frame source. Directory -> ``_FrameSequenceCapture``,
-    ``.vpy`` -> VapourSynth bridge (when installed), VSR_PYNVVIDEOCODEC=1
-    -> PyNvVideoCodec, else cv2.VideoCapture (optionally HW-accelerated).
+    trusted ``.vpy`` -> VapourSynth bridge when ``VSR_VAPOURSYNTH=1``,
+    VSR_PYNVVIDEOCODEC=1 -> PyNvVideoCodec, else cv2.VideoCapture
+    (optionally HW-accelerated).
     """
     if Path(path).is_dir():
         logger.info(f"Frame-sequence input detected at {path} (fps={input_fps})")
