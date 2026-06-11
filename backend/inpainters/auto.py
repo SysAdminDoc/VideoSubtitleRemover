@@ -25,7 +25,7 @@ class AutoInpainter(BaseInpainter):
 
     def __init__(self, device: str = "cuda:0", config=None):
         self.device = device
-        from backend.processor import ProcessingConfig
+        from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
         self._sttn = STTNInpainter(device, self.config)
         self._lama: Optional[LAMAInpainter] = None

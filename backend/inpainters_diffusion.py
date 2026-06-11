@@ -33,9 +33,9 @@ import cv2
 import numpy as np
 
 from backend.inpainter_registry import register
-from backend.processor import (
+from backend.config import ProcessingConfig
+from backend.inpainters import (
     BaseInpainter,
-    ProcessingConfig,
     _cv2_inpaint,
     _edge_ring_color_correct,
     _feather_blend,
