@@ -65,6 +65,15 @@ def _maybe_session(model_path: str, providers=None):
         return None
 
 
+def _providers_for_device(device: str) -> List:
+    """Return ONNX Runtime providers for the requested VSR device token."""
+    if device == "directml":
+        return ["DmlExecutionProvider", "CPUExecutionProvider"]
+    if "cuda" in device:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
 def _ensure_multiple_of(value: int, multiple: int) -> int:
     """Round `value` up to the next multiple of `multiple`. ONNX
     inpainters typically require dimensions divisible by 8."""
@@ -104,10 +113,7 @@ class LamaOnnxInpainter:
                     }))
         except Exception as exc:
             logger.debug(f"TensorRT path skipped: {exc}")
-        providers += (
-            ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if "cuda" in device else ["CPUExecutionProvider"]
-        )
+        providers += _providers_for_device(device)
         self._session = _maybe_session(model_path, providers) if model_path else None
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
@@ -159,10 +165,7 @@ class MiGanInpainter:
         self.device = device
         self.config = config
         model_path = os.environ.get("VSR_MIGAN_ONNX", "")
-        providers = (
-            ["CUDAExecutionProvider", "CPUExecutionProvider"]
-            if "cuda" in device else ["CPUExecutionProvider"]
-        )
+        providers = _providers_for_device(device)
         self._session = _maybe_session(model_path, providers) if model_path else None
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:

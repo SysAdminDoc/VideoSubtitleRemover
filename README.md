@@ -43,7 +43,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Inpaint Preview** -- "Preview cleanup" button runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **~50 Language Support** -- English / Chinese / Japanese / Korean / European, plus Thai, Vietnamese, Polish, Greek, Ukrainian, Filipino, Hebrew, Czech, and more
-- **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
+- **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)

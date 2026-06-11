@@ -31,8 +31,9 @@ Pillow>=12.1.1
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
 # (Run_VSR_Pro.bat / setup.py auto-detect 50-series and pick cu128 for you.)
 
-# For AMD/Intel (DirectML):
-# pip install torch-directml==0.2.5.dev240914
+# For AMD/Intel (DirectML via ONNX Runtime):
+# pip install onnxruntime-directml>=1.18.0
+# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # For CPU only:

@@ -1017,14 +1017,18 @@ def detect_gpu() -> List[dict]:
     # If no NVIDIA GPU, check for DirectML support
     if not gpus:
         try:
-            import torch_directml
+            import onnxruntime as ort
+            providers = set(getattr(ort, "get_available_providers", lambda: [])())
+        except Exception:
+            providers = set()
+        if "DmlExecutionProvider" in providers:
             gpus.append({
                 "index": 0,
                 "name": "DirectML Device",
-                "memory": "Unknown",
+                "memory": "ONNX Runtime",
                 "type": "DirectML"
             })
-        except ImportError:
+        else:
             pass
 
     return gpus

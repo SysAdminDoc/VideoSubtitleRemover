@@ -288,6 +288,46 @@ class DecodeHwAccelCoerceTests(unittest.TestCase):
         self.assertEqual(cfg.decode_hw_accel, "d3d11")
 
 
+class DirectMlProviderTests(unittest.TestCase):
+    def test_gui_detects_directml_via_onnxruntime_provider(self):
+        from unittest import mock
+        fake_ort = SimpleNamespace(
+            get_available_providers=lambda: [
+                "DmlExecutionProvider", "CPUExecutionProvider"
+            ]
+        )
+        with mock.patch.object(gui.subprocess, "run", side_effect=FileNotFoundError):
+            with mock.patch.dict(sys.modules, {"onnxruntime": fake_ort}):
+                gpus = gui.detect_gpu()
+
+        self.assertEqual(len(gpus), 1)
+        self.assertEqual(gpus[0]["type"], "DirectML")
+        self.assertEqual(gpus[0]["memory"], "ONNX Runtime")
+
+    def test_gui_ignores_onnxruntime_without_dml_provider(self):
+        from unittest import mock
+        fake_ort = SimpleNamespace(
+            get_available_providers=lambda: ["CPUExecutionProvider"]
+        )
+        with mock.patch.object(gui.subprocess, "run", side_effect=FileNotFoundError):
+            with mock.patch.dict(sys.modules, {"onnxruntime": fake_ort}):
+                self.assertEqual(gui.detect_gpu(), [])
+
+    def test_onnx_inpainter_provider_order_for_directml(self):
+        from backend.inpainters_onnx import _providers_for_device
+        self.assertEqual(
+            _providers_for_device("directml"),
+            ["DmlExecutionProvider", "CPUExecutionProvider"],
+        )
+
+    def test_easyocr_gpu_flag_is_cuda_only(self):
+        det = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
+        det.device = "directml"
+        self.assertFalse(det._is_gpu_device())
+        det.device = "cuda:0"
+        self.assertTrue(det._is_gpu_device())
+
+
 class MultiAudioPassthroughTests(unittest.TestCase):
     def test_default_is_on(self):
         cfg = processor.normalize_processing_config(processor.ProcessingConfig())
