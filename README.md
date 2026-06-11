@@ -353,6 +353,8 @@ to a bug report.
 - Delete `venv` folder and re-run setup
 - Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
+- If the log warns that OpenCV bundles libpng older than `1.6.54`, avoid
+  opening untrusted PNG files until `opencv-python` ships a fixed wheel
 
 </details>
 

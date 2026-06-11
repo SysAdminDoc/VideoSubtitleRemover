@@ -1162,6 +1162,42 @@ class CachedRemoverHotSwapNormalizationTests(unittest.TestCase):
         self.assertTrue(0.1 <= cfg.detection_threshold <= 1.0)
 
 
+class RuntimeSecurityCheckTests(unittest.TestCase):
+    def test_parse_libpng_version_from_opencv_build_info(self):
+        from backend.security_checks import parse_libpng_version
+
+        info = "    PNG:                         build (ver 1.6.53)"
+        self.assertEqual(parse_libpng_version(info), (1, 6, 53))
+
+    def test_libpng_warning_fires_below_fixed_floor(self):
+        from unittest import mock
+        from backend.security_checks import warn_if_vulnerable_opencv_libpng
+
+        fake_cv2 = SimpleNamespace(
+            getBuildInformation=lambda: "PNG: build (ver 1.6.53)"
+        )
+        logger = mock.Mock()
+        with mock.patch.dict(sys.modules, {"cv2": fake_cv2}):
+            message = warn_if_vulnerable_opencv_libpng(logger)
+
+        self.assertIn("CVE-2026-22801", message)
+        logger.warning.assert_called_once()
+
+    def test_libpng_warning_silent_at_fixed_floor(self):
+        from unittest import mock
+        from backend.security_checks import warn_if_vulnerable_opencv_libpng
+
+        fake_cv2 = SimpleNamespace(
+            getBuildInformation=lambda: "PNG: build (ver 1.6.54)"
+        )
+        logger = mock.Mock()
+        with mock.patch.dict(sys.modules, {"cv2": fake_cv2}):
+            message = warn_if_vulnerable_opencv_libpng(logger)
+
+        self.assertIsNone(message)
+        logger.warning.assert_not_called()
+
+
 class QualityReportMaskedRoiTests(unittest.TestCase):
     """B-3: union-mask bbox accumulator + ROI-cropped PSNR/SSIM metric so
     a bad inpaint is no longer masked by 80-95% of unchanged pixels."""
