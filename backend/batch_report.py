@@ -155,12 +155,24 @@ def finish_batch_item(record: dict, status: str, *,
     return record
 
 
+def _redact_record(record: dict) -> dict:
+    """Strip absolute paths from a batch record. Filenames stay; full
+    paths are opt-in local-debug fields only."""
+    redacted = dict(record)
+    redacted.pop("input", None)
+    redacted.pop("output", None)
+    redacted.pop("output_parent_free_bytes", None)
+    return redacted
+
+
 def write_batch_reports(out_dir: Path, records: list[dict], *,
                         kind: str,
                         started_at: _dt.datetime,
-                        completed_at: Optional[_dt.datetime] = None) -> tuple[Path, Path]:
+                        completed_at: Optional[_dt.datetime] = None,
+                        redact_paths: bool = True) -> tuple[Path, Path]:
     started = _as_utc(started_at)
     completed = _as_utc(completed_at or _dt.datetime.now(_dt.timezone.utc))
+    files = [_redact_record(r) for r in records] if redact_paths else records
     payload = {
         "schema": "vsr.batch_summary.v1",
         "kind": kind,
@@ -169,7 +181,7 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
         "elapsed_seconds": round(max(0.0, (completed - started).total_seconds()), 3),
         "count": len(records),
         "counts": _counts(records),
-        "files": records,
+        "files": files,
     }
     out = Path(out_dir)
     json_path = out / "vsr-batch-summary.json"
