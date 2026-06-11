@@ -186,6 +186,7 @@ decode, inpainting, or video re-encode:
 
 ```bash
 python -m backend.processor -i input.mkv --soft-subtitle-dry-run
+python -m backend.processor --pattern "inputs/*.mkv" --soft-subtitle-dry-run --soft-subtitle-plan-json soft-plan.json
 python -m backend.processor -i input.mkv -o stripped.mkv --strip-soft-subtitles
 ```
 
@@ -221,6 +222,7 @@ python -m backend.processor -i input.mkv -o stripped.mkv --strip-soft-subtitles
 | `--ffmpeg-whisper-model` | Local whisper.cpp ggml model for FFmpeg Whisper | - |
 | `--ffmpeg-whisper-queue` | FFmpeg whisper queue size in seconds | 3.0 |
 | `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action without loading OCR | Off |
+| `--soft-subtitle-plan-json` | Write soft-subtitle dry-run preflight details as JSON | - |
 | `--strip-soft-subtitles` | Stream-copy remux that removes embedded subtitle tracks | Off |
 | `--keep-soft-subtitles` | Stream-copy remux that keeps embedded subtitle tracks | Off |
 | `--burned-in-only` | Ignore embedded tracks and run visual cleanup normally | Off |
