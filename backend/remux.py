@@ -48,12 +48,12 @@ def build_soft_subtitle_remux_cmd(
     if resolved_action == SoftSubtitleAction.KEEP_ALL:
         cmd += ["-map", "0"]
     elif resolved_action == SoftSubtitleAction.STRIP:
-        cmd += ["-map", "0", "-map", "-0:s"]
+        cmd += ["-map", "0", "-map", "-0:s?"]
     elif resolved_action == SoftSubtitleAction.KEEP_SELECTED:
         selected = _normalize_stream_indices(keep_stream_indices)
         if not selected:
             raise ValueError("keep_selected requires at least one stream index")
-        cmd += ["-map", "0", "-map", "-0:s"]
+        cmd += ["-map", "0", "-map", "-0:s?"]
         for stream_index in selected:
             cmd += ["-map", f"0:{stream_index}"]
     cmd += ["-c", "copy", str(output_path)]

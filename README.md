@@ -181,6 +181,14 @@ local whisper.cpp ggml model without Python ML dependencies:
 python -m backend.processor -i input.mp4 -o output.mp4 --whisper-fallback --whisper-backend ffmpeg --ffmpeg-whisper-model C:\models\ggml-base.en.bin
 ```
 
+Embedded subtitle tracks can be inspected or remuxed without OCR, frame
+decode, inpainting, or video re-encode:
+
+```bash
+python -m backend.processor -i input.mkv --soft-subtitle-dry-run
+python -m backend.processor -i input.mkv -o stripped.mkv --strip-soft-subtitles
+```
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-i`, `--input` | Input file path | Required |
@@ -212,6 +220,10 @@ python -m backend.processor -i input.mp4 -o output.mp4 --whisper-fallback --whis
 | `--whisper-model` | faster-whisper model size | tiny |
 | `--ffmpeg-whisper-model` | Local whisper.cpp ggml model for FFmpeg Whisper | - |
 | `--ffmpeg-whisper-queue` | FFmpeg whisper queue size in seconds | 3.0 |
+| `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action without loading OCR | Off |
+| `--strip-soft-subtitles` | Stream-copy remux that removes embedded subtitle tracks | Off |
+| `--keep-soft-subtitles` | Stream-copy remux that keeps embedded subtitle tracks | Off |
+| `--burned-in-only` | Ignore embedded tracks and run visual cleanup normally | Off |
 | `--quality-report` | Compute PSNR/SSIM and VMAF when libvmaf is available | Off |
 | `--quality-sheet` | Side-by-side comparison PNG | Off |
 | `--validate-config` | Print resolved config and exit | Off |

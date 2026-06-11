@@ -20,7 +20,13 @@ import shutil
 import sys
 from pathlib import Path
 
-from backend.io import _choose_available_output_path, _path_key, _write_text_atomic
+from backend.io import (
+    _choose_available_output_path,
+    _path_key,
+    _probe_subtitle_streams,
+    _write_text_atomic,
+)
+from backend.remux import SoftSubtitleAction, remux_soft_subtitles
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +85,41 @@ def _apply_auto_band_override(remover, input_path: str, *, auto_band: bool,
     band = remover.detect_subtitle_band(input_path)
     remover.config.subtitle_area = band
     return band
+
+
+def _soft_subtitle_action(args):
+    if args.strip_soft_subtitles:
+        return SoftSubtitleAction.STRIP
+    if args.keep_soft_subtitles:
+        return SoftSubtitleAction.KEEP_ALL
+    return None
+
+
+def _print_soft_subtitle_plan(input_path: str, action_label: str) -> None:
+    streams = _probe_subtitle_streams(input_path)
+    source = Path(input_path).name
+    if not streams:
+        print(f"[soft-subtitles] {source}: no embedded subtitle streams | action={action_label}")
+        return
+    print(f"[soft-subtitles] {source}: {len(streams)} stream(s) | action={action_label}")
+    for stream in streams:
+        language = stream.language or "-"
+        title = stream.title or "-"
+        default = "yes" if stream.default else "no"
+        forced = "yes" if stream.forced else "no"
+        print(
+            "  "
+            f"stream={stream.index} | codec={stream.codec_name or '-'} | "
+            f"lang={language} | title={title} | default={default} | forced={forced}"
+        )
+
+
+def _run_soft_subtitle_only(input_path: str, output_path: str,
+                            action: SoftSubtitleAction) -> bool:
+    _print_soft_subtitle_plan(input_path, action.value)
+    remux_soft_subtitles(input_path, output_path, action=action)
+    print(f"[soft-subtitles] wrote {output_path}")
+    return True
 
 
 def main():
@@ -240,6 +281,14 @@ def main():
                        help="Bounded prefetch queue size in frames.")
     parser.add_argument("--skip-existing", action="store_true",
                        help="Skip inputs whose output path already exists.")
+    parser.add_argument("--soft-subtitle-dry-run", action="store_true",
+                       help="Print embedded subtitle tracks and planned action, then exit.")
+    parser.add_argument("--strip-soft-subtitles", action="store_true",
+                       help="Fast remux that removes embedded subtitle tracks without OCR.")
+    parser.add_argument("--keep-soft-subtitles", action="store_true",
+                       help="Fast remux that keeps embedded subtitle tracks without OCR.")
+    parser.add_argument("--burned-in-only", action="store_true",
+                       help="Ignore embedded subtitle tracks and run burned-in cleanup normally.")
     parser.add_argument("--validate-config", action="store_true",
                        help="Print the resolved ProcessingConfig as JSON and exit.")
     parser.add_argument("--json-log", metavar="PATH",
@@ -264,6 +313,21 @@ def main():
         for source, name, desc in rows:
             print(f"[{source:<8}] {name.ljust(width)}  {desc}")
         sys.exit(0)
+
+    soft_mode_count = sum(
+        1 for enabled in (
+            args.strip_soft_subtitles,
+            args.keep_soft_subtitles,
+            args.burned_in_only,
+        ) if enabled
+    )
+    if soft_mode_count > 1:
+        parser.error(
+            "--strip-soft-subtitles, --keep-soft-subtitles, and "
+            "--burned-in-only are mutually exclusive"
+        )
+    soft_action = _soft_subtitle_action(args)
+    dry_run_only = args.soft_subtitle_dry_run
 
     if args.preset:
         from backend.presets import preset_fields as _preset_fields
@@ -306,9 +370,9 @@ def main():
             parser.error("one of --input or --pattern is required")
         if args.input and args.pattern:
             parser.error("--input and --pattern are mutually exclusive")
-        if args.pattern and not args.out_dir:
+        if args.pattern and not args.out_dir and not dry_run_only:
             parser.error("--pattern requires --out-dir")
-        if args.input and not args.output:
+        if args.input and not args.output and not dry_run_only:
             parser.error("--input requires --output")
     if not 0.1 <= args.threshold <= 1.0:
         parser.error("--threshold must be between 0.1 and 1.0")
@@ -494,6 +558,66 @@ def main():
         print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
         sys.exit(0)
 
+    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
+
+    if args.soft_subtitle_dry_run:
+        planned = (
+            soft_action.value if soft_action is not None
+            else ("burned-in-cleanup" if args.burned_in_only else "inspect")
+        )
+        if args.pattern:
+            from glob import glob
+            inputs = sorted(glob(args.pattern, recursive=True))
+            inputs = [p for p in inputs if Path(p).is_file()]
+            if not inputs:
+                parser.error(f"No files matched pattern: {args.pattern}")
+            for inp in inputs:
+                _print_soft_subtitle_plan(inp, planned)
+        else:
+            _print_soft_subtitle_plan(args.input, planned)
+        sys.exit(0)
+
+    if soft_action is not None:
+        if args.pattern:
+            from glob import glob
+            inputs = sorted(glob(args.pattern, recursive=True))
+            inputs = [p for p in inputs if Path(p).is_file()]
+            if not inputs:
+                parser.error(f"No files matched pattern: {args.pattern}")
+            out_dir = Path(args.out_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            failures = 0
+            reserved_outputs: set = set()
+            for i, inp in enumerate(inputs, 1):
+                src = Path(inp)
+                outp = str(_choose_available_output_path(
+                    out_dir / f"{src.stem}_soft_subtitles{src.suffix}",
+                    reserved_outputs,
+                ))
+                reserved_outputs.add(_path_key(outp))
+                print(f"\n[soft-subtitles] ({i}/{len(inputs)}) {src.name}")
+                try:
+                    if args.skip_existing and Path(outp).exists():
+                        print(f"[skip] {src.name} (output exists)")
+                        continue
+                    _run_soft_subtitle_only(inp, outp, soft_action)
+                except Exception as exc:
+                    logger.error(f"Soft-subtitle remux failed on {src.name}: {exc}")
+                    failures += 1
+            sys.exit(0 if failures == 0 else 1)
+        try:
+            if args.skip_existing and Path(args.output).exists():
+                print(f"[skip] {Path(args.input).name} (output exists)")
+                sys.exit(0)
+            _run_soft_subtitle_only(args.input, args.output, soft_action)
+            sys.exit(0)
+        except KeyboardInterrupt:
+            print("\n[soft-subtitles] Interrupted by user.")
+            sys.exit(130)
+        except Exception as exc:
+            logger.error(f"Soft-subtitle remux failed: {exc}")
+            sys.exit(1)
+
     remover = SubtitleRemover(config)
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
 
@@ -505,7 +629,6 @@ def main():
     if config.preserve_audio and not ffmpeg_ready:
         print("[note] FFmpeg is not available, so outputs will be saved without original audio.")
 
-    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
     ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else _default_checkpoint_dir()
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     base_subtitle_area = config.subtitle_area
