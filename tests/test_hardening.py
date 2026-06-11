@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -1463,10 +1464,10 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
         )
         self.assertIn("-map", cmd)
         self.assertIn("0", cmd)
-        self.assertIn("-0:s", cmd)
+        self.assertIn("-0:s?", cmd)
         self.assertIn("-c", cmd)
         self.assertIn("copy", cmd)
-        self.assertLess(cmd.index("-0:s"), cmd.index("-c"))
+        self.assertLess(cmd.index("-0:s?"), cmd.index("-c"))
 
     def test_build_keep_selected_cmd_maps_selected_global_streams(self):
         from backend.remux import SoftSubtitleAction, build_soft_subtitle_remux_cmd
@@ -1477,12 +1478,12 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
             action=SoftSubtitleAction.KEEP_SELECTED,
             keep_stream_indices=[4, 2, 4],
         )
-        self.assertIn("-0:s", cmd)
+        self.assertIn("-0:s?", cmd)
         maps = [
             cmd[i + 1] for i, token in enumerate(cmd[:-1])
             if token == "-map"
         ]
-        self.assertEqual(maps, ["0", "-0:s", "0:2", "0:4"])
+        self.assertEqual(maps, ["0", "-0:s?", "0:2", "0:4"])
 
     def test_keep_selected_requires_stream_index(self):
         from backend.remux import SoftSubtitleAction, build_soft_subtitle_remux_cmd
@@ -1523,7 +1524,7 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
         allocate.assert_called_once_with(str(final_path))
         cmd = run.call_args.args[0]
         self.assertEqual(cmd[-1], str(temp_path))
-        self.assertIn("-0:s", cmd)
+        self.assertIn("-0:s?", cmd)
         self.assertTrue(run.call_args.kwargs["check"])
         promote.assert_called_once_with(temp_path, final_path)
         clean.assert_called_once_with(temp_path)
@@ -1564,6 +1565,85 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
 
             self.assertEqual(_probe_subtitle_streams(str(output)), [])
             self.assertEqual(_probe_codec_for_log(str(output)), source_codec)
+
+
+class CliSoftSubtitleTests(unittest.TestCase):
+    def _run_cli(self, args):
+        from unittest import mock
+        from backend import cli as _cli
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(sys, "argv", ["vsr"] + args):
+            with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as caught:
+                    _cli.main()
+        return caught.exception.code, stdout.getvalue(), stderr.getvalue()
+
+    def test_soft_subtitle_dry_run_does_not_construct_remover(self):
+        from unittest import mock
+        from backend import cli as _cli
+
+        stream = processor.SubtitleStreamInfo(
+            index=2,
+            codec_name="subrip",
+            language="eng",
+            title="SDH",
+            default=True,
+            forced=False,
+        )
+        with mock.patch.object(_cli, "_probe_subtitle_streams", return_value=[stream]):
+            with mock.patch(
+                "backend.processor.SubtitleRemover",
+                side_effect=AssertionError("heavy backend should not load"),
+            ):
+                code, stdout, _stderr = self._run_cli([
+                    "--input", "movie.mkv",
+                    "--soft-subtitle-dry-run",
+                ])
+
+        self.assertEqual(code, 0)
+        self.assertIn("action=inspect", stdout)
+        self.assertIn("stream=2", stdout)
+        self.assertIn("codec=subrip", stdout)
+        self.assertIn("lang=eng", stdout)
+        self.assertIn("title=SDH", stdout)
+        self.assertIn("default=yes", stdout)
+
+    def test_strip_soft_subtitles_remuxes_without_remover(self):
+        from unittest import mock
+        from backend import cli as _cli
+        from backend.remux import SoftSubtitleAction
+
+        with mock.patch.object(_cli, "_probe_subtitle_streams", return_value=[]):
+            with mock.patch.object(_cli, "remux_soft_subtitles") as remux:
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    side_effect=AssertionError("heavy backend should not load"),
+                ):
+                    code, stdout, _stderr = self._run_cli([
+                        "--input", "movie.mkv",
+                        "--output", "out.mkv",
+                        "--strip-soft-subtitles",
+                    ])
+
+        self.assertEqual(code, 0)
+        remux.assert_called_once_with(
+            "movie.mkv",
+            "out.mkv",
+            action=SoftSubtitleAction.STRIP,
+        )
+        self.assertIn("action=strip", stdout)
+
+    def test_soft_subtitle_modes_are_mutually_exclusive(self):
+        code, _stdout, stderr = self._run_cli([
+            "--input", "movie.mkv",
+            "--output", "out.mkv",
+            "--strip-soft-subtitles",
+            "--keep-soft-subtitles",
+        ])
+        self.assertEqual(code, 2)
+        self.assertIn("mutually exclusive", stderr)
 
 
 class LanguagePickerTests(unittest.TestCase):
