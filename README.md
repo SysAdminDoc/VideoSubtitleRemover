@@ -199,6 +199,13 @@ python -m backend.processor --pattern "inputs/*.mkv" --soft-subtitle-dry-run --s
 python -m backend.processor -i input.mkv -o stripped.mkv --strip-soft-subtitles
 ```
 
+When the input is a directory of images, `--output-frames` writes the cleaned
+frames as individual PNGs instead of encoding a video:
+
+```bash
+python -m backend.processor -i frames_dir/ -o cleaned_dir/ --output-frames
+```
+
 In the GUI, queued videos with embedded subtitle tracks show a track summary;
 right-click the item to fast strip, fast remux/keep, or continue with
 burned-in cleanup.
@@ -255,6 +262,7 @@ review-needed outputs. A failed gate changes the batch row status to
 | `--validate-config` | Print resolved config and exit | Off |
 | `--skip-existing` | Skip files whose output already exists | Off |
 | `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
+| `--output-frames` | Write cleaned frames as individual PNGs instead of a video | Off |
 | `--json-log PATH` | Append a structured JSON-line log | - |
 
 ## Configuration
