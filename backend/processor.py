@@ -69,6 +69,8 @@ from backend.encoder import _detect_hw_encoder
 from backend.quality import (
     _ssim,
     compute_vmaf,
+    compute_extended_metrics,
+    temporal_consistency_score,
     residual_text_score,
     temporal_flicker_score,
 )
@@ -680,6 +682,31 @@ class SubtitleRemover:
                     )
                 except Exception as exc:
                     logger.warning(f"Quality sheet write failed: {exc}")
+            # RM-102: opt-in perceptual metrics (LPIPS, DISTS) via pyiqa.
+            # Zero-cost when pyiqa is not installed -- the function
+            # returns {} and these keys stay None in the report.
+            extended = {}
+            temporal_consistency = None
+            if roi_ready and pairs:
+                x1, y1, x2, y2 = roi
+                x1 = max(0, min(pairs[0][1].shape[1] - 1, x1))
+                x2 = max(x1 + 1, min(pairs[0][1].shape[1], x2))
+                y1 = max(0, min(pairs[0][1].shape[0] - 1, y1))
+                y2 = max(y1 + 1, min(pairs[0][1].shape[0], y2))
+                roi_pairs = [
+                    (a[y1:y2, x1:x2], b[y1:y2, x1:x2])
+                    for (_, a, b, _, _) in pairs
+                    if a[y1:y2, x1:x2].size > 0
+                ]
+                extended = compute_extended_metrics(roi_pairs)
+                cleaned_roi_frames = [b for (_, b) in roi_pairs]
+                temporal_consistency = temporal_consistency_score(
+                    cleaned_roi_frames)
+            elif pairs:
+                extended = compute_extended_metrics(
+                    [(a, b) for (_, a, b, _, _) in pairs])
+                temporal_consistency = temporal_consistency_score(
+                    [b for (_, _, b, _, _) in pairs])
             metrics = {
                 'psnr': mean_psnr,
                 'ssim': mean_ssim,
@@ -689,7 +716,10 @@ class SubtitleRemover:
                 'roi_vmaf': roi_vmaf,
                 'roi_bbox': list(roi) if roi else None,
                 'temporal_flicker_score': flicker_score,
+                'temporal_consistency': temporal_consistency,
                 'residual_text_score': residual_mean_score,
+                'lpips': extended.get('lpips'),
+                'dists': extended.get('dists'),
                 'samples': len(psnrs),
                 'tag': tag,
                 'sheet': sheet_path,

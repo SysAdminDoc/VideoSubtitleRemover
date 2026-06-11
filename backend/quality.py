@@ -142,6 +142,88 @@ def residual_text_score(frame: np.ndarray) -> Optional[float]:
     return float(min(1.0, max(edge_density, contour_density)))
 
 
+def _pyiqa_available() -> bool:
+    """True when pyiqa is importable (opt-in advanced metrics)."""
+    try:
+        import pyiqa  # type: ignore  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def compute_extended_metrics(
+    pairs: Sequence[Tuple[np.ndarray, np.ndarray]],
+    *,
+    metric_names: Sequence[str] = ("lpips", "dists"),
+    device: str = "cpu",
+) -> dict:
+    """Compute perceptual quality metrics via pyiqa on (original, cleaned)
+    frame pairs. Returns {metric_name: mean_score} for each available
+    metric, or an empty dict when pyiqa is not installed.
+
+    Metrics are computed on the ROI crop when provided; pairs should
+    already be cropped by the caller. All scores are lower-is-better
+    (distance metrics); pyiqa handles the convention internally.
+    """
+    try:
+        import pyiqa  # type: ignore
+    except ImportError:
+        return {}
+    if not pairs:
+        return {}
+    try:
+        import torch
+    except ImportError:
+        return {}
+    results: dict = {}
+    for name in metric_names:
+        try:
+            metric_fn = pyiqa.create_metric(name, device=device)
+        except Exception:
+            logger.debug(f"pyiqa metric {name!r} unavailable")
+            continue
+        scores: List[float] = []
+        for orig, cleaned in pairs:
+            try:
+                a = _frame_to_tensor(orig, device)
+                b = _frame_to_tensor(cleaned, device)
+                with torch.no_grad():
+                    score = metric_fn(a, b)
+                scores.append(float(score.item()))
+            except Exception:
+                continue
+        if scores:
+            results[name] = float(np.mean(scores))
+    return results
+
+
+def temporal_consistency_score(
+    frames: Sequence[np.ndarray],
+) -> Optional[float]:
+    """Mean pairwise SSIM between consecutive cleaned ROI frames.
+
+    High values (close to 1.0) indicate temporally stable inpainting;
+    low values indicate flicker or per-frame inconsistency. Complements
+    the simpler absolute-delta flicker score with a structural measure.
+    """
+    if len(frames) < 2:
+        return None
+    scores: List[float] = []
+    for i in range(len(frames) - 1):
+        s = _ssim(frames[i], frames[i + 1])
+        if s > 0:
+            scores.append(s)
+    return float(np.mean(scores)) if scores else None
+
+
+def _frame_to_tensor(frame: np.ndarray, device: str = "cpu"):
+    """BGR uint8 frame -> torch float32 NCHW tensor in [0, 1]."""
+    import torch
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    t = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    return t.to(device)
+
+
 def _prepare_flicker_frame(frame: np.ndarray) -> Optional[np.ndarray]:
     if frame is None or frame.size == 0:
         return None
