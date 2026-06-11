@@ -6,6 +6,14 @@ on:
       version:
         description: 'Version tag (e.g. v3.12.0)'
         required: true
+      release_quality:
+        description: 'Release quality gate'
+        required: true
+        default: permissive
+        type: choice
+        options:
+          - permissive
+          - strict
 
 permissions:
   contents: write
@@ -67,11 +75,9 @@ jobs:
       - name: Dependency vulnerability scan (pip-audit)
         # Reports known CVEs in the installed runtime closure. Runs after
         # the install step so it sees exactly what PyInstaller will bundle.
-        # Non-fatal during the transitional v3.13 cycle: pip-audit's vuln
-        # database can lag patched wheels by hours, and we don't want a
-        # flaky external feed to brick a release. Flip continue-on-error
-        # to false once the pin set in requirements.txt is stable.
-        continue-on-error: true
+        # Permissive releases tolerate external advisory-feed drift; strict
+        # releases fail on actionable audit results.
+        continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}
         run: |
           python -m pip install pip-audit
           pip-audit --progress-spinner off
@@ -143,23 +149,37 @@ jobs:
       - name: Install NSIS
         shell: pwsh
         run: choco install -y nsis
-        continue-on-error: true
+        continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}
 
       - name: Build NSIS installer
         shell: pwsh
         run: |
           if (Test-Path 'C:\Program Files (x86)\NSIS\makensis.exe') {
             & 'C:\Program Files (x86)\NSIS\makensis.exe' installer\vsr.nsi
+          } elseif ("${{ github.event.inputs.release_quality }}" -eq "strict") {
+            throw "Strict release requires NSIS, but makensis.exe was not found."
           } else {
             Write-Host "NSIS not found; skipping installer build."
           }
-        continue-on-error: true
+          if ("${{ github.event.inputs.release_quality }}" -eq "strict" -and -not (Test-Path 'VideoSubtitleRemoverPro-Setup.exe')) {
+            throw "Strict release requires VideoSubtitleRemoverPro-Setup.exe."
+          }
+        continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}
+
+      - name: Check signing readiness
+        id: signing
+        shell: pwsh
+        env:
+          AZURE_SIGN_TENANT_ID: ${{ secrets.AZURE_SIGN_TENANT_ID }}
+        run: |
+          $hasSigning = -not [string]::IsNullOrWhiteSpace($env:AZURE_SIGN_TENANT_ID)
+          "has_signing=$($hasSigning.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
       # RM-50: optional code-signing via Azure Trusted Signing. Activated
       # only when the AZURE_SIGN_TENANT_ID secret is set. Falls through
       # silently for fork builds without the cert provisioned.
       - name: Sign EXE + installer with Azure Trusted Signing
-        if: env.AZURE_SIGN_TENANT_ID != ''
+        if: ${{ steps.signing.outputs.has_signing == 'true' }}
         shell: pwsh
         env:
           AZURE_SIGN_TENANT_ID: ${{ secrets.AZURE_SIGN_TENANT_ID }}
@@ -188,11 +208,81 @@ jobs:
               --file-digest sha256 `
               $t
           }
-        continue-on-error: true
+        continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}
+
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $versionTag = "${{ github.event.inputs.version }}"
+          $quality = "${{ github.event.inputs.release_quality }}"
+          $strict = $quality -eq "strict"
+          $distDir = "dist\VideoSubtitleRemoverPro"
+          $exe = Join-Path $distDir "VideoSubtitleRemoverPro.exe"
+          $zip = "VideoSubtitleRemoverPro-$versionTag-windows.zip"
+          $installer = "VideoSubtitleRemoverPro-Setup.exe"
+          $verification = [ordered]@{
+            version = $versionTag
+            releaseQuality = $quality
+            generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+            assets = @()
+            bundledDocs = @()
+          }
+
+          function Add-VerifiedAsset {
+            param(
+              [string]$Path,
+              [string]$Name
+            )
+            if (-not (Test-Path $Path)) {
+              throw "Required release artifact missing: $Path"
+            }
+            $item = Get-Item $Path
+            $hash = Get-FileHash $Path -Algorithm SHA256
+            $script:verification.assets += [ordered]@{
+              name = $Name
+              path = $Path
+              bytes = $item.Length
+              sha256 = $hash.Hash.ToLowerInvariant()
+            }
+          }
+
+          Add-VerifiedAsset $zip "windows_zip"
+          Add-VerifiedAsset $exe "app_exe"
+          if (Test-Path $installer) {
+            Add-VerifiedAsset $installer "nsis_installer"
+          } elseif ($strict) {
+            throw "Strict release requires NSIS installer artifact."
+          }
+
+          foreach ($doc in @("README.md", "LICENSE")) {
+            $docPath = Join-Path $distDir $doc
+            if (-not (Test-Path $docPath)) {
+              throw "Required bundled document missing: $doc"
+            }
+            $verification.bundledDocs += $doc
+          }
+
+          $signingConfigured = "${{ steps.signing.outputs.has_signing }}" -eq "true"
+          if ($signingConfigured) {
+            $signedTargets = @($exe)
+            if (Test-Path $installer) { $signedTargets += $installer }
+            foreach ($target in $signedTargets) {
+              $signature = Get-AuthenticodeSignature $target
+              if ($signature.Status -ne "Valid") {
+                throw "Authenticode signature is not valid for $target: $($signature.Status)"
+              }
+            }
+          }
+
+          $verification | ConvertTo-Json -Depth 5 | Set-Content release-verification.json
 
       - name: Upload release
         run: |
-          $assets = @('VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip')
+          $assets = @(
+            'VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip',
+            'release-verification.json'
+          )
           if (Test-Path 'VideoSubtitleRemoverPro-Setup.exe') {
             Rename-Item 'VideoSubtitleRemoverPro-Setup.exe' "VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-Setup.exe"
             $assets += "VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-Setup.exe"

@@ -48,6 +48,28 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("--token $env:WINGET_CREATE_GITHUB_TOKEN", self.workflow)
         self.assertIn("--no-open", self.workflow)
 
+    def test_strict_release_quality_verifies_artifacts(self):
+        self.assertIn("release_quality:", self.workflow)
+        self.assertIn("type: choice", self.workflow)
+        self.assertIn("- permissive", self.workflow)
+        self.assertIn("- strict", self.workflow)
+        self.assertIn(
+            "continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}",
+            self.workflow,
+        )
+        self.assertIn("Verify release artifacts", self.workflow)
+        self.assertIn("release-verification.json", self.workflow)
+        self.assertIn("Get-FileHash $Path -Algorithm SHA256", self.workflow)
+        self.assertIn("Required bundled document missing", self.workflow)
+        self.assertIn("Strict release requires NSIS installer artifact.", self.workflow)
+        self.assertIn("Get-AuthenticodeSignature $target", self.workflow)
+
+    def test_signing_readiness_uses_step_output(self):
+        self.assertIn("id: signing", self.workflow)
+        self.assertIn("has_signing=", self.workflow)
+        self.assertIn("steps.signing.outputs.has_signing == 'true'", self.workflow)
+        self.assertNotIn("if: env.AZURE_SIGN_TENANT_ID != ''", self.workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
