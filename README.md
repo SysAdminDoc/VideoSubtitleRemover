@@ -162,6 +162,15 @@ Process files from the command line:
 python -m backend.processor -i input.mp4 -o output.mp4 -m lama --lang en --crf 20
 ```
 
+For OCR-empty frames with speech, the optional Whisper fallback can
+mask the bottom subtitle band. The default backend is `faster-whisper`;
+FFmpeg 8 builds that include the `whisper` filter can instead use a
+local whisper.cpp ggml model without Python ML dependencies:
+
+```bash
+python -m backend.processor -i input.mp4 -o output.mp4 --whisper-fallback --whisper-backend ffmpeg --ffmpeg-whisper-model C:\models\ggml-base.en.bin
+```
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-i`, `--input` | Input file path | Required |
@@ -188,6 +197,11 @@ python -m backend.processor -i input.mp4 -o output.mp4 -m lama --lang en --crf 2
 | `--keep-chyrons` | Leave persistent text (logos / lower-thirds) | Off |
 | `--keep-subtitles` | Leave dialogue subtitles | Off |
 | `--karaoke-grouping` | Fuse per-syllable boxes on the same line | Off |
+| `--whisper-fallback` | Use Whisper timing to mask OCR-empty speech frames | Off |
+| `--whisper-backend` | Whisper backend (`faster-whisper` or `ffmpeg`) | faster-whisper |
+| `--whisper-model` | faster-whisper model size | tiny |
+| `--ffmpeg-whisper-model` | Local whisper.cpp ggml model for FFmpeg Whisper | - |
+| `--ffmpeg-whisper-queue` | FFmpeg whisper queue size in seconds | 3.0 |
 | `--quality-report` | Compute PSNR/SSIM after each run | Off |
 | `--quality-sheet` | Side-by-side comparison PNG | Off |
 | `--validate-config` | Print resolved config and exit | Off |

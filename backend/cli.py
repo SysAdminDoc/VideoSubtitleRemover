@@ -130,6 +130,9 @@ def main():
                        help="Vertical-text mode (rotate frames 90 CCW before OCR).")
     parser.add_argument("--whisper-fallback", action="store_true",
                        help="Whisper-driven bottom-band default mask on OCR-empty frames.")
+    parser.add_argument("--whisper-backend", default="faster-whisper",
+                       choices=["faster-whisper", "ffmpeg"],
+                       help="Whisper fallback backend.")
     parser.add_argument("--upscale", type=int, default=0, choices=[0, 2, 3, 4],
                        help="Post-cleanup upscale (Real-ESRGAN).")
     parser.add_argument("--no-color-preserve", action="store_true",
@@ -147,6 +150,11 @@ def main():
                        choices=["tiny", "base", "small", "medium",
                                 "large", "large-v2", "large-v3"],
                        help="faster-whisper model size.")
+    parser.add_argument("--ffmpeg-whisper-model", default="",
+                       help="Path to a local whisper.cpp ggml model for --whisper-backend ffmpeg.")
+    parser.add_argument("--ffmpeg-whisper-queue", type=float, default=3.0,
+                       metavar="SECONDS",
+                       help="FFmpeg whisper filter queue size in seconds.")
     parser.add_argument("--frame-skip", type=int, default=0,
                        help="Reuse detection mask for N frames between detections")
     parser.add_argument("--mask-dilate", type=int, default=8,
@@ -326,6 +334,8 @@ def main():
         parser.error("--colour-tolerance must be zero or positive")
     if args.loudnorm != 0.0 and not -70.0 <= args.loudnorm <= -5.0:
         parser.error("--loudnorm must be 0 (off) or between -70 and -5 LUFS")
+    if args.ffmpeg_whisper_queue < 0.02:
+        parser.error("--ffmpeg-whisper-queue must be at least 0.02 seconds")
 
     config = ProcessingConfig(
         mode=InpaintMode(args.mode),
@@ -337,7 +347,10 @@ def main():
         detection_threshold=args.threshold,
         detection_vertical=args.vertical,
         whisper_fallback=args.whisper_fallback,
+        whisper_backend=args.whisper_backend,
         whisper_model_size=args.whisper_model,
+        whisper_model_path=args.ffmpeg_whisper_model,
+        whisper_queue_seconds=args.ffmpeg_whisper_queue,
         upscale_factor=args.upscale,
         film_grain_strength=args.film_grain,
         swinir_restore=args.swinir,
@@ -464,6 +477,11 @@ def main():
             "prefetch_queue_size": config.prefetch_queue_size,
             "input_fps": config.input_fps,
             "quality_report_sheet": config.quality_report_sheet,
+            "whisper_fallback": config.whisper_fallback,
+            "whisper_backend": config.whisper_backend,
+            "whisper_model_size": config.whisper_model_size,
+            "whisper_model_path": config.whisper_model_path,
+            "whisper_queue_seconds": config.whisper_queue_seconds,
             "remove_subtitles": config.remove_subtitles,
             "remove_chyrons": config.remove_chyrons,
             "chyron_min_hits": config.chyron_min_hits,

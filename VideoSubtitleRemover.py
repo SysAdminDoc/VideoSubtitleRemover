@@ -350,7 +350,10 @@ class ProcessingConfig:
     detection_threshold: float = 0.5
     detection_vertical: bool = False    # RM-24 vertical-text mode
     whisper_fallback: bool = False       # RM-27 Whisper-driven mask fallback
+    whisper_backend: str = "faster-whisper"
     whisper_model_size: str = "tiny"
+    whisper_model_path: str = ""
+    whisper_queue_seconds: float = 3.0
     upscale_factor: int = 0              # RM-78 post-cleanup upscale (0/2/3/4)
     film_grain_strength: float = 0.0     # RM-80 additive film grain (0..0.5)
     swinir_restore: bool = False         # RM-79 SwinIR restoration pass
@@ -483,10 +486,19 @@ class ProcessingConfig:
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
         self.detection_vertical = _coerce_bool(self.detection_vertical, False)
         self.whisper_fallback = _coerce_bool(self.whisper_fallback, False)
+        wb = _coerce_text(self.whisper_backend, "faster-whisper", 32).lower()
+        if wb in {"faster", "faster_whisper"}:
+            wb = "faster-whisper"
+        if wb not in {"faster-whisper", "ffmpeg"}:
+            wb = "faster-whisper"
+        self.whisper_backend = wb
         wm = _coerce_text(self.whisper_model_size, "tiny", 16).lower()
         if wm not in {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}:
             wm = "tiny"
         self.whisper_model_size = wm
+        self.whisper_model_path = _coerce_text(self.whisper_model_path, "", 512)
+        self.whisper_queue_seconds = _coerce_float(
+            self.whisper_queue_seconds, 3.0, 0.02, 3600.0)
         upscale = _coerce_int(self.upscale_factor, 0, 0, 4)
         if upscale not in (0, 2, 3, 4):
             upscale = 0
@@ -7535,7 +7547,10 @@ class VideoSubtitleRemoverApp:
                 detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
                 detection_vertical=getattr(item.config, 'detection_vertical', False),
                 whisper_fallback=getattr(item.config, 'whisper_fallback', False),
+                whisper_backend=getattr(item.config, 'whisper_backend', 'faster-whisper'),
                 whisper_model_size=getattr(item.config, 'whisper_model_size', 'tiny'),
+                whisper_model_path=getattr(item.config, 'whisper_model_path', ''),
+                whisper_queue_seconds=getattr(item.config, 'whisper_queue_seconds', 3.0),
                 upscale_factor=getattr(item.config, 'upscale_factor', 0),
                 film_grain_strength=getattr(item.config, 'film_grain_strength', 0.0),
                 swinir_restore=getattr(item.config, 'swinir_restore', False),
