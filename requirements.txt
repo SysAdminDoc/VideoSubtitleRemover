@@ -4,10 +4,10 @@
 # Core
 # opencv-python >= 4.12.0 patches CVE-2025-53644 (uninitialised pointer in
 # JPEG read can become an arbitrary heap write on a crafted file).
-# Pillow >= 11.3.0 patches CVE-2026-25990 (PSD loader out-of-bounds write).
+# Pillow >= 12.1.1 patches CVE-2026-25990 (PSD loader out-of-bounds write).
 numpy>=1.21.0
 opencv-python>=4.12.0
-Pillow>=11.3.0
+Pillow>=12.1.1
 
 # AI/ML Frameworks (choose based on your GPU)
 # ------------------------------------------
