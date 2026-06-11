@@ -4468,7 +4468,7 @@ class VideoSubtitleRemoverApp:
                             self._stop_throbber()
                             self._preview_photo = ImageTk.PhotoImage(img)
                             self.preview_title_label.config(text=f"Detection mask for {Path(item.file_path).name}")
-                            if sub_area:
+                            if sub_areas:
                                 meta = "Manual region applied. Detection used your saved subtitle band."
                             elif n:
                                 meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
