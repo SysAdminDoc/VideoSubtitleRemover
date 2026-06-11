@@ -190,6 +190,10 @@ python -m backend.processor --pattern "inputs/*.mkv" --soft-subtitle-dry-run --s
 python -m backend.processor -i input.mkv -o stripped.mkv --strip-soft-subtitles
 ```
 
+In the GUI, queued videos with embedded subtitle tracks show a track summary;
+right-click the item to fast strip, fast remux/keep, or continue with
+burned-in cleanup.
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-i`, `--input` | Input file path | Required |

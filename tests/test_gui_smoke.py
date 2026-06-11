@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 def _have_display() -> bool:
@@ -80,6 +81,66 @@ class GuiSmokeTests(unittest.TestCase):
             initial = app._layout_mode
             app._apply_responsive_layout(1280)
             self.assertEqual(app._layout_mode, initial)
+        finally:
+            app.root.destroy()
+
+    def test_queue_soft_subtitle_probe_surfaces_actions(self):
+        app = self._make_app()
+        try:
+            source = Path(self._tmpdir.name) / "soft.mkv"
+            source.write_bytes(b"not a real video")
+            stream = {
+                "index": 2,
+                "codec_name": "subrip",
+                "language": "eng",
+                "title": "SDH",
+                "default": True,
+                "forced": False,
+            }
+            with mock.patch.object(app, "_start_soft_subtitle_probe"):
+                self.assertEqual(app._add_to_queue(str(source)), "added")
+
+            item = app.queue[0]
+            app._apply_soft_subtitle_probe_records(item.id, [stream])
+            widget = app.queue_widgets[item.id]
+            self.assertTrue(item.soft_subtitle_probe_done)
+            self.assertEqual(item.soft_subtitle_streams[0]["language"], "eng")
+            self.assertIn("Right-click", item.message)
+            self.assertIn("embedded subtitle", widget.info_label.cget("text"))
+
+            app._set_soft_subtitle_action(item.id, "strip")
+
+            self.assertEqual(item.soft_subtitle_action, "strip")
+            self.assertIn("Fast strip", item.message)
+
+        finally:
+            app.root.destroy()
+
+    def test_soft_subtitle_action_remuxes_without_backend_remover(self):
+        app = self._make_app()
+        try:
+            source = Path(self._tmpdir.name) / "remux.mkv"
+            output = Path(self._tmpdir.name) / "remux-out.mkv"
+            source.write_bytes(b"not a real video")
+            item = self._g.QueueItem(
+                id="soft-action",
+                file_path=str(source),
+                output_path=str(output),
+                config=self._g.ProcessingConfig(),
+                soft_subtitle_action="strip",
+            )
+            with mock.patch("backend.remux.remux_soft_subtitles") as remux:
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    side_effect=AssertionError("backend remover should not load"),
+                ):
+                    app._process_item(item)
+
+            self.assertEqual(item.status, self._g.ProcessingStatus.COMPLETE)
+            self.assertEqual(item.progress, 1.0)
+            self.assertIn("stripped", item.message)
+            remux.assert_called_once()
+
         finally:
             app.root.destroy()
 
