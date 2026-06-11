@@ -296,6 +296,7 @@ class ProcessingConfig:
     rtl_layout: bool = False
     update_check: bool = False
     json_log_enabled: bool = False
+    output_frames: bool = False
 
     def to_dict(self) -> dict:
         from dataclasses import fields as _dc_fields
@@ -443,6 +444,7 @@ class ProcessingConfig:
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         self.update_check = _coerce_bool(self.update_check, False)
         self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)
+        self.output_frames = _coerce_bool(self.output_frames, False)
         return self
 
     @classmethod

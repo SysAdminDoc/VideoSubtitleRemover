@@ -652,3 +652,27 @@ class _LosslessIntermediateWriter:
             except Exception:
                 pass
             self._fallback = None
+
+
+class _FrameSequenceWriter:
+    """Write each frame as a numbered PNG to a directory.
+
+    RM-35 follow-up: when ``output_frames`` is enabled, the processed
+    frames are written as individual images instead of going through
+    the video encode pipeline.
+    """
+
+    def __init__(self, out_dir: str, prefix: str = "frame", ext: str = ".png"):
+        self._dir = Path(out_dir)
+        self._dir.mkdir(parents=True, exist_ok=True)
+        self._prefix = prefix
+        self._ext = ext
+        self._idx = 0
+
+    def write(self, frame) -> None:
+        name = f"{self._prefix}_{self._idx:06d}{self._ext}"
+        cv2.imwrite(str(self._dir / name), frame)
+        self._idx += 1
+
+    def release(self) -> None:
+        pass
