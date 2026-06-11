@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -1447,6 +1448,122 @@ class SubtitleStreamProbeTests(unittest.TestCase):
         completed = SimpleNamespace(returncode=0, stdout="{bad", stderr="")
         with mock.patch("backend.io.subprocess.run", return_value=completed):
             self.assertEqual(processor._probe_subtitle_streams("bad.mkv"), [])
+
+
+class SoftSubtitleRemuxTests(unittest.TestCase):
+    """#103 remux primitive: explicit stream-copy mapping only."""
+
+    def test_build_strip_cmd_removes_subtitle_streams(self):
+        from backend.remux import SoftSubtitleAction, build_soft_subtitle_remux_cmd
+
+        cmd = build_soft_subtitle_remux_cmd(
+            "input.mkv",
+            "output.mkv",
+            action=SoftSubtitleAction.STRIP,
+        )
+        self.assertIn("-map", cmd)
+        self.assertIn("0", cmd)
+        self.assertIn("-0:s", cmd)
+        self.assertIn("-c", cmd)
+        self.assertIn("copy", cmd)
+        self.assertLess(cmd.index("-0:s"), cmd.index("-c"))
+
+    def test_build_keep_selected_cmd_maps_selected_global_streams(self):
+        from backend.remux import SoftSubtitleAction, build_soft_subtitle_remux_cmd
+
+        cmd = build_soft_subtitle_remux_cmd(
+            "input.mkv",
+            "output.mkv",
+            action=SoftSubtitleAction.KEEP_SELECTED,
+            keep_stream_indices=[4, 2, 4],
+        )
+        self.assertIn("-0:s", cmd)
+        maps = [
+            cmd[i + 1] for i, token in enumerate(cmd[:-1])
+            if token == "-map"
+        ]
+        self.assertEqual(maps, ["0", "-0:s", "0:2", "0:4"])
+
+    def test_keep_selected_requires_stream_index(self):
+        from backend.remux import SoftSubtitleAction, build_soft_subtitle_remux_cmd
+
+        with self.assertRaises(ValueError):
+            build_soft_subtitle_remux_cmd(
+                "input.mkv",
+                "output.mkv",
+                action=SoftSubtitleAction.KEEP_SELECTED,
+            )
+
+    def test_remux_uses_atomic_temp_output(self):
+        from unittest import mock
+        from backend import remux as _remux
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_path = Path(tmpdir) / ".out.tmp.mkv"
+            final_path = Path(tmpdir) / "out.mkv"
+            with mock.patch.object(_remux.shutil, "which", return_value="ffmpeg"):
+                with mock.patch.object(
+                    _remux, "_allocate_temp_output_path", return_value=temp_path,
+                ) as allocate:
+                    with mock.patch.object(_remux, "_promote_temp_output") as promote:
+                        with mock.patch.object(_remux, "_cleanup_temp_output") as clean:
+                            with mock.patch.object(
+                                _remux, "_probe_duration_seconds", return_value=2.0,
+                            ):
+                                with mock.patch.object(
+                                    _remux.subprocess,
+                                    "run",
+                                    return_value=SimpleNamespace(returncode=0),
+                                ) as run:
+                                    _remux.remux_soft_subtitles(
+                                        "input.mkv",
+                                        str(final_path),
+                                    )
+
+        allocate.assert_called_once_with(str(final_path))
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd[-1], str(temp_path))
+        self.assertIn("-0:s", cmd)
+        self.assertTrue(run.call_args.kwargs["check"])
+        promote.assert_called_once_with(temp_path, final_path)
+        clean.assert_called_once_with(temp_path)
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg") and shutil.which("ffprobe"),
+        "ffmpeg/ffprobe unavailable",
+    )
+    def test_strip_remux_integration_removes_subtitle_streams(self):
+        from backend.io import _probe_codec_for_log, _probe_subtitle_streams
+        from backend.remux import remux_soft_subtitles
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            srt = work / "captions.srt"
+            source = work / "source.mkv"
+            output = work / "stripped.mkv"
+            srt.write_text(
+                "1\n00:00:00,000 --> 00:00:00,200\nHello\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                    "-f", "lavfi", "-i", "color=c=black:s=32x24:d=0.25:r=1",
+                    "-f", "srt", "-i", str(srt),
+                    "-map", "0:v", "-map", "1:s",
+                    "-c:v", "ffv1", "-c:s", "srt", str(source),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+            self.assertEqual(len(_probe_subtitle_streams(str(source))), 1)
+            source_codec = _probe_codec_for_log(str(source))
+
+            remux_soft_subtitles(str(source), str(output))
+
+            self.assertEqual(_probe_subtitle_streams(str(output)), [])
+            self.assertEqual(_probe_codec_for_log(str(output)), source_codec)
 
 
 class LanguagePickerTests(unittest.TestCase):
