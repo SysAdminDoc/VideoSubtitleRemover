@@ -483,6 +483,94 @@ class DirectMlProviderTests(unittest.TestCase):
         self.assertEqual(calls, [{}])
 
 
+class RapidOcrOutputCompatibilityTests(unittest.TestCase):
+    def _detector_with_output(self, output):
+        det = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
+        det._rapid_model = lambda frame: output
+        det._fallback_detection = lambda frame: [(-1, -1, -1, -1)]
+        return det
+
+    @staticmethod
+    def _frame():
+        import numpy as _np
+        return _np.zeros((12, 12, 3), dtype=_np.uint8)
+
+    def test_detect_rapid_accepts_legacy_tuple_output(self):
+        output = (
+            [
+                (
+                    [[1, 2], [5, 2], [5, 6], [1, 6]],
+                    "subtitle",
+                    0.9,
+                )
+            ],
+            {"det": 0.01},
+        )
+        det = self._detector_with_output(output)
+
+        boxes = det._detect_rapid(self._frame(), threshold=0.5)
+
+        self.assertEqual(boxes, [(1, 2, 5, 6)])
+
+    def test_detect_rapid_accepts_structured_object_output(self):
+        output = SimpleNamespace(
+            dt_polys=[[[1, 1], [7, 1], [7, 4], [1, 4]]],
+            rec_scores=[0.8],
+            rec_texts=["subtitle"],
+        )
+        det = self._detector_with_output(output)
+
+        boxes = det._detect_rapid(self._frame(), threshold=0.5)
+
+        self.assertEqual(boxes, [(1, 1, 7, 4)])
+
+    def test_detect_rapid_accepts_structured_dict_output(self):
+        output = {
+            "dt_polys": [
+                [[1, 1], [7, 1], [7, 4], [1, 4]],
+                [[2, 5], [9, 5], [9, 8], [2, 8]],
+            ],
+            "rec_scores": [0.4, 0.95],
+        }
+        det = self._detector_with_output(output)
+
+        boxes = det._detect_rapid(self._frame(), threshold=0.5)
+
+        self.assertEqual(boxes, [(2, 5, 9, 8)])
+
+    def test_detect_rapid_ignores_malformed_polygons_without_fallback(self):
+        output = {"dt_polys": [["bad"], [[3, 3], [3, 3]]], "rec_scores": [1.0, 1.0]}
+        det = self._detector_with_output(output)
+
+        boxes = det._detect_rapid(self._frame(), threshold=0.5)
+
+        self.assertEqual(boxes, [])
+
+    def test_rapidocr_config_load_failures_fall_through_cascade(self):
+        from unittest import mock
+
+        class MissingConfigRapidOCR:
+            def __init__(self, **kwargs):
+                raise FileNotFoundError("default_models.yaml")
+
+        absent = {
+            name: None
+            for name in (
+                "rapidocr_onnxruntime",
+                "paddleocr",
+                "surya",
+                "surya.detection",
+                "easyocr",
+            )
+        }
+        fake_rapid = SimpleNamespace(RapidOCR=MissingConfigRapidOCR)
+
+        with mock.patch.dict(sys.modules, {"rapidocr": fake_rapid, **absent}):
+            det = processor.SubtitleDetector(device="cpu")
+
+        self.assertEqual(det._engine_name, "OpenCV fallback")
+
+
 class MultiAudioPassthroughTests(unittest.TestCase):
     def test_default_is_on(self):
         cfg = processor.normalize_processing_config(processor.ProcessingConfig())
