@@ -3082,6 +3082,25 @@ class VideoSubtitleRemoverApp:
             ModernButton(actions_inner, text="Open output", width=132,
                          command=_open_output_and_close,
                          style="accent", size="md", icon="^").pack(side="left")
+        report_paths = getattr(self, "_last_batch_report_paths", [])
+        if report_paths:
+            def _open_report_and_close():
+                import subprocess as _sp
+                for rp in report_paths:
+                    if str(rp).endswith(".md") and Path(rp).exists():
+                        _sp.Popen(["cmd", "/c", "start", "", str(rp)],
+                                  creationflags=0x08000000)
+                        break
+                else:
+                    for rp in report_paths:
+                        if Path(rp).exists():
+                            _sp.Popen(["cmd", "/c", "start", "", str(rp)],
+                                      creationflags=0x08000000)
+                            break
+                _close()
+            ModernButton(actions_inner, text="Open report", width=116,
+                         command=_open_report_and_close,
+                         style="ghost", size="md").pack(side="left", padx=(Theme.S_SM, 0))
         if errors > 0:
             ModernButton(actions_inner, text="Open log", width=104,
                          command=self._open_log_file,
@@ -4722,6 +4741,8 @@ class VideoSubtitleRemoverApp:
         self._probe_eta_seconds = 0.0
         self._batch_started_at = datetime.now()
         self._prepare_batch_report_records()
+        self._write_batch_preflight_plan()
+        self._last_batch_report_paths = []
         self._refresh_action_states()
         self._update_status("Batch processing started", "info")
         # Kick off Windows taskbar progress in indeterminate until first tick
@@ -4884,6 +4905,47 @@ class VideoSubtitleRemoverApp:
             finished.append(record)
         return finished
 
+    def _write_batch_preflight_plan(self) -> List[Path]:
+        """Write a preflight plan JSON before processing starts, so
+        overnight runs are fully accounted for even on crash."""
+        records = getattr(self, "_batch_report_records", {}) or {}
+        if not records:
+            return []
+        from backend.io import _write_text_atomic
+        import json as _json
+        grouped: dict[Path, List[dict]] = {}
+        for item_id, record in records.items():
+            out_dir = Path(record.get("output") or ".").parent
+            grouped.setdefault(out_dir, []).append(record)
+        written: List[Path] = []
+        for out_dir, group in grouped.items():
+            plan_path = out_dir / "vsr_batch_plan.json"
+            payload = {
+                "schema": "vsr.batch_plan.v1",
+                "created_at": datetime.now().astimezone().isoformat(
+                    timespec="seconds"),
+                "count": len(group),
+                "files": [
+                    {
+                        "input_name": r.get("input_name", ""),
+                        "output_name": r.get("output_name", ""),
+                        "planned_result": r.get("planned_result", ""),
+                        "mode": r.get("mode", ""),
+                        "device": r.get("device", ""),
+                        "duration_seconds": r.get("duration_seconds", 0),
+                        "estimated_seconds": r.get("estimated_seconds", 0),
+                    }
+                    for r in group
+                ],
+            }
+            _write_text_atomic(
+                plan_path,
+                _json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
+            )
+            written.append(plan_path)
+            logger.info(f"Batch preflight plan written: {plan_path}")
+        return written
+
     def _write_batch_report_files(self) -> List[Path]:
         from backend.batch_report import write_batch_reports
 
@@ -4906,6 +4968,7 @@ class VideoSubtitleRemoverApp:
             )
             written.extend([json_path, md_path])
             logger.info(f"Batch report written: {json_path}")
+        self._last_batch_report_paths = written
         return written
 
     def _process_queue(self):
