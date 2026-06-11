@@ -1084,7 +1084,6 @@ class VideoSubtitleRemoverApp:
                 from backend.processor import (
                     SubtitleRemover as _Remover,
                     ProcessingConfig as _BackendCfg,
-                    InpaintMode as _BackendMode,
                 )
                 if is_image_file(source_path):
                     frame = _cv2.imread(source_path)
@@ -1107,15 +1106,10 @@ class VideoSubtitleRemoverApp:
                     return
 
                 # Build a backend config snapshot from the item.
-                mode_map = {
-                    "Auto": _BackendMode.AUTO,
-                    "STTN": _BackendMode.STTN,
-                    "LAMA": _BackendMode.LAMA,
-                    "ProPainter": _BackendMode.PROPAINTER,
-                }
                 backend_cfg = _BackendCfg(
-                    mode=mode_map.get(snapshot_cfg.mode.value, _BackendMode.STTN),
-                    device="cpu" if not snapshot_cfg.use_gpu else f"cuda:{snapshot_cfg.gpu_id}",
+                    mode=self._gui_to_backend_mode(snapshot_cfg.mode.value),
+                    device=self._gui_to_backend_device(
+                        snapshot_cfg.use_gpu, snapshot_cfg.gpu_id),
                     detection_lang=snapshot_cfg.detection_lang,
                     detection_threshold=snapshot_cfg.detection_threshold,
                     subtitle_area=snapshot_cfg.subtitle_area,
@@ -3528,6 +3522,29 @@ class VideoSubtitleRemoverApp:
             return default
 
     @staticmethod
+    def _gui_to_backend_mode(gui_mode_value: str):
+        """Map a GUI InpaintMode value onto the backend enum. The two
+        enums are deliberately separate (see CLAUDE.md) -- this mapping
+        is the single place they meet."""
+        from backend.processor import InpaintMode as _BM
+        return {
+            "Auto": _BM.AUTO,
+            "STTN": _BM.STTN,
+            "LAMA": _BM.LAMA,
+            "ProPainter": _BM.PROPAINTER,
+        }.get(gui_mode_value, _BM.STTN)
+
+    def _gui_to_backend_device(self, use_gpu: bool, gpu_id: int) -> str:
+        """DirectML GPUs map to device='directml' (ONNX Runtime DirectML
+        EP, not torch-directml); CUDA GPUs map to 'cuda:N'."""
+        if not use_gpu:
+            return "cpu"
+        for g in self.gpus:
+            if g['index'] == gpu_id and g.get('type') == "DirectML":
+                return "directml"
+        return f"cuda:{gpu_id}"
+
+    @staticmethod
     def _normalized_path_key(path: str | Path) -> str:
         """Return a case-folded absolute path for reliable Windows comparisons."""
         try:
@@ -4938,32 +4955,11 @@ class VideoSubtitleRemoverApp:
             from backend.processor import (
                 SubtitleRemover as BackendRemover,
                 ProcessingConfig as BackendConfig,
-                InpaintMode as BackendInpaintMode,
             )
 
-            # Map GUI enum values to backend enum values
-            mode_map = {
-                "Auto": BackendInpaintMode.AUTO,
-                "STTN": BackendInpaintMode.STTN,
-                "LAMA": BackendInpaintMode.LAMA,
-                "ProPainter": BackendInpaintMode.PROPAINTER,
-            }
-
-            # Determine device string based on GPU type
-            if item.config.use_gpu:
-                gpu_type = None
-                for g in self.gpus:
-                    if g['index'] == item.config.gpu_id:
-                        gpu_type = g.get('type')
-                        break
-                if gpu_type == "DirectML":
-                    device = "directml"
-                else:
-                    device = f"cuda:{item.config.gpu_id}"
-            else:
-                device = "cpu"
-
-            backend_mode = mode_map.get(item.config.mode.value, BackendInpaintMode.STTN)
+            backend_mode = self._gui_to_backend_mode(item.config.mode.value)
+            device = self._gui_to_backend_device(
+                item.config.use_gpu, item.config.gpu_id)
             lang = getattr(item.config, 'detection_lang', 'en')
             vertical = bool(getattr(item.config, 'detection_vertical', False))
             cache_key = (backend_mode, device, lang, vertical)
