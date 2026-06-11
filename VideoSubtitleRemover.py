@@ -452,6 +452,7 @@ class ProcessingConfig:
     onboarding_seen: bool = False
     high_contrast: bool = False     # RM-96 alt theme palette
     rtl_layout: bool = False        # RM-98 right-to-left UI mirror
+    update_check: bool = False       # RM-116 opt-in startup version check
 
     def to_dict(self) -> dict:
         """Persist every dataclass field automatically. Using
@@ -594,6 +595,7 @@ class ProcessingConfig:
         self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)
         self.high_contrast = _coerce_bool(self.high_contrast, False)
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
+        self.update_check = _coerce_bool(self.update_check, False)
         return self
 
     @classmethod
@@ -3313,6 +3315,8 @@ class VideoSubtitleRemoverApp:
             self.config.detection_vertical = self.vertical_text_var.get()
         if hasattr(self, 'high_contrast_var'):
             self.config.high_contrast = self.high_contrast_var.get()
+        if hasattr(self, 'update_check_var'):
+            self.config.update_check = self.update_check_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -4855,6 +4859,15 @@ class VideoSubtitleRemoverApp:
         )
         hc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
         Tooltip(hc_toggle, "Alternative palette tuned for low-vision users. Persists across sessions.")
+
+        self.update_check_var = tk.BooleanVar(value=getattr(self.config, "update_check", False))
+        uc_toggle = ModernToggle(
+            quality_frame,
+            text="Check for updates on startup",
+            variable=self.update_check_var,
+        )
+        uc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        Tooltip(uc_toggle, "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry.")
 
         self._update_region_label_display()
         self._update_mode_options()
@@ -8382,6 +8395,27 @@ class VideoSubtitleRemoverApp:
         except Exception:
             pass
 
+    def _check_for_update(self):
+        """RM-116: opt-in startup update check against GitHub Releases."""
+        try:
+            from backend.update_check import check_for_update
+        except ImportError:
+            return
+
+        def _on_update(tag, url):
+            try:
+                self.root.after(0, lambda: self._show_update_toast(tag, url))
+            except Exception:
+                pass
+
+        check_for_update(APP_VERSION, _on_update)
+
+    def _show_update_toast(self, tag, url):
+        try:
+            Toast.show(self.root, f"Update available: {tag}", "info")
+        except Exception:
+            pass
+
     def run(self):
         """Run the application."""
         self.root.update_idletasks()
@@ -8420,6 +8454,8 @@ class VideoSubtitleRemoverApp:
 
         logger.info(f"{APP_NAME} v{APP_VERSION} started")
         logger.info(f"Log file: {LOG_FILE}")
+        if self.config.update_check:
+            self._check_for_update()
         self.root.mainloop()
 
 
