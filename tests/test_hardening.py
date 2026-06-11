@@ -1118,6 +1118,29 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         )
         self.assertEqual(cfg.mode, gui.InpaintMode.STTN)
 
+    def test_soft_subtitle_summary_formats_tracks(self):
+        summary = gui._format_soft_subtitle_summary([
+            {
+                "index": 2,
+                "codec_name": "subrip",
+                "language": "eng",
+                "title": "SDH",
+                "default": True,
+                "forced": False,
+            },
+            {
+                "index": 3,
+                "codec_name": "ass",
+                "language": "",
+                "title": "",
+                "default": False,
+                "forced": True,
+            },
+        ])
+        self.assertIn("2 embedded subtitle tracks", summary)
+        self.assertIn("eng/subrip (default)", summary)
+        self.assertIn("und/ass (forced)", summary)
+
 
 class CachedRemoverHotSwapNormalizationTests(unittest.TestCase):
     """I-2: hot-swap of `remover.config` must run through

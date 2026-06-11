@@ -633,6 +633,9 @@ class QueueItem:
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
     quality_report: Optional[dict] = None
+    soft_subtitle_streams: List[dict] = field(default_factory=list)
+    soft_subtitle_probe_done: bool = False
+    soft_subtitle_action: str = "burned_in"
     # F-7: per-item cancel flag. Set by the queue widget when the user
     # asks to cancel just this entry. The progress callback in
     # _process_item checks it alongside the global cancel_event so a
@@ -1249,6 +1252,47 @@ def get_file_info(path: str) -> str:
     elif is_image_file(path):
         return f"Image ({ext}) - {size}"
     return f"{ext} - {size}"
+
+
+def _soft_subtitle_stream_record(stream) -> dict:
+    return {
+        "index": int(getattr(stream, "index", 0)),
+        "codec_name": str(getattr(stream, "codec_name", "") or ""),
+        "language": str(getattr(stream, "language", "") or ""),
+        "title": str(getattr(stream, "title", "") or ""),
+        "default": bool(getattr(stream, "default", False)),
+        "forced": bool(getattr(stream, "forced", False)),
+    }
+
+
+def _format_soft_subtitle_summary(streams: List[dict]) -> str:
+    if not streams:
+        return ""
+    labels = []
+    for stream in streams[:3]:
+        language = stream.get("language") or "und"
+        codec = stream.get("codec_name") or "unknown"
+        flags = []
+        if stream.get("default"):
+            flags.append("default")
+        if stream.get("forced"):
+            flags.append("forced")
+        suffix = f" ({', '.join(flags)})" if flags else ""
+        labels.append(f"{language}/{codec}{suffix}")
+    if len(streams) > 3:
+        labels.append(f"+{len(streams) - 3} more")
+    noun = "track" if len(streams) == 1 else "tracks"
+    return f"{len(streams)} embedded subtitle {noun}: {', '.join(labels)}"
+
+
+def _queue_item_info_text(item: QueueItem) -> str:
+    parts = [get_file_info(item.file_path)]
+    if getattr(item, "soft_subtitle_streams", None):
+        parts.append(_format_soft_subtitle_summary(item.soft_subtitle_streams))
+    elif is_video_file(item.file_path) and not getattr(item, "soft_subtitle_probe_done", False):
+        parts.append("checking embedded subtitle tracks")
+    parts.append(truncate_middle(item.file_path, 68))
+    return "   -   ".join(part for part in parts if part)
 
 
 def truncate_middle(text: str, max_length: int = 56) -> str:
@@ -2570,6 +2614,7 @@ class QueueItemWidget(tk.Frame):
                  on_select: Callable = None, on_rename: Callable = None,
                  on_repeat: Callable = None, on_cancel_item: Callable = None,
                  on_override: Callable = None,
+                 on_soft_action: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER)
@@ -2581,6 +2626,7 @@ class QueueItemWidget(tk.Frame):
         self.on_repeat = on_repeat
         self.on_cancel_item = on_cancel_item
         self.on_override = on_override
+        self.on_soft_action = on_soft_action
         self.is_selected = False
         self._surface_bg = Theme.BG_CARD
         self._pulse_id = None
@@ -2615,9 +2661,8 @@ class QueueItemWidget(tk.Frame):
         self.status_badge.pack(side="right")
 
         # File info row (meta caption)
-        file_info = get_file_info(item.file_path)
         self.info_label = tk.Label(self.container,
-                                   text=f"{file_info}   -   {truncate_middle(item.file_path, 68)}",
+                                   text=_queue_item_info_text(item),
                                    font=f(Theme.F_META),
                                    bg=self._surface_bg, fg=Theme.TEXT_MUTED, anchor="w")
         self.info_label.pack(fill="x", pady=(Theme.S_XS, 0))
@@ -2720,6 +2765,22 @@ class QueueItemWidget(tk.Frame):
         if self.on_override is not None and self.item.status == ProcessingStatus.IDLE:
             menu.add_command(label="Override settings for this file...",
                              command=lambda: self.on_override(self.item.id))
+        if (self.on_soft_action is not None
+                and self.item.status == ProcessingStatus.IDLE
+                and getattr(self.item, "soft_subtitle_streams", None)):
+            menu.add_separator()
+            menu.add_command(
+                label="Fast strip embedded subtitles",
+                command=lambda: self.on_soft_action(self.item.id, "strip"),
+            )
+            menu.add_command(
+                label="Fast remux and keep embedded subtitles",
+                command=lambda: self.on_soft_action(self.item.id, "keep_all"),
+            )
+            menu.add_command(
+                label="Run burned-in cleanup instead",
+                command=lambda: self.on_soft_action(self.item.id, "burned_in"),
+            )
         menu.add_separator()
         menu.add_command(label="Remove from queue",
                          command=lambda: self.on_remove(self.item.id),
@@ -2803,6 +2864,7 @@ class QueueItemWidget(tk.Frame):
         self.item = item
         badge = status_ui(item.status)
         self.status_badge.config(text=badge["label"], fg=badge["color"], bg=badge["bg"])
+        self.info_label.config(text=_queue_item_info_text(item))
         self.progress_bar.set_progress(item.progress)
         self.progress_bar.set_color(self._get_status_color())
         status_message = truncate_middle(item.message or "Ready to process", 74)
@@ -6440,6 +6502,96 @@ class VideoSubtitleRemoverApp:
         desired = target_dir / f"{input_path.stem}_no_sub{input_path.suffix}"
         return self._make_unique_output_path(desired, exclude_item_id=exclude_item_id)
 
+    def _probe_soft_subtitle_records(self, path: str) -> List[dict]:
+        from backend.io import _probe_subtitle_streams
+        return [
+            _soft_subtitle_stream_record(stream)
+            for stream in _probe_subtitle_streams(path)
+        ]
+
+    def _apply_soft_subtitle_probe_records(self, item_id: str,
+                                           records: List[dict]) -> None:
+        with self.queue_lock:
+            target = next((it for it in self.queue if it.id == item_id), None)
+        if target is None:
+            return
+        target.soft_subtitle_streams = records
+        target.soft_subtitle_probe_done = True
+        if target.status == ProcessingStatus.IDLE:
+            if records:
+                target.message = (
+                    "Embedded subtitle tracks found. Right-click for "
+                    "fast strip/keep, or run burned-in cleanup."
+                )
+            elif target.message == "Checking embedded subtitle tracks...":
+                target.message = "Ready to process"
+        if target.id in self.queue_widgets:
+            self.queue_widgets[target.id].update_item(target)
+        if self._selected_queue_item_id == target.id:
+            self.preview_meta_label.config(
+                text=(
+                    _format_soft_subtitle_summary(records)
+                    if records else
+                    "Review mask to confirm the subtitle band, then start the batch when the framing looks right."
+                )
+            )
+
+    def _start_soft_subtitle_probe(self, item: QueueItem) -> None:
+        """Probe embedded subtitle streams off the Tk thread."""
+        if not is_video_file(item.file_path):
+            item.soft_subtitle_probe_done = True
+            return
+        item.soft_subtitle_probe_done = False
+        if item.status == ProcessingStatus.IDLE:
+            item.message = "Checking embedded subtitle tracks..."
+
+        def _worker(item_id: str, path: str):
+            records: List[dict] = []
+            try:
+                records = self._probe_soft_subtitle_records(path)
+            except Exception as exc:
+                logger.debug(f"Soft-subtitle probe failed for {path}: {exc}")
+
+            try:
+                self.root.after(0, self._apply_soft_subtitle_probe_records,
+                                item_id, records)
+            except RuntimeError:
+                pass
+
+        threading.Thread(
+            target=_worker,
+            args=(item.id, item.file_path),
+            name="vsr-soft-subtitle-probe",
+            daemon=True,
+        ).start()
+
+    def _set_soft_subtitle_action(self, item_id: str, action: str) -> None:
+        labels = {
+            "strip": "Fast strip embedded subtitles",
+            "keep_all": "Fast remux and keep embedded subtitles",
+            "burned_in": "Burned-in cleanup",
+        }
+        if action not in labels:
+            return
+        with self.queue_lock:
+            item = next((it for it in self.queue if it.id == item_id), None)
+        if item is None or item.status != ProcessingStatus.IDLE:
+            self._update_status("Only idle queue items can change subtitle action", "warning")
+            return
+        item.soft_subtitle_action = action
+        if action == "burned_in":
+            item.message = "Ready for burned-in cleanup"
+        else:
+            item.message = labels[action]
+        if not item.output_path_locked:
+            item.output_path = str(self._suggest_output_path(
+                item.file_path,
+                exclude_item_id=item.id,
+            ))
+        if item.id in self.queue_widgets:
+            self.queue_widgets[item.id].update_item(item)
+        self._update_status(f"{Path(item.file_path).name}: {labels[action]}", "info")
+
     def _refresh_idle_output_paths(self) -> int:
         """Recompute output paths for idle items that still follow the live output rule."""
         refreshed = 0
@@ -6563,18 +6715,25 @@ class VideoSubtitleRemoverApp:
         config = self._make_processing_snapshot()
 
         # Create queue item
+        initial_message = (
+            "Checking embedded subtitle tracks..."
+            if is_video_file(file_path) else
+            "Ready to process"
+        )
         item = QueueItem(
             id=item_id,
             file_path=file_path,
             output_path=str(output_path),
             output_path_locked=False,
             config=config,
-            message="Ready to process"
+            message=initial_message
         )
 
         with self.queue_lock:
             self.queue.append(item)
         self._update_queue_display()
+        if is_video_file(file_path):
+            self._start_soft_subtitle_probe(item)
         if len(self.queue) == 1 and not self.is_processing:
             self._show_preview(item)
         logger.info(f"Queued: {Path(file_path).name} ({get_file_info(file_path)})")
@@ -6847,6 +7006,9 @@ class VideoSubtitleRemoverApp:
             status=ProcessingStatus.IDLE,
             progress=0.0,
             message="Ready to process",
+            soft_subtitle_streams=list(template.soft_subtitle_streams),
+            soft_subtitle_probe_done=template.soft_subtitle_probe_done,
+            soft_subtitle_action=template.soft_subtitle_action,
         )
         with self.queue_lock:
             self.queue.append(new_item)
@@ -7002,7 +7164,8 @@ class VideoSubtitleRemoverApp:
                                              on_rename=self._rename_output_for,
                                              on_repeat=self._repeat_item_with_settings,
                                              on_cancel_item=self._cancel_queue_item,
-                                             on_override=self._open_per_file_overrides)
+                                             on_override=self._open_per_file_overrides,
+                                             on_soft_action=self._set_soft_subtitle_action)
                     widget.pack(fill="x", pady=(0, 8))
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas
@@ -7270,8 +7433,21 @@ class VideoSubtitleRemoverApp:
                 input_img.thumbnail((max_w, max_h), Image.LANCZOS)
                 self._preview_photo = ImageTk.PhotoImage(input_img)
                 self.preview_title_label.config(text=f"Source frame for {Path(item.file_path).name}")
+                soft_summary = _format_soft_subtitle_summary(
+                    getattr(item, "soft_subtitle_streams", [])
+                )
+                if soft_summary:
+                    preview_meta = (
+                        f"{soft_summary}. Right-click the queue item for fast "
+                        "strip/keep, or review the mask for burned-in cleanup."
+                    )
+                else:
+                    preview_meta = (
+                        "Review mask to confirm the subtitle band, then start "
+                        "the batch when the framing looks right."
+                    )
                 self.preview_meta_label.config(
-                    text="Review mask to confirm the subtitle band, then start the batch when the framing looks right."
+                    text=preview_meta
                 )
                 self._preview_label.config(image=self._preview_photo, text="")
         except Exception as e:
@@ -7487,6 +7663,50 @@ class VideoSubtitleRemoverApp:
         except RuntimeError:
             pass  # root destroyed during shutdown
 
+    def _process_soft_subtitle_item(self, item: QueueItem) -> bool:
+        action_value = getattr(item, "soft_subtitle_action", "burned_in")
+        if action_value not in {"strip", "keep_all"}:
+            return False
+
+        from backend.remux import SoftSubtitleAction, remux_soft_subtitles
+
+        action_map = {
+            "strip": SoftSubtitleAction.STRIP,
+            "keep_all": SoftSubtitleAction.KEEP_ALL,
+        }
+        action = action_map[action_value]
+
+        item.status = ProcessingStatus.MERGING
+        item.progress = 0.2
+        item.message = (
+            "Stripping embedded subtitle tracks..."
+            if action == SoftSubtitleAction.STRIP else
+            "Remuxing embedded subtitle tracks..."
+        )
+        self._update_item_display(item)
+
+        Path(item.output_path).parent.mkdir(parents=True, exist_ok=True)
+        remux_soft_subtitles(item.file_path, item.output_path, action=action)
+
+        item.status = ProcessingStatus.COMPLETE
+        item.progress = 1.0
+        item.error = None
+        item.quality_report = None
+        item.completed_at = datetime.now()
+        item.message = (
+            "Embedded subtitles stripped"
+            if action == SoftSubtitleAction.STRIP else
+            "Embedded subtitles remuxed"
+        )
+        elapsed = (item.completed_at - item.started_at).total_seconds()
+        self._batch_times.append(elapsed)
+        logger.info(
+            f"Soft-subtitle {action.value}: {Path(item.file_path).name} "
+            f"in {format_time(elapsed)}"
+        )
+        self._update_item_display(item)
+        return True
+
     def _process_item(self, item: QueueItem):
         """Process a single queue item using the backend processor."""
         try:
@@ -7499,6 +7719,9 @@ class VideoSubtitleRemoverApp:
             item.quality_report = None
             item.cancel_requested = False  # F-7 reset on fresh attempt
             self._update_item_display(item)
+
+            if self._process_soft_subtitle_item(item):
+                return
 
             from backend.processor import (
                 SubtitleRemover as BackendRemover,
