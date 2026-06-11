@@ -207,7 +207,10 @@ Pattern batches and GUI batches write `vsr-batch-summary.json` and
 `vsr-batch-summary.md` next to their outputs when they finish. The report
 records each input, selected output path, codec/duration/subtitle preflight
 data, planned action, final status, and elapsed time for skipped,
-checkpointed, remuxed, processed, or failed files.
+checkpointed, remuxed, processed, or failed files. When quality reports are
+enabled, batch summaries also include a `passed`, `review`, or `unknown`
+quality gate plus any quality-sheet preview path for review-needed outputs;
+skipped and remux-only rows are marked `not_applicable`.
 
 | Flag | Description | Default |
 |------|-------------|---------|

@@ -69,6 +69,7 @@ from backend.io import (
 )
 from backend.encoder import _detect_hw_encoder
 from backend.quality import _ssim, compute_vmaf
+from backend.quality_gate import evaluate_quality_gate
 from backend.tracking import (
     _KalmanBox,
     _box_from_state,
@@ -1035,7 +1036,7 @@ class SubtitleRemover:
                     )
                 except Exception as exc:
                     logger.warning(f"Quality sheet write failed: {exc}")
-            return {
+            metrics = {
                 'psnr': mean_psnr,
                 'ssim': mean_ssim,
                 'roi_psnr': roi_mean_psnr,
@@ -1047,6 +1048,8 @@ class SubtitleRemover:
                 'tag': tag,
                 'sheet': sheet_path,
             }
+            metrics["quality_gate"] = evaluate_quality_gate(metrics)
+            return metrics
         finally:
             cap_in.release()
             cap_out.release()

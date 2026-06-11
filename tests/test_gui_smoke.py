@@ -143,6 +143,12 @@ class GuiSmokeTests(unittest.TestCase):
 
             item.status = self._g.ProcessingStatus.COMPLETE
             item.message = "Complete!"
+            item.quality_report = {
+                "tag": "Good",
+                "samples": 2,
+                "ssim": 0.99,
+                "roi_ssim": 0.98,
+            }
             item.started_at = self._g.datetime.now()
             item.completed_at = self._g.datetime.now()
 
@@ -156,6 +162,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(payload["kind"], "gui-batch")
             self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
             self.assertEqual(payload["files"][0]["input_name"], source.name)
+            self.assertEqual(payload["files"][0]["quality_gate"]["status"], "passed")
 
         finally:
             app.root.destroy()
