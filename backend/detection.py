@@ -14,7 +14,7 @@ the source coordinate space.
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -28,6 +28,47 @@ def _surya_allowed() -> bool:
     import os
     val = os.environ.get("VSR_ALLOW_GPL", "").strip().lower()
     return val in {"1", "true", "yes", "on"}
+
+
+def _onnxruntime_has_provider(provider: str) -> bool:
+    try:
+        import onnxruntime as ort  # type: ignore
+        return provider in ort.get_available_providers()
+    except ImportError:
+        return False
+    except Exception as exc:
+        logger.debug(f"ONNX Runtime provider probe failed: {exc}")
+        return False
+
+
+def _rapidocr_directml_params(device: str) -> Optional[Dict[str, Any]]:
+    if device != "directml":
+        return None
+    if not _onnxruntime_has_provider("DmlExecutionProvider"):
+        logger.info(
+            "RapidOCR DirectML requested but DmlExecutionProvider is not "
+            "available; using RapidOCR CPU provider."
+        )
+        return None
+    return {
+        "EngineConfig.onnxruntime.use_dml": True,
+        "EngineConfig.onnxruntime.use_cuda": False,
+        "EngineConfig.onnxruntime.use_cann": False,
+        "EngineConfig.onnxruntime.use_coreml": False,
+    }
+
+
+def _build_rapidocr(rapid_cls, device: str):
+    directml_params = _rapidocr_directml_params(device)
+    if directml_params:
+        try:
+            return rapid_cls(params=directml_params), "DirectML"
+        except Exception as exc:
+            logger.warning(
+                "RapidOCR DirectML provider init failed; retrying CPU "
+                f"provider: {exc}"
+            )
+    return rapid_cls(), "CPU"
 
 
 class SubtitleDetector:
@@ -70,14 +111,21 @@ class SubtitleDetector:
             rapid_obj = None
             try:
                 from rapidocr import RapidOCR as _RapidOCR
-                rapid_obj = _RapidOCR()
+                rapid_obj, rapid_provider = _build_rapidocr(_RapidOCR, self.device)
             except ImportError:
                 from rapidocr_onnxruntime import RapidOCR as _RapidOCR
-                rapid_obj = _RapidOCR()
+                rapid_obj, rapid_provider = _build_rapidocr(_RapidOCR, self.device)
             if rapid_obj is not None:
                 self._rapid_model = rapid_obj
-                self._engine_name = "RapidOCR"
-                logger.info(f"RapidOCR loaded via ONNX Runtime (lang={self.lang})")
+                self._engine_name = (
+                    "RapidOCR (DirectML)"
+                    if rapid_provider == "DirectML"
+                    else "RapidOCR"
+                )
+                logger.info(
+                    f"RapidOCR loaded via ONNX Runtime {rapid_provider} "
+                    f"provider (lang={self.lang})"
+                )
                 return
         except ImportError:
             pass

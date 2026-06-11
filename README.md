@@ -149,6 +149,11 @@ The app automatically selects the best available engine:
 | 4 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
 | 5 | OpenCV fallback | Built-in | Any | Threshold-based |
 
+On AMD/Intel systems, setup installs `onnxruntime-directml`. When ONNX
+Runtime reports `DmlExecutionProvider`, RapidOCR is initialized with its
+DirectML provider settings; unsupported RapidOCR versions or missing
+providers fall back to CPU automatically.
+
 ## CLI Usage
 
 Process files from the command line:
