@@ -90,6 +90,12 @@ try:
 except Exception:
     pass
 
+try:
+    from backend.security_checks import warn_if_vulnerable_opencv_libpng
+    warn_if_vulnerable_opencv_libpng(logger)
+except Exception:
+    pass
+
 # GUI Imports
 try:
     import tkinter as tk
