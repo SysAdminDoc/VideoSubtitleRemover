@@ -2246,6 +2246,100 @@ class SegmentationAdapterTests(unittest.TestCase):
         frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
         self.assertIsNone(track_points(frames, [(4, 4)]))
 
+    def test_sam2_inference_error_returns_base_mask(self):
+        import numpy as _np
+        from backend import segmentation as _seg
+
+        class BrokenPredictor:
+            def set_image(self, rgb):
+                return None
+
+            def predict(self, **kwargs):
+                raise RuntimeError("sam2 failed")
+
+        saved = dict(_seg._SAM2_STATE)
+        try:
+            _seg._SAM2_STATE.update({"probed": True, "predictor": BrokenPredictor()})
+            frame = _np.zeros((32, 32, 3), dtype=_np.uint8)
+            mask = _np.zeros((32, 32), dtype=_np.uint8)
+            mask[10:20, 10:20] = 255
+            out = _seg.refine_mask_with_sam2(frame, [(10, 10, 20, 20)], mask)
+            _np.testing.assert_array_equal(out, mask)
+        finally:
+            _seg._SAM2_STATE.clear()
+            _seg._SAM2_STATE.update(saved)
+
+    def test_sam3_inference_error_returns_none(self):
+        import numpy as _np
+        from backend import segmentation as _seg
+
+        class BrokenPredictor:
+            def segment(self, frame, prompt):
+                raise RuntimeError("sam3 failed")
+
+        saved = dict(_seg._SAM3_STATE)
+        try:
+            _seg._SAM3_STATE.update({"probed": True, "predictor": BrokenPredictor()})
+            self.assertIsNone(_seg.segment_text_with_sam3(
+                _np.zeros((32, 32, 3), dtype=_np.uint8)
+            ))
+        finally:
+            _seg._SAM3_STATE.clear()
+            _seg._SAM3_STATE.update(saved)
+
+    def test_matanyone_inference_error_returns_none(self):
+        import numpy as _np
+        from backend import segmentation as _seg
+
+        class BrokenModel:
+            def matte(self, frame, hint_mask):
+                raise RuntimeError("matanyone failed")
+
+        saved = dict(_seg._MATANYONE_STATE)
+        try:
+            _seg._MATANYONE_STATE.update({"probed": True, "model": BrokenModel()})
+            self.assertIsNone(_seg.matte_frame(
+                _np.zeros((32, 32, 3), dtype=_np.uint8),
+                _np.zeros((32, 32), dtype=_np.uint8),
+            ))
+        finally:
+            _seg._MATANYONE_STATE.clear()
+            _seg._MATANYONE_STATE.update(saved)
+
+    def test_cotracker_inference_error_returns_none(self):
+        import numpy as _np
+        from unittest import mock
+        from backend import segmentation as _seg
+
+        class FakeTensor:
+            def permute(self, *args):
+                return self
+
+            def unsqueeze(self, *args):
+                return self
+
+            def float(self):
+                return self
+
+        class BrokenModel:
+            def __call__(self, *args, **kwargs):
+                raise RuntimeError("cotracker failed")
+
+        fake_torch = SimpleNamespace(
+            float32=object(),
+            from_numpy=lambda value: FakeTensor(),
+            tensor=lambda value, dtype=None: FakeTensor(),
+        )
+        saved = dict(_seg._COTRACKER_STATE)
+        try:
+            _seg._COTRACKER_STATE.update({"probed": True, "model": BrokenModel()})
+            frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
+            with mock.patch.dict(sys.modules, {"torch": fake_torch}):
+                self.assertIsNone(_seg.track_points(frames, [(4, 4)]))
+        finally:
+            _seg._COTRACKER_STATE.clear()
+            _seg._COTRACKER_STATE.update(saved)
+
 
 class DiffusionInpainterScaffoldTests(unittest.TestCase):
     """RM-59/60/61/62/63/64/65: each scaffolded diffusion backend must
@@ -2269,6 +2363,18 @@ class DiffusionInpainterScaffoldTests(unittest.TestCase):
         from backend import inpainters_diffusion as _id
         self.assertEqual(_id.maybe_register(), [])
 
+    def test_maybe_register_only_enabled_backends(self):
+        from backend import inpainter_registry as _registry
+        from backend import inpainters_diffusion as _id
+
+        os.environ["VSR_DIFFUERASER"] = "1"
+        try:
+            registered = _id.maybe_register()
+            self.assertEqual(registered, ["diffueraser"])
+            self.assertTrue(_registry.is_registered("diffueraser"))
+        finally:
+            _registry.unregister("diffueraser")
+
     def test_scaffold_falls_back_to_tbe(self):
         from backend.inpainters_diffusion import _DiffuEraserBackend
         cfg = processor.normalize_processing_config(
@@ -2283,6 +2389,31 @@ class DiffusionInpainterScaffoldTests(unittest.TestCase):
         self.assertEqual(len(out), 3)
         for f in out:
             self.assertEqual(f.shape, (16, 16, 3))
+
+    def test_scaffold_falls_back_when_loaded_model_raises(self):
+        from backend.inpainters_diffusion import _DiffusionBackendBase
+
+        class BrokenBackend(_DiffusionBackendBase):
+            MODE_NAME = "broken"
+
+            def _load(self):
+                return object()
+
+            def _run_model(self, frames, masks):
+                raise RuntimeError("model failed")
+
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(tbe_enable=False)
+        )
+        backend = BrokenBackend(device="cpu", config=cfg)
+        import numpy as _np
+        frames = [_np.full((16, 16, 3), 60, dtype=_np.uint8) for _ in range(2)]
+        masks = [_np.zeros((16, 16), dtype=_np.uint8) for _ in range(2)]
+        masks[0][4:8, 4:8] = 255
+        out = backend.inpaint(frames, masks)
+        self.assertEqual(len(out), 2)
+        for frame in out:
+            self.assertEqual(frame.shape, (16, 16, 3))
 
 
 class DecodeAccelTests(unittest.TestCase):
@@ -2335,6 +2466,42 @@ class VlmOcrAdapterTests(unittest.TestCase):
         # Either None (no dep) or a real tuple (very unlikely in CI);
         # both are acceptable here.
         self.assertTrue(result is None or isinstance(result, tuple))
+
+    def test_qwen25vl_malformed_json_returns_empty_boxes(self):
+        import numpy as _np
+        from backend.ocr_vlm import _Qwen25VLDetector
+
+        class NoGrad:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        class FakeProcessor:
+            def apply_chat_template(self, messages, add_generation_prompt=True):
+                return "prompt"
+
+            def __call__(self, **kwargs):
+                return {}
+
+            def batch_decode(self, generated, skip_special_tokens=True):
+                return ["no json payload here"]
+
+        class FakeModel:
+            def generate(self, **kwargs):
+                return ["tokens"]
+
+        fake_torch = SimpleNamespace(no_grad=lambda: NoGrad())
+        detector = _Qwen25VLDetector(device="cpu")
+        detector._model = (FakeProcessor(), FakeModel(), fake_torch)
+
+        boxes = detector._extract_boxes(
+            _np.zeros((32, 32, 3), dtype=_np.uint8),
+            threshold=0.5,
+        )
+
+        self.assertEqual(boxes, [])
 
 
 class PreprocessAdaptersTests(unittest.TestCase):
