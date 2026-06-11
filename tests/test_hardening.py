@@ -62,16 +62,17 @@ class GuiConfigHardeningTests(unittest.TestCase):
         self.assertEqual(cfg.window_geometry, "")
 
     def test_load_settings_falls_back_cleanly_from_non_object_json(self):
+        from gui import config as _gui_config
         with tempfile.TemporaryDirectory() as tmpdir:
-            original = gui.SETTINGS_FILE
+            original = _gui_config.SETTINGS_FILE
             try:
-                gui.SETTINGS_FILE = Path(tmpdir) / "settings.json"
-                gui.SETTINGS_FILE.write_text(json.dumps(["bad"]), encoding="utf-8")
+                _gui_config.SETTINGS_FILE = Path(tmpdir) / "settings.json"
+                _gui_config.SETTINGS_FILE.write_text(json.dumps(["bad"]), encoding="utf-8")
                 cfg = gui.load_settings()
                 self.assertIsInstance(cfg, gui.ProcessingConfig)
                 self.assertEqual(cfg.mode, gui.InpaintMode.STTN)
             finally:
-                gui.SETTINGS_FILE = original
+                _gui_config.SETTINGS_FILE = original
 
     @unittest.skipUnless(_has_display(), "No display available -- skipping GUI test")
     def test_on_processing_complete_during_shutdown_skips_summary_ui(self):
