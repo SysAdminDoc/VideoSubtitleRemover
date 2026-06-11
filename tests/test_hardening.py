@@ -327,6 +327,89 @@ class DirectMlProviderTests(unittest.TestCase):
         det.device = "cuda:0"
         self.assertTrue(det._is_gpu_device())
 
+    def test_rapidocr_uses_directml_params_when_provider_available(self):
+        from unittest import mock
+
+        calls = []
+
+        class FakeRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        fake_ort = SimpleNamespace(
+            get_available_providers=lambda: [
+                "DmlExecutionProvider", "CPUExecutionProvider"
+            ]
+        )
+        fake_rapid = SimpleNamespace(RapidOCR=FakeRapidOCR)
+
+        with mock.patch.dict(
+            sys.modules,
+            {"onnxruntime": fake_ort, "rapidocr": fake_rapid},
+        ):
+            det = processor.SubtitleDetector(device="directml")
+
+        self.assertEqual(det._engine_name, "RapidOCR (DirectML)")
+        self.assertEqual(
+            calls[0]["params"]["EngineConfig.onnxruntime.use_dml"],
+            True,
+        )
+        self.assertEqual(
+            calls[0]["params"]["EngineConfig.onnxruntime.use_cuda"],
+            False,
+        )
+
+    def test_rapidocr_directml_params_fall_back_for_legacy_constructor(self):
+        from unittest import mock
+
+        calls = []
+
+        class LegacyRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+                if kwargs:
+                    raise TypeError("unexpected keyword argument 'params'")
+
+        fake_ort = SimpleNamespace(
+            get_available_providers=lambda: [
+                "DmlExecutionProvider", "CPUExecutionProvider"
+            ]
+        )
+        fake_rapid = SimpleNamespace(RapidOCR=LegacyRapidOCR)
+
+        with mock.patch.dict(
+            sys.modules,
+            {"onnxruntime": fake_ort, "rapidocr": fake_rapid},
+        ):
+            det = processor.SubtitleDetector(device="directml")
+
+        self.assertEqual(det._engine_name, "RapidOCR")
+        self.assertIn("params", calls[0])
+        self.assertEqual(calls[1], {})
+
+    def test_rapidocr_directml_params_skip_when_provider_absent(self):
+        from unittest import mock
+
+        calls = []
+
+        class FakeRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        fake_ort = SimpleNamespace(
+            get_available_providers=lambda: ["CPUExecutionProvider"]
+        )
+        fake_rapid = SimpleNamespace(RapidOCR=FakeRapidOCR)
+
+        with mock.patch.dict(
+            sys.modules,
+            {"onnxruntime": fake_ort, "rapidocr": fake_rapid},
+        ):
+            det = processor.SubtitleDetector(device="directml")
+
+        self.assertEqual(det._engine_name, "RapidOCR")
+        self.assertEqual(calls, [{}])
+
 
 class MultiAudioPassthroughTests(unittest.TestCase):
     def test_default_is_on(self):
