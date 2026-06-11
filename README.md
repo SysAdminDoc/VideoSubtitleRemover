@@ -2,7 +2,7 @@
 <p align="center"><img src="icon.png" width="128" alt="Video Subtitle Remover"></p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.16.0-58A6FF?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-3.16.1-58A6FF?style=for-the-badge">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-4ade80?style=for-the-badge">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20desktop-58A6FF?style=for-the-badge">
 </p>
@@ -12,10 +12,10 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.16.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.16.1-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
-![Python](https://img.shields.io/badge/python-3.10+-blue)
+![Python](https://img.shields.io/badge/python-3.10--3.13%20CUDA-blue)
 
 **Professional AI-powered tool for removing hard-coded subtitles from videos and images**
 
@@ -67,7 +67,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 | RAM | 8 GB | 16+ GB |
 | GPU | Any (CPU mode) | NVIDIA RTX 2060+ (RTX 50-series supported via CUDA 12.8) |
 | VRAM | - | 6+ GB |
-| Python | 3.10 | 3.12 |
+| Python | 3.10 | 3.12 or 3.13 for CUDA |
 
 ## Installation
 
@@ -240,6 +240,19 @@ to RapidOCR (ONNX Runtime), which is GPU-generation agnostic.
 </details>
 
 <details>
+<summary><b>Python 3.14 installs but NVIDIA CUDA is unavailable</b></summary>
+
+PyTorch does not publish Windows CUDA wheels for Python 3.14 yet. If you
+run setup with Python 3.14 and an NVIDIA GPU, setup stops before silently
+installing a CPU-only torch build and recommends Python 3.12 or 3.13 for
+GPU acceleration.
+
+CPU-only use is still possible. Set `VSR_ALLOW_PY314_CPU=1` before
+running setup if you explicitly accept slower CPU inference.
+
+</details>
+
+<details>
 <summary><b>Colors shift / look washed out (TV vs full color range)</b></summary>
 
 The upstream project re-encodes the output without carrying the source's
@@ -289,7 +302,7 @@ to a bug report.
 <details>
 <summary><b>Application won't start</b></summary>
 
-- Ensure Python 3.10+ is installed
+- Ensure Python 3.10+ is installed; use Python 3.12 or 3.13 for NVIDIA CUDA
 - Delete `venv` folder and re-run setup
 - Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
@@ -320,9 +333,8 @@ VideoSubtitleRemover/
 |   |-- architecture.md       # Pipeline map for new contributors
 |   |-- edge_case_corpus.md   # Community regression-corpus guide
 |   `-- archive/              # Retired audits and completed checklists
-|-- ROADMAP.md                # Active planning and research bench
-|-- COMPLETED.md              # Shipped-work summary
-|-- RESEARCH_REPORT.md        # Current research synthesis
+|-- ROADMAP.md                # Active incomplete work
+|-- RESEARCH.md               # Current research synthesis
 |-- setup.py                  # First-time environment setup
 |-- Run_VSR_Pro.bat           # Windows launcher
 |-- Run_VSR_Pro_Debug.bat     # Windows launcher with a visible console
@@ -341,10 +353,9 @@ the detect -> tracker -> mask -> TBE -> refine -> mux pipeline and the
 "add a new feature" checklist.
 
 Planning entry points:
-[ROADMAP.md](ROADMAP.md) for active planning,
-[COMPLETED.md](COMPLETED.md) for shipped-work summary, and
-[RESEARCH_REPORT.md](RESEARCH_REPORT.md) for current research synthesis.
-Retired audits and completed checklists live under [docs/archive/](docs/archive/).
+[ROADMAP.md](ROADMAP.md) for active incomplete work and
+[RESEARCH.md](RESEARCH.md) for current research synthesis. Retired audits
+and completed checklists live under [docs/archive/](docs/archive/).
 
 ## Credits
 

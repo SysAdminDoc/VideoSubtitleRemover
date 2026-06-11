@@ -1586,10 +1586,12 @@ class WhisperFallbackTests(unittest.TestCase):
     merge overlapping spans deterministically."""
 
     def test_is_available_handles_missing_dep(self):
-        # The test environment has no faster-whisper installed; the
-        # helper must return False instead of raising ImportError.
+        # Force faster-whisper to look absent even on developer machines
+        # where optional packages are installed.
+        from unittest import mock
         from backend import whisper_fallback as _wf
-        self.assertFalse(_wf.is_available())
+        with mock.patch.dict(sys.modules, {"faster_whisper": None}):
+            self.assertFalse(_wf.is_available())
 
     def test_run_whisper_segments_returns_none_without_dep(self):
         from backend import whisper_fallback as _wf
@@ -1669,10 +1671,13 @@ class PySceneDetectAdapterTests(unittest.TestCase):
 
     def test_adapter_returns_none_without_dep(self):
         import numpy as _np
+        from unittest import mock
         frames = [_np.zeros((10, 10, 3), dtype=_np.uint8) for _ in range(3)]
-        # The CI environment doesn't have scenedetect installed; the
-        # adapter must return None instead of raising.
-        result = processor._detect_scene_cuts_pyscenedetect(frames)
+        # Force scenedetect to look absent even on developer machines where
+        # optional packages are installed.
+        absent = {"scenedetect": None, "scenedetect.detectors": None}
+        with mock.patch.dict(sys.modules, absent):
+            result = processor._detect_scene_cuts_pyscenedetect(frames)
         self.assertIsNone(result)
 
     def test_default_path_is_histogram(self):
@@ -1906,7 +1911,7 @@ class LoadJsonConfigTests(unittest.TestCase):
         """Files larger than 1 MB should raise ValueError without being parsed."""
         with tempfile.TemporaryDirectory() as tmpdir:
             big = Path(tmpdir) / "big.json"
-            # Write >1 MB of valid JSON — use enough entries to exceed the cap
+            # Write >1 MB of valid JSON; use enough entries to exceed the cap
             big.write_text("{" + ", ".join(f'"{i}": {i}' for i in range(150_000)) + "}",
                            encoding="utf-8")
             self.assertGreater(big.stat().st_size, 1 * 1024 * 1024,

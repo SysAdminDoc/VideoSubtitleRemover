@@ -34,7 +34,7 @@ from datetime import datetime
 APP_NAME = "Video Subtitle Remover Pro"
 # Single source of truth for the app's version string. Update here and it
 # propagates to the banner, header, logs, About dialog, and CHANGELOG cue.
-APP_VERSION = "3.16.0"
+APP_VERSION = "3.16.1"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"
@@ -4135,7 +4135,7 @@ class VideoSubtitleRemoverApp:
         self._header_guidance_panel = tk.Frame(right, bg=Theme.BG_SECONDARY)
         self._header_guidance_panel.pack(anchor="e", fill="x", pady=(Theme.S_SM, 0))
 
-        # Workflow step pills (Import → Inspect → Run)
+        # Workflow step pills (Import -> Inspect -> Run)
         pills_row = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
         pills_row.pack(anchor="w", pady=(0, Theme.S_SM))
         for idx, step_label in enumerate(("Import", "Inspect", "Run"), start=1):
@@ -5214,7 +5214,7 @@ class VideoSubtitleRemoverApp:
                  font=f(Theme.F_BODY, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w", pady=(2, 0))
 
-        # Level badges: warn / error counts — packed in a row between title and toggle
+        # Level badges: warn / error counts, packed in a row between title and toggle
         self._badge_row = tk.Frame(log_header, bg=Theme.BG_SECONDARY)
         self._badge_row.pack(side="left", padx=(Theme.S_MD, 0))
         self._log_warn_badge = tk.Label(
