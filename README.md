@@ -81,6 +81,13 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
    - Launches the application
    - Use `Run_VSR_Pro_Debug.bat` if you want the same bootstrap flow with a visible console for troubleshooting
 
+After the Windows Package Manager manifest is accepted, signed release
+installers can also be installed with:
+
+```powershell
+winget install SysAdminDoc.VideoSubtitleRemoverPro
+```
+
 ### Manual Install
 
 ```powershell
