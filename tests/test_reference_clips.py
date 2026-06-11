@@ -2,8 +2,8 @@
 
 The roadmap originally specified eight curated CC0 clips covering
 static / karaoke / vertical-JP / motion-pan / dissolve / chyron / VHS /
-thin-Arabic edge cases. Sourcing rights-cleared clips is operationally
-out of scope for this autonomous pass, so we ship the *harness* with
+thin-Arabic edge cases. Sourcing rights-cleared clips is not practical
+for this autonomous pass, so we ship the *harness* with
 8 synthetic clips generated deterministically from a fixed seed. Each
 synthetic clip exercises a different code path:
 
@@ -128,12 +128,14 @@ class ReferenceClipHarnessTests(unittest.TestCase):
             remover._color_metadata = None
             ok = remover.process_video(str(src), str(output))
             self.assertTrue(ok, "pipeline must complete")
-            return output
+            exists = output.exists()
+            self.assertTrue(exists, "output file must be written")
+            return exists
 
     def test_static_dialogue(self):
         frames = [_bg_with_band(self.H, self.W, 240, 60) for _ in range(20)]
         out = self._run(frames)
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_motion_pan(self):
         frames = []
@@ -145,7 +147,7 @@ class ReferenceClipHarnessTests(unittest.TestCase):
                 int(self.W * 0.08):int(self.W * 0.92)] = 240
             frames.append(arr)
         out = self._run(frames)
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_dissolve_cuts(self):
         # Crossfade between bg=50 and bg=150 across 20 frames.
@@ -155,7 +157,7 @@ class ReferenceClipHarnessTests(unittest.TestCase):
             bg = int(50 * (1 - t) + 150 * t)
             frames.append(_bg_with_band(self.H, self.W, 240, bg))
         out = self._run(frames)
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_karaoke_burnin(self):
         frames = []
@@ -167,13 +169,13 @@ class ReferenceClipHarnessTests(unittest.TestCase):
                 arr[55:67, x0:x0 + 28] = 230
             frames.append(arr)
         out = self._run(frames, subtitle_area=(8, 50, 120, 70))
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_chyron_persistent(self):
         # Same band for the full 20 frames -- chyron-like persistence.
         frames = [_bg_with_band(self.H, self.W, 220, 40) for _ in range(20)]
         out = self._run(frames)
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_vertical_text(self):
         # Subtitle column on the right edge instead of the bottom band.
@@ -183,7 +185,7 @@ class ReferenceClipHarnessTests(unittest.TestCase):
             arr[8:60, 110:122] = 230
             frames.append(arr)
         out = self._run(frames, subtitle_area=(108, 6, 124, 62))
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_thin_font(self):
         frames = []
@@ -194,7 +196,7 @@ class ReferenceClipHarnessTests(unittest.TestCase):
                 arr[58:66, x:x + 2] = 250
             frames.append(arr)
         out = self._run(frames, subtitle_area=(10, 56, 120, 68))
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
     def test_gradient_background(self):
         frames = []
@@ -205,7 +207,7 @@ class ReferenceClipHarnessTests(unittest.TestCase):
                 int(self.W * 0.08):int(self.W * 0.92)] = 240
             frames.append(arr)
         out = self._run(frames)
-        self.assertTrue(out.exists())
+        self.assertTrue(out)
 
 
 if __name__ == "__main__":

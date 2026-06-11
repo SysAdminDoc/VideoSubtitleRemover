@@ -23,26 +23,46 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          $ErrorActionPreference = 'Stop'
+
+          function Install-Required {
+            param(
+              [string]$Name,
+              [string[]]$PackageArgs
+            )
+            Write-Host "Installing required dependency group: $Name"
+            python -m pip install @PackageArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Required dependency install failed: $Name"
+            }
+          }
+
+          function Install-Optional {
+            param(
+              [string]$Name,
+              [string[]]$PackageArgs,
+              [string]$SkipMessage
+            )
+            Write-Host "Installing optional dependency group: $Name"
+            python -m pip install @PackageArgs
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host $SkipMessage
+              $global:LASTEXITCODE = 0
+            }
+          }
+
+          Install-Required "pip tooling" @("--upgrade", "pip")
           # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434.
-          python -m pip install "torch>=2.10.0" "torchvision>=0.25.0" --index-url https://download.pytorch.org/whl/cpu
+          Install-Required "torch CPU runtime" @("torch>=2.10.0", "torchvision>=0.25.0", "--index-url", "https://download.pytorch.org/whl/cpu")
           # opencv-python >= 4.12.0 patches CVE-2025-53644 (JPEG read).
           # Pillow >= 12.1.1 patches CVE-2026-25990 (PSD loader OOB write).
-          python -m pip install numpy "opencv-python>=4.12.0" "Pillow>=12.1.1"
-          python -m pip install rapidocr rapidocr-onnxruntime
-          python -m pip install simple-lama-inpainting
-          python -m pip install easyocr
-          try {
-            python -m pip install "paddleocr>=3.0.0"
-          } catch {
-            Write-Host "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
-          }
-          try {
-            python -m pip install "torch-directml==0.2.5.dev240914"
-          } catch {
-            Write-Host "torch-directml install skipped; release will rely on CUDA/CPU builds."
-          }
-          python -m pip install pyinstaller
+          Install-Required "core image stack" @("numpy", "opencv-python>=4.12.0", "Pillow>=12.1.1")
+          Install-Required "RapidOCR engines" @("rapidocr", "rapidocr-onnxruntime")
+          Install-Required "LaMa inpainter" @("simple-lama-inpainting")
+          Install-Required "EasyOCR fallback" @("easyocr")
+          Install-Optional "PaddleOCR" @("paddleocr>=3.0.0") "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
+          Install-Optional "torch-directml" @("torch-directml==0.2.5.dev240914") "torch-directml install skipped; release will rely on CUDA/CPU builds."
+          Install-Required "PyInstaller" @("pyinstaller")
 
       - name: Dependency vulnerability scan (pip-audit)
         # Reports known CVEs in the installed runtime closure. Runs after

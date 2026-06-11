@@ -16,6 +16,25 @@ from pathlib import Path
 # Enable ANSI escape codes on Windows 10+
 os.system('')
 REQUIREMENTS_FILE = Path("requirements.txt")
+PYTHON_CUDA_WHEEL_MAX = (3, 13)
+PY314_CPU_OVERRIDE_ENV = "VSR_ALLOW_PY314_CPU"
+
+
+def _windows_cuda_wheels_unavailable(version=None, system_name=None):
+    """Return True when the current Python cannot install Windows CUDA wheels."""
+    version = version or sys.version_info
+    system_name = system_name or platform.system()
+    return (
+        system_name == "Windows"
+        and (version.major, version.minor) > PYTHON_CUDA_WHEEL_MAX
+    )
+
+
+def _allow_py314_cpu_fallback():
+    """Return True when the user explicitly accepts CPU-only setup."""
+    return os.environ.get(PY314_CPU_OVERRIDE_ENV, "").strip().lower() in {
+        "1", "true", "yes", "cpu"
+    }
 
 
 class Colors:
@@ -52,6 +71,15 @@ def check_python():
         return False
     
     print(f"  [OK] Python {version.major}.{version.minor}.{version.micro}")
+    if _windows_cuda_wheels_unavailable():
+        print(
+            f"{Colors.YELLOW}  WARN: PyTorch does not publish Windows CUDA wheels for "
+            f"Python {version.major}.{version.minor} yet.{Colors.END}"
+        )
+        print("  NVIDIA GPU acceleration needs Python 3.12 or 3.13.")
+        print(
+            f"  Set {PY314_CPU_OVERRIDE_ENV}=1 only if CPU-only setup is acceptable."
+        )
     return True
 
 
@@ -65,7 +93,8 @@ def detect_gpu():
         "intel": False,
         "name": None,
         "cuda_version": None,
-        "blackwell": False
+        "blackwell": False,
+        "cuda_disabled_by_python": False
     }
     
     # Check NVIDIA
@@ -183,7 +212,27 @@ def install_pytorch(gpu_info):
     try:
         # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434
         # (torch.load weights_only RCE in 2.9.1 and earlier).
-        if gpu_info["nvidia"] and gpu_info["blackwell"]:
+        if gpu_info["nvidia"] and _windows_cuda_wheels_unavailable():
+            version = sys.version_info
+            gpu_info["cuda_disabled_by_python"] = True
+            print(
+                f"{Colors.RED}  ERROR: Python {version.major}.{version.minor} cannot "
+                f"install Windows CUDA PyTorch wheels yet.{Colors.END}"
+            )
+            print("  Install Python 3.12 or 3.13 for NVIDIA GPU acceleration.")
+            print(
+                f"  To continue explicitly as CPU-only, set {PY314_CPU_OVERRIDE_ENV}=1 "
+                "and rerun setup."
+            )
+            if not _allow_py314_cpu_fallback():
+                return False
+            print(f"{Colors.YELLOW}  WARN: Proceeding with CPU-only PyTorch by explicit override.{Colors.END}")
+            subprocess.run([
+                pip, 'install',
+                'torch>=2.10.0', 'torchvision>=0.25.0',
+                '--index-url', 'https://download.pytorch.org/whl/cpu'
+            ], check=True)
+        elif gpu_info["nvidia"] and gpu_info["blackwell"]:
             # Blackwell (RTX 50-series, sm_120) requires CUDA 12.8 wheels.
             # The cu128 index ships torch >= 2.7 with Blackwell kernels;
             # cu118/cu121 builds fail or fall back to CPU on these cards.
@@ -349,6 +398,13 @@ if not exist "venv\\Scripts\\python.exe" (
     echo  First-time setup required.
     echo  Preparing the runtime and dependencies...
     echo.
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" >nul 2>nul
+    if not errorlevel 1 (
+        echo  WARNING: Python 3.14+ cannot install Windows CUDA PyTorch wheels.
+        echo  Use Python 3.12 or 3.13 for NVIDIA GPU acceleration.
+        echo  Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup.
+        echo.
+    )
     python setup.py
     if errorlevel 1 (
         echo.
@@ -395,6 +451,13 @@ if not exist "venv\\Scripts\\python.exe" (
     echo  First-time setup required.
     echo  Preparing the runtime and dependencies...
     echo.
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" >nul 2>nul
+    if not errorlevel 1 (
+        echo  WARNING: Python 3.14+ cannot install Windows CUDA PyTorch wheels.
+        echo  Use Python 3.12 or 3.13 for NVIDIA GPU acceleration.
+        echo  Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup.
+        echo.
+    )
     python setup.py
     if errorlevel 1 (
         echo.
@@ -430,6 +493,13 @@ if (-not (Test-Path ".\\venv\\Scripts\\python.exe")) {
     Write-Host "First-time setup required." -ForegroundColor Yellow
     Write-Host "Preparing the runtime and dependencies..." -ForegroundColor Yellow
     Write-Host ""
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "WARNING: Python 3.14+ cannot install Windows CUDA PyTorch wheels." -ForegroundColor Yellow
+        Write-Host "Use Python 3.12 or 3.13 for NVIDIA GPU acceleration." -ForegroundColor Yellow
+        Write-Host "Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup." -ForegroundColor Yellow
+        Write-Host ""
+    }
     python setup.py
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
@@ -508,7 +578,9 @@ def main():
     print(f"    * Or run: {Colors.BOLD}python VideoSubtitleRemover.py{Colors.END}")
     print(f"\n  GPU Mode: ", end="")
     
-    if gpu_info["nvidia"]:
+    if gpu_info["nvidia"] and gpu_info.get("cuda_disabled_by_python"):
+        print(f"{Colors.YELLOW}CPU (Python CUDA wheels unavailable){Colors.END}")
+    elif gpu_info["nvidia"]:
         print(f"{Colors.GREEN}NVIDIA CUDA{Colors.END}")
     elif gpu_info["amd"] or gpu_info["intel"]:
         print(f"{Colors.GREEN}DirectML{Colors.END}")

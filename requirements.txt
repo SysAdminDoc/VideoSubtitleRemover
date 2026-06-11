@@ -16,9 +16,9 @@ Pillow>=12.1.1
 # 2.9.1 and earlier. simple-lama-inpainting loads weights via torch.load,
 # so this is a runtime concern, not just a transitive-dependency one.
 
-# Python compatibility: torch 2.7+ supports Python 3.9-3.13. The CUDA
-# index you pick must match your GPU generation (see below). Mixing an
-# old torch pin with a too-new Python is the usual "no wheel found" error.
+# Python compatibility: torch 2.7+ supports Python 3.9-3.13 for Windows
+# CUDA wheels. Python 3.14 currently resolves CPU-only torch on Windows;
+# setup.py blocks that NVIDIA path unless VSR_ALLOW_PY314_CPU=1 is set.
 
 # For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada, CUDA 11.8):
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu118

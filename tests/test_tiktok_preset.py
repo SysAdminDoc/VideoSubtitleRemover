@@ -96,7 +96,6 @@ class TikTokPresetSyntheticAbTests(unittest.TestCase):
                 preserve_audio=False,
                 use_hw_encode=False,
                 adaptive_batch=False,
-                auto_band=False,
                 subtitle_areas=None,
                 subtitle_area=None,
             )
