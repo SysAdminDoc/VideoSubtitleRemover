@@ -4621,12 +4621,11 @@ class VideoSubtitleRemoverApp:
         self.start_btn.icon = "x"
         self.start_btn.set_text("Stop batch")
         self._batch_times = []
-        # F-9: probe the first queued video so the very first ETA tick
-        # has a real number instead of "" until the first item finishes.
-        try:
-            self._probe_eta_seconds = self._probe_batch_eta()
-        except Exception:
-            self._probe_eta_seconds = 0.0
+        # F-9: the ETA probe loads an OCR model and detects 30 frames --
+        # far too slow for the Tk main thread. _process_queue runs it on
+        # the worker thread before the first item; until then the ETA
+        # line is simply empty.
+        self._probe_eta_seconds = 0.0
         self._batch_started_at = datetime.now()
         self._prepare_batch_report_records()
         self._refresh_action_states()
@@ -4817,6 +4816,12 @@ class VideoSubtitleRemoverApp:
 
     def _process_queue(self):
         """Process all items in the queue."""
+        # F-9: pre-batch ETA probe runs here, on the worker thread, so
+        # model load + 30-frame detection never block the Tk main loop.
+        try:
+            self._probe_eta_seconds = self._probe_batch_eta()
+        except Exception:
+            self._probe_eta_seconds = 0.0
         with self.queue_lock:
             items_to_process = [i for i in self.queue
                                 if i.status not in (ProcessingStatus.COMPLETE,
@@ -5211,9 +5216,9 @@ class VideoSubtitleRemoverApp:
         probe size. Returns the estimated per-item seconds (or 0 if the
         probe can't run -- e.g. only images in the queue).
 
-        Runs synchronously off the main thread so the GUI stays
-        responsive; we always cap the probe at ~10 s so launch latency
-        stays low even on slow CPUs.
+        Called from _process_queue on the worker thread so the GUI
+        stays responsive; the detect loop is capped at ~10 s so the
+        first item still starts promptly on slow CPUs.
         """
         first_video = None
         for item in self.queue:
@@ -5245,24 +5250,28 @@ class VideoSubtitleRemoverApp:
                     self._preview_detector_lang = lang
                 threshold = getattr(first_video.config, "detection_threshold", 0.5)
                 t0 = time.monotonic()
+                frames_done = 0
                 for _ in range(probe_frames):
                     ok, frame = cap.read()
                     if not ok:
                         break
                     detector.detect(frame, threshold)
+                    frames_done += 1
+                    if time.monotonic() - t0 > 10.0:
+                        break
                 elapsed = time.monotonic() - t0
             finally:
                 cap.release()
         except Exception as exc:
             logger.debug(f"Pre-batch ETA probe failed: {exc}")
             return 0.0
-        if elapsed <= 0 or probe_frames <= 0:
+        if elapsed <= 0 or frames_done <= 0:
             return 0.0
         # Scale to the full video duration. Add a fudge factor for the
         # inpaint pass and ffmpeg mux which the detect-only probe does
         # not see. 1.8x leaves room for slower inpainters without
         # over-estimating to the point of being useless.
-        per_frame_detect = elapsed / probe_frames
+        per_frame_detect = elapsed / frames_done
         est_per_video = per_frame_detect * total_frames * 1.8 + max(2.0, duration * 0.05)
         return est_per_video
 
