@@ -212,9 +212,18 @@ def main():
     # Import here so the heavy backend (SubtitleRemover + cv2 + numpy)
     # loads only when the CLI actually runs.
     from backend.processor import (
-        ProcessingConfig, InpaintMode, SubtitleRemover,
+        ProcessingConfig, SubtitleRemover,
         attach_json_log, normalize_processing_config, _coerce_backend_mode,
+        is_known_backend_mode,
     )
+    from backend import inpainter_registry
+
+    # Built-in modes first, then whatever opt-in backends registered at
+    # import time (ONNX / diffusion scaffolds gated by env vars).
+    mode_choices = ["sttn", "lama", "propainter", "auto", "migan"]
+    for _name, _builder in inpainter_registry.list_modes():
+        if _name not in mode_choices:
+            mode_choices.append(_name)
 
     parser = argparse.ArgumentParser(
         description="Video Subtitle Remover Pro CLI",
@@ -239,7 +248,7 @@ def main():
     parser.add_argument("--no-resume", action="store_true",
                        help="Ignore any existing checkpoint and reprocess every file")
     parser.add_argument("--mode", "-m", default="sttn",
-                       choices=["sttn", "lama", "propainter", "auto", "migan"],
+                       choices=mode_choices,
                        help="Inpainting algorithm.")
     parser.add_argument("--gpu", "-g", type=int, default=0, help="GPU device ID (-1 for CPU)")
     parser.add_argument("--lang", "-l", default="en", help="Detection language")
@@ -492,7 +501,7 @@ def main():
         parser.error("--ffmpeg-whisper-queue must be at least 0.02 seconds")
 
     config = ProcessingConfig(
-        mode=InpaintMode(args.mode),
+        mode=_coerce_backend_mode(args.mode),
         device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
         sttn_skip_detection=args.skip_detection,
         lama_super_fast=args.fast,
@@ -564,11 +573,8 @@ def main():
             overlay = _load_json_config(args.config)
             for k, v in overlay.items():
                 if k == "mode":
-                    mode_value = _coerce_backend_mode(v)
-                    if isinstance(v, str) and v.strip().casefold() in {
-                        "sttn", "lama", "propainter", "pro painter", "auto"
-                    }:
-                        config.mode = mode_value
+                    if is_known_backend_mode(v):
+                        config.mode = _coerce_backend_mode(v)
                     else:
                         logger.warning(f"Ignoring unknown mode in config: {v}")
                     continue
