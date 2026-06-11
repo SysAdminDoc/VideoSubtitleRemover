@@ -56,7 +56,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
 - **Premium Dark UI** -- Cohesive design system with custom sliders, toggles, status chips, taskbar progress, onboarding modal
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
-- **CI/CD Releases** -- Automated Windows builds via GitHub Actions, pip-audit scan, strict artifact verification, and winget submission support
+- **CI/CD Releases** -- Automated Windows builds via GitHub Actions, pip-audit scan, strict artifact/version/dependency verification, and winget submission support
 
 ## System Requirements
 

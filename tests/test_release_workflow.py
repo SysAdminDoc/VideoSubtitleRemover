@@ -63,6 +63,15 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("Required bundled document missing", self.workflow)
         self.assertIn("Strict release requires NSIS installer artifact.", self.workflow)
         self.assertIn("Get-AuthenticodeSignature $target", self.workflow)
+        self.assertIn("release-hidden-imports.json", self.workflow)
+        self.assertIn("hiddenImports", self.workflow)
+        self.assertIn("python -m pip list --format=json", self.workflow)
+        self.assertIn("dependencies", self.workflow)
+        self.assertIn("APP_VERSION $appVersion does not match release tag", self.workflow)
+        self.assertIn("README.md", self.workflow)
+        self.assertIn("CHANGELOG.md", self.workflow)
+        self.assertIn("ROADMAP.md", self.workflow)
+        self.assertIn("smokeLaunch", self.workflow)
 
     def test_signing_readiness_uses_step_output(self):
         self.assertIn("id: signing", self.workflow)
