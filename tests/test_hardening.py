@@ -238,7 +238,7 @@ class BackendWriteSrtTests(unittest.TestCase):
             path = f.name
         try:
             remover._write_srt(path, fps=0.0)
-            content = open(path, encoding="utf-8").read()
+            content = Path(path).read_text(encoding="utf-8")
             self.assertIn("00:00:00,033", content)  # frame 0 / 30 fps
         finally:
             os.unlink(path)
@@ -251,7 +251,7 @@ class BackendWriteSrtTests(unittest.TestCase):
             path = f.name
         try:
             remover._write_srt(path, fps=0.001)
-            content = open(path, encoding="utf-8").read()
+            content = Path(path).read_text(encoding="utf-8")
             # Should have sane timestamp, not a 1000-second-long cue
             self.assertIn("00:00:00", content)
             # The end timestamp at 30fps for frame 0 is 0.033s, nowhere near 1000s
