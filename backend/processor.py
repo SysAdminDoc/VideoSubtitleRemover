@@ -45,8 +45,10 @@ logger = logging.getLogger(__name__)
 # but moved during the split is re-imported here so existing callers
 # (`from backend.processor import _open_capture`) keep working.
 from backend.io import (
+    SubtitleStreamInfo,
     _probe_codec_for_log,
     _probe_audio_stream_count,
+    _probe_subtitle_streams,
     _probe_duration_seconds,
     _ffmpeg_subprocess_timeout,
     _probe_keyframe_indices,

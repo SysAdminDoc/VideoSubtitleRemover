@@ -1389,6 +1389,66 @@ class MultiTrackLoudnormFilterTests(unittest.TestCase):
             _shutil.which = original
 
 
+class SubtitleStreamProbeTests(unittest.TestCase):
+    """#103 first pass: probe embedded subtitle tracks without loading OCR."""
+
+    def test_probe_subtitle_streams_parses_ffprobe_json(self):
+        from unittest import mock
+
+        payload = {
+            "streams": [
+                {
+                    "index": 2,
+                    "codec_name": "subrip",
+                    "tags": {"language": "eng", "title": "SDH"},
+                    "disposition": {"default": 1, "forced": 0},
+                },
+                {
+                    "index": 4,
+                    "codec_name": "ass",
+                    "tags": {"language": "jpn"},
+                    "disposition": {"default": "0", "forced": "1"},
+                },
+            ]
+        }
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+        with mock.patch("backend.io.subprocess.run", return_value=completed) as run:
+            streams = processor._probe_subtitle_streams("movie.mkv")
+
+        cmd = run.call_args.args[0]
+        self.assertIn("-select_streams", cmd)
+        self.assertIn("s", cmd)
+        self.assertIn("-of", cmd)
+        self.assertIn("json", cmd)
+        self.assertEqual(len(streams), 2)
+        self.assertEqual(streams[0].index, 2)
+        self.assertEqual(streams[0].codec_name, "subrip")
+        self.assertEqual(streams[0].language, "eng")
+        self.assertEqual(streams[0].title, "SDH")
+        self.assertTrue(streams[0].default)
+        self.assertFalse(streams[0].forced)
+        self.assertEqual(streams[1].index, 4)
+        self.assertEqual(streams[1].codec_name, "ass")
+        self.assertTrue(streams[1].forced)
+
+    def test_probe_subtitle_streams_falls_back_to_empty_list(self):
+        from unittest import mock
+
+        with mock.patch(
+            "backend.io.subprocess.run",
+            side_effect=FileNotFoundError,
+        ):
+            self.assertEqual(processor._probe_subtitle_streams("missing.mkv"), [])
+
+        completed = SimpleNamespace(returncode=0, stdout="{bad", stderr="")
+        with mock.patch("backend.io.subprocess.run", return_value=completed):
+            self.assertEqual(processor._probe_subtitle_streams("bad.mkv"), [])
+
+
 class LanguagePickerTests(unittest.TestCase):
     """F-5: lang picker must expose more than the legacy 12 languages
     while keeping the curated English-first ordering."""
