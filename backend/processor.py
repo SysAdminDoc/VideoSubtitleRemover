@@ -66,7 +66,7 @@ from backend.io import (
     _LosslessIntermediateWriter,
 )
 from backend.encoder import _detect_hw_encoder
-from backend.quality import _ssim
+from backend.quality import _ssim, compute_vmaf
 from backend.tracking import (
     _KalmanBox,
     _box_from_state,
@@ -1003,6 +1003,23 @@ class SubtitleRemover:
             mean_psnr = float(np.mean(psnrs))
             roi_mean_ssim = float(np.mean(roi_ssims)) if roi_ssims else None
             roi_mean_psnr = float(np.mean(roi_psnrs)) if roi_psnrs else None
+            segment_duration = max(0.1, min(30.0, span / max(fps, 1.0)))
+            segment_start = start_frame / max(fps, 1.0)
+            vmaf = compute_vmaf(
+                input_path,
+                output_path,
+                start_seconds=segment_start,
+                duration_seconds=segment_duration,
+            )
+            roi_vmaf = None
+            if roi_ready:
+                roi_vmaf = compute_vmaf(
+                    input_path,
+                    output_path,
+                    start_seconds=segment_start,
+                    duration_seconds=segment_duration,
+                    roi=roi,
+                )
             # SSIM 0.95 is the common "visually indistinguishable" floor
             # for compressed video. Tag now uses the ROI score when
             # available -- that's the signal users actually care about.
@@ -1021,6 +1038,8 @@ class SubtitleRemover:
                 'ssim': mean_ssim,
                 'roi_psnr': roi_mean_psnr,
                 'roi_ssim': roi_mean_ssim,
+                'vmaf': vmaf,
+                'roi_vmaf': roi_vmaf,
                 'roi_bbox': list(roi) if roi else None,
                 'samples': len(psnrs),
                 'tag': tag,
@@ -1655,6 +1674,15 @@ class SubtitleRemover:
                             f"Quality report: PSNR={metrics['psnr']:.2f} dB, "
                             f"SSIM={metrics['ssim']:.4f} "
                             f"({metrics['samples']} samples){tag_suffix}")
+                        if metrics.get('vmaf') is not None:
+                            logger.info(
+                                f"Quality report VMAF={metrics['vmaf']:.2f}"
+                                + (
+                                    f", ROI VMAF={metrics['roi_vmaf']:.2f}"
+                                    if metrics.get('roi_vmaf') is not None
+                                    else ""
+                                )
+                            )
                         if metrics.get('sheet'):
                             logger.info(f"Quality sheet: {metrics['sheet']}")
                 except Exception as exc:

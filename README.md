@@ -47,7 +47,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
-- **Quality Self-Test** -- PSNR / SSIM report with an ROI-cropped metric (measures the inpaint region, not the unchanged background) and an optional side-by-side comparison PNG
+- **Quality Self-Test** -- PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, and an optional side-by-side comparison PNG
 - **CLI + Presets** -- `python -m backend.processor --pattern ... --preset "YouTube (default)"`; six built-in presets + user presets persisted to `%APPDATA%`
 - **Chyron vs Subtitle Filter** -- Keep persistent text (logos, lower-thirds) and remove dialogue, or vice versa
 - **Karaoke Grouping** -- Per-syllable boxes fuse into a single line mask so highlighted lyrics do not leak through the gaps
@@ -202,7 +202,7 @@ python -m backend.processor -i input.mp4 -o output.mp4 --whisper-fallback --whis
 | `--whisper-model` | faster-whisper model size | tiny |
 | `--ffmpeg-whisper-model` | Local whisper.cpp ggml model for FFmpeg Whisper | - |
 | `--ffmpeg-whisper-queue` | FFmpeg whisper queue size in seconds | 3.0 |
-| `--quality-report` | Compute PSNR/SSIM after each run | Off |
+| `--quality-report` | Compute PSNR/SSIM and VMAF when libvmaf is available | Off |
 | `--quality-sheet` | Side-by-side comparison PNG | Off |
 | `--validate-config` | Print resolved config and exit | Off |
 | `--skip-existing` | Skip files whose output already exists | Off |
