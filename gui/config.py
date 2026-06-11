@@ -295,6 +295,7 @@ class ProcessingConfig:
     high_contrast: bool = False
     rtl_layout: bool = False
     update_check: bool = False
+    json_log_enabled: bool = False
 
     def to_dict(self) -> dict:
         from dataclasses import fields as _dc_fields
@@ -441,6 +442,7 @@ class ProcessingConfig:
         self.high_contrast = _coerce_bool(self.high_contrast, False)
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         self.update_check = _coerce_bool(self.update_check, False)
+        self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)
         return self
 
     @classmethod

@@ -3604,5 +3604,21 @@ class UpdateCheckTests(unittest.TestCase):
         self.assertTrue(cfg2.update_check)
 
 
+class JsonLogGuiTests(unittest.TestCase):
+    """RM-53: structured JSON log GUI toggle."""
+
+    def test_config_field_defaults_off(self):
+        cfg = gui.ProcessingConfig()
+        self.assertFalse(cfg.json_log_enabled)
+
+    def test_config_round_trip(self):
+        cfg = gui.ProcessingConfig()
+        cfg.json_log_enabled = True
+        d = cfg.to_dict()
+        self.assertTrue(d["json_log_enabled"])
+        cfg2 = gui.ProcessingConfig.from_dict(d)
+        self.assertTrue(cfg2.json_log_enabled)
+
+
 if __name__ == "__main__":
     unittest.main()
