@@ -101,21 +101,26 @@ jobs:
           if (Test-Path "icon.ico") { $dataArgs += @("--add-data", "icon.ico;.") }
           if (Test-Path "icons") { $dataArgs += @("--add-data", "icons;icons") }
 
-          $hiddenImports = @(
-            "--hidden-import", "PIL._tkinter_finder",
-            "--hidden-import", "cv2",
-            "--hidden-import", "numpy",
-            "--hidden-import", "tkinter",
-            "--hidden-import", "tkinter.ttk",
-            "--hidden-import", "tkinter.filedialog",
-            "--hidden-import", "tkinter.messagebox",
-            "--hidden-import", "simple_lama_inpainting"
+          $hiddenImportModules = @(
+            "PIL._tkinter_finder",
+            "cv2",
+            "numpy",
+            "tkinter",
+            "tkinter.ttk",
+            "tkinter.filedialog",
+            "tkinter.messagebox",
+            "simple_lama_inpainting"
           )
+          $hiddenImports = @()
+          foreach ($moduleName in $hiddenImportModules) {
+            $hiddenImports += @("--hidden-import", $moduleName)
+          }
 
           function Add-HiddenImportIfAvailable([string]$moduleName) {
             python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$moduleName') else 1)"
             if ($LASTEXITCODE -eq 0) {
               $script:hiddenImports += @("--hidden-import", $moduleName)
+              $script:hiddenImportModules += $moduleName
               Write-Host "Including optional module: $moduleName"
             } else {
               Write-Host "Optional module not installed, skipping: $moduleName"
@@ -129,6 +134,10 @@ jobs:
           Add-HiddenImportIfAvailable "onnxruntime"
 
           python -m PyInstaller --noconfirm --onedir --windowed @iconArgs --name "VideoSubtitleRemoverPro" @dataArgs @hiddenImports VideoSubtitleRemover.py
+          $hiddenImportModules |
+            Sort-Object -Unique |
+            ConvertTo-Json |
+            Set-Content release-hidden-imports.json
 
           $distDir = "dist\VideoSubtitleRemoverPro"
           foreach ($doc in @("README.md", "LICENSE", "CHANGELOG.md")) {
@@ -227,6 +236,14 @@ jobs:
             generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
             assets = @()
             bundledDocs = @()
+            dependencies = @()
+            hiddenImports = @()
+            versionChecks = @()
+            smokeLaunch = [ordered]@{
+              attempted = $false
+              status = "skipped"
+              reason = "Windowed GUI launch is skipped unless a reliable interactive desktop session is available."
+            }
           }
 
           function Add-VerifiedAsset {
@@ -262,6 +279,58 @@ jobs:
             }
             $verification.bundledDocs += $doc
           }
+
+          $expectedVersion = $versionTag.TrimStart("v")
+          $appSource = Get-Content "VideoSubtitleRemover.py" -Raw
+          if ($appSource -notmatch 'APP_VERSION\s*=\s*"([^"]+)"') {
+            throw "Could not find APP_VERSION in VideoSubtitleRemover.py"
+          }
+          $appVersion = $Matches[1]
+          $appVersionMatches = $appVersion -eq $expectedVersion
+          $verification.versionChecks += [ordered]@{
+            path = "VideoSubtitleRemover.py"
+            expected = $expectedVersion
+            actual = $appVersion
+            matched = $appVersionMatches
+          }
+          if (-not $appVersionMatches) {
+            throw "APP_VERSION $appVersion does not match release tag $versionTag"
+          }
+
+          $docVersionChecks = @(
+            @{ Path = "README.md"; Pattern = $expectedVersion },
+            @{ Path = "CHANGELOG.md"; Pattern = "## [$expectedVersion]" },
+            @{ Path = "ROADMAP.md"; Pattern = "v$expectedVersion" }
+          )
+          foreach ($check in $docVersionChecks) {
+            $present = Test-Path $check.Path
+            $matched = $false
+            if ($present) {
+              $matched = (Get-Content $check.Path -Raw).Contains($check.Pattern)
+            }
+            $verification.versionChecks += [ordered]@{
+              path = $check.Path
+              expected = $check.Pattern
+              present = $present
+              matched = $matched
+            }
+            if ($present -and -not $matched) {
+              throw "$($check.Path) does not contain expected version marker $($check.Pattern)"
+            }
+          }
+
+          $dependencyPayload = python -m pip list --format=json | ConvertFrom-Json
+          foreach ($dep in ($dependencyPayload | Sort-Object name)) {
+            $verification.dependencies += [ordered]@{
+              name = $dep.name
+              version = $dep.version
+            }
+          }
+
+          if (-not (Test-Path "release-hidden-imports.json")) {
+            throw "Hidden import manifest missing."
+          }
+          $verification.hiddenImports = Get-Content "release-hidden-imports.json" -Raw | ConvertFrom-Json
 
           $signingConfigured = "${{ steps.signing.outputs.has_signing }}" -eq "true"
           if ($signingConfigured) {
