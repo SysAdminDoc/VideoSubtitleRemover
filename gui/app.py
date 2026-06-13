@@ -3193,6 +3193,12 @@ class VideoSubtitleRemoverApp:
         fact("Input", "Click Import or drag files onto the queue")
         fact("Settings", str(SETTINGS_FILE))
         fact("Log file", str(LOG_FILE))
+        try:
+            from backend.cache_inventory import discover_caches, _format_bytes
+            total = sum(e.total_bytes for e in discover_caches())
+            fact("Disk cache", _format_bytes(total))
+        except Exception:
+            fact("Disk cache", "unavailable")
 
         # Action row
         actions = tk.Frame(body, bg=Theme.BG_CARD)
