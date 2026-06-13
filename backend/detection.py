@@ -214,6 +214,86 @@ class SubtitleDetector:
             return out
         return self._detect_axis_aligned(frame, threshold)
 
+    def detect_with_confidence(
+        self, frame: np.ndarray, threshold: float = 0.5
+    ) -> List[Tuple[int, int, int, int, float]]:
+        """Like detect(), but each result is (x1, y1, x2, y2, confidence)."""
+        if self.vertical:
+            h, w = frame.shape[:2]
+            rotated = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            rotated = self._detect_axis_aligned_conf(rotated, threshold)
+            out: List[Tuple[int, int, int, int, float]] = []
+            for (rx1, ry1, rx2, ry2, conf) in rotated:
+                ox1 = max(0, ry1)
+                oy1 = max(0, w - rx2)
+                ox2 = min(h, ry2)
+                oy2 = min(w, w - rx1)
+                if ox2 > ox1 and oy2 > oy1:
+                    out.append((ox1, oy1, ox2, oy2, conf))
+            return out
+        return self._detect_axis_aligned_conf(frame, threshold)
+
+    def _detect_axis_aligned_conf(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int, float]]:
+        if self._rapid_model is not None:
+            return self._detect_rapid_conf(frame, threshold)
+        boxes = self._detect_axis_aligned(frame, threshold)
+        return [(x1, y1, x2, y2, 1.0) for (x1, y1, x2, y2) in boxes]
+
+    def _detect_rapid_conf(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int, float]]:
+        try:
+            output = self._rapid_model(frame)
+            return self._rapid_output_to_boxes_conf(output, threshold)
+        except Exception as e:
+            logger.error(f"RapidOCR detection error: {e}")
+            return [(x1, y1, x2, y2, 1.0)
+                    for (x1, y1, x2, y2) in self._fallback_detection(frame)]
+
+    @classmethod
+    def _rapid_output_to_boxes_conf(
+        cls, output, threshold: float
+    ) -> List[Tuple[int, int, int, int, float]]:
+        if output is None:
+            return []
+        results = output[0] if isinstance(output, tuple) and output else output
+        if not results:
+            return []
+        boxes: List[Tuple[int, int, int, int, float]] = []
+        polys = cls._rapid_field(
+            results, "boxes", "dt_polys", "dt_boxes", "polys", "det_polys")
+        if polys is not None:
+            scores = cls._rapid_field(
+                results, "scores", "rec_scores", "text_scores", "cls_scores")
+            for index, poly in enumerate(polys):
+                conf = cls._rapid_score_at(scores, index)
+                if conf >= threshold:
+                    parsed = cls._poly_to_box(poly)
+                    if parsed is not None:
+                        boxes.append(parsed + (conf,))
+            return boxes
+        for entry in results:
+            parsed = cls._rapid_entry_to_box(entry, threshold)
+            if parsed is not None:
+                conf = 1.0
+                if isinstance(entry, dict):
+                    c = cls._rapid_field(
+                        entry, "score", "confidence", "conf", "rec_score")
+                    if c is not None:
+                        try:
+                            conf = float(c)
+                        except (TypeError, ValueError):
+                            pass
+                elif hasattr(entry, '__len__') and len(entry) >= 3:
+                    try:
+                        conf = float(entry[2])
+                    except (TypeError, ValueError):
+                        pass
+                boxes.append(parsed + (conf,))
+        return boxes
+
     def _detect_axis_aligned(self, frame: np.ndarray,
                               threshold: float) -> List[Tuple[int, int, int, int]]:
         vlm = getattr(self, "_vlm_detector", None)

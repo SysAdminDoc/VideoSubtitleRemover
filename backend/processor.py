@@ -421,21 +421,40 @@ class SubtitleRemover:
             self.on_progress(progress, message)
 
     def _create_mask(self, frame_shape: Tuple[int, int], boxes: List[Tuple[int, int, int, int]],
-                     padding: int = 5, frame: Optional[np.ndarray] = None) -> np.ndarray:
+                     padding: int = 5, frame: Optional[np.ndarray] = None,
+                     confidences: Optional[List[float]] = None) -> np.ndarray:
         h, w = frame_shape[:2]
         mask = np.zeros((h, w), dtype=np.uint8)
-        for x1, y1, x2, y2 in boxes:
-            x1 = max(0, x1 - padding)
-            y1 = max(0, y1 - padding)
-            x2 = min(w, x2 + padding)
-            y2 = min(h, y2 + padding)
-            mask[y1:y2, x1:x2] = 255
+        base_dilate = self.config.mask_dilate_px
+        use_conf_dilate = (
+            self.config.confidence_weighted_dilation
+            and confidences is not None
+            and base_dilate > 0
+        )
 
-        # Morphological dilation for cleaner inpainting boundaries
-        dilate_px = self.config.mask_dilate_px
-        if dilate_px > 0 and mask.max() > 0:
+        for idx, (x1, y1, x2, y2) in enumerate(boxes):
+            bx1 = max(0, x1 - padding)
+            by1 = max(0, y1 - padding)
+            bx2 = min(w, x2 + padding)
+            by2 = min(h, y2 + padding)
+            mask[by1:by2, bx1:bx2] = 255
+
+            if use_conf_dilate:
+                conf = confidences[idx] if idx < len(confidences) else 1.0
+                scale = self.config.confidence_dilation_scale
+                effective = int(base_dilate * (1.0 + (1.0 - conf) * scale))
+                if effective > 0:
+                    k = cv2.getStructuringElement(
+                        cv2.MORPH_ELLIPSE,
+                        (effective * 2 + 1, effective * 2 + 1))
+                    box_mask = np.zeros((h, w), dtype=np.uint8)
+                    box_mask[by1:by2, bx1:bx2] = 255
+                    dilated = cv2.dilate(box_mask, k, iterations=1)
+                    mask = cv2.bitwise_or(mask, dilated)
+
+        if not use_conf_dilate and base_dilate > 0 and mask.max() > 0:
             kernel = cv2.getStructuringElement(
-                cv2.MORPH_ELLIPSE, (dilate_px * 2 + 1, dilate_px * 2 + 1))
+                cv2.MORPH_ELLIPSE, (base_dilate * 2 + 1, base_dilate * 2 + 1))
             mask = cv2.dilate(mask, kernel, iterations=1)
 
         # RM-66: optional SAM 2 mask refinement. When the user has set
@@ -835,8 +854,14 @@ class SubtitleRemover:
 
             self._report_progress(0.3, "Detecting text regions...")
             fixed = self._fixed_region_boxes()
+            confidences = None
             if fixed:
                 boxes = fixed
+            elif self.config.confidence_weighted_dilation:
+                results = self.detector.detect_with_confidence(
+                    image, self.config.detection_threshold)
+                boxes = [(x1, y1, x2, y2) for x1, y1, x2, y2, _ in results]
+                confidences = [c for _, _, _, _, c in results]
             else:
                 boxes = self.detector.detect(image, self.config.detection_threshold)
 
@@ -847,7 +872,8 @@ class SubtitleRemover:
                 return True
 
             self._report_progress(0.5, f"Removing {len(boxes)} text regions...")
-            mask = self._create_mask(image.shape, boxes, frame=image)
+            mask = self._create_mask(image.shape, boxes, frame=image,
+                                     confidences=confidences)
             [result] = self.inpainter.inpaint([image], [mask])
 
             self._report_progress(0.9, "Saving result...")
@@ -1212,7 +1238,18 @@ class SubtitleRemover:
                                 det_frame = frame
                         else:
                             det_frame = frame
-                        detected_boxes = self.detector.detect(det_frame, self.config.detection_threshold)
+                        det_confs = None
+                        if self.config.confidence_weighted_dilation:
+                            det_results = self.detector.detect_with_confidence(
+                                det_frame, self.config.detection_threshold)
+                            detected_boxes = [
+                                (x1, y1, x2, y2)
+                                for x1, y1, x2, y2, _ in det_results
+                            ]
+                            det_confs = [c for _, _, _, _, c in det_results]
+                        else:
+                            detected_boxes = self.detector.detect(
+                                det_frame, self.config.detection_threshold)
                         # Karaoke grouping: fuse per-syllable boxes on the
                         # same line before tracking so Kalman sees one
                         # composite per line, not one per syllable.
@@ -1222,9 +1259,11 @@ class SubtitleRemover:
                                 x_gap_px=self.config.karaoke_x_gap_px,
                                 y_overlap_ratio=self.config.karaoke_y_overlap,
                             )
+                            det_confs = None
                         # Smooth jitter + fill single-frame misses via Kalman
                         if tracker is not None:
                             smoothed = tracker.update(list(detected_boxes))
+                            det_confs = None
                         else:
                             smoothed = list(detected_boxes)
                         # Chyron / subtitle filter: when either remove flag is
@@ -1239,11 +1278,13 @@ class SubtitleRemover:
                                 if (c == "chyron" and self.config.remove_chyrons)
                                 or (c == "subtitle" and self.config.remove_subtitles)
                             ]
+                            det_confs = None
                         # If fixed boxes are set without skip_detection, union them
                         # with per-frame detections so users can pin a region AND
                         # still clean incidental text elsewhere.
                         if fixed_boxes:
                             boxes = list(fixed_boxes) + smoothed
+                            det_confs = None
                         else:
                             boxes = smoothed
                         if self.config.export_srt:
@@ -1266,7 +1307,8 @@ class SubtitleRemover:
                                           int(w_full * 0.95), h_full - 4)]
                                 break
 
-                    mask = self._create_mask(frame.shape, boxes, frame=frame)
+                    mask = self._create_mask(frame.shape, boxes, frame=frame,
+                                             confidences=det_confs)
                     # B-3: accumulate the union-mask bbox for the quality
                     # report ROI. We track the bbox (not the per-frame mask
                     # stack) to keep memory flat; the bbox is enough to

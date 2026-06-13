@@ -293,6 +293,8 @@ def main():
                        help="Reuse detection mask for N frames between detections")
     parser.add_argument("--mask-dilate", type=int, default=8,
                        help="Mask dilation in pixels (0=off)")
+    parser.add_argument("--confidence-dilate", action="store_true",
+                       help="Scale mask dilation inversely with OCR confidence")
     parser.add_argument("--no-hw-encode", action="store_true",
                        help="Disable hardware encoding (force libx264)")
     parser.add_argument("--codec", default="h264",
@@ -525,6 +527,7 @@ def main():
         time_end=args.end,
         detection_frame_skip=args.frame_skip,
         mask_dilate_px=args.mask_dilate,
+        confidence_weighted_dilation=args.confidence_dilate,
         mask_feather_px=args.mask_feather,
         edge_ring_px=args.edge_ring,
         tbe_enable=not args.no_tbe,

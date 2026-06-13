@@ -352,6 +352,8 @@ class VideoSubtitleRemoverApp:
             self.config.update_check = self.update_check_var.get()
         if hasattr(self, 'json_log_var'):
             self.config.json_log_enabled = self.json_log_var.get()
+        if hasattr(self, 'conf_dilate_var'):
+            self.config.confidence_weighted_dilation = self.conf_dilate_var.get()
         # GPU sync
         selection = self.gpu_var.get()
         for gpu in self.gpus:
@@ -1580,6 +1582,17 @@ class VideoSubtitleRemoverApp:
         self._create_slider(det_frame, "Mask dilate", 0, 20,
                             self.config.mask_dilate_px, "mask_dilate_px",
                             hint="Expand detected regions for cleaner fill edges.")
+        self.conf_dilate_var = tk.BooleanVar(
+            value=self.config.confidence_weighted_dilation)
+        conf_dilate_toggle = ModernToggle(
+            det_frame,
+            text="Confidence-weighted dilation",
+            variable=self.conf_dilate_var,
+        )
+        conf_dilate_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(conf_dilate_toggle,
+                "Scale mask dilation inversely with OCR confidence: "
+                "low-confidence boxes get more padding, high-confidence boxes stay tight.")
         self._create_slider(det_frame, "Mask feather", 0, 15,
                             self.config.mask_feather_px, "mask_feather_px",
                             hint="Soft-blend the removal edge for seamless boundaries.")

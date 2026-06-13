@@ -122,6 +122,8 @@ class ProcessingConfig:
     # Mask settings
     mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
     mask_feather_px: int = 4  # gaussian feather for seamless alpha-blend at edges
+    confidence_weighted_dilation: bool = False
+    confidence_dilation_scale: float = 1.5
 
     # Temporal Background Exposure (real STTN / ProPainter path)
     # When enabled, STTN/ProPainter sample masked pixels from neighbouring frames
@@ -461,6 +463,10 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.nle_sidecar = sidecar
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
+    config.confidence_weighted_dilation = _coerce_bool(
+        config.confidence_weighted_dilation, False)
+    config.confidence_dilation_scale = _coerce_float(
+        config.confidence_dilation_scale, 1.5, 0.0, 5.0)
     config.tbe_enable = _coerce_bool(config.tbe_enable, True)
     config.tbe_min_coverage = _coerce_int(config.tbe_min_coverage, 3, 1, 32)
     config.tbe_use_median = _coerce_bool(config.tbe_use_median, True)
