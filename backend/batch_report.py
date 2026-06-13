@@ -12,7 +12,7 @@ import datetime as _dt
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from backend.io import (
     _choose_available_output_path,
@@ -138,10 +138,13 @@ def finish_batch_item(record: dict, status: str, *,
             and gate.get("status") == "review"
         ):
             record["status"] = STATUS_REVIEW_NEEDED
-            if message:
-                record["message"] = f"{message}; quality gate review needed"
-            else:
-                record["message"] = "Quality gate review needed"
+            step = gate.get("ladderStep", "")
+            reason = gate.get("reason", "")
+            parts = [message] if message else []
+            parts.append(f"quality gate: {step}")
+            if reason:
+                parts.append(reason)
+            record["message"] = "; ".join(parts)
     elif status == STATUS_HARDCODED_PROCESSED:
         record["quality_gate"] = quality_gate_unknown("quality report not enabled")
     elif status in {STATUS_SKIPPED_EXISTING, STATUS_CHECKPOINT_DONE, STATUS_SOFT_REMUXED}:
@@ -294,6 +297,7 @@ def _markdown_summary(payload: dict) -> str:
         "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Quality | Message |",
         "|---|---|---|---|---:|---|---:|---:|---|---|",
     ]
+    review_notes: List[str] = []
     for record in payload.get("files", []):
         lines.append(
             "| "
@@ -311,6 +315,19 @@ def _markdown_summary(payload: dict) -> str:
             ])
             + " |"
         )
+        gate = record.get("quality_gate")
+        if isinstance(gate, dict) and gate.get("status") == "review":
+            remediation = gate.get("remediation", "")
+            if remediation:
+                review_notes.append(
+                    f"- **{_escape_md(record.get('input_name', '?'))}** "
+                    f"({gate.get('ladderStep', '')}): {_escape_md(remediation)}"
+                )
+    if review_notes:
+        lines.append("")
+        lines.append("### Quality review notes")
+        lines.append("")
+        lines.extend(review_notes)
     return "\n".join(lines) + "\n"
 
 
@@ -351,7 +368,10 @@ def _quality_report_record(metrics: dict) -> dict:
         "roi_vmaf",
         "roi_bbox",
         "temporal_flicker_score",
+        "temporal_consistency",
         "residual_text_score",
+        "lpips",
+        "dists",
         "sheet",
     )
     return {key: metrics.get(key) for key in keys if key in metrics}
@@ -362,6 +382,6 @@ def _format_quality_gate(value: Any) -> str:
         return ""
     status = str(value.get("status") or "")
     step = str(value.get("ladderStep") or "")
-    if status and step and step not in {"none", "not-applicable"}:
+    if status and step and step not in {"none", "not-applicable", "not-run"}:
         return _escape_md(f"{status} ({step})")
     return _escape_md(status)

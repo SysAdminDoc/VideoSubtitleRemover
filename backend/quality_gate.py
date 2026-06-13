@@ -2,14 +2,18 @@
 
 The processor already computes cheap PSNR/SSIM/ROI/VMAF metrics when the
 quality report is enabled. This module turns that metric payload into a
-small, stable decision object that batch reports can persist and future
-fallback ladders can build on.
+small, stable decision object that batch reports can persist.
+
+The fallback ladder classifies each metric violation into a specific
+remediation bucket. When multiple violations are present, the most
+severe ladder step wins. The report includes the step taken, reasons
+for every triggered check, and an actionable remediation suggestion.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 
 STATUS_PASSED = "passed"
@@ -18,71 +22,110 @@ STATUS_UNKNOWN = "unknown"
 STATUS_NOT_APPLICABLE = "not_applicable"
 
 LADDER_NONE = "none"
+LADDER_INCREASE_DILATION = "increase-dilation"
+LADDER_TEMPORAL_SMOOTH = "temporal-smooth"
+LADDER_ALTERNATE_INPAINTER = "alternate-inpainter"
 LADDER_MANUAL_REVIEW = "manual-review"
 LADDER_NOT_RUN = "not-run"
 LADDER_NOT_APPLICABLE = "not-applicable"
+
+_LADDER_SEVERITY = {
+    LADDER_NONE: 0,
+    LADDER_INCREASE_DILATION: 1,
+    LADDER_TEMPORAL_SMOOTH: 2,
+    LADDER_ALTERNATE_INPAINTER: 3,
+    LADDER_MANUAL_REVIEW: 4,
+    LADDER_NOT_RUN: -1,
+    LADDER_NOT_APPLICABLE: -1,
+}
 
 SSIM_FLOOR = 0.95
 VMAF_FLOOR = 90.0
 TEMPORAL_FLICKER_CEILING = 0.08
 RESIDUAL_TEXT_SCORE_CEILING = 0.025
 
+_REMEDIATION = {
+    LADDER_NONE: "",
+    LADDER_INCREASE_DILATION: (
+        "Re-process with increased mask dilation (--mask-dilate) "
+        "to cover residual text strokes at subtitle edges."
+    ),
+    LADDER_TEMPORAL_SMOOTH: (
+        "Re-process with temporal smoothing enabled "
+        "(--temporal-smooth 2) to reduce per-frame flicker "
+        "in the inpainted region."
+    ),
+    LADDER_ALTERNATE_INPAINTER: (
+        "Re-process with a different inpaint mode. If using STTN, "
+        "try LAMA or ProPainter for better visual quality on this clip. "
+        "If using LAMA, try ProPainter for motion-heavy footage."
+    ),
+    LADDER_MANUAL_REVIEW: (
+        "Multiple quality checks failed or a single check failed "
+        "severely. Inspect the quality sheet and decide whether to "
+        "accept, re-process with different settings, or exclude "
+        "this file from the batch."
+    ),
+    LADDER_NOT_RUN: "Enable --quality-report to run the quality gate.",
+    LADDER_NOT_APPLICABLE: "",
+}
+
+_ALL_OPTIONAL_METRICS = ("vmaf", "roi_vmaf", "lpips", "dists",
+                         "temporal_consistency")
+
 
 def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
-    """Return a stable gate result for a quality metric payload."""
+    """Return a stable gate result for a quality metric payload.
 
+    The result includes a graduated ``ladderStep`` that maps each
+    failure mode to a specific remediation action, plus a human-readable
+    ``remediation`` string and a ``degradedMetrics`` list of optional
+    metrics that were unavailable.
+    """
     if not metrics:
         return quality_gate_unknown("quality report not available")
     samples = _number(metrics.get("samples"))
     if samples is not None and samples <= 0:
         return quality_gate_unknown("quality report has no sampled frames")
 
-    reasons = []
+    violations: List[Dict[str, Any]] = []
+
     tag = str(metrics.get("tag") or "").strip().lower()
     if tag == "review":
-        reasons.append("quality report tag is Review")
+        violations.append({
+            "metric": "tag",
+            "detail": "quality report tag is Review",
+            "ladder": LADDER_MANUAL_REVIEW,
+        })
 
-    roi_ssim = _number(metrics.get("roi_ssim"))
-    frame_ssim = _number(metrics.get("ssim"))
-    if roi_ssim is not None:
-        if roi_ssim < SSIM_FLOOR:
-            reasons.append(f"ROI SSIM {roi_ssim:.4f} below {SSIM_FLOOR:.4f}")
-    elif frame_ssim is not None and frame_ssim < SSIM_FLOOR:
-        reasons.append(f"frame SSIM {frame_ssim:.4f} below {SSIM_FLOOR:.4f}")
+    _check_ssim(metrics, violations)
+    _check_vmaf(metrics, violations)
+    _check_flicker(metrics, violations)
+    _check_residual_text(metrics, violations)
 
-    roi_vmaf = _number(metrics.get("roi_vmaf"))
-    frame_vmaf = _number(metrics.get("vmaf"))
-    if roi_vmaf is not None:
-        if roi_vmaf < VMAF_FLOOR:
-            reasons.append(f"ROI VMAF {roi_vmaf:.2f} below {VMAF_FLOOR:.2f}")
-    elif frame_vmaf is not None and frame_vmaf < VMAF_FLOOR:
-        reasons.append(f"frame VMAF {frame_vmaf:.2f} below {VMAF_FLOOR:.2f}")
-
-    flicker = _number(metrics.get("temporal_flicker_score"))
-    if flicker is not None and flicker > TEMPORAL_FLICKER_CEILING:
-        reasons.append(
-            f"temporal flicker {flicker:.4f} above "
-            f"{TEMPORAL_FLICKER_CEILING:.4f}"
-        )
-    residual = _number(metrics.get("residual_text_score"))
-    if residual is not None and residual > RESIDUAL_TEXT_SCORE_CEILING:
-        reasons.append(
-            f"residual text score {residual:.4f} above "
-            f"{RESIDUAL_TEXT_SCORE_CEILING:.4f}"
-        )
-
+    degraded = _find_degraded_metrics(metrics)
     previews = _preview_paths(metrics)
-    if reasons:
+
+    if not violations:
         return {
-            "status": STATUS_REVIEW,
-            "ladderStep": LADDER_MANUAL_REVIEW,
-            "reason": "; ".join(reasons),
+            "status": STATUS_PASSED,
+            "ladderStep": LADDER_NONE,
+            "reason": "quality metrics passed configured thresholds",
+            "reasons": [],
+            "remediation": "",
+            "degradedMetrics": degraded,
             "previewFramePaths": previews,
         }
+
+    ladder = _select_ladder_step(violations)
+    reasons_text = [v["detail"] for v in violations]
     return {
-        "status": STATUS_PASSED,
-        "ladderStep": LADDER_NONE,
-        "reason": "quality metrics passed configured thresholds",
+        "status": STATUS_REVIEW,
+        "ladderStep": ladder,
+        "reason": "; ".join(reasons_text),
+        "reasons": violations,
+        "remediation": _REMEDIATION.get(ladder, ""),
+        "degradedMetrics": degraded,
         "previewFramePaths": previews,
     }
 
@@ -92,6 +135,9 @@ def quality_gate_unknown(reason: str) -> Dict[str, Any]:
         "status": STATUS_UNKNOWN,
         "ladderStep": LADDER_NOT_RUN,
         "reason": reason,
+        "reasons": [],
+        "remediation": _REMEDIATION[LADDER_NOT_RUN],
+        "degradedMetrics": [],
         "previewFramePaths": [],
     }
 
@@ -101,8 +147,117 @@ def quality_gate_not_applicable(reason: str) -> Dict[str, Any]:
         "status": STATUS_NOT_APPLICABLE,
         "ladderStep": LADDER_NOT_APPLICABLE,
         "reason": reason,
+        "reasons": [],
+        "remediation": "",
+        "degradedMetrics": [],
         "previewFramePaths": [],
     }
+
+
+def _check_ssim(metrics: dict,
+                violations: List[Dict[str, Any]]) -> None:
+    roi_ssim = _number(metrics.get("roi_ssim"))
+    frame_ssim = _number(metrics.get("ssim"))
+    ssim = roi_ssim if roi_ssim is not None else frame_ssim
+    label = "ROI SSIM" if roi_ssim is not None else "frame SSIM"
+    if ssim is None:
+        return
+    if ssim < SSIM_FLOOR:
+        violations.append({
+            "metric": "ssim",
+            "value": ssim,
+            "threshold": SSIM_FLOOR,
+            "detail": f"{label} {ssim:.4f} below {SSIM_FLOOR:.4f}",
+            "ladder": LADDER_ALTERNATE_INPAINTER,
+        })
+
+
+def _check_vmaf(metrics: dict,
+                violations: List[Dict[str, Any]]) -> None:
+    roi_vmaf = _number(metrics.get("roi_vmaf"))
+    frame_vmaf = _number(metrics.get("vmaf"))
+    vmaf = roi_vmaf if roi_vmaf is not None else frame_vmaf
+    label = "ROI VMAF" if roi_vmaf is not None else "frame VMAF"
+    if vmaf is None:
+        return
+    if vmaf < VMAF_FLOOR:
+        violations.append({
+            "metric": "vmaf",
+            "value": vmaf,
+            "threshold": VMAF_FLOOR,
+            "detail": f"{label} {vmaf:.2f} below {VMAF_FLOOR:.2f}",
+            "ladder": LADDER_ALTERNATE_INPAINTER,
+        })
+
+
+def _check_flicker(metrics: dict,
+                   violations: List[Dict[str, Any]]) -> None:
+    flicker = _number(metrics.get("temporal_flicker_score"))
+    if flicker is None:
+        return
+    if flicker > TEMPORAL_FLICKER_CEILING:
+        violations.append({
+            "metric": "temporal_flicker_score",
+            "value": flicker,
+            "threshold": TEMPORAL_FLICKER_CEILING,
+            "detail": (
+                f"temporal flicker {flicker:.4f} above "
+                f"{TEMPORAL_FLICKER_CEILING:.4f}"
+            ),
+            "ladder": LADDER_TEMPORAL_SMOOTH,
+        })
+
+
+def _check_residual_text(metrics: dict,
+                         violations: List[Dict[str, Any]]) -> None:
+    residual = _number(metrics.get("residual_text_score"))
+    if residual is None:
+        return
+    if residual > RESIDUAL_TEXT_SCORE_CEILING:
+        violations.append({
+            "metric": "residual_text_score",
+            "value": residual,
+            "threshold": RESIDUAL_TEXT_SCORE_CEILING,
+            "detail": (
+                f"residual text score {residual:.4f} above "
+                f"{RESIDUAL_TEXT_SCORE_CEILING:.4f}"
+            ),
+            "ladder": LADDER_INCREASE_DILATION,
+        })
+
+
+def _select_ladder_step(violations: Sequence[Dict[str, Any]]) -> str:
+    """Pick the most severe ladder step from a set of violations.
+
+    When multiple violations are present and at least two different
+    ladder steps triggered, escalate to MANUAL_REVIEW since no single
+    automated remediation covers all failures.
+    """
+    if not violations:
+        return LADDER_NONE
+    steps = set()
+    max_severity = -1
+    best = LADDER_MANUAL_REVIEW
+    for v in violations:
+        step = v.get("ladder", LADDER_MANUAL_REVIEW)
+        steps.add(step)
+        sev = _LADDER_SEVERITY.get(step, 4)
+        if sev > max_severity:
+            max_severity = sev
+            best = step
+    if len(steps) > 1:
+        return LADDER_MANUAL_REVIEW
+    return best
+
+
+def _find_degraded_metrics(metrics: dict) -> List[str]:
+    """Return names of optional metrics that were expected but absent."""
+    degraded: List[str] = []
+    for name in _ALL_OPTIONAL_METRICS:
+        value = metrics.get(name)
+        if value is None:
+            degraded.append(name)
+    return degraded
 
 
 def _preview_paths(metrics: dict) -> list[str]:

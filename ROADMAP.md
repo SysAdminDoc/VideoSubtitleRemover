@@ -16,15 +16,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
      - Execute the bundled GUI smoke path in strict mode when the release
        runner has a reliable interactive desktop session.
 
-108. **Batch quality gate ladder** -- failed quality checks must produce
-     a transparent fallback/review result instead of quietly shipping bad
-     fills.
-     Priority: P1. Effort: L. Confidence: medium.
-     Acceptance criteria:
-     - Synthetic residual-text clip exercises the fallback ladder.
-     - Report includes ladder step taken and manual-review reason.
-     - Missing optional metric dependencies degrade cleanly.
-
 110. **OpenCV 5 DNN LaMa migration** -- migrate the LaMa inpainting
      backend from `simple-lama-inpainting` (PyTorch) to OpenCV 5's
      `cv2.dnn` LaMa runner; removes the PyTorch runtime dependency for
@@ -369,46 +360,9 @@ Speculative research bench; not commitments.
 
 ## Research-Driven Additions
 
-### P0
-
-- [ ] P0 - Raise Pillow floor to 12.2.0
-  Why: The current `Pillow>=12.1.1` floor admits versions affected by newer 2026 Pillow advisories in an image-enabled app.
-  Evidence: `requirements.txt:7-10`; `setup.py:333-337`; `.github/workflows/build.yml:65-67`; https://github.com/advisories/GHSA-wjx4-4jcj-g98j; https://github.com/advisories/GHSA-pwv6-vv43-88gr; https://github.com/python-pillow/Pillow/security/advisories/GHSA-whj4-6x5x-4v2j
-  Touches: `requirements.txt`, `setup.py`, `.github/workflows/build.yml`, `README.md`, `tests/test_release_workflow.py`, `tests/test_setup_bootstrap.py`
-  Acceptance: All install/release paths require `Pillow>=12.2.0`; comments mention the current advisories; tests assert the floor; dependency tests pass.
-  Complexity: S
-
 ### P1
 
-- [ ] P1 - Remove app-wide keyboard accelerators and shortcut copy
-  Why: The repo still binds and advertises global shortcuts despite the local product rule banning keyboard shortcuts.
-  Evidence: `gui/app.py:685-694`; `gui/app.py:3186`; `README.md:129-130`
-  Touches: `gui/app.py`, `README.md`, `tests/test_gui_smoke.py`
-  Acceptance: No app-wide `Control-*` or `F5` bindings remain; README/About no longer mention shortcut usage; focused-widget Enter/Space activation stays intact for accessibility.
-  Complexity: S
-
-- [ ] P1 - Add FFmpeg Whisper VAD controls
-  Why: The FFmpeg Whisper backend only exposes model path and queue seconds, while the filter supports VAD controls that can reduce coarse speech-span masking.
-  Evidence: `backend/whisper_fallback.py:99-116`; `backend/config.py:92-96`; `README.md:184-190`; https://ayosec.github.io/ffmpeg-filters-docs/8.0/Filters/Audio/whisper.html
-  Touches: `backend/config.py`, `gui/config.py`, `backend/cli.py`, `backend/whisper_fallback.py`, `gui/app.py`, `tests/test_hardening.py`, `README.md`
-  Acceptance: Config/CLI/GUI can set optional `vad_model`, `vad_threshold`, and minimum speech duration for the FFmpeg Whisper backend; missing VAD model degrades visibly; mocked tests verify filter argv escaping.
-  Complexity: M
-
 ### P2
-
-- [ ] P2 - Prune stale `torch_directml` local packaging probe
-  Why: DirectML acceleration now routes through ONNX Runtime, but the local PyInstaller batch build still probes `torch_directml`.
-  Evidence: `build_exe.bat:49-55`; `setup.py:254`; `tests/test_release_workflow.py:31-33`; https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html
-  Touches: `build_exe.bat`, `tests/test_release_workflow.py`, `tests/test_setup_bootstrap.py`
-  Acceptance: `torch_directml` no longer appears in local or GitHub packaging paths; `onnxruntime`/DirectML packaging coverage remains; tests assert both build paths.
-  Complexity: S
-
-- [ ] P2 - Centralize supported media extension allowlists
-  Why: GUI single-file validation, file pickers, and backend frame-directory capture duplicate image extension rules and disagree on `.tif`.
-  Evidence: `gui/utils.py:108-110`; `gui/widgets.py:1206-1209`; `gui/app.py:3297-3298`; `backend/io.py:332-342`
-  Touches: `gui/utils.py`, `gui/widgets.py`, `gui/app.py`, `backend/io.py`, `tests/test_hardening.py`, `tests/test_gui_smoke.py`
-  Acceptance: One shared media-extension source drives GUI, drag/drop, file picker, CLI/frame-directory validation; `.tif` parity is covered; unsupported risky formats stay excluded.
-  Complexity: S
 
 - [ ] P2 - Add local cache inspector and cleanup command
   Why: Optional proxies, model weights, TensorRT engines, and Whisper assets can consume disk silently, but the app only exposes log/settings folders today.
@@ -416,3 +370,12 @@ Speculative research bench; not commitments.
   Touches: `backend/cache_inventory.py`, `backend/cli.py`, `gui/app.py`, `README.md`, `tests/test_hardening.py`
   Acceptance: GUI and CLI report cache directories, byte sizes, and provenance labels; cleanup skips active-run files, leaves unknown user files alone, and records results in the log/status surface.
   Complexity: M
+
+- [ ] P2 - Promote LaMa-ONNX from opt-in to default inpaint backend
+  Why: IOPaint (the 23K-star LaMa ecosystem anchor) was archived in April 2025. simple-lama-inpainting's continued maintenance is uncertain. The existing LaMa-ONNX path (RM-25, opt-in via `VSR_LAMA_ONNX`) eliminates the `torch.load` CVE surface (CVE-2026-24747), removes the PyTorch runtime dependency for the LaMa codepath, and runs 3-5x faster via ONNX Runtime.
+  Evidence: IOPaint archived at https://github.com/Sanster/IOPaint; simple-lama-inpainting uses torch.load internally; `backend/inpainters_onnx.py` already has a working LaMa-ONNX backend that registers via the inpainter registry; CVE-2026-24747 / CVE-2025-32434 affect torch.load in PyTorch <= 2.9.1; OpenCV 5 DNN LaMa (#110) is the longer-term exit but is CPU-only as of June 2026
+  Touches: `backend/inpainters/lama.py`, `backend/inpainters_onnx.py`, `requirements.txt`, `setup.py`, `build_exe.bat`, `.github/workflows/build.yml`, `README.md`, `tests/test_hardening.py`
+  Acceptance: The default LAMA mode uses ONNX Runtime with a bundled or auto-downloaded LaMa FP32 ONNX weight (SHA-256 verified via `backend/model_hashes.py`). simple-lama-inpainting becomes the fallback when ONNX Runtime is absent. A/B PSNR/SSIM parity with the PyTorch path on reference clips (+/- 0.5 dB). PyInstaller bundle includes the ONNX weight. torch is still needed for opt-in diffusion backends but no longer for the core LaMa path.
+  Complexity: L
+
+
