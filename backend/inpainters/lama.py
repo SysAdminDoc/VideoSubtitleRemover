@@ -15,6 +15,7 @@ from backend.inpainters._common import (
     _cv2_inpaint,
     _edge_ring_color_correct,
     _feather_blend,
+    _temporal_smooth_inpainted,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ class LAMAInpainter(BaseInpainter):
             if ring > 0 and m.max() > 0:
                 r = _edge_ring_color_correct(f, r, m, ring)
             out.append(_feather_blend(f, r, m, feather))
+        smooth = self.config.temporal_smooth_radius
+        if smooth > 0 and len(out) > 1:
+            out = _temporal_smooth_inpainted(out, masks, radius=smooth)
         return out
 
     def _inpaint_lama(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:

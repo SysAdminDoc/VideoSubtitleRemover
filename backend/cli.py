@@ -310,6 +310,9 @@ def main():
                        help="Output video codec.")
     parser.add_argument("--mask-feather", type=int, default=4,
                        help="Gaussian edge feathering in pixels (0=off)")
+    parser.add_argument("--temporal-smooth", type=int, default=0,
+                       metavar="RADIUS",
+                       help="Post-inpaint temporal smoothing radius for LaMa (0=off, 1-5)")
     parser.add_argument("--edge-ring", type=int, default=2,
                        help="Edge-ring colour match width in pixels (0=off)")
     parser.add_argument("--flow-warp", action="store_true",
@@ -540,6 +543,7 @@ def main():
         mask_dilate_px=args.mask_dilate,
         confidence_weighted_dilation=args.confidence_dilate,
         mask_feather_px=args.mask_feather,
+        temporal_smooth_radius=args.temporal_smooth,
         edge_ring_px=args.edge_ring,
         tbe_enable=not args.no_tbe,
         tbe_flow_warp=args.flow_warp,

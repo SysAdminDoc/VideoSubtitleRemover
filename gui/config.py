@@ -251,6 +251,7 @@ class ProcessingConfig:
     confidence_dilation_scale: float = 1.5
     lama_tile_size: int = 512
     lama_tile_overlap: int = 64
+    temporal_smooth_radius: int = 0
 
     tbe_enable: bool = True
     tbe_min_coverage: int = 3

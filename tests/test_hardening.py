@@ -3715,6 +3715,39 @@ class MediaExtensionParityTests(unittest.TestCase):
             self.assertIn(f"*{ext}", pattern)
 
 
+class TemporalSmoothTests(unittest.TestCase):
+    """Post-inpaint temporal consistency filter for LaMa path."""
+
+    def test_temporal_smooth_reduces_variance(self):
+        import numpy as _np
+        from backend.inpainters._common import _temporal_smooth_inpainted
+        mask = _np.zeros((100, 100), dtype=_np.uint8)
+        mask[40:60, 40:60] = 255
+        masks = [mask] * 5
+        frames = []
+        for i in range(5):
+            f = _np.full((100, 100, 3), 128, dtype=_np.uint8)
+            f[40:60, 40:60] = _np.random.randint(50, 200, (20, 20, 3), dtype=_np.uint8)
+            frames.append(f)
+        smoothed = _temporal_smooth_inpainted(frames, masks, radius=2)
+        self.assertEqual(len(smoothed), 5)
+        orig_var = _np.var([f[50, 50, 0] for f in frames])
+        smooth_var = _np.var([f[50, 50, 0] for f in smoothed])
+        self.assertLessEqual(smooth_var, orig_var)
+
+    def test_temporal_smooth_skips_unmasked(self):
+        import numpy as _np
+        from backend.inpainters._common import _temporal_smooth_inpainted
+        mask = _np.zeros((50, 50), dtype=_np.uint8)
+        frame = _np.full((50, 50, 3), 100, dtype=_np.uint8)
+        result = _temporal_smooth_inpainted([frame, frame], [mask, mask], radius=2)
+        _np.testing.assert_array_equal(result[0], frame)
+
+    def test_config_defaults_off(self):
+        cfg = gui.ProcessingConfig()
+        self.assertEqual(cfg.temporal_smooth_radius, 0)
+
+
 class TiledLamaTests(unittest.TestCase):
     """Tile-based LaMa inference for high-resolution frames."""
 

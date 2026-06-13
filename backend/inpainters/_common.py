@@ -358,3 +358,55 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
             flow_warp=flow_warp,
         ))
     return out
+
+
+def _temporal_smooth_inpainted(
+    frames: List[np.ndarray],
+    masks: List[np.ndarray],
+    radius: int = 2,
+    scene_cuts: Optional[List[int]] = None,
+) -> List[np.ndarray]:
+    """Weighted-average blend of the inpainted region across a sliding
+    window of 2*radius+1 frames. Only the masked pixels are blended;
+    unmasked pixels are untouched. Scene-cut boundaries gate the window
+    so no cross-scene ghosting occurs."""
+    n = len(frames)
+    if n <= 1 or radius <= 0:
+        return list(frames)
+    cut_set = set(scene_cuts) if scene_cuts else set()
+    out: List[np.ndarray] = []
+    for i in range(n):
+        mask = masks[i]
+        if mask.max() == 0:
+            out.append(frames[i].copy())
+            continue
+        weights = np.zeros(mask.shape, dtype=np.float32)
+        accum = np.zeros_like(frames[i], dtype=np.float32)
+        for j in range(max(0, i - radius), min(n, i + radius + 1)):
+            if j != i:
+                crosses_cut = False
+                lo, hi = min(i, j), max(i, j)
+                for c in range(lo + 1, hi + 1):
+                    if c in cut_set:
+                        crosses_cut = True
+                        break
+                if crosses_cut:
+                    continue
+            dist = abs(i - j)
+            w = 1.0 / (1.0 + dist)
+            m_j = masks[j].astype(np.float32) / 255.0
+            combined = m_j * (mask.astype(np.float32) / 255.0)
+            weights += combined * w
+            accum += frames[j].astype(np.float32) * combined[..., None] * w
+        result = frames[i].copy()
+        valid = weights > 0
+        if valid.any():
+            safe_w = np.maximum(weights, 1e-6)
+            for c in range(3):
+                result[:, :, c] = np.where(
+                    valid,
+                    (accum[:, :, c] / safe_w).clip(0, 255),
+                    frames[i][:, :, c],
+                )
+        out.append(result.astype(np.uint8))
+    return out
