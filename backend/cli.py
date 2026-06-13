@@ -925,7 +925,9 @@ def main():
         )
         succeeded = len(inputs) - failures
         suffix = f", {reviews} review-needed" if reviews else ""
-        print(f"\n[batch] finished: {succeeded}/{len(inputs)} succeeded{suffix}")
+        print(f"\n{'='*60}")
+        print(f"  BATCH COMPLETE: {succeeded}/{len(inputs)} succeeded{suffix}")
+        print(f"{'='*60}")
         if failures:
             print("[batch] Some items need attention. Review the errors above before retrying.")
         if reviews:

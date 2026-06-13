@@ -5589,6 +5589,34 @@ class VideoSubtitleRemoverApp:
                 winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
         except Exception:
             pass
+        # System toast notification (visible even when minimised)
+        if self.config.notify_on_completion:
+            self._send_system_notification(complete, errors)
+
+    def _send_system_notification(self, complete: int, errors: int):
+        """Send a Windows toast notification summarising the batch result."""
+        if errors == 0:
+            title = "Batch Complete"
+            msg = f"{complete} item{'s' if complete != 1 else ''} processed successfully."
+        else:
+            title = "Batch Finished with Errors"
+            msg = (f"{complete} processed, {errors} failed.")
+        try:
+            from plyer import notification
+            notification.notify(
+                title=title,
+                message=msg,
+                app_name="Video Subtitle Remover Pro",
+                timeout=10,
+            )
+            return
+        except Exception:
+            pass
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBeep(0)
+        except Exception:
+            pass
 
     def _queue_argv_files(self):
         """RM-58: queue files passed via sys.argv (e.g. 'Send to VSR')."""

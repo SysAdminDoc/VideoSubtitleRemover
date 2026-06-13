@@ -309,6 +309,7 @@ class ProcessingConfig:
     rtl_layout: bool = False
     update_check: bool = False
     json_log_enabled: bool = False
+    notify_on_completion: bool = True
     output_frames: bool = False
 
     def to_dict(self) -> dict:
