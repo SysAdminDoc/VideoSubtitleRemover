@@ -403,6 +403,10 @@ def main():
                        help="Audit all discoverable ONNX models for DirectML opset compatibility and exit.")
     parser.add_argument("--scan-weights", action="store_true",
                        help="Scan cached model weights and verify SHA-256 against known hashes, then exit.")
+    parser.add_argument("--cache-info", action="store_true",
+                       help="Print cache directory inventory with sizes and exit.")
+    parser.add_argument("--cache-clean", action="store_true",
+                       help="Remove stale cache entries (checkpoints, proxies, TRT engines) and exit.")
     parser.add_argument("--validate-config", action="store_true",
                        help="Print the resolved ProcessingConfig as JSON and exit.")
     parser.add_argument("--json-log", metavar="PATH",
@@ -436,6 +440,17 @@ def main():
     if args.scan_weights:
         from backend.model_hashes import print_weight_report
         print_weight_report()
+        sys.exit(0)
+
+    if args.cache_info:
+        from backend.cache_inventory import print_cache_info
+        print_cache_info()
+        sys.exit(0)
+
+    if args.cache_clean:
+        from backend.cache_inventory import clean_cache
+        print("Cleaning stale VSR caches:")
+        clean_cache(dry_run=False)
         sys.exit(0)
 
     soft_mode_count = sum(
