@@ -63,8 +63,9 @@ jobs:
           # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434.
           Install-Required "torch CPU runtime" @("torch>=2.10.0", "torchvision>=0.25.0", "--index-url", "https://download.pytorch.org/whl/cpu")
           # opencv-python >= 4.12.0 patches CVE-2025-53644 (JPEG read).
-          # Pillow >= 12.1.1 patches CVE-2026-25990 (PSD loader OOB write).
-          Install-Required "core image stack" @("numpy", "opencv-python>=4.12.0", "Pillow>=12.1.1")
+          # Pillow >= 12.2.0 patches CVE-2026-25990, GHSA-wjx4-4jcj-g98j,
+          # GHSA-pwv6-vv43-88gr, GHSA-whj4-6x5x-4v2j.
+          Install-Required "core image stack" @("numpy", "opencv-python>=4.12.0", "Pillow>=12.2.0")
           Install-Required "RapidOCR engines" @("rapidocr", "rapidocr-onnxruntime")
           Install-Required "LaMa inpainter" @("simple-lama-inpainting")
           Install-Required "EasyOCR fallback" @("easyocr")

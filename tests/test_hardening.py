@@ -3667,5 +3667,29 @@ class JsonLogGuiTests(unittest.TestCase):
         self.assertTrue(cfg2.json_log_enabled)
 
 
+class DependencyFloorTests(unittest.TestCase):
+    """Verify minimum dependency versions across all install surfaces."""
+
+    def _read_requirements(self):
+        root = Path(__file__).resolve().parents[1]
+        return (root / "requirements.txt").read_text(encoding="utf-8")
+
+    def test_pillow_floor_is_12_2_0_in_requirements(self):
+        text = self._read_requirements()
+        self.assertIn("Pillow>=12.2.0", text)
+
+    def test_pillow_floor_is_12_2_0_in_setup_py(self):
+        root = Path(__file__).resolve().parents[1]
+        setup_text = (root / "setup.py").read_text(encoding="utf-8")
+        self.assertIn("Pillow>=12.2.0", setup_text)
+
+    def test_pillow_floor_is_12_2_0_in_build_workflow(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github" / "workflows" / "build.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Pillow>=12.2.0", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
