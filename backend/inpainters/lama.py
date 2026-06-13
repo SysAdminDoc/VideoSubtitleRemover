@@ -91,11 +91,21 @@ class LAMAInpainter(BaseInpainter):
             except Exception as exc:
                 logger.warning(f"Batched LaMa fell back to per-frame: {exc}")
         from PIL import Image
+        tile_size = self.config.lama_tile_size
+        tile_overlap = self.config.lama_tile_overlap
         results = []
         for frame, mask in zip(frames, masks):
             if mask.max() == 0:
                 results.append(frame.copy())
                 continue
+            h, w = frame.shape[:2]
+            if h > tile_size or w > tile_size:
+                try:
+                    results.append(self._inpaint_lama_tiled(
+                        frame, mask, tile_size, tile_overlap))
+                    continue
+                except Exception as exc:
+                    logger.warning(f"Tiled LaMa fell back to full-frame: {exc}")
             try:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(frame_rgb)
@@ -107,6 +117,73 @@ class LAMAInpainter(BaseInpainter):
                 logger.warning(f"LaMa inpaint failed for frame, falling back to cv2: {e}")
                 results.append(_cv2_inpaint(frame, mask, 7, cv2.INPAINT_NS))
         return results
+
+    def _inpaint_lama_tiled(self, frame: np.ndarray, mask: np.ndarray,
+                            tile_size: int, overlap: int) -> np.ndarray:
+        """Tile the masked region into overlapping patches, inpaint each,
+        and blend the results with a raised-cosine window."""
+        from PIL import Image
+        h, w = frame.shape[:2]
+        ys = mask.any(axis=1)
+        xs = mask.any(axis=0)
+        if not ys.any():
+            return frame.copy()
+        y_indices = np.where(ys)[0]
+        x_indices = np.where(xs)[0]
+        roi_y1 = max(0, int(y_indices[0]) - overlap)
+        roi_y2 = min(h, int(y_indices[-1]) + 1 + overlap)
+        roi_x1 = max(0, int(x_indices[0]) - overlap)
+        roi_x2 = min(w, int(x_indices[-1]) + 1 + overlap)
+        step = max(1, tile_size - overlap)
+        result = frame.copy()
+        weight_acc = np.zeros((h, w), dtype=np.float32)
+        color_acc = np.zeros_like(frame, dtype=np.float32)
+        tile_count = 0
+        for ty in range(roi_y1, roi_y2, step):
+            for tx in range(roi_x1, roi_x2, step):
+                ty2 = min(ty + tile_size, h)
+                tx2 = min(tx + tile_size, w)
+                ty1 = max(0, ty2 - tile_size)
+                tx1 = max(0, tx2 - tile_size)
+                tile_mask = mask[ty1:ty2, tx1:tx2]
+                if tile_mask.max() == 0:
+                    continue
+                tile_frame = frame[ty1:ty2, tx1:tx2]
+                tile_rgb = cv2.cvtColor(tile_frame, cv2.COLOR_BGR2RGB)
+                pil_tile = Image.fromarray(tile_rgb)
+                pil_mask = Image.fromarray(tile_mask)
+                try:
+                    pil_out = self._lama(pil_tile, pil_mask)
+                    tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
+                except Exception:
+                    tile_out = _cv2_inpaint(tile_frame, tile_mask, 7, cv2.INPAINT_NS)
+                th, tw = tile_out.shape[:2]
+                wy = np.ones(th, dtype=np.float32)
+                wx = np.ones(tw, dtype=np.float32)
+                if overlap > 0:
+                    ramp = min(overlap, th // 2, tw // 2)
+                    if ramp > 0:
+                        taper = 0.5 - 0.5 * np.cos(
+                            np.linspace(0, np.pi, ramp, dtype=np.float32))
+                        wy[:ramp] *= taper
+                        wy[-ramp:] *= taper[::-1]
+                        wx[:ramp] *= taper
+                        wx[-ramp:] *= taper[::-1]
+                win = np.outer(wy, wx)
+                color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32) * win[..., None]
+                weight_acc[ty1:ty2, tx1:tx2] += win
+                tile_count += 1
+        if tile_count > 0:
+            blend_mask = weight_acc > 0
+            for c in range(3):
+                result[:, :, c] = np.where(
+                    blend_mask,
+                    (color_acc[:, :, c] / np.maximum(weight_acc, 1e-6)).clip(0, 255),
+                    frame[:, :, c],
+                )
+            result = result.astype(np.uint8)
+            logger.debug(f"Tiled LaMa: {tile_count} tiles, roi {roi_x2-roi_x1}x{roi_y2-roi_y1}")
+        return result
 
     def _inpaint_lama_batched(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         """RM-40: stack the batch + one forward pass through the underlying
