@@ -83,12 +83,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### Security
 
-49. **Model-weight hash table expansion** -- the SHA-256 verifier in
-    `backend/model_hashes.py` exists but only lists `big-lama.pt`;
-    remaining: add vendored hash entries for every opt-in downloadable
-    weight (real ProPainter, MI-GAN, LaMa-ONNX, etc.) so first-download
-    verification actually covers them.
-
 ### Observability
 
 ### Testing

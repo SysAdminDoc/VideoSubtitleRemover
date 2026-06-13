@@ -401,6 +401,8 @@ def main():
                        help="Ignore embedded subtitle tracks and run burned-in cleanup normally.")
     parser.add_argument("--audit-onnx", action="store_true",
                        help="Audit all discoverable ONNX models for DirectML opset compatibility and exit.")
+    parser.add_argument("--scan-weights", action="store_true",
+                       help="Scan cached model weights and verify SHA-256 against known hashes, then exit.")
     parser.add_argument("--validate-config", action="store_true",
                        help="Print the resolved ProcessingConfig as JSON and exit.")
     parser.add_argument("--json-log", metavar="PATH",
@@ -429,6 +431,11 @@ def main():
     if args.audit_onnx:
         from backend.onnx_model_info import print_audit_report
         print_audit_report()
+        sys.exit(0)
+
+    if args.scan_weights:
+        from backend.model_hashes import print_weight_report
+        print_weight_report()
         sys.exit(0)
 
     soft_mode_count = sum(
