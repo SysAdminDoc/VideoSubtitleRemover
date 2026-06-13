@@ -97,17 +97,29 @@ def format_size(bytes_size: int) -> str:
     return f"{bytes_size:.1f} PB"
 
 
+VIDEO_EXTENSIONS = frozenset({
+    ".mp4", ".avi", ".mkv", ".mov", ".wmv",
+    ".flv", ".webm", ".m4v", ".mpeg", ".mpg",
+})
+
+IMAGE_EXTENSIONS = frozenset({
+    ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp",
+})
+
+SUPPORTED_EXTENSIONS = VIDEO_EXTENSIONS | IMAGE_EXTENSIONS
+
+
 def is_video_file(path: str) -> bool:
-    video_extensions = {
-        ".mp4", ".avi", ".mkv", ".mov", ".wmv",
-        ".flv", ".webm", ".m4v", ".mpeg", ".mpg",
-    }
-    return Path(path).suffix.lower() in video_extensions
+    return Path(path).suffix.lower() in VIDEO_EXTENSIONS
 
 
 def is_image_file(path: str) -> bool:
-    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-    return Path(path).suffix.lower() in image_extensions
+    return Path(path).suffix.lower() in IMAGE_EXTENSIONS
+
+
+def filepicker_pattern(exts: frozenset) -> str:
+    """Build a semicolon-joined *.ext pattern for tkinter file dialogs."""
+    return ";".join(f"*{e}" for e in sorted(exts))
 
 
 _CURATED_LANG_NAMES: Tuple[Tuple[str, str], ...] = (
