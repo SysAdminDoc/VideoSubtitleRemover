@@ -3693,6 +3693,47 @@ class MediaExtensionParityTests(unittest.TestCase):
             self.assertIn(f"*{ext}", pattern)
 
 
+class ConfidenceWeightedDilationTests(unittest.TestCase):
+    """Confidence-weighted mask dilation scales padding by OCR confidence."""
+
+    def test_config_defaults_off(self):
+        cfg = gui.ProcessingConfig()
+        self.assertFalse(cfg.confidence_weighted_dilation)
+        self.assertAlmostEqual(cfg.confidence_dilation_scale, 1.5)
+
+    def test_config_round_trip(self):
+        cfg = gui.ProcessingConfig()
+        cfg.confidence_weighted_dilation = True
+        cfg.confidence_dilation_scale = 2.0
+        d = cfg.to_dict()
+        self.assertTrue(d["confidence_weighted_dilation"])
+        cfg2 = gui.ProcessingConfig.from_dict(d)
+        self.assertTrue(cfg2.confidence_weighted_dilation)
+        self.assertAlmostEqual(cfg2.confidence_dilation_scale, 2.0)
+
+    def test_high_confidence_gets_less_dilation(self):
+        """With confidence weighting on, a high-confidence box should produce
+        a smaller dilated area than a low-confidence box."""
+        import cv2 as _cv2
+        cfg_hi = gui.ProcessingConfig()
+        cfg_hi.confidence_weighted_dilation = True
+        cfg_hi.mask_dilate_px = 8
+        cfg_hi.confidence_dilation_scale = 1.5
+        cfg_lo = gui.ProcessingConfig()
+        cfg_lo.confidence_weighted_dilation = True
+        cfg_lo.mask_dilate_px = 8
+        cfg_lo.confidence_dilation_scale = 1.5
+        shape = (200, 400, 3)
+        boxes = [(100, 80, 300, 120)]
+        remover_hi = SimpleNamespace(config=cfg_hi)
+        remover_lo = SimpleNamespace(config=cfg_lo)
+        mask_hi = processor.SubtitleRemover._create_mask(
+            remover_hi, shape, boxes, confidences=[0.95])
+        mask_lo = processor.SubtitleRemover._create_mask(
+            remover_lo, shape, boxes, confidences=[0.3])
+        self.assertGreater(mask_lo.sum(), mask_hi.sum())
+
+
 class DependencyFloorTests(unittest.TestCase):
     """Verify minimum dependency versions across all install surfaces."""
 
