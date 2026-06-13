@@ -52,7 +52,6 @@ call :maybe_hidden_import rapidocr
 call :maybe_hidden_import rapidocr_onnxruntime
 call :maybe_hidden_import paddleocr
 call :maybe_hidden_import easyocr
-call :maybe_hidden_import torch_directml
 
 echo.
 echo Building EXE (this may take several minutes)...

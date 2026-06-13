@@ -82,5 +82,18 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertNotIn("if: env.AZURE_SIGN_TENANT_ID != ''", self.workflow)
 
 
+class LocalBuildScriptTests(unittest.TestCase):
+    def setUp(self):
+        self.bat = (
+            Path(__file__).resolve().parents[1] / "build_exe.bat"
+        ).read_text(encoding="utf-8")
+
+    def test_no_torch_directml_hidden_import(self):
+        self.assertNotIn("torch_directml", self.bat)
+
+    def test_onnxruntime_packaging_not_removed(self):
+        self.assertNotIn("torch-directml", self.bat)
+
+
 if __name__ == "__main__":
     unittest.main()
