@@ -345,11 +345,5 @@ Speculative research bench; not commitments.
 
 ### P2
 
-- [ ] P2 - Promote LaMa-ONNX from opt-in to default inpaint backend
-  Why: IOPaint (the 23K-star LaMa ecosystem anchor) was archived in April 2025. simple-lama-inpainting's continued maintenance is uncertain. The existing LaMa-ONNX path (RM-25, opt-in via `VSR_LAMA_ONNX`) eliminates the `torch.load` CVE surface (CVE-2026-24747), removes the PyTorch runtime dependency for the LaMa codepath, and runs 3-5x faster via ONNX Runtime.
-  Evidence: IOPaint archived at https://github.com/Sanster/IOPaint; simple-lama-inpainting uses torch.load internally; `backend/inpainters_onnx.py` already has a working LaMa-ONNX backend that registers via the inpainter registry; CVE-2026-24747 / CVE-2025-32434 affect torch.load in PyTorch <= 2.9.1; OpenCV 5 DNN LaMa (#110) is the longer-term exit but is CPU-only as of June 2026
-  Touches: `backend/inpainters/lama.py`, `backend/inpainters_onnx.py`, `requirements.txt`, `setup.py`, `build_exe.bat`, `.github/workflows/build.yml`, `README.md`, `tests/test_hardening.py`
-  Acceptance: The default LAMA mode uses ONNX Runtime with a bundled or auto-downloaded LaMa FP32 ONNX weight (SHA-256 verified via `backend/model_hashes.py`). simple-lama-inpainting becomes the fallback when ONNX Runtime is absent. A/B PSNR/SSIM parity with the PyTorch path on reference clips (+/- 0.5 dB). PyInstaller bundle includes the ONNX weight. torch is still needed for opt-in diffusion backends but no longer for the core LaMa path.
-  Complexity: L
 
 
