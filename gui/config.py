@@ -231,6 +231,9 @@ class ProcessingConfig:
     whisper_model_size: str = "tiny"
     whisper_model_path: str = ""
     whisper_queue_seconds: float = 3.0
+    whisper_vad_model: str = ""
+    whisper_vad_threshold: float = 0.5
+    whisper_min_speech_duration: float = 0.0
     upscale_factor: int = 0
     film_grain_strength: float = 0.0
     swinir_restore: bool = False

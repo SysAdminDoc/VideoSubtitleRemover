@@ -1120,6 +1120,9 @@ class SubtitleRemover:
                             model_path=self.config.whisper_model_path,
                             language=(self.config.detection_lang or None),
                             queue_seconds=self.config.whisper_queue_seconds,
+                            vad_model=self.config.whisper_vad_model,
+                            vad_threshold=self.config.whisper_vad_threshold,
+                            min_speech_duration=self.config.whisper_min_speech_duration,
                         )
                         if segments:
                             whisper_spans = _wf.segments_to_frame_spans(

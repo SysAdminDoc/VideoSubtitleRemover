@@ -289,6 +289,14 @@ def main():
     parser.add_argument("--ffmpeg-whisper-queue", type=float, default=3.0,
                        metavar="SECONDS",
                        help="FFmpeg whisper filter queue size in seconds.")
+    parser.add_argument("--ffmpeg-whisper-vad-model", default="",
+                       help="Path to a Silero VAD ONNX model for FFmpeg Whisper.")
+    parser.add_argument("--ffmpeg-whisper-vad-threshold", type=float, default=0.5,
+                       metavar="FLOAT",
+                       help="VAD confidence threshold (0.0-1.0, default 0.5).")
+    parser.add_argument("--ffmpeg-whisper-min-speech", type=float, default=0.0,
+                       metavar="SECONDS",
+                       help="Minimum speech duration for VAD segments (default 0).")
     parser.add_argument("--frame-skip", type=int, default=0,
                        help="Reuse detection mask for N frames between detections")
     parser.add_argument("--mask-dilate", type=int, default=8,
@@ -516,6 +524,9 @@ def main():
         whisper_model_size=args.whisper_model,
         whisper_model_path=args.ffmpeg_whisper_model,
         whisper_queue_seconds=args.ffmpeg_whisper_queue,
+        whisper_vad_model=args.ffmpeg_whisper_vad_model,
+        whisper_vad_threshold=args.ffmpeg_whisper_vad_threshold,
+        whisper_min_speech_duration=args.ffmpeg_whisper_min_speech,
         upscale_factor=args.upscale,
         film_grain_strength=args.film_grain,
         swinir_restore=args.swinir,

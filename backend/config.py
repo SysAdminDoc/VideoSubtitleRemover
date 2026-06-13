@@ -94,6 +94,9 @@ class ProcessingConfig:
     whisper_model_size: str = "tiny"   # tiny / base / small / medium
     whisper_model_path: str = ""
     whisper_queue_seconds: float = 3.0
+    whisper_vad_model: str = ""
+    whisper_vad_threshold: float = 0.5
+    whisper_min_speech_duration: float = 0.0
     # RM-78 / RM-80 optional post-restore passes. Each runs after the
     # main encode + audio mux. Real-ESRGAN scale 0 = disabled; values
     # 2 or 4 invoke the upscale stage (requires the
@@ -449,6 +452,11 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.whisper_model_path = _coerce_text(config.whisper_model_path, "", 512)
     config.whisper_queue_seconds = _coerce_float(
         config.whisper_queue_seconds, 3.0, 0.02, 3600.0)
+    config.whisper_vad_model = _coerce_text(config.whisper_vad_model, "", 512)
+    config.whisper_vad_threshold = _coerce_float(
+        config.whisper_vad_threshold, 0.5, 0.0, 1.0)
+    config.whisper_min_speech_duration = _coerce_float(
+        config.whisper_min_speech_duration, 0.0, 0.0, 30.0)
     config.upscale_factor = _coerce_int(config.upscale_factor, 0, 0, 8)
     if config.upscale_factor not in (0, 2, 3, 4):
         config.upscale_factor = 0
