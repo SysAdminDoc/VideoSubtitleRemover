@@ -25,6 +25,7 @@ def _detect_hw_encoder(codec: str = "h264") -> Optional[str]:
         "h264": ("h264_nvenc", "h264_qsv", "h264_amf"),
         "h265": ("hevc_nvenc", "hevc_qsv", "hevc_amf"),
         "av1":  ("av1_nvenc",  "av1_qsv",  "av1_amf"),
+        "vvc":  ("vvc_nvenc",  "vvc_qsv",  "vvc_amf"),
     }.get(codec, ("h264_nvenc", "h264_qsv", "h264_amf"))
     try:
         result = subprocess.run(

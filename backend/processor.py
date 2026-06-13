@@ -1593,6 +1593,9 @@ class SubtitleRemover:
             # speed/quality midpoint for libsvtav1.
             crf = min(63, self.config.output_quality)
             base = ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
+        elif codec == "vvc":
+            base = ['-c:v', 'libvvenc', '-qp', str(self.config.output_quality),
+                    '-preset', 'medium']
         else:
             base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                     '-preset', 'medium']

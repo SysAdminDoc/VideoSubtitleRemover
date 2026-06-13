@@ -522,7 +522,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     codec = _coerce_text(config.output_codec, "h264", 16).lower()
     if codec in {"hevc", "h.265"}:
         codec = "h265"
-    if codec not in {"h264", "h265", "av1"}:
+    if codec in {"h266", "h.266"}:
+        codec = "vvc"
+    if codec not in {"h264", "h265", "av1", "vvc"}:
         codec = "h264"
     config.output_codec = codec
     # loudnorm_target: 0.0 disables; otherwise clamp to the LUFS range
