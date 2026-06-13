@@ -1409,8 +1409,8 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
 
 
 class QualityGateTests(unittest.TestCase):
-    """#108: existing quality metrics are converted into a stable batch
-    gate result before automatic fallback ladder work is added."""
+    """#108: quality metrics produce graduated ladder steps with
+    actionable remediations, not just binary pass/review."""
 
     def test_passes_when_roi_metrics_clear_thresholds(self):
         from backend.quality_gate import evaluate_quality_gate
@@ -1424,6 +1424,8 @@ class QualityGateTests(unittest.TestCase):
         })
         self.assertEqual(gate["status"], "passed")
         self.assertEqual(gate["ladderStep"], "none")
+        self.assertEqual(gate["reasons"], [])
+        self.assertEqual(gate["remediation"], "")
 
     def test_temporal_flicker_score_uses_adjacent_samples_only(self):
         import numpy as _np
@@ -1452,7 +1454,7 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(residual_text_score(flat), 0.0)
         self.assertGreater(residual_text_score(text), 0.025)
 
-    def test_review_when_temporal_flicker_is_high(self):
+    def test_ladder_temporal_smooth_on_flicker(self):
         from backend.quality_gate import evaluate_quality_gate
         gate = evaluate_quality_gate({
             "samples": 4,
@@ -1462,9 +1464,13 @@ class QualityGateTests(unittest.TestCase):
             "temporal_flicker_score": 0.2,
         })
         self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "temporal-smooth")
         self.assertIn("temporal flicker", gate["reason"])
+        self.assertIn("temporal smooth", gate["remediation"].lower())
+        self.assertEqual(len(gate["reasons"]), 1)
+        self.assertEqual(gate["reasons"][0]["metric"], "temporal_flicker_score")
 
-    def test_review_when_residual_text_score_is_high(self):
+    def test_ladder_increase_dilation_on_residual_text(self):
         from backend.quality_gate import evaluate_quality_gate
         gate = evaluate_quality_gate({
             "samples": 4,
@@ -1474,7 +1480,35 @@ class QualityGateTests(unittest.TestCase):
             "residual_text_score": 0.1,
         })
         self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "increase-dilation")
         self.assertIn("residual text score", gate["reason"])
+        self.assertIn("dilation", gate["remediation"].lower())
+
+    def test_ladder_alternate_inpainter_on_low_ssim(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.90,
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "alternate-inpainter")
+        self.assertIn("ROI SSIM", gate["reason"])
+        self.assertIn("inpaint mode", gate["remediation"].lower())
+
+    def test_ladder_escalates_to_manual_on_multiple_violation_types(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.90,
+            "residual_text_score": 0.1,
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "manual-review")
+        self.assertGreaterEqual(len(gate["reasons"]), 2)
 
     def test_review_when_roi_metric_fails_and_sheet_is_preview(self):
         from backend.quality_gate import evaluate_quality_gate
@@ -1495,6 +1529,53 @@ class QualityGateTests(unittest.TestCase):
         gate = evaluate_quality_gate(None)
         self.assertEqual(gate["status"], "unknown")
         self.assertEqual(gate["ladderStep"], "not-run")
+        self.assertIn("remediation", gate)
+        self.assertIsInstance(gate["reasons"], list)
+
+    def test_degraded_metrics_reported_when_optional_absent(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.98,
+            "roi_ssim": 0.97,
+        })
+        self.assertEqual(gate["status"], "passed")
+        self.assertIn("vmaf", gate["degradedMetrics"])
+        self.assertIn("roi_vmaf", gate["degradedMetrics"])
+        self.assertIn("lpips", gate["degradedMetrics"])
+        self.assertIn("dists", gate["degradedMetrics"])
+
+    def test_degraded_metrics_empty_when_all_present(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.98,
+            "roi_ssim": 0.97,
+            "vmaf": 95.0,
+            "roi_vmaf": 92.0,
+            "lpips": 0.01,
+            "dists": 0.02,
+            "temporal_consistency": 0.99,
+        })
+        self.assertEqual(gate["degradedMetrics"], [])
+
+    def test_structured_reasons_carry_metric_and_value(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+            "residual_text_score": 0.1,
+        })
+        self.assertEqual(len(gate["reasons"]), 1)
+        reason = gate["reasons"][0]
+        self.assertEqual(reason["metric"], "residual_text_score")
+        self.assertAlmostEqual(reason["value"], 0.1)
+        self.assertAlmostEqual(reason["threshold"], 0.025)
+        self.assertEqual(reason["ladder"], "increase-dilation")
 
 
 class LosslessIntermediateWriterTests(unittest.TestCase):
@@ -1911,7 +1992,7 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
         self.assertEqual(payload["counts"], {"review-needed": 1})
         self.assertEqual(payload["files"][0]["status"], "review-needed")
-        self.assertIn("quality gate review needed", payload["files"][0]["message"])
+        self.assertIn("quality gate: manual-review", payload["files"][0]["message"])
         self.assertEqual(payload["files"][0]["source_width"], 1920)
         self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
         self.assertGreater(payload["files"][0]["estimated_seconds"], 0)
@@ -1924,8 +2005,13 @@ class BatchReportTests(unittest.TestCase):
             payload["files"][0]["quality_gate"]["previewFramePaths"],
             ["clip.qualitysheet.png"],
         )
+        self.assertIn("remediation", payload["files"][0]["quality_gate"])
+        self.assertIn("reasons", payload["files"][0]["quality_gate"])
+        self.assertIsInstance(payload["files"][0]["quality_gate"]["reasons"], list)
+        self.assertIn("degradedMetrics", payload["files"][0]["quality_gate"])
         self.assertIn("| review-needed | clip.mkv | clip_no_sub.mkv |", markdown)
         self.assertIn("review (manual-review)", markdown)
+        self.assertIn("Quality review notes", markdown)
 
 
 class CliSoftSubtitleTests(unittest.TestCase):
