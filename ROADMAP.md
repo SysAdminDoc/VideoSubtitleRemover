@@ -44,19 +44,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
      - CI `pip-audit` or equivalent catches this advisory.
      Source: https://github.com/opencv/opencv-python/issues/1186
 
-119. **Complete DirectML retirement: model-opset audit (remainder)** --
-     provider selection, opset parsing without the `onnx` package, and the
-     DirectML fallback guard (drop DML when default-domain opset > 20) are
-     implemented. Remaining work is the model audit only.
-     Priority: P1. Effort: M.
-     Acceptance criteria (remaining):
-     - Local/model-zoo audit confirms target PP-OCR and LaMa ONNX models
-       use opset <= 20 (DML EP ceiling) or records exact model-source
-       blockers.
-     Evidence: github.com/microsoft/DirectML maintenance-mode banner,
-     onnxruntime issue #23783, pypi.org/project/torch-directml (stale),
-     onnxruntime.ai DirectML EP docs (opset 20 ceiling).
-
 ---
 
 ## Next

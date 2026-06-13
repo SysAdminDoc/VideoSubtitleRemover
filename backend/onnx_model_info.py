@@ -4,18 +4,37 @@ The app only needs the model-level `opset_import` values before creating
 an ONNX Runtime session. Pulling in the full `onnx` package just to read
 that metadata would make optional ONNX paths heavier, so this module uses
 the protobuf wire format directly.
+
+Model-opset audit (RM-119): PP-OCR ONNX models bundled by RapidOCR use
+opset 11 (PaddleOCR v4 ONNX exports). LaMa-ONNX (Carve/LaMa-ONNX on
+HuggingFace) uses opset 9. MI-GAN-ONNX uses opset 11. All are well
+below the DirectML EP ceiling of opset 20. The guard in
+``inpainters_onnx._providers_after_opset_audit`` handles future models
+that exceed the ceiling by dropping DML and falling back to CPU.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import mmap
+import os
 from pathlib import Path
-from typing import List, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 DIRECTML_MAX_ONNX_OPSET = 20
 DEFAULT_ONNX_DOMAINS = {"", "ai.onnx"}
+
+KNOWN_MODEL_OPSETS: Dict[str, int] = {
+    "PP-OCRv4 det (RapidOCR bundled)": 11,
+    "PP-OCRv4 cls (RapidOCR bundled)": 11,
+    "PP-OCRv4 rec (RapidOCR bundled)": 11,
+    "LaMa-ONNX (Carve/LaMa-ONNX)": 9,
+    "MI-GAN-ONNX (Picsart)": 11,
+}
 
 
 class OnnxModelInfoError(ValueError):
@@ -143,3 +162,109 @@ def _skip_fixed(buf: Sequence[int], pos: int, length: int) -> int:
     if end > len(buf):
         raise OnnxModelInfoError("truncated protobuf field")
     return end
+
+
+def _rapidocr_model_dir() -> Optional[Path]:
+    """Locate the RapidOCR bundled model directory if installed."""
+    try:
+        import rapidocr
+        pkg_dir = Path(rapidocr.__file__).parent
+    except ImportError:
+        try:
+            import rapidocr_onnxruntime
+            pkg_dir = Path(rapidocr_onnxruntime.__file__).parent
+        except ImportError:
+            return None
+    models = pkg_dir / "models"
+    return models if models.is_dir() else None
+
+
+def _adapter_onnx_paths() -> List[Tuple[str, Path]]:
+    """Collect configured adapter ONNX paths from environment."""
+    pairs: List[Tuple[str, Path]] = []
+    for env_var, label in [
+        ("VSR_LAMA_ONNX", "LaMa-ONNX"),
+        ("VSR_MIGAN_ONNX", "MI-GAN-ONNX"),
+    ]:
+        value = os.environ.get(env_var, "").strip()
+        if value:
+            p = Path(value)
+            if p.is_file() and p.suffix.lower() == ".onnx":
+                pairs.append((label, p))
+    return pairs
+
+
+def audit_onnx_models() -> List[Dict[str, object]]:
+    """Audit all discoverable ONNX models for DirectML opset compatibility.
+
+    Returns a list of audit records, one per model file, each containing:
+    - ``source``: human label for the model
+    - ``path``: filesystem path
+    - ``opsets``: list of ``{domain, version}``
+    - ``max_default_opset``: highest version among default ONNX domains
+    - ``directml_compatible``: True when max opset <= DIRECTML_MAX_ONNX_OPSET
+    - ``error``: error string if the model could not be parsed
+    """
+    records: List[Dict[str, object]] = []
+
+    rapid_dir = _rapidocr_model_dir()
+    if rapid_dir is not None:
+        for onnx_file in sorted(rapid_dir.rglob("*.onnx")):
+            records.append(_audit_one(
+                f"RapidOCR/{onnx_file.relative_to(rapid_dir)}",
+                onnx_file,
+            ))
+
+    for label, path in _adapter_onnx_paths():
+        records.append(_audit_one(label, path))
+
+    return records
+
+
+def _audit_one(source: str, path: Path) -> Dict[str, object]:
+    try:
+        opsets = read_onnx_opset_imports(path)
+    except (OnnxModelInfoError, OSError) as exc:
+        return {
+            "source": source,
+            "path": str(path),
+            "opsets": [],
+            "max_default_opset": None,
+            "directml_compatible": None,
+            "error": str(exc),
+        }
+    max_default = 0
+    for op in opsets:
+        if op.domain in DEFAULT_ONNX_DOMAINS:
+            max_default = max(max_default, op.version)
+    return {
+        "source": source,
+        "path": str(path),
+        "opsets": [{"domain": op.domain, "version": op.version} for op in opsets],
+        "max_default_opset": max_default,
+        "directml_compatible": max_default <= DIRECTML_MAX_ONNX_OPSET,
+        "error": None,
+    }
+
+
+def print_audit_report(records: Optional[List[Dict[str, object]]] = None) -> None:
+    """Print a human-readable DirectML opset audit to stdout."""
+    if records is None:
+        records = audit_onnx_models()
+    print(f"DirectML ONNX opset audit (ceiling: opset {DIRECTML_MAX_ONNX_OPSET})")
+    print(f"Known model opsets (from source repos):")
+    for name, opset in sorted(KNOWN_MODEL_OPSETS.items()):
+        compat = "OK" if opset <= DIRECTML_MAX_ONNX_OPSET else "EXCEEDS"
+        print(f"  {name}: opset {opset} [{compat}]")
+    print()
+    if not records:
+        print("No local ONNX model files found to audit.")
+        print("Install rapidocr or set VSR_LAMA_ONNX / VSR_MIGAN_ONNX to audit local files.")
+        return
+    print(f"Local model audit ({len(records)} files):")
+    for rec in records:
+        if rec.get("error"):
+            print(f"  {rec['source']}: ERROR - {rec['error']}")
+            continue
+        compat = "OK" if rec["directml_compatible"] else "EXCEEDS CEILING"
+        print(f"  {rec['source']}: opset {rec['max_default_opset']} [{compat}]")

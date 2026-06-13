@@ -399,6 +399,8 @@ def main():
                        help="Fast remux that keeps embedded subtitle tracks without OCR.")
     parser.add_argument("--burned-in-only", action="store_true",
                        help="Ignore embedded subtitle tracks and run burned-in cleanup normally.")
+    parser.add_argument("--audit-onnx", action="store_true",
+                       help="Audit all discoverable ONNX models for DirectML opset compatibility and exit.")
     parser.add_argument("--validate-config", action="store_true",
                        help="Print the resolved ProcessingConfig as JSON and exit.")
     parser.add_argument("--json-log", metavar="PATH",
@@ -422,6 +424,11 @@ def main():
         width = max((len(n) for _, n, _ in rows), default=4)
         for source, name, desc in rows:
             print(f"[{source:<8}] {name.ljust(width)}  {desc}")
+        sys.exit(0)
+
+    if args.audit_onnx:
+        from backend.onnx_model_info import print_audit_report
+        print_audit_report()
         sys.exit(0)
 
     soft_mode_count = sum(
