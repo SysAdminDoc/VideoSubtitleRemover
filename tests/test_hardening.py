@@ -3667,6 +3667,32 @@ class JsonLogGuiTests(unittest.TestCase):
         self.assertTrue(cfg2.json_log_enabled)
 
 
+class MediaExtensionParityTests(unittest.TestCase):
+    """Verify that GUI and backend media extension sets stay in sync."""
+
+    def test_gui_image_extensions_include_tif(self):
+        from gui.utils import IMAGE_EXTENSIONS
+        self.assertIn(".tif", IMAGE_EXTENSIONS)
+        self.assertIn(".tiff", IMAGE_EXTENSIONS)
+
+    def test_backend_frame_capture_matches_gui_image_extensions(self):
+        from gui.utils import IMAGE_EXTENSIONS
+        from backend.io import _FrameSequenceCapture
+        self.assertEqual(
+            _FrameSequenceCapture.SUPPORTED_EXTS,
+            set(IMAGE_EXTENSIONS),
+        )
+
+    def test_filepicker_pattern_covers_all_extensions(self):
+        from gui.utils import (
+            SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS, IMAGE_EXTENSIONS,
+            filepicker_pattern,
+        )
+        pattern = filepicker_pattern(SUPPORTED_EXTENSIONS)
+        for ext in VIDEO_EXTENSIONS | IMAGE_EXTENSIONS:
+            self.assertIn(f"*{ext}", pattern)
+
+
 class DependencyFloorTests(unittest.TestCase):
     """Verify minimum dependency versions across all install surfaces."""
 

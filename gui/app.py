@@ -49,6 +49,7 @@ from gui.config import (
     status_ui,
 )
 from gui.utils import (
+    SUPPORTED_EXTENSIONS, filepicker_pattern,
     get_app_dir, detect_gpu, format_time, format_size,
     is_video_file, is_image_file,
     _CURATED_LANG_NAMES, _engine_supported_languages, _build_language_list,
@@ -3288,7 +3289,7 @@ class VideoSubtitleRemoverApp:
         if not source_path:
             source_path = filedialog.askopenfilename(
                 title="Select a video/image to define subtitle region",
-                filetypes=[("All Supported", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp")]
+                filetypes=[("All Supported", filepicker_pattern(SUPPORTED_EXTENSIONS))]
             )
         if not source_path:
             return

@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 from gui.utils import (
+    IMAGE_EXTENSIONS,
+    SUPPORTED_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    filepicker_pattern,
     format_time,
     is_image_file,
     is_video_file,
@@ -1204,9 +1208,9 @@ class DragDropFrame(tk.Frame):
         files = filedialog.askopenfilenames(
             title="Choose files to clean",
             filetypes=[
-                ("All Supported", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp"),
-                ("Video Files", "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;*.mpeg;*.mpg"),
-                ("Image Files", "*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp"),
+                ("All Supported", filepicker_pattern(SUPPORTED_EXTENSIONS)),
+                ("Video Files", filepicker_pattern(VIDEO_EXTENSIONS)),
+                ("Image Files", filepicker_pattern(IMAGE_EXTENSIONS)),
                 ("All Files", "*.*"),
             ]
         )
