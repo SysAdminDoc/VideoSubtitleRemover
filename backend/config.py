@@ -127,6 +127,8 @@ class ProcessingConfig:
     mask_feather_px: int = 4  # gaussian feather for seamless alpha-blend at edges
     confidence_weighted_dilation: bool = False
     confidence_dilation_scale: float = 1.5
+    lama_tile_size: int = 512
+    lama_tile_overlap: int = 64
 
     # Temporal Background Exposure (real STTN / ProPainter path)
     # When enabled, STTN/ProPainter sample masked pixels from neighbouring frames
@@ -475,6 +477,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.confidence_weighted_dilation, False)
     config.confidence_dilation_scale = _coerce_float(
         config.confidence_dilation_scale, 1.5, 0.0, 5.0)
+    config.lama_tile_size = _coerce_int(config.lama_tile_size, 512, 256, 1024)
+    config.lama_tile_overlap = _coerce_int(config.lama_tile_overlap, 64, 0, 256)
     config.tbe_enable = _coerce_bool(config.tbe_enable, True)
     config.tbe_min_coverage = _coerce_int(config.tbe_min_coverage, 3, 1, 32)
     config.tbe_use_median = _coerce_bool(config.tbe_use_median, True)

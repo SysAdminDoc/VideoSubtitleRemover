@@ -249,6 +249,8 @@ class ProcessingConfig:
     mask_feather_px: int = 4
     confidence_weighted_dilation: bool = False
     confidence_dilation_scale: float = 1.5
+    lama_tile_size: int = 512
+    lama_tile_overlap: int = 64
 
     tbe_enable: bool = True
     tbe_min_coverage: int = 3

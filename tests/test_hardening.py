@@ -3715,6 +3715,44 @@ class MediaExtensionParityTests(unittest.TestCase):
             self.assertIn(f"*{ext}", pattern)
 
 
+class TiledLamaTests(unittest.TestCase):
+    """Tile-based LaMa inference for high-resolution frames."""
+
+    def test_config_tile_defaults(self):
+        cfg = gui.ProcessingConfig()
+        self.assertEqual(cfg.lama_tile_size, 512)
+        self.assertEqual(cfg.lama_tile_overlap, 64)
+
+    def test_config_tile_round_trip(self):
+        cfg = gui.ProcessingConfig()
+        cfg.lama_tile_size = 256
+        cfg.lama_tile_overlap = 32
+        d = cfg.to_dict()
+        cfg2 = gui.ProcessingConfig.from_dict(d)
+        self.assertEqual(cfg2.lama_tile_size, 256)
+        self.assertEqual(cfg2.lama_tile_overlap, 32)
+
+    def test_tiled_inpaint_produces_valid_output(self):
+        """Tiled path should produce a valid uint8 BGR frame."""
+        import numpy as _np
+        from backend.inpainters.lama import LAMAInpainter
+        cfg = gui.ProcessingConfig()
+        cfg.lama_tile_size = 256
+        cfg.lama_tile_overlap = 32
+        inpainter = LAMAInpainter.__new__(LAMAInpainter)
+        inpainter.config = cfg
+        inpainter.device = "cpu"
+        def fake_lama(pil_img, pil_mask):
+            return pil_img
+        inpainter._lama = fake_lama
+        frame = _np.random.randint(0, 255, (600, 800, 3), dtype=_np.uint8)
+        mask = _np.zeros((600, 800), dtype=_np.uint8)
+        mask[250:350, 300:500] = 255
+        result = inpainter._inpaint_lama_tiled(frame, mask, 256, 32)
+        self.assertEqual(result.shape, frame.shape)
+        self.assertEqual(result.dtype, _np.uint8)
+
+
 class ConfidenceWeightedDilationTests(unittest.TestCase):
     """Confidence-weighted mask dilation scales padding by OCR confidence."""
 
