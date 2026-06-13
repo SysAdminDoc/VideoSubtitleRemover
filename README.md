@@ -26,7 +26,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 ## Features
 
 - **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
-- **Real AI Inpainting** -- LaMa neural network for still-frame and residual refinement (via `simple-lama-inpainting`)
+- **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency) or simple-lama-inpainting (PyTorch fallback)
 - **AUTO Inpaint Routing** -- Per-batch routing between TBE and LaMa based on exposure score
 - **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
@@ -131,7 +131,7 @@ python -m unittest discover -s tests -v
 | Algorithm | Inpainting Engine | Speed | Quality | Best For |
 |-----------|-------------------|-------|---------|----------|
 | **STTN** | Temporal Background Exposure | Fastest | Great | Live-action video with changing subtitles (default) |
-| LAMA | Neural (LaMa) | Medium | Best still-frame | Images, animations, static backgrounds |
+| LAMA | Neural (LaMa ONNX or PyTorch) | Medium | Best still-frame | Images, animations, static backgrounds |
 | ProPainter | TBE + LaMa refinement | Slowest | Best motion | Motion-heavy footage, thick/decorative text |
 
 > All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a hybrid: TBE reconstructs the background, then LaMa refines any residual.
