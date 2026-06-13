@@ -683,15 +683,8 @@ class VideoSubtitleRemoverApp:
         self._update_guidance_surface()
 
     def _bind_shortcuts(self):
-        """Register global shortcuts for the most common actions."""
-        self.root.bind("<Control-o>", lambda e: self._open_file_picker())
-        self.root.bind("<Control-O>", lambda e: self._open_file_picker())
-        self.root.bind("<Control-Return>", lambda e: self._start_processing())
-        self.root.bind("<F5>", lambda e: self._start_processing())
-        self.root.bind("<Control-l>", lambda e: self._toggle_log_panel())
-        self.root.bind("<Control-L>", lambda e: self._toggle_log_panel())
-        self.root.bind("<Control-f>", self._focus_queue_filter)
-        self.root.bind("<Control-F>", self._focus_queue_filter)
+        """No app-wide keyboard accelerators -- all actions are click-only."""
+        pass
 
     def _open_file_picker(self):
         if hasattr(self, "drop_area"):
@@ -3183,7 +3176,7 @@ class VideoSubtitleRemoverApp:
              Theme.SUCCESS if self.gpus else Theme.WARNING)
         fact("FFmpeg", "Ready" if self.ffmpeg_ready else "Missing",
              Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING)
-        fact("Shortcuts", "Ctrl+O import   |   Ctrl+Enter start   |   Ctrl+L activity")
+        fact("Input", "Click Import or drag files onto the queue")
         fact("Settings", str(SETTINGS_FILE))
         fact("Log file", str(LOG_FILE))
 

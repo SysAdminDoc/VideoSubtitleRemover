@@ -119,7 +119,7 @@ python -m unittest discover -s tests -v
 ## Usage
 
 1. **Launch** via `Run_VSR_Pro.bat`
-2. **Add files** — Click to browse, press `Ctrl+O`, right-click for folders, or drag & drop
+2. **Add files** -- Click to browse, right-click for folders, or drag & drop
 3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
 4. **Set language** if subtitles are non-English
 5. **Optionally set region** — Click "Set Region" to draw a rectangle on the subtitle area
