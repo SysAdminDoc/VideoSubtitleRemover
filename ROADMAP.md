@@ -79,12 +79,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     one-shot region selector with live-drag adjustment on the preview
     pane and instant mask re-render.
 
-### Input preprocessing
-
-### Security
-
-### Observability
-
 ### Testing
 
 54. **Reference-clip regression harness (remainder)** -- synthetic
@@ -336,14 +330,6 @@ Speculative research bench; not commitments.
   stay opt-in installs, never bundled, keeping the MIT licence clean.
 - **Mocking the AI weights for "offline demos"** -- the zero-weight TBE
   path already works and is the demo.
-
----
-
-## Research-Driven Additions
-
-### P1
-
-### P2
 
 
 
