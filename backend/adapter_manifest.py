@@ -81,7 +81,16 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         name="lama-onnx",
         env_vars=("VSR_LAMA_ONNX",),
         expected_filenames=("lama_fp32.onnx", "lama.onnx"),
-        sha256={},
+        sha256={
+            "lama_fp32.onnx": (
+                "1faef5301d78db7dda502fe59966957ec4b79dd64e16f0"
+                "3ed96913c7a4eb68d6"
+            ),
+            "lama.onnx": (
+                "351e481e287f345b7fbfd026068cfb9ec0c7f24b440e65"
+                "01458ebe54a833d1a1"
+            ),
+        },
         license="Apache-2.0 or upstream model-card terms",
         source_url="https://huggingface.co/Carve/LaMa-ONNX",
         preferred_format="ONNX",

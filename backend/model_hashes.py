@@ -32,14 +32,29 @@ from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 
-# Filename -> SHA-256 hex digest, lowercase, no separator. Entries that
-# reference simple-lama-inpainting's bundled weights are validated
-# against the upstream release at the time of this commit; bump in a
-# follow-up if the maintainer rotates a checkpoint.
 KNOWN_WEIGHT_HASHES: Dict[str, str] = {
-    # LaMa weights distributed by simple-lama-inpainting 0.1.x.
+    # simple-lama-inpainting 0.1.x PyTorch checkpoint.
     # https://github.com/enesmsahin/simple-lama-inpainting
-    "big-lama.pt": "344c77bbcb158f17dd143070d1e789f38a66c04202311ae3a258ef66667a9ea9",
+    "big-lama.pt": (
+        "344c77bbcb158f17dd143070d1e789f38a66c04202311ae"
+        "3a258ef66667a9ea9"
+    ),
+    # LaMa-ONNX FP32 -- Carve/LaMa-ONNX on HuggingFace.
+    # https://huggingface.co/Carve/LaMa-ONNX
+    "lama_fp32.onnx": (
+        "1faef5301d78db7dda502fe59966957ec4b79dd64e16f0"
+        "3ed96913c7a4eb68d6"
+    ),
+    "lama.onnx": (
+        "351e481e287f345b7fbfd026068cfb9ec0c7f24b440e65"
+        "01458ebe54a833d1a1"
+    ),
+    # OpenCV inpainting_lama (opencv/inpainting_lama on HuggingFace).
+    # https://huggingface.co/opencv/inpainting_lama
+    "inpainting_lama_2025jan.onnx": (
+        "7df918ac3921d3daf0aae1d219776cf0dc4e4935f035af"
+        "81841b40adcf74fdf2"
+    ),
 }
 
 
@@ -94,6 +109,67 @@ def verify_weight_file(path: Path, expected_filename: Optional[str] = None,
         return False
     logger.info(f"Verified weight file {p.name} via vendored SHA-256")
     return True
+
+
+def scan_and_verify_weights() -> list:
+    """Scan all candidate weight directories and verify known files.
+
+    Returns a list of dicts: {filename, path, expected, actual, status}
+    where status is "verified", "mismatch", "unknown", or "missing".
+    """
+    results = []
+    dirs = candidate_weight_dirs()
+    seen: set = set()
+    for d in dirs:
+        for f in sorted(d.iterdir()):
+            if not f.is_file():
+                continue
+            key = f.name
+            if key in seen:
+                continue
+            seen.add(key)
+            expected = KNOWN_WEIGHT_HASHES.get(key)
+            if expected is None:
+                continue
+            actual = hash_file(f)
+            match = actual.lower() == expected.lower()
+            results.append({
+                "filename": key,
+                "path": str(f),
+                "expected": expected,
+                "actual": actual,
+                "status": "verified" if match else "mismatch",
+            })
+    for key in sorted(KNOWN_WEIGHT_HASHES):
+        if key not in seen:
+            results.append({
+                "filename": key,
+                "path": None,
+                "expected": KNOWN_WEIGHT_HASHES[key],
+                "actual": None,
+                "status": "missing",
+            })
+    return results
+
+
+def print_weight_report() -> None:
+    """Print a human-readable weight verification report."""
+    results = scan_and_verify_weights()
+    print(f"Weight verification report ({len(KNOWN_WEIGHT_HASHES)} known hashes)")
+    dirs = candidate_weight_dirs()
+    print(f"Scanned directories: {len(dirs)}")
+    for d in dirs:
+        print(f"  {d}")
+    print()
+    if not results:
+        print("No known weight files found.")
+        return
+    for r in results:
+        tag = r["status"].upper()
+        if r["path"]:
+            print(f"  [{tag}] {r['filename']} -> {r['path']}")
+        else:
+            print(f"  [{tag}] {r['filename']}")
 
 
 def candidate_weight_dirs() -> list:

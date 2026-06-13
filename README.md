@@ -252,6 +252,7 @@ review-needed outputs. A failed gate changes the batch row status to
 | `--quality-report` | Compute PSNR/SSIM and VMAF when libvmaf is available | Off |
 | `--quality-sheet` | Side-by-side comparison PNG | Off |
 | `--audit-onnx` | Audit all ONNX models for DirectML opset compatibility and exit | Off |
+| `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes | Off |
 | `--validate-config` | Print resolved config and exit | Off |
 | `--skip-existing` | Skip files whose output already exists | Off |
 | `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
