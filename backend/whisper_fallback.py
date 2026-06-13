@@ -101,6 +101,9 @@ def _build_ffmpeg_whisper_filter(
     destination_path: str,
     language: Optional[str] = None,
     queue_seconds: float = 3.0,
+    vad_model: str = "",
+    vad_threshold: float = 0.5,
+    min_speech_duration: float = 0.0,
 ) -> str:
     lang = (language or "auto").strip() or "auto"
     queue = max(0.02, float(queue_seconds))
@@ -111,6 +114,12 @@ def _build_ffmpeg_whisper_filter(
         "format=srt",
         f"destination={_escape_filter_value(destination_path)}",
     ]
+    if vad_model:
+        options.append(f"vad_model={_escape_filter_value(vad_model)}")
+    if vad_model and 0.0 < vad_threshold < 1.0:
+        options.append(f"vad_threshold={vad_threshold:g}")
+    if min_speech_duration > 0:
+        options.append(f"min_speech_duration={min_speech_duration:g}")
     return (
         "aformat=sample_rates=16000:channel_layouts=mono,"
         f"whisper={':'.join(options)}"
@@ -158,6 +167,9 @@ def run_ffmpeg_whisper_segments(
     language: Optional[str] = None,
     queue_seconds: float = 3.0,
     ffmpeg: str = "ffmpeg",
+    vad_model: str = "",
+    vad_threshold: float = 0.5,
+    min_speech_duration: float = 0.0,
 ) -> Optional[List[Tuple[float, float, str]]]:
     """Transcribe `media_path` through FFmpeg's whisper filter.
 
@@ -192,6 +204,9 @@ def run_ffmpeg_whisper_segments(
             srt_path,
             language=language,
             queue_seconds=queue_seconds,
+            vad_model=vad_model,
+            vad_threshold=vad_threshold,
+            min_speech_duration=min_speech_duration,
         )
         cmd = [
             ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-nostats",

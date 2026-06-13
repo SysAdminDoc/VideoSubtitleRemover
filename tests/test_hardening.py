@@ -2895,6 +2895,28 @@ class WhisperFallbackTests(unittest.TestCase):
         self.assertIn(r"model=C\:\\models\\ggml-base.en.bin", expr)
         self.assertIn(r"destination=C\:\\Temp\\whisper.srt", expr)
 
+    def test_ffmpeg_whisper_filter_includes_vad_options(self):
+        from backend import whisper_fallback as _wf
+        expr = _wf._build_ffmpeg_whisper_filter(
+            "/models/ggml-base.bin",
+            "/tmp/whisper.srt",
+            vad_model="/models/silero_vad.onnx",
+            vad_threshold=0.6,
+            min_speech_duration=0.25,
+        )
+        self.assertIn("vad_model=", expr)
+        self.assertIn("vad_threshold=0.6", expr)
+        self.assertIn("min_speech_duration=0.25", expr)
+
+    def test_ffmpeg_whisper_filter_omits_vad_when_empty(self):
+        from backend import whisper_fallback as _wf
+        expr = _wf._build_ffmpeg_whisper_filter(
+            "/models/ggml-base.bin",
+            "/tmp/whisper.srt",
+        )
+        self.assertNotIn("vad_model", expr)
+        self.assertNotIn("vad_threshold", expr)
+
     def test_parse_srt_segments(self):
         from backend import whisper_fallback as _wf
         srt = (
