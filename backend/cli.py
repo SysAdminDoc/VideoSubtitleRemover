@@ -306,8 +306,8 @@ def main():
     parser.add_argument("--no-hw-encode", action="store_true",
                        help="Disable hardware encoding (force libx264)")
     parser.add_argument("--codec", default="h264",
-                       choices=["h264", "h265", "av1"],
-                       help="Output video codec.")
+                       choices=["h264", "h265", "av1", "vvc"],
+                       help="Output video codec (vvc requires FFmpeg with libvvenc).")
     parser.add_argument("--mask-feather", type=int, default=4,
                        help="Gaussian edge feathering in pixels (0=off)")
     parser.add_argument("--temporal-smooth", type=int, default=0,

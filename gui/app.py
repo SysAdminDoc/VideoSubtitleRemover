@@ -1692,12 +1692,12 @@ class VideoSubtitleRemoverApp:
         self.output_codec_var = tk.StringVar(value=getattr(self.config, "output_codec", "h264"))
         codec_combo = ttk.Combobox(
             codec_row, textvariable=self.output_codec_var, width=10,
-            values=["h264", "h265", "av1"],
+            values=["h264", "h265", "av1", "vvc"],
             state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
         )
         codec_combo.pack(side="right")
         Tooltip(codec_combo,
-                "h264 is universal; h265 and av1 cut bitrate ~50% on 4K. Uses NVENC/QSV/AMF when available.")
+                "h264 is universal; h265 and av1 cut bitrate ~50% on 4K; vvc (H.266) needs FFmpeg with libvvenc. Uses NVENC/QSV/AMF when available.")
 
         self.adaptive_batch_var = tk.BooleanVar(value=self.config.adaptive_batch)
         adaptive_toggle = ModernToggle(
@@ -4045,7 +4045,7 @@ class VideoSubtitleRemoverApp:
         codec_var = tk.StringVar(value=getattr(item.config, "output_codec", "h264"))
         ttk.Combobox(
             codec_row, textvariable=codec_var, width=8,
-            values=["h264", "h265", "av1"],
+            values=["h264", "h265", "av1", "vvc"],
             state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
         ).pack(side="right")
 

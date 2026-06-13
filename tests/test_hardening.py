@@ -3175,6 +3175,18 @@ class OutputCodecTests(unittest.TestCase):
         )
         self.assertEqual(cfg.output_codec, "h264")
 
+    def test_vvc_codec_normalises(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(output_codec="vvc")
+        )
+        self.assertEqual(cfg.output_codec, "vvc")
+
+    def test_h266_alias_normalises_to_vvc(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(output_codec="h266")
+        )
+        self.assertEqual(cfg.output_codec, "vvc")
+
     def test_software_encoder_args_match_codec(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover._hw_encoder = None
@@ -3187,6 +3199,9 @@ class OutputCodecTests(unittest.TestCase):
         remover.config.output_codec = "av1"
         args = remover._get_encode_args()
         self.assertIn("libsvtav1", args)
+        remover.config.output_codec = "vvc"
+        args = remover._get_encode_args()
+        self.assertIn("libvvenc", args)
 
 
 class ExtendedMetricsTests(unittest.TestCase):
