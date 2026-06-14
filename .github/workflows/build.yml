@@ -274,6 +274,32 @@ jobs:
             throw "Strict release requires NSIS installer artifact."
           }
 
+          # RM-106: bundled GUI smoke in strict mode. The frozen app
+          # supports --smoke-test, which constructs and tears down the GUI
+          # off-screen and exits 0/1 without entering the Tk mainloop. The
+          # GitHub-hosted windows-latest runner provides an interactive
+          # desktop session, so Tk can create (withdrawn) windows.
+          if ($strict) {
+            $verification.smokeLaunch.attempted = $true
+            try {
+              $proc = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -NoNewWindow
+              if (-not $proc.WaitForExit(120000)) {
+                try { $proc.Kill() } catch {}
+                throw "Bundled GUI smoke test timed out after 120s."
+              }
+              $code = $proc.ExitCode
+              if ($code -ne 0) {
+                throw "Bundled GUI smoke test exited with code $code."
+              }
+              $verification.smokeLaunch.status = "passed"
+              $verification.smokeLaunch.reason = "Frozen app constructed and tore down the GUI off-screen (exit 0)."
+            } catch {
+              $verification.smokeLaunch.status = "failed"
+              $verification.smokeLaunch.reason = $_.Exception.Message
+              throw
+            }
+          }
+
           foreach ($doc in @("README.md", "LICENSE")) {
             $docPath = Join-Path $distDir $doc
             if (-not (Test-Path $docPath)) {
