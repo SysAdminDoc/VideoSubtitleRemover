@@ -96,6 +96,21 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         preferred_format="ONNX",
         remote_code_required=False,
     ),
+    "opencv-lama": AdapterManifestEntry(
+        name="opencv-lama",
+        env_vars=("VSR_OPENCV_LAMA",),
+        expected_filenames=("inpainting_lama_2025jan.onnx",),
+        sha256={
+            "inpainting_lama_2025jan.onnx": (
+                "7df918ac3921d3daf0aae1d219776cf0dc4e4935f035af"
+                "81841b40adcf74fdf2"
+            ),
+        },
+        license="Apache-2.0",
+        source_url="https://huggingface.co/opencv/inpainting_lama",
+        preferred_format="ONNX",
+        remote_code_required=False,
+    ),
     "migan-onnx": AdapterManifestEntry(
         name="migan-onnx",
         env_vars=("VSR_MIGAN_ONNX",),

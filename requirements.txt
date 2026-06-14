@@ -8,6 +8,14 @@
 # GHSA-wjx4-4jcj-g98j (JPEG2000 decode OOB read),
 # GHSA-pwv6-vv43-88gr (BLP loader heap overflow), and
 # GHSA-whj4-6x5x-4v2j (TIFF IFD loop DoS).
+#
+# OpenCV 5 upgrade path: opencv-python >= 5.0 enables the built-in
+# cv2.dnn LaMa inpaint backend, which needs only OpenCV + numpy (no
+# onnxruntime, no torch). Download the model from
+# https://huggingface.co/opencv/inpainting_lama and set
+# VSR_OPENCV_LAMA=path/to/inpainting_lama_2025jan.onnx, or place it in
+# %APPDATA%/VideoSubtitleRemoverPro/models/ for auto-discovery. The
+# 4.x floor is kept for users who have not upgraded yet.
 numpy>=1.21.0
 opencv-python>=4.12.0
 Pillow>=12.2.0
@@ -53,6 +61,10 @@ paddleocr>=3.0.0
 easyocr>=1.7.0
 
 # Real AI Inpainting (LAMA mode)
+# simple-lama-inpainting is now an optional fallback dependency. The
+# preferred backends (ONNX Runtime or OpenCV 5 DNN) avoid the torch.load
+# CVE surface entirely. Install simple-lama-inpainting only if neither
+# onnxruntime nor opencv-python >= 5.0 is available.
 simple-lama-inpainting>=0.1.0
 
 # GUI Enhancement (optional)
