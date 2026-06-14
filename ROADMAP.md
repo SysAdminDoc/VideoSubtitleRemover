@@ -7,34 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Now
 
-106. **Release artifact verification gate (remainder)** -- strict mode
-     (`release_quality=permissive|strict`), strict pip-audit/NSIS/signing,
-     artifact hash manifest, bundled-doc checks, signature verification,
-     and ffmpeg version recording are implemented.
-     Priority: P0 release quality. Effort: S (remainder). Confidence: high.
-     Acceptance criteria (remaining):
-     - Execute the bundled GUI smoke path in strict mode when the release
-       runner has a reliable interactive desktop session.
-
-110. **OpenCV 5 DNN LaMa migration** -- migrate the LaMa inpainting
-     backend from `simple-lama-inpainting` (PyTorch) to OpenCV 5's
-     `cv2.dnn` LaMa runner; removes the PyTorch runtime dependency for
-     that codepath and closes the `torch.load` CVE surface.
-     Priority: P0 security + maintenance. Effort: M. Confidence: high.
-     Acceptance criteria:
-     - `LAMAInpainter` runs inference via `cv2.dnn.readNetFromONNX` using
-       the `opencv/inpainting_lama` ONNX model.
-     - Falls back to `simple-lama-inpainting` when opencv-python < 5.0;
-       that package becomes an optional/fallback dependency.
-     - A/B PSNR/SSIM parity with the PyTorch path (+/- 0.5 dB) on
-       reference clips.
-     - `requirements.txt` floor updated with documented upgrade path.
-     - Tests mock the DNN path and verify fallback behavior.
-     Risks: new DNN engine ONNX op coverage; fixed 512x512 input may need
-     tiling for large frames.
-     Sources: https://opencv.org/opencv-5/
-     https://huggingface.co/opencv/inpainting_lama
-
 111. **CVE-2026-22801 libpng mitigation (remainder)** -- the runtime
      OpenCV build-info warning is implemented. Remaining work is blocked
      until opencv-python publishes a wheel with libpng >= 1.6.54.
@@ -331,5 +303,202 @@ Speculative research bench; not commitments.
 - **Mocking the AI weights for "offline demos"** -- the zero-weight TBE
   path already works and is the demo.
 
+---
 
+## Research-Driven Additions
 
+### P1 (root-cause reliability)
+
+- [ ] P1 -- EDL sidecar UnicodeEncodeError on non-ASCII filenames
+  Why: a Chinese/Japanese/Korean source or output filename (the dominant subtitle-removal use case) crashes the EDL sidecar write with UnicodeEncodeError, aborting NLE export.
+  Evidence: `backend/nle_sidecar.py:65` uses `Path(path).write_text(text, encoding="ascii")` where `text` embeds `Path(source).name`/`Path(cleaned).name` (lines 60-61); the FCPXML writer at `nle_sidecar.py:111` already uses UTF-8, as do all other backend writers (`io.py:279`, `presets.py`, `processor.py:168`). The ASCII-only project rule governs source files, not runtime output.
+  Touches: `backend/nle_sidecar.py`, `tests/`
+  Acceptance: `write_edl` writes UTF-8 (or ASCII-transliterated) output; a unit test round-trips an EDL with a non-ASCII filename without raising; FCPXML/EDL parity verified.
+  Complexity: S
+
+- [ ] P1 -- setup.py pip/venv subprocess timeouts
+  Why: a stalled PyPI mirror or corrupt download hangs the installer forever with no feedback.
+  Evidence: `setup.py:184` (venv) and `setup.py:230-355` (all pip installs) pass `check=True` with no `timeout=`, unlike the probe calls that already use `timeout=10` (`setup.py:102,122,135,370`).
+  Touches: `setup.py`
+  Acceptance: every `subprocess.run` for venv/pip carries an explicit timeout (e.g. 600-1800s); on timeout the assistant prints an actionable error and exits non-zero instead of hanging.
+  Complexity: S
+
+- [ ] P1 -- Off-main-thread startup hardware probes
+  Why: the window does not paint for up to ~18s+ when nvidia-smi/ffmpeg are slow or absent, reading as a frozen app on launch.
+  Evidence: `gui/app.py:137-139` calls `detect_gpu()`/`detect_ai_engines()`/`detect_ffmpeg()` inline in `MainWindow.__init__`; each shells out with 8-10s timeouts (`gui/utils.py:27,250`).
+  Touches: `gui/app.py`, `gui/utils.py`
+  Acceptance: the main window paints immediately with a "Detecting hardware..." state; GPU/engine/ffmpeg results are marshalled back via `root.after(0, ...)` and update the header chips when ready.
+  Complexity: M
+
+- [ ] P1 -- First-run model-download progress and guidance
+  Why: EasyOCR / torch-LaMa / VLM weights download on first use with no progress UI; the app looks hung during a multi-hundred-MB fetch.
+  Evidence: `backend/inpainters_onnx.py:17` documents a manual `huggingface-cli download`; EasyOCR/simple-lama fetch weights on first call with no in-app feedback; RESEARCH "Architecture Assessment".
+  Touches: `gui/app.py`, `backend/inpainters/lama.py`, `backend/inpainters_onnx.py`, `backend/detection.py`
+  Acceptance: first-use of any backend that fetches weights surfaces a determinate or indeterminate progress indicator + size estimate in the log panel/toast; failures show a clear retry message.
+  Complexity: M
+
+- [ ] P1 -- Remove ROADMAP version marker from strict release verification
+  Why: strict releases currently require `ROADMAP.md` to contain the release tag, contradicting the mandatory rule that ROADMAP contains only incomplete work and no release/session log material.
+  Evidence: `.github/workflows/build.yml:367-370` checks `@{ Path = "ROADMAP.md"; Pattern = "v$expectedVersion" }`; `ROADMAP.md` header says remaining-work backlog only; `AGENTS.md` repeats the same hygiene rule.
+  Touches: `.github/workflows/build.yml`, `tests/test_release_workflow.py`
+  Acceptance: release verification no longer requires a version marker in ROADMAP; tests assert README/CHANGELOG/APP_VERSION checks remain and ROADMAP hygiene is preserved.
+  Complexity: S
+
+### P2 (trust / test depth / hygiene)
+
+- [ ] P2 -- CI/test guard for the source-ASCII invariant
+  Why: "ALL .py files must be pure ASCII" is a CRITICAL project rule (CLAUDE.md) but nothing enforces it; a stray unicode char ships silently and only breaks downstream (PyInstaller bundling, arbitrary parsers).
+  Evidence: no ASCII-check test in `tests/` and no step in `.github/workflows/build.yml` (verified); the hand-rolled ascii guarding in `backend/nle_sidecar.py` exists precisely because this class of bug is unguarded.
+  Touches: `tests/`, `.github/workflows/build.yml`
+  Acceptance: a pytest (or CI step) scans `**/*.py` and `*.bat` for bytes outside `\x00-\x7f` and fails listing offending file:line; passes on the current tree.
+  Complexity: S
+
+- [ ] P2 -- User-visible notice on settings.json corruption/reset
+  Why: a malformed settings file silently resets all persisted state (geometry, panel layout, saved regions, user presets) with only a hidden-log warning, so users silently lose configuration.
+  Evidence: `gui/config.py:621-633` returns default `ProcessingConfig()` on any load failure and logs to the rotating file only; malformed region rects are likewise dropped silently in `_coerce_rect`.
+  Touches: `gui/config.py`, `gui/app.py`
+  Acceptance: on a settings load/parse failure the app shows a startup toast/status ("Settings were corrupted and reset to defaults"); dropped region rects log a WARNING naming each discarded entry.
+  Complexity: S
+
+- [ ] P2 -- Drag-drop feedback when all dropped files are unsupported
+  Why: dropping only unsupported files (e.g. `.exe`, `.txt`) does nothing at all -- no toast, no status -- reading as a broken drop target.
+  Evidence: `gui/widgets.py:1204` `if valid:` early-returns before calling `on_drop`, bypassing the existing `_announce_import_summary` infra (`gui/app.py:3747`) which already handles the unsupported-count message.
+  Touches: `gui/widgets.py`, `gui/app.py`
+  Acceptance: an all-unsupported drop routes through `_announce_import_summary` (or equivalent) and surfaces "skipped N unsupported file(s)"; mixed drops report both added and skipped counts.
+  Complexity: S
+
+- [ ] P2 -- Core-pipeline unit tests (detection cascade, tracking, io fallbacks)
+  Why: the large suite is integration/hardening-weighted; the modules most likely to break on a dependency bump have no dedicated unit coverage of their fallback branches.
+  Evidence: no `tests/test_detection*.py`/`test_tracking*.py`/`test_io*.py`; `backend/detection.py` (cascade RapidOCR>Paddle>Surya>EasyOCR>cv2), `backend/tracking.py` (Kalman), `backend/io.py` (FFmpeg timeout/intermediate-writer fallback) untested in isolation.
+  Touches: `tests/`
+  Acceptance: parametrized unit tests cover the detection-cascade fallback order with engines mocked absent, the Kalman single-frame-miss recovery, and the io FFmpeg-timeout fallback path; all pass in CI.
+  Complexity: M
+
+- [ ] P2 -- Dependency upper bounds + version-cap CI check
+  Why: requirements.txt has only lower bounds; a major bump (paddleocr 4.x, rapidocr 3.x) can change return shapes and silently break detection.
+  Evidence: `requirements.txt` has no `,<` upper bounds (verified); CLAUDE.md already documents RapidOCR 1.x/2.x return-shape divergence handled in `_detect_rapid`.
+  Touches: `requirements.txt`, `setup.py`, `.github/workflows/build.yml`
+  Acceptance: OCR-engine deps carry documented major-version caps (`rapidocr>=2.0.0,<3.0.0`, `paddleocr>=3.0.0,<4.0.0`); a CI step fails if an installed engine exceeds the cap. numpy/opencv stay uncapped (documented upgrade path).
+  Complexity: S
+
+- [ ] P2 -- Diagnosable logging on swallowed processing-path exceptions
+  Why: `except Exception: pass` in the processing/inpaint paths discards tracebacks needed for post-mortem when crash reporting is off (it is opt-in).
+  Evidence: multiple swallowed blocks in `backend/processor.py` and `gui/app.py`; deliberate guards (e.g. `backend/detection.py:160-169` GPL Surya skip) must be left alone.
+  Touches: `backend/processor.py`, `gui/app.py`, `backend/inpainters/*.py`
+  Acceptance: swallowed exceptions on the processing/inpaint paths log at WARNING with `exc_info=True` and a short context tag; intentional control-flow guards are explicitly annotated and exempted.
+  Complexity: S
+
+- [ ] P2 -- Graceful in-flight subprocess teardown on app close
+  Why: closing during processing can orphan the FFmpeg subprocess and leave worker/preview daemon threads mid-write.
+  Evidence: `gui/app.py:215` `_on_close` exists but does not join worker/preview threads or terminate the active FFmpeg child.
+  Touches: `gui/app.py`, `backend/io.py`/`backend/remux.py`
+  Acceptance: on close-during-processing the active FFmpeg child is terminated and partial outputs cleaned up; preview/worker threads are signalled and joined with a short timeout before the process exits.
+  Complexity: M
+
+- [ ] P2 -- Validate PaddleOCR 3.7 / PP-OCRv6 compatibility
+  Why: PaddleOCR 3.7.0 shipped PP-OCRv6 on 2026-06-11, while VSR floats `paddleocr>=3.0.0`; the next install can change OCR behavior without a VSR-side benchmark or parser test.
+  Evidence: PaddleOCR release notes for v3.7.0 / PP-OCRv6; `requirements.txt:59`, `setup.py:348`, and `.github/workflows/build.yml:72` all install `paddleocr>=3.0.0`; `backend/paddle_compat.py` only documents 2.x/3.x shape compatibility and README still names PP-OCRv5.
+  Touches: `backend/paddle_compat.py`, `backend/detection.py`, `tests/`, `README.md`, `requirements.txt`, `.github/workflows/build.yml`
+  Acceptance: CI covers a mocked PP-OCRv6 `predict()` payload; README states the supported PaddleOCR tier accurately; dependency policy either pins a tested 3.x range or explicitly validates latest 3.x.
+  Complexity: M
+
+- [ ] P2 -- Sync VVC / H.266 support across README and release docs
+  Why: VVC output is implemented in the CLI, GUI, and encoder probe, but user-facing docs still list only H.264/H.265/AV1, so users cannot discover the option or its FFmpeg/libvvenc requirement from README.
+  Evidence: `backend/cli.py:308-310`, `gui/app.py:1692-1700`, and `backend/encoder.py:25-28` include `vvc`; `README.md:33`, `README.md:226`, and `README.md:276` still document only h264/h265/av1; VVenC FFmpeg docs require `--enable-libvvenc`.
+  Touches: `README.md`, `.github/workflows/build.yml`, `tests/test_release_workflow.py`
+  Acceptance: README feature list, CLI table, and configuration table include VVC/H.266 with the libvvenc caveat; release verification records whether the bundled/system FFmpeg exposes `libvvenc`.
+  Complexity: S
+
+### Later (research bench -- only if local, permissively licensed weights appear)
+
+- [ ] P3 -- ROSE object-removal bench adapter
+  Why: ROSE explicitly models removal side-effects (shadows, reflections), directly relevant to drop-shadowed/glowing subtitles that defeat simple masking -- the #5 community pain point.
+  Evidence: ROSE "Remove Objects with Side Effects in Videos", https://arxiv.org/pdf/2508.18633; gap noted in RESEARCH community signal.
+  Touches: `backend/inpainters_diffusion.py`, `backend/inpainter_registry.py`
+  Acceptance: opt-in adapter (env-gated) registering like the existing diffusion scaffolds; falls closed to AUTO/TBE when weights/license/VRAM unavailable; benchmarked vs TBE/LaMa on the reference clips.
+  Complexity: L
+
+- [ ] P3 -- MiniMax-Remover lightweight bench adapter
+  Why: a low-VRAM, consumer-GPU-friendly video object remover fits VSR's "runs on normal hardware" stance better than the 8-10 GB diffusion bench items.
+  Evidence: MiniMax-Remover (minimax-optimization video object removal), surfaced in 2026 SOTA survey; RESEARCH Sources.
+  Touches: `backend/inpainters_diffusion.py`, `backend/inpainter_registry.py`
+  Acceptance: opt-in adapter behind an env gate; reports peak VRAM and s/frame in the quality report; falls closed to AUTO/TBE when unavailable.
+  Complexity: L
+
+### P1 - Reliability and Hardening
+
+- [ ] P1 -- Harden startup GitHub Releases update check
+  Why: the optional update check is bounded, but it still polls the GitHub
+  Releases API without REST etiquette; rate-limit or API-shape failures are
+  currently only swallowed/logged, and repeated launches can keep making the
+  same avoidable request.
+  Evidence: `backend/update_check.py` sends only an `Accept` header
+  (`application/vnd.github+json`); GitHub REST best practices recommend
+  explicit error/rate-limit handling and conditional requests where appropriate.
+  The continuation research pass also hit unauthenticated GitHub API rate
+  limits.
+  Touches: `backend/update_check.py`, `gui/config.py`, `tests/test_hardening.py`
+  Acceptance: the request sets a clear User-Agent and API-version header;
+  ETag/Last-Modified state is stored under APPDATA or settings; 304 responses
+  are treated as "no update"; 403/429 rate-limit headers back off without
+  repeated retries; tests cover 200-newer, 304-not-modified, timeout, and
+  rate-limited cases.
+  Complexity: M
+  Sources:
+  https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api
+
+- [ ] P1 -- Verify release workflow downloaded tooling and action supply chain
+  Why: release jobs execute installer and winget submission tooling, so mutable
+  action tags and downloaded executables need stronger evidence than "latest"
+  URLs before producing user-facing binaries.
+  Evidence: `.github/workflows/build.yml` uses action major-version tags and
+  downloads `wingetcreate.exe` from `https://aka.ms/wingetcreate/latest` before
+  executing it; GitHub Actions secure-use guidance recommends hardening action
+  and dependency trust boundaries.
+  Touches: `.github/workflows/build.yml`, `tests/test_release_workflow.py`
+  Acceptance: actions are pinned to reviewed SHAs or covered by a documented
+  allowlist/update policy; wingetcreate is downloaded from a versioned release
+  and Authenticode/hash verified before execution; release-verification records
+  release-tool names, versions, and hashes; a workflow test rejects unchecked
+  executable downloads from mutable "latest" URLs.
+  Complexity: M
+  Sources:
+  https://docs.github.com/en/actions/reference/security/secure-use
+  https://github.com/microsoft/winget-create/releases
+
+### P2 - Evidence Quality and Observability
+
+- [ ] P2 -- Refresh architecture map after module split and release additions
+  Why: stale architecture docs send contributors to the wrong files and make
+  future research repeat basic tree discovery.
+  Evidence: `docs/architecture.md` still reflects older GUI ownership, an older
+  backend map, a narrow test map, pre-VVC codec support, and an old "current as
+  of" marker; the current tree has `gui/app.py`, cache/update/security modules,
+  VVC/H.266 paths, and broader release/hardening tests.
+  Touches: `docs/architecture.md`, `README.md`
+  Acceptance: architecture docs name the current GUI and backend module
+  boundaries; include VVC/H.266, cache inventory, update checks, release
+  verification, and current test families; remove stale monolith guidance and
+  update the "current as of" marker.
+  Complexity: S
+
+### P3 - Operational Maturity
+
+- [ ] P3 -- Release SBOM and optional artifact provenance evidence
+  Why: release verification records useful details, but users and maintainers do
+  not get a standard CycloneDX/SPDX bill of materials or a provenance path for
+  the Windows binaries.
+  Evidence: `.github/workflows/build.yml` writes release-verification JSON and
+  pip evidence but no SBOM artifact; GitHub supports SBOM attestations with
+  repository-plan caveats, and CISA SBOM guidance treats component transparency
+  as supply-chain risk evidence.
+  Touches: `.github/workflows/build.yml`, `tests/test_release_workflow.py`
+  Acceptance: release builds emit a CycloneDX or SPDX JSON SBOM for bundled
+  Python/runtime dependencies; release-verification records the SBOM path and
+  hash; strict release fails if the SBOM is missing; GitHub artifact attestation
+  is added when repository visibility/plan supports it and skipped with a clear
+  note otherwise.
+  Complexity: M
+  Sources:
+  https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations
+  https://www.cisa.gov/resources-tools/resources/2025-minimum-elements-software-bill-materials-sbom
