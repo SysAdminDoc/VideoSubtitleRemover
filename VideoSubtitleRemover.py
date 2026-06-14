@@ -123,8 +123,57 @@ from gui.widgets import (  # noqa: E402, F401
 )
 
 
+def _run_smoke_test() -> int:
+    """RM-106: bundled GUI smoke path for strict release verification.
+
+    Constructs the full application off-screen, pumps one idle cycle, and
+    tears it down without entering the Tk mainloop. Settings are pinned to
+    a throwaway temp dir so a release-runner smoke does not clobber a real
+    user's %APPDATA% config. Returns 0 on success, 1 on any failure so the
+    release workflow can gate on the exit code.
+    """
+    import tempfile
+    from pathlib import Path as _Path
+
+    with tempfile.TemporaryDirectory(prefix="vsr_smoke_") as tmp:
+        # Redirect settings persistence to the throwaway dir. gui.config is
+        # the single source of truth; VideoSubtitleRemover re-exports the
+        # name for back-compat, so update both views.
+        import gui.config as _gc
+        smoke_settings = _Path(tmp) / "settings.json"
+        _gc.SETTINGS_FILE = smoke_settings
+        global SETTINGS_FILE
+        SETTINGS_FILE = smoke_settings
+
+        app = None
+        try:
+            app = VideoSubtitleRemoverApp()
+            app.root.withdraw()
+            app.root.update_idletasks()
+            title = app.root.title()
+            if not title.startswith(APP_NAME):
+                logger.error("Smoke test: unexpected window title %r", title)
+                return 1
+            logger.info("Smoke test passed: GUI constructed and torn down.")
+            return 0
+        except Exception:
+            logger.critical("Smoke test failed:\n%s", traceback.format_exc())
+            return 1
+        finally:
+            if app is not None:
+                try:
+                    app.root.destroy()
+                except Exception:
+                    pass
+
+
 def main():
     """Main entry point."""
+    # RM-106: headless self-test for release verification. Must run before
+    # the DPI/mainloop path so it can exit cleanly on a CI runner.
+    if "--smoke-test" in sys.argv[1:]:
+        sys.exit(_run_smoke_test())
+
     # High DPI support on Windows -- Per-Monitor V2 for best multi-monitor support
     try:
         from ctypes import windll
