@@ -1,10 +1,15 @@
-"""LaMa neural inpainter -- ONNX Runtime preferred, simple-lama-inpainting
-fallback, cv2 last resort.
+"""LaMa neural inpainter -- ONNX Runtime preferred, OpenCV 5 DNN second,
+simple-lama-inpainting (PyTorch) fallback, cv2 last resort.
 
-The ONNX path eliminates the torch.load CVE surface and runs 3-5x faster
-than the PyTorch path. It activates automatically when onnxruntime is
-installed and a LaMa ONNX weight file is found (VSR_LAMA_ONNX env var,
-known cache dirs, or bundled location).
+Priority chain:
+1. ONNX Runtime   -- fastest, most flexible EP selection (CUDA/DirectML/CPU)
+2. OpenCV 5 DNN   -- no torch, no onnxruntime; uses opencv/inpainting_lama
+3. PyTorch         -- simple-lama-inpainting; optional/fallback dependency
+4. cv2.inpaint     -- always available
+
+The ONNX and DNN paths eliminate the torch.load CVE surface. The DNN path
+activates automatically when opencv-python >= 5.0 is installed and an
+inpainting_lama ONNX weight file is found.
 """
 
 from __future__ import annotations
@@ -12,7 +17,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -28,6 +33,16 @@ from backend.inpainters._common import (
 logger = logging.getLogger(__name__)
 
 _ONNX_SEARCH_FILENAMES = ("lama_fp32.onnx", "lama.onnx")
+
+_CV2DNN_LAMA_FILENAMES = (
+    "inpainting_lama_2025jan.onnx",
+    "lama_fp32.onnx",
+    "lama.onnx",
+)
+
+_OPENCV_NATIVE_NAMES = frozenset({"inpainting_lama_2025jan.onnx"})
+
+_OPENCV5_MIN = (5, 0, 0)
 
 
 def _find_lama_onnx_weight() -> Optional[str]:
@@ -62,6 +77,115 @@ def _find_lama_onnx_weight() -> Optional[str]:
                 if match.is_file():
                     return str(match)
     return None
+
+
+def _opencv_version_tuple() -> Tuple[int, ...]:
+    """Parse cv2.__version__ into a comparable tuple of ints."""
+    parts = cv2.__version__.split(".")
+    result = []
+    for p in parts[:3]:
+        digits = ""
+        for ch in p:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        result.append(int(digits) if digits else 0)
+    while len(result) < 3:
+        result.append(0)
+    return tuple(result)
+
+
+def _opencv5_available() -> bool:
+    """Return True when OpenCV >= 5.0 is installed."""
+    return _opencv_version_tuple() >= _OPENCV5_MIN
+
+
+def _find_opencv_lama_weight() -> Optional[str]:
+    """Auto-discover an OpenCV-compatible LaMa ONNX weight file.
+
+    Resolution order:
+    1. VSR_OPENCV_LAMA env var (explicit)
+    2. App model cache (%APPDATA%/VideoSubtitleRemoverPro/models/)
+    3. HuggingFace hub cache
+    4. OpenCV model cache
+    5. Torch hub cache
+    """
+    explicit = os.environ.get("VSR_OPENCV_LAMA", "").strip()
+    if explicit and Path(explicit).is_file():
+        return explicit
+
+    search_dirs = []
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        search_dirs.append(
+            Path(appdata) / "VideoSubtitleRemoverPro" / "models"
+        )
+    home = Path.home()
+    search_dirs.append(home / ".cache" / "huggingface" / "hub")
+    search_dirs.append(home / ".cache" / "opencv_models")
+    search_dirs.append(home / ".cache" / "torch" / "hub" / "checkpoints")
+    search_dirs.append(home / ".cache" / "simple_lama")
+
+    for d in search_dirs:
+        if not d.is_dir():
+            continue
+        for name in _CV2DNN_LAMA_FILENAMES:
+            candidate = d / name
+            if candidate.is_file():
+                return str(candidate)
+            for match in d.rglob(name):
+                if match.is_file():
+                    return str(match)
+    return None
+
+
+def _try_cv2dnn_net(
+    model_path: str, device: str
+) -> Optional["cv2.dnn.Net"]:
+    """Load a cv2.dnn.Net from an ONNX LaMa model file.
+
+    Returns the Net on success or None on any failure so the caller can
+    fall through to the next backend in the priority chain.
+    """
+    if not _opencv5_available():
+        return None
+
+    filename = Path(model_path).name
+    adapter_name = (
+        "opencv-lama" if filename in _OPENCV_NATIVE_NAMES else "lama-onnx"
+    )
+    try:
+        from backend.adapter_manifest import (
+            log_adapter_verification,
+            verify_adapter_path,
+        )
+        result = verify_adapter_path(adapter_name, model_path)
+        log_adapter_verification(result)
+        if not result.allowed:
+            return None
+    except Exception as exc:
+        logger.debug("OpenCV LaMa adapter verification skipped: %s", exc)
+
+    try:
+        net = cv2.dnn.readNetFromONNX(model_path)
+    except Exception as exc:
+        logger.info("cv2.dnn.readNetFromONNX failed for LaMa: %s", exc)
+        return None
+
+    if "cuda" in device:
+        try:
+            net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+            net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+            logger.info("OpenCV DNN LaMa using CUDA backend")
+        except Exception:
+            net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+            net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    else:
+        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+
+    return net
 
 
 def _try_onnx_session(model_path: str, device: str):
@@ -104,8 +228,8 @@ def _try_onnx_session(model_path: str, device: str):
 
 
 class LAMAInpainter(BaseInpainter):
-    """LaMa inpainter. Prefers ONNX Runtime (no torch dependency, faster);
-    falls back to simple-lama-inpainting (PyTorch), then cv2.inpaint."""
+    """LaMa inpainter with four-tier backend priority:
+    ONNX Runtime > OpenCV 5 DNN > PyTorch > cv2.inpaint."""
 
     INPUT_NAME = "image"
     MASK_NAME = "mask"
@@ -115,6 +239,7 @@ class LAMAInpainter(BaseInpainter):
         from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
         self._onnx_session = None
+        self._dnn_net = None
         self._lama = None
         self._backend_name = "cv2"
         self._load_model()
@@ -125,12 +250,25 @@ class LAMAInpainter(BaseInpainter):
             session, provider = _try_onnx_session(onnx_path, self.device)
             if session is not None:
                 self._onnx_session = session
-                self._backend_name = f"ONNX ({provider})"
+                self._backend_name = "ONNX (%s)" % provider
                 logger.info(
                     "LaMa ONNX Runtime inpainting loaded via %s from %s",
                     provider, onnx_path,
                 )
                 return
+
+        if _opencv5_available():
+            opencv_path = _find_opencv_lama_weight()
+            if opencv_path:
+                net = _try_cv2dnn_net(opencv_path, self.device)
+                if net is not None:
+                    self._dnn_net = net
+                    self._backend_name = "OpenCV DNN"
+                    logger.info(
+                        "LaMa OpenCV 5 DNN inpainting loaded from %s",
+                        opencv_path,
+                    )
+                    return
 
         try:
             from simple_lama_inpainting import SimpleLama
@@ -140,8 +278,8 @@ class LAMAInpainter(BaseInpainter):
             self._verify_pytorch_weights()
         except ImportError:
             logger.warning(
-                "Neither onnxruntime+LaMa-ONNX nor simple-lama-inpainting "
-                "are available. LAMA will use OpenCV fallback."
+                "No LaMa backend available (onnxruntime, OpenCV 5 DNN, or "
+                "simple-lama-inpainting). LAMA will use OpenCV fallback."
             )
         except Exception as e:
             logger.warning("LaMa model load failed: %s", e)
@@ -179,6 +317,8 @@ class LAMAInpainter(BaseInpainter):
         ring = self.config.edge_ring_px
         if self._onnx_session is not None:
             raw = self._inpaint_onnx(frames, masks)
+        elif self._dnn_net is not None:
+            raw = self._inpaint_cv2dnn(frames, masks)
         elif self._lama is not None:
             raw = self._inpaint_pytorch(frames, masks)
         else:
@@ -295,6 +435,130 @@ class LAMAInpainter(BaseInpainter):
                 )
             result = result.astype(np.uint8)
         return result
+
+    # ------------------------------------------------------------------
+    # OpenCV 5 DNN path
+    # ------------------------------------------------------------------
+
+    def _inpaint_cv2dnn(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
+        tile_size = self.config.lama_tile_size
+        tile_overlap = self.config.lama_tile_overlap
+        results = []
+        for frame, mask in zip(frames, masks):
+            if mask.max() == 0:
+                results.append(frame.copy())
+                continue
+            h, w = frame.shape[:2]
+            if h > tile_size or w > tile_size:
+                try:
+                    results.append(self._inpaint_cv2dnn_tiled(
+                        frame, mask, tile_size, tile_overlap))
+                    continue
+                except Exception as exc:
+                    logger.warning(
+                        "Tiled LaMa cv2.dnn fell back to full-frame: %s", exc)
+            try:
+                results.append(self._inpaint_cv2dnn_one(frame, mask))
+            except Exception as exc:
+                logger.warning(
+                    "LaMa cv2.dnn inference failed, falling back to cv2: %s",
+                    exc)
+                results.append(_cv2_inpaint(frame, mask, 7, cv2.INPAINT_NS))
+        return results
+
+    def _inpaint_cv2dnn_one(self, frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        h, w = frame.shape[:2]
+        ph = _ensure_multiple_of(h, 8)
+        pw = _ensure_multiple_of(w, 8)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if (ph, pw) != (h, w):
+            rgb = cv2.copyMakeBorder(
+                rgb, 0, ph - h, 0, pw - w, cv2.BORDER_REFLECT_101)
+            mask_padded = cv2.copyMakeBorder(
+                mask, 0, ph - h, 0, pw - w, cv2.BORDER_CONSTANT, value=0)
+        else:
+            mask_padded = mask
+        img_blob = (rgb.astype(np.float32) / 255.0).transpose(2, 0, 1)[
+            None, ...
+        ]
+        mask_blob = (mask_padded.astype(np.float32) / 255.0)[None, None, ...]
+        self._dnn_net.setInput(img_blob, self.INPUT_NAME)
+        self._dnn_net.setInput(mask_blob, self.MASK_NAME)
+        out = self._dnn_net.forward()
+        bgr = cv2.cvtColor(
+            (out[0].transpose(1, 2, 0) * 255.0).clip(0, 255).astype(
+                np.uint8
+            ),
+            cv2.COLOR_RGB2BGR,
+        )
+        return bgr[:h, :w]
+
+    def _inpaint_cv2dnn_tiled(self, frame: np.ndarray, mask: np.ndarray,
+                              tile_size: int, overlap: int) -> np.ndarray:
+        h, w = frame.shape[:2]
+        ys = mask.any(axis=1)
+        xs = mask.any(axis=0)
+        if not ys.any():
+            return frame.copy()
+        y_indices = np.where(ys)[0]
+        x_indices = np.where(xs)[0]
+        roi_y1 = max(0, int(y_indices[0]) - overlap)
+        roi_y2 = min(h, int(y_indices[-1]) + 1 + overlap)
+        roi_x1 = max(0, int(x_indices[0]) - overlap)
+        roi_x2 = min(w, int(x_indices[-1]) + 1 + overlap)
+        step = max(1, tile_size - overlap)
+        result = frame.copy()
+        weight_acc = np.zeros((h, w), dtype=np.float32)
+        color_acc = np.zeros_like(frame, dtype=np.float32)
+        tile_count = 0
+        for ty in range(roi_y1, roi_y2, step):
+            for tx in range(roi_x1, roi_x2, step):
+                ty2 = min(ty + tile_size, h)
+                tx2 = min(tx + tile_size, w)
+                ty1 = max(0, ty2 - tile_size)
+                tx1 = max(0, tx2 - tile_size)
+                tile_mask = mask[ty1:ty2, tx1:tx2]
+                if tile_mask.max() == 0:
+                    continue
+                tile_frame = frame[ty1:ty2, tx1:tx2]
+                try:
+                    tile_out = self._inpaint_cv2dnn_one(tile_frame, tile_mask)
+                except Exception:
+                    tile_out = _cv2_inpaint(
+                        tile_frame, tile_mask, 7, cv2.INPAINT_NS)
+                th, tw = tile_out.shape[:2]
+                wy = np.ones(th, dtype=np.float32)
+                wx = np.ones(tw, dtype=np.float32)
+                if overlap > 0:
+                    ramp = min(overlap, th // 2, tw // 2)
+                    if ramp > 0:
+                        taper = 0.5 - 0.5 * np.cos(
+                            np.linspace(
+                                0, np.pi, ramp, dtype=np.float32))
+                        wy[:ramp] *= taper
+                        wy[-ramp:] *= taper[::-1]
+                        wx[:ramp] *= taper
+                        wx[-ramp:] *= taper[::-1]
+                win = np.outer(wy, wx)
+                color_acc[ty1:ty2, tx1:tx2] += (
+                    tile_out.astype(np.float32) * win[..., None])
+                weight_acc[ty1:ty2, tx1:tx2] += win
+                tile_count += 1
+        if tile_count > 0:
+            blend_mask = weight_acc > 0
+            for c in range(3):
+                result[:, :, c] = np.where(
+                    blend_mask,
+                    (color_acc[:, :, c] / np.maximum(
+                        weight_acc, 1e-6)).clip(0, 255),
+                    frame[:, :, c],
+                )
+            result = result.astype(np.uint8)
+        return result
+
+    # ------------------------------------------------------------------
+    # PyTorch path (simple-lama-inpainting fallback)
+    # ------------------------------------------------------------------
 
     def _inpaint_pytorch(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if (os.environ.get("VSR_LAMA_BATCH", "").strip().lower()
