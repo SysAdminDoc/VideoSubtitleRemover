@@ -309,13 +309,6 @@ Speculative research bench; not commitments.
 
 ### P1 (root-cause reliability)
 
-- [ ] P1 -- setup.py pip/venv subprocess timeouts
-  Why: a stalled PyPI mirror or corrupt download hangs the installer forever with no feedback.
-  Evidence: `setup.py:184` (venv) and `setup.py:230-355` (all pip installs) pass `check=True` with no `timeout=`, unlike the probe calls that already use `timeout=10` (`setup.py:102,122,135,370`).
-  Touches: `setup.py`
-  Acceptance: every `subprocess.run` for venv/pip carries an explicit timeout (e.g. 600-1800s); on timeout the assistant prints an actionable error and exits non-zero instead of hanging.
-  Complexity: S
-
 - [ ] P1 -- Off-main-thread startup hardware probes
   Why: the window does not paint for up to ~18s+ when nvidia-smi/ffmpeg are slow or absent, reading as a frozen app on launch.
   Evidence: `gui/app.py:137-139` calls `detect_gpu()`/`detect_ai_engines()`/`detect_ffmpeg()` inline in `MainWindow.__init__`; each shells out with 8-10s timeouts (`gui/utils.py:27,250`).

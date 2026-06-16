@@ -18,6 +18,8 @@ os.system('')
 REQUIREMENTS_FILE = Path("requirements.txt")
 PYTHON_CUDA_WHEEL_MAX = (3, 13)
 PY314_CPU_OVERRIDE_ENV = "VSR_ALLOW_PY314_CPU"
+VENV_CREATE_TIMEOUT_SECONDS = 600
+PIP_INSTALL_TIMEOUT_SECONDS = 1800
 
 
 def _windows_cuda_wheels_unavailable(version=None, system_name=None):
@@ -45,6 +47,26 @@ class Colors:
     RED = '\033[91m'
     END = '\033[0m'
     BOLD = '\033[1m'
+
+
+def _run_setup_command(args, timeout_seconds, action):
+    """Run a setup subprocess with a hard timeout and clear retry guidance."""
+    try:
+        return subprocess.run(args, check=True, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        minutes = max(1, timeout_seconds // 60)
+        print(
+            f"{Colors.RED}  ERROR: Timed out while {action} after "
+            f"{minutes} minutes.{Colors.END}"
+        )
+        print("  Check your network, PyPI mirror, and antivirus scanner, then rerun setup.py.")
+        print("  If a partial virtual environment was created, delete venv and retry.")
+        raise
+
+
+def _run_pip_install(args, action):
+    """Run a pip install command with the standard installer timeout."""
+    return _run_setup_command(args, PIP_INSTALL_TIMEOUT_SECONDS, action)
 
 
 def print_banner():
@@ -181,9 +203,15 @@ def create_virtual_env():
             return True
     
     try:
-        subprocess.run([sys.executable, '-m', 'venv', 'venv'], check=True)
+        _run_setup_command(
+            [sys.executable, '-m', 'venv', 'venv'],
+            VENV_CREATE_TIMEOUT_SECONDS,
+            "creating the virtual environment",
+        )
         print(f"  [OK] Virtual environment created")
         return True
+    except subprocess.TimeoutExpired:
+        return False
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ERROR: Failed to create virtual environment: {e}{Colors.END}")
         return False
@@ -227,46 +255,48 @@ def install_pytorch(gpu_info):
             if not _allow_py314_cpu_fallback():
                 return False
             print(f"{Colors.YELLOW}  WARN: Proceeding with CPU-only PyTorch by explicit override.{Colors.END}")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
-            ], check=True)
+            ], "installing CPU PyTorch")
         elif gpu_info["nvidia"] and gpu_info["blackwell"]:
             # Blackwell (RTX 50-series, sm_120) requires CUDA 12.8 wheels.
             # The cu128 index ships torch >= 2.7 with Blackwell kernels;
             # cu118/cu121 builds fail or fall back to CPU on these cards.
             print(f"  Installing PyTorch with CUDA 12.8 (Blackwell) support...")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cu128'
-            ], check=True)
+            ], "installing CUDA 12.8 PyTorch")
         elif gpu_info["nvidia"]:
             print(f"  Installing PyTorch with CUDA support...")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cu118'
-            ], check=True)
+            ], "installing CUDA PyTorch")
         elif gpu_info["amd"] or gpu_info["intel"]:
             print(f"  Installing PyTorch CPU runtime for AMD/Intel fallback paths...")
             print(f"  DirectML acceleration is provided by ONNX Runtime, not torch-directml.")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
-            ], check=True)
+            ], "installing CPU PyTorch")
         else:
             print(f"  Installing PyTorch CPU version...")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
-            ], check=True)
+            ], "installing CPU PyTorch")
         
         print(f"  [OK] PyTorch installed")
         return True
+    except subprocess.TimeoutExpired:
+        return False
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ERROR: Failed to install PyTorch: {e}{Colors.END}")
         return False
@@ -285,25 +315,27 @@ def install_paddlepaddle(gpu_info):
             # kernels. If PaddleOCR cannot load, detection automatically
             # falls back to RapidOCR (ONNX) which is GPU-agnostic.
             print(f"  Installing PaddlePaddle GPU (CUDA 12.6) version...")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install', 'paddlepaddle-gpu==3.0.0',
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cu126/'
-            ], check=True)
+            ], "installing CUDA 12.6 PaddlePaddle")
         elif gpu_info["nvidia"]:
             print(f"  Installing PaddlePaddle GPU version...")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install', 'paddlepaddle-gpu==3.0.0',
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cu118/'
-            ], check=True)
+            ], "installing CUDA PaddlePaddle")
         else:
             print(f"  Installing PaddlePaddle CPU version...")
-            subprocess.run([
+            _run_pip_install([
                 pip, 'install', 'paddlepaddle==3.0.0',
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cpu/'
-            ], check=True)
+            ], "installing CPU PaddlePaddle")
         
         print(f"  [OK] PaddlePaddle installed")
         return True
+    except subprocess.TimeoutExpired:
+        return False
     except subprocess.CalledProcessError as e:
         print(f"{Colors.YELLOW}  WARNING: PaddlePaddle installation failed: {e}{Colors.END}")
         print(f"  Text detection will use fallback method")
@@ -318,13 +350,19 @@ def install_dependencies(gpu_info=None):
 
     try:
         print("  Refreshing packaging tools...")
-        subprocess.run([pip, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'], check=True)
+        _run_pip_install(
+            [pip, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'],
+            "refreshing packaging tools",
+        )
 
         installed_from_requirements = False
         if REQUIREMENTS_FILE.exists():
             print(f"  Installing dependencies from {REQUIREMENTS_FILE}...")
             try:
-                subprocess.run([pip, 'install', '-r', str(REQUIREMENTS_FILE)], check=True)
+                _run_pip_install(
+                    [pip, 'install', '-r', str(REQUIREMENTS_FILE)],
+                    "installing requirements.txt",
+                )
                 print(f"  [OK] Requirements installed")
                 installed_from_requirements = True
             except subprocess.CalledProcessError:
@@ -342,21 +380,29 @@ def install_dependencies(gpu_info=None):
 
             for package in core_packages:
                 print(f"  Installing {package}...")
-                subprocess.run([pip, 'install', package], check=True)
+                _run_pip_install([pip, 'install', package], f"installing {package}")
 
             try:
-                subprocess.run([pip, 'install', 'paddleocr>=3.0.0'], check=True)
+                _run_pip_install(
+                    [pip, 'install', 'paddleocr>=3.0.0'],
+                    "installing PaddleOCR",
+                )
                 print(f"  [OK] PaddleOCR installed")
             except subprocess.CalledProcessError:
                 print(f"  Note: PaddleOCR skipped (RapidOCR / EasyOCR will be used instead)")
 
         if gpu_info and (gpu_info.get("amd") or gpu_info.get("intel")):
             print("  Installing ONNX Runtime DirectML provider...")
-            subprocess.run([pip, 'install', 'onnxruntime-directml>=1.18.0'], check=True)
+            _run_pip_install(
+                [pip, 'install', 'onnxruntime-directml>=1.18.0'],
+                "installing ONNX Runtime DirectML",
+            )
             print(f"  [OK] ONNX Runtime DirectML installed")
 
         print(f"  [OK] All dependencies installed")
         return True
+    except subprocess.TimeoutExpired:
+        return False
     except subprocess.CalledProcessError as e:
         print(f"{Colors.RED}  ERROR: Failed to install dependencies: {e}{Colors.END}")
         return False
@@ -561,7 +607,8 @@ def main():
         sys.exit(1)
     
     # Step 5: Install PaddlePaddle
-    install_paddlepaddle(gpu_info)
+    if not install_paddlepaddle(gpu_info):
+        sys.exit(1)
     
     # Step 6: Install other dependencies
     if not install_dependencies(gpu_info):
