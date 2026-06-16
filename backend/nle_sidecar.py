@@ -12,7 +12,7 @@ Two formats are supported:
 - A CMX 3600 EDL with one event spanning the processed range.
 - An FCPXML 1.10 minimal stub naming the cleaned file as an asset.
 
-Both are ASCII-only and small (<2 KB for a 1-event sidecar). Neither
+Both are UTF-8 encoded and small (<2 KB for a 1-event sidecar). Neither
 attempts to round-trip transitions or audio tracks; this is the
 "hand it to the editor" interchange, not a full project re-author.
 """
@@ -62,7 +62,7 @@ def write_edl(path: str, source: str, cleaned: str,
     payload.append(f"* CLEANED BY:     Video Subtitle Remover Pro")
     payload.append("")
     text = "\n".join(payload) + "\n"
-    Path(path).write_text(text, encoding="ascii")
+    Path(path).write_text(text, encoding="utf-8")
     return path
 
 

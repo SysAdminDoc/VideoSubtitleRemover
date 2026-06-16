@@ -309,13 +309,6 @@ Speculative research bench; not commitments.
 
 ### P1 (root-cause reliability)
 
-- [ ] P1 -- EDL sidecar UnicodeEncodeError on non-ASCII filenames
-  Why: a Chinese/Japanese/Korean source or output filename (the dominant subtitle-removal use case) crashes the EDL sidecar write with UnicodeEncodeError, aborting NLE export.
-  Evidence: `backend/nle_sidecar.py:65` uses `Path(path).write_text(text, encoding="ascii")` where `text` embeds `Path(source).name`/`Path(cleaned).name` (lines 60-61); the FCPXML writer at `nle_sidecar.py:111` already uses UTF-8, as do all other backend writers (`io.py:279`, `presets.py`, `processor.py:168`). The ASCII-only project rule governs source files, not runtime output.
-  Touches: `backend/nle_sidecar.py`, `tests/`
-  Acceptance: `write_edl` writes UTF-8 (or ASCII-transliterated) output; a unit test round-trips an EDL with a non-ASCII filename without raising; FCPXML/EDL parity verified.
-  Complexity: S
-
 - [ ] P1 -- setup.py pip/venv subprocess timeouts
   Why: a stalled PyPI mirror or corrupt download hangs the installer forever with no feedback.
   Evidence: `setup.py:184` (venv) and `setup.py:230-355` (all pip installs) pass `check=True` with no `timeout=`, unlike the probe calls that already use `timeout=10` (`setup.py:102,122,135,370`).
