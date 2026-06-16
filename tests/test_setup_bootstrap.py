@@ -73,9 +73,67 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertTrue(gpu_info["cuda_disabled_by_python"])
         args = run.call_args.args[0]
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            self.setup_mod.PIP_INSTALL_TIMEOUT_SECONDS,
+        )
         self.assertIn("https://download.pytorch.org/whl/cpu", args)
         self.assertNotIn("https://download.pytorch.org/whl/cu118", args)
         self.assertNotIn("https://download.pytorch.org/whl/cu128", args)
+
+    def test_create_virtual_env_timeout_fails_with_guidance(self):
+        timeout = self.setup_mod.VENV_CREATE_TIMEOUT_SECONDS
+        exc = self.setup_mod.subprocess.TimeoutExpired(
+            cmd=["python", "-m", "venv", "venv"],
+            timeout=timeout,
+        )
+        with mock.patch.object(self.setup_mod.Path, "exists", return_value=False):
+            with mock.patch.object(self.setup_mod.subprocess, "run", side_effect=exc) as run:
+                with mock.patch("builtins.print") as printed:
+                    ok = self.setup_mod.create_virtual_env()
+
+        self.assertFalse(ok)
+        self.assertEqual(run.call_args.kwargs["timeout"], timeout)
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("Timed out", output)
+        self.assertIn("rerun setup.py", output)
+
+    def test_install_dependencies_timeout_fails(self):
+        timeout = self.setup_mod.PIP_INSTALL_TIMEOUT_SECONDS
+        exc = self.setup_mod.subprocess.TimeoutExpired(
+            cmd=["pip", "install", "--upgrade", "pip"],
+            timeout=timeout,
+        )
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(self.setup_mod.subprocess, "run", side_effect=exc) as run:
+                with mock.patch("builtins.print") as printed:
+                    ok = self.setup_mod.install_dependencies()
+
+        self.assertFalse(ok)
+        self.assertEqual(run.call_args.kwargs["timeout"], timeout)
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("Timed out", output)
+        self.assertIn("PyPI mirror", output)
+
+    def test_paddlepaddle_timeout_returns_false(self):
+        gpu_info = {
+            "nvidia": False,
+            "amd": False,
+            "intel": False,
+            "blackwell": False,
+        }
+        timeout = self.setup_mod.PIP_INSTALL_TIMEOUT_SECONDS
+        exc = self.setup_mod.subprocess.TimeoutExpired(
+            cmd=["pip", "install", "paddlepaddle==3.0.0"],
+            timeout=timeout,
+        )
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(self.setup_mod.subprocess, "run", side_effect=exc) as run:
+                with mock.patch("builtins.print"):
+                    ok = self.setup_mod.install_paddlepaddle(gpu_info)
+
+        self.assertFalse(ok)
+        self.assertEqual(run.call_args.kwargs["timeout"], timeout)
 
     def test_amd_intel_branch_keeps_torch_cpu_and_avoids_torch_directml(self):
         gpu_info = {
