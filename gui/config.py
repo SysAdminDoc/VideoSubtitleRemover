@@ -19,6 +19,21 @@ from gui.theme import Theme
 
 logger = logging.getLogger(__name__)
 
+_settings_load_notice: Optional[str] = None
+
+
+def _set_settings_load_notice(message: str):
+    global _settings_load_notice
+    _settings_load_notice = message
+
+
+def consume_settings_load_notice() -> Optional[str]:
+    """Return and clear the last settings-load notice for startup UI."""
+    global _settings_load_notice
+    notice = _settings_load_notice
+    _settings_load_notice = None
+    return notice
+
 # -- App identity -----------------------------------------------------------
 
 APP_NAME = "Video Subtitle Remover Pro"
@@ -163,26 +178,41 @@ def _coerce_text(value, default: str, max_length: int = 256) -> str:
     return default
 
 
-def _coerce_rect(value) -> Optional[Tuple[int, int, int, int]]:
+def _coerce_rect(value, *, label: Optional[str] = None,
+                 warn_invalid: bool = False) -> Optional[Tuple[int, int, int, int]]:
     if not isinstance(value, (list, tuple)) or len(value) != 4:
+        if warn_invalid:
+            logger.warning("Discarding invalid %s rectangle: %r",
+                           label or "region", value)
         return None
     try:
         x1, y1, x2, y2 = [int(float(v)) for v in value]
     except (TypeError, ValueError):
+        if warn_invalid:
+            logger.warning("Discarding invalid %s rectangle: %r",
+                           label or "region", value)
         return None
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = max(0, x2), max(0, y2)
     if x2 <= x1 or y2 <= y1:
+        if warn_invalid:
+            logger.warning("Discarding invalid %s rectangle: %r",
+                           label or "region", value)
         return None
     return (x1, y1, x2, y2)
 
 
-def _coerce_rect_list(value) -> Optional[List[Tuple[int, int, int, int]]]:
+def _coerce_rect_list(value, *, label: Optional[str] = None,
+                      warn_invalid: bool = False) -> Optional[List[Tuple[int, int, int, int]]]:
     if not isinstance(value, (list, tuple)):
+        if warn_invalid:
+            logger.warning("Discarding invalid %s rectangle list: %r",
+                           label or "regions", value)
         return None
     rects = []
-    for item in value:
-        rect = _coerce_rect(item)
+    for index, item in enumerate(value):
+        item_label = f"{label or 'regions'}[{index}]"
+        rect = _coerce_rect(item, label=item_label, warn_invalid=warn_invalid)
         if rect:
             rects.append(rect)
     return rects or None
@@ -485,9 +515,11 @@ class ProcessingConfig:
             if name == "mode":
                 kwargs[name] = raw
             elif name == "subtitle_area":
-                kwargs[name] = _coerce_rect(raw)
+                kwargs[name] = _coerce_rect(
+                    raw, label=name, warn_invalid=raw is not None)
             elif name == "subtitle_areas":
-                kwargs[name] = _coerce_rect_list(raw)
+                kwargs[name] = _coerce_rect_list(
+                    raw, label=name, warn_invalid=raw is not None)
             else:
                 kwargs[name] = raw
         return cls(**kwargs).normalized()
@@ -623,13 +655,19 @@ def load_settings() -> ProcessingConfig:
     try:
         if settings_file.exists():
             data = _read_json_object(settings_file, "settings")
-            if not data:
+            if data is None:
+                _set_settings_load_notice(
+                    "Settings were corrupted and reset to defaults."
+                )
                 return ProcessingConfig()
             data = _migrate_settings(data)
             logger.info(f"Settings loaded from {settings_file}")
             return ProcessingConfig.from_dict(data)
     except Exception as e:
         logger.warning(f"Could not load settings: {e}")
+        _set_settings_load_notice(
+            "Settings were corrupted and reset to defaults."
+        )
     return ProcessingConfig()
 
 

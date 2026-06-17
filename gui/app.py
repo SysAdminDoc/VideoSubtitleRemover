@@ -43,7 +43,7 @@ from gui.config import (
     _coerce_bool, _coerce_int, _coerce_float, _coerce_text,
     _coerce_rect, _coerce_rect_list, _coerce_gui_mode,
     _read_json_object, _write_json_atomic,
-    _migrate_settings, load_settings, save_settings,
+    _migrate_settings, consume_settings_load_notice, load_settings, save_settings,
     PRESETS_FILE, list_presets, apply_preset,
     save_user_preset, delete_user_preset, export_preset, import_preset,
     status_ui,
@@ -107,6 +107,7 @@ class VideoSubtitleRemoverApp:
 
         # State
         self.config = load_settings()
+        self._settings_load_notice = consume_settings_load_notice()
         # RM-96: high-contrast theme applies BEFORE widget construction so
         # every Canvas / ttk style reads the swapped palette on first draw.
         if getattr(self.config, "high_contrast", False):
@@ -184,6 +185,7 @@ class VideoSubtitleRemoverApp:
         self._update_output_label()
         self._update_region_label_display()
         self._update_status("Detecting hardware...", "info")
+        self._surface_settings_load_notice()
         self._refresh_action_states()
         self.root.after(0, lambda: self._apply_responsive_layout(self.root.winfo_width()))
 
@@ -355,6 +357,19 @@ class VideoSubtitleRemoverApp:
                 self.config.gpu_id = gpu['index']
                 self.config.use_gpu = True
                 break
+
+    def _surface_settings_load_notice(self):
+        notice = getattr(self, "_settings_load_notice", None)
+        if not notice:
+            return
+
+        def _show_notice():
+            self._update_status(notice, "warning", toast=True)
+
+        try:
+            self.root.after(350, _show_notice)
+        except Exception:
+            logger.warning(notice)
 
     def _make_processing_snapshot(self) -> ProcessingConfig:
         """Build a fresh processing snapshot from the current UI state."""
@@ -4000,6 +4015,10 @@ class VideoSubtitleRemoverApp:
             parts = [f"Added {added} item{'s' if added != 1 else ''} to the queue"]
             if duplicate:
                 parts.append(f"skipped {duplicate} duplicate{'s' if duplicate != 1 else ''}")
+            if unsupported:
+                parts.append(f"skipped {unsupported} unsupported file{'s' if unsupported != 1 else ''}")
+            if missing:
+                parts.append(f"skipped {missing} missing file{'s' if missing != 1 else ''}")
             if queue_full:
                 parts.append("queue reached the 500-item limit")
             detail = ". ".join(parts)
@@ -4023,8 +4042,12 @@ class VideoSubtitleRemoverApp:
             return
 
         if unsupported and not (duplicate or missing):
-            self._update_status("Only supported video and image formats can be queued", "warning")
-            logger.warning("Import skipped because the selection only contained unsupported files")
+            detail = (
+                f"Skipped {unsupported} unsupported file{'s' if unsupported != 1 else ''}. "
+                "Only video and image formats can be queued"
+            )
+            self._update_status(detail, "warning")
+            logger.warning(detail)
             return
 
         if missing and not (duplicate or unsupported):
