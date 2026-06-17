@@ -22,6 +22,9 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
+      # Action trust policy: this workflow only uses official GitHub-owned
+      # actions by reviewed major-version tags. Any third-party action must be
+      # pinned to a full commit SHA and added to tests/test_release_workflow.py.
       - uses: actions/checkout@v4
 
       - name: Set up Python
@@ -275,6 +278,16 @@ jobs:
             dependencies = @()
             hiddenImports = @()
             adapterSecurity = @()
+            releaseTools = @(
+              [ordered]@{
+                name = "wingetcreate"
+                version = "v1.12.8.0"
+                asset = "wingetcreate.exe"
+                sha256 = "8BD738851B524885410112678E3771B341C5C716DE60FBBECB88AB0A363ED85D"
+                source = "https://github.com/microsoft/winget-create/releases/download/v1.12.8.0/wingetcreate.exe"
+                verification = "download step enforces SHA-256 and Authenticode before execution"
+              }
+            )
             versionChecks = @()
             smokeLaunch = [ordered]@{
               attempted = $false
@@ -478,7 +491,22 @@ jobs:
           }
 
           $installerUrl = "https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/download/$versionTag/$installerName"
-          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          $wingetCreateVersion = "v1.12.8.0"
+          $wingetCreateSha256 = "8BD738851B524885410112678E3771B341C5C716DE60FBBECB88AB0A363ED85D"
+          $wingetCreateUrl = "https://github.com/microsoft/winget-create/releases/download/$wingetCreateVersion/wingetcreate.exe"
+          Invoke-WebRequest -Uri $wingetCreateUrl -OutFile wingetcreate.exe
+          $wingetHash = (Get-FileHash .\wingetcreate.exe -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($wingetHash -ne $wingetCreateSha256) {
+            throw "wingetcreate.exe hash mismatch: expected $wingetCreateSha256, got $wingetHash"
+          }
+          $wingetSignature = Get-AuthenticodeSignature .\wingetcreate.exe
+          if ($wingetSignature.Status -ne "Valid") {
+            throw "wingetcreate.exe Authenticode signature is not valid: $($wingetSignature.Status)"
+          }
+          if ($wingetSignature.SignerCertificate.Subject -notmatch "Microsoft") {
+            throw "wingetcreate.exe signer is not Microsoft: $($wingetSignature.SignerCertificate.Subject)"
+          }
+          Write-Host "wingetcreate $wingetCreateVersion verified ($wingetHash)"
           .\wingetcreate.exe update $packageId `
             --urls "$installerUrl|x64|machine" `
             --version $manifestVersion `
