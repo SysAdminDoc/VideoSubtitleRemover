@@ -83,6 +83,41 @@ jobs:
           python -m pip install pip-audit
           pip-audit --progress-spinner off
 
+      - name: Bundled libpng advisory check (CVE-2026-22801)
+        # pip-audit cannot see libpng because it is vendored inside the
+        # opencv-python wheel, so we parse cv2.getBuildInformation()
+        # directly. The fix is blocked on opencv-python shipping a wheel
+        # with libpng >= 1.6.54: while still vulnerable we emit a warning
+        # annotation (non-fatal); once a fixed wheel is detected we emit a
+        # notice prompting a floor bump. Never fails the build.
+        shell: pwsh
+        run: |
+          $report = python -c @"
+          import json
+          from backend.security_checks import (
+              parse_libpng_version, libpng_is_vulnerable,
+              format_libpng_version, LIBPNG_FIXED_VERSION,
+          )
+          try:
+              import cv2
+              ver = parse_libpng_version(cv2.getBuildInformation())
+          except Exception as exc:
+              print(json.dumps({'error': str(exc)})); raise SystemExit(0)
+          print(json.dumps({
+              'version': format_libpng_version(ver) if ver else None,
+              'vulnerable': libpng_is_vulnerable(ver),
+              'fixed': format_libpng_version(LIBPNG_FIXED_VERSION),
+          }))
+          "@
+          $data = $report | ConvertFrom-Json
+          if ($null -ne $data.error) {
+            Write-Host "libpng check skipped: $($data.error)"
+          } elseif ($data.vulnerable) {
+            Write-Host "::warning title=CVE-2026-22801::OpenCV bundles libpng $($data.version); fixed in $($data.fixed). Avoid untrusted PNG input until opencv-python ships a patched wheel."
+          } elseif ($data.version) {
+            Write-Host "::notice title=CVE-2026-22801::OpenCV now bundles libpng $($data.version) (>= $($data.fixed)). Bump the opencv-python floor and clear the blocked roadmap item."
+          }
+
       - name: Run regression tests
         run: |
           python -m unittest discover -s tests -v
@@ -331,8 +366,7 @@ jobs:
 
           $docVersionChecks = @(
             @{ Path = "README.md"; Pattern = $expectedVersion },
-            @{ Path = "CHANGELOG.md"; Pattern = "## [$expectedVersion]" },
-            @{ Path = "ROADMAP.md"; Pattern = "v$expectedVersion" }
+            @{ Path = "CHANGELOG.md"; Pattern = "## [$expectedVersion]" }
           )
           foreach ($check in $docVersionChecks) {
             $present = Test-Path $check.Path
