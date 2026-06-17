@@ -153,6 +153,7 @@ class VideoSubtitleRemoverApp:
         self._batch_times: List[float] = []  # seconds per item for ETA
         self._batch_started_at: Optional[datetime] = None
         self._batch_report_records: dict = {}
+        self._model_download_guidance_seen: set = set()
         self._preview_request_id = 0
         self._throbber_id = None
         self._throbber_phase = 0
@@ -5225,19 +5226,59 @@ class VideoSubtitleRemoverApp:
         self._last_batch_report_paths = written
         return written
 
+    def _announce_model_download_guidance(self, item: QueueItem):
+        """Surface first-run model download guidance before lazy loaders run."""
+        try:
+            from backend.model_downloads import (
+                pending_model_download_hints,
+                summarize_hints,
+            )
+            hints = pending_model_download_hints(item.config)
+        except Exception as exc:
+            logger.debug(f"Model download guidance probe failed: {exc}")
+            return
+        if not hints:
+            return
+        key = tuple((h.label, h.size_estimate) for h in hints)
+        seen = getattr(self, "_model_download_guidance_seen", set())
+        if key in seen:
+            return
+        seen.add(key)
+        self._model_download_guidance_seen = seen
+        summary = summarize_hints(hints)
+        status = f"First use may download model files: {summary}"
+        detail = (
+            "Preparing model downloads if caches are empty. "
+            "Keep this window open; failures will appear in the log."
+        )
+        logger.info("%s. %s", status, detail)
+        item.message = "Preparing model downloads if needed..."
+        item.progress = max(float(getattr(item, "progress", 0.0) or 0.0), 0.02)
+        self._update_item_display(item)
+
+        def _show():
+            self._update_status(status, "info", toast=True)
+
+        try:
+            self.root.after(0, _show)
+        except RuntimeError:
+            pass
+
     def _process_queue(self):
         """Process all items in the queue."""
+        with self.queue_lock:
+            items_to_process = [i for i in self.queue
+                                if i.status not in (ProcessingStatus.COMPLETE,
+                                                     ProcessingStatus.ERROR,
+                                                     ProcessingStatus.CANCELLED)]
+        if items_to_process:
+            self._announce_model_download_guidance(items_to_process[0])
         # F-9: pre-batch ETA probe runs here, on the worker thread, so
         # model load + 30-frame detection never block the Tk main loop.
         try:
             self._probe_eta_seconds = self._probe_batch_eta()
         except Exception:
             self._probe_eta_seconds = 0.0
-        with self.queue_lock:
-            items_to_process = [i for i in self.queue
-                                if i.status not in (ProcessingStatus.COMPLETE,
-                                                     ProcessingStatus.ERROR,
-                                                     ProcessingStatus.CANCELLED)]
 
         total = len(items_to_process)
         for idx, item in enumerate(items_to_process):
@@ -5324,6 +5365,8 @@ class VideoSubtitleRemoverApp:
 
             if self._process_soft_subtitle_item(item):
                 return
+
+            self._announce_model_download_guidance(item)
 
             from backend.processor import (
                 SubtitleRemover as BackendRemover,
