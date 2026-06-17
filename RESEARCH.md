@@ -35,6 +35,12 @@ Video Subtitle Remover is a Windows-first, local-first Python/tkinter desktop ap
 - Documentation gaps: README codec/launcher tables and `docs/architecture.md` should be checked against the live CLI/GUI choices after VVC and launcher changes. Existing roadmap items already cover VVC sync and architecture refresh.
 - Category coverage: security, observability, testing, docs, distribution, accessibility, i18n/l10n, plugin ecosystem, mobile, offline/resilience, multi-user, migration paths, and upgrade strategy were reviewed. New additions focus on security/provenance/workflow/packaging because accessibility/i18n/mobile/plugin/migration lanes are already tracked in `ROADMAP.md` and no new public source changed their priority.
 
+## Additive Pass -- Missed Gaps
+- Verified: imported presets are trusted too broadly. `gui/config.py:765-784` stores imported `fields` without a schema allowlist, and `gui/config.py:683-700` applies any field that matches `ProcessingConfig`. This is not remote code execution, but a shared preset can unexpectedly flip network/update, output, reporting, Whisper, or destructive workflow settings without a preview.
+- Verified: support intake is under-built for a local media tool. README links directly to generic GitHub issues, `.github/` contains only the build workflow, and there is no single redacted diagnostics bundle even though `backend/crash_reporter.py` already scrubs paths and `backend/batch_report.py:161-168` already redacts report paths. GitHub issue forms support structured required fields, and OWASP logging guidance backs explicit redaction before sharing logs.
+- Verified: soft-subtitle remux, cache inventory, quality sheets, JSON logs, crash reporting, and batch reports exist, so the missed support gap is not "add logging"; it is packaging the already-available local evidence into a privacy-preserving handoff.
+- Rechecked but not added: soft-subtitle track handling, cache-clean safety, reference-clip coverage, accessibility, i18n, mobile, plugin architecture, and cloud/API workflows are already implemented, already on `ROADMAP.md`, or explicitly rejected.
+
 ## Rejected Ideas
 - Cloud upload/default SaaS processing -- commercial tools prove demand, but it conflicts with VSR's local privacy and large-file control advantage.
 - Mobile app as a near-term goal -- AniEraser/Media.io show mobile demand, but VSR's current architecture is desktop Python/tkinter plus FFmpeg/model dependencies; packaging and reliability work should land first.
@@ -48,23 +54,21 @@ Video Subtitle Remover is a Windows-first, local-first Python/tkinter desktop ap
 OSS and adjacent:
 - https://github.com/YaoFANGUK/video-subtitle-remover
 - https://github.com/timminator/VideOCR
-- https://github.com/Rats20/EraseSubtitles
 - https://github.com/voun7/VidSubX
 - https://github.com/SWHL/RapidVideOCR
 - https://github.com/SWHL/VideoSubFinder
 - https://github.com/Purfview/InpaintDelogo
 - https://github.com/Sanster/IOPaint
-- https://github.com/suhwan-cho/awesome-video-inpainting
-- https://github.com/showlab/Awesome-Video-Diffusion
+- https://www.iopaint.com/batch_process
+- https://www.iopaint.com/install/download_model
 
 Commercial and community:
 - https://jollytoday.com/subtitle-removal/
-- https://vmake.ai/remove-subtitles-from-video
-- https://www.creatok.ai/video-subtitle-remover
 - https://reccloud.com/remove-subtitle
 - https://reccloud.com/ai-burned-in-subtitle-removal-large-video-archives.html
 - https://anieraser.media.io/remove-subtitles-from-video.html
 - https://github.com/SubtitleEdit/subtitleedit/discussions/9562
+- https://github.com/SubtitleEdit/docs
 - https://forum.videohelp.com/threads/418629-Which-tool-has-the-best-accuracy-for-extracting-hardsubs-from-video
 - https://stackoverflow.com/questions/58283967/tesseract-ocr-pre-processing-for-subtitles-extraction
 
@@ -77,6 +81,8 @@ Dependencies, standards, and advisories:
 - https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html
 - https://github.com/opencv/opencv-python/issues/1186
 - https://nvd.nist.gov/vuln/detail/CVE-2026-22801
+- https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
+- https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
 - https://docs.github.com/en/actions/reference/security/secure-use
 - https://docs.github.com/en/actions/concepts/security/artifact-attestations
 - https://www.cisa.gov/resources-tools/resources/2025-minimum-elements-software-bill-materials-sbom

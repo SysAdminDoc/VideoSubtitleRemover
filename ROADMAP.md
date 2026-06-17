@@ -496,6 +496,20 @@ Speculative research bench; not commitments.
   Acceptance: either stop generating `Run_VSR_Pro.ps1` or track, package, document, and smoke-test it; release verification records the exact launcher files included in the bundle.
   Complexity: S
 
+- [ ] P2 -- Schema-gate imported presets before applying settings
+  Why: shared preset files can currently mutate any `ProcessingConfig` field with no preview or field allowlist, which can unexpectedly flip network, output, reporting, Whisper, or destructive workflow settings.
+  Evidence: `gui/config.py:765-784` stores imported preset `fields` as-is; `gui/config.py:683-700` applies every imported key that exists on `ProcessingConfig`.
+  Touches: `gui/config.py`, `backend/presets.py`, `gui/app.py`, `tests/test_hardening.py`
+  Acceptance: imported presets are filtered through an explicit allowlist of safe tuning fields; rejected fields are reported in the import status; the GUI previews which settings will change before applying; tests cover malicious/unknown/path/network fields.
+  Complexity: S
+
+- [ ] P2 -- Add redacted support bundle and structured bug-report intake
+  Why: users can open logs, but maintainers do not get a single privacy-preserving diagnostics package or issue form with the versions, ffmpeg/OpenCV/GPU facts, settings summary, and redacted logs needed to reproduce local media failures.
+  Evidence: README links directly to generic GitHub issues; `.github/` only contains `workflows/build.yml`; `backend/crash_reporter.py` already scrubs paths and `backend/batch_report.py:161-168` already redacts report paths; GitHub issue forms support structured required fields; OWASP logging guidance warns that logs may contain sensitive data and should be protected/redacted.
+  Touches: `gui/app.py`, `backend/crash_reporter.py`, `backend/batch_report.py`, `.github/ISSUE_TEMPLATE/bug_report.yml`, `README.md`, `tests/`
+  Acceptance: GUI exposes "Create support bundle" and CLI exposes an equivalent command; the bundle contains app/Python/dependency/ffmpeg/OpenCV/GPU metadata, redacted settings, recent redacted logs, and optional batch report summaries without media paths or OCR text; GitHub bug form asks for the bundle and key reproduction fields; tests assert path/OCR redaction.
+  Complexity: M
+
 ### P3 - Operational Maturity
 
 - [ ] P3 -- Release SBOM and optional artifact provenance evidence
