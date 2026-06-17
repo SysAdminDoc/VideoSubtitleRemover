@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -48,6 +49,30 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("--token $env:WINGET_CREATE_GITHUB_TOKEN", self.workflow)
         self.assertIn("--no-open", self.workflow)
 
+    def test_winget_tool_download_is_versioned_and_verified(self):
+        self.assertNotIn("https://aka.ms/wingetcreate/latest", self.workflow)
+        self.assertIn("$wingetCreateVersion = \"v1.12.8.0\"", self.workflow)
+        self.assertIn(
+            "https://github.com/microsoft/winget-create/releases/download/$wingetCreateVersion/wingetcreate.exe",
+            self.workflow,
+        )
+        self.assertIn(
+            "$wingetCreateSha256 = \"8BD738851B524885410112678E3771B341C5C716DE60FBBECB88AB0A363ED85D\"",
+            self.workflow,
+        )
+        self.assertIn("Get-FileHash .\\wingetcreate.exe -Algorithm SHA256", self.workflow)
+        self.assertIn("Get-AuthenticodeSignature .\\wingetcreate.exe", self.workflow)
+        self.assertIn("wingetcreate.exe hash mismatch", self.workflow)
+        self.assertIn("wingetcreate.exe signer is not Microsoft", self.workflow)
+
+    def test_workflow_actions_follow_allowlist_policy(self):
+        self.assertIn("Action trust policy", self.workflow)
+        uses = re.findall(r"uses:\s*([^\s]+)", self.workflow)
+        self.assertEqual(
+            sorted(uses),
+            ["actions/checkout@v4", "actions/setup-python@v5"],
+        )
+
     def test_strict_release_quality_verifies_artifacts(self):
         self.assertIn("release_quality:", self.workflow)
         self.assertIn("type: choice", self.workflow)
@@ -68,6 +93,8 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("python -m pip list --format=json", self.workflow)
         self.assertIn("dependencies", self.workflow)
         self.assertIn("adapterSecurity", self.workflow)
+        self.assertIn("releaseTools", self.workflow)
+        self.assertIn("wingetcreate", self.workflow)
         self.assertIn("backend.adapter_manifest import release_manifest_status", self.workflow)
         self.assertIn("APP_VERSION $appVersion does not match release tag", self.workflow)
         self.assertIn("README.md", self.workflow)
