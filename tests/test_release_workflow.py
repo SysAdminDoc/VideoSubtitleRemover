@@ -72,7 +72,7 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("APP_VERSION $appVersion does not match release tag", self.workflow)
         self.assertIn("README.md", self.workflow)
         self.assertIn("CHANGELOG.md", self.workflow)
-        self.assertIn("ROADMAP.md", self.workflow)
+        self.assertNotIn('@{ Path = "ROADMAP.md"', self.workflow)
         self.assertIn("smokeLaunch", self.workflow)
 
     def test_signing_readiness_uses_step_output(self):
