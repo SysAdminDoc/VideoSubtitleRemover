@@ -32,6 +32,8 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.remote_model_policy import resolve_remote_model_source
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,8 +98,16 @@ class _Florence2Detector(_BaseVlmDetector):
             )
             return None
         try:
-            processor = AutoProcessor.from_pretrained(self.MODEL_ID, trust_remote_code=True)
-            model = AutoModelForCausalLM.from_pretrained(self.MODEL_ID, trust_remote_code=True)
+            source = resolve_remote_model_source("florence2")
+            if not source.allowed:
+                logger.warning("Florence-2 OCR disabled: %s", source.reason)
+                return None
+            kwargs = {"trust_remote_code": True}
+            if source.revision:
+                kwargs["revision"] = source.revision
+            model_ref = source.source or self.MODEL_ID
+            processor = AutoProcessor.from_pretrained(model_ref, **kwargs)
+            model = AutoModelForCausalLM.from_pretrained(model_ref, **kwargs)
             if "cuda" in self.device and torch.cuda.is_available():
                 model = model.to("cuda")
             model.eval()

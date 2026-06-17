@@ -30,6 +30,8 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.remote_model_policy import resolve_remote_model_source
+
 logger = logging.getLogger(__name__)
 
 
@@ -204,7 +206,23 @@ def _maybe_load_cotracker():
         return None
     try:
         import torch  # type: ignore
-        model = torch.hub.load("facebookresearch/co-tracker", "cotracker3_online")
+        source = resolve_remote_model_source("cotracker3")
+        if not source.allowed:
+            logger.warning("CoTracker3 disabled: %s", source.reason)
+            return None
+        if source.source_type == "local":
+            model = torch.hub.load(
+                source.source,
+                "cotracker3_online",
+                source="local",
+                trust_repo=True,
+            )
+        else:
+            model = torch.hub.load(
+                f"facebookresearch/co-tracker:{source.revision}",
+                "cotracker3_online",
+                trust_repo=True,
+            )
         _COTRACKER_STATE["model"] = model
         return model
     except Exception:
