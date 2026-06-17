@@ -29,8 +29,6 @@ from gui.utils import (
     VIDEO_EXTENSIONS,
     filepicker_pattern,
     format_time,
-    is_image_file,
-    is_video_file,
     truncate_middle,
     _queue_item_info_text,
 )
@@ -1229,10 +1227,8 @@ class DragDropFrame(tk.Frame):
 
     def _handle_drop(self, event):
         files = self.tk.splitlist(event.data)
-        # Accept both files and folders
-        valid = [f for f in files if is_video_file(f) or is_image_file(f) or Path(f).is_dir()]
-        if valid:
-            self.on_drop(valid)
+        if files:
+            self.on_drop(list(files))
 
     def _open_file_dialog(self):
         files = filedialog.askopenfilenames(

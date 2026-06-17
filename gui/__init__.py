@@ -40,6 +40,7 @@ from gui.config import (  # noqa: F401
     _read_json_object,
     _write_json_atomic,
     apply_preset,
+    consume_settings_load_notice,
     delete_user_preset,
     export_preset,
     import_preset,
