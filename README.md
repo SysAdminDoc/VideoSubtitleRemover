@@ -4,7 +4,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.17.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.17.1-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.10--3.13%20CUDA-blue)
@@ -32,7 +32,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **HEVC + AV1 Output** -- Pick H.264 / H.265 / AV1 from a dropdown; NVENC/QSV/AMF for HW encoding, libx265 / libsvtav1 software fallback
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame; backend honours every rect
-- **Inpaint Preview** -- "Preview cleanup" button runs detect + inpaint on the selected frame so you can A/B settings before committing
+- **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **~50 Language Support** -- English / Chinese / Japanese / Korean / European, plus Thai, Vietnamese, Polish, Greek, Ukrainian, Filipino, Hebrew, Czech, and more
 - **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
@@ -46,7 +46,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Live Preview During Processing** -- 15 FPS throttled preview piped from the backend worker
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
 - **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
-- **Premium Dark UI** -- Cohesive design system with custom sliders, toggles, status chips, taskbar progress, onboarding modal
+- **Premium Dark UI** -- Cohesive design system with custom controls, rectangular status tiles, responsive workbench scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
 - **CI/CD Releases** -- Automated Windows builds via GitHub Actions, pip-audit scan, strict artifact/version/dependency verification, and winget submission support
 

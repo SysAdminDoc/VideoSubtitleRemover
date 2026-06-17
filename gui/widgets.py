@@ -255,8 +255,9 @@ class ModernButton(tk.Canvas):
 
         if self.icon:
             gap = 6
-            icon_font = (Theme.FONT_FAMILY, self.font_size + 1, "bold")
-            text_font = (Theme.FONT_FAMILY, self.font_size, "bold")
+            text_size = self._fit_text_size(self.text, self.icon, gap)
+            icon_font = (Theme.FONT_FAMILY, text_size + 1, "bold")
+            text_font = (Theme.FONT_FAMILY, text_size, "bold")
             icon_w = self._text_width(self.icon, icon_font)
             text_w = self._text_width(self.text, text_font)
             total = icon_w + gap + text_w
@@ -266,8 +267,10 @@ class ModernButton(tk.Canvas):
             self.create_text(start_x + icon_w + gap + text_w // 2, text_y,
                              text=self.text, fill=text_color, font=text_font)
         else:
+            text_size = self._fit_text_size(self.text)
             self.create_text(self.width // 2, text_y, text=self.text,
-                             fill=text_color, font=(Theme.FONT_FAMILY, self.font_size, "bold"))
+                             fill=text_color,
+                             font=(Theme.FONT_FAMILY, text_size, "bold"))
 
     def _subtle_border(self):
         # For filled CTAs, border should match the fill for a flat look
@@ -280,6 +283,21 @@ class ModernButton(tk.Canvas):
             return tkfont.Font(font=font).measure(text)
         except Exception:
             return len(text) * 7
+
+    def _fit_text_size(self, text: str, icon: str = "", gap: int = 0) -> int:
+        """Keep long labels inside fixed-width canvas buttons."""
+        size = self.font_size
+        available = max(24, self.width - 18)
+        while size > Theme.F_MICRO:
+            text_font = (Theme.FONT_FAMILY, size, "bold")
+            measured = self._text_width(text, text_font)
+            if icon:
+                icon_font = (Theme.FONT_FAMILY, size + 1, "bold")
+                measured += self._text_width(icon, icon_font) + gap
+            if measured <= available:
+                return size
+            size -= 1
+        return Theme.F_MICRO
 
     def _create_rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
         points = [
@@ -337,7 +355,7 @@ class ModernButton(tk.Canvas):
     def set_enabled(self, enabled: bool):
         self.enabled = enabled
         self.current_bg = self.bg_color if enabled else Theme.BG_TERTIARY
-        self.config(cursor="hand2" if enabled else "")
+        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
         self._draw()
 
     def set_text(self, text: str):
@@ -563,7 +581,7 @@ class ModernToggle(tk.Canvas):
 
     def set_enabled(self, enabled: bool):
         self.enabled = enabled
-        self.config(cursor="hand2" if enabled else "")
+        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
         self._draw()
 
 
@@ -587,6 +605,7 @@ class ModernSlider(tk.Frame):
         self.command = command
         self._width = width
         self._dragging = False
+        self._focused = False
 
         self.canvas = tk.Canvas(self, width=width, height=self.HEIGHT,
                                 highlightthickness=0, bg=self.parent_bg, takefocus=1)
@@ -599,6 +618,8 @@ class ModernSlider(tk.Frame):
         self.canvas.bind("<Left>", lambda e: self._step(-1))
         self.canvas.bind("<Right>", lambda e: self._step(1))
         self.canvas.bind("<MouseWheel>", self._on_wheel)
+        self.canvas.bind("<FocusIn>", lambda e: self._set_focused(True))
+        self.canvas.bind("<FocusOut>", lambda e: self._set_focused(False))
         self._draw()
 
     def _on_resize(self, event):
@@ -649,6 +670,15 @@ class ModernSlider(tk.Frame):
             thumb_x + self.THUMB_R, mid + self.THUMB_R,
             fill=Theme.BLUE_PRIMARY, outline=Theme.BLUE_HOVER, width=1,
         )
+        if self._focused:
+            self.canvas.create_rectangle(
+                1, 1, self._width - 1, self.HEIGHT - 1,
+                outline=Theme.BORDER_FOCUS, width=1,
+            )
+
+    def _set_focused(self, focused: bool):
+        self._focused = focused
+        self._draw()
 
     def _on_press(self, event):
         self.canvas.focus_set()

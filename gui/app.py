@@ -134,9 +134,11 @@ class VideoSubtitleRemoverApp:
         self._processing_thread: Optional[threading.Thread] = None
         self.cancel_event = threading.Event()
         self.queue_lock = threading.Lock()
-        self.gpus = detect_gpu()
-        self.ai_engines = detect_ai_engines()
-        self.ffmpeg_ready = detect_ffmpeg()
+        self.gpus = []
+        self.ai_engines = {"detection": [], "inpainting": []}
+        self.ffmpeg_ready = False
+        self._hardware_probe_pending = True
+        self._hardware_probe_thread: Optional[threading.Thread] = None
         self._elapsed_timer_id = None
         self._output_dir: Optional[Path] = None  # None = use input_dir/output/
         self._preview_detector = None  # cached SubtitleDetector for mask preview
@@ -159,7 +161,7 @@ class VideoSubtitleRemoverApp:
 
         # Variables
         self.mode_var = tk.StringVar(value=self.config.mode.value)
-        self.gpu_var = tk.StringVar()
+        self.gpu_var = tk.StringVar(value="Detecting hardware...")
         self.skip_detection_var = tk.BooleanVar(value=self.config.sttn_skip_detection)
         self.lama_fast_var = tk.BooleanVar(value=self.config.lama_super_fast)
         self.preserve_audio_var = tk.BooleanVar(value=self.config.preserve_audio)
@@ -171,20 +173,6 @@ class VideoSubtitleRemoverApp:
         self._bind_shortcuts()
         self.root.bind("<Configure>", self._on_root_configure, add="+")
 
-        # GPU setup -- restore saved selection or default to first
-        if self.gpus:
-            matched = False
-            for g in self.gpus:
-                if g['index'] == self.config.gpu_id:
-                    self.gpu_var.set(f"{g['name']} ({g['memory']})")
-                    matched = True
-                    break
-            if not matched:
-                self.gpu_var.set(f"{self.gpus[0]['name']} ({self.gpus[0]['memory']})")
-        else:
-            self.gpu_var.set("CPU Mode")
-            self.config.use_gpu = False
-
         # Attach log panel handler (tracks warn/error counts for badges)
         self._log_handler = TextWidgetHandler(self.log_text,
                                               on_count_change=self._update_log_badges)
@@ -194,6 +182,7 @@ class VideoSubtitleRemoverApp:
 
         self._update_output_label()
         self._update_region_label_display()
+        self._update_status("Detecting hardware...", "info")
         self._refresh_action_states()
         self.root.after(0, lambda: self._apply_responsive_layout(self.root.winfo_width()))
 
@@ -210,6 +199,7 @@ class VideoSubtitleRemoverApp:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # First-run welcome overlay (only shown once, then persisted)
+        self._start_startup_hardware_probe()
         self._maybe_show_onboarding()
 
     def _on_close(self):
@@ -355,10 +345,14 @@ class VideoSubtitleRemoverApp:
         if hasattr(self, 'conf_dilate_var'):
             self.config.confidence_weighted_dilation = self.conf_dilate_var.get()
         # GPU sync
+        if self._hardware_probe_pending or not self.gpus:
+            self.config.use_gpu = False
+            return
         selection = self.gpu_var.get()
         for gpu in self.gpus:
             if f"{gpu['name']} ({gpu['memory']})" == selection:
                 self.config.gpu_id = gpu['index']
+                self.config.use_gpu = True
                 break
 
     def _make_processing_snapshot(self) -> ProcessingConfig:
@@ -435,20 +429,207 @@ class VideoSubtitleRemoverApp:
         return tk.Frame(parent, bg=bg, highlightthickness=1,
                         highlightbackground=Theme.BORDER_SUBTLE)
 
-    def _create_chip(self, parent, label: str, value: str, fg: str, bg: str) -> tk.Frame:
-        """Minimal status chip with a single clear line of text."""
-        chip = tk.Frame(parent, bg=bg, highlightthickness=1,
+    def _create_status_tile(self, parent, label: str, value: str, fg: str,
+                            bg: str) -> tk.Frame:
+        """Compact rectangular status tile for live environment signals."""
+        tile = tk.Frame(parent, bg=bg, highlightthickness=1,
                         highlightbackground=Theme.BORDER_SUBTLE)
+        inner = tk.Frame(tile, bg=bg)
+        inner.pack(fill="x", padx=12, pady=8)
         tk.Label(
-            chip,
-            text=f"{label}: {value}",
+            inner,
+            text=label.upper(),
+            font=f(Theme.F_MICRO, "bold"),
+            bg=bg,
+            fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w")
+        tk.Label(
+            inner,
+            text=value,
             font=f(Theme.F_META, "bold"),
             bg=bg,
             fg=fg,
-            padx=12,
-            pady=7,
-        ).pack(anchor="w")
-        return chip
+            anchor="w",
+        ).pack(anchor="w", pady=(2, 0))
+        return tile
+
+    @staticmethod
+    def _fallback_ai_engines() -> dict:
+        return {
+            "detection": ["OpenCV fallback"],
+            "inpainting": ["Temporal BG (TBE)", "OpenCV"],
+        }
+
+    def _start_startup_hardware_probe(self):
+        """Run slow startup hardware probes off the Tk main thread."""
+        if self._hardware_probe_thread and self._hardware_probe_thread.is_alive():
+            return
+        self._hardware_probe_thread = threading.Thread(
+            target=self._probe_startup_hardware,
+            daemon=True,
+            name="startup-hardware-probe",
+        )
+        self._hardware_probe_thread.start()
+
+    def _probe_startup_hardware(self):
+        """Collect startup hardware facts, then marshal results to Tk."""
+        try:
+            gpus = detect_gpu()
+        except Exception:
+            logger.warning("Startup GPU probe failed", exc_info=True)
+            gpus = []
+        try:
+            ai_engines = detect_ai_engines()
+        except Exception:
+            logger.warning("Startup AI engine probe failed", exc_info=True)
+            ai_engines = self._fallback_ai_engines()
+        try:
+            ffmpeg_ready = detect_ffmpeg()
+        except Exception:
+            logger.warning("Startup FFmpeg probe failed", exc_info=True)
+            ffmpeg_ready = False
+
+        try:
+            self.root.after(
+                0,
+                lambda: self._apply_startup_hardware_probe(
+                    gpus, ai_engines, ffmpeg_ready
+                ),
+            )
+        except (tk.TclError, RuntimeError):
+            pass
+
+    def _apply_startup_hardware_probe(self, gpus, ai_engines, ffmpeg_ready):
+        """Apply background probe results on the Tk main thread."""
+        if self._shutdown_started:
+            return
+        self.gpus = list(gpus or [])
+        self.ai_engines = ai_engines or self._fallback_ai_engines()
+        self.ffmpeg_ready = bool(ffmpeg_ready)
+        self._hardware_probe_pending = False
+        self._apply_gpu_selection_from_config()
+        self._refresh_gpu_selector()
+        self._render_header_chips()
+        self._refresh_ffmpeg_warning()
+        self._refresh_action_states()
+
+        gpu_label = self.gpus[0]["name"] if self.gpus else "CPU mode"
+        audio_label = "FFmpeg ready" if self.ffmpeg_ready else "FFmpeg missing"
+        self._update_status(f"Hardware detected: {gpu_label}; {audio_label}", "info")
+        logger.info(
+            "Startup hardware probe complete: gpus=%s detection=%s inpainting=%s ffmpeg=%s",
+            len(self.gpus),
+            self.ai_engines.get("detection", []),
+            self.ai_engines.get("inpainting", []),
+            self.ffmpeg_ready,
+        )
+
+    def _apply_gpu_selection_from_config(self):
+        """Restore the saved GPU choice after async hardware detection."""
+        if not self.gpus:
+            self.gpu_var.set("CPU Mode")
+            self.config.use_gpu = False
+            return
+        selected = None
+        for gpu in self.gpus:
+            if gpu["index"] == self.config.gpu_id:
+                selected = gpu
+                break
+        if selected is None:
+            selected = self.gpus[0]
+            self.config.gpu_id = selected["index"]
+        self.gpu_var.set(f"{selected['name']} ({selected['memory']})")
+        self.config.use_gpu = True
+
+    def _refresh_gpu_selector(self):
+        """Refresh the compute-device combobox after async probing."""
+        if not hasattr(self, "gpu_combo"):
+            return
+        if self._hardware_probe_pending:
+            self.gpu_combo.configure(values=["Detecting hardware..."], state="disabled")
+            self.gpu_var.set("Detecting hardware...")
+            return
+        if self.gpus:
+            options = [f"{g['name']} ({g['memory']})" for g in self.gpus]
+            self.gpu_combo.configure(values=options, state="readonly")
+        else:
+            self.gpu_combo.configure(values=["CPU Mode"], state="disabled")
+            self.gpu_var.set("CPU Mode")
+
+    def _refresh_ffmpeg_warning(self):
+        """Show FFmpeg pending/missing state without rebuilding the settings card."""
+        if not hasattr(self, "ffmpeg_warning_label"):
+            return
+        if self._hardware_probe_pending:
+            self.ffmpeg_warning_label.config(
+                text="Checking FFmpeg availability for audio preservation...",
+                fg=Theme.INFO,
+            )
+            if not self.ffmpeg_warning_label.winfo_ismapped():
+                self.ffmpeg_warning_label.pack(anchor="w", pady=(Theme.S_XS, 0))
+        elif not self.ffmpeg_ready:
+            self.ffmpeg_warning_label.config(
+                text="FFmpeg is not available, so outputs will be saved without original audio until it is installed.",
+                fg=Theme.WARNING,
+            )
+            if not self.ffmpeg_warning_label.winfo_ismapped():
+                self.ffmpeg_warning_label.pack(anchor="w", pady=(Theme.S_XS, 0))
+        else:
+            self.ffmpeg_warning_label.pack_forget()
+
+    def _render_header_chips(self):
+        """Render or refresh the live header chips."""
+        if not hasattr(self, "_header_chips"):
+            return
+        for child in self._header_chips.winfo_children():
+            child.destroy()
+        for idx in range(3):
+            self._header_chips.columnconfigure(
+                idx, weight=0, uniform="")
+        if self._hardware_probe_pending:
+            chip_data = [
+                ("Device", "Detecting...", Theme.INFO),
+                ("Detection", "Detecting...", Theme.INFO),
+                ("Audio", "Detecting...", Theme.INFO),
+            ]
+        else:
+            gpu_short = truncate_middle(self.gpus[0]["name"], 26) if self.gpus else "CPU mode"
+            gpu_fg = Theme.SUCCESS if self.gpus else Theme.WARNING
+            detection = self.ai_engines.get("detection", [])
+            det_short = detection[0] if detection else "OpenCV fallback"
+            audio_short = "FFmpeg ready" if self.ffmpeg_ready else "No FFmpeg"
+            audio_fg = Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING
+            chip_data = [
+                ("Device", gpu_short, gpu_fg),
+                ("Detection", det_short, Theme.INFO),
+                ("Audio", audio_short, audio_fg),
+            ]
+        compact = (
+            getattr(self, "_layout_mode", "wide") == "stacked"
+            or self.root.winfo_width() < 1100
+        )
+        if compact:
+            for idx in range(2):
+                self._header_chips.columnconfigure(
+                    idx, weight=1, uniform="header_status_compact")
+            positions = [(0, 0, 1), (0, 1, 1), (1, 0, 2)]
+            for idx, (label, value, fg) in enumerate(chip_data):
+                row, col, span = positions[idx]
+                padx = (Theme.S_SM, 0) if col else 0
+                pady = (Theme.S_SM, 0) if row else 0
+                self._create_status_tile(
+                    self._header_chips, label, value, fg, Theme.BG_CARD
+                ).grid(row=row, column=col, columnspan=span, sticky="ew",
+                       padx=padx, pady=pady)
+        else:
+            for idx in range(3):
+                self._header_chips.columnconfigure(
+                    idx, weight=1, uniform="header_status")
+            for idx, (label, value, fg) in enumerate(chip_data):
+                padx = (Theme.S_SM, 0) if idx else 0
+                self._create_status_tile(
+                    self._header_chips, label, value, fg, Theme.BG_CARD
+                ).grid(row=0, column=idx, sticky="ew", padx=padx)
 
     def _section_title(self, parent, eyebrow: str, title: str, hint: str,
                        pad_x: int = 20, pad_top: int = 16):
@@ -706,6 +887,28 @@ class VideoSubtitleRemoverApp:
             pass
         return "break"
 
+    def _on_content_configure(self, event):
+        """Keep the middle workbench scrollable when settings exceed the viewport."""
+        if hasattr(self, "_content_canvas"):
+            self._content_canvas.configure(
+                scrollregion=self._content_canvas.bbox("all"))
+
+    def _on_content_canvas_configure(self, event):
+        """Lock the scrollable content frame to the canvas width."""
+        if hasattr(self, "_content_window"):
+            self._content_canvas.itemconfig(self._content_window, width=event.width)
+
+    def _on_content_mousewheel(self, event):
+        """Scroll the workbench unless the content already fits."""
+        if not hasattr(self, "_content_canvas"):
+            return
+        bbox = self._content_canvas.bbox("all")
+        if not bbox:
+            return
+        if bbox[3] <= self._content_canvas.winfo_height():
+            return
+        self._content_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
     def _on_root_configure(self, event):
         """Keep layout responsive as the window width changes."""
         if event.widget is not self.root:
@@ -722,7 +925,7 @@ class VideoSubtitleRemoverApp:
             if hasattr(self, "preview_meta_label"):
                 self.preview_meta_label.config(wraplength=520 if mode == "stacked" else 360)
             if hasattr(self, "header_guidance_body"):
-                self.header_guidance_body.config(wraplength=520 if mode == "stacked" else 300)
+                self.header_guidance_body.config(wraplength=520 if mode == "stacked" else 680)
             if hasattr(self, "status_hint"):
                 self.status_hint.config(wraplength=520 if mode == "stacked" else 360)
             return
@@ -734,29 +937,35 @@ class VideoSubtitleRemoverApp:
         self._right_col.grid_forget()
 
         if stacked:
-            self._content.columnconfigure(0, weight=1, minsize=0)
-            self._content.columnconfigure(1, weight=0, minsize=0)
+            self._content.columnconfigure(0, weight=1, minsize=0, uniform="")
+            self._content.columnconfigure(1, weight=0, minsize=0, uniform="")
             self._content.rowconfigure(0, weight=0)
             self._content.rowconfigure(1, weight=1)
             self._left_col.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, Theme.S_MD))
             self._right_col.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
 
             self._header_right.pack_forget()
-            self._header_right.pack(fill="x", pady=(Theme.S_LG, 0))
+            self._header_right.pack(anchor="w", pady=(Theme.S_MD, 0))
             self._header_chips.pack_forget()
-            self._header_chips.pack(anchor="w")
+            self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
             self._header_help_btn.pack_forget()
-            self._header_help_btn.pack(anchor="w", pady=(Theme.S_SM, 0))
+            self._header_help_btn.pack(anchor="w")
             self._header_guidance_panel.pack_forget()
-            self._header_guidance_panel.pack(fill="x", pady=(Theme.S_SM, 0))
+            self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
+            if hasattr(self, "_workflow_steps_row"):
+                self._workflow_steps_row.pack_forget()
+                self._workflow_steps_row.pack(anchor="w")
+            if hasattr(self, "_header_guidance_copy"):
+                self._header_guidance_copy.pack_forget()
+                self._header_guidance_copy.pack(fill="x", pady=(Theme.S_SM, 0))
 
             self._footer_left.pack_forget()
             self._footer_left.pack(anchor="w")
             self.status_hint.pack_forget()
             self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
         else:
-            self._content.columnconfigure(0, weight=57, minsize=440)
-            self._content.columnconfigure(1, weight=43, minsize=360)
+            self._content.columnconfigure(0, weight=58, minsize=0, uniform="main_cols")
+            self._content.columnconfigure(1, weight=42, minsize=0, uniform="main_cols")
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
             self._left_col.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_MD))
@@ -765,11 +974,18 @@ class VideoSubtitleRemoverApp:
             self._header_right.pack_forget()
             self._header_right.pack(side="right", anchor="n")
             self._header_chips.pack_forget()
-            self._header_chips.pack(anchor="e")
+            self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
             self._header_help_btn.pack_forget()
-            self._header_help_btn.pack(anchor="e", pady=(Theme.S_SM, 0))
+            self._header_help_btn.pack(anchor="e")
             self._header_guidance_panel.pack_forget()
-            self._header_guidance_panel.pack(anchor="e", fill="x", pady=(Theme.S_SM, 0))
+            self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
+            if hasattr(self, "_workflow_steps_row"):
+                self._workflow_steps_row.pack_forget()
+                self._workflow_steps_row.pack(side="left", anchor="w")
+            if hasattr(self, "_header_guidance_copy"):
+                self._header_guidance_copy.pack_forget()
+                self._header_guidance_copy.pack(side="left", fill="x", expand=True,
+                                                padx=(Theme.S_LG, 0))
 
             self._footer_left.pack_forget()
             self._footer_left.pack(side="left")
@@ -777,8 +993,9 @@ class VideoSubtitleRemoverApp:
             self.status_hint.pack(side="right")
 
         self.preview_meta_label.config(wraplength=520 if stacked else 360)
-        self.header_guidance_body.config(wraplength=520 if stacked else 300)
+        self.header_guidance_body.config(wraplength=520 if stacked else 680)
         self.status_hint.config(wraplength=520 if stacked else 360)
+        self._render_header_chips()
 
     def _get_selected_queue_item(self) -> Optional[QueueItem]:
         """Return the currently selected queue item, if any."""
@@ -1174,11 +1391,28 @@ class VideoSubtitleRemoverApp:
         # Header
         self._build_header(main_container)
 
-        # Content area (two columns via grid)
-        content = tk.Frame(main_container, bg=Theme.BG_DARK)
-        content.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
-        content.columnconfigure(0, weight=57, minsize=440)
-        content.columnconfigure(1, weight=43, minsize=360)
+        # Content area (two columns via grid) inside a scrollable workbench.
+        content_shell = tk.Frame(main_container, bg=Theme.BG_DARK)
+        content_shell.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
+        self._content_canvas = tk.Canvas(
+            content_shell, bg=Theme.BG_DARK, highlightthickness=0)
+        content_scroll = ttk.Scrollbar(
+            content_shell, orient="vertical",
+            command=self._content_canvas.yview,
+            style="Dark.Vertical.TScrollbar")
+        self._content_canvas.configure(yscrollcommand=content_scroll.set)
+        content_scroll.pack(side="right", fill="y")
+        self._content_canvas.pack(side="left", fill="both", expand=True)
+
+        content = tk.Frame(self._content_canvas, bg=Theme.BG_DARK)
+        self._content_window = self._content_canvas.create_window(
+            (0, 0), window=content, anchor="nw")
+        content.bind("<Configure>", self._on_content_configure)
+        self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
+        self._content_canvas.bind("<MouseWheel>", self._on_content_mousewheel)
+        content.bind("<MouseWheel>", self._on_content_mousewheel)
+        content.columnconfigure(0, weight=58, minsize=0, uniform="main_cols")
+        content.columnconfigure(1, weight=42, minsize=0, uniform="main_cols")
         content.rowconfigure(0, weight=1)
 
         # Left column - Input & Settings
@@ -1211,7 +1445,10 @@ class VideoSubtitleRemoverApp:
         inner = tk.Frame(header, bg=Theme.BG_SECONDARY)
         inner.pack(fill="x", padx=Theme.S_XL, pady=Theme.S_LG)
 
-        left = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        header_top = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        header_top.pack(fill="x")
+
+        left = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
         left.pack(side="left", fill="both", expand=True)
         self._header_left = left
 
@@ -1229,39 +1466,29 @@ class VideoSubtitleRemoverApp:
             fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(8, 0))
 
-        right = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        right = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
         right.pack(side="right", anchor="n")
         self._header_right = right
-
-        gpu_short = truncate_middle(self.gpus[0]["name"], 26) if self.gpus else "CPU mode"
-        gpu_fg = Theme.SUCCESS if self.gpus else Theme.WARNING
-        det_short = self.ai_engines["detection"][0] if self.ai_engines["detection"] else "OpenCV fallback"
-        audio_short = "FFmpeg ready" if self.ffmpeg_ready else "No FFmpeg"
-        audio_fg = Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING
-
-        chips = tk.Frame(right, bg=Theme.BG_SECONDARY)
-        chips.pack(anchor="e")
-        self._header_chips = chips
-
-        self._create_chip(chips, "Device", gpu_short, gpu_fg, Theme.BG_CARD).pack(side="left")
-        self._create_chip(chips, "Detection", det_short, Theme.INFO, Theme.BG_CARD).pack(
-            side="left", padx=(Theme.S_SM, 0))
-        self._create_chip(chips, "Audio", audio_short, audio_fg, Theme.BG_CARD).pack(
-            side="left", padx=(Theme.S_SM, 0))
 
         # About / help
         help_btn = ModernButton(right, text="Help", width=80,
                                 command=self._show_about, style="ghost",
                                 size="sm", icon="?")
-        help_btn.pack(anchor="e", pady=(Theme.S_SM, 0))
+        help_btn.pack(anchor="e")
         self._header_help_btn = help_btn
 
-        self._header_guidance_panel = tk.Frame(right, bg=Theme.BG_SECONDARY)
-        self._header_guidance_panel.pack(anchor="e", fill="x", pady=(Theme.S_SM, 0))
+        chips = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        chips.pack(fill="x", pady=(Theme.S_MD, 0))
+        self._header_chips = chips
+        self._render_header_chips()
+
+        self._header_guidance_panel = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
 
         # Workflow step pills (Import -> Inspect -> Run)
         pills_row = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
-        pills_row.pack(anchor="w", pady=(0, Theme.S_SM))
+        pills_row.pack(side="left", anchor="w")
+        self._workflow_steps_row = pills_row
         for idx, step_label in enumerate(("Import", "Inspect", "Run"), start=1):
             pill_frame = tk.Frame(pills_row, bg=Theme.BG_CARD,
                                   highlightthickness=1, highlightbackground=Theme.BORDER)
@@ -1280,8 +1507,13 @@ class VideoSubtitleRemoverApp:
                 "frame": pill_frame, "badge": badge_lbl, "text": text_lbl,
             })
 
+        guidance_copy = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
+        guidance_copy.pack(side="left", fill="x", expand=True,
+                           padx=(Theme.S_LG, 0))
+        self._header_guidance_copy = guidance_copy
+
         self.header_guidance_title = tk.Label(
-            self._header_guidance_panel,
+            guidance_copy,
             text="Build your batch",
             font=f(Theme.F_TITLE, "bold"),
             bg=Theme.BG_SECONDARY,
@@ -1289,10 +1521,10 @@ class VideoSubtitleRemoverApp:
         )
         self.header_guidance_title.pack(anchor="w")
         self.header_guidance_body = tk.Label(
-            self._header_guidance_panel,
+            guidance_copy,
             text="Import files or choose a folder to start.",
             font=f(Theme.F_BODY_SM),
-            wraplength=300,
+            wraplength=680,
             justify="left",
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED,
@@ -1427,19 +1659,19 @@ class VideoSubtitleRemoverApp:
                                   wraplength=520)
         self.algo_desc.pack(fill="x", padx=Theme.S_LG, pady=(2, Theme.S_MD))
 
-        if self.gpus:
-            row2 = tk.Frame(profile_panel, bg=Theme.BG_CARD)
-            row2.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
+        row2 = tk.Frame(profile_panel, bg=Theme.BG_CARD)
+        row2.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
 
-            tk.Label(row2, text="Compute device", font=f(Theme.F_BODY_SM),
-                     bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        tk.Label(row2, text="Compute device", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
-            gpu_options = [f"{g['name']} ({g['memory']})" for g in self.gpus]
-            self.gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
-                                          values=gpu_options, style="Dark.TCombobox",
-                                          state="readonly", font=f(Theme.F_BODY_SM))
-            self.gpu_combo.pack(side="right")
-            self.gpu_combo.bind("<<ComboboxSelected>>", self._on_gpu_changed)
+        self.gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
+                                      values=["Detecting hardware..."],
+                                      style="Dark.TCombobox", state="disabled",
+                                      font=f(Theme.F_BODY_SM))
+        self.gpu_combo.pack(side="right")
+        self.gpu_combo.bind("<<ComboboxSelected>>", self._on_gpu_changed)
+        self._refresh_gpu_selector()
 
         lang_row = tk.Frame(profile_panel, bg=Theme.BG_CARD)
         lang_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
@@ -1496,16 +1728,16 @@ class VideoSubtitleRemoverApp:
             variable=self.preserve_audio_var,
         )
         self.preserve_audio_check.pack(anchor="w", pady=(Theme.S_SM, 0))
-        if not self.ffmpeg_ready:
-            tk.Label(
-                checks_frame,
-                text="FFmpeg is not available, so outputs will be saved without original audio until it is installed.",
-                font=f(Theme.F_META),
-                bg=Theme.BG_CARD,
-                fg=Theme.WARNING,
-                wraplength=520,
-                justify="left",
-            ).pack(anchor="w", pady=(Theme.S_XS, 0))
+        self.ffmpeg_warning_label = tk.Label(
+            checks_frame,
+            text="Checking FFmpeg availability for audio preservation...",
+            font=f(Theme.F_META),
+            bg=Theme.BG_CARD,
+            fg=Theme.INFO,
+            wraplength=520,
+            justify="left",
+        )
+        self._refresh_ffmpeg_warning()
 
         # Region surface -- raised card-within-card
         region_surface = tk.Frame(workflow_panel, bg=Theme.BG_TERTIARY,
@@ -1991,9 +2223,10 @@ class VideoSubtitleRemoverApp:
         tk.Label(heading, text="Queue",
                  font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(heading, text="Review the list, then start the batch when ready.",
+        tk.Label(heading, text="Review queued files before starting.",
                  font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
+                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                 wraplength=360, justify="left").pack(anchor="w", pady=(2, 0))
 
         # Count + status chip cluster (right-aligned)
         count_cluster = tk.Frame(header, bg=Theme.BG_SECONDARY)
@@ -2137,10 +2370,10 @@ class VideoSubtitleRemoverApp:
             fg=Theme.TEXT_MUTED)
         self.preview_meta_label.pack(anchor="w", pady=(4, 0))
 
-        preview_actions = tk.Frame(preview_header, bg=Theme.BG_CARD)
-        preview_actions.pack(side="right", anchor="ne")
+        preview_status = tk.Frame(preview_header, bg=Theme.BG_CARD)
+        preview_status.pack(side="right", anchor="ne")
         self.preview_status_chip = tk.Label(
-            preview_actions,
+            preview_status,
             text="Waiting",
             font=f(Theme.F_META, "bold"),
             bg=Theme.BG_TERTIARY,
@@ -2148,11 +2381,14 @@ class VideoSubtitleRemoverApp:
             padx=10,
             pady=4,
         )
-        self.preview_status_chip.pack(side="left", padx=(0, Theme.S_SM))
+        self.preview_status_chip.pack(side="right")
+
+        preview_actions = tk.Frame(self._preview_frame, bg=Theme.BG_CARD)
+        preview_actions.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         self.preview_mask_btn = ModernButton(
             preview_actions,
             text="Review mask",
-            width=108,
+            width=102,
             command=self._open_selected_mask_preview,
             style="ghost",
             size="sm",
@@ -2163,7 +2399,7 @@ class VideoSubtitleRemoverApp:
         self.preview_zoom_btn = ModernButton(
             preview_actions,
             text="Full size",
-            width=92,
+            width=86,
             command=self._open_preview_zoom,
             style="ghost",
             size="sm",
@@ -2176,8 +2412,8 @@ class VideoSubtitleRemoverApp:
         # so users can A/B settings before committing the batch.
         self.preview_inpaint_btn = ModernButton(
             preview_actions,
-            text="Preview cleanup",
-            width=128,
+            text="Test cleanup",
+            width=112,
             command=self._open_selected_inpaint_preview,
             style="ghost",
             size="sm",
@@ -2189,7 +2425,7 @@ class VideoSubtitleRemoverApp:
         self.preview_ab_btn = ModernButton(
             preview_actions,
             text="A/B compare",
-            width=108,
+            width=102,
             command=self._open_ab_scrubber,
             style="ghost",
             size="sm",
@@ -2208,34 +2444,39 @@ class VideoSubtitleRemoverApp:
         Tooltip(self._preview_label,
                 "Double-click to view at full size. Right-click a queue item for more actions.")
 
-        # Action bar -- Start is primary, secondary actions right-aligned
+        # Action bar -- primary row first, secondary queue actions below.
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         btn_frame.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_LG))
 
-        self.start_btn = ModernButton(btn_frame, text="Start batch", width=156,
+        primary_actions = tk.Frame(btn_frame, bg=Theme.BG_SECONDARY)
+        primary_actions.pack(fill="x")
+        secondary_actions = tk.Frame(btn_frame, bg=Theme.BG_SECONDARY)
+        secondary_actions.pack(fill="x", pady=(Theme.S_SM, 0))
+
+        self.start_btn = ModernButton(primary_actions, text="Start batch", width=180,
                                      command=self._start_processing,
                                      style="primary", size="lg", icon=">")
         self.start_btn.pack(side="left")
 
-        self.open_output_btn = ModernButton(btn_frame, text="Open output", width=132,
+        self.open_output_btn = ModernButton(primary_actions, text="Open output", width=132,
                                             command=self._open_output_folder,
                                             style="ghost", size="lg", icon="^")
         self.open_output_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.retry_btn = ModernButton(btn_frame, text="Retry failed", width=124,
+        self.retry_btn = ModernButton(secondary_actions, text="Retry failed", width=124,
                                       command=self._retry_failed,
                                       style="ghost", size="lg")
-        self.retry_btn.pack(side="right")
+        self.retry_btn.pack(side="left")
 
-        self.repeat_btn = ModernButton(btn_frame, text="Repeat last", width=120,
+        self.repeat_btn = ModernButton(secondary_actions, text="Repeat last", width=120,
                                       command=self._repeat_last_job,
                                       style="ghost", size="lg")
-        self.repeat_btn.pack(side="right")
+        self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.clear_btn = ModernButton(btn_frame, text="Clear queue", width=120,
+        self.clear_btn = ModernButton(secondary_actions, text="Clear queue", width=120,
                                      command=self._clear_queue,
                                      style="ghost", size="lg")
-        self.clear_btn.pack(side="right", padx=(0, Theme.S_SM))
+        self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         self._set_preview_placeholder(
             "Preview a sample frame",
@@ -2257,11 +2498,11 @@ class VideoSubtitleRemoverApp:
             icon.create_rectangle(x - 5, 20, x + 5, 40,
                                   fill=Theme.BG_TERTIARY, outline="")
 
-        tk.Label(self.empty_container, text="Your queue is empty",
+        tk.Label(self.empty_container, text="No media queued",
                  font=f(Theme.F_TITLE, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(pady=(Theme.S_MD, 4))
         tk.Label(self.empty_container,
-                 text="Add files on the left to start a batch.",
+                 text="Add media from Import media to begin.",
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  wraplength=340, justify="center").pack()
