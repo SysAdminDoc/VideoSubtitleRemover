@@ -452,6 +452,13 @@ Speculative research bench; not commitments.
   https://docs.github.com/en/actions/reference/security/secure-use
   https://github.com/microsoft/winget-create/releases
 
+- [ ] P1 -- Pin runtime remote-code model adapters
+  Why: optional VLM and tracking adapters can execute remote repository code or moving refs, which weakens the local-first trust boundary.
+  Evidence: `backend/ocr_vlm.py:99-100` uses `trust_remote_code=True`; `backend/segmentation.py:207` calls `torch.hub.load("facebookresearch/co-tracker", "cotracker3_online")`; Hugging Face Auto Classes docs and PyTorch torch.hub docs both describe these as trusted-code boundaries.
+  Touches: `backend/ocr_vlm.py`, `backend/segmentation.py`, `backend/adapter_manifest.py`, `backend/model_hashes.py`, `tests/`
+  Acceptance: remote-code adapters require an approved local path or pinned revision; default runtime refuses unpinned remote-code loaders with an actionable message; release evidence records model repo/revision/path/hash; tests assert no `trust_remote_code=True` or `torch.hub.load()` path is reachable without the policy gate.
+  Complexity: M
+
 ### P2 - Evidence Quality and Observability
 
 - [ ] P2 -- Refresh architecture map after module split and release additions
@@ -466,6 +473,27 @@ Speculative research bench; not commitments.
   boundaries; include VVC/H.266, cache inventory, update checks, release
   verification, and current test families; remove stale monolith guidance and
   update the "current as of" marker.
+  Complexity: S
+
+- [ ] P2 -- Capture RapidOCR bundled-model provenance in release evidence
+  Why: RapidOCR is the default OCR path, but its bundled ONNX assets are only audited for opsets today, not package version, file hashes, or asset provenance.
+  Evidence: `backend/onnx_model_info.py:167-214` locates and audits RapidOCR model files; RapidOCR discussion #667 reports v3.x wheels depend on older v1.1.0 release assets.
+  Touches: `backend/onnx_model_info.py`, `backend/model_hashes.py`, `.github/workflows/build.yml`, `tests/`
+  Acceptance: release verification lists RapidOCR package name/version, discovered model filenames, SHA-256 hashes, and opsets; strict release fails or clearly warns when default RapidOCR assets are missing/unreadable; tests cover a mocked RapidOCR model directory.
+  Complexity: M
+
+- [ ] P2 -- Add GUI review worklist for quality-gate failures
+  Why: batch quality gates can mark outputs as `review-needed`, but the GUI completion flow only offers a generic report open action, making failed-gate outputs easy to miss in large batches.
+  Evidence: `backend/batch_report.py:37` defines `review-needed`; `backend/batch_report.py:140` sets that status on failed quality gates; `gui/app.py:3333-3349` exposes only `Open report` in the completion modal.
+  Touches: `gui/app.py`, `gui/widgets.py`, `backend/batch_report.py`, `backend/quality_gate.py`
+  Acceptance: when any batch item is `review-needed`, the completion dialog shows a review count and a primary review action; clicking it filters or focuses the queue on those items and opens the quality sheet/report for the first affected output; row actions expose `Open quality sheet` where available.
+  Complexity: M
+
+- [ ] P2 -- Resolve generated PowerShell launcher drift
+  Why: setup generates a PowerShell launcher that is not part of the tracked/documented launcher set, so it can drift from release-tested launch behavior.
+  Evidence: `setup.py:431-583` writes `Run_VSR_Pro.ps1`; tracked root launchers and README launcher instructions focus on `Run_VSR_Pro.bat` and `Run_VSR_Pro_Debug.bat`.
+  Touches: `setup.py`, `README.md`, `.github/workflows/build.yml`, `tests/test_setup_bootstrap.py`
+  Acceptance: either stop generating `Run_VSR_Pro.ps1` or track, package, document, and smoke-test it; release verification records the exact launcher files included in the bundle.
   Complexity: S
 
 ### P3 - Operational Maturity
