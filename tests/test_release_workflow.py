@@ -93,6 +93,8 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("python -m pip list --format=json", self.workflow)
         self.assertIn("dependencies", self.workflow)
         self.assertIn("adapterSecurity", self.workflow)
+        self.assertIn("remoteModelSecurity", self.workflow)
+        self.assertIn("backend.remote_model_policy import release_remote_model_status", self.workflow)
         self.assertIn("releaseTools", self.workflow)
         self.assertIn("wingetcreate", self.workflow)
         self.assertIn("backend.adapter_manifest import release_manifest_status", self.workflow)

@@ -278,6 +278,7 @@ jobs:
             dependencies = @()
             hiddenImports = @()
             adapterSecurity = @()
+            remoteModelSecurity = @()
             releaseTools = @(
               [ordered]@{
                 name = "wingetcreate"
@@ -408,6 +409,8 @@ jobs:
 
           $adapterPayload = python -c "import json; from backend.adapter_manifest import release_manifest_status; print(json.dumps(release_manifest_status()))"
           $verification.adapterSecurity = $adapterPayload | ConvertFrom-Json
+          $remoteModelPayload = python -c "import json; from backend.remote_model_policy import release_remote_model_status; print(json.dumps(release_remote_model_status()))"
+          $verification.remoteModelSecurity = $remoteModelPayload | ConvertFrom-Json
 
           if (-not (Test-Path "release-hidden-imports.json")) {
             throw "Hidden import manifest missing."

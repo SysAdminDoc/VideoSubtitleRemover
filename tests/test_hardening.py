@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -2617,7 +2618,8 @@ class SegmentationAdapterTests(unittest.TestCase):
     def setUp(self):
         self._saved = {k: os.environ.pop(k, None) for k in (
             "VSR_SAM2_CHECKPOINT", "VSR_SAM2_CONFIG", "VSR_SAM3",
-            "VSR_MATANYONE", "VSR_COTRACKER",
+            "VSR_MATANYONE", "VSR_COTRACKER", "VSR_COTRACKER_REPO",
+            "VSR_COTRACKER_REF",
         )}
 
     def tearDown(self):
@@ -2653,6 +2655,27 @@ class SegmentationAdapterTests(unittest.TestCase):
         from backend.segmentation import track_points
         frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
         self.assertIsNone(track_points(frames, [(4, 4)]))
+
+    def test_cotracker_refuses_torch_hub_without_pinned_source(self):
+        import numpy as _np
+        from unittest import mock
+        from backend import segmentation as _seg
+
+        fake_torch = types.ModuleType("torch")
+        fake_torch.hub = SimpleNamespace(load=mock.Mock())
+        saved = dict(_seg._COTRACKER_STATE)
+        try:
+            _seg._COTRACKER_STATE.update({"probed": False, "model": None})
+            os.environ["VSR_COTRACKER"] = "1"
+            os.environ.pop("VSR_COTRACKER_REPO", None)
+            os.environ.pop("VSR_COTRACKER_REF", None)
+            frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
+            with mock.patch.dict(sys.modules, {"torch": fake_torch}):
+                self.assertIsNone(_seg.track_points(frames, [(4, 4)]))
+            fake_torch.hub.load.assert_not_called()
+        finally:
+            _seg._COTRACKER_STATE.clear()
+            _seg._COTRACKER_STATE.update(saved)
 
     def test_sam2_inference_error_returns_base_mask(self):
         import numpy as _np
@@ -2848,12 +2871,17 @@ class VlmOcrAdapterTests(unittest.TestCase):
     survive a missing-dependency load."""
 
     def setUp(self):
-        self._saved = os.environ.pop("VSR_VLM_OCR", None)
+        self._saved = {
+            "VSR_VLM_OCR": os.environ.pop("VSR_VLM_OCR", None),
+            "VSR_FLORENCE2_PATH": os.environ.pop("VSR_FLORENCE2_PATH", None),
+            "VSR_FLORENCE2_REVISION": os.environ.pop("VSR_FLORENCE2_REVISION", None),
+        }
 
     def tearDown(self):
-        os.environ.pop("VSR_VLM_OCR", None)
-        if self._saved is not None:
-            os.environ["VSR_VLM_OCR"] = self._saved
+        for k, v in self._saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
 
     def test_no_vlm_when_env_unset(self):
         from backend.ocr_vlm import maybe_build_vlm_detector
@@ -2874,6 +2902,32 @@ class VlmOcrAdapterTests(unittest.TestCase):
         # Either None (no dep) or a real tuple (very unlikely in CI);
         # both are acceptable here.
         self.assertTrue(result is None or isinstance(result, tuple))
+
+    def test_florence2_refuses_trust_remote_code_without_pinned_source(self):
+        from unittest import mock
+        from backend.ocr_vlm import _Florence2Detector
+
+        class Loader:
+            calls = []
+
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                cls.calls.append((args, kwargs))
+                raise AssertionError("remote code loader should be gated")
+
+        transformers = types.ModuleType("transformers")
+        transformers.AutoProcessor = Loader
+        transformers.AutoModelForCausalLM = Loader
+        torch = types.ModuleType("torch")
+        torch.cuda = SimpleNamespace(is_available=lambda: False)
+
+        d = _Florence2Detector(device="cpu")
+        with mock.patch.dict(sys.modules, {
+            "transformers": transformers,
+            "torch": torch,
+        }):
+            self.assertIsNone(d._load())
+        self.assertEqual(Loader.calls, [])
 
     def test_qwen25vl_malformed_json_returns_empty_boxes(self):
         import numpy as _np
