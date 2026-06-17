@@ -3710,6 +3710,20 @@ class OcrCascadeOrderTests(unittest.TestCase):
 class UpdateCheckTests(unittest.TestCase):
     """RM-116: optional startup update check."""
 
+    def _join(self, thread):
+        if thread is not None:
+            thread.join(timeout=5)
+        if thread is not None and thread.is_alive():
+            self.fail("update check thread did not finish")
+
+    def _response(self, payload, headers=None):
+        fake_resp = io.BytesIO(json.dumps(payload).encode())
+        fake_resp.status = 200
+        fake_resp.headers = headers or {}
+        fake_resp.__enter__ = lambda s: s
+        fake_resp.__exit__ = lambda s, *a: None
+        return fake_resp
+
     def test_parse_version_standard(self):
         from backend.update_check import _parse_version
         self.assertEqual(_parse_version("v3.16.1"), (3, 16, 1))
@@ -3724,32 +3738,26 @@ class UpdateCheckTests(unittest.TestCase):
         from unittest.mock import MagicMock, patch
         from backend.update_check import check_for_update
         cb = MagicMock()
-        fake_resp = io.BytesIO(json.dumps({
+        fake_resp = self._response({
             "tag_name": "v3.16.1",
             "html_url": "https://example.com/releases/v3.16.1",
-        }).encode())
-        fake_resp.status = 200
-        fake_resp.__enter__ = lambda s: s
-        fake_resp.__exit__ = lambda s, *a: None
+        })
         with patch("backend.update_check.urlopen", return_value=fake_resp):
-            check_for_update("3.16.1", cb)
-            import time; time.sleep(0.5)
+            t = check_for_update("3.16.1", cb)
+            self._join(t)
         cb.assert_not_called()
 
     def test_callback_when_newer_available(self):
         from unittest.mock import MagicMock, patch
         from backend.update_check import check_for_update
         cb = MagicMock()
-        fake_resp = io.BytesIO(json.dumps({
+        fake_resp = self._response({
             "tag_name": "v4.0.0",
             "html_url": "https://example.com/releases/v4.0.0",
-        }).encode())
-        fake_resp.status = 200
-        fake_resp.__enter__ = lambda s: s
-        fake_resp.__exit__ = lambda s, *a: None
+        })
         with patch("backend.update_check.urlopen", return_value=fake_resp):
-            check_for_update("3.16.1", cb)
-            import time; time.sleep(0.5)
+            t = check_for_update("3.16.1", cb)
+            self._join(t)
         cb.assert_called_once_with("v4.0.0", "https://example.com/releases/v4.0.0")
 
     def test_no_crash_on_network_error(self):
@@ -3757,8 +3765,86 @@ class UpdateCheckTests(unittest.TestCase):
         from backend.update_check import check_for_update
         cb = MagicMock()
         with patch("backend.update_check.urlopen", side_effect=OSError("offline")):
-            check_for_update("3.16.1", cb)
-            import time; time.sleep(0.5)
+            t = check_for_update("3.16.1", cb)
+            self._join(t)
+        cb.assert_not_called()
+
+    def test_request_headers_and_conditional_state_are_used(self):
+        from unittest.mock import MagicMock, patch
+        from backend.update_check import check_for_update
+        cb = MagicMock()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "update_check.json"
+            state_path.write_text(json.dumps({
+                "etag": '"abc123"',
+                "last_modified": "Wed, 17 Jun 2026 12:00:00 GMT",
+            }), encoding="utf-8")
+            captured = {}
+
+            def fake_urlopen(req, timeout):
+                captured["req"] = req
+                captured["timeout"] = timeout
+                return self._response({
+                    "tag_name": "v3.16.1",
+                    "html_url": "https://example.com/releases/v3.16.1",
+                }, headers={
+                    "ETag": '"def456"',
+                    "Last-Modified": "Thu, 18 Jun 2026 12:00:00 GMT",
+                })
+
+            with patch("backend.update_check.urlopen", side_effect=fake_urlopen):
+                t = check_for_update("3.16.1", cb, state_path=state_path)
+                self._join(t)
+
+            req = captured["req"]
+            self.assertEqual(req.get_header("Accept"), "application/vnd.github+json")
+            self.assertEqual(req.get_header("X-github-api-version"), "2022-11-28")
+            self.assertIn("VideoSubtitleRemover/3.16.1", req.get_header("User-agent"))
+            self.assertEqual(req.get_header("If-none-match"), '"abc123"')
+            self.assertEqual(
+                req.get_header("If-modified-since"),
+                "Wed, 17 Jun 2026 12:00:00 GMT",
+            )
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["etag"], '"def456"')
+            self.assertEqual(
+                saved["last_modified"],
+                "Thu, 18 Jun 2026 12:00:00 GMT",
+            )
+
+    def test_not_modified_response_is_no_update(self):
+        from urllib.error import HTTPError
+        from unittest.mock import MagicMock, patch
+        from backend.update_check import check_for_update
+        cb = MagicMock()
+        err = HTTPError("url", 304, "Not Modified", {}, None)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "update_check.json"
+            with patch("backend.update_check.urlopen", side_effect=err):
+                t = check_for_update("3.16.1", cb, state_path=state_path)
+                self._join(t)
+        cb.assert_not_called()
+
+    def test_rate_limit_sets_backoff_and_skips_next_request(self):
+        from urllib.error import HTTPError
+        from unittest.mock import MagicMock, patch
+        from backend.update_check import check_for_update
+        cb = MagicMock()
+        err = HTTPError("url", 429, "Too Many Requests", {"Retry-After": "60"}, None)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "update_check.json"
+            with patch("backend.update_check.time.time", return_value=1000):
+                with patch("backend.update_check.urlopen", side_effect=err) as mocked:
+                    t = check_for_update("3.16.1", cb, state_path=state_path)
+                    self._join(t)
+                    self.assertEqual(mocked.call_count, 1)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["backoff_until"], 1060)
+            with patch("backend.update_check.time.time", return_value=1001):
+                with patch("backend.update_check.urlopen") as mocked:
+                    t = check_for_update("3.16.1", cb, state_path=state_path)
+                    self._join(t)
+                    mocked.assert_not_called()
         cb.assert_not_called()
 
     def test_config_field_defaults_off(self):
