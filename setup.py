@@ -438,8 +438,10 @@ setlocal EnableDelayedExpansion
 
 title Video Subtitle Remover Pro
 
+:: Change to script directory
 cd /d "%~dp0"
 
+:: Check if venv exists
 if not exist "venv\\Scripts\\python.exe" (
     echo.
     echo  ============================================================
@@ -627,6 +629,7 @@ def main():
     print(f"\n  To run the application:")
     print(f"    * Double-click: {Colors.BOLD}Run_VSR_Pro.bat{Colors.END}")
     print(f"    * Troubleshooting: {Colors.BOLD}Run_VSR_Pro_Debug.bat{Colors.END}")
+    print(f"    * PowerShell: {Colors.BOLD}.\\Run_VSR_Pro.ps1{Colors.END}")
     print(f"    * Or run: {Colors.BOLD}python VideoSubtitleRemover.py{Colors.END}")
     print(f"\n  GPU Mode: ", end="")
     

@@ -71,7 +71,8 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
    - Detects your GPU and installs appropriate packages
    - Installs PaddleOCR, EasyOCR, and LaMa inpainting
    - Launches the application
-   - Use `Run_VSR_Pro_Debug.bat` if you want the same bootstrap flow with a visible console for troubleshooting
+   - Use `Run_VSR_Pro_Debug.bat` for a visible troubleshooting console, or
+     `Run_VSR_Pro.ps1` when you prefer launching from PowerShell
 
 After the Windows Package Manager manifest is accepted, signed release
 installers can also be installed with:
@@ -118,7 +119,8 @@ python -m unittest discover -s tests -v
 
 ## Usage
 
-1. **Launch** via `Run_VSR_Pro.bat`
+1. **Launch** via `Run_VSR_Pro.bat`, `Run_VSR_Pro_Debug.bat`, or
+   `Run_VSR_Pro.ps1`
 2. **Add files** -- Click to browse, right-click for folders, or drag & drop
 3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
 4. **Set language** if subtitles are non-English
@@ -376,7 +378,8 @@ to a bug report.
 
 - Ensure Python 3.10+ is installed; use Python 3.12 or 3.13 for NVIDIA CUDA
 - Delete `venv` folder and re-run setup
-- Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup
+- Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup, or
+  `Run_VSR_Pro.ps1` from PowerShell to see setup/launch errors there
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
 - If the log warns that OpenCV bundles libpng older than `1.6.54`, avoid
   opening untrusted PNG files until `opencv-python` ships a fixed wheel
@@ -417,6 +420,7 @@ VideoSubtitleRemover/
 |-- setup.py                  # First-time environment setup
 |-- Run_VSR_Pro.bat           # Windows launcher
 |-- Run_VSR_Pro_Debug.bat     # Windows launcher with a visible console
+|-- Run_VSR_Pro.ps1           # PowerShell launcher
 |-- build_exe.bat             # PyInstaller build script
 |-- requirements.txt          # Python dependencies
 |-- tests/                    # Focused regression coverage for hardened paths

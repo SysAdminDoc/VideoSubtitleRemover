@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -167,6 +168,29 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
         self.assertTrue(any("onnxruntime-directml>=1.18.0" in call for call in calls))
         self.assertFalse(any("torch-directml" in call for call in calls))
+
+    def test_generated_launchers_match_tracked_files(self):
+        root = Path(__file__).resolve().parents[1]
+        launchers = [
+            "Run_VSR_Pro.bat",
+            "Run_VSR_Pro_Debug.bat",
+            "Run_VSR_Pro.ps1",
+        ]
+        tracked = {
+            name: (root / name).read_text(encoding="utf-8")
+            for name in launchers
+        }
+        old_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                with mock.patch("builtins.print"):
+                    self.setup_mod.create_launcher()
+                for name in launchers:
+                    generated = Path(name).read_text(encoding="utf-8")
+                    self.assertEqual(generated, tracked[name], name)
+            finally:
+                os.chdir(old_cwd)
 
 
 if __name__ == "__main__":

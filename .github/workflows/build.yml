@@ -188,6 +188,9 @@ jobs:
               Copy-Item $doc -Destination (Join-Path $distDir $doc) -Force
             }
           }
+          foreach ($launcher in @("Run_VSR_Pro.bat", "Run_VSR_Pro_Debug.bat", "Run_VSR_Pro.ps1")) {
+            Copy-Item $launcher -Destination (Join-Path $distDir $launcher) -Force
+          }
 
       - name: Package release ZIP
         run: |
@@ -279,6 +282,7 @@ jobs:
             generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
             assets = @()
             bundledDocs = @()
+            launchers = @()
             dependencies = @()
             hiddenImports = @()
             adapterSecurity = @()
@@ -359,6 +363,20 @@ jobs:
               throw "Required bundled document missing: $doc"
             }
             $verification.bundledDocs += $doc
+          }
+
+          foreach ($launcher in @("Run_VSR_Pro.bat", "Run_VSR_Pro_Debug.bat", "Run_VSR_Pro.ps1")) {
+            $launcherPath = Join-Path $distDir $launcher
+            if (-not (Test-Path $launcherPath)) {
+              throw "Required bundled launcher missing: $launcher"
+            }
+            $item = Get-Item $launcherPath
+            $hash = Get-FileHash $launcherPath -Algorithm SHA256
+            $verification.launchers += [ordered]@{
+              name = $launcher
+              bytes = $item.Length
+              sha256 = $hash.Hash.ToLowerInvariant()
+            }
           }
 
           $expectedVersion = $versionTag.TrimStart("v")
