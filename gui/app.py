@@ -3798,7 +3798,7 @@ class VideoSubtitleRemoverApp:
                 try:
                     cap.release()
                 except Exception:
-                    pass
+                    logger.warning("Region selector capture release failed", exc_info=True)
 
     def _reset_region(self):
         """Reset subtitle region to auto-detect. Clears BOTH region
@@ -5573,7 +5573,7 @@ class VideoSubtitleRemoverApp:
                     self.root.after(0, self._push_live_preview, pil, cur_idx, total,
                                      Path(item.file_path).name)
                 except Exception:
-                    pass
+                    logger.warning("Live preview callback failed", exc_info=True)
 
             remover.on_preview_frame = on_preview_frame
 
@@ -5628,7 +5628,7 @@ class VideoSubtitleRemoverApp:
             item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
-            logger.error(f"Processing error for {item.file_path}: {e}")
+            logger.error(f"Processing error for {item.file_path}: {e}", exc_info=True)
 
     def _ensure_taskbar(self):
         """Lazily create the Windows taskbar progress client once the window
