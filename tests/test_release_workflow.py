@@ -99,6 +99,8 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("dependencies", self.workflow)
         self.assertIn("adapterSecurity", self.workflow)
         self.assertIn("remoteModelSecurity", self.workflow)
+        self.assertIn("ffmpeg -hide_banner -encoders", self.workflow)
+        self.assertIn("libvvenc", self.workflow)
         self.assertIn("backend.remote_model_policy import release_remote_model_status", self.workflow)
         self.assertIn("releaseTools", self.workflow)
         self.assertIn("wingetcreate", self.workflow)

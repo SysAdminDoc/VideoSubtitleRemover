@@ -30,7 +30,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **AUTO Inpaint Routing** -- Per-batch routing between TBE and LaMa based on exposure score
 - **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
-- **HEVC + AV1 Output** -- Pick H.264 / H.265 / AV1 from a dropdown; NVENC/QSV/AMF for HW encoding, libx265 / libsvtav1 software fallback
+- **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, and VVC when FFmpeg exposes `libvvenc`
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame; backend honours every rect
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
@@ -223,7 +223,7 @@ review-needed outputs. A failed gate changes the batch row status to
 | `--preset NAME` | Apply a built-in or user preset by name | - |
 | `--list-presets` | List every preset and exit | - |
 | `-m`, `--mode` | Algorithm (sttn/lama/propainter/auto) | sttn |
-| `--codec` | Output codec (h264/h265/av1) | h264 |
+| `--codec` | Output codec (h264/h265/av1/vvc; VVC requires FFmpeg with `libvvenc`) | h264 |
 | `-g`, `--gpu` | GPU device ID (-1 for CPU) | 0 |
 | `-l`, `--lang` | Detection language | en |
 | `--crf` | Output quality (15-35, lower=better) | 23 |
@@ -273,7 +273,7 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Reference Length | STTN reference frames | 10 | 5-30 |
 | Max Load Frames | Batch size | 30 | 10-100 |
 | CRF Quality | Output quality (lower=better) | 23 | 15-35 |
-| Output Codec | H.264 / H.265 / AV1 | h264 | h264/h265/av1 |
+| Output Codec | H.264 / H.265 / AV1 / VVC (H.266) | h264 | h264/h265/av1/vvc; VVC requires FFmpeg with `libvvenc` |
 | Frame Skip | Reuse detection mask for N frames | 0 | 0-10 |
 | Mask Dilate | Expand detected regions (px) | 8 | 0-20 |
 | Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |

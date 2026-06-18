@@ -427,16 +427,20 @@ jobs:
             $ffmpegRaw = (& ffmpeg -version 2>&1 | Select-Object -First 1) -replace '^\s+',''
             $ffmpegBuild = ""
             if ($ffmpegRaw -match 'ffmpeg version\s+(\S+)') { $ffmpegBuild = $Matches[1] }
+            $ffmpegEncoders = (& ffmpeg -hide_banner -encoders 2>&1) -join "`n"
+            $libvvencAvailable = $ffmpegEncoders -match '(^|\s)libvvenc(\s|$)'
             $verification.ffmpeg = [ordered]@{
               path = $ffmpegPath
               version = $ffmpegBuild
               banner = $ffmpegRaw
+              libvvenc = [bool]$libvvencAvailable
             }
           } else {
             $verification.ffmpeg = [ordered]@{
               path = ""
               version = ""
               banner = "ffmpeg not found on PATH"
+              libvvenc = $false
             }
           }
 
