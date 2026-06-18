@@ -16,11 +16,14 @@ that exceed the ceiling by dropping DML and falling back to CPU.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib.metadata
 import logging
 import mmap
 import os
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
+
+from backend.model_hashes import hash_file
 
 logger = logging.getLogger(__name__)
 
@@ -164,19 +167,99 @@ def _skip_fixed(buf: Sequence[int], pos: int, length: int) -> int:
     return end
 
 
-def _rapidocr_model_dir() -> Optional[Path]:
-    """Locate the RapidOCR bundled model directory if installed."""
+def _rapidocr_package_root() -> Optional[Tuple[str, Path]]:
+    """Return (import name, package root) for an installed RapidOCR package."""
     try:
         import rapidocr
-        pkg_dir = Path(rapidocr.__file__).parent
+        return "rapidocr", Path(rapidocr.__file__).parent
     except ImportError:
         try:
             import rapidocr_onnxruntime
-            pkg_dir = Path(rapidocr_onnxruntime.__file__).parent
+            return "rapidocr_onnxruntime", Path(rapidocr_onnxruntime.__file__).parent
         except ImportError:
             return None
+
+
+def _rapidocr_model_dir() -> Optional[Path]:
+    """Locate the RapidOCR bundled model directory if installed."""
+    package = _rapidocr_package_root()
+    if package is None:
+        return None
+    _import_name, pkg_dir = package
     models = pkg_dir / "models"
     return models if models.is_dir() else None
+
+
+def _rapidocr_package_version(import_name: str) -> Optional[str]:
+    candidates = (
+        ("rapidocr", "rapidocr"),
+        ("rapidocr_onnxruntime", "rapidocr-onnxruntime"),
+    )
+    for candidate_import, dist_name in candidates:
+        if import_name != candidate_import:
+            continue
+        try:
+            return importlib.metadata.version(dist_name)
+        except importlib.metadata.PackageNotFoundError:
+            return None
+    return None
+
+
+def rapidocr_release_provenance(
+    model_dir: Optional[str | Path] = None,
+    *,
+    package_name: Optional[str] = None,
+    package_version: Optional[str] = None,
+) -> Dict[str, object]:
+    """Return release evidence for bundled RapidOCR ONNX assets."""
+    package_root = None if package_name else _rapidocr_package_root()
+    resolved_package = package_name or (package_root[0] if package_root else "")
+    resolved_version = (
+        package_version
+        if package_version is not None
+        else (_rapidocr_package_version(resolved_package) if resolved_package else None)
+    )
+    if model_dir is not None:
+        rapid_dir = Path(model_dir)
+    else:
+        rapid_dir = _rapidocr_model_dir()
+    models: List[Dict[str, object]] = []
+    if rapid_dir is not None and rapid_dir.is_dir():
+        for onnx_file in sorted(rapid_dir.rglob("*.onnx")):
+            record = _audit_one(
+                f"RapidOCR/{onnx_file.relative_to(rapid_dir)}",
+                onnx_file,
+            )
+            try:
+                rel = onnx_file.relative_to(rapid_dir)
+            except ValueError:
+                rel = onnx_file.name
+            try:
+                record.update({
+                    "filename": onnx_file.name,
+                    "relative_path": str(rel).replace(os.sep, "/"),
+                    "bytes": onnx_file.stat().st_size,
+                    "sha256": hash_file(onnx_file),
+                })
+            except OSError as exc:
+                record.update({
+                    "filename": onnx_file.name,
+                    "relative_path": str(rel).replace(os.sep, "/"),
+                    "bytes": None,
+                    "sha256": None,
+                    "error": str(exc),
+                })
+            models.append(record)
+    return {
+        "package": {
+            "name": resolved_package,
+            "version": resolved_version,
+        },
+        "model_dir": str(rapid_dir) if rapid_dir else "",
+        "model_count": len(models),
+        "models": models,
+        "missing": not models,
+    }
 
 
 def _adapter_onnx_paths() -> List[Tuple[str, Path]]:

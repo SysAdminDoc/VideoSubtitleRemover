@@ -287,6 +287,7 @@ jobs:
             hiddenImports = @()
             adapterSecurity = @()
             remoteModelSecurity = @()
+            rapidocrModels = @{}
             releaseTools = @(
               [ordered]@{
                 name = "wingetcreate"
@@ -433,6 +434,11 @@ jobs:
           $verification.adapterSecurity = $adapterPayload | ConvertFrom-Json
           $remoteModelPayload = python -c "import json; from backend.remote_model_policy import release_remote_model_status; print(json.dumps(release_remote_model_status()))"
           $verification.remoteModelSecurity = $remoteModelPayload | ConvertFrom-Json
+          $rapidOcrPayload = python -c "import json; from backend.onnx_model_info import rapidocr_release_provenance; print(json.dumps(rapidocr_release_provenance()))"
+          $verification.rapidocrModels = $rapidOcrPayload | ConvertFrom-Json
+          if ($strict -and ($verification.rapidocrModels.missing -or $verification.rapidocrModels.model_count -eq 0)) {
+            throw "Strict release requires readable RapidOCR bundled ONNX models."
+          }
 
           if (-not (Test-Path "release-hidden-imports.json")) {
             throw "Hidden import manifest missing."
