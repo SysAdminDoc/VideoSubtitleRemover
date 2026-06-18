@@ -1055,7 +1055,7 @@ class ConfigFuzzTests(unittest.TestCase):
                             or -70.0 <= cfg.loudnorm_target <= -5.0)
             self.assertIn(cfg.decode_hw_accel,
                           {"off", "auto", "any", "d3d11", "vaapi", "mfx"})
-            self.assertIn(cfg.output_codec, {"h264", "h265", "av1"})
+            self.assertIn(cfg.output_codec, {"h264", "h265", "av1", "vvc"})
             self.assertIsInstance(cfg.multi_audio_passthrough, bool)
             self.assertGreaterEqual(cfg.input_fps, 1.0)
             self.assertLessEqual(cfg.input_fps, 240.0)
@@ -3296,7 +3296,7 @@ class HighContrastThemeTests(unittest.TestCase):
 
 
 class OutputCodecTests(unittest.TestCase):
-    """F-8: output_codec must coerce to one of h264 / h265 / av1 and
+    """F-8: output_codec must coerce to h264 / h265 / av1 / vvc and
     drive the right software encoder when no HW encoder is available."""
 
     def test_default_is_h264(self):
