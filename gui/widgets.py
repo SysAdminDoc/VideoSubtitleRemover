@@ -1404,6 +1404,9 @@ class QueueItemWidget(tk.Frame):
         menu.add_command(label="Open result",
                          command=self._open_output,
                          state="normal" if is_complete else "disabled")
+        menu.add_command(label="Open quality sheet",
+                         command=self._open_quality_sheet,
+                         state="normal" if self._quality_sheet_path() else "disabled")
         menu.add_command(label="Reveal output folder",
                          command=self._reveal_output,
                          state="normal" if is_complete else "disabled")
@@ -1525,6 +1528,25 @@ class QueueItemWidget(tk.Frame):
                 os.startfile(self.item.output_path)
             except Exception:
                 pass
+
+    def _quality_sheet_path(self) -> Optional[Path]:
+        report = getattr(self.item, "quality_report", None)
+        if not isinstance(report, dict):
+            return None
+        sheet = report.get("sheet")
+        if not sheet:
+            return None
+        path = Path(sheet)
+        return path if path.exists() else None
+
+    def _open_quality_sheet(self):
+        path = self._quality_sheet_path()
+        if path is None:
+            return
+        try:
+            os.startfile(str(path))
+        except Exception:
+            pass
 
     def _get_status_color(self) -> str:
         return status_ui(self.item.status)["color"]

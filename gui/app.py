@@ -157,6 +157,7 @@ class VideoSubtitleRemoverApp:
         self._batch_times: List[float] = []  # seconds per item for ETA
         self._batch_started_at: Optional[datetime] = None
         self._batch_report_records: dict = {}
+        self._last_batch_report_records: List[dict] = []
         self._model_download_guidance_seen: set = set()
         self._preview_request_id = 0
         self._throbber_id = None
@@ -3273,10 +3274,11 @@ class VideoSubtitleRemoverApp:
 
     def _show_batch_summary(self, complete: int, errors: int,
                             cancelled: int, elapsed: str,
-                            quality_summary: Optional[dict] = None):
+                            quality_summary: Optional[dict] = None,
+                            review_count: int = 0):
         """Themed summary modal shown when a batch finishes."""
         total = complete + errors + cancelled
-        is_clean = errors == 0 and cancelled == 0
+        is_clean = errors == 0 and cancelled == 0 and review_count == 0
 
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
@@ -3303,9 +3305,18 @@ class VideoSubtitleRemoverApp:
                      font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(
                          anchor="w", pady=(2, 0))
-        summary_note = ("Outputs are ready to review."
-                        if is_clean else
-                        "Completed outputs are ready. Review the outliers or open the log for details.")
+        if is_clean:
+            summary_note = "Outputs are ready to review."
+        elif review_count:
+            summary_note = (
+                "Some completed outputs need a closer look. Start with "
+                "the quality review item, then retry failed items if needed."
+            )
+        else:
+            summary_note = (
+                "Completed outputs are ready. Review the outliers or "
+                "open the log for details."
+            )
         tk.Label(content, text=summary_note, font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
                  wraplength=420, justify="left").pack(anchor="w", pady=(Theme.S_SM, 0))
@@ -3343,6 +3354,9 @@ class VideoSubtitleRemoverApp:
             side="left", padx=(Theme.S_SM, 0))
         stat(stats, "STOPPED", cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
             side="left", padx=(Theme.S_SM, 0))
+        if review_count:
+            stat(stats, "REVIEW", review_count, Theme.WARNING, Theme.WARNING_BG).pack(
+                side="left", padx=(Theme.S_SM, 0))
 
         if quality_summary:
             quality_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
@@ -3399,10 +3413,22 @@ class VideoSubtitleRemoverApp:
             self._retry_failed()
             _close()
 
+        def _review_first_and_close():
+            self._open_first_review_item()
+            _close()
+
+        if review_count > 0:
+            ModernButton(actions_inner, text="Review first", width=122,
+                         command=_review_first_and_close,
+                         style="accent", size="md").pack(side="left")
         if complete > 0:
             ModernButton(actions_inner, text="Open output", width=132,
                          command=_open_output_and_close,
-                         style="accent", size="md", icon="^").pack(side="left")
+                         style="accent" if review_count == 0 else "ghost",
+                         size="md", icon="^").pack(
+                             side="left",
+                             padx=(Theme.S_SM, 0) if review_count else 0,
+                         )
         report_paths = getattr(self, "_last_batch_report_paths", [])
         if report_paths:
             def _open_report_and_close():
@@ -5302,6 +5328,70 @@ class VideoSubtitleRemoverApp:
             finished.append(record)
         return finished
 
+    def _review_needed_records(self) -> List[dict]:
+        records = getattr(self, "_last_batch_report_records", []) or []
+        return [
+            record for record in records
+            if record.get("status") == "review-needed"
+        ]
+
+    def _queue_item_for_report_record(self, record: dict) -> Optional[QueueItem]:
+        output = record.get("output")
+        output_key = self._normalized_path_key(output) if output else ""
+        output_name = record.get("output_name")
+        for item in self.queue:
+            if output_key and self._normalized_path_key(item.output_path) == output_key:
+                return item
+            if output_name and Path(item.output_path).name == output_name:
+                return item
+        return None
+
+    def _open_first_review_item(self):
+        records = self._review_needed_records()
+        if not records:
+            self._update_status("No quality review items are available", "info")
+            return
+        record = records[0]
+        item = self._queue_item_for_report_record(record)
+        if item is not None:
+            self._set_selected_queue_item(item.id)
+            self._scroll_queue_to_item(item.id)
+            if item.status == ProcessingStatus.COMPLETE:
+                self._show_preview(item)
+        quality_report = record.get("quality_report") or {}
+        gate = record.get("quality_gate") or {}
+        candidates = []
+        sheet = quality_report.get("sheet")
+        if sheet:
+            candidates.append(sheet)
+        for key in ("previewFramePaths", "preview_frame_paths"):
+            paths = gate.get(key) or quality_report.get(key)
+            if isinstance(paths, (list, tuple)):
+                candidates.extend(paths)
+        for path in candidates:
+            if path and Path(path).exists():
+                try:
+                    os.startfile(str(path))
+                    self._update_status(
+                        f"Opened quality review for {record.get('output_name', 'output')}",
+                        "warning",
+                    )
+                    return
+                except Exception:
+                    logger.warning("Could not open quality review artifact", exc_info=True)
+        for report_path in getattr(self, "_last_batch_report_paths", []) or []:
+            if str(report_path).endswith(".md") and Path(report_path).exists():
+                try:
+                    os.startfile(str(report_path))
+                    self._update_status("Opened batch report for review", "warning")
+                    return
+                except Exception:
+                    logger.warning("Could not open batch report", exc_info=True)
+        self._update_status(
+            f"Focused {record.get('output_name', 'the first review item')}",
+            "warning",
+        )
+
     def _write_batch_preflight_plan(self) -> List[Path]:
         """Write a preflight plan JSON before processing starts, so
         overnight runs are fully accounted for even on crash."""
@@ -5347,6 +5437,7 @@ class VideoSubtitleRemoverApp:
         from backend.batch_report import write_batch_reports
 
         records = self._finalize_batch_report_records()
+        self._last_batch_report_records = records
         if not records:
             return []
         started_at = self._batch_started_at or datetime.now()
@@ -5947,11 +6038,14 @@ class VideoSubtitleRemoverApp:
         complete = sum(1 for item in self.queue if item.status == ProcessingStatus.COMPLETE)
         errors = sum(1 for item in self.queue if item.status == ProcessingStatus.ERROR)
         cancelled = sum(1 for item in self.queue if item.status == ProcessingStatus.CANCELLED)
+        review_count = len(self._review_needed_records())
 
         summary = f"Batch finished: {complete} completed, {errors} failed"
+        if review_count:
+            summary += f", {review_count} needs review"
         if cancelled:
             summary += f", {cancelled} stopped"
-        is_clean = errors == 0 and cancelled == 0
+        is_clean = errors == 0 and cancelled == 0 and review_count == 0
         quality_summary = summarize_quality_reports(
             [item.quality_report for item in self.queue if item.status == ProcessingStatus.COMPLETE]
         )
@@ -5981,6 +6075,7 @@ class VideoSubtitleRemoverApp:
                 cancelled,
                 elapsed,
                 quality_summary=quality_summary,
+                review_count=review_count,
             )
 
     def _notify_completion(self, complete: int, errors: int):
