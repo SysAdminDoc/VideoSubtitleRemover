@@ -30,6 +30,11 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
 
         self.assertIn('Install-Optional "PaddleOCR"', self.workflow)
         self.assertIn('Install-Optional "ONNX Runtime DirectML"', self.workflow)
+        self.assertIn('"rapidocr>=2.0.0,<3.0.0"', self.workflow)
+        self.assertIn('"rapidocr-onnxruntime>=1.4.0,<2.0.0"', self.workflow)
+        self.assertIn('"paddleocr>=3.0.0,<4.0.0"', self.workflow)
+        self.assertIn("OCR dependency version-cap check", self.workflow)
+        self.assertIn("python -m backend.dependency_caps", self.workflow)
         self.assertNotIn('Install-Optional "torch-directml"', self.workflow)
         self.assertNotIn("torch_directml", self.workflow)
 

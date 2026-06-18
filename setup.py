@@ -373,7 +373,7 @@ def install_dependencies(gpu_info=None):
                 'numpy>=1.21.0',
                 'opencv-python>=4.12.0',
                 'Pillow>=12.2.0',
-                'rapidocr>=2.0.0',
+                'rapidocr>=2.0.0,<3.0.0',
                 'easyocr>=1.7.0',
                 'simple-lama-inpainting>=0.1.0',
             ]
@@ -384,7 +384,7 @@ def install_dependencies(gpu_info=None):
 
             try:
                 _run_pip_install(
-                    [pip, 'install', 'paddleocr>=3.0.0'],
+                    [pip, 'install', 'paddleocr>=3.0.0,<4.0.0'],
                     "installing PaddleOCR",
                 )
                 print(f"  [OK] PaddleOCR installed")
