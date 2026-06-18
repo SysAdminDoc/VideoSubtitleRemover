@@ -470,8 +470,12 @@ class ProcessingConfig:
         self.preserve_audio = _coerce_bool(self.preserve_audio, True)
         self.output_quality = _coerce_int(self.output_quality, 23, 15, 35)
         self.use_hw_encode = _coerce_bool(self.use_hw_encode, True)
-        codec = _coerce_text(self.output_codec, "h264", 8).lower()
-        if codec not in {"h264", "h265", "av1"}:
+        codec = _coerce_text(self.output_codec, "h264", 16).lower()
+        if codec in {"hevc", "h.265"}:
+            codec = "h265"
+        if codec in {"h266", "h.266"}:
+            codec = "vvc"
+        if codec not in {"h264", "h265", "av1", "vvc"}:
             codec = "h264"
         self.output_codec = codec
         # Match backend semantics: 0.0 disables; anything outside the
