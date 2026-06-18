@@ -69,12 +69,16 @@ jobs:
           # Pillow >= 12.2.0 patches CVE-2026-25990, GHSA-wjx4-4jcj-g98j,
           # GHSA-pwv6-vv43-88gr, GHSA-whj4-6x5x-4v2j.
           Install-Required "core image stack" @("numpy", "opencv-python>=4.12.0", "Pillow>=12.2.0")
-          Install-Required "RapidOCR engines" @("rapidocr", "rapidocr-onnxruntime")
+          Install-Required "RapidOCR engines" @("rapidocr>=2.0.0,<3.0.0", "rapidocr-onnxruntime>=1.4.0,<2.0.0")
           Install-Required "LaMa inpainter" @("simple-lama-inpainting")
           Install-Required "EasyOCR fallback" @("easyocr")
-          Install-Optional "PaddleOCR" @("paddleocr>=3.0.0") "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
+          Install-Optional "PaddleOCR" @("paddleocr>=3.0.0,<4.0.0") "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
           Install-Optional "ONNX Runtime DirectML" @("onnxruntime-directml>=1.18.0") "ONNX Runtime DirectML install skipped; release will rely on CUDA/CPU builds."
           Install-Required "PyInstaller" @("pyinstaller")
+
+      - name: OCR dependency version-cap check
+        run: |
+          python -m backend.dependency_caps
 
       - name: Dependency vulnerability scan (pip-audit)
         # Reports known CVEs in the installed runtime closure. Runs after
