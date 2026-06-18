@@ -46,6 +46,7 @@ from gui.config import (
     _migrate_settings, consume_settings_load_notice, load_settings, save_settings,
     PRESETS_FILE, list_presets, apply_preset,
     save_user_preset, delete_user_preset, export_preset, import_preset,
+    consume_preset_import_notice,
     status_ui,
 )
 from gui.utils import (
@@ -2873,7 +2874,14 @@ class VideoSubtitleRemoverApp:
             self.preset_combo['values'] = ["(custom)"] + [n for n, _ in list_presets()]
             self.preset_var.set(new_name)
             self._on_preset_applied()
-            self._update_status(f"Imported preset '{new_name}'", "success")
+            notice = consume_preset_import_notice()
+            if notice:
+                self._update_status(
+                    f"Imported preset '{new_name}'. {notice}",
+                    "warning",
+                )
+            else:
+                self._update_status(f"Imported preset '{new_name}'", "success")
         except Exception as exc:
             self._update_status(f"Import failed: {exc}", "error")
 

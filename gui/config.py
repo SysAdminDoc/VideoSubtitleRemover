@@ -20,6 +20,7 @@ from gui.theme import Theme
 logger = logging.getLogger(__name__)
 
 _settings_load_notice: Optional[str] = None
+_preset_import_notice: Optional[str] = None
 
 
 def _set_settings_load_notice(message: str):
@@ -32,6 +33,19 @@ def consume_settings_load_notice() -> Optional[str]:
     global _settings_load_notice
     notice = _settings_load_notice
     _settings_load_notice = None
+    return notice
+
+
+def _set_preset_import_notice(message: Optional[str]):
+    global _preset_import_notice
+    _preset_import_notice = message
+
+
+def consume_preset_import_notice() -> Optional[str]:
+    """Return and clear the last preset-import notice for GUI feedback."""
+    global _preset_import_notice
+    notice = _preset_import_notice
+    _preset_import_notice = None
     return notice
 
 # -- App identity -----------------------------------------------------------
@@ -686,6 +700,58 @@ PRESETS_FILE = LOG_DIR / "presets.json"
 
 from backend.presets import BUILTIN_PRESETS  # noqa: E402
 
+SAFE_PRESET_FIELDS = frozenset({
+    "mode",
+    "detection_threshold",
+    "detection_vertical",
+    "detection_frame_skip",
+    "mask_dilate_px",
+    "mask_feather_px",
+    "confidence_weighted_dilation",
+    "confidence_dilation_scale",
+    "lama_tile_size",
+    "lama_tile_overlap",
+    "temporal_smooth_radius",
+    "tbe_enable",
+    "tbe_min_coverage",
+    "tbe_use_median",
+    "tbe_flow_warp",
+    "tbe_scene_cut_split",
+    "tbe_scene_cut_threshold",
+    "tbe_scene_cut_use_pyscenedetect",
+    "tbe_scene_cut_use_transnetv2",
+    "detection_denoise",
+    "sam2_refine",
+    "edge_ring_px",
+    "auto_band",
+    "adaptive_batch",
+    "auto_exposure_threshold",
+    "deinterlace",
+    "deinterlace_auto",
+    "keyframe_detection",
+    "kalman_tracking",
+    "kalman_iou_threshold",
+    "kalman_max_age",
+    "phash_skip_enable",
+    "phash_skip_distance",
+    "colour_tune_enable",
+    "colour_tune_tolerance",
+    "remove_subtitles",
+    "remove_chyrons",
+    "chyron_min_hits",
+    "karaoke_grouping",
+    "karaoke_x_gap_px",
+    "karaoke_y_overlap",
+})
+
+DEFAULT_PRESET_FIELDS = [
+    "mode", "detection_threshold", "mask_dilate_px",
+    "mask_feather_px", "edge_ring_px", "tbe_flow_warp",
+    "tbe_scene_cut_split", "colour_tune_enable",
+    "colour_tune_tolerance", "kalman_tracking",
+    "phash_skip_enable", "phash_skip_distance", "auto_band",
+]
+
 
 def _load_user_presets() -> dict:
     if PRESETS_FILE.exists():
@@ -700,6 +766,36 @@ def _save_user_presets(presets: dict):
         _write_json_atomic(PRESETS_FILE, presets)
     except Exception as exc:
         logger.warning(f"Could not save user presets: {exc}")
+
+
+def _format_rejected_preset_fields(fields: List[str]) -> str:
+    if not fields:
+        return ""
+    preview = fields[:6]
+    suffix = "" if len(fields) <= 6 else f" and {len(fields) - 6} more"
+    return ", ".join(preview) + suffix
+
+
+def _filter_preset_fields(fields: dict, source: str) -> Tuple[dict, List[str]]:
+    accepted = {}
+    rejected = []
+    for raw_key, value in fields.items():
+        if not isinstance(raw_key, str):
+            rejected.append(_coerce_text(str(raw_key), "unknown", 40))
+            continue
+        key = raw_key.strip()
+        if key in SAFE_PRESET_FIELDS:
+            accepted[key] = value
+        else:
+            rejected.append(key or "empty")
+    rejected = sorted(set(rejected))
+    if rejected:
+        logger.warning(
+            "Ignored unsupported preset fields in %s: %s",
+            source,
+            ", ".join(rejected),
+        )
+    return accepted, rejected
 
 
 def list_presets() -> List[Tuple[str, str]]:
@@ -727,6 +823,7 @@ def apply_preset(config: ProcessingConfig, name: str) -> bool:
     fields = preset.get("fields", {})
     if not isinstance(fields, dict):
         return False
+    fields, _rejected = _filter_preset_fields(fields, name)
     for k, v in fields.items():
         if k == "mode":
             config.mode = _coerce_gui_mode(v)
@@ -748,17 +845,17 @@ def save_user_preset(name: str, description: str,
         return False
     if name in BUILTIN_PRESETS:
         return False
-    default_fields = [
-        "mode", "detection_threshold", "mask_dilate_px",
-        "mask_feather_px", "edge_ring_px", "tbe_flow_warp",
-        "tbe_scene_cut_split", "colour_tune_enable",
-        "colour_tune_tolerance", "kalman_tracking",
-        "phash_skip_enable", "phash_skip_distance", "auto_band",
-    ]
-    fields = fields or default_fields
+    fields = fields or DEFAULT_PRESET_FIELDS
     config = config.normalized()
     snap = {}
     for k in fields:
+        if k not in SAFE_PRESET_FIELDS:
+            logger.warning(
+                "Ignoring unsupported field '%s' while saving preset '%s'",
+                k,
+                name,
+            )
+            continue
         v = getattr(config, k, None)
         if k == "mode" and hasattr(v, "value"):
             v = v.value
@@ -785,10 +882,14 @@ def export_preset(name: str, path: str) -> bool:
     preset = BUILTIN_PRESETS.get(name) or _load_user_presets().get(name)
     if not preset:
         return False
+    fields = preset.get("fields", {})
+    if not isinstance(fields, dict):
+        return False
+    fields, _rejected = _filter_preset_fields(fields, name)
     payload = {
         "name": name,
         "description": preset.get("description", ""),
-        "fields": preset.get("fields", {}),
+        "fields": fields,
         "vsr_preset_format": 1,
     }
     try:
@@ -801,6 +902,7 @@ def export_preset(name: str, path: str) -> bool:
 
 
 def import_preset(path: str) -> Optional[str]:
+    _set_preset_import_notice(None)
     payload = _read_json_object(Path(path), "preset import")
     if payload is None:
         return None
@@ -815,6 +917,15 @@ def import_preset(path: str) -> Optional[str]:
     )
     if not name or not isinstance(fields, dict):
         return None
+    fields, rejected = _filter_preset_fields(fields, str(path))
+    if not fields:
+        logger.warning("Preset import contained no supported fields: %s", path)
+        return None
+    if rejected:
+        _set_preset_import_notice(
+            "Skipped unsupported preset fields: "
+            + _format_rejected_preset_fields(rejected)
+        )
     if name in BUILTIN_PRESETS:
         name = f"{name} (imported)"
     user = _load_user_presets()
