@@ -49,13 +49,13 @@ class AutoInpainter(BaseInpainter):
             import gc as _gc
             _gc.collect()
         except Exception:
-            pass
+            logger.warning("AUTO LaMa idle GC cleanup failed", exc_info=True)
         try:
             import torch as _torch
             if hasattr(_torch, "cuda") and _torch.cuda.is_available():
                 _torch.cuda.empty_cache()
         except Exception:
-            pass
+            logger.warning("AUTO LaMa idle CUDA cleanup failed", exc_info=True)
 
     @staticmethod
     def _exposure_score(masks: List[np.ndarray]) -> float:

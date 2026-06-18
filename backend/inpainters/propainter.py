@@ -68,6 +68,10 @@ class ProPainterInpainter(BaseInpainter):
                         blend = cv2.addWeighted(inpainted, 0.65, bgr, 0.35, 0)
                         refined.append(_feather_blend(frame, blend, mask, feather))
                     except Exception:
+                        logger.warning(
+                            "ProPainter LaMa residual refinement failed",
+                            exc_info=True,
+                        )
                         refined.append(inpainted)
                 return refined
             return results

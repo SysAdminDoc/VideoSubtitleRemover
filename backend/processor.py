@@ -335,13 +335,13 @@ class SubtitleRemover:
                         f"(free VRAM {free_gb:.1f} GB)")
                     self.config.sttn_max_load_num = target
             except Exception:
-                pass
+                logger.warning("Adaptive batch VRAM probe failed", exc_info=True)
             finally:
                 if pynvml is not None and nvml_started:
                     try:
                         pynvml.nvmlShutdown()
                     except Exception:
-                        pass
+                        logger.warning("NVML shutdown failed", exc_info=True)
 
         logger.info(f"Detector: {self.detector._engine_name} | "
                     f"Inpainter: {self.config.mode.value} | "
@@ -482,6 +482,7 @@ class SubtitleRemover:
         try:
             text = self._read_text_for_boxes(frame, boxes)
         except Exception:
+            logger.warning("SRT text collection failed", exc_info=True)
             text = ""
         if text:
             self._srt_entries.append((frame_idx, text))
@@ -508,7 +509,7 @@ class SubtitleRemover:
                         texts.extend(t for t in txt_attr if t)
                 return " ".join(texts).strip()
             except Exception:
-                pass
+                logger.warning("RapidOCR SRT extraction failed", exc_info=True)
         # PaddleOCR (line[1][0] is the recognised text)
         if self.detector._paddle_model is not None:
             try:
@@ -516,7 +517,7 @@ class SubtitleRemover:
                 if results and results[0]:
                     return " ".join(line[1][0] for line in results[0] if line and line[1]).strip()
             except Exception:
-                pass
+                logger.warning("PaddleOCR SRT extraction failed", exc_info=True)
         # EasyOCR: readtext yields (bbox, text, conf)
         if self.detector._easyocr_reader is not None:
             try:
@@ -524,7 +525,7 @@ class SubtitleRemover:
                 rows = self.detector._easyocr_reader.readtext(frame_rgb)
                 return " ".join(r[1] for r in rows if len(r) >= 2 and r[1]).strip()
             except Exception:
-                pass
+                logger.warning("EasyOCR SRT extraction failed", exc_info=True)
         return ""
 
     def _accumulate_quality_bbox(self, mask: np.ndarray) -> None:
@@ -658,7 +659,10 @@ class SubtitleRemover:
                             roi_psnrs.append(float(cv2.PSNR(a_roi, b_roi)))
                             roi_ssims.append(_ssim(a_roi, b_roi))
                         except Exception:
-                            pass
+                            logger.warning(
+                                "Quality ROI metric calculation failed",
+                                exc_info=True,
+                            )
                 if self.config.quality_report_sheet:
                     pairs.append((idx, a, b, p, s))
             if not psnrs:
@@ -700,7 +704,7 @@ class SubtitleRemover:
                         output_path, pairs, mean_psnr, mean_ssim, tag,
                     )
                 except Exception as exc:
-                    logger.warning(f"Quality sheet write failed: {exc}")
+                    logger.warning(f"Quality sheet write failed: {exc}", exc_info=True)
             # RM-102: opt-in perceptual metrics (LPIPS, DISTS) via pyiqa.
             # Zero-cost when pyiqa is not installed -- the function
             # returns {} and these keys stay None in the report.
@@ -833,7 +837,7 @@ class SubtitleRemover:
             _write_text_atomic(Path(path), "".join(payload))
             logger.info(f"SRT written: {path} ({len(cues)} cues)")
         except Exception as exc:
-            logger.warning(f"SRT write failed: {exc}")
+            logger.warning(f"SRT write failed: {exc}", exc_info=True)
 
     def _fixed_region_boxes(self) -> Optional[List[Tuple[int, int, int, int]]]:
         """Return explicit mask rects from config, preferring the multi-region
@@ -930,7 +934,10 @@ class SubtitleRemover:
                     logger.info(f"Using deinterlaced source: {processed_input}")
                     decode_path = processed_input
                 except Exception as exc:
-                    logger.warning(f"Deinterlace failed, continuing with original: {exc}")
+                    logger.warning(
+                        f"Deinterlace failed, continuing with original: {exc}",
+                        exc_info=True,
+                    )
                     decode_path = input_path
             else:
                 decode_path = input_path
@@ -954,7 +961,7 @@ class SubtitleRemover:
                     if _codec_line:
                         logger.info(f"Source codec: {_codec_line}")
                 except Exception:
-                    pass
+                    logger.warning("Source codec probe failed", exc_info=True)
 
             if (self.config.preserve_color_metadata
                     and not Path(input_path).is_dir()):
@@ -973,7 +980,10 @@ class SubtitleRemover:
                         else:
                             logger.info(f"Color signalling: {meta.label}")
                 except Exception as exc:
-                    logger.debug(f"Color-metadata probe failed: {exc}")
+                    logger.warning(
+                        f"Color-metadata probe failed: {exc}",
+                        exc_info=True,
+                    )
 
             # Optional keyframe-driven detection: get the set of I-frame
             # indices once, OCR only those, propagate masks between.
@@ -1152,7 +1162,10 @@ class SubtitleRemover:
                                     f"{len(whisper_spans)} speech spans"
                                 )
                 except Exception as exc:
-                    logger.debug(f"Whisper fallback setup failed: {exc}")
+                    logger.warning(
+                        f"Whisper fallback setup failed: {exc}",
+                        exc_info=True,
+                    )
 
             # v3.10: Kalman tracker for detection smoothing
             tracker = (SubtitleTracker(self.config.kalman_iou_threshold,
@@ -1235,8 +1248,9 @@ class SubtitleRemover:
                                 from backend.preprocess import fastdvdnet_denoise_frame
                                 det_frame = fastdvdnet_denoise_frame(frame)
                             except Exception as exc:
-                                logger.debug(
-                                    f"Detection denoise fell back: {exc}"
+                                logger.warning(
+                                    f"Detection denoise fell back: {exc}",
+                                    exc_info=True,
                                 )
                                 det_frame = frame
                         else:
@@ -1356,7 +1370,10 @@ class SubtitleRemover:
                         except Exception as exc:
                             # Never let a flaky preview hook break processing,
                             # but leave a breadcrumb so a broken UI is debuggable.
-                            logger.debug(f"on_preview_frame hook raised: {exc}")
+                            logger.warning(
+                                f"on_preview_frame hook raised: {exc}",
+                                exc_info=True,
+                            )
                 if mask_writer is not None:
                     for m in masks:
                         mask_writer.write(m)
@@ -1425,7 +1442,7 @@ class SubtitleRemover:
                         if metrics.get('sheet'):
                             logger.info(f"Quality sheet: {metrics['sheet']}")
                 except Exception as exc:
-                    logger.warning(f"Quality report failed: {exc}")
+                    logger.warning(f"Quality report failed: {exc}", exc_info=True)
 
             self._report_progress(1.0, "Complete!")
             return True
@@ -1441,12 +1458,12 @@ class SubtitleRemover:
                 try:
                     writer.release()
                 except Exception:
-                    pass
+                    logger.warning("Video writer release failed", exc_info=True)
             if mask_writer is not None:
                 try:
                     mask_writer.release()
                 except Exception:
-                    pass
+                    logger.warning("Mask writer release failed", exc_info=True)
             # If a prefetch reader was set up, release it (which also stops
             # the worker thread and releases the underlying cap). Otherwise
             # release the raw cap. Tolerate either being unset on early
@@ -1455,12 +1472,12 @@ class SubtitleRemover:
                 try:
                     reader.release()
                 except Exception:
-                    pass
+                    logger.warning("Prefetch reader release failed", exc_info=True)
             elif cap is not None:
                 try:
                     cap.release()
                 except Exception:
-                    pass
+                    logger.warning("Input capture release failed", exc_info=True)
             _cleanup_temp_output(temp_mask_path)
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
@@ -1471,7 +1488,7 @@ class SubtitleRemover:
                 if _wda and os.path.exists(_wda):
                     shutil.rmtree(_wda, ignore_errors=True)
             except Exception:
-                pass
+                logger.warning("Whisper temp cleanup failed", exc_info=True)
 
     def _write_nle_sidecar(self, input_path: str, output_path: str,
                              start_frame: int, end_frame: int,
@@ -1505,7 +1522,7 @@ class SubtitleRemover:
                 )
             logger.info(f"NLE {mode.upper()} sidecar written: {path}")
         except Exception as exc:
-            logger.warning(f"NLE sidecar write failed: {exc}")
+            logger.warning(f"NLE sidecar write failed: {exc}", exc_info=True)
 
     def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
         """RM-78 / RM-80: run optional post-restore passes against the
@@ -1527,7 +1544,7 @@ class SubtitleRemover:
                         f"Real-ESRGAN x{self.config.upscale_factor} pass complete"
                     )
             except Exception as exc:
-                logger.warning(f"Real-ESRGAN pass failed: {exc}")
+                logger.warning(f"Real-ESRGAN pass failed: {exc}", exc_info=True)
         if self.config.swinir_restore:
             try:
                 from backend.post_restore import swinir_restore
@@ -1537,7 +1554,7 @@ class SubtitleRemover:
                     _promote_temp_output(produced, output_path)
                     logger.info("SwinIR restoration pass complete")
             except Exception as exc:
-                logger.warning(f"SwinIR pass failed: {exc}")
+                logger.warning(f"SwinIR pass failed: {exc}", exc_info=True)
         if self.config.seedvr2_restore:
             try:
                 from backend.post_restore import seedvr2_restore
@@ -1547,7 +1564,7 @@ class SubtitleRemover:
                     _promote_temp_output(produced, output_path)
                     logger.info("SeedVR2 restoration pass complete")
             except Exception as exc:
-                logger.warning(f"SeedVR2 pass failed: {exc}")
+                logger.warning(f"SeedVR2 pass failed: {exc}", exc_info=True)
         if self.config.film_grain_strength > 0.0:
             try:
                 from backend.post_restore import add_film_grain
@@ -1563,7 +1580,7 @@ class SubtitleRemover:
                         f"(strength={self.config.film_grain_strength:.3f})"
                     )
             except Exception as exc:
-                logger.warning(f"Film-grain pass failed: {exc}")
+                logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
 
     def _get_encode_args(self) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
@@ -1609,6 +1626,7 @@ class SubtitleRemover:
             from backend.hdr import hdr_encode_args
             return hdr_encode_args(self._color_metadata)
         except Exception:
+            logger.warning("HDR encode argument generation failed", exc_info=True)
             return []
 
     def _salvage_intermediate(self, source: str, output: str) -> str:
@@ -1654,7 +1672,11 @@ class SubtitleRemover:
                 self._reencode_or_copy(source, output)
                 return
             self._salvage_intermediate(source, output)
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                f"FFmpeg re-encode failed; salvaging intermediate: {exc}",
+                exc_info=True,
+            )
             self._salvage_intermediate(source, output)
         finally:
             _cleanup_temp_output(temp_output)

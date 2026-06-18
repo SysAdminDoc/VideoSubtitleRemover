@@ -408,6 +408,10 @@ class LAMAInpainter(BaseInpainter):
                 try:
                     tile_out = self._inpaint_onnx_one(tile_frame, tile_mask)
                 except Exception:
+                    logger.warning(
+                        "LaMa-ONNX tile inference failed, falling back to cv2",
+                        exc_info=True,
+                    )
                     tile_out = _cv2_inpaint(tile_frame, tile_mask, 7, cv2.INPAINT_NS)
                 th, tw = tile_out.shape[:2]
                 wy = np.ones(th, dtype=np.float32)
@@ -566,7 +570,11 @@ class LAMAInpainter(BaseInpainter):
             try:
                 return self._inpaint_pytorch_batched(frames, masks)
             except Exception as exc:
-                logger.warning("Batched LaMa fell back to per-frame: %s", exc)
+                logger.warning(
+                    "Batched LaMa fell back to per-frame: %s",
+                    exc,
+                    exc_info=True,
+                )
         from PIL import Image
         tile_size = self.config.lama_tile_size
         tile_overlap = self.config.lama_tile_overlap
@@ -582,7 +590,11 @@ class LAMAInpainter(BaseInpainter):
                         frame, mask, tile_size, tile_overlap))
                     continue
                 except Exception as exc:
-                    logger.warning("Tiled LaMa fell back to full-frame: %s", exc)
+                    logger.warning(
+                        "Tiled LaMa fell back to full-frame: %s",
+                        exc,
+                        exc_info=True,
+                    )
             try:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(frame_rgb)
@@ -591,7 +603,11 @@ class LAMAInpainter(BaseInpainter):
                 result_bgr = cv2.cvtColor(np.array(result_pil), cv2.COLOR_RGB2BGR)
                 results.append(result_bgr)
             except Exception as e:
-                logger.warning("LaMa inpaint failed for frame, falling back to cv2: %s", e)
+                logger.warning(
+                    "LaMa inpaint failed for frame, falling back to cv2: %s",
+                    e,
+                    exc_info=True,
+                )
                 results.append(_cv2_inpaint(frame, mask, 7, cv2.INPAINT_NS))
         return results
 
@@ -631,6 +647,10 @@ class LAMAInpainter(BaseInpainter):
                     pil_out = self._lama(pil_tile, pil_mask)
                     tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
                 except Exception:
+                    logger.warning(
+                        "LaMa PyTorch tile inference failed, falling back to cv2",
+                        exc_info=True,
+                    )
                     tile_out = _cv2_inpaint(tile_frame, tile_mask, 7, cv2.INPAINT_NS)
                 th, tw = tile_out.shape[:2]
                 wy = np.ones(th, dtype=np.float32)
