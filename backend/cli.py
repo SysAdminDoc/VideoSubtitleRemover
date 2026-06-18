@@ -22,28 +22,50 @@ import sys
 import time
 from pathlib import Path
 
-from backend.batch_report import (
-    STATUS_CANCELLED,
-    STATUS_CHECKPOINT_DONE,
-    STATUS_FAILED,
-    STATUS_HARDCODED_PROCESSED,
-    STATUS_PENDING,
-    STATUS_REVIEW_NEEDED,
-    STATUS_SKIPPED_EXISTING,
-    STATUS_SOFT_REMUXED,
-    choose_batch_output_path,
-    finish_batch_item,
-    make_batch_item_record,
-    write_batch_reports,
-)
-from backend.io import (
-    _path_key,
-    _probe_subtitle_streams,
-    _write_text_atomic,
-)
-from backend.remux import SoftSubtitleAction, remux_soft_subtitles
-
 logger = logging.getLogger(__name__)
+_RUNTIME_HELPERS_LOADED = False
+
+
+def _load_runtime_helpers() -> None:
+    """Import processing helpers only after diagnostics-only exits run."""
+    global _RUNTIME_HELPERS_LOADED
+    global STATUS_CANCELLED, STATUS_CHECKPOINT_DONE, STATUS_FAILED
+    global STATUS_HARDCODED_PROCESSED, STATUS_PENDING
+    global STATUS_REVIEW_NEEDED, STATUS_SKIPPED_EXISTING, STATUS_SOFT_REMUXED
+    global choose_batch_output_path, finish_batch_item
+    global make_batch_item_record, write_batch_reports
+    global _path_key, _probe_subtitle_streams, _write_text_atomic
+    global SoftSubtitleAction, remux_soft_subtitles
+
+    if _RUNTIME_HELPERS_LOADED:
+        return
+
+    from backend.batch_report import (
+        STATUS_CANCELLED,
+        STATUS_CHECKPOINT_DONE,
+        STATUS_FAILED,
+        STATUS_HARDCODED_PROCESSED,
+        STATUS_PENDING,
+        STATUS_REVIEW_NEEDED,
+        STATUS_SKIPPED_EXISTING,
+        STATUS_SOFT_REMUXED,
+        choose_batch_output_path,
+        finish_batch_item,
+        make_batch_item_record,
+        write_batch_reports,
+    )
+    from backend.io import (
+        _path_key,
+        _probe_subtitle_streams,
+        _write_text_atomic,
+    )
+    from backend.remux import SoftSubtitleAction, remux_soft_subtitles
+    _RUNTIME_HELPERS_LOADED = True
+
+
+def _ensure_runtime_helpers() -> None:
+    if not _RUNTIME_HELPERS_LOADED:
+        _load_runtime_helpers()
 
 
 def _default_checkpoint_dir() -> Path:
@@ -71,6 +93,7 @@ def _checkpoint_is_done(ckpt_dir: Path, key: str, output_path: str) -> bool:
 
 
 def _checkpoint_mark_done(ckpt_dir: Path, key: str):
+    _ensure_runtime_helpers()
     marker = ckpt_dir / f"{key}.done"
     try:
         _write_text_atomic(marker, "ok")
@@ -103,6 +126,7 @@ def _apply_auto_band_override(remover, input_path: str, *, auto_band: bool,
 
 
 def _soft_subtitle_action(args):
+    _ensure_runtime_helpers()
     if args.strip_soft_subtitles:
         return SoftSubtitleAction.STRIP
     if args.keep_soft_subtitles:
@@ -122,6 +146,7 @@ def _soft_subtitle_stream_record(stream) -> dict:
 
 
 def _build_soft_subtitle_plan_record(input_path: str, action_label: str) -> dict:
+    _ensure_runtime_helpers()
     streams = _probe_subtitle_streams(input_path)
     return {
         "input": str(input_path),
@@ -178,6 +203,7 @@ def _print_soft_subtitle_plan(input_path: str, action_label: str) -> dict:
 
 def _run_soft_subtitle_only(input_path: str, output_path: str,
                             action: SoftSubtitleAction) -> bool:
+    _ensure_runtime_helpers()
     _print_soft_subtitle_plan(input_path, action.value)
     remux_soft_subtitles(input_path, output_path, action=action)
     print(f"[soft-subtitles] wrote {output_path}")
@@ -185,6 +211,7 @@ def _run_soft_subtitle_only(input_path: str, output_path: str,
 
 
 def _cancel_pending_records(records: list[dict]) -> None:
+    _ensure_runtime_helpers()
     for record in records:
         if record.get("status") == STATUS_PENDING:
             finish_batch_item(record, STATUS_CANCELLED, message="Interrupted")
@@ -193,6 +220,7 @@ def _cancel_pending_records(records: list[dict]) -> None:
 def _write_cli_batch_reports(out_dir: Path, records: list[dict], *,
                              kind: str,
                              started_at: datetime.datetime) -> None:
+    _ensure_runtime_helpers()
     if not records:
         return
     json_path, md_path = write_batch_reports(
@@ -209,8 +237,22 @@ def _write_cli_batch_reports(out_dir: Path, records: list[dict], *,
 def main():
     """CLI entry point."""
     import argparse
+    early_parser = argparse.ArgumentParser(add_help=False)
+    early_parser.add_argument("--support-bundle", metavar="PATH")
+    early_args, _remaining = early_parser.parse_known_args()
+    if early_args.support_bundle:
+        from backend.support_bundle import create_support_bundle
+        bundle = create_support_bundle(
+            early_args.support_bundle,
+            app_version=os.environ.get("VSR_APP_VERSION", ""),
+            extra_facts={"surface": "cli"},
+        )
+        print(f"[support] wrote {bundle}")
+        sys.exit(0)
+
     # Import here so the heavy backend (SubtitleRemover + cv2 + numpy)
     # loads only when the CLI actually runs.
+    _load_runtime_helpers()
     from backend.processor import (
         ProcessingConfig, SubtitleRemover,
         attach_json_log, normalize_processing_config, _coerce_backend_mode,
@@ -407,6 +449,8 @@ def main():
                        help="Print cache directory inventory with sizes and exit.")
     parser.add_argument("--cache-clean", action="store_true",
                        help="Remove stale cache entries (checkpoints, proxies, TRT engines) and exit.")
+    parser.add_argument("--support-bundle", metavar="PATH",
+                       help="Write a redacted diagnostics zip and exit.")
     parser.add_argument("--validate-config", action="store_true",
                        help="Print the resolved ProcessingConfig as JSON and exit.")
     parser.add_argument("--json-log", metavar="PATH",
@@ -987,3 +1031,7 @@ def main():
         sys.exit(130)
     print(f"[file] {'completed' if success else 'failed'}")
     sys.exit(0 if success else 1)
+
+
+if __name__ == "__main__":
+    main()
