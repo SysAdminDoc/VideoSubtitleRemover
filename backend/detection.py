@@ -132,7 +132,7 @@ class SubtitleDetector:
         except Exception as e:
             logger.warning(f"RapidOCR init failed: {e}")
 
-        # PaddleOCR PP-OCRv5 (2.x/3.x handled by paddle_compat)
+        # PaddleOCR PP-OCRv6/3.x (2.x compatibility handled by paddle_compat)
         try:
             from backend.paddle_compat import build_paddleocr
             self._paddle_model = build_paddleocr(self.lang, self.device)
