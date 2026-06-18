@@ -2745,6 +2745,47 @@ class VideoSubtitleRemoverApp:
         except Exception:
             self._update_status("The settings folder could not be opened", "warning")
 
+    def _save_support_bundle(self):
+        """Save a redacted diagnostics zip for bug reports."""
+        try:
+            initial = (
+                "vsr-support-"
+                + datetime.now().strftime("%Y%m%d-%H%M%S")
+                + ".zip"
+            )
+            path = filedialog.asksaveasfilename(
+                parent=self.root,
+                title="Save support bundle",
+                defaultextension=".zip",
+                filetypes=[("Support bundle", "*.zip"), ("All files", "*.*")],
+                initialfile=initial,
+            )
+            if not path:
+                return
+            from backend.support_bundle import create_support_bundle
+            bundle = create_support_bundle(
+                path,
+                settings_path=SETTINGS_FILE,
+                log_path=LOG_FILE,
+                batch_report_paths=getattr(self, "_last_batch_report_paths", []),
+                app_version=APP_VERSION,
+                extra_facts={
+                    "ffmpeg_ready": self.ffmpeg_ready,
+                    "detection_engines": self.ai_engines.get("detection", []),
+                    "inpainting_engines": self.ai_engines.get("inpainting", []),
+                    "gpu_count": len(self.gpus),
+                    "gpus": self.gpus,
+                    "queue_count": len(self.queue),
+                },
+            )
+            self._update_status(
+                f"Saved redacted support bundle to {Path(bundle).name}",
+                "success",
+            )
+        except Exception as exc:
+            logger.warning("Support bundle save failed: %s", exc, exc_info=True)
+            self._update_status("Support bundle could not be saved", "error")
+
     def _build_footer(self, parent):
         """Footer status bar with a colored dot + message and a right-side hint."""
         footer = tk.Frame(parent, bg=Theme.BG_DARK)
@@ -3481,6 +3522,9 @@ class VideoSubtitleRemoverApp:
 
         ModernButton(actions_inner, text="Open log", width=110,
                      command=self._open_log_file, style="ghost", size="md").pack(side="left")
+        ModernButton(actions_inner, text="Support bundle", width=142,
+                     command=self._save_support_bundle, style="ghost",
+                     size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text="Settings folder", width=140,
                      command=self._open_settings_folder, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))

@@ -255,6 +255,7 @@ review-needed outputs. A failed gate changes the batch row status to
 | `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes | Off |
 | `--cache-info` | Print cache directory inventory with sizes and exit | Off |
 | `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) | Off |
+| `--support-bundle PATH` | Write a redacted diagnostics zip and exit | - |
 | `--validate-config` | Print resolved config and exit | Off |
 | `--skip-existing` | Skip files whose output already exists | Off |
 | `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
@@ -386,6 +387,10 @@ to a bug report.
 
 - GUI log panel (collapsible, click "Open Log File" for full log)
 - File log: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log` (5MB rotating)
+- About -> Support bundle saves a redacted `.zip` with runtime facts,
+  dependency versions, settings summary, recent log lines, and batch report
+  evidence. CLI equivalent:
+  `python -m backend.cli --support-bundle support.zip`
 
 ## Project Structure
 

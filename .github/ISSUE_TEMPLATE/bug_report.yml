@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a reproducible failure or broken workflow.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Please attach a redacted support bundle when possible. In the GUI, open
+        About and choose Support bundle. From a terminal, run
+        `python -m backend.cli --support-bundle support.zip`.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the failure and what you expected instead.
+      placeholder: The batch failed after...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest workflow that reproduces the issue.
+      placeholder: |
+        1. Open...
+        2. Select...
+        3. Start...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: App version or commit SHA.
+      placeholder: 3.17.1
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - GUI
+        - CLI
+        - Installer or setup
+        - Release package
+    validations:
+      required: true
+  - type: textarea
+    id: support-bundle
+    attributes:
+      label: Support bundle
+      description: Attach the generated zip or explain why you cannot.
+      placeholder: Attached support.zip, or the bundle could not be created because...
+    validations:
+      required: false
+  - type: textarea
+    id: media-summary
+    attributes:
+      label: Media summary
+      description: Do not upload private media unless you are comfortable sharing it.
+      placeholder: MP4, H.264, 1080p30, burned-in English subtitles near bottom.
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Paste short log excerpts only if you cannot attach a support bundle.
+    validations:
+      required: false
