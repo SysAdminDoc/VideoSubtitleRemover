@@ -72,6 +72,23 @@ class GuiReviewWorklistTests(unittest.TestCase):
 
         self.assertIs(app._queue_item_for_report_record(record), item)
 
+    def test_open_batch_report_prefers_markdown_without_shell(self):
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            json_report = root / "report&unsafe.json"
+            md_report = root / "report&unsafe.md"
+            json_report.write_text("{}", encoding="utf-8")
+            md_report.write_text("# report\n", encoding="utf-8")
+
+            with mock.patch("gui.app.os.startfile", create=True) as startfile:
+                with mock.patch("gui.app.subprocess.Popen") as popen:
+                    opened = app._open_batch_report_path([json_report, md_report])
+
+            self.assertTrue(opened)
+            startfile.assert_called_once_with(str(md_report))
+            popen.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
