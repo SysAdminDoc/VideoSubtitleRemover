@@ -64,6 +64,8 @@ from backend.io import (
     _PrefetchReader,
     _LosslessIntermediateWriter,
     _FrameSequenceWriter,
+    _run_subprocess_checked,
+    _terminate_subprocess,
 )
 from backend.encoder import _detect_hw_encoder
 from backend.quality import (
@@ -297,6 +299,9 @@ class SubtitleRemover:
         # process_video once we know the input path. Used by _get_encode_args
         # to preserve HDR / BT.2020 tagging on the output.
         self._color_metadata = None
+        self._active_writer = None
+        self._active_subprocess: Optional[subprocess.Popen] = None
+        self._teardown_requested = False
 
         if self.config.use_hw_encode:
             self._hw_encoder = _detect_hw_encoder(self.config.output_codec)
@@ -347,6 +352,35 @@ class SubtitleRemover:
                     f"Inpainter: {self.config.mode.value} | "
                     f"Device: {self.config.device}"
                     f"{' | HW encode: ' + self._hw_encoder if self._hw_encoder else ''}")
+
+    def _set_active_subprocess(self, proc: Optional[subprocess.Popen]) -> None:
+        self._active_subprocess = proc
+
+    def _is_teardown_requested(self) -> bool:
+        return bool(self._teardown_requested)
+
+    def _run_checked_ffmpeg(self, cmd: List[str], timeout: float) -> None:
+        _run_subprocess_checked(
+            cmd,
+            timeout=timeout,
+            on_process=self._set_active_subprocess,
+            cancel_check=self._is_teardown_requested,
+        )
+
+    def terminate_active_work(self, timeout: float = 2.0) -> None:
+        """Terminate the currently active writer or ffmpeg process."""
+        self._teardown_requested = True
+        writer = self._active_writer
+        if writer is not None and hasattr(writer, "terminate"):
+            try:
+                writer.terminate(timeout=timeout)
+            except Exception:
+                logger.warning("Active writer termination failed", exc_info=True)
+        proc = self._active_subprocess
+        if proc is not None:
+            _terminate_subprocess(proc, timeout=timeout)
+            if self._active_subprocess is proc:
+                self._active_subprocess = None
 
     # -----------------------------------------------------------------
     # Auto subtitle-band detection
@@ -849,6 +883,7 @@ class SubtitleRemover:
         return None
 
     def process_image(self, input_path: str, output_path: str) -> bool:
+        self._teardown_requested = False
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
@@ -908,6 +943,7 @@ class SubtitleRemover:
             return False
 
     def process_video(self, input_path: str, output_path: str) -> bool:
+        self._teardown_requested = False
         temp_dir = None
         cap = None
         reader = None
@@ -930,7 +966,12 @@ class SubtitleRemover:
                 self._report_progress(0.02, "Deinterlacing source...")
                 temp_dir = tempfile.mkdtemp(prefix="vsr_")
                 try:
-                    processed_input = _deinterlace_to_temp(input_path, temp_dir)
+                    processed_input = _deinterlace_to_temp(
+                        input_path,
+                        temp_dir,
+                        on_process=self._set_active_subprocess,
+                        cancel_check=self._is_teardown_requested,
+                    )
                     logger.info(f"Using deinterlaced source: {processed_input}")
                     decode_path = processed_input
                 except Exception as exc:
@@ -1082,6 +1123,7 @@ class SubtitleRemover:
                 writer = _LosslessIntermediateWriter(
                     temp_video_target, width, height, fps
                 )
+                self._active_writer = writer
                 temp_video = writer.path
                 if not writer.isOpened():
                     raise ValueError(
@@ -1459,6 +1501,9 @@ class SubtitleRemover:
                     writer.release()
                 except Exception:
                     logger.warning("Video writer release failed", exc_info=True)
+                finally:
+                    if self._active_writer is writer:
+                        self._active_writer = None
             if mask_writer is not None:
                 try:
                     mask_writer.release()
@@ -1663,7 +1708,7 @@ class SubtitleRemover:
             cmd += self._get_encode_args()
             cmd += ['-an', str(temp_output)]
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(source))
-            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+            self._run_checked_ffmpeg(cmd, timeout)
             _promote_temp_output(temp_output, output)
         except subprocess.CalledProcessError as e:
             if self._hw_encoder:
@@ -1752,7 +1797,7 @@ class SubtitleRemover:
             # input so multi-hour videos do not silently lose audio when the
             # mux pass takes longer than the legacy 10-minute fixed budget.
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(original))
-            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+            self._run_checked_ffmpeg(cmd, timeout)
             _promote_temp_output(temp_output, output)
             encoder_name = self._hw_encoder or 'libx264'
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")

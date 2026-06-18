@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 import shutil
 import subprocess
-from typing import Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional
 
 from backend.io import (
     _allocate_temp_output_path,
@@ -20,6 +20,7 @@ from backend.io import (
     _path_key,
     _probe_duration_seconds,
     _promote_temp_output,
+    _run_subprocess_checked,
 )
 
 
@@ -67,6 +68,8 @@ def remux_soft_subtitles(
     *,
     action: SoftSubtitleAction | str = SoftSubtitleAction.STRIP,
     keep_stream_indices: Optional[Iterable[int]] = None,
+    on_process: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> None:
     """Run a soft-subtitle remux through a sibling temp output path."""
     if _path_key(input_path) == _path_key(output_path):
@@ -82,7 +85,12 @@ def remux_soft_subtitles(
             keep_stream_indices=keep_stream_indices,
         )
         timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(input_path))
-        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+        _run_subprocess_checked(
+            cmd,
+            timeout=timeout,
+            on_process=on_process,
+            cancel_check=cancel_check,
+        )
         _promote_temp_output(temp_output, Path(output_path))
     finally:
         _cleanup_temp_output(temp_output)

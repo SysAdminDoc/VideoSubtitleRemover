@@ -31,12 +31,84 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def _terminate_subprocess(proc: subprocess.Popen, timeout: float = 2.0) -> None:
+    """Terminate a subprocess, escalating to kill when it ignores shutdown."""
+    try:
+        poll = getattr(proc, "poll", None)
+        if callable(poll) and poll() is not None:
+            return
+    except Exception:
+        pass
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=timeout)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _run_subprocess_checked(
+    cmd: List[str],
+    *,
+    timeout: float,
+    on_process: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
+) -> None:
+    """Run a command like subprocess.run(..., check=True, capture_output=True).
+
+    The Popen handle is exposed while active so GUI shutdown can terminate
+    long ffmpeg jobs instead of waiting for the timeout budget.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if on_process is not None:
+        on_process(proc)
+    try:
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            _terminate_subprocess(proc, timeout=10.0)
+            raise subprocess.TimeoutExpired(
+                cmd=cmd,
+                timeout=timeout,
+                output=getattr(exc, "output", None),
+                stderr=getattr(exc, "stderr", None),
+            )
+        if cancel_check is not None and cancel_check():
+            raise InterruptedError("subprocess cancelled")
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(
+                proc.returncode,
+                cmd,
+                output=stdout,
+                stderr=stderr,
+            )
+    finally:
+        if on_process is not None:
+            on_process(None)
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +299,13 @@ def _probe_is_interlaced(video_path: str) -> bool:
     return False
 
 
-def _deinterlace_to_temp(src: str, temp_dir: str) -> str:
+def _deinterlace_to_temp(
+    src: str,
+    temp_dir: str,
+    *,
+    on_process: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
+) -> str:
     """v3.12: run `ffmpeg -vf yadif` and return the temp progressive path."""
     dst = os.path.join(temp_dir, "deinterlaced.mp4")
     cmd = [
@@ -238,7 +316,12 @@ def _deinterlace_to_temp(src: str, temp_dir: str) -> str:
         '-c:a', 'copy', dst,
     ]
     timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(src))
-    subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+    _run_subprocess_checked(
+        cmd,
+        timeout=timeout,
+        on_process=on_process,
+        cancel_check=cancel_check,
+    )
     return dst
 
 
@@ -666,6 +749,28 @@ class _LosslessIntermediateWriter:
                     self._proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     pass
+            if self._proc.stderr is not None:
+                try:
+                    self._proc.stderr.close()
+                except Exception:
+                    pass
+            self._proc = None
+        if self._fallback is not None:
+            try:
+                self._fallback.release()
+            except Exception:
+                pass
+            self._fallback = None
+
+    def terminate(self, timeout: float = 2.0) -> None:
+        """Abort the active ffmpeg writer process during app shutdown."""
+        if self._proc is not None:
+            try:
+                if self._proc.stdin is not None:
+                    self._proc.stdin.close()
+            except Exception:
+                pass
+            _terminate_subprocess(self._proc, timeout=timeout)
             if self._proc.stderr is not None:
                 try:
                     self._proc.stderr.close()

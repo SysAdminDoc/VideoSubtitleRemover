@@ -146,6 +146,8 @@ class VideoSubtitleRemoverApp:
         self._preview_detector_lang = None  # lang the cached detector was created with
         self._cached_remover = None  # cached BackendRemover for batch reuse
         self._cached_remover_key = None  # (mode, device, lang) key for cache invalidation
+        self._active_remover = None
+        self._active_subprocess: Optional[subprocess.Popen] = None
         self._selected_queue_item_id: Optional[str] = None
         self._brand_photo = None
         self._status_tone = "neutral"
@@ -237,6 +239,8 @@ class VideoSubtitleRemoverApp:
                 self.cancel_event.set()
                 self._stop_elapsed_timer()
                 self._stop_requested = True
+                self._terminate_active_backend_work()
+                self._join_processing_thread(0.1)
                 self._update_status(
                     "Closing after the current step stops safely...",
                     "warning",
@@ -261,7 +265,11 @@ class VideoSubtitleRemoverApp:
 
     def _finish_close_when_safe(self, deadline: float):
         """Wait briefly for active work to notice cancellation before exit."""
+        if self._has_active_processing_thread():
+            self._terminate_active_backend_work()
+            self._join_processing_thread(0.05)
         if not self._has_active_processing_thread() or time.monotonic() >= deadline:
+            self._join_processing_thread(0.2)
             try:
                 self.root.destroy()
             except Exception:
@@ -5042,6 +5050,7 @@ class VideoSubtitleRemoverApp:
             return
         self._stop_requested = True
         self.cancel_event.set()
+        self._terminate_active_backend_work()
         # Invalidate the cached remover so the next batch re-initialises with
         # fresh state. A cancelled run may have left detector / inpainter /
         # SRT buffers in an intermediate state.
@@ -5061,6 +5070,64 @@ class VideoSubtitleRemoverApp:
 
     def _has_active_processing_thread(self) -> bool:
         return self._processing_thread is not None and self._processing_thread.is_alive()
+
+    def _join_processing_thread(self, timeout: float) -> None:
+        thread = self._processing_thread
+        if thread is None or thread is threading.current_thread():
+            return
+        if not thread.is_alive():
+            return
+        try:
+            thread.join(timeout=timeout)
+        except RuntimeError:
+            pass
+
+    def _set_active_subprocess(self, proc: Optional[subprocess.Popen]) -> None:
+        self._active_subprocess = proc
+
+    @staticmethod
+    def _terminate_subprocess_handle(proc: subprocess.Popen, timeout: float) -> None:
+        try:
+            poll = getattr(proc, "poll", None)
+            if callable(poll) and poll() is not None:
+                return
+        except Exception:
+            pass
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=timeout)
+            return
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            try:
+                proc.wait(timeout=timeout)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    def _terminate_active_backend_work(self) -> None:
+        remover = self._active_remover or self._cached_remover
+        if remover is not None and hasattr(remover, "terminate_active_work"):
+            try:
+                remover.terminate_active_work(timeout=2.0)
+            except Exception:
+                logger.warning("Active backend termination failed", exc_info=True)
+        proc = self._active_subprocess
+        if proc is not None:
+            try:
+                self._terminate_subprocess_handle(proc, timeout=2.0)
+            except Exception:
+                logger.warning("Active remux process termination failed", exc_info=True)
+            finally:
+                if self._active_subprocess is proc:
+                    self._active_subprocess = None
 
     def _start_elapsed_timer(self):
         """Start a timer that updates elapsed times on in-progress queue items."""
@@ -5352,7 +5419,13 @@ class VideoSubtitleRemoverApp:
         self._update_item_display(item)
 
         Path(item.output_path).parent.mkdir(parents=True, exist_ok=True)
-        remux_soft_subtitles(item.file_path, item.output_path, action=action)
+        remux_soft_subtitles(
+            item.file_path,
+            item.output_path,
+            action=action,
+            on_process=self._set_active_subprocess,
+            cancel_check=self.cancel_event.is_set,
+        )
 
         item.status = ProcessingStatus.COMPLETE
         item.progress = 1.0
@@ -5511,6 +5584,7 @@ class VideoSubtitleRemoverApp:
                 remover = BackendRemover(backend_config)
                 self._cached_remover = remover
                 self._cached_remover_key = cache_key
+            self._active_remover = remover
             if hasattr(remover, "last_quality_report"):
                 remover.last_quality_report = None
 
@@ -5629,6 +5703,9 @@ class VideoSubtitleRemoverApp:
             item.completed_at = datetime.now()
             self._update_item_display(item)
             logger.error(f"Processing error for {item.file_path}: {e}", exc_info=True)
+        finally:
+            if self._active_remover is locals().get("remover"):
+                self._active_remover = None
 
     def _ensure_taskbar(self):
         """Lazily create the Windows taskbar progress client once the window

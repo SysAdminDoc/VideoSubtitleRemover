@@ -70,6 +70,43 @@ class LosslessIntermediateWriterTests(unittest.TestCase):
             self.assertTrue(process.stderr.closed)
             self.assertIsNone(writer._proc)
 
+    def test_terminate_aborts_active_ffmpeg_writer(self):
+        with _fresh_io_module() as io:
+            class FakeProcess:
+                def __init__(self):
+                    self.stdin = _FakeStream()
+                    self.stderr = _FakeStream()
+                    self.terminated = False
+                    self.killed = False
+                    self.wait_timeouts = []
+
+                def poll(self):
+                    return None
+
+                def terminate(self):
+                    self.terminated = True
+
+                def wait(self, timeout):
+                    self.wait_timeouts.append(timeout)
+                    return 0
+
+                def kill(self):
+                    self.killed = True
+
+            process = FakeProcess()
+            writer = object.__new__(io._LosslessIntermediateWriter)
+            writer._proc = process
+            writer._fallback = None
+
+            writer.terminate(timeout=0.25)
+
+            self.assertTrue(process.stdin.closed)
+            self.assertTrue(process.terminated)
+            self.assertFalse(process.killed)
+            self.assertEqual(process.wait_timeouts, [0.25])
+            self.assertTrue(process.stderr.closed)
+            self.assertIsNone(writer._proc)
+
 
 if __name__ == "__main__":
     unittest.main()
