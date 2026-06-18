@@ -158,7 +158,10 @@ def clean_cache(
     targets = subdirs or _CLEANABLE_SUBDIRS
     freed: Dict[str, int] = {}
 
-    for name in sorted(targets):
+    for name in sorted(str(target) for target in targets):
+        if name not in _CLEANABLE_SUBDIRS:
+            logger.warning("Skipping unsupported cache-clean target: %s", name)
+            continue
         path = root / name
         if not path.is_dir():
             continue
