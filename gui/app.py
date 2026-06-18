@@ -3432,18 +3432,7 @@ class VideoSubtitleRemoverApp:
         report_paths = getattr(self, "_last_batch_report_paths", [])
         if report_paths:
             def _open_report_and_close():
-                import subprocess as _sp
-                for rp in report_paths:
-                    if str(rp).endswith(".md") and Path(rp).exists():
-                        _sp.Popen(["cmd", "/c", "start", "", str(rp)],
-                                  creationflags=0x08000000)
-                        break
-                else:
-                    for rp in report_paths:
-                        if Path(rp).exists():
-                            _sp.Popen(["cmd", "/c", "start", "", str(rp)],
-                                      creationflags=0x08000000)
-                            break
+                self._open_batch_report_path(report_paths)
                 _close()
             ModernButton(actions_inner, text="Open report", width=116,
                          command=_open_report_and_close,
@@ -5379,18 +5368,39 @@ class VideoSubtitleRemoverApp:
                     return
                 except Exception:
                     logger.warning("Could not open quality review artifact", exc_info=True)
-        for report_path in getattr(self, "_last_batch_report_paths", []) or []:
-            if str(report_path).endswith(".md") and Path(report_path).exists():
-                try:
-                    os.startfile(str(report_path))
-                    self._update_status("Opened batch report for review", "warning")
-                    return
-                except Exception:
-                    logger.warning("Could not open batch report", exc_info=True)
+        if self._open_batch_report_path(getattr(self, "_last_batch_report_paths", [])):
+            self._update_status("Opened batch report for review", "warning")
+            return
         self._update_status(
             f"Focused {record.get('output_name', 'the first review item')}",
             "warning",
         )
+
+    @staticmethod
+    def _preferred_batch_report_path(report_paths) -> Optional[Path]:
+        existing: List[Path] = []
+        for report_path in report_paths or []:
+            try:
+                path = Path(report_path)
+            except (TypeError, ValueError):
+                continue
+            if path.exists():
+                existing.append(path)
+        for path in existing:
+            if path.suffix.lower() == ".md":
+                return path
+        return existing[0] if existing else None
+
+    def _open_batch_report_path(self, report_paths) -> bool:
+        path = self._preferred_batch_report_path(report_paths)
+        if path is None:
+            return False
+        try:
+            os.startfile(str(path))
+            return True
+        except Exception:
+            logger.warning("Could not open batch report", exc_info=True)
+            return False
 
     def _write_batch_preflight_plan(self) -> List[Path]:
         """Write a preflight plan JSON before processing starts, so
