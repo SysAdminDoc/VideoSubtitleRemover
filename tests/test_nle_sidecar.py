@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from xml.etree import ElementTree
 
 from backend import nle_sidecar
 
@@ -34,6 +35,42 @@ class NleSidecarEncodingTests(unittest.TestCase):
         self.assertIn(source_name, edl_text)
         self.assertIn(cleaned_name, edl_text)
         self.assertIn(source_name[:-4], fcpxml_text)
+
+    def test_fcpxml_escapes_attribute_filenames(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fcpxml_path = Path(tmpdir) / "out.fcpxml"
+            written = nle_sidecar.write_fcpxml(
+                str(fcpxml_path),
+                source="/clips/rough cut & review's clip.mp4",
+                cleaned=str(Path(tmpdir) / "clean & final.mp4"),
+                fps=24.0,
+                start_s=0.0,
+                end_s=1.0,
+            )
+
+            root = ElementTree.parse(written).getroot()
+
+        asset = root.find("./resources/asset")
+        self.assertIsNotNone(asset)
+        self.assertEqual(asset.attrib["name"], "rough cut & review's clip")
+        self.assertIn("clean & final.mp4", asset.attrib["src"])
+
+    def test_edl_clip_comments_are_single_line(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            edl_path = Path(tmpdir) / "out.edl"
+            written = nle_sidecar.write_edl(
+                str(edl_path),
+                source="/clips/source\nname.mp4",
+                cleaned=str(Path(tmpdir) / "cleaned.mp4"),
+                fps=24.0,
+                start_s=0.0,
+                end_s=1.0,
+            )
+
+            lines = Path(written).read_text(encoding="utf-8").splitlines()
+
+        from_lines = [line for line in lines if line.startswith("* FROM CLIP NAME:")]
+        self.assertEqual(from_lines, ["* FROM CLIP NAME: source name.mp4"])
 
 
 if __name__ == "__main__":

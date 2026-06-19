@@ -22,6 +22,16 @@ from __future__ import annotations
 import datetime as _dt
 from pathlib import Path
 from typing import Optional
+from xml.sax.saxutils import quoteattr
+
+
+def _edl_comment_text(value: str) -> str:
+    """Keep EDL comment metadata on one line."""
+    return " ".join(str(value).replace("\r", "\n").splitlines()).strip()
+
+
+def _xml_attr(value: str) -> str:
+    return quoteattr(str(value))
 
 
 def _ts_to_smpte(seconds: float, fps: float) -> str:
@@ -57,8 +67,8 @@ def write_edl(path: str, source: str, cleaned: str,
         f"001  AX       V     C        "
         f"{src_in} {src_out} {src_in} {src_out}"
     )
-    payload.append(f"* FROM CLIP NAME: {Path(source).name}")
-    payload.append(f"* TO CLIP NAME:   {Path(cleaned).name}")
+    payload.append(f"* FROM CLIP NAME: {_edl_comment_text(Path(source).name)}")
+    payload.append(f"* TO CLIP NAME:   {_edl_comment_text(Path(cleaned).name)}")
     payload.append(f"* CLEANED BY:     Video Subtitle Remover Pro")
     payload.append("")
     text = "\n".join(payload) + "\n"
@@ -82,6 +92,8 @@ def write_fcpxml(path: str, source: str, cleaned: str,
     duration_frames = max(1, int(round((end_s - start_s) * rate)))
     start_frames = max(0, int(round(start_s * rate)))
     now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    event_name = f"VSR Cleanup {now} UTC"
+    project_name = f"{src_name} -- cleaned"
     payload = (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<!DOCTYPE fcpxml>\n"
@@ -89,16 +101,17 @@ def write_fcpxml(path: str, source: str, cleaned: str,
         "  <resources>\n"
         f"    <format id=\"r0\" frameDuration=\"1/{rate}s\" "
         f"width=\"1920\" height=\"1080\"/>\n"
-        f"    <asset id=\"r1\" name=\"{src_name}\" "
+        f"    <asset id=\"r1\" name={_xml_attr(src_name)} "
         f"start=\"0s\" duration=\"{duration_frames}/{rate}s\" "
-        f"hasVideo=\"1\" hasAudio=\"1\" format=\"r0\" src=\"{cleaned_uri}\"/>\n"
+        f"hasVideo=\"1\" hasAudio=\"1\" format=\"r0\" "
+        f"src={_xml_attr(cleaned_uri)}/>\n"
         "  </resources>\n"
         "  <library>\n"
-        f"    <event name=\"VSR Cleanup {now} UTC\">\n"
-        f"      <project name=\"{src_name} -- cleaned\">\n"
+        f"    <event name={_xml_attr(event_name)}>\n"
+        f"      <project name={_xml_attr(project_name)}>\n"
         f"        <sequence format=\"r0\">\n"
         f"          <spine>\n"
-        f"            <asset-clip name=\"{src_name}\" "
+        f"            <asset-clip name={_xml_attr(src_name)} "
         f"ref=\"r1\" offset=\"{start_frames}/{rate}s\" "
         f"start=\"0s\" duration=\"{duration_frames}/{rate}s\"/>\n"
         "          </spine>\n"
