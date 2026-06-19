@@ -900,6 +900,10 @@ class VideoSubtitleRemoverApp:
         if hasattr(self, "drop_area"):
             self.drop_area._open_file_dialog()
 
+    def _open_folder_picker(self):
+        if hasattr(self, "drop_area"):
+            self.drop_area._open_folder_dialog()
+
     def _focus_queue_filter(self, event=None):
         if len(self.queue) < 6 or not hasattr(self, "_queue_filter_entry"):
             return "break"
@@ -2511,7 +2515,7 @@ class VideoSubtitleRemoverApp:
         self._refresh_action_states()
 
     def _build_queue_empty_state(self):
-        """Queue empty state with short, clear guidance."""
+        """Queue empty state with short, clear guidance and direct actions."""
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
         self.empty_container.pack(pady=(Theme.S_3XL, Theme.S_LG), fill="x")
 
@@ -2528,10 +2532,33 @@ class VideoSubtitleRemoverApp:
                  font=f(Theme.F_TITLE, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(pady=(Theme.S_MD, 4))
         tk.Label(self.empty_container,
-                 text="Add media from Import media to begin.",
+                 text="Add videos or images to build a cleanup batch. Originals stay untouched.",
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  wraplength=340, justify="center").pack()
+
+        actions = tk.Frame(self.empty_container, bg=Theme.BG_SECONDARY)
+        actions.pack(pady=(Theme.S_MD, 0))
+        choose_files = ModernButton(
+            actions,
+            text="Choose files",
+            width=116,
+            command=self._open_file_picker,
+            style="accent",
+            size="sm",
+        )
+        choose_files.pack(side="left")
+        Tooltip(choose_files, "Choose one or more videos or images to add to the queue.")
+        choose_folder = ModernButton(
+            actions,
+            text="Choose folder",
+            width=122,
+            command=self._open_folder_picker,
+            style="ghost",
+            size="sm",
+        )
+        choose_folder.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(choose_folder, "Add every supported media file from a folder.")
 
     def _ensure_filter_empty_state(self):
         """Create the queue filter empty state on demand."""
