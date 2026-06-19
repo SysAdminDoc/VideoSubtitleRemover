@@ -6053,7 +6053,13 @@ class VideoSubtitleRemoverApp:
                     self._scroll_queue_to_item(item.id)
             fname = Path(item.file_path).name
             if item.status == ProcessingStatus.COMPLETE:
-                self._update_status(f"Completed {fname}", "success")
+                if self._queue_item_needs_quality_review(item):
+                    self._update_status(
+                        f"{fname} completed; quality review recommended",
+                        "warning",
+                    )
+                else:
+                    self._update_status(f"Completed {fname}", "success")
             elif item.status == ProcessingStatus.ERROR:
                 self._update_status(f"{fname} needs attention: {item.message}", "error")
             elif item.status == ProcessingStatus.CANCELLED:

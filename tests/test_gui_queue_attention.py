@@ -16,6 +16,22 @@ def _item(status, quality_report=None):
 
 
 class GuiQueueAttentionTests(unittest.TestCase):
+    def _app_stub(self):
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        app.queue_widgets = {}
+        app._status_messages = []
+        app._update_status = lambda message, tone="info", **_kw: app._status_messages.append(
+            (message, tone)
+        )
+        app._refresh_action_states = lambda: None
+
+        class _Root:
+            def after(self, _delay, callback, *args):
+                callback(*args)
+
+        app.root = _Root()
+        return app
+
     def test_attention_count_includes_failed_stopped_and_review_outputs(self):
         queue = [
             _item(ProcessingStatus.ERROR),
@@ -41,6 +57,31 @@ class GuiQueueAttentionTests(unittest.TestCase):
         ]
 
         self.assertEqual(VideoSubtitleRemoverApp._queue_attention_count(queue), 0)
+
+    def test_complete_review_item_announces_warning_not_success(self):
+        app = self._app_stub()
+        item = _item(
+            ProcessingStatus.COMPLETE,
+            {"quality_gate": {"status": "review"}},
+        )
+
+        app._update_item_display(item)
+
+        self.assertEqual(
+            app._status_messages,
+            [("input.mp4 completed; quality review recommended", "warning")],
+        )
+
+    def test_complete_passed_item_announces_success(self):
+        app = self._app_stub()
+        item = _item(
+            ProcessingStatus.COMPLETE,
+            {"quality_gate": {"status": "passed"}},
+        )
+
+        app._update_item_display(item)
+
+        self.assertEqual(app._status_messages, [("Completed input.mp4", "success")])
 
 
 if __name__ == "__main__":
