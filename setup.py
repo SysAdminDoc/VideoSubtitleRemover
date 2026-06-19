@@ -11,6 +11,7 @@ import sys
 import subprocess
 import platform
 import shutil
+import stat
 from pathlib import Path
 
 # Enable ANSI escape codes on Windows 10+
@@ -67,6 +68,37 @@ def _run_setup_command(args, timeout_seconds, action):
 def _run_pip_install(args, action):
     """Run a pip install command with the standard installer timeout."""
     return _run_setup_command(args, PIP_INSTALL_TIMEOUT_SECONDS, action)
+
+
+def _is_reparse_point(path):
+    """Return True for Windows junctions/symlinks without following targets."""
+    try:
+        attrs = getattr(os.lstat(path), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+
+
+def _is_repo_local_venv(path):
+    """Only allow setup.py to remove the literal repo-local venv directory."""
+    expected = os.path.normcase(os.path.abspath("venv"))
+    actual = os.path.normcase(os.path.abspath(path))
+    if actual != expected:
+        return False
+    return not (path.is_symlink() or _is_reparse_point(path))
+
+
+def _remove_existing_venv(path):
+    """Delete an existing venv only after path-boundary checks pass."""
+    if not _is_repo_local_venv(path):
+        print(
+            f"{Colors.RED}  ERROR: Refusing to remove unsafe virtual "
+            f"environment path: {path}{Colors.END}"
+        )
+        print("  Delete or rename the path manually, then rerun setup.py.")
+        return False
+    shutil.rmtree(path)
+    return True
 
 
 def print_banner():
@@ -198,7 +230,8 @@ def create_virtual_env():
         print(f"  Virtual environment already exists")
         response = input(f"  Recreate? (y/N): ").strip().lower()
         if response == 'y':
-            shutil.rmtree(venv_path)
+            if not _remove_existing_venv(venv_path):
+                return False
         else:
             return True
     
