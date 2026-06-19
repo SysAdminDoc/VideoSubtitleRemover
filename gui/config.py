@@ -58,6 +58,7 @@ LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPr
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
+MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
 # semantics change. _migrate_settings() must learn the upgrade path so
@@ -584,6 +585,13 @@ def status_ui(status: ProcessingStatus) -> dict:
 
 def _read_json_object(path: Path, label: str) -> Optional[dict]:
     try:
+        size = path.stat().st_size
+        if size > MAX_JSON_OBJECT_BYTES:
+            logger.warning(
+                f"Ignoring {label} at {path}: file is too large "
+                f"({size} bytes > {MAX_JSON_OBJECT_BYTES} bytes)"
+            )
+            return None
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         logger.warning(f"Could not read {label} from {path}: {exc}")
