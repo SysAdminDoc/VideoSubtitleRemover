@@ -27,6 +27,7 @@ The first call downloads weights to the HuggingFace cache.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import shutil
@@ -309,8 +310,15 @@ def segments_to_frame_spans(
         return []
     spans: List[Tuple[int, int]] = []
     for start_s, end_s, _text in segments:
-        s = max(0, int(start_s * fps))
-        e = max(s + 1, int(end_s * fps))
+        try:
+            start = float(start_s)
+            end = float(end_s)
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(start) and math.isfinite(end)) or end <= start:
+            continue
+        s = max(0, int(start * fps))
+        e = max(s + 1, int(end * fps))
         spans.append((s, e))
     spans.sort()
     merged: List[Tuple[int, int]] = []
