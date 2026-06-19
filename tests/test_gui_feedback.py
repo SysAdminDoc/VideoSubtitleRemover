@@ -50,6 +50,28 @@ class SettingsLoadFeedbackTests(unittest.TestCase):
         self.assertIn("subtitle_areas[1]", joined)
         self.assertIn("subtitle_areas[2]", joined)
 
+    def test_oversized_settings_file_resets_with_notice(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = gui_config.SETTINGS_FILE
+            try:
+                gui_config.SETTINGS_FILE = Path(tmpdir) / "settings.json"
+                gui_config.SETTINGS_FILE.write_text(
+                    " " * (gui_config.MAX_JSON_OBJECT_BYTES + 1),
+                    encoding="utf-8",
+                )
+
+                with self.assertLogs("gui.config", level="WARNING") as caught:
+                    cfg = gui_config.load_settings()
+
+                self.assertIsInstance(cfg, gui_config.ProcessingConfig)
+                self.assertEqual(
+                    gui_config.consume_settings_load_notice(),
+                    "Settings were corrupted and reset to defaults.",
+                )
+                self.assertIn("file is too large", "\n".join(caught.output))
+            finally:
+                gui_config.SETTINGS_FILE = original
+
 
 class DropFeedbackTests(unittest.TestCase):
     def test_drop_widget_passes_unsupported_paths_to_app_summarizer(self):

@@ -59,6 +59,19 @@ class PresetSchemaTests(unittest.TestCase):
         self.assertIsNone(gui_config.import_preset(str(path)))
         self.assertFalse(gui_config.PRESETS_FILE.exists())
 
+    def test_import_rejects_oversized_preset_before_parsing(self):
+        path = Path(self._tmp.name) / "oversized.vsr-preset.json"
+        path.write_text(
+            " " * (gui_config.MAX_JSON_OBJECT_BYTES + 1),
+            encoding="utf-8",
+        )
+
+        with self.assertLogs("gui.config", level="WARNING") as caught:
+            self.assertIsNone(gui_config.import_preset(str(path)))
+
+        self.assertFalse(gui_config.PRESETS_FILE.exists())
+        self.assertIn("file is too large", "\n".join(caught.output))
+
     def test_apply_preset_ignores_unsupported_existing_fields(self):
         gui_config.PRESETS_FILE.write_text(
             json.dumps({
