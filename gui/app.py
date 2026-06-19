@@ -164,6 +164,7 @@ class VideoSubtitleRemoverApp:
         self._throbber_phase = 0
         self._layout_mode = "wide"
         self._workflow_pills = []
+        self._settings_sliders: List[ModernSlider] = []
 
         # Variables
         self.mode_var = tk.StringVar(value=self.config.mode.value)
@@ -2213,6 +2214,7 @@ class VideoSubtitleRemoverApp:
         slider = ModernSlider(row, from_=min_val, to=max_val, value=default,
                               bg=parent_bg)
         slider.pack(side="left", fill="x", expand=True, padx=(Theme.S_SM, 0))
+        self._settings_sliders.append(slider)
 
         def on_change(val):
             value_label.config(text=str(int(val)))
@@ -5086,6 +5088,8 @@ class VideoSubtitleRemoverApp:
             self.region_reset_btn.set_enabled(
                 (not locked) and self.config.subtitle_area is not None)
             self.adv_toggle.set_enabled(not locked)
+            for slider in getattr(self, "_settings_sliders", []):
+                slider.set_enabled(not locked)
             # Segmented algo picker: dim/undim each segment
             try:
                 for seg in self.mode_picker._segments.values():
