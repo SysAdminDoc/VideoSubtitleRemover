@@ -1297,7 +1297,7 @@ class QueueItemWidget(tk.Frame):
                  on_soft_action: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
-                        highlightbackground=Theme.BORDER)
+                        highlightbackground=Theme.BORDER, takefocus=1)
 
         self.item = item
         self.on_remove = on_remove
@@ -1308,6 +1308,7 @@ class QueueItemWidget(tk.Frame):
         self.on_override = on_override
         self.on_soft_action = on_soft_action
         self.is_selected = False
+        self.focused = False
         self._surface_bg = Theme.BG_CARD
         self._pulse_id = None
         self._pulse_phase = 0
@@ -1394,6 +1395,10 @@ class QueueItemWidget(tk.Frame):
             widget.bind("<Leave>", self._on_leave, add="+")
             widget.bind("<Button-1>", self._on_card_click, add="+")
             widget.bind("<Button-3>", self._on_context_menu, add="+")
+        self.bind("<FocusIn>", self._on_focus_in, add="+")
+        self.bind("<FocusOut>", self._on_focus_out, add="+")
+        self.bind("<Return>", self._on_card_activate, add="+")
+        self.bind("<space>", self._on_card_activate, add="+")
 
         self.update_item(item)
 
@@ -1499,14 +1504,37 @@ class QueueItemWidget(tk.Frame):
             self.on_select(self.item, show_mask=True)
 
     def _on_card_click(self, event):
+        self.focus_set()
         if self.on_select:
             self.on_select(self.item)
 
+    def _on_card_activate(self, event=None):
+        if self.on_select:
+            self.on_select(self.item)
+        return "break"
+
     def _on_enter(self, event):
         if not self.is_selected:
-            self._apply_surface_state(Theme.BG_CARD_HOVER, Theme.BORDER)
+            border = Theme.BORDER_FOCUS if self.focused else Theme.BORDER
+            self._apply_surface_state(Theme.BG_CARD_HOVER, border)
 
     def _on_leave(self, event):
+        if not self.is_selected:
+            border = Theme.BORDER_FOCUS if self.focused else Theme.BORDER
+            accent = Theme.BORDER_FOCUS if self.focused else None
+            self._apply_surface_state(Theme.BG_CARD, border, accent=accent)
+
+    def _on_focus_in(self, event):
+        self.focused = True
+        if not self.is_selected:
+            self._apply_surface_state(
+                Theme.BG_CARD_HOVER,
+                Theme.BORDER_FOCUS,
+                accent=Theme.BORDER_FOCUS,
+            )
+
+    def _on_focus_out(self, event):
+        self.focused = False
         if not self.is_selected:
             self._apply_surface_state(Theme.BG_CARD, Theme.BORDER)
 
@@ -1529,6 +1557,12 @@ class QueueItemWidget(tk.Frame):
         if selected:
             self._apply_surface_state(
                 Theme.BG_CARD_SELECTED, Theme.BLUE_PRIMARY, accent=Theme.BLUE_PRIMARY)
+        elif self.focused:
+            self._apply_surface_state(
+                Theme.BG_CARD_HOVER,
+                Theme.BORDER_FOCUS,
+                accent=Theme.BORDER_FOCUS,
+            )
         else:
             self._apply_surface_state(Theme.BG_CARD, Theme.BORDER)
 
