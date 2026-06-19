@@ -604,6 +604,7 @@ class ModernSlider(tk.Frame):
         self._width = width
         self._dragging = False
         self._focused = False
+        self.enabled = True
 
         self.canvas = tk.Canvas(self, width=width, height=self.HEIGHT,
                                 highlightthickness=0, bg=self.parent_bg, takefocus=1)
@@ -654,7 +655,8 @@ class ModernSlider(tk.Frame):
         if thumb_x > left:
             self.canvas.create_rectangle(
                 left, mid - self.TRACK_H // 2, thumb_x, mid + self.TRACK_H // 2,
-                fill=Theme.BLUE_PRIMARY, outline="",
+                fill=Theme.BLUE_PRIMARY if self.enabled else Theme.BORDER_SUBTLE,
+                outline="",
             )
 
         # Thumb
@@ -666,9 +668,11 @@ class ModernSlider(tk.Frame):
         self.canvas.create_oval(
             thumb_x - self.THUMB_R, mid - self.THUMB_R,
             thumb_x + self.THUMB_R, mid + self.THUMB_R,
-            fill=Theme.BLUE_PRIMARY, outline=Theme.BLUE_HOVER, width=1,
+            fill=Theme.BLUE_PRIMARY if self.enabled else Theme.BG_TERTIARY,
+            outline=Theme.BLUE_HOVER if self.enabled else Theme.BORDER_SUBTLE,
+            width=1,
         )
-        if self._focused:
+        if self._focused and self.enabled:
             self.canvas.create_rectangle(
                 1, 1, self._width - 1, self.HEIGHT - 1,
                 outline=Theme.BORDER_FOCUS, width=1,
@@ -679,21 +683,27 @@ class ModernSlider(tk.Frame):
         self._draw()
 
     def _on_press(self, event):
+        if not self.enabled:
+            return
         self.canvas.focus_set()
         self._dragging = True
         self._set_from_x(event.x)
 
     def _on_drag(self, event):
-        if self._dragging:
+        if self.enabled and self._dragging:
             self._set_from_x(event.x)
 
     def _on_release(self, event):
         self._dragging = False
 
     def _on_wheel(self, event):
+        if not self.enabled:
+            return
         self._step(1 if event.delta > 0 else -1)
 
     def _step(self, direction):
+        if not self.enabled:
+            return
         step = max(1, int((self.to - self.from_) / 50))
         new_val = max(self.from_, min(self.to, int(self.value) + direction * step))
         self._set_value(new_val)
@@ -716,6 +726,17 @@ class ModernSlider(tk.Frame):
 
     def get(self):
         return int(self.value)
+
+    def set_enabled(self, enabled: bool):
+        self.enabled = enabled
+        if not enabled:
+            self._dragging = False
+            self._focused = False
+        self.canvas.config(
+            cursor="hand2" if enabled else "",
+            takefocus=1 if enabled else 0,
+        )
+        self._draw()
 
 
 def _confirm_default_focus(tone: str, requested: Optional[str] = None) -> str:
