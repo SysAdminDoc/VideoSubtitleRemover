@@ -718,14 +718,23 @@ class ModernSlider(tk.Frame):
         return int(self.value)
 
 
+def _confirm_default_focus(tone: str, requested: Optional[str] = None) -> str:
+    """Return the safest initial focus target for a confirmation dialog."""
+    if requested in {"confirm", "cancel"}:
+        return requested
+    return "cancel" if tone == "danger" else "confirm"
+
+
 def show_confirm(parent, title: str, message: str, detail: str = "",
                  confirm_label: str = "Confirm",
                  cancel_label: str = "Cancel",
-                 tone: str = "primary") -> bool:
+                 tone: str = "primary",
+                 default_focus: Optional[str] = None) -> bool:
     """Themed modal confirmation dialog that matches the app aesthetic.
 
     Returns True if confirmed, False if cancelled (or closed).
     `tone` selects the confirm button style: primary / danger / accent.
+    Destructive dialogs focus the safe action unless explicitly overridden.
     """
     result = {"value": False}
 
@@ -782,7 +791,6 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
     confirm_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
     dialog.bind("<Escape>", lambda e: _cancel())
-    dialog.bind("<Return>", lambda e: _confirm())
     dialog.protocol("WM_DELETE_WINDOW", _cancel)
 
     # Center on parent
@@ -802,7 +810,10 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
 
     dialog.deiconify()
     dialog.grab_set()
-    confirm_btn.focus_set()
+    if _confirm_default_focus(tone, default_focus) == "cancel":
+        cancel_btn.focus_set()
+    else:
+        confirm_btn.focus_set()
     dialog.wait_window()
     return result["value"]
 
