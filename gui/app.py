@@ -2274,7 +2274,7 @@ class VideoSubtitleRemoverApp:
         self.queue_done_pill, self.queue_done_lbl = _mk_stat_pill(
             fg=Theme.SUCCESS, bg=Theme.SUCCESS_BG)
         self.queue_err_pill, self.queue_err_lbl = _mk_stat_pill(
-            fg=Theme.ERROR, bg=Theme.ERROR_BG)
+            fg=Theme.WARNING, bg=Theme.WARNING_BG)
 
         self.queue_total_pill.pack(side="left")
         # done/err pills get shown conditionally in _update_queue_display
@@ -4607,6 +4607,29 @@ class VideoSubtitleRemoverApp:
         self._update_queue_display()
         self._update_status("Queue cleared")
 
+    @staticmethod
+    def _queue_item_needs_quality_review(item: QueueItem) -> bool:
+        report = getattr(item, "quality_report", None)
+        if not isinstance(report, dict):
+            return False
+        gate = report.get("quality_gate")
+        if isinstance(gate, dict) and gate.get("status") == "review":
+            return True
+        return str(report.get("tag") or "").strip().lower() == "review"
+
+    @classmethod
+    def _queue_attention_count(cls, queue: List[QueueItem]) -> int:
+        attention_states = (ProcessingStatus.ERROR, ProcessingStatus.CANCELLED)
+        return sum(
+            1
+            for item in queue
+            if item.status in attention_states
+            or (
+                item.status == ProcessingStatus.COMPLETE
+                and cls._queue_item_needs_quality_review(item)
+            )
+        )
+
     def _update_queue_display(self):
         """Update the queue display. Only rebuilds widgets that changed."""
         with self.queue_lock:
@@ -4622,15 +4645,14 @@ class VideoSubtitleRemoverApp:
         total = len(self.queue)
         self.queue_count.config(text=f"{total} item{'s' if total != 1 else ''}")
         done = sum(1 for i in self.queue if i.status == ProcessingStatus.COMPLETE)
-        err = sum(1 for i in self.queue
-                  if i.status in (ProcessingStatus.ERROR, ProcessingStatus.CANCELLED))
+        attention = self._queue_attention_count(self.queue)
         if done > 0:
             self.queue_done_lbl.config(text=f"{done} done")
             self.queue_done_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_done_pill.pack_forget()
-        if err > 0:
-            self.queue_err_lbl.config(text=f"{err} failed")
+        if attention > 0:
+            self.queue_err_lbl.config(text=f"{attention} needs attention")
             self.queue_err_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_err_pill.pack_forget()
