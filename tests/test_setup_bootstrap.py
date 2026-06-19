@@ -99,6 +99,44 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertIn("Timed out", output)
         self.assertIn("rerun setup.py", output)
 
+    def test_recreate_virtual_env_removes_only_repo_local_venv(self):
+        old_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                Path("venv").mkdir()
+                with mock.patch("builtins.input", return_value="y"):
+                    with mock.patch.object(self.setup_mod.shutil, "rmtree") as rmtree:
+                        with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                            ok = self.setup_mod.create_virtual_env()
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertTrue(ok)
+        rmtree.assert_called_once_with(Path("venv"))
+        run.assert_called_once()
+
+    def test_recreate_virtual_env_refuses_reparse_point(self):
+        old_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                Path("venv").mkdir()
+                with mock.patch("builtins.input", return_value="y"):
+                    with mock.patch.object(self.setup_mod, "_is_reparse_point", return_value=True):
+                        with mock.patch.object(self.setup_mod.shutil, "rmtree") as rmtree:
+                            with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                                with mock.patch("builtins.print") as printed:
+                                    ok = self.setup_mod.create_virtual_env()
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertFalse(ok)
+        rmtree.assert_not_called()
+        run.assert_not_called()
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("Refusing to remove unsafe virtual environment path", output)
+
     def test_install_dependencies_timeout_fails(self):
         timeout = self.setup_mod.PIP_INSTALL_TIMEOUT_SECONDS
         exc = self.setup_mod.subprocess.TimeoutExpired(
