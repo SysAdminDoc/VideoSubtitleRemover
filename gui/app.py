@@ -4736,6 +4736,11 @@ class VideoSubtitleRemoverApp:
         else:
             self._hide_filter_empty_state()
 
+    @staticmethod
+    def _footer_status_text(message: str) -> str:
+        """Keep the footer status line stable for long summaries."""
+        return truncate_middle(str(message), 132)
+
     def _update_status(self, message: str, tone: str = "neutral", toast: bool = False):
         """Update the footer status dot + message.
 
@@ -4749,7 +4754,7 @@ class VideoSubtitleRemoverApp:
             "info": Theme.INFO,
         }
         color = colors.get(tone, Theme.TEXT_SECONDARY)
-        self.status_label.config(text=message, fg=color)
+        self.status_label.config(text=self._footer_status_text(message), fg=color)
         try:
             self.status_dot.itemconfig(self._status_dot_item, fill=color)
         except Exception:
