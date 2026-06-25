@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: What are you trying to accomplish? Describe the workflow, not just the feature.
+      placeholder: I process anime episodes with styled subtitles and currently...
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What should the feature do?
+      placeholder: The app should...
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds, other tools, or approaches you have tried.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Current version
+      description: App version you are running.
+      placeholder: 3.17.1
+    validations:
+      required: false
