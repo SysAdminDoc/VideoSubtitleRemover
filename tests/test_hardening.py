@@ -3269,13 +3269,13 @@ class VerticalTextDetectionTests(unittest.TestCase):
         det = self._make_detector(vertical=True)
         # Original frame 200w x 100h. After 90 CCW the rotated frame is
         # 100w x 200h. A box at (rx1=10, ry1=20, rx2=40, ry2=60) in the
-        # rotated frame maps back to:
-        # ox = ry -> x in [20, 60]
-        # oy = w - rx2 .. w - rx1 -> y in [200 - 40, 200 - 10] = [160, 190]
+        # rotated frame maps back using the inverse rotation:
+        # ox = w - ry -> x in [200-60, 200-20] = [140, 180]
+        # oy = rx -> y in [10, 40]
         det._detect_axis_aligned = lambda f, t: [(10, 20, 40, 60)]
         frame = _np.zeros((100, 200, 3), dtype=_np.uint8)
         result = det.detect(frame, 0.5)
-        self.assertEqual(result, [(20, 160, 60, 190)])
+        self.assertEqual(result, [(140, 10, 180, 40)])
 
 
 class HighContrastThemeTests(unittest.TestCase):
