@@ -69,7 +69,7 @@ jobs:
           # Pillow >= 12.2.0 patches CVE-2026-25990, GHSA-wjx4-4jcj-g98j,
           # GHSA-pwv6-vv43-88gr, GHSA-whj4-6x5x-4v2j.
           Install-Required "core image stack" @("numpy", "opencv-python>=4.12.0", "Pillow>=12.2.0")
-          Install-Required "RapidOCR engines" @("rapidocr>=2.0.0,<3.0.0", "rapidocr-onnxruntime>=1.4.0,<2.0.0")
+          Install-Required "RapidOCR engines" @("rapidocr>=2.0.0,<4.0.0", "rapidocr-onnxruntime>=1.4.0,<2.0.0")
           Install-Required "LaMa inpainter" @("simple-lama-inpainting")
           Install-Required "EasyOCR fallback" @("easyocr")
           Install-Optional "PaddleOCR" @("paddleocr>=3.0.0,<4.0.0") "PaddleOCR install skipped; release will rely on RapidOCR/EasyOCR."
@@ -89,6 +89,18 @@ jobs:
         run: |
           python -m pip install pip-audit
           pip-audit --progress-spinner off
+
+      - name: Generate CycloneDX SBOM
+        continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}
+        run: |
+          python -m pip install cyclonedx-bom
+          cyclonedx-py environment --output-format json -o sbom.cdx.json
+          if (Test-Path sbom.cdx.json) {
+            Write-Host "SBOM generated: $(Get-Item sbom.cdx.json | Select-Object -ExpandProperty Length) bytes"
+          } else {
+            Write-Host "::warning::SBOM generation produced no output"
+          }
+        shell: pwsh
 
       - name: Bundled libpng advisory check (CVE-2026-22801)
         # pip-audit cannot see libpng because it is vendored inside the
@@ -479,6 +491,24 @@ jobs:
             }
           }
 
+          if (Test-Path "sbom.cdx.json") {
+            $sbomHash = (Get-FileHash "sbom.cdx.json" -Algorithm SHA256).Hash
+            $verification.sbom = [ordered]@{
+              path = "sbom.cdx.json"
+              format = "CycloneDX"
+              sha256 = $sbomHash
+            }
+          } else {
+            $verification.sbom = [ordered]@{
+              path = ""
+              format = "missing"
+              sha256 = ""
+            }
+          }
+          if ($strict -and -not (Test-Path "sbom.cdx.json")) {
+            throw "Strict release requires an SBOM artifact."
+          }
+
           $signingConfigured = "${{ steps.signing.outputs.has_signing }}" -eq "true"
           if ($signingConfigured) {
             $signedTargets = @($exe)
@@ -499,6 +529,9 @@ jobs:
             'VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-windows.zip',
             'release-verification.json'
           )
+          if (Test-Path 'sbom.cdx.json') {
+            $assets += 'sbom.cdx.json'
+          }
           if (Test-Path 'VideoSubtitleRemoverPro-Setup.exe') {
             Rename-Item 'VideoSubtitleRemoverPro-Setup.exe' "VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-Setup.exe"
             $assets += "VideoSubtitleRemoverPro-${{ github.event.inputs.version }}-Setup.exe"
