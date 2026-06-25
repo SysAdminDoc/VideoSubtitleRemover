@@ -682,8 +682,10 @@ def load_settings() -> ProcessingConfig:
         if settings_file.exists():
             data = _read_json_object(settings_file, "settings")
             if data is None:
+                _backup_corrupt_settings(settings_file)
                 _set_settings_load_notice(
                     "Settings were corrupted and reset to defaults."
+                    " A backup was saved as settings.json.bak."
                 )
                 return ProcessingConfig()
             data = _migrate_settings(data)
@@ -691,10 +693,23 @@ def load_settings() -> ProcessingConfig:
             return ProcessingConfig.from_dict(data)
     except Exception as e:
         logger.warning(f"Could not load settings: {e}")
+        _backup_corrupt_settings(settings_file)
         _set_settings_load_notice(
             "Settings were corrupted and reset to defaults."
+            " A backup was saved as settings.json.bak."
         )
     return ProcessingConfig()
+
+
+def _backup_corrupt_settings(settings_file: Path):
+    try:
+        bak = settings_file.with_suffix(".json.bak")
+        if settings_file.exists():
+            import shutil
+            shutil.copy2(str(settings_file), str(bak))
+            logger.info(f"Corrupt settings backed up to {bak}")
+    except Exception as exc:
+        logger.debug(f"Could not back up corrupt settings: {exc}")
 
 
 def save_settings(config: ProcessingConfig):
