@@ -15,7 +15,7 @@ class DependencyCapTests(unittest.TestCase):
         setup = (ROOT / "setup.py").read_text(encoding="utf-8")
 
         for expected in (
-            "rapidocr>=2.0.0,<3.0.0",
+            "rapidocr>=2.0.0,<4.0.0",
             "paddleocr>=3.0.0,<4.0.0",
         ):
             self.assertIn(expected, requirements)
@@ -46,7 +46,7 @@ class DependencyCapTests(unittest.TestCase):
 
     def test_checker_reports_major_version_overrun(self):
         versions = {
-            "rapidocr": "3.0.0",
+            "rapidocr": "4.0.0",
             "rapidocr-onnxruntime": "2.0.0",
             "paddleocr": "4.0.0",
         }
@@ -62,7 +62,7 @@ class DependencyCapTests(unittest.TestCase):
             problems = dependency_caps.check_ocr_dependency_caps()
 
         self.assertEqual(len(problems), 3)
-        self.assertIn("rapidocr==3.0.0", problems[0])
+        self.assertIn("rapidocr==4.0.0", problems[0])
         self.assertIn("rapidocr-onnxruntime==2.0.0", problems[1])
         self.assertIn("paddleocr==4.0.0", problems[2])
 
