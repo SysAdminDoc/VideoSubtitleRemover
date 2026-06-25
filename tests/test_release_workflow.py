@@ -30,7 +30,7 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
 
         self.assertIn('Install-Optional "PaddleOCR"', self.workflow)
         self.assertIn('Install-Optional "ONNX Runtime DirectML"', self.workflow)
-        self.assertIn('"rapidocr>=2.0.0,<3.0.0"', self.workflow)
+        self.assertIn('"rapidocr>=2.0.0,<4.0.0"', self.workflow)
         self.assertIn('"rapidocr-onnxruntime>=1.4.0,<2.0.0"', self.workflow)
         self.assertIn('"paddleocr>=3.0.0,<4.0.0"', self.workflow)
         self.assertIn("OCR dependency version-cap check", self.workflow)
@@ -116,6 +116,9 @@ class ReleaseWorkflowInstallTests(unittest.TestCase):
         self.assertIn("CHANGELOG.md", self.workflow)
         self.assertNotIn('@{ Path = "ROADMAP.md"', self.workflow)
         self.assertIn("smokeLaunch", self.workflow)
+        self.assertIn("cyclonedx-bom", self.workflow)
+        self.assertIn("sbom.cdx.json", self.workflow)
+        self.assertIn("Strict release requires an SBOM artifact", self.workflow)
 
     def test_signing_readiness_uses_step_output(self):
         self.assertIn("id: signing", self.workflow)
