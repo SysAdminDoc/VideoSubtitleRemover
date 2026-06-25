@@ -1411,6 +1411,7 @@ class QueueItemWidget(tk.Frame):
         self._interactive_widgets = [
             self, self.container, self.top_row, self.name_label, self.info_label,
             self.bottom_row, self.message_label, self.time_label, self.actions_row,
+            self.status_badge, self.progress_bar,
         ]
         for widget in self._interactive_widgets:
             widget.bind("<Enter>", self._on_enter, add="+")

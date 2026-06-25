@@ -1096,8 +1096,8 @@ class VideoSubtitleRemoverApp:
         elif not selected:
             stage = 2
             title = "Inspect a sample frame"
-            body = "Select one item and review the mask before starting."
-            hint = "Select one item and review the mask before starting."
+            body = "Click a queue item, then use Set region or Review mask."
+            hint = "Click a queue item, then use Set region or Review mask."
         elif has_complete:
             stage = 3
             title = "Outputs are ready"
@@ -1121,6 +1121,8 @@ class VideoSubtitleRemoverApp:
             return
         selected = self._get_selected_queue_item()
         can_preview = bool(selected and PIL_AVAILABLE)
+        if hasattr(self, "preview_region_btn"):
+            self.preview_region_btn.set_enabled(not self.is_processing)
         self.preview_mask_btn.set_enabled(bool(selected) and not self.is_processing)
         self.preview_zoom_btn.set_enabled(can_preview)
         if hasattr(self, "preview_inpaint_btn"):
@@ -2397,7 +2399,7 @@ class VideoSubtitleRemoverApp:
         self.preview_title_label.pack(anchor="w")
         self.preview_meta_label = tk.Label(
             preview_text,
-            text="Select a queued item and review the mask before processing.",
+            text="Click a queue item, then use Set region or Review mask.",
             font=f(Theme.F_META), wraplength=360,
             justify="left", bg=Theme.BG_CARD,
             fg=Theme.TEXT_MUTED)
@@ -2418,6 +2420,17 @@ class VideoSubtitleRemoverApp:
 
         preview_actions = tk.Frame(self._preview_frame, bg=Theme.BG_CARD)
         preview_actions.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        self.preview_region_btn = ModernButton(
+            preview_actions,
+            text="Set region",
+            width=96,
+            command=self._open_region_selector,
+            style="accent",
+            size="sm",
+        )
+        self.preview_region_btn.pack(side="left")
+        Tooltip(self.preview_region_btn,
+                "Draw the subtitle region on the frame so the detector knows where to look.")
         self.preview_mask_btn = ModernButton(
             preview_actions,
             text="Review mask",
@@ -2426,7 +2439,7 @@ class VideoSubtitleRemoverApp:
             style="ghost",
             size="sm",
         )
-        self.preview_mask_btn.pack(side="left")
+        self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_mask_btn,
                 "Run detection on the selected item and show the first-frame mask.")
         self.preview_zoom_btn = ModernButton(
@@ -2475,7 +2488,7 @@ class VideoSubtitleRemoverApp:
         self._preview_photo = None
         self._preview_label.bind("<Double-Button-1>", self._open_preview_zoom)
         Tooltip(self._preview_label,
-                "Double-click to view at full size. Right-click a queue item for more actions.")
+                "Double-click to view at full size. Use Set region above to draw the subtitle band.")
 
         # Action bar -- primary row first, secondary queue actions below.
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
@@ -2513,7 +2526,7 @@ class VideoSubtitleRemoverApp:
 
         self._set_preview_placeholder(
             "Preview a sample frame",
-            "Select a queued item to inspect it before processing.",
+            "Click a queued item to preview it. Use Set region to mark the subtitle band.",
         )
         self._refresh_action_states()
 
@@ -3183,8 +3196,8 @@ class VideoSubtitleRemoverApp:
              "info").pack(side="left", fill="both", expand=True,
                           padx=(0, Theme.S_SM))
         card("2", "Inspect the region",
-             "Select a queued item and review the mask to confirm the subtitle "
-             "mask before running the batch.",
+             "Click a queue item, then use Set region to draw the subtitle band "
+             "or Review mask to see what the detector finds.",
              "warning").pack(side="left", fill="both", expand=True,
                              padx=(0, Theme.S_SM))
         card("3", "Run the batch",
@@ -4031,7 +4044,7 @@ class VideoSubtitleRemoverApp:
                 text=(
                     _format_soft_subtitle_summary(records)
                     if records else
-                    "Review mask to confirm the subtitle band, then start the batch when the framing looks right."
+                    "Use Set region to draw the subtitle band, or Review mask to confirm what the detector finds automatically."
                 )
             )
 
@@ -4677,7 +4690,7 @@ class VideoSubtitleRemoverApp:
             self._build_queue_empty_state()
             self._set_preview_placeholder(
                 "Preview a sample frame",
-                "Select a queued item to inspect it before processing. Review mask is the fastest way to confirm the subtitle region.",
+                "Add files to preview them. Use Set region to mark the subtitle band before processing.",
             )
         else:
             # Remove empty label if present
@@ -4857,7 +4870,7 @@ class VideoSubtitleRemoverApp:
                 max_w = max(220, self._preview_frame.winfo_width() - 36)
             except Exception:
                 max_w = 390
-            max_h = 158
+            max_h = 260
 
             # Mask preview mode -- run detection in background thread
             if show_mask:
@@ -4981,8 +4994,8 @@ class VideoSubtitleRemoverApp:
                     )
                 else:
                     preview_meta = (
-                        "Review mask to confirm the subtitle band, then start "
-                        "the batch when the framing looks right."
+                        "Use Set region to draw the subtitle band, or Review mask "
+                        "to confirm what the detector finds automatically."
                     )
                 self.preview_meta_label.config(
                     text=preview_meta
@@ -5086,6 +5099,8 @@ class VideoSubtitleRemoverApp:
             self.time_end_entry.config(state=entry_state)
 
             self.region_btn.set_enabled(not locked)
+            if hasattr(self, "preview_region_btn"):
+                self.preview_region_btn.set_enabled(not locked)
             self.region_reset_btn.set_enabled(
                 (not locked) and self.config.subtitle_area is not None)
             self.adv_toggle.set_enabled(not locked)
