@@ -1190,12 +1190,13 @@ class DragDropFrame(tk.Frame):
                             fg=Theme.TEXT_PRIMARY)
         main_text.pack(pady=(2, 0))
 
-        # Sub text
-        sub_text = tk.Label(inner,
+        # Sub text -- updated after DnD setup to reflect actual capabilities
+        self._sub_text = tk.Label(inner,
                            text="Drag files here, choose files, or choose a folder. Originals stay untouched.",
                            font=f(Theme.F_BODY_SM), bg=self.normal_bg,
                            fg=Theme.TEXT_SECONDARY, justify="center", wraplength=480)
-        sub_text.pack(pady=(6, 12))
+        self._sub_text.pack(pady=(6, 12))
+        sub_text = self._sub_text
 
         actions = tk.Frame(inner, bg=self.normal_bg)
         actions.pack()
@@ -1233,10 +1234,15 @@ class DragDropFrame(tk.Frame):
             child.bind("<Leave>", self._on_leave, add="+")
 
         # Try to enable native drag-drop (Windows)
+        self._dnd_available = False
         try:
             self._setup_dnd()
         except Exception:
             pass
+        if not self._dnd_available:
+            self._sub_text.config(
+                text="Choose files or a folder below. Originals stay untouched."
+            )
 
     def _set_bg(self, bg: str, border: str):
         self.config(bg=bg, highlightbackground=border)
@@ -1255,6 +1261,7 @@ class DragDropFrame(tk.Frame):
             import tkinterdnd2
             self.drop_target_register(tkinterdnd2.DND_FILES)
             self.dnd_bind('<<Drop>>', self._handle_drop)
+            self._dnd_available = True
         except ImportError:
             pass
 
