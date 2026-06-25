@@ -57,5 +57,36 @@ class PaddleCompatTests(unittest.TestCase):
         self.assertEqual(boxes, [(5, 7, 55, 18)])
 
 
+    def test_v3_dt_polys_key(self):
+        class Model:
+            def predict(self, frame):
+                return [{
+                    "dt_polys": np.array([
+                        [[8, 12], [80, 12], [80, 26], [8, 26]],
+                    ], dtype=np.float32),
+                    "rec_scores": [0.95],
+                }]
+
+        boxes = extract_paddle_boxes(Model(), np.zeros((4, 4, 3)), 0.5)
+        self.assertEqual(boxes, [(8, 12, 80, 26)])
+
+    def test_low_confidence_filtered_out(self):
+        class Model:
+            def predict(self, frame):
+                return [
+                    _JsonMethodResult({
+                        "res": {
+                            "rec_polys": np.array([
+                                [[10, 20], [40, 20], [40, 32], [10, 32]],
+                            ]),
+                            "rec_scores": [0.15],
+                        }
+                    })
+                ]
+
+        boxes = extract_paddle_boxes(Model(), np.zeros((4, 4, 3)), 0.5)
+        self.assertEqual(boxes, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -34,9 +34,16 @@ def build_paddleocr(lang: str, device: str, **extra):
     """
     from paddleocr import PaddleOCR
 
+    paddle_version = "unknown"
+    try:
+        import paddleocr as _poc
+        paddle_version = getattr(_poc, "__version__", "unknown")
+    except Exception:
+        pass
+
     use_cuda = "cuda" in device
     try:
-        return PaddleOCR(
+        model = PaddleOCR(
             lang=lang,
             device="gpu" if use_cuda else "cpu",
             use_doc_orientation_classify=False,
@@ -44,14 +51,22 @@ def build_paddleocr(lang: str, device: str, **extra):
             use_textline_orientation=False,
             **extra,
         )
+        logger.info(
+            f"PaddleOCR {paddle_version} loaded (3.x API, lang={lang})"
+        )
+        return model
     except TypeError:
-        return PaddleOCR(
+        model = PaddleOCR(
             lang=lang,
             use_angle_cls=False,
             use_gpu=use_cuda,
             show_log=False,
             **extra,
         )
+        logger.info(
+            f"PaddleOCR {paddle_version} loaded (2.x API, lang={lang})"
+        )
+        return model
 
 
 def extract_paddle_boxes(model, frame: np.ndarray,
