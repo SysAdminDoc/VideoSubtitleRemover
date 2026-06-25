@@ -3,21 +3,6 @@
 Remaining-work backlog only: every item below is NOT yet implemented.
 Completed items are deleted from this file; history lives in CHANGELOG.md and git.
 
----
-
-## Now
-
-111. **CVE-2026-22801 libpng mitigation (remainder)** -- the runtime
-     OpenCV build-info warning is implemented. Remaining work is blocked
-     until opencv-python publishes a wheel with libpng >= 1.6.54.
-     Priority: P1 security. Effort: S. Confidence: high.
-     Acceptance criteria (remaining):
-     - Pin is updated when a fixed opencv-python wheel is published.
-     - CI `pip-audit` or equivalent catches this advisory.
-     Source: https://github.com/opencv/opencv-python/issues/1186
-
----
-
 ## Next
 
 ### Detection
@@ -307,93 +292,7 @@ Speculative research bench; not commitments.
 
 ## Research-Driven Additions
 
-### P1 (root-cause reliability)
-
-- [ ] P1 -- Off-main-thread startup hardware probes
-  Why: the window does not paint for up to ~18s+ when nvidia-smi/ffmpeg are slow or absent, reading as a frozen app on launch.
-  Evidence: `gui/app.py:137-139` calls `detect_gpu()`/`detect_ai_engines()`/`detect_ffmpeg()` inline in `MainWindow.__init__`; each shells out with 8-10s timeouts (`gui/utils.py:27,250`).
-  Touches: `gui/app.py`, `gui/utils.py`
-  Acceptance: the main window paints immediately with a "Detecting hardware..." state; GPU/engine/ffmpeg results are marshalled back via `root.after(0, ...)` and update the header chips when ready.
-  Complexity: M
-
-- [ ] P1 -- First-run model-download progress and guidance
-  Why: EasyOCR / torch-LaMa / VLM weights download on first use with no progress UI; the app looks hung during a multi-hundred-MB fetch.
-  Evidence: `backend/inpainters_onnx.py:17` documents a manual `huggingface-cli download`; EasyOCR/simple-lama fetch weights on first call with no in-app feedback; RESEARCH "Architecture Assessment".
-  Touches: `gui/app.py`, `backend/inpainters/lama.py`, `backend/inpainters_onnx.py`, `backend/detection.py`
-  Acceptance: first-use of any backend that fetches weights surfaces a determinate or indeterminate progress indicator + size estimate in the log panel/toast; failures show a clear retry message.
-  Complexity: M
-
-- [ ] P1 -- Remove ROADMAP version marker from strict release verification
-  Why: strict releases currently require `ROADMAP.md` to contain the release tag, contradicting the mandatory rule that ROADMAP contains only incomplete work and no release/session log material.
-  Evidence: `.github/workflows/build.yml:367-370` checks `@{ Path = "ROADMAP.md"; Pattern = "v$expectedVersion" }`; `ROADMAP.md` header says remaining-work backlog only; `AGENTS.md` repeats the same hygiene rule.
-  Touches: `.github/workflows/build.yml`, `tests/test_release_workflow.py`
-  Acceptance: release verification no longer requires a version marker in ROADMAP; tests assert README/CHANGELOG/APP_VERSION checks remain and ROADMAP hygiene is preserved.
-  Complexity: S
-
 ### P2 (trust / test depth / hygiene)
-
-- [ ] P2 -- CI/test guard for the source-ASCII invariant
-  Why: "ALL .py files must be pure ASCII" is a CRITICAL project rule (CLAUDE.md) but nothing enforces it; a stray unicode char ships silently and only breaks downstream (PyInstaller bundling, arbitrary parsers).
-  Evidence: no ASCII-check test in `tests/` and no step in `.github/workflows/build.yml` (verified); the hand-rolled ascii guarding in `backend/nle_sidecar.py` exists precisely because this class of bug is unguarded.
-  Touches: `tests/`, `.github/workflows/build.yml`
-  Acceptance: a pytest (or CI step) scans `**/*.py` and `*.bat` for bytes outside `\x00-\x7f` and fails listing offending file:line; passes on the current tree.
-  Complexity: S
-
-- [ ] P2 -- User-visible notice on settings.json corruption/reset
-  Why: a malformed settings file silently resets all persisted state (geometry, panel layout, saved regions, user presets) with only a hidden-log warning, so users silently lose configuration.
-  Evidence: `gui/config.py:621-633` returns default `ProcessingConfig()` on any load failure and logs to the rotating file only; malformed region rects are likewise dropped silently in `_coerce_rect`.
-  Touches: `gui/config.py`, `gui/app.py`
-  Acceptance: on a settings load/parse failure the app shows a startup toast/status ("Settings were corrupted and reset to defaults"); dropped region rects log a WARNING naming each discarded entry.
-  Complexity: S
-
-- [ ] P2 -- Drag-drop feedback when all dropped files are unsupported
-  Why: dropping only unsupported files (e.g. `.exe`, `.txt`) does nothing at all -- no toast, no status -- reading as a broken drop target.
-  Evidence: `gui/widgets.py:1204` `if valid:` early-returns before calling `on_drop`, bypassing the existing `_announce_import_summary` infra (`gui/app.py:3747`) which already handles the unsupported-count message.
-  Touches: `gui/widgets.py`, `gui/app.py`
-  Acceptance: an all-unsupported drop routes through `_announce_import_summary` (or equivalent) and surfaces "skipped N unsupported file(s)"; mixed drops report both added and skipped counts.
-  Complexity: S
-
-- [ ] P2 -- Core-pipeline unit tests (detection cascade, tracking, io fallbacks)
-  Why: the large suite is integration/hardening-weighted; the modules most likely to break on a dependency bump have no dedicated unit coverage of their fallback branches.
-  Evidence: no `tests/test_detection*.py`/`test_tracking*.py`/`test_io*.py`; `backend/detection.py` (cascade RapidOCR>Paddle>Surya>EasyOCR>cv2), `backend/tracking.py` (Kalman), `backend/io.py` (FFmpeg timeout/intermediate-writer fallback) untested in isolation.
-  Touches: `tests/`
-  Acceptance: parametrized unit tests cover the detection-cascade fallback order with engines mocked absent, the Kalman single-frame-miss recovery, and the io FFmpeg-timeout fallback path; all pass in CI.
-  Complexity: M
-
-- [ ] P2 -- Dependency upper bounds + version-cap CI check
-  Why: requirements.txt has only lower bounds; a major bump (paddleocr 4.x, rapidocr 3.x) can change return shapes and silently break detection.
-  Evidence: `requirements.txt` has no `,<` upper bounds (verified); CLAUDE.md already documents RapidOCR 1.x/2.x return-shape divergence handled in `_detect_rapid`.
-  Touches: `requirements.txt`, `setup.py`, `.github/workflows/build.yml`
-  Acceptance: OCR-engine deps carry documented major-version caps (`rapidocr>=2.0.0,<3.0.0`, `paddleocr>=3.0.0,<4.0.0`); a CI step fails if an installed engine exceeds the cap. numpy/opencv stay uncapped (documented upgrade path).
-  Complexity: S
-
-- [ ] P2 -- Diagnosable logging on swallowed processing-path exceptions
-  Why: `except Exception: pass` in the processing/inpaint paths discards tracebacks needed for post-mortem when crash reporting is off (it is opt-in).
-  Evidence: multiple swallowed blocks in `backend/processor.py` and `gui/app.py`; deliberate guards (e.g. `backend/detection.py:160-169` GPL Surya skip) must be left alone.
-  Touches: `backend/processor.py`, `gui/app.py`, `backend/inpainters/*.py`
-  Acceptance: swallowed exceptions on the processing/inpaint paths log at WARNING with `exc_info=True` and a short context tag; intentional control-flow guards are explicitly annotated and exempted.
-  Complexity: S
-
-- [ ] P2 -- Graceful in-flight subprocess teardown on app close
-  Why: closing during processing can orphan the FFmpeg subprocess and leave worker/preview daemon threads mid-write.
-  Evidence: `gui/app.py:215` `_on_close` exists but does not join worker/preview threads or terminate the active FFmpeg child.
-  Touches: `gui/app.py`, `backend/io.py`/`backend/remux.py`
-  Acceptance: on close-during-processing the active FFmpeg child is terminated and partial outputs cleaned up; preview/worker threads are signalled and joined with a short timeout before the process exits.
-  Complexity: M
-
-- [ ] P2 -- Validate PaddleOCR 3.7 / PP-OCRv6 compatibility
-  Why: PaddleOCR 3.7.0 shipped PP-OCRv6 on 2026-06-11, while VSR floats `paddleocr>=3.0.0`; the next install can change OCR behavior without a VSR-side benchmark or parser test.
-  Evidence: PaddleOCR release notes for v3.7.0 / PP-OCRv6; `requirements.txt:59`, `setup.py:348`, and `.github/workflows/build.yml:72` all install `paddleocr>=3.0.0`; `backend/paddle_compat.py` only documents 2.x/3.x shape compatibility and README still names PP-OCRv5.
-  Touches: `backend/paddle_compat.py`, `backend/detection.py`, `tests/`, `README.md`, `requirements.txt`, `.github/workflows/build.yml`
-  Acceptance: CI covers a mocked PP-OCRv6 `predict()` payload; README states the supported PaddleOCR tier accurately; dependency policy either pins a tested 3.x range or explicitly validates latest 3.x.
-  Complexity: M
-
-- [ ] P2 -- Sync VVC / H.266 support across README and release docs
-  Why: VVC output is implemented in the CLI, GUI, and encoder probe, but user-facing docs still list only H.264/H.265/AV1, so users cannot discover the option or its FFmpeg/libvvenc requirement from README.
-  Evidence: `backend/cli.py:308-310`, `gui/app.py:1692-1700`, and `backend/encoder.py:25-28` include `vvc`; `README.md:33`, `README.md:226`, and `README.md:276` still document only h264/h265/av1; VVenC FFmpeg docs require `--enable-libvvenc`.
-  Touches: `README.md`, `.github/workflows/build.yml`, `tests/test_release_workflow.py`
-  Acceptance: README feature list, CLI table, and configuration table include VVC/H.266 with the libvvenc caveat; release verification records whether the bundled/system FFmpeg exposes `libvvenc`.
-  Complexity: S
 
 ### Later (research bench -- only if local, permissively licensed weights appear)
 
@@ -413,51 +312,33 @@ Speculative research bench; not commitments.
 
 ### P1 - Reliability and Hardening
 
-- [ ] P1 -- Harden startup GitHub Releases update check
-  Why: the optional update check is bounded, but it still polls the GitHub
-  Releases API without REST etiquette; rate-limit or API-shape failures are
-  currently only swallowed/logged, and repeated launches can keep making the
-  same avoidable request.
-  Evidence: `backend/update_check.py` sends only an `Accept` header
-  (`application/vnd.github+json`); GitHub REST best practices recommend
-  explicit error/rate-limit handling and conditional requests where appropriate.
-  The continuation research pass also hit unauthenticated GitHub API rate
-  limits.
-  Touches: `backend/update_check.py`, `gui/config.py`, `tests/test_hardening.py`
-  Acceptance: the request sets a clear User-Agent and API-version header;
-  ETag/Last-Modified state is stored under APPDATA or settings; 304 responses
-  are treated as "no update"; 403/429 rate-limit headers back off without
-  repeated retries; tests cover 200-newer, 304-not-modified, timeout, and
-  rate-limited cases.
+- [ ] P1 -- RapidOCR 3.x compatibility testing and cap lift
+  Why: the `<3.0.0` pin blocks 9 months of improvements including a unified
+  package, CoreML engine, and TensorRT support; v3.8.0+ changed the constructor
+  and return types.
+  Evidence: RapidOCR v3.9.0 released 2026-06-23; v3.8.0 breaking changes noted
+  by Immich/docling-serve downstream consumers; RESEARCH open question.
+  Touches: `requirements.txt`, `backend/detection.py` (`_detect_rapid`),
+  `tests/test_detection_pipeline.py`
+  Acceptance: `_detect_rapid` handles v2.x and v3.x constructor + return types;
+  test covers both API shapes; cap changed to `<4.0.0`; no regression on
+  reference clips.
   Complexity: M
-  Sources:
-  https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api
+  Source: https://github.com/RapidAI/RapidOCR/releases
 
-- [ ] P1 -- Verify release workflow downloaded tooling and action supply chain
-  Why: release jobs execute installer and winget submission tooling, so mutable
-  action tags and downloaded executables need stronger evidence than "latest"
-  URLs before producing user-facing binaries.
-  Evidence: `.github/workflows/build.yml` uses action major-version tags and
-  downloads `wingetcreate.exe` from `https://aka.ms/wingetcreate/latest` before
-  executing it; GitHub Actions secure-use guidance recommends hardening action
-  and dependency trust boundaries.
-  Touches: `.github/workflows/build.yml`, `tests/test_release_workflow.py`
-  Acceptance: actions are pinned to reviewed SHAs or covered by a documented
-  allowlist/update policy; wingetcreate is downloaded from a versioned release
-  and Authenticode/hash verified before execution; release-verification records
-  release-tool names, versions, and hashes; a workflow test rejects unchecked
-  executable downloads from mutable "latest" URLs.
+- [ ] P1 -- PP-OCRv6 model evaluation and auto-selection
+  Why: +5.1% recognition accuracy over PP-OCRv5, 5.2x CPU speedup, 50-language
+  single model (no model switching); ships inside PaddleOCR 3.7+ within the
+  existing pip floor.
+  Evidence: PP-OCRv6 paper (arXiv 2606.13108) and PaddleOCR 3.7.0 release;
+  benchmarks show 83.2% recognition accuracy at 34.5M params.
+  Touches: `backend/detection.py` (`_detect_paddle`), `backend/paddle_compat.py`,
+  `tests/test_detection_pipeline.py`
+  Acceptance: detection pipeline auto-selects PP-OCRv6 medium model when
+  PaddleOCR >= 3.7.0 is installed; accuracy validated on reference clips;
+  fallback to existing models on older PaddleOCR.
   Complexity: M
-  Sources:
-  https://docs.github.com/en/actions/reference/security/secure-use
-  https://github.com/microsoft/winget-create/releases
-
-- [ ] P1 -- Pin runtime remote-code model adapters
-  Why: optional VLM and tracking adapters can execute remote repository code or moving refs, which weakens the local-first trust boundary.
-  Evidence: `backend/ocr_vlm.py:99-100` uses `trust_remote_code=True`; `backend/segmentation.py:207` calls `torch.hub.load("facebookresearch/co-tracker", "cotracker3_online")`; Hugging Face Auto Classes docs and PyTorch torch.hub docs both describe these as trusted-code boundaries.
-  Touches: `backend/ocr_vlm.py`, `backend/segmentation.py`, `backend/adapter_manifest.py`, `backend/model_hashes.py`, `tests/`
-  Acceptance: remote-code adapters require an approved local path or pinned revision; default runtime refuses unpinned remote-code loaders with an actionable message; release evidence records model repo/revision/path/hash; tests assert no `trust_remote_code=True` or `torch.hub.load()` path is reachable without the policy gate.
-  Complexity: M
+  Source: https://arxiv.org/html/2606.13108
 
 ### P2 - Evidence Quality and Observability
 
@@ -475,40 +356,61 @@ Speculative research bench; not commitments.
   update the "current as of" marker.
   Complexity: S
 
-- [ ] P2 -- Capture RapidOCR bundled-model provenance in release evidence
-  Why: RapidOCR is the default OCR path, but its bundled ONNX assets are only audited for opsets today, not package version, file hashes, or asset provenance.
-  Evidence: `backend/onnx_model_info.py:167-214` locates and audits RapidOCR model files; RapidOCR discussion #667 reports v3.x wheels depend on older v1.1.0 release assets.
-  Touches: `backend/onnx_model_info.py`, `backend/model_hashes.py`, `.github/workflows/build.yml`, `tests/`
-  Acceptance: release verification lists RapidOCR package name/version, discovered model filenames, SHA-256 hashes, and opsets; strict release fails or clearly warns when default RapidOCR assets are missing/unreadable; tests cover a mocked RapidOCR model directory.
-  Complexity: M
+- [ ] P2 -- GitHub issue templates with support-bundle prompt
+  Why: bug reports are unstructured and do not ask for the support bundle that
+  already ships; structured issue forms reduce back-and-forth and surface
+  reproducible details.
+  Evidence: RESEARCH security/reliability section; `backend/support_bundle.py`
+  exists but GitHub intake is a bare issue link; docs.github.com issue templates
+  support structured required fields.
+  Touches: `.github/ISSUE_TEMPLATE/bug_report.yml`,
+  `.github/ISSUE_TEMPLATE/feature_request.yml`
+  Acceptance: bug report form asks for VSR version, OS, GPU, support-bundle zip,
+  and reproduction steps; feature request form asks for use case and expected
+  behavior; both render correctly on GitHub.
+  Complexity: S
+  Source: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests
 
-- [ ] P2 -- Add GUI review worklist for quality-gate failures
-  Why: batch quality gates can mark outputs as `review-needed`, but the GUI completion flow only offers a generic report open action, making failed-gate outputs easy to miss in large batches.
-  Evidence: `backend/batch_report.py:37` defines `review-needed`; `backend/batch_report.py:140` sets that status on failed quality gates; `gui/app.py:3333-3349` exposes only `Open report` in the completion modal.
-  Touches: `gui/app.py`, `gui/widgets.py`, `backend/batch_report.py`, `backend/quality_gate.py`
-  Acceptance: when any batch item is `review-needed`, the completion dialog shows a review count and a primary review action; clicking it filters or focuses the queue on those items and opens the quality sheet/report for the first affected output; row actions expose `Open quality sheet` where available.
-  Complexity: M
-
-- [ ] P2 -- Resolve generated PowerShell launcher drift
-  Why: setup generates a PowerShell launcher that is not part of the tracked/documented launcher set, so it can drift from release-tested launch behavior.
-  Evidence: `setup.py:431-583` writes `Run_VSR_Pro.ps1`; tracked root launchers and README launcher instructions focus on `Run_VSR_Pro.bat` and `Run_VSR_Pro_Debug.bat`.
-  Touches: `setup.py`, `README.md`, `.github/workflows/build.yml`, `tests/test_setup_bootstrap.py`
-  Acceptance: either stop generating `Run_VSR_Pro.ps1` or track, package, document, and smoke-test it; release verification records the exact launcher files included in the bundle.
+- [ ] P2 -- TkinterDnD2 bundling or visible degradation feedback
+  Why: native drag-drop silently fails without the optional `tkinterdnd2` package;
+  the drop area degrades to click-only with no user-visible indication, causing
+  confusion (issues #4/#5 reporter hit this).
+  Evidence: `gui/widgets.py:1252-1259` wraps TkinterDnD2 in a silent try/except;
+  issue #4 reporter could not drag files; EchoSubs and upstream both support
+  drag-drop out of the box.
+  Touches: `gui/widgets.py` (`DragDropFrame._setup_dnd`), `requirements.txt`,
+  `setup.py`
+  Acceptance: either TkinterDnD2 is installed by default (preferred), or the drop
+  area shows a visible note when drag-drop is unavailable (e.g. "Drag-drop
+  requires tkinterdnd2; click to browse").
   Complexity: S
 
-- [ ] P2 -- Schema-gate imported presets before applying settings
-  Why: shared preset files can currently mutate any `ProcessingConfig` field with no preview or field allowlist, which can unexpectedly flip network, output, reporting, Whisper, or destructive workflow settings.
-  Evidence: `gui/config.py:765-784` stores imported preset `fields` as-is; `gui/config.py:683-700` applies every imported key that exists on `ProcessingConfig`.
-  Touches: `gui/config.py`, `backend/presets.py`, `gui/app.py`, `tests/test_hardening.py`
-  Acceptance: imported presets are filtered through an explicit allowlist of safe tuning fields; rejected fields are reported in the import status; the GUI previews which settings will change before applying; tests cover malicious/unknown/path/network fields.
+- [ ] P2 -- FFmpeg 8 Whisper filter backend evaluation
+  Why: FFmpeg 8 ships a built-in Whisper filter for live transcription, which
+  could simplify or replace the project's `whisper_fallback.py` for subtitle-aware
+  processing without requiring Python ML dependencies.
+  Evidence: FFmpeg 8.0 "Huffman" release (2025-08-22) includes `whisper` filter;
+  `backend/whisper_fallback.py` already has `--whisper-backend ffmpeg` support but
+  performance/accuracy comparison against `faster-whisper` is not documented.
+  Touches: `backend/whisper_fallback.py`, `docs/architecture.md`
+  Acceptance: documented benchmark comparing FFmpeg Whisper filter vs
+  faster-whisper on 3+ reference clips (accuracy, speed, VRAM); recommendation
+  on default backend; architecture docs updated.
   Complexity: S
 
-- [ ] P2 -- Add redacted support bundle and structured bug-report intake
-  Why: users can open logs, but maintainers do not get a single privacy-preserving diagnostics package or issue form with the versions, ffmpeg/OpenCV/GPU facts, settings summary, and redacted logs needed to reproduce local media failures.
-  Evidence: README links directly to generic GitHub issues; `.github/` only contains `workflows/build.yml`; `backend/crash_reporter.py` already scrubs paths and `backend/batch_report.py:161-168` already redacts report paths; GitHub issue forms support structured required fields; OWASP logging guidance warns that logs may contain sensitive data and should be protected/redacted.
-  Touches: `gui/app.py`, `backend/crash_reporter.py`, `backend/batch_report.py`, `.github/ISSUE_TEMPLATE/bug_report.yml`, `README.md`, `tests/`
-  Acceptance: GUI exposes "Create support bundle" and CLI exposes an equivalent command; the bundle contains app/Python/dependency/ffmpeg/OpenCV/GPU metadata, redacted settings, recent redacted logs, and optional batch report summaries without media paths or OCR text; GitHub bug form asks for the bundle and key reproduction fields; tests assert path/OCR redaction.
-  Complexity: M
+- [ ] P2 -- Document ProPainter name vs license distinction in user-facing docs
+  Why: VSR's "ProPainter" mode is TBE+LaMa (MIT-clean), not the ICCV 2023
+  ProPainter (NTU S-Lab non-commercial). CLAUDE.md documents this internally
+  but user-facing docs and the README algorithm table do not.
+  Evidence: ProPainter license is NTU S-Lab 1.0 (non-commercial only);
+  competitive analysis flags this as the single biggest legal confusion risk
+  for MIT-licensed tools; README Algorithm Comparison table says "ProPainter"
+  without clarification.
+  Touches: `README.md` (Algorithm Comparison table and credits section)
+  Acceptance: README algorithm table and credits section explicitly note that
+  VSR's ProPainter mode is a TBE+LaMa hybrid, not the ICCV 2023 ProPainter
+  weights or code.
+  Complexity: S
 
 ### P3 - Operational Maturity
 
