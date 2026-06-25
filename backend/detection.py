@@ -63,12 +63,23 @@ def _build_rapidocr(rapid_cls, device: str):
     if directml_params:
         try:
             return rapid_cls(params=directml_params), "DirectML"
+        except TypeError:
+            try:
+                return rapid_cls(**directml_params), "DirectML"
+            except Exception as exc:
+                logger.warning(
+                    "RapidOCR DirectML provider init failed; retrying CPU "
+                    f"provider: {exc}"
+                )
         except Exception as exc:
             logger.warning(
                 "RapidOCR DirectML provider init failed; retrying CPU "
                 f"provider: {exc}"
             )
-    return rapid_cls(), "CPU"
+    try:
+        return rapid_cls(), "CPU"
+    except TypeError:
+        return rapid_cls(params={}), "CPU"
 
 
 class SubtitleDetector:

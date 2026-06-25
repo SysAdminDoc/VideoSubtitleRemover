@@ -144,7 +144,7 @@ The app automatically selects the best available engine:
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
-| 1 | **RapidOCR** (ONNX PP-OCR) | `pip install "rapidocr>=2.0.0,<3.0.0"` | 100+ | 4-5x faster than PaddleOCR, leak-free (default) |
+| 1 | **RapidOCR** (ONNX PP-OCR) | `pip install "rapidocr>=2.0.0,<4.0.0"` | 100+ | 4-5x faster than PaddleOCR, leak-free (default) |
 | 2 | PaddleOCR (3.x, PP-OCRv6 default in 3.7) | `pip install "paddleocr>=3.0.0,<4.0.0"` | 106 | High accuracy reference implementation; PP-OCRv5/v6 result payloads are supported |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
 | 4 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |

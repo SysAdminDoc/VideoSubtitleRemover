@@ -122,5 +122,72 @@ class DetectionCascadeTests(unittest.TestCase):
         self.assertIs(detector._paddle_model, paddle_model)
 
 
+class RapidOCROutputParsingTests(unittest.TestCase):
+    """Verify that the output parser handles v1.x, v2.x, and v3.x shapes."""
+
+    def _get_detector_cls(self):
+        with _fresh_detection_module() as detection:
+            return detection.SubtitleDetector
+
+    def test_v1_tuple_output(self):
+        cls = self._get_detector_cls()
+        output = ([
+            [[[10, 20], [100, 20], [100, 40], [10, 40]], "hello", 0.95],
+        ], 0.1)
+        boxes = cls._rapid_output_to_boxes(output, 0.5)
+        self.assertEqual(len(boxes), 1)
+        self.assertEqual(boxes[0], (10, 20, 100, 40))
+
+    def test_v2_structured_object(self):
+        cls = self._get_detector_cls()
+        import numpy as np
+        output = types.SimpleNamespace(
+            boxes=np.array([
+                [[10, 20], [100, 20], [100, 40], [10, 40]],
+            ]),
+            scores=[0.92],
+        )
+        boxes = cls._rapid_output_to_boxes(output, 0.5)
+        self.assertEqual(len(boxes), 1)
+        self.assertEqual(boxes[0], (10, 20, 100, 40))
+
+    def test_v3_dict_output(self):
+        cls = self._get_detector_cls()
+        import numpy as np
+        output = {
+            "dt_polys": [
+                np.array([[15, 25], [110, 25], [110, 45], [15, 45]]),
+            ],
+            "rec_scores": [0.88],
+        }
+        boxes = cls._rapid_output_to_boxes(output, 0.5)
+        self.assertEqual(len(boxes), 1)
+        self.assertEqual(boxes[0], (15, 25, 110, 45))
+
+    def test_low_confidence_filtered(self):
+        cls = self._get_detector_cls()
+        output = ([
+            [[[10, 20], [100, 20], [100, 40], [10, 40]], "hello", 0.2],
+        ], 0.1)
+        boxes = cls._rapid_output_to_boxes(output, 0.5)
+        self.assertEqual(len(boxes), 0)
+
+    def test_none_output(self):
+        cls = self._get_detector_cls()
+        boxes = cls._rapid_output_to_boxes(None, 0.5)
+        self.assertEqual(boxes, [])
+
+    def test_v3_list_of_dicts(self):
+        cls = self._get_detector_cls()
+        import numpy as np
+        output = [
+            {"box": np.array([[5, 10], [50, 10], [50, 30], [5, 30]]),
+             "score": 0.91, "text": "test"},
+        ]
+        boxes = cls._rapid_output_to_boxes(output, 0.5)
+        self.assertEqual(len(boxes), 1)
+        self.assertEqual(boxes[0], (5, 10, 50, 30))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -56,7 +56,7 @@ Pillow>=12.2.0
 # uncapped because the OpenCV 5 DNN path is the documented upgrade route.
 # RapidOCR runs PP-OCR via ONNX Runtime -- 4-5x faster than the upstream
 # paddlepaddle build and free of its long-standing memory-leak issues.
-rapidocr>=2.0.0,<3.0.0; python_version>="3.10"
+rapidocr>=2.0.0,<4.0.0; python_version>="3.10"
 rapidocr-onnxruntime>=1.4.0,<2.0.0; python_version<"3.10"
 paddleocr>=3.0.0,<4.0.0
 # surya-ocr>=0.9.0  # Optional: fast layout-aware detection (GPL -- see license)
