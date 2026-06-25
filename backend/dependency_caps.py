@@ -17,7 +17,7 @@ class DependencyCap:
 
 
 OCR_DEPENDENCY_CAPS: Tuple[DependencyCap, ...] = (
-    DependencyCap("rapidocr", "2.0.0", "3.0.0"),
+    DependencyCap("rapidocr", "2.0.0", "4.0.0"),
     DependencyCap("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
     DependencyCap("paddleocr", "3.0.0", "4.0.0"),
 )
