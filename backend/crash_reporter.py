@@ -47,10 +47,10 @@ def _path_scrub(text: str) -> str:
     the upload doesn't carry filesystem layout information. Replaces
     `C:\\Users\\xxx\\repos\\VSR\\...` with `<path>\\...` and
     `/home/xxx/...` with `<path>/...`."""
-    text = re.sub(r"[A-Za-z]:\\(?:[^\s\\:]+\\)*", "<path>\\\\", text)
-    text = re.sub(r"[A-Za-z]:/(?:[^/\s:]+/)*", "<path>/", text)
-    text = re.sub(r"\\\\\\\\[^\s\\:]+\\\\(?:[^\s\\:]+\\\\)*", "<path>\\\\", text)
-    text = re.sub(r"/(?:home|Users|var|tmp)/(?:[^/\s]+/)+", "<path>/", text)
+    text = re.sub(r"[A-Za-z]:\\(?:[^\\:]+\\)*", "<path>\\\\", text)
+    text = re.sub(r"[A-Za-z]:/(?:[^/:]+/)*", "<path>/", text)
+    text = re.sub(r"\\\\\\\\[^\\:]+\\\\(?:[^\\:]+\\\\)*", "<path>\\\\", text)
+    text = re.sub(r"/(?:home|Users|var|tmp)/(?:[^/]+/)+", "<path>/", text)
     return text
 
 

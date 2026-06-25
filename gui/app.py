@@ -47,7 +47,7 @@ from gui.config import (
     PRESETS_FILE, list_presets, apply_preset,
     save_user_preset, delete_user_preset, export_preset, import_preset,
     consume_preset_import_notice,
-    status_ui,
+    status_ui, BUILTIN_PRESETS, _load_user_presets,
 )
 from gui.utils import (
     SUPPORTED_EXTENSIONS, filepicker_pattern,
@@ -5612,7 +5612,7 @@ class VideoSubtitleRemoverApp:
             # Update batch progress + window title
             try:
                 self.root.after(0, self._update_batch_progress, idx, total)
-            except RuntimeError:
+            except (RuntimeError, tk.TclError):
                 return  # root destroyed during shutdown
             self._process_item(item)
 
@@ -5620,7 +5620,7 @@ class VideoSubtitleRemoverApp:
         try:
             self.root.after(0, self._update_batch_progress, total, total)
             self.root.after(0, self._on_processing_complete)
-        except RuntimeError:
+        except (RuntimeError, tk.TclError):
             pass  # root destroyed during shutdown
 
     def _process_soft_subtitle_item(self, item: QueueItem) -> bool:

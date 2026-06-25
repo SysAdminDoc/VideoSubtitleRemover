@@ -216,10 +216,10 @@ class SubtitleDetector:
             rotated_boxes = self._detect_axis_aligned(rotated, threshold)
             out: List[Tuple[int, int, int, int]] = []
             for (rx1, ry1, rx2, ry2) in rotated_boxes:
-                ox1 = max(0, ry1)
-                oy1 = max(0, w - rx2)
-                ox2 = min(h, ry2)
-                oy2 = min(w, w - rx1)
+                ox1 = max(0, w - ry2)
+                oy1 = max(0, rx1)
+                ox2 = min(w, w - ry1)
+                oy2 = min(h, rx2)
                 if ox2 > ox1 and oy2 > oy1:
                     out.append((ox1, oy1, ox2, oy2))
             return out
@@ -235,10 +235,10 @@ class SubtitleDetector:
             rotated = self._detect_axis_aligned_conf(rotated, threshold)
             out: List[Tuple[int, int, int, int, float]] = []
             for (rx1, ry1, rx2, ry2, conf) in rotated:
-                ox1 = max(0, ry1)
-                oy1 = max(0, w - rx2)
-                ox2 = min(h, ry2)
-                oy2 = min(w, w - rx1)
+                ox1 = max(0, w - ry2)
+                oy1 = max(0, rx1)
+                ox2 = min(w, w - ry1)
+                oy2 = min(h, rx2)
                 if ox2 > ox1 and oy2 > oy1:
                     out.append((ox1, oy1, ox2, oy2, conf))
             return out

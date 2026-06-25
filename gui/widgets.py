@@ -6,6 +6,7 @@ import ctypes
 import logging
 import os
 import sys
+from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog
 import tkinter.font as tkfont
@@ -353,6 +354,8 @@ class ModernButton(tk.Canvas):
 
     def set_enabled(self, enabled: bool):
         self.enabled = enabled
+        self.hovered = False
+        self.pressed = False
         self.current_bg = self.bg_color if enabled else Theme.BG_TERTIARY
         self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
         self._draw()
@@ -1416,7 +1419,8 @@ class QueueItemWidget(tk.Frame):
         self.open_btn.pack(side="right")
 
         self._interactive_widgets = [
-            self, self.container, self.top_row, self.name_label, self.info_label,
+            self, self.accent_stripe, self.container, self.top_row,
+            self.name_label, self.info_label,
             self.bottom_row, self.message_label, self.time_label, self.actions_row,
             self.status_badge, self.progress_bar,
         ]
