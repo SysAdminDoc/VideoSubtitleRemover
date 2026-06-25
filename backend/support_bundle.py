@@ -219,13 +219,18 @@ def _cache_summary() -> list[dict]:
     return summary
 
 
-def _unique_existing(paths: Iterable[Path]) -> list[Path]:
+def _unique_existing(paths: Iterable[Path],
+                     allowed_suffixes: tuple = (".json", ".md", ".txt",
+                                                ".log"),
+                     ) -> list[Path]:
     seen = set()
     result = []
     for path in paths:
         try:
             resolved = path.resolve(strict=True)
         except OSError:
+            continue
+        if resolved.suffix.lower() not in allowed_suffixes:
             continue
         key = str(resolved).casefold()
         if key in seen or not resolved.is_file():
