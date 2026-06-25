@@ -131,6 +131,13 @@ class JsonLineLogHandler(logging.Handler):
         super().__init__()
         self._stream = stream
 
+    def close(self):
+        try:
+            self._stream.close()
+        except Exception:
+            pass
+        super().close()
+
     def emit(self, record: logging.LogRecord) -> None:
         try:
             payload = {

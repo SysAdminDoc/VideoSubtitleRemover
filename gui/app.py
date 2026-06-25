@@ -1186,14 +1186,26 @@ class VideoSubtitleRemoverApp:
             self._update_status("Could not open input/output for compare", "warning")
             return
 
-        n_a = int(cap_a.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
-        n_b = int(cap_b.get(_cv2.CAP_PROP_FRAME_COUNT)) or 1
+        n_a = max(1, int(cap_a.get(_cv2.CAP_PROP_FRAME_COUNT)))
+        n_b = max(1, int(cap_b.get(_cv2.CAP_PROP_FRAME_COUNT)))
         n_total = max(1, min(n_a, n_b))
         fps = cap_a.get(_cv2.CAP_PROP_FPS) or 30.0
         if fps <= 0:
             fps = 30.0
         max_w = min(1024, int(self.root.winfo_screenwidth() * 0.7))
         max_h = min(576, int(self.root.winfo_screenheight() * 0.6))
+
+        try:
+            self._open_ab_scrubber_window(
+                in_path, cap_a, cap_b, n_a, n_b, n_total, fps, max_w, max_h)
+        except Exception:
+            cap_a.release()
+            cap_b.release()
+            raise
+
+    def _open_ab_scrubber_window(self, in_path, cap_a, cap_b,
+                                  n_a, n_b, n_total, fps, max_w, max_h):
+        import cv2 as _cv2
 
         win = tk.Toplevel(self.root)
         win.title(f"A/B compare: {Path(in_path).name}")
