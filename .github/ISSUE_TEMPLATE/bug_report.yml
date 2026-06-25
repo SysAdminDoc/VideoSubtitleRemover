@@ -47,6 +47,29 @@ body:
         - Release package
     validations:
       required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: gpu
+    attributes:
+      label: GPU
+      options:
+        - NVIDIA (CUDA)
+        - AMD / Intel (DirectML)
+        - CPU only
+        - Unknown
+    validations:
+      required: true
   - type: textarea
     id: support-bundle
     attributes:
