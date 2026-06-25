@@ -122,6 +122,45 @@ class DetectionCascadeTests(unittest.TestCase):
         self.assertIs(detector._paddle_model, paddle_model)
 
 
+class VerticalTextRotationTests(unittest.TestCase):
+    """Verify that 90-CCW rotation coordinate mapping is correct."""
+
+    def test_box_round_trips_through_rotation(self):
+        import numpy as np
+        with _fresh_detection_module() as detection:
+            h, w = 1080, 1920
+            frame = np.zeros((h, w, 3), dtype=np.uint8)
+            original_box = (1800, 400, 1900, 500)
+            detector = detection.SubtitleDetector.__new__(
+                detection.SubtitleDetector)
+            detector.vertical = True
+            detector._rapid_model = None
+            detector._paddle_model = None
+            detector._surya_det = None
+            detector._easyocr_reader = None
+            detector._vlm_detector = None
+            detector._engine_name = "test"
+
+            rotated_box = (400, 19, 500, 119)
+
+            def fake_detect(f, t):
+                return [rotated_box]
+
+            detector._detect_axis_aligned = fake_detect
+            result = detector.detect(frame, 0.5)
+
+            self.assertEqual(len(result), 1)
+            rx1, ry1, rx2, ry2 = result[0]
+            self.assertTrue(1799 <= rx1 <= 1801,
+                            f"ox1={rx1} expected ~1800")
+            self.assertTrue(399 <= ry1 <= 401,
+                            f"oy1={ry1} expected ~400")
+            self.assertTrue(1900 <= rx2 <= 1921,
+                            f"ox2={rx2} expected ~1901")
+            self.assertTrue(499 <= ry2 <= 501,
+                            f"oy2={ry2} expected ~500")
+
+
 class RapidOCROutputParsingTests(unittest.TestCase):
     """Verify that the output parser handles v1.x, v2.x, and v3.x shapes."""
 
