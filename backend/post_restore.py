@@ -95,7 +95,8 @@ def seedvr2_restore(input_path: str, output_path: str,
     cmd_env = os.environ.get("VSR_SEEDVR2_CMD", "")
     if cmd_env:
         try:
-            cmd = cmd_env.split() + ["-i", input_path, "-o", output_path]
+            import shlex
+            cmd = shlex.split(cmd_env) + ["-i", input_path, "-o", output_path]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=14400)
             if result.returncode == 0 and Path(output_path).is_file():
                 logger.info(f"SeedVR2 restoration complete via {cmd_env}")

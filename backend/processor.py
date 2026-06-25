@@ -1064,7 +1064,7 @@ class SubtitleRemover:
             fps = float(min(raw_fps, 1000.0))
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+            total_frames = max(1, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
 
             if width == 0 or height == 0:
                 raise ValueError(f"Invalid video dimensions: {width}x{height}")
@@ -1429,6 +1429,7 @@ class SubtitleRemover:
             writer = None
             if mask_writer is not None:
                 mask_writer.release()
+                mask_writer = None
 
             self._report_progress(0.9, "Merging audio...")
             if use_frame_output:
@@ -1529,9 +1530,8 @@ class SubtitleRemover:
             # RM-27: Whisper audio temp dir is created lazily inside the
             # main try block; clean it up here only if it was set.
             try:
-                _wda = locals().get("whisper_audio_dir", None)
-                if _wda and os.path.exists(_wda):
-                    shutil.rmtree(_wda, ignore_errors=True)
+                if whisper_audio_dir and os.path.exists(whisper_audio_dir):
+                    shutil.rmtree(whisper_audio_dir, ignore_errors=True)
             except Exception:
                 logger.warning("Whisper temp cleanup failed", exc_info=True)
 
