@@ -136,7 +136,7 @@ python -m unittest discover -s tests -v
 | LAMA | Neural (LaMa ONNX or PyTorch) | Medium | Best still-frame | Images, animations, static backgrounds |
 | ProPainter | TBE + LaMa refinement | Slowest | Best motion | Motion-heavy footage, thick/decorative text |
 
-> All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a hybrid: TBE reconstructs the background, then LaMa refines any residual.
+> All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a TBE + LaMa refinement hybrid -- it is **not** the ICCV 2023 ProPainter model or weights (which carry a non-commercial NTU S-Lab license). This implementation uses only MIT-licensed code.
 
 ### Detection Engines
 
@@ -446,7 +446,7 @@ and completed checklists live under [docs/archive/](docs/archive/).
 - LaMa inpainting: [simple-lama-inpainting](https://github.com/enesmsahin/simple-lama-inpainting)
 - EasyOCR: [JaidedAI/EasyOCR](https://github.com/JaidedAI/EasyOCR)
 - STTN: [Learning Joint Spatial-Temporal Transformations](https://arxiv.org/abs/2007.10247)
-- ProPainter: [sczhou/ProPainter](https://github.com/sczhou/ProPainter)
+- ProPainter (research reference): [sczhou/ProPainter](https://github.com/sczhou/ProPainter) -- VSR's "ProPainter" mode is a TBE + LaMa hybrid inspired by the concept; it does not use the upstream ProPainter code or weights
 
 ## License
 
