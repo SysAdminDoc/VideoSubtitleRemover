@@ -848,6 +848,7 @@ class VideoSubtitleRemoverApp:
         for wid, widget in self.queue_widgets.items():
             widget.set_selected(wid == item_id)
         self._update_preview_actions()
+        self._update_guidance_surface()
 
     def _refresh_action_states(self):
         """Enable or disable primary queue actions based on current state."""

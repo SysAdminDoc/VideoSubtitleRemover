@@ -53,6 +53,11 @@ call :maybe_hidden_import rapidocr_onnxruntime
 call :maybe_hidden_import paddleocr
 call :maybe_hidden_import easyocr
 
+:: Collect data files (YAML configs + ONNX models) for OCR packages
+set "COLLECT_DATA="
+call :maybe_collect_data rapidocr
+call :maybe_collect_data rapidocr_onnxruntime
+
 echo.
 echo Building EXE (this may take several minutes)...
 echo.
@@ -65,6 +70,7 @@ echo.
     --name "VideoSubtitleRemoverPro" ^
     %DATA_ARGS% ^
     !HIDDEN_IMPORTS! ^
+    !COLLECT_DATA! ^
     VideoSubtitleRemover.py
 
 if errorlevel 1 (
@@ -101,5 +107,15 @@ if not errorlevel 1 (
     echo   Including optional module: %~1
 ) else (
     echo   Optional module not installed, skipping: %~1
+)
+exit /b 0
+
+:maybe_collect_data
+"%PYTHON%" -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec(r'%~1') else 1)" >nul 2>&1
+if not errorlevel 1 (
+    set "COLLECT_DATA=!COLLECT_DATA! --collect-data %~1"
+    echo   Collecting data files for: %~1
+) else (
+    echo   Optional data collection skipped (not installed): %~1
 )
 exit /b 0

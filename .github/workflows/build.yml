@@ -176,7 +176,18 @@ jobs:
           Add-HiddenImportIfAvailable "easyocr"
           Add-HiddenImportIfAvailable "onnxruntime"
 
-          python -m PyInstaller --noconfirm --onedir --windowed @iconArgs --name "VideoSubtitleRemoverPro" @dataArgs @hiddenImports VideoSubtitleRemover.py
+          # Collect data files (YAML configs + ONNX models) so RapidOCR
+          # can locate default_models.yaml inside the frozen bundle.
+          $collectData = @()
+          foreach ($pkg in @("rapidocr", "rapidocr_onnxruntime")) {
+            python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$pkg') else 1)"
+            if ($LASTEXITCODE -eq 0) {
+              $collectData += @("--collect-data", $pkg)
+              Write-Host "Collecting data files for: $pkg"
+            }
+          }
+
+          python -m PyInstaller --noconfirm --onedir --windowed @iconArgs --name "VideoSubtitleRemoverPro" @dataArgs @hiddenImports @collectData VideoSubtitleRemover.py
           $hiddenImportModules |
             Sort-Object -Unique |
             ConvertTo-Json |
