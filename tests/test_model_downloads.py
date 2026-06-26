@@ -110,6 +110,23 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(hints[0].label, "Whisper small model")
         self.assertIn("460 MB", hints[0].size_estimate)
 
+    def test_vace_auto_fetch_reports_checkpoint_download(self):
+        from backend import model_downloads as md
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "USERPROFILE": tmpdir,
+                "APPDATA": tmpdir,
+                "VSR_VACE": "1",
+                "VSR_VACE_AUTO_FETCH": "1",
+            }
+            hints = md.pending_model_download_hints(_cfg(mode="vace"), env)
+
+        self.assertEqual(len(hints), 1)
+        self.assertEqual(hints[0].label, "Wan2.1-VACE 1.3B checkpoint")
+        self.assertIn("huggingface_hub", hints[0].detail)
+
     def test_installed_backend_status_is_privacy_safe_and_actionable(self):
         from backend import model_downloads as md
 

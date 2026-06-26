@@ -33,6 +33,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   dissolve, shadow, and timed-region cases, with a `backend.reference_corpus`
   runner that compares decoded output-frame hashes and PSNR/SSIM floors during
   local release evidence generation.
+- **Wan2.1-VACE opt-in adapter.** `VSR_VACE=1` now resolves reviewed local
+  Wan2.1-VACE-1.3B checkpoint directories, can auto-fetch the HuggingFace
+  snapshot when `VSR_VACE_AUTO_FETCH=1` and `huggingface-hub` is installed,
+  verifies the checkpoint path through the adapter manifest, and surfaces
+  first-run download guidance before falling back safely.
 
 ### Fixed
 

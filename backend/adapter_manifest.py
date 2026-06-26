@@ -33,6 +33,7 @@ class AdapterManifestEntry:
     source_url: str = ""
     preferred_format: str = "unknown"
     remote_code_required: bool = False
+    allow_directories: bool = False
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class AdapterVerification:
             "license": self.adapter.license,
             "sourceUrl": self.adapter.source_url,
             "remoteCodeRequired": self.adapter.remote_code_required,
+            "allowDirectories": self.adapter.allow_directories,
         }
         if include_path:
             payload["path"] = self.path
@@ -165,6 +167,27 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         preferred_format="strict local VOID checkpoints",
         remote_code_required=True,
     ),
+    "vace-wan13b": AdapterManifestEntry(
+        name="vace-wan13b",
+        env_vars=(
+            "VSR_VACE_CKPT_DIR",
+            "VSR_VACE_MODEL_DIR",
+            "VSR_VACE_WEIGHTS",
+            "VSR_VACE_MANIFEST",
+        ),
+        expected_filenames=(
+            "diffusion_pytorch_model.safetensors",
+            "models_t5_umt5-xxl-enc-bf16.pth",
+            "Wan2.1_VAE.pth",
+            "model_index.json",
+        ),
+        sha256={},
+        license="Apache-2.0",
+        source_url="https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
+        preferred_format="HuggingFace snapshot directory",
+        remote_code_required=False,
+        allow_directories=True,
+    ),
     "transnetv2": AdapterManifestEntry(
         name="transnetv2",
         env_vars=("VSR_TRANSNETV2",),
@@ -245,7 +268,7 @@ def verify_adapter_path(
             strict_unknown=strict_unknown,
         )
     path = Path(model_path)
-    if not path.is_file():
+    if not path.is_file() and not (entry.allow_directories and path.is_dir()):
         return AdapterVerification(
             adapter=entry,
             path=str(path),
@@ -253,7 +276,11 @@ def verify_adapter_path(
             exists=False,
             allowed=False,
             hash_status="missing",
-            reason=f"adapter model file does not exist: {path}",
+            reason=(
+                f"adapter model directory does not exist: {path}"
+                if entry.allow_directories else
+                f"adapter model file does not exist: {path}"
+            ),
             unsafe_override=override,
             strict_unknown=strict_unknown,
         )

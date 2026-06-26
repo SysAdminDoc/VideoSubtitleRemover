@@ -32,6 +32,7 @@ class ModelDownloadHint:
 
 
 _LAMA_FILENAMES = ("lama_fp32.onnx", "lama.onnx", "inpainting_lama_2025jan.onnx")
+_VACE_REPO_ID = "Wan-AI/Wan2.1-VACE-1.3B"
 _TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 _WHISPER_SIZES = {
     "tiny": "~75 MB",
@@ -108,6 +109,18 @@ def _lama_weight_present(env: Mapping[str, str]) -> bool:
         if _has_any_file(root, names=_LAMA_FILENAMES):
             return True
     return False
+
+
+def _vace_checkpoint_present(env: Mapping[str, str]) -> bool:
+    for key in ("VSR_VACE_CKPT_DIR", "VSR_VACE_MODEL_DIR", "VSR_VACE_WEIGHTS"):
+        value = str(env.get(key, "") or "").strip()
+        if value and Path(value).exists():
+            return True
+    app_cache = _app_model_dir(env) / "vace" / "Wan2.1-VACE-1.3B"
+    if _has_any_file(app_cache, suffixes=(".safetensors", ".pth", ".bin", ".json")):
+        return True
+    repo = str(env.get("VSR_VACE_REPO_ID") or _VACE_REPO_ID)
+    return _hf_repo_cached(env, repo)
 
 
 def _hf_repo_cached(env: Mapping[str, str], repo: str) -> bool:
@@ -196,6 +209,34 @@ def _append_lama_hints(hints: list[ModelDownloadHint], config, env: Mapping[str,
         ))
 
 
+def _append_vace_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
+    mode = _mode_value(config)
+    if mode != "vace" and not _env_truthy(env, "VSR_VACE"):
+        return
+    if _vace_checkpoint_present(env):
+        return
+    if _env_truthy(env, "VSR_VACE_AUTO_FETCH"):
+        hints.append(ModelDownloadHint(
+            label="Wan2.1-VACE 1.3B checkpoint",
+            size_estimate="multi-GB",
+            detail=(
+                "VACE auto-fetch will download the Wan-AI/Wan2.1-VACE-1.3B "
+                "snapshot through huggingface_hub before inference."
+            ),
+            cache_hint="%APPDATA%\\VideoSubtitleRemoverPro\\models\\vace",
+        ))
+    else:
+        hints.append(ModelDownloadHint(
+            label="Wan2.1-VACE 1.3B checkpoint",
+            size_estimate="multi-GB",
+            detail=(
+                "Set VSR_VACE_CKPT_DIR to a local Wan2.1-VACE-1.3B snapshot "
+                "or set VSR_VACE_AUTO_FETCH=1."
+            ),
+            cache_hint="%APPDATA%\\VideoSubtitleRemoverPro\\models\\vace",
+        ))
+
+
 def _append_whisper_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
     if not bool(getattr(config, "whisper_fallback", False)):
         return
@@ -222,6 +263,7 @@ def pending_model_download_hints(
     _append_vlm_hints(hints, source_env)
     _append_detection_hints(hints, source_env)
     _append_lama_hints(hints, config, source_env)
+    _append_vace_hints(hints, config, source_env)
     _append_whisper_hints(hints, config, source_env)
     return tuple(hints)
 
