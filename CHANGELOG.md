@@ -50,6 +50,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **SAM 2 mask refinement now shrinks coarse boxes.** `--sam2-refine` now
+  clears each detected rectangle before applying the prompted SAM 2 mask, uses
+  the detected-mask center as a positive point prompt, preserves unrelated mask
+  regions, and still falls back to the original mask on SAM 2 errors.
 - **Local release evidence restored.** `build_exe.bat` now copies release
   launchers into the PyInstaller bundle and emits `release-verification.json`,
   `release-hidden-imports.json`, and `sbom.cdx.json` through

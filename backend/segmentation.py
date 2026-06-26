@@ -47,6 +47,33 @@ def _env_set(name: str) -> bool:
 _SAM2_STATE: dict = {"probed": False, "predictor": None}
 
 
+def _clip_box(box: Tuple[int, int, int, int],
+              width: int,
+              height: int) -> Optional[Tuple[int, int, int, int]]:
+    x1, y1, x2, y2 = box
+    x1 = max(0, min(width, int(x1)))
+    x2 = max(0, min(width, int(x2)))
+    y1 = max(0, min(height, int(y1)))
+    y2 = max(0, min(height, int(y2)))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def _positive_point_for_box(base_mask: np.ndarray,
+                            box: Tuple[int, int, int, int]) -> np.ndarray:
+    x1, y1, x2, y2 = box
+    region = base_mask[y1:y2, x1:x2]
+    ys, xs = np.where(region > 0)
+    if xs.size and ys.size:
+        cx = float(x1 + np.median(xs))
+        cy = float(y1 + np.median(ys))
+    else:
+        cx = float((x1 + x2) / 2.0)
+        cy = float((y1 + y2) / 2.0)
+    return np.array([[cx, cy]], dtype=np.float32)
+
+
 def _maybe_load_sam2(device: str):
     if _SAM2_STATE["probed"]:
         return _SAM2_STATE["predictor"]
@@ -96,10 +123,38 @@ def refine_mask_with_sam2(frame: np.ndarray,
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         predictor.set_image(rgb)
         refined = base_mask.copy()
-        for (x1, y1, x2, y2) in boxes:
+        height, width = base_mask.shape[:2]
+        for raw_box in boxes:
+            clipped = _clip_box(raw_box, width, height)
+            if clipped is None:
+                continue
+            x1, y1, x2, y2 = clipped
+            refined[y1:y2, x1:x2] = 0
             box_t = np.array([x1, y1, x2, y2], dtype=np.float32)[None, :]
-            masks, _scores, _logits = predictor.predict(box=box_t, multimask_output=False)
-            sam_mask = (masks[0] > 0).astype(np.uint8) * 255
+            point = _positive_point_for_box(base_mask, clipped)
+            labels = np.array([1], dtype=np.int32)
+            try:
+                masks, _scores, _logits = predictor.predict(
+                    point_coords=point,
+                    point_labels=labels,
+                    box=box_t,
+                    multimask_output=False,
+                )
+            except TypeError:
+                masks, _scores, _logits = predictor.predict(
+                    box=box_t,
+                    multimask_output=False,
+                )
+            sam_mask = (np.asarray(masks[0]) > 0).astype(np.uint8) * 255
+            if sam_mask.shape != base_mask.shape:
+                sam_mask = cv2.resize(
+                    sam_mask,
+                    (width, height),
+                    interpolation=cv2.INTER_NEAREST,
+                )
+            region_gate = np.zeros_like(base_mask)
+            region_gate[y1:y2, x1:x2] = 255
+            sam_mask = cv2.bitwise_and(sam_mask, region_gate)
             refined = np.maximum(refined, sam_mask)
         return refined
     except Exception as exc:
