@@ -1161,6 +1161,72 @@ class VideoSubtitleRemoverApp:
         if item:
             self._show_preview(item, show_mask=True)
 
+    def _probe_language_from_preview(self):
+        """Auto-detect subtitle language from the selected queue item."""
+        item = self._get_selected_queue_item()
+        source = None
+        if item:
+            source = item.file_path
+        else:
+            for q in self.queue:
+                source = q.file_path
+                break
+        if not source:
+            self._update_status(
+                "Add a file to the queue first", "warning")
+            return
+        self._update_status("Detecting language...", "info")
+
+        def _probe():
+            try:
+                import cv2 as _cv2
+                if is_video_file(source):
+                    cap = _cv2.VideoCapture(source)
+                    try:
+                        ok, frame = cap.read()
+                    finally:
+                        cap.release()
+                    if not ok or frame is None:
+                        return None
+                else:
+                    frame = _cv2.imread(source)
+                if frame is None:
+                    return None
+                region = getattr(self.config, "subtitle_area", None)
+                from backend.detection import probe_language
+                return probe_language(frame, region=region)
+            except Exception as exc:
+                logger.debug(f"Language probe failed: {exc}")
+                return None
+
+        def _on_result(result):
+            if result is None:
+                self._update_status(
+                    "Could not detect language from this frame", "warning")
+                return
+            lang, conf, script = result
+            for label, (code, _name) in zip(
+                self._lang_labels, self._lang_display
+            ):
+                if code == lang:
+                    self._lang_display_var.set(label)
+                    self.lang_var.set(lang)
+                    break
+            self._update_status(
+                f"Detected {script} script, suggested language: {lang} "
+                f"(confidence {conf:.0%})",
+                "success",
+            )
+
+        def _worker():
+            result = _probe()
+            try:
+                self.root.after(0, _on_result, result)
+            except (RuntimeError, tk.TclError):
+                pass
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _open_ab_scrubber(self):
         """RM-30: open a Toplevel that lets the user scrub frames AND
         wipe a vertical seam left/right to compare the original vs the
@@ -1746,6 +1812,13 @@ class VideoSubtitleRemoverApp:
                                        state="readonly", font=f(Theme.F_BODY_SM))
         self.lang_combo.pack(side="right")
         self.lang_combo.bind("<<ComboboxSelected>>", self._on_lang_changed)
+        self._lang_detect_btn = ModernButton(
+            lang_row, text="Detect", width=68,
+            command=self._probe_language_from_preview,
+            style="ghost", size="sm")
+        self._lang_detect_btn.pack(side="right", padx=(0, Theme.S_SM))
+        Tooltip(self._lang_detect_btn,
+                "Auto-detect the subtitle language from a sample frame.")
 
         # ---- Workflow card ----------------------------------------------
         workflow_panel = self._create_card(settings)

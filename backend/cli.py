@@ -456,6 +456,9 @@ def main():
     parser.add_argument("--self-test", action="store_true",
                        help="Probe OCR engines, inpaint backends, GPU providers, "
                             "and codecs, then print results and exit.")
+    parser.add_argument("--auto-lang-probe", action="store_true",
+                       help="Probe the first frame for script/language and print "
+                            "a suggestion, then exit. Requires -i.")
     parser.add_argument("--json-log", metavar="PATH",
                        help="Append a structured JSON-line log at PATH.")
 
@@ -508,6 +511,28 @@ def main():
             for entry in entries:
                 mark = "OK" if entry["available"] else "  "
                 print(f"  [{mark}] {entry['name']}: {entry['reason']}")
+        sys.exit(0)
+
+    if args.auto_lang_probe:
+        if not args.input:
+            print("--auto-lang-probe requires -i <input file>", file=sys.stderr)
+            sys.exit(1)
+        import cv2 as _cv2
+        cap = _cv2.VideoCapture(args.input)
+        try:
+            ok, frame = cap.read()
+        finally:
+            cap.release()
+        if not ok or frame is None:
+            frame = _cv2.imread(args.input)
+        if frame is None:
+            print("Could not read input file", file=sys.stderr)
+            sys.exit(1)
+        from backend.detection import probe_language
+        lang, conf, script = probe_language(frame)
+        print(f"Detected script: {script}")
+        print(f"Suggested language: {lang}")
+        print(f"Confidence: {conf:.2f}")
         sys.exit(0)
 
     soft_mode_count = sum(

@@ -549,3 +549,103 @@ class SubtitleDetector:
             if ux2 > ux1 and uy2 > uy1:
                 result.append((ux1, uy1, ux2, uy2))
         return result
+
+
+def _classify_script(text: str) -> str:
+    """Classify the dominant script family of recognized text."""
+    if not text:
+        return "unknown"
+    counts = {"cjk": 0, "latin": 0, "cyrillic": 0, "arabic": 0,
+              "devanagari": 0, "thai": 0, "hangul": 0, "other": 0}
+    for ch in text:
+        cp = ord(ch)
+        if 0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF:
+            counts["cjk"] += 1
+        elif 0x3040 <= cp <= 0x30FF or 0x31F0 <= cp <= 0x31FF:
+            counts["cjk"] += 1
+        elif 0xAC00 <= cp <= 0xD7AF or 0x1100 <= cp <= 0x11FF:
+            counts["hangul"] += 1
+        elif 0x0041 <= cp <= 0x024F:
+            counts["latin"] += 1
+        elif 0x0400 <= cp <= 0x04FF:
+            counts["cyrillic"] += 1
+        elif 0x0600 <= cp <= 0x06FF or 0x0750 <= cp <= 0x077F:
+            counts["arabic"] += 1
+        elif 0x0900 <= cp <= 0x097F:
+            counts["devanagari"] += 1
+        elif 0x0E00 <= cp <= 0x0E7F:
+            counts["thai"] += 1
+        elif not ch.isspace():
+            counts["other"] += 1
+    best = max(counts, key=counts.get)
+    if counts[best] == 0:
+        return "unknown"
+    return best
+
+
+_SCRIPT_TO_LANG = {
+    "latin": "en",
+    "cjk": "ch",
+    "hangul": "ko",
+    "cyrillic": "ru",
+    "arabic": "ar",
+    "devanagari": "hi",
+    "thai": "th",
+}
+
+
+def probe_language(frame: np.ndarray,
+                   region: Optional[Tuple[int, int, int, int]] = None,
+                   device: str = "cpu") -> Tuple[str, float, str]:
+    """Probe a frame (optionally cropped to region) and return
+    (lang_code, confidence, script_name).
+
+    Uses the default RapidOCR engine to recognize text in the region
+    and classifies the dominant script to suggest a language code.
+    Returns ("en", 0.0, "unknown") when no text is detected.
+    """
+    if region:
+        x1, y1, x2, y2 = region
+        h, w = frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 <= x1 or y2 <= y1:
+            return ("en", 0.0, "unknown")
+        crop = frame[y1:y2, x1:x2]
+    else:
+        crop = frame
+
+    texts = []
+    confs = []
+    try:
+        try:
+            from rapidocr import RapidOCR
+        except ImportError:
+            from rapidocr_onnxruntime import RapidOCR
+        ocr = RapidOCR()
+        output = ocr(crop)
+        results = output[0] if isinstance(output, tuple) and output else output
+        if results:
+            for entry in (results if isinstance(results, list) else []):
+                if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                    text = str(entry[1]) if not isinstance(entry[1], str) else entry[1]
+                    conf = float(entry[2]) if len(entry) >= 3 else 0.5
+                    texts.append(text)
+                    confs.append(conf)
+                elif isinstance(entry, dict):
+                    text = str(entry.get("text", entry.get("rec_text", "")))
+                    conf = float(entry.get("score", entry.get("confidence", 0.5)))
+                    texts.append(text)
+                    confs.append(conf)
+    except Exception as exc:
+        logger.debug(f"Language probe OCR failed: {exc}")
+        return ("en", 0.0, "unknown")
+
+    if not texts:
+        return ("en", 0.0, "unknown")
+
+    combined = " ".join(texts)
+    avg_conf = sum(confs) / len(confs) if confs else 0.0
+    script = _classify_script(combined)
+    lang = _SCRIPT_TO_LANG.get(script, "en")
+    return (lang, avg_conf, script)

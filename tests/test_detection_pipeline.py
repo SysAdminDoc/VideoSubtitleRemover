@@ -269,5 +269,37 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--fast", cmd)
 
 
+class ScriptClassificationTests(unittest.TestCase):
+    """Verify _classify_script maps characters to correct script families."""
+
+    def test_latin(self):
+        with _fresh_detection_module() as detection:
+            self.assertEqual(detection._classify_script("Hello world"), "latin")
+
+    def test_cjk(self):
+        with _fresh_detection_module() as detection:
+            self.assertEqual(
+                detection._classify_script("你好世界"), "cjk")
+
+    def test_hangul(self):
+        with _fresh_detection_module() as detection:
+            self.assertEqual(
+                detection._classify_script("안녕하세요"), "hangul")
+
+    def test_cyrillic(self):
+        with _fresh_detection_module() as detection:
+            self.assertEqual(
+                detection._classify_script("Привет"), "cyrillic")
+
+    def test_empty(self):
+        with _fresh_detection_module() as detection:
+            self.assertEqual(detection._classify_script(""), "unknown")
+
+    def test_mixed_cjk_dominant(self):
+        with _fresh_detection_module() as detection:
+            self.assertEqual(
+                detection._classify_script("你好Hi"), "cjk")
+
+
 if __name__ == "__main__":
     unittest.main()
