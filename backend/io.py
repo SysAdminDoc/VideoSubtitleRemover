@@ -36,6 +36,8 @@ from typing import Callable, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.safe_image import safe_imread
+
 logger = logging.getLogger(__name__)
 
 
@@ -639,7 +641,7 @@ class _FrameSequenceCapture:
                 f"No supported image files in {dir_path} "
                 f"(expected one of {sorted(self.SUPPORTED_EXTS)})"
             )
-        first = cv2.imread(str(self._files[0]))
+        first = safe_imread(self._files[0])
         if first is None:
             raise ValueError(f"Could not read first frame: {self._files[0]}")
         self._h, self._w = first.shape[:2]
@@ -671,7 +673,7 @@ class _FrameSequenceCapture:
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         if self._pos >= len(self._files):
             return False, None
-        frame = cv2.imread(str(self._files[self._pos]))
+        frame = safe_imread(self._files[self._pos])
         self._pos += 1
         if frame is None:
             return False, None

@@ -585,7 +585,8 @@ def main():
         finally:
             cap.release()
         if not ok or frame is None:
-            frame = _cv2.imread(args.input)
+            from backend.safe_image import safe_imread
+            frame = safe_imread(args.input)
         if frame is None:
             print("Could not read input file", file=sys.stderr)
             sys.exit(1)

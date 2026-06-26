@@ -69,6 +69,7 @@ from gui.widgets import (
     TextWidgetHandler,
 )
 from backend.model_downloads import installed_backend_status
+from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
 
@@ -1253,7 +1254,7 @@ class VideoSubtitleRemoverApp:
                     if not ok or frame is None:
                         return None
                 else:
-                    frame = _cv2.imread(source)
+                    frame = safe_imread(source)
                 if frame is None:
                     return None
                 region = getattr(self.config, "subtitle_area", None)
@@ -1482,7 +1483,7 @@ class VideoSubtitleRemoverApp:
                     ProcessingConfig as _BackendCfg,
                 )
                 if is_image_file(source_path):
-                    frame = _cv2.imread(source_path)
+                    frame = safe_imread(source_path)
                 elif is_video_file(source_path):
                     cap = _cv2.VideoCapture(source_path)
                     try:
@@ -3410,7 +3411,7 @@ class VideoSubtitleRemoverApp:
                 finally:
                     cap.release()
             else:
-                frame = _cv2.imread(item.file_path)
+                frame = safe_imread(item.file_path)
                 if frame is None:
                     return
 
@@ -3955,7 +3956,7 @@ class VideoSubtitleRemoverApp:
                     cap.release()
                     return
             else:
-                frame = _cv2.imread(source_path)
+                frame = safe_imread(source_path)
                 if frame is None:
                     logger.error("Could not read image for region selection")
                     return
@@ -5092,7 +5093,7 @@ class VideoSubtitleRemoverApp:
             def load_first_frame_raw(path):
                 """Load first frame as BGR numpy array."""
                 if is_image_file(path):
-                    return _cv2.imread(path)
+                    return safe_imread(path)
                 elif is_video_file(path):
                     cap = _cv2.VideoCapture(path)
                     try:

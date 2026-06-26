@@ -82,6 +82,7 @@ from backend.quality import (
     temporal_flicker_score,
 )
 from backend.quality_gate import evaluate_quality_gate
+from backend.safe_image import safe_imread
 from backend.tracking import (
     _KalmanBox,
     _box_from_state,
@@ -917,7 +918,7 @@ class SubtitleRemover:
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
-            image = cv2.imread(input_path)
+            image = safe_imread(input_path)
             if image is None:
                 raise ValueError(f"Could not load image: {input_path}")
 

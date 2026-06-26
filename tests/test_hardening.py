@@ -1571,6 +1571,70 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
         self.assertIsNone(message)
         logger.warning.assert_not_called()
 
+    def test_vulnerable_png_decode_uses_pillow_not_opencv_imread(self):
+        from unittest import mock
+        from PIL import Image
+        from backend.safe_image import safe_imread
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "sample.png"
+            Image.new("RGB", (2, 1), (10, 20, 30)).save(path)
+            with mock.patch(
+                "backend.safe_image.opencv_libpng_status",
+                return_value={"vulnerable": True},
+            ):
+                with mock.patch("cv2.imread",
+                                side_effect=AssertionError("unsafe read")):
+                    frame = safe_imread(path)
+
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.shape, (1, 2, 3))
+        self.assertEqual(frame[0, 0].tolist(), [30, 20, 10])
+
+    def test_fixed_png_decode_uses_opencv_imread(self):
+        from unittest import mock
+        import numpy as _np
+        from backend.safe_image import safe_imread
+
+        expected = _np.zeros((1, 1, 3), dtype=_np.uint8)
+        with mock.patch(
+            "backend.safe_image.opencv_libpng_status",
+            return_value={"vulnerable": False},
+        ):
+            with mock.patch("cv2.imread", return_value=expected) as imread:
+                frame = safe_imread("sample.png")
+
+        self.assertIs(frame, expected)
+        imread.assert_called_once_with("sample.png")
+
+    def test_non_png_decode_uses_opencv_even_when_libpng_vulnerable(self):
+        from unittest import mock
+        import numpy as _np
+        from backend.safe_image import safe_imread
+
+        expected = _np.zeros((1, 1, 3), dtype=_np.uint8)
+        with mock.patch(
+            "backend.safe_image.opencv_libpng_status",
+            return_value={"vulnerable": True},
+        ):
+            with mock.patch("cv2.imread", return_value=expected) as imread:
+                frame = safe_imread("sample.jpg")
+
+        self.assertIs(frame, expected)
+        imread.assert_called_once_with("sample.jpg")
+
+    def test_production_image_reads_go_through_safe_helper(self):
+        roots = [Path("backend"), Path("gui")]
+        offenders = []
+        for root in roots:
+            for path in root.rglob("*.py"):
+                if path.as_posix() == "backend/safe_image.py":
+                    continue
+                text = path.read_text(encoding="utf-8")
+                if "cv2.imread" in text or "_cv2.imread" in text:
+                    offenders.append(path.as_posix())
+        self.assertEqual(offenders, [])
+
 
 class QualityReportMaskedRoiTests(unittest.TestCase):
     """B-3: union-mask bbox accumulator + ROI-cropped PSNR/SSIM metric so

@@ -34,6 +34,7 @@ import cv2
 import numpy as np
 
 from backend.inpainters._common import BaseInpainter, _feather_blend
+from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class ExternalInpainter(BaseInpainter):
         for i, (frame, mask) in enumerate(zip(frames, masks)):
             out_path = os.path.join(out_dir, f"{i:06d}.png")
             if os.path.isfile(out_path):
-                out_frame = cv2.imread(out_path)
+                out_frame = safe_imread(out_path)
                 if out_frame is not None and out_frame.shape == frame.shape:
                     blended = _feather_blend(out_frame, frame, mask)
                     results.append(blended)

@@ -37,6 +37,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   CPU/edge VLM detector through a local llama.cpp OpenAI-compatible server,
   with clean fallback to the normal OCR cascade when the server or PaddleOCRVL
   entrypoint is unavailable.
+- **Safe PNG decode routing.** User-supplied PNG still frames now decode
+  through Pillow instead of OpenCV whenever the runtime reports a vulnerable
+  bundled libpng, closing the untrusted-PNG read path until fixed OpenCV wheels
+  ship.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.
