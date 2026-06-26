@@ -33,6 +33,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.
+- **PaddleOCR-VL-1.5 llama.cpp detector.** `VSR_PADDLEOCR_VL=1` now enables a
+  CPU/edge VLM detector through a local llama.cpp OpenAI-compatible server,
+  with clean fallback to the normal OCR cascade when the server or PaddleOCRVL
+  entrypoint is unavailable.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

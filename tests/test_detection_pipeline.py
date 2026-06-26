@@ -123,6 +123,42 @@ class DetectionCascadeTests(unittest.TestCase):
         self.assertEqual(detector._engine_name, "PaddleOCR")
         self.assertIs(detector._paddle_model, paddle_model)
 
+    def test_paddleocr_vl_flag_falls_back_to_paddle_when_server_absent(self):
+        blocked = {"rapidocr", "rapidocr_onnxruntime"}
+        real_import = builtins.__import__
+        paddle_model = object()
+        paddle = types.ModuleType("backend.paddle_compat")
+        paddle.build_paddleocr = lambda lang, device: paddle_model
+
+        def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name in blocked:
+                raise ImportError(name)
+            return real_import(name, globals, locals, fromlist, level)
+
+        from backend import ocr_vlm
+
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                sys.modules,
+                {"backend.paddle_compat": paddle},
+            ):
+                with mock.patch.dict(os.environ, {
+                    "VSR_PADDLEOCR_VL": "1",
+                    "VSR_ALLOW_GPL": "",
+                }):
+                    with mock.patch.object(
+                        ocr_vlm,
+                        "_llama_cpp_server_reachable",
+                        return_value=False,
+                    ):
+                        with mock.patch("builtins.__import__",
+                                        side_effect=fake_import):
+                            detector = detection.SubtitleDetector(
+                                device="cpu", lang="en")
+
+        self.assertEqual(detector._engine_name, "PaddleOCR")
+        self.assertIs(detector._paddle_model, paddle_model)
+
     def test_opencv_fallback_detect_returns_list(self):
         from backend.detection import SubtitleDetector
         detector = SubtitleDetector.__new__(SubtitleDetector)

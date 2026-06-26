@@ -151,6 +151,15 @@ The app automatically selects the best available engine:
 | 4 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
 | 5 | OpenCV fallback | Built-in | Any | Threshold-based |
 
+Experimental VLM OCR tiers stay default-off. `VSR_VLM_OCR=florence2`,
+`VSR_VLM_OCR=qwen25vl`, and `VSR_VLM_OCR=paddleocr-vl` try the heavier
+transformer/PaddleOCR adapters before the table above. For CPU/edge
+PaddleOCR-VL-1.5, start a local llama.cpp OpenAI-compatible server with the
+GGUF model, then set `VSR_PADDLEOCR_VL=1`; use
+`VSR_PADDLEOCR_VL_SERVER_URL` when the server is not at
+`http://127.0.0.1:8080/v1`. If the server or PaddleOCRVL entrypoint is not
+available, detection falls back to the normal cascade.
+
 On AMD/Intel systems, setup installs `onnxruntime-directml`. When ONNX
 Runtime reports `DmlExecutionProvider`, RapidOCR is initialized with its
 DirectML provider settings; unsupported RapidOCR versions or missing

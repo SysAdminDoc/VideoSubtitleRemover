@@ -3156,6 +3156,11 @@ class VlmOcrAdapterTests(unittest.TestCase):
             "VSR_VLM_OCR": os.environ.pop("VSR_VLM_OCR", None),
             "VSR_FLORENCE2_PATH": os.environ.pop("VSR_FLORENCE2_PATH", None),
             "VSR_FLORENCE2_REVISION": os.environ.pop("VSR_FLORENCE2_REVISION", None),
+            "VSR_PADDLEOCR_VL": os.environ.pop("VSR_PADDLEOCR_VL", None),
+            "VSR_PADDLEOCR_VL_SERVER_URL": os.environ.pop(
+                "VSR_PADDLEOCR_VL_SERVER_URL", None),
+            "VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE": os.environ.pop(
+                "VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE", None),
         }
 
     def tearDown(self):
@@ -3245,6 +3250,87 @@ class VlmOcrAdapterTests(unittest.TestCase):
         )
 
         self.assertEqual(boxes, [])
+
+    def test_paddleocr_vl_flag_falls_back_when_llama_cpp_unavailable(self):
+        from unittest import mock
+        from backend import ocr_vlm
+
+        os.environ["VSR_PADDLEOCR_VL"] = "1"
+        with mock.patch.object(
+            ocr_vlm,
+            "_llama_cpp_server_reachable",
+            return_value=False,
+        ):
+            self.assertIsNone(ocr_vlm.maybe_build_vlm_detector("cpu", "en"))
+
+    def test_paddleocr_vl_llama_uses_cpu_server_backend(self):
+        from unittest import mock
+        from backend import ocr_vlm
+
+        calls = []
+
+        class FakePaddleOCRVL:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+            def predict(self, _path):
+                return []
+
+        paddleocr = types.ModuleType("paddleocr")
+        paddleocr.PaddleOCRVL = FakePaddleOCRVL
+
+        os.environ["VSR_PADDLEOCR_VL"] = "1"
+        os.environ["VSR_PADDLEOCR_VL_SERVER_URL"] = "http://127.0.0.1:18080/v1"
+        with mock.patch.dict(sys.modules, {"paddleocr": paddleocr}):
+            with mock.patch.object(
+                ocr_vlm,
+                "_llama_cpp_server_reachable",
+                return_value=True,
+            ):
+                detector = ocr_vlm.maybe_build_vlm_detector("cuda:0", "en")
+
+        self.assertIsNotNone(detector)
+        self.assertEqual(detector.name, "paddleocr-vl-1.5-llama.cpp")
+        self.assertEqual(detector.device, "cpu")
+        self.assertEqual(calls, [{
+            "vl_rec_backend": "llama-cpp-server",
+            "vl_rec_server_url": "http://127.0.0.1:18080/v1",
+        }])
+
+    def test_paddleocr_vl_llama_parser_extracts_nested_boxes(self):
+        import numpy as _np
+        from backend.ocr_vlm import _PaddleOcrVlLlamaCppDetector
+
+        class FakeModel:
+            def predict(self, path):
+                self.path = path
+                return [{
+                    "res": {
+                        "layout_parsing_result": [
+                            {"bbox": [2, 3, 20, 30], "confidence": 0.9},
+                            {
+                                "poly": [[4, 5], [12, 5], [12, 17], [4, 17]],
+                                "score": 0.8,
+                            },
+                            {"bbox": [1, 1, 2, 2], "confidence": 0.1},
+                        ],
+                        "rec_boxes": [[30, 10, 40, 20]],
+                        "rec_scores": [0.95],
+                    }
+                }]
+
+        detector = _PaddleOcrVlLlamaCppDetector(device="cuda:0", env={})
+        detector._model = FakeModel()
+
+        boxes = detector._extract_boxes(
+            _np.zeros((48, 64, 3), dtype=_np.uint8),
+            threshold=0.5,
+        )
+
+        self.assertEqual(
+            boxes,
+            [(30, 10, 40, 20), (2, 3, 20, 30), (4, 5, 12, 17)],
+        )
 
 
 class PreprocessAdaptersTests(unittest.TestCase):

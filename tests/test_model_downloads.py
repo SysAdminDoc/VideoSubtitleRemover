@@ -78,6 +78,23 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(len(hints), 1)
         self.assertEqual(hints[0].label, "Florence-2 VLM OCR")
 
+    def test_paddleocr_vl_llama_reports_local_server_setup(self):
+        from backend import model_downloads as md
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "USERPROFILE": tmpdir,
+                "APPDATA": tmpdir,
+                "VSR_PADDLEOCR_VL": "1",
+            }
+            with mock.patch.object(md.importlib.util, "find_spec", return_value=None):
+                hints = md.pending_model_download_hints(_cfg(), env)
+
+        self.assertEqual(len(hints), 1)
+        self.assertEqual(hints[0].label, "PaddleOCR-VL-1.5 GGUF")
+        self.assertIn("llama-server", hints[0].detail)
+
     def test_whisper_fallback_reports_model_size(self):
         from backend import model_downloads as md
 

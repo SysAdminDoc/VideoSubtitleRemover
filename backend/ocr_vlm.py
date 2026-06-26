@@ -9,7 +9,13 @@ matching transformers stack.
 RM-23 PaddleOCR-VL 0.9B -- alternative VLM-OCR with irregular-polygon
 bbox support. Marketed as beating GPT-4o on OmniDocBench v1.5 at 94.5%
 accuracy. Loaded via the official PaddleOCR Python package when the
-user sets `VSR_PADDLEOCR_VL=1`.
+user sets `VSR_VLM_OCR=paddleocr-vl`.
+
+RM-113 PaddleOCR-VL-1.5 llama.cpp -- CPU/edge VLM-OCR tier using a
+local `llama-server` OpenAI-compatible endpoint. Activated by
+`VSR_PADDLEOCR_VL=1`; returns None during construction if the server or
+PaddleOCRVL entrypoint is unavailable so the normal OCR cascade keeps
+working.
 
 RM-42 Manga / anime mode -- `manga-ocr` (vertical Japanese) + the
 comic-text-detector for irregular speech-bubble shapes. Activated via
@@ -26,8 +32,12 @@ from __future__ import annotations
 
 import logging
 import os
+import json
+import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
+from urllib import error as urlerror
+from urllib import request as urlrequest
 
 import cv2
 import numpy as np
@@ -36,14 +46,34 @@ from backend.remote_model_policy import resolve_remote_model_source
 
 logger = logging.getLogger(__name__)
 
+_TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
+_PADDLEOCR_VL_LLAMA_VALUES = {
+    "paddleocr-vl-llama",
+    "paddleocr-vl-llamacpp",
+    "paddleocr-vl15",
+    "paddleocr-vl-1.5",
+}
+_PADDLEOCR_VL_LLAMA_DEFAULT_URL = "http://127.0.0.1:8080/v1"
+Box = Tuple[int, int, int, int]
+
+
+def _env_truthy(env: Mapping[str, str], name: str) -> bool:
+    return str(env.get(name, "") or "").strip().lower() in _TRUE_FLAG_VALUES
+
 
 def selected_vlm_backend() -> Optional[str]:
     """Return the user-selected VLM OCR backend name, or None when
     the cascade should keep its default. The env var values are
-    "florence2", "qwen25vl", "paddleocr-vl"."""
+    "florence2", "qwen25vl", "paddleocr-vl", and
+    "paddleocr-vl-llama". The legacy `VSR_PADDLEOCR_VL=1` flag selects
+    the llama.cpp-backed PaddleOCR-VL-1.5 path."""
     raw = os.environ.get("VSR_VLM_OCR", "").strip().lower()
     if raw in {"florence2", "qwen25vl", "paddleocr-vl"}:
         return raw
+    if raw in _PADDLEOCR_VL_LLAMA_VALUES:
+        return "paddleocr-vl-llama"
+    if _env_truthy(os.environ, "VSR_PADDLEOCR_VL"):
+        return "paddleocr-vl-llama"
     return None
 
 
@@ -268,6 +298,263 @@ class _PaddleOcrVlDetector(_BaseVlmDetector):
         return extract_paddle_boxes(self._model, frame, threshold)
 
 
+def _normalise_vl_server_url(raw: str) -> str:
+    value = str(raw or "").strip() or _PADDLEOCR_VL_LLAMA_DEFAULT_URL
+    return value.rstrip("/")
+
+
+def _llama_cpp_models_url(server_url: str) -> str:
+    return f"{_normalise_vl_server_url(server_url)}/models"
+
+
+def _llama_cpp_server_reachable(server_url: str, timeout: float = 0.75) -> bool:
+    if _env_truthy(os.environ, "VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE"):
+        return True
+    models_url = _llama_cpp_models_url(server_url)
+    try:
+        req = urlrequest.Request(models_url, method="GET")
+        with urlrequest.urlopen(req, timeout=timeout) as response:
+            return 200 <= int(getattr(response, "status", 200)) < 500
+    except urlerror.HTTPError as exc:
+        return 200 <= exc.code < 500
+    except (OSError, TimeoutError, ValueError) as exc:
+        logger.info(
+            "PaddleOCR-VL llama.cpp server unavailable at %s: %s",
+            models_url,
+            exc,
+        )
+        return False
+
+
+def _result_payload(result: Any) -> Any:
+    if isinstance(result, (dict, list, tuple)):
+        return result
+    for attr in ("json", "to_json", "as_dict", "dict"):
+        data = getattr(result, attr, None)
+        if data is None:
+            continue
+        if callable(data):
+            try:
+                data = data()
+            except TypeError:
+                continue
+        if isinstance(data, str):
+            try:
+                return json.loads(data)
+            except json.JSONDecodeError:
+                continue
+        return data
+    return None
+
+
+def _box_from_coords(coords: Any, frame_shape: Tuple[int, int, int]) -> Optional[Box]:
+    h, w = frame_shape[:2]
+    try:
+        pts = np.array(coords, dtype=np.float32)
+    except (TypeError, ValueError):
+        return None
+    if pts.size < 4:
+        return None
+    if pts.ndim == 1 and pts.size == 4:
+        x1, y1, x2, y2 = [float(v) for v in pts[:4]]
+    else:
+        try:
+            pts = pts.reshape(-1, 2)
+        except ValueError:
+            return None
+        if pts.shape[1] < 2:
+            return None
+        x1, y1 = float(pts[:, 0].min()), float(pts[:, 1].min())
+        x2, y2 = float(pts[:, 0].max()), float(pts[:, 1].max())
+    x1 = max(0, min(w, int(round(x1))))
+    y1 = max(0, min(h, int(round(y1))))
+    x2 = max(0, min(w, int(round(x2))))
+    y2 = max(0, min(h, int(round(y2))))
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return (x1, y1, x2, y2)
+
+
+def _score_at(scores: Any, idx: int, fallback: float = 1.0) -> float:
+    try:
+        if isinstance(scores, (list, tuple)) and idx < len(scores):
+            return float(scores[idx])
+        if scores is not None and not isinstance(scores, (list, tuple, dict)):
+            return float(scores)
+    except (TypeError, ValueError):
+        pass
+    return fallback
+
+
+def _score_from_dict(data: Mapping[str, Any]) -> float:
+    for key in ("score", "confidence", "rec_score", "layout_score"):
+        if key in data:
+            try:
+                return float(data[key])
+            except (TypeError, ValueError):
+                return 1.0
+    return 1.0
+
+
+def _collect_vl_boxes(payload: Any, threshold: float,
+                      frame_shape: Tuple[int, int, int]) -> List[Box]:
+    boxes: List[Box] = []
+    if isinstance(payload, dict):
+        data = payload.get("res", payload)
+        handled_keys = {
+            "bbox", "box", "rect", "coordinate", "poly", "polygon",
+            "rec_boxes", "dt_boxes", "boxes", "bboxes",
+            "rec_polys", "dt_polys", "polys", "quad_boxes", "points",
+            "rec_scores", "scores", "layout_scores", "confidence",
+            "score", "rec_score", "layout_score",
+        }
+        score = _score_from_dict(data)
+        for key in ("bbox", "box", "rect", "coordinate", "poly", "polygon"):
+            if key in data and score >= threshold:
+                box = _box_from_coords(data[key], frame_shape)
+                if box:
+                    boxes.append(box)
+        scores = (
+            data.get("rec_scores")
+            or data.get("scores")
+            or data.get("layout_scores")
+            or data.get("confidence")
+        )
+        for key in ("rec_boxes", "dt_boxes", "boxes", "bboxes"):
+            values = data.get(key)
+            if isinstance(values, (list, tuple)):
+                for idx, value in enumerate(values):
+                    if _score_at(scores, idx) < threshold:
+                        continue
+                    box = _box_from_coords(value, frame_shape)
+                    if box:
+                        boxes.append(box)
+        for key in ("rec_polys", "dt_polys", "polys", "quad_boxes", "points"):
+            values = data.get(key)
+            if isinstance(values, (list, tuple)):
+                for idx, value in enumerate(values):
+                    if _score_at(scores, idx) < threshold:
+                        continue
+                    box = _box_from_coords(value, frame_shape)
+                    if box:
+                        boxes.append(box)
+        for key, value in data.items():
+            if key in handled_keys:
+                continue
+            if isinstance(value, (dict, list, tuple)):
+                boxes.extend(_collect_vl_boxes(value, threshold, frame_shape))
+        return boxes
+    if isinstance(payload, (list, tuple)):
+        box = _box_from_coords(payload, frame_shape)
+        if box:
+            return [box]
+        for value in payload:
+            boxes.extend(_collect_vl_boxes(value, threshold, frame_shape))
+    return boxes
+
+
+def _dedupe_boxes(boxes: List[Box]) -> List[Box]:
+    out: List[Box] = []
+    seen = set()
+    for box in boxes:
+        if box in seen:
+            continue
+        seen.add(box)
+        out.append(box)
+    return out
+
+
+def _vl_result_sequence(results: Any) -> List[Any]:
+    if results is None:
+        return []
+    if isinstance(results, (dict, str, bytes)):
+        return [results]
+    try:
+        return list(results)
+    except TypeError:
+        return [results]
+
+
+class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
+    """PaddleOCR-VL-1.5 through a local llama.cpp OpenAI-compatible
+    server. The Python process only runs the document parser and talks
+    to the local CPU/edge server, so this tier does not require CUDA.
+    """
+
+    name = "paddleocr-vl-1.5-llama.cpp"
+
+    def __init__(self, device: str = "cpu", env: Optional[Mapping[str, str]] = None):
+        super().__init__(device="cpu")
+        self.env = env or os.environ
+        self.server_url = _normalise_vl_server_url(
+            str(self.env.get(
+                "VSR_PADDLEOCR_VL_SERVER_URL",
+                _PADDLEOCR_VL_LLAMA_DEFAULT_URL,
+            ))
+        )
+
+    def _warm_load(self) -> bool:
+        self._model = self._load()
+        self._loaded = True
+        return self._model is not None
+
+    def _load(self):
+        if not _llama_cpp_server_reachable(self.server_url):
+            logger.info(
+                "PaddleOCR-VL-1.5 llama.cpp detector disabled; start "
+                "llama-server and expose %s before setting VSR_PADDLEOCR_VL=1.",
+                self.server_url,
+            )
+            return None
+        try:
+            from paddleocr import PaddleOCRVL  # type: ignore
+        except ImportError:
+            logger.info(
+                "PaddleOCR-VL-1.5 requires PaddleOCR with PaddleOCRVL; "
+                "install a compatible paddleocr package."
+            )
+            return None
+        except Exception as exc:
+            logger.warning("PaddleOCR-VL import failed: %s", exc)
+            return None
+        kwargs = {
+            "vl_rec_backend": "llama-cpp-server",
+            "vl_rec_server_url": self.server_url,
+        }
+        try:
+            return PaddleOCRVL(**kwargs)
+        except TypeError:
+            logger.warning(
+                "Installed PaddleOCRVL does not expose llama.cpp server "
+                "kwargs; falling back to the default OCR cascade."
+            )
+            return None
+        except Exception as exc:
+            logger.warning("PaddleOCR-VL-1.5 llama.cpp load failed: %s", exc)
+            return None
+
+    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Box]:
+        fd, path = tempfile.mkstemp(prefix="vsr_paddleocr_vl_", suffix=".png")
+        os.close(fd)
+        try:
+            if not cv2.imwrite(path, frame):
+                return []
+            if hasattr(self._model, "predict"):
+                results = self._model.predict(path)
+            else:
+                results = self._model(path)
+        finally:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except OSError:
+                pass
+        payloads = [_result_payload(result) for result in _vl_result_sequence(results)]
+        boxes: List[Box] = []
+        for payload in payloads:
+            boxes.extend(_collect_vl_boxes(payload, threshold, frame.shape))
+        return _dedupe_boxes(boxes)
+
+
 class _MangaOcrDetector(_BaseVlmDetector):
     """RM-42: manga-ocr + comic-text-detector for vertical Japanese
     manga / anime sources. manga-ocr only RECOGNISES text given a crop;
@@ -351,4 +638,9 @@ def maybe_build_vlm_detector(device: str, lang: str) -> Optional[object]:
         return _Qwen25VLDetector(device=device)
     if selected == "paddleocr-vl":
         return _PaddleOcrVlDetector(device=device)
+    if selected == "paddleocr-vl-llama":
+        detector = _PaddleOcrVlLlamaCppDetector(device=device)
+        if detector._warm_load():
+            return detector
+        return None
     return None

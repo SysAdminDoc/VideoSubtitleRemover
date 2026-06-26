@@ -141,6 +141,26 @@ def _append_detection_hints(hints: list[ModelDownloadHint], env: Mapping[str, st
 
 def _append_vlm_hints(hints: list[ModelDownloadHint], env: Mapping[str, str]) -> None:
     selected = str(env.get("VSR_VLM_OCR", "") or "").strip().lower()
+    paddle_vl_selected = (
+        _env_truthy(env, "VSR_PADDLEOCR_VL")
+        or selected in {
+            "paddleocr-vl-llama",
+            "paddleocr-vl-llamacpp",
+            "paddleocr-vl15",
+            "paddleocr-vl-1.5",
+        }
+    )
+    if paddle_vl_selected:
+        hints.append(ModelDownloadHint(
+            label="PaddleOCR-VL-1.5 GGUF",
+            size_estimate="model-size dependent",
+            detail=(
+                "Start llama-server with a local PaddleOCR-VL-1.5 GGUF "
+                "model before enabling VSR_PADDLEOCR_VL."
+            ),
+            cache_hint="local llama.cpp model directory",
+        ))
+        return
     if selected != "florence2":
         return
     source = resolve_remote_model_source("florence2", env)
