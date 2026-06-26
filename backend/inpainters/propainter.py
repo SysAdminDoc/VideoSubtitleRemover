@@ -8,6 +8,10 @@ from typing import List
 import cv2
 import numpy as np
 
+from backend.inpainters.lama import (
+    _module_can_import,
+    _pytorch_lama_allowed,
+)
 from backend.inpainters._common import (
     BaseInpainter,
     _cv2_inpaint,
@@ -28,6 +32,18 @@ class ProPainterInpainter(BaseInpainter):
         from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
         self._lama = None
+        if not _pytorch_lama_allowed():
+            logger.info(
+                "ProPainter LaMa refinement skipped; set "
+                "VSR_ENABLE_PYTORCH_LAMA=1 to opt in."
+            )
+            return
+        if not _module_can_import(
+            "simple_lama_inpainting",
+            logger=logger,
+            failure_context="ProPainter LaMa refinement disabled",
+        ):
+            return
         try:
             from simple_lama_inpainting import SimpleLama
             self._lama = SimpleLama()

@@ -36,6 +36,8 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from backend.import_safety import module_can_import as _safe_module_can_import
+
 logger = logging.getLogger(__name__)
 
 _SRT_TIME_RE = re.compile(
@@ -46,11 +48,16 @@ _SRT_TIME_RE = re.compile(
 
 def is_available() -> bool:
     """Best-effort check for faster-whisper availability."""
-    try:
-        import faster_whisper  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    return _module_can_import("faster_whisper")
+
+
+def _module_can_import(module_name: str, *, timeout: float = 20.0) -> bool:
+    return _safe_module_can_import(
+        module_name,
+        timeout=timeout,
+        logger=logger,
+        failure_context="optional Whisper fallback disabled",
+    )
 
 
 def ffmpeg_whisper_available(ffmpeg: str = "ffmpeg") -> bool:
@@ -246,16 +253,21 @@ def run_whisper_segments(audio_path: str, model_size: str = "tiny",
     `compute_type="int8"` is the CPU-friendly default; pass "float16"
     when running on a CUDA box.
     """
-    try:
-        from faster_whisper import WhisperModel  # type: ignore
-    except ImportError:
-        logger.info(
-            "faster-whisper is not installed; Whisper fallback disabled. "
-            "Install with `pip install faster-whisper` to enable."
-        )
-        return None
     if not Path(audio_path).is_file():
         logger.warning(f"Whisper input audio missing: {audio_path}")
+        return None
+    if not _module_can_import("faster_whisper"):
+        logger.info(
+            "faster-whisper is not installed or cannot be imported; "
+            "Whisper fallback disabled."
+        )
+        return None
+    try:
+        from faster_whisper import WhisperModel  # type: ignore
+    except (ImportError, OSError, RuntimeError) as exc:
+        logger.info(
+            f"faster-whisper import failed; Whisper fallback disabled: {exc}"
+        )
         return None
     try:
         model = WhisperModel(model_size, device="auto", compute_type=compute_type)

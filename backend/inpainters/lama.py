@@ -1,10 +1,10 @@
 """LaMa neural inpainter -- ONNX Runtime preferred, OpenCV 5 DNN second,
-simple-lama-inpainting (PyTorch) fallback, cv2 last resort.
+opt-in simple-lama-inpainting (PyTorch) fallback, cv2 last resort.
 
 Priority chain:
 1. ONNX Runtime   -- fastest, most flexible EP selection (CUDA/DirectML/CPU)
 2. OpenCV 5 DNN   -- no torch, no onnxruntime; uses opencv/inpainting_lama
-3. PyTorch         -- simple-lama-inpainting; optional/fallback dependency
+3. PyTorch         -- simple-lama-inpainting; optional opt-in dependency
 4. cv2.inpaint     -- always available
 
 The ONNX and DNN paths eliminate the torch.load CVE surface. The DNN path
@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.import_safety import module_can_import as _module_can_import
 from backend.inpainters._common import (
     BaseInpainter,
     _cv2_inpaint,
@@ -43,6 +44,19 @@ _CV2DNN_LAMA_FILENAMES = (
 _OPENCV_NATIVE_NAMES = frozenset({"inpainting_lama_2025jan.onnx"})
 
 _OPENCV5_MIN = (5, 0, 0)
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _pytorch_lama_allowed() -> bool:
+    return _env_flag("VSR_ENABLE_PYTORCH_LAMA")
 
 
 def _find_lama_onnx_weight() -> Optional[str]:
@@ -270,16 +284,37 @@ class LAMAInpainter(BaseInpainter):
                     )
                     return
 
+        if not _pytorch_lama_allowed():
+            logger.warning(
+                "No ONNX/OpenCV LaMa backend is available. The PyTorch "
+                "simple-lama fallback is disabled by default because broken "
+                "native torch wheels can crash the process; set "
+                "VSR_ENABLE_PYTORCH_LAMA=1 to opt in."
+            )
+            return
+
+        if not _module_can_import(
+            "simple_lama_inpainting",
+            logger=logger,
+            failure_context="LaMa PyTorch fallback disabled",
+        ):
+            logger.warning(
+                "No LaMa backend available (onnxruntime, OpenCV 5 DNN, or "
+                "simple-lama-inpainting). LAMA will use OpenCV fallback."
+            )
+            return
+
         try:
             from simple_lama_inpainting import SimpleLama
             self._lama = SimpleLama()
             self._backend_name = "PyTorch (simple-lama-inpainting)"
             logger.info("LaMa PyTorch inpainting loaded (simple-lama-inpainting)")
             self._verify_pytorch_weights()
-        except ImportError:
+        except (ImportError, OSError, RuntimeError) as exc:
             logger.warning(
-                "No LaMa backend available (onnxruntime, OpenCV 5 DNN, or "
-                "simple-lama-inpainting). LAMA will use OpenCV fallback."
+                "simple-lama-inpainting import failed; LAMA will use OpenCV "
+                "fallback: %s",
+                exc,
             )
         except Exception as e:
             logger.warning("LaMa model load failed: %s", e)
@@ -679,7 +714,18 @@ class LAMAInpainter(BaseInpainter):
             result = result.astype(np.uint8)
         return result
 
+    def _inpaint_lama_tiled(self, frame: np.ndarray, mask: np.ndarray,
+                            tile_size: int, overlap: int) -> np.ndarray:
+        """Compatibility wrapper for callers using the historical name."""
+        return self._inpaint_pytorch_tiled(frame, mask, tile_size, overlap)
+
     def _inpaint_pytorch_batched(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
+        if not _module_can_import(
+            "torch",
+            logger=logger,
+            failure_context="batched LaMa disabled",
+        ):
+            raise RuntimeError("torch import failed safety probe")
         import torch
         model = getattr(self._lama, "model", None) or getattr(self._lama, "_model", None)
         if model is None:

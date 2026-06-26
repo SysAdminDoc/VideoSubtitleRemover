@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+from backend.import_safety import module_can_import
+from backend.inpainters.lama import _pytorch_lama_allowed
+
 if TYPE_CHECKING:
     pass
 
@@ -202,45 +205,54 @@ def _build_language_list() -> List[Tuple[str, str]]:
 
 def detect_ai_engines() -> dict:
     engines = {"detection": [], "inpainting": []}
-    try:
-        try:
-            import rapidocr  # noqa: F401
-        except ImportError:
-            import rapidocr_onnxruntime  # noqa: F401
+    if (
+        module_can_import(
+            "rapidocr",
+            logger=logger,
+            failure_context="RapidOCR engine probe skipped",
+        )
+        or module_can_import(
+            "rapidocr_onnxruntime",
+            logger=logger,
+            failure_context="RapidOCR engine probe skipped",
+        )
+    ):
         engines["detection"].append("RapidOCR")
-    except ImportError:
-        pass
-    try:
-        import paddleocr  # noqa: F401
+    if module_can_import(
+        "paddleocr",
+        logger=logger,
+        failure_context="PaddleOCR engine probe skipped",
+    ):
         engines["detection"].append("PaddleOCR")
-    except ImportError:
-        pass
     surya_opt_in = os.environ.get(
         "VSR_ALLOW_GPL", ""
     ).strip().lower() in {"1", "true", "yes", "on"}
-    try:
-        from surya.detection import DetectionPredictor  # noqa: F401
+    if module_can_import(
+        "surya.detection",
+        logger=logger,
+        failure_context="Surya engine probe skipped",
+    ):
         if surya_opt_in:
             engines["detection"].append("Surya")
         else:
             engines["detection"].append(
                 "Surya (GPL -- set VSR_ALLOW_GPL=1)"
             )
-    except Exception:
-        pass
-    try:
-        import easyocr  # noqa: F401
+    if module_can_import(
+        "easyocr",
+        logger=logger,
+        failure_context="EasyOCR engine probe skipped",
+    ):
         engines["detection"].append("EasyOCR")
-    except ImportError:
-        pass
     if not engines["detection"]:
         engines["detection"].append("OpenCV fallback")
     engines["inpainting"].append("Temporal BG (TBE)")
-    try:
-        from simple_lama_inpainting import SimpleLama  # noqa: F401
-        engines["inpainting"].append("LaMa (neural)")
-    except ImportError:
-        pass
+    if _pytorch_lama_allowed() and module_can_import(
+        "simple_lama_inpainting",
+        logger=logger,
+        failure_context="LaMa engine probe skipped",
+    ):
+        engines["inpainting"].append("LaMa (PyTorch, opt-in)")
     engines["inpainting"].append("OpenCV")
     return engines
 

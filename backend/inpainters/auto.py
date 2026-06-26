@@ -4,6 +4,7 @@ lazy LaMa load + idle unload (B-5)."""
 from __future__ import annotations
 
 import logging
+import sys
 from typing import List, Optional
 
 import numpy as np
@@ -50,10 +51,12 @@ class AutoInpainter(BaseInpainter):
             _gc.collect()
         except Exception:
             logger.warning("AUTO LaMa idle GC cleanup failed", exc_info=True)
+        torch_mod = sys.modules.get("torch")
+        if torch_mod is None:
+            return
         try:
-            import torch as _torch
-            if hasattr(_torch, "cuda") and _torch.cuda.is_available():
-                _torch.cuda.empty_cache()
+            if hasattr(torch_mod, "cuda") and torch_mod.cuda.is_available():
+                torch_mod.cuda.empty_cache()
         except Exception:
             logger.warning("AUTO LaMa idle CUDA cleanup failed", exc_info=True)
 

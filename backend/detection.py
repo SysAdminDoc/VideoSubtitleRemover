@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.import_safety import module_can_import as _module_can_import
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,14 +65,6 @@ def _build_rapidocr(rapid_cls, device: str):
     if directml_params:
         try:
             return rapid_cls(params=directml_params), "DirectML"
-        except TypeError:
-            try:
-                return rapid_cls(**directml_params), "DirectML"
-            except Exception as exc:
-                logger.warning(
-                    "RapidOCR DirectML provider init failed; retrying CPU "
-                    f"provider: {exc}"
-                )
         except Exception as exc:
             logger.warning(
                 "RapidOCR DirectML provider init failed; retrying CPU "
@@ -120,12 +114,14 @@ class SubtitleDetector:
         # RapidOCR (ONNX PP-OCR, default)
         try:
             rapid_obj = None
-            try:
+            if _module_can_import("rapidocr"):
                 from rapidocr import RapidOCR as _RapidOCR
                 rapid_obj, rapid_provider = _build_rapidocr(_RapidOCR, self.device)
-            except ImportError:
+            elif _module_can_import("rapidocr_onnxruntime"):
                 from rapidocr_onnxruntime import RapidOCR as _RapidOCR
                 rapid_obj, rapid_provider = _build_rapidocr(_RapidOCR, self.device)
+            else:
+                raise ImportError("RapidOCR unavailable or failed import probe")
             if rapid_obj is not None:
                 self._rapid_model = rapid_obj
                 self._engine_name = (
@@ -180,6 +176,13 @@ class SubtitleDetector:
                 pass
 
         # EasyOCR
+        if not _module_can_import("easyocr"):
+            self._engine_name = "OpenCV fallback"
+            logger.warning(
+                "EasyOCR is unavailable or failed its import probe; "
+                "using OpenCV fallback detection"
+            )
+            return
         try:
             import easyocr
             gpu = self._is_gpu_device()
