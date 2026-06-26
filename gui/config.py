@@ -344,6 +344,7 @@ class ProcessingConfig:
     json_log_enabled: bool = False
     notify_on_completion: bool = True
     output_frames: bool = False
+    work_directory: str = ""
 
     def to_dict(self) -> dict:
         from dataclasses import fields as _dc_fields
@@ -514,6 +515,7 @@ class ProcessingConfig:
             self.whisper_min_speech_duration, 0.0, 0.0, 30.0)
         self.temporal_smooth_radius = _coerce_int(
             self.temporal_smooth_radius, 0, 0, 10)
+        self.work_directory = _coerce_text(self.work_directory, "", 512)
         return self
 
     @classmethod

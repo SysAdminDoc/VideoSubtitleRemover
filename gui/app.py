@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -5180,6 +5181,26 @@ class VideoSubtitleRemoverApp:
             except Exception:
                 pass
 
+    def _preflight_free_space_check(self):
+        """Warn if the temp/work directory has low free space."""
+        try:
+            work = getattr(self.config, "work_directory", "")
+            check_dir = work if (work and Path(work).is_dir()) else None
+            if check_dir is None:
+                import tempfile as _tf
+                check_dir = _tf.gettempdir()
+            usage = shutil.disk_usage(check_dir)
+            free_gb = usage.free / (1024 ** 3)
+            if free_gb < 2.0:
+                self._update_status(
+                    f"Low disk space: {free_gb:.1f} GB free in work directory. "
+                    "Processing may fail for large files.",
+                    "warning",
+                    toast=True,
+                )
+        except Exception:
+            pass
+
     def _start_processing(self):
         """Start processing the queue."""
         if not self.queue:
@@ -5202,6 +5223,7 @@ class VideoSubtitleRemoverApp:
             return
 
         self._apply_current_settings_to_idle_items()
+        self._preflight_free_space_check()
         if self.preserve_audio_var.get() and not self.ffmpeg_ready:
             has_video = any(is_video_file(item.file_path) for item in self.queue)
             if has_video:

@@ -949,6 +949,12 @@ class SubtitleRemover:
             logger.error(f"Image processing error: {e}", exc_info=True)
             return False
 
+    def _make_temp_dir(self) -> str:
+        work = getattr(self.config, "work_directory", "")
+        if work and os.path.isdir(work):
+            return tempfile.mkdtemp(prefix="vsr_", dir=work)
+        return tempfile.mkdtemp(prefix="vsr_")
+
     def process_video(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
         temp_dir = None
@@ -971,7 +977,7 @@ class SubtitleRemover:
                     should_deinterlace = True
             if should_deinterlace:
                 self._report_progress(0.02, "Deinterlacing source...")
-                temp_dir = tempfile.mkdtemp(prefix="vsr_")
+                temp_dir = self._make_temp_dir()
                 try:
                     processed_input = _deinterlace_to_temp(
                         input_path,
@@ -1111,7 +1117,7 @@ class SubtitleRemover:
 
             # Re-use the deinterlace temp_dir if one was created, else fresh
             if temp_dir is None:
-                temp_dir = tempfile.mkdtemp(prefix="vsr_")
+                temp_dir = self._make_temp_dir()
             # I-1: lossless FFV1 intermediate inside .mkv. The previous
             # mp4v intermediate cost a full generation of lossy
             # compression before the final ffmpeg encode pass. The
