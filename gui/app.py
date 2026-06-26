@@ -5237,6 +5237,8 @@ class VideoSubtitleRemoverApp:
             self.region_reset_btn.set_enabled(
                 (not locked) and self.config.subtitle_area is not None)
             self.adv_toggle.set_enabled(not locked)
+            if hasattr(self, "drop_area"):
+                self.drop_area.set_import_enabled(not locked)
             for slider in getattr(self, "_settings_sliders", []):
                 slider.set_enabled(not locked)
             # Segmented algo picker: dim/undim each segment

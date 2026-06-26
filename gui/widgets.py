@@ -54,17 +54,77 @@ def _build_cli_command(item: QueueItem) -> str:
     dilate = getattr(cfg, "mask_dilate_px", 8)
     if dilate != 8:
         parts.append(f"--mask-dilate {dilate}")
+    feather = getattr(cfg, "mask_feather_px", 4)
+    if feather != 4:
+        parts.append(f"--mask-feather {feather}")
     skip = getattr(cfg, "detection_frame_skip", 0)
     if skip:
         parts.append(f"--frame-skip {skip}")
+    edge_ring = getattr(cfg, "edge_ring_px", 2)
+    if edge_ring != 2:
+        parts.append(f"--edge-ring {edge_ring}")
+    temporal = getattr(cfg, "temporal_smooth_radius", 0)
+    if temporal:
+        parts.append(f"--temporal-smooth {temporal}")
     if getattr(cfg, "lama_super_fast", False):
         parts.append("--fast")
     if not getattr(cfg, "preserve_audio", True):
         parts.append("--no-audio")
     if not getattr(cfg, "use_hw_encode", True):
         parts.append("--no-hw-encode")
+    if getattr(cfg, "detection_vertical", False):
+        parts.append("--vertical")
+    start = getattr(cfg, "time_start", 0.0) or 0.0
+    if start > 0:
+        parts.append(f"--start {start}")
+    end = getattr(cfg, "time_end", 0.0) or 0.0
+    if end > 0:
+        parts.append(f"--end {end}")
+    loudnorm = getattr(cfg, "loudnorm_target", 0.0) or 0.0
+    if loudnorm != 0.0:
+        parts.append(f"--loudnorm {loudnorm}")
+    if not getattr(cfg, "multi_audio_passthrough", True):
+        parts.append("--single-audio")
+    if getattr(cfg, "tbe_flow_warp", False):
+        parts.append("--flow-warp")
+    if getattr(cfg, "colour_tune_enable", False):
+        parts.append("--colour-tune")
+        tolerance = getattr(cfg, "colour_tune_tolerance", 25)
+        if tolerance != 25:
+            parts.append(f"--colour-tolerance {tolerance}")
+    if not getattr(cfg, "kalman_tracking", True):
+        parts.append("--no-kalman")
+    if not getattr(cfg, "phash_skip_enable", True):
+        parts.append("--no-phash")
+    if getattr(cfg, "confidence_weighted_dilation", False):
+        parts.append("--confidence-dilate")
+    if getattr(cfg, "whisper_fallback", False):
+        parts.append("--whisper-fallback")
+        model = getattr(cfg, "whisper_model_size", "tiny")
+        if model != "tiny":
+            parts.append(f"--whisper-model {model}")
+        backend = getattr(cfg, "whisper_backend", "faster-whisper")
+        if backend != "faster-whisper":
+            parts.append(f"--whisper-backend {backend}")
+    if not getattr(cfg, "remove_subtitles", True):
+        parts.append("--keep-subtitles")
+    if not getattr(cfg, "remove_chyrons", True):
+        parts.append("--keep-chyrons")
+    if getattr(cfg, "karaoke_grouping", False):
+        parts.append("--karaoke-grouping")
+    if getattr(cfg, "export_srt", False):
+        parts.append("--export-srt")
+    if getattr(cfg, "export_mask_video", False):
+        parts.append("--export-mask")
+    if getattr(cfg, "output_frames", False):
+        parts.append("--output-frames")
     if getattr(cfg, "quality_report", False):
         parts.append("--quality-report")
+    if getattr(cfg, "quality_report_sheet", False):
+        parts.append("--quality-sheet")
+    nle = getattr(cfg, "nle_sidecar", "off")
+    if nle and nle != "off":
+        parts.append(f"--nle-sidecar {nle}")
     return " ".join(parts)
 
 
@@ -1074,8 +1134,7 @@ class Toast:
         self._win = None
         if self in Toast._active:
             Toast._active.remove(self)
-        # Reposition remaining toasts upward so gaps don't linger
-        for t in Toast._active:
+        for t in list(Toast._active):
             try:
                 t._position()
             except Exception:
@@ -1300,6 +1359,11 @@ class DragDropFrame(tk.Frame):
                     pass
         for button in (self.add_files_btn, self.add_folder_btn):
             button.config(bg=bg)
+
+    def set_import_enabled(self, enabled: bool):
+        """Enable or disable import buttons during processing."""
+        self.add_files_btn.set_enabled(enabled)
+        self.add_folder_btn.set_enabled(enabled)
 
     def _setup_dnd(self):
         """Setup native drag and drop if available."""

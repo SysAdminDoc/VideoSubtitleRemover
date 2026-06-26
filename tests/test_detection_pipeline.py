@@ -268,6 +268,79 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--mask-dilate 12", cmd)
         self.assertIn("--fast", cmd)
 
+    def test_expanded_fields_round_trip(self):
+        from gui.config import ProcessingConfig, QueueItem
+        from gui.widgets import _build_cli_command
+        cfg = ProcessingConfig()
+        cfg.mask_feather_px = 6
+        cfg.edge_ring_px = 0
+        cfg.temporal_smooth_radius = 2
+        cfg.detection_vertical = True
+        cfg.time_start = 10.0
+        cfg.time_end = 120.5
+        cfg.loudnorm_target = -16.0
+        cfg.multi_audio_passthrough = False
+        cfg.tbe_flow_warp = True
+        cfg.colour_tune_enable = True
+        cfg.colour_tune_tolerance = 30
+        cfg.kalman_tracking = False
+        cfg.phash_skip_enable = False
+        cfg.whisper_fallback = True
+        cfg.whisper_model_size = "base"
+        cfg.remove_subtitles = False
+        cfg.karaoke_grouping = True
+        cfg.export_srt = True
+        cfg.export_mask_video = True
+        cfg.quality_report_sheet = True
+        cfg.nle_sidecar = "edl"
+        item = QueueItem(
+            id="test",
+            file_path="input.mp4",
+            output_path="output.mp4",
+            config=cfg,
+        )
+        cmd = _build_cli_command(item)
+        self.assertIn("--mask-feather 6", cmd)
+        self.assertIn("--edge-ring 0", cmd)
+        self.assertIn("--temporal-smooth 2", cmd)
+        self.assertIn("--vertical", cmd)
+        self.assertIn("--start 10.0", cmd)
+        self.assertIn("--end 120.5", cmd)
+        self.assertIn("--loudnorm -16.0", cmd)
+        self.assertIn("--single-audio", cmd)
+        self.assertIn("--flow-warp", cmd)
+        self.assertIn("--colour-tune", cmd)
+        self.assertIn("--colour-tolerance 30", cmd)
+        self.assertIn("--no-kalman", cmd)
+        self.assertIn("--no-phash", cmd)
+        self.assertIn("--whisper-fallback", cmd)
+        self.assertIn("--whisper-model base", cmd)
+        self.assertIn("--keep-subtitles", cmd)
+        self.assertIn("--karaoke-grouping", cmd)
+        self.assertIn("--export-srt", cmd)
+        self.assertIn("--export-mask", cmd)
+        self.assertIn("--quality-sheet", cmd)
+        self.assertIn("--nle-sidecar edl", cmd)
+
+    def test_default_config_omits_expanded_fields(self):
+        from gui.config import ProcessingConfig, QueueItem
+        from gui.widgets import _build_cli_command
+        item = QueueItem(
+            id="test",
+            file_path="input.mp4",
+            output_path="output.mp4",
+            config=ProcessingConfig(),
+        )
+        cmd = _build_cli_command(item)
+        for flag in ("--mask-feather", "--edge-ring", "--temporal-smooth",
+                     "--vertical", "--start", "--end", "--loudnorm",
+                     "--single-audio", "--flow-warp", "--colour-tune",
+                     "--no-kalman", "--no-phash", "--whisper-fallback",
+                     "--keep-subtitles", "--keep-chyrons", "--karaoke",
+                     "--export-srt", "--export-mask", "--nle-sidecar",
+                     "--quality-sheet", "--output-frames"):
+            self.assertNotIn(flag, cmd, f"Default config should not emit {flag}")
+
 
 class ScriptClassificationTests(unittest.TestCase):
     """Verify _classify_script maps characters to correct script families."""

@@ -968,6 +968,8 @@ class SubtitleRemover:
 
     def process_video(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
+        self._srt_entries = []
+        self._quality_mask_bbox = None
         temp_dir = None
         cap = None
         reader = None
@@ -1173,10 +1175,6 @@ class SubtitleRemover:
                 reader = cap
             last_mask = None  # cached mask for frame-skip optimization
             fixed_mask = None  # cached mask for skip_detection mode
-            self._srt_entries = []
-            # B-3: reset the union-mask bbox so the report ROI reflects
-            # only the current video's detections.
-            self._quality_mask_bbox = None
 
             # RM-27 Whisper fallback: pre-compute frame spans where
             # Whisper detected speech. When OCR returns no boxes for a
