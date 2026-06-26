@@ -3296,6 +3296,7 @@ class DiffusionInpainterScaffoldTests(unittest.TestCase):
         self._saved = {k: os.environ.pop(k, None) for k in (
             "VSR_PROPAINTER_REAL", "VSR_DIFFUERASER", "VSR_VACE",
             "VSR_VIDEOPAINTER", "VSR_COCOCO", "VSR_ERASERDIT", "VSR_FLOED",
+            "VSR_VOID",
         )}
 
     def tearDown(self):

@@ -151,6 +151,20 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         preferred_format="strict local weights only",
         remote_code_required=True,
     ),
+    "void": AdapterManifestEntry(
+        name="void",
+        env_vars=("VSR_VOID_WEIGHTS", "VSR_VOID_PASS1", "VSR_VOID_PASS2"),
+        expected_filenames=(
+            "void_pass1.safetensors",
+            "void_pass2.safetensors",
+            "pytorch_model.bin",
+        ),
+        sha256={},
+        license="Apache-2.0",
+        source_url="https://github.com/netflix/void-model",
+        preferred_format="strict local VOID checkpoints",
+        remote_code_required=True,
+    ),
     "transnetv2": AdapterManifestEntry(
         name="transnetv2",
         env_vars=("VSR_TRANSNETV2",),

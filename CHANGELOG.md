@@ -16,6 +16,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   entries, and a benchmark-only evaluator now records runtime, subtitle
   removal quality, outside-region artifact score, and temporal stability for
   supplied licensed outputs.
+- **VOID research adapter gate.** `VSR_VOID=1` can now register a `void`
+  research inpainter mode, but it verifies local checkpoints through the
+  adapter manifest before importing VOID code and falls back to TBE when
+  weights or dependencies are absent.
 
 ### Fixed
 

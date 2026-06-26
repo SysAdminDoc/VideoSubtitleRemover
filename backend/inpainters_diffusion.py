@@ -17,6 +17,7 @@ input formats is the upstream project's concern):
 - RM-63 CoCoCoBackend (text-guided AAAI 2025).
 - RM-64 EraserDiTBackend (track only; experimental).
 - RM-65 FloedBackend (NevSNev/FloED, flow-guided efficient diffusion).
+- VOID (Netflix research, opt-in and strict-local weights only).
 - CLEAR / SEDiT mask-free subtitle erasure are tracked as research
   benchmark candidates only; they are deliberately not registered as
   inpainter modes here.
@@ -357,6 +358,85 @@ class _FloedBackend(_DiffusionBackendBase):
         ]
 
 
+def _void_weight_paths() -> Optional[List[str]]:
+    primary = (
+        os.environ.get("VSR_VOID_WEIGHTS", "").strip()
+        or os.environ.get("VSR_VOID_PASS1", "").strip()
+    )
+    if not primary:
+        return None
+    paths = [primary]
+    pass2 = os.environ.get("VSR_VOID_PASS2", "").strip()
+    if pass2:
+        paths.append(pass2)
+    return paths
+
+
+class _VoidBackend(_DiffusionBackendBase):
+    MODE_NAME = "void"
+    REPO_HINT = (
+        "VOID is research-only. Set VSR_VOID=1 plus VSR_VOID_WEIGHTS "
+        "(or VSR_VOID_PASS1/VSR_VOID_PASS2) to reviewed local checkpoints."
+    )
+
+    def _load(self):
+        paths = _void_weight_paths()
+        if not paths:
+            logger.info(
+                "VOID enabled but no local weights were configured; falling "
+                "back to TBE. Set VSR_VOID_WEIGHTS or VSR_VOID_PASS1."
+            )
+            return None
+        try:
+            from backend.adapter_manifest import (
+                log_adapter_verification,
+                verify_adapter_path,
+            )
+            for path in paths:
+                result = verify_adapter_path(
+                    "void",
+                    path,
+                    strict_unknown=True,
+                )
+                log_adapter_verification(result)
+                if not result.allowed:
+                    return None
+        except Exception as exc:
+            logger.warning(f"VOID adapter manifest verification failed: {exc}")
+            return None
+
+        try:
+            import void_model  # type: ignore
+            return {"module": void_model, "weights": paths}
+        except Exception:
+            try:
+                import void  # type: ignore
+                return {"module": void, "weights": paths}
+            except Exception:
+                logger.info(
+                    "VOID package is unavailable; install the reviewed "
+                    "upstream checkout before enabling inference."
+                )
+                return None
+
+    def _run_model(self, frames, masks):
+        module = self._model["module"]
+        kwargs = {
+            "weights": self._model["weights"],
+            "device": self.device,
+        }
+        if hasattr(module, "inpaint"):
+            out = module.inpaint(frames, masks, **kwargs)
+        elif hasattr(module, "run"):
+            out = module.run(frames, masks, **kwargs)
+        else:
+            raise RuntimeError("VOID package missing `inpaint` or `run` entrypoint")
+        return [
+            _feather_blend(f, r, m, self.config.mask_feather_px)
+            for f, r, m in zip(frames, out, masks)
+        ]
+
+
 # Map an env var to (mode-name, builder).
 _OPT_INS = [
     ("VSR_PROPAINTER_REAL", "propainter-real", _PropainterRealBackend),
@@ -366,6 +446,7 @@ _OPT_INS = [
     ("VSR_COCOCO",          "cococo",          _CocoCoBackend),
     ("VSR_ERASERDIT",       "eraserdit",       _EraserDitBackend),
     ("VSR_FLOED",           "floed",           _FloedBackend),
+    ("VSR_VOID",            "void",            _VoidBackend),
 ]
 
 
