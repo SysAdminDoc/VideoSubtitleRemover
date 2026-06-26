@@ -228,5 +228,46 @@ class RapidOCROutputParsingTests(unittest.TestCase):
         self.assertEqual(boxes[0], (5, 10, 50, 30))
 
 
+class CliCommandBuilderTests(unittest.TestCase):
+    """Verify that _build_cli_command produces correct CLI strings."""
+
+    def test_default_config_produces_minimal_command(self):
+        from gui.config import ProcessingConfig, QueueItem
+        from gui.widgets import _build_cli_command
+        item = QueueItem(
+            id="test",
+            file_path="input.mp4",
+            output_path="output.mp4",
+            config=ProcessingConfig(),
+        )
+        cmd = _build_cli_command(item)
+        self.assertIn('-i "input.mp4"', cmd)
+        self.assertIn('-o "output.mp4"', cmd)
+        self.assertNotIn("--crf", cmd)
+        self.assertNotIn("--codec", cmd)
+
+    def test_custom_config_includes_flags(self):
+        from gui.config import ProcessingConfig, QueueItem
+        from gui.widgets import _build_cli_command
+        cfg = ProcessingConfig()
+        cfg.detection_lang = "ja"
+        cfg.output_quality = 18
+        cfg.output_codec = "h265"
+        cfg.mask_dilate_px = 12
+        cfg.lama_super_fast = True
+        item = QueueItem(
+            id="test",
+            file_path="video.mkv",
+            output_path="clean.mkv",
+            config=cfg,
+        )
+        cmd = _build_cli_command(item)
+        self.assertIn("-l ja", cmd)
+        self.assertIn("--crf 18", cmd)
+        self.assertIn("--codec h265", cmd)
+        self.assertIn("--mask-dilate 12", cmd)
+        self.assertIn("--fast", cmd)
+
+
 if __name__ == "__main__":
     unittest.main()

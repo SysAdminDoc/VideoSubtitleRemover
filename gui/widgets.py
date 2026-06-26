@@ -25,6 +25,49 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _build_cli_command(item: QueueItem) -> str:
+    """Build a CLI command string that reproduces an item's settings."""
+    parts = ["python -m backend.processor"]
+    parts.append(f'-i "{item.file_path}"')
+    parts.append(f'-o "{item.output_path}"')
+    cfg = item.config
+    mode_map = {"STTN": "sttn", "LAMA": "lama", "ProPainter": "propainter",
+                "AUTO": "auto"}
+    mode_str = getattr(cfg, "mode", None)
+    if mode_str:
+        if hasattr(mode_str, "value"):
+            mode_str = mode_str.value
+        cli_mode = mode_map.get(str(mode_str), str(mode_str).lower())
+        parts.append(f"-m {cli_mode}")
+    lang = getattr(cfg, "detection_lang", "en") or "en"
+    if lang != "en":
+        parts.append(f"-l {lang}")
+    crf = getattr(cfg, "output_quality", 23)
+    if crf != 23:
+        parts.append(f"--crf {crf}")
+    codec = getattr(cfg, "output_codec", "h264")
+    if codec and codec != "h264":
+        parts.append(f"--codec {codec}")
+    threshold = getattr(cfg, "detection_threshold", 0.5)
+    if threshold != 0.5:
+        parts.append(f"--threshold {threshold}")
+    dilate = getattr(cfg, "mask_dilate_px", 8)
+    if dilate != 8:
+        parts.append(f"--mask-dilate {dilate}")
+    skip = getattr(cfg, "detection_frame_skip", 0)
+    if skip:
+        parts.append(f"--frame-skip {skip}")
+    if getattr(cfg, "lama_super_fast", False):
+        parts.append("--fast")
+    if not getattr(cfg, "preserve_audio", True):
+        parts.append("--no-audio")
+    if not getattr(cfg, "use_hw_encode", True):
+        parts.append("--no-hw-encode")
+    if getattr(cfg, "quality_report", False):
+        parts.append("--quality-report")
+    return " ".join(parts)
+
+
 from gui.utils import (
     IMAGE_EXTENSIONS,
     SUPPORTED_EXTENSIONS,
@@ -1468,6 +1511,8 @@ class QueueItemWidget(tk.Frame):
                          state="normal" if rename_allowed else "disabled")
         menu.add_command(label="Copy source path",
                          command=self._copy_source_path)
+        menu.add_command(label="Copy CLI command",
+                         command=self._copy_cli_command)
         # RM-28: re-queue the same source with the snapshot of settings
         # that was active on this item. Useful when re-running with a
         # tweaked global config but you still want exactly the same
@@ -1526,6 +1571,15 @@ class QueueItemWidget(tk.Frame):
         try:
             self.clipboard_clear()
             self.clipboard_append(self.item.file_path)
+        except tk.TclError:
+            pass
+
+    def _copy_cli_command(self):
+        """Copy a CLI command that reproduces this item's settings."""
+        try:
+            cmd = _build_cli_command(self.item)
+            self.clipboard_clear()
+            self.clipboard_append(cmd)
         except tk.TclError:
             pass
 
