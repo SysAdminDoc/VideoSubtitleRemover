@@ -160,6 +160,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             evidence["releaseTools"]["rapidocrEngines"]["preferredProvider"],
             "OpenVINO CPU",
         )
+        self.assertFalse(evidence["releaseTools"]["referenceCorpus"]["ran"])
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
@@ -202,6 +203,70 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(hidden_json["hiddenImports"], ["cv2"])
         self.assertEqual(advisory_json["schema"], "vsr.release_advisories.v1")
         self.assertEqual(sbom_json["specVersion"], "1.5")
+
+    def test_release_evidence_can_run_reference_corpus(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp) / "dist"
+            dist_dir.mkdir()
+            self._copy_release_inputs(dist_dir)
+
+            corpus_result = {
+                "schema": "vsr.reference_corpus.v1",
+                "ran": True,
+                "passed": True,
+                "clipCount": 10,
+                "failures": [],
+                "error": "",
+            }
+            with ExitStack() as stack:
+                for patch in self._patched_environment():
+                    stack.enter_context(patch)
+                stack.enter_context(mock.patch(
+                    "backend.release_verification._run_reference_corpus",
+                    return_value=corpus_result,
+                ))
+                evidence, _hidden_payload, _sbom, _advisories = (
+                    release_verification.build_release_evidence(
+                        dist_dir=dist_dir,
+                        run_reference_corpus=True,
+                    )
+                )
+
+        self.assertEqual(
+            evidence["releaseTools"]["referenceCorpus"],
+            corpus_result,
+        )
+        self.assertEqual(evidence["errors"], [])
+
+    def test_release_evidence_reports_reference_corpus_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp) / "dist"
+            dist_dir.mkdir()
+            self._copy_release_inputs(dist_dir)
+
+            corpus_result = {
+                "schema": "vsr.reference_corpus.v1",
+                "ran": True,
+                "passed": False,
+                "clipCount": 10,
+                "failures": [{"filename": "clip.mkv", "failures": ["hash"]}],
+                "error": "",
+            }
+            with ExitStack() as stack:
+                for patch in self._patched_environment():
+                    stack.enter_context(patch)
+                stack.enter_context(mock.patch(
+                    "backend.release_verification._run_reference_corpus",
+                    return_value=corpus_result,
+                ))
+                evidence, _hidden_payload, _sbom, _advisories = (
+                    release_verification.build_release_evidence(
+                        dist_dir=dist_dir,
+                        run_reference_corpus=True,
+                    )
+                )
+
+        self.assertIn("Reference corpus regression failed", evidence["errors"])
 
     def test_strict_release_fails_on_blocking_advisory(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -28,6 +28,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   drag a manual subtitle region directly on the selected frame and immediately
   refreshes the mask preview with the saved coordinates; the advanced selector
   remains available for timed and multi-region ranges.
+- **Reference-clip regression corpus.** `tests/clips/` now carries 10
+  deterministic MIT fixtures for motion, karaoke, vertical, HDR-like, font,
+  dissolve, shadow, and timed-region cases, with a `backend.reference_corpus`
+  runner that compares decoded output-frame hashes and PSNR/SSIM floors during
+  local release evidence generation.
 
 ### Fixed
 

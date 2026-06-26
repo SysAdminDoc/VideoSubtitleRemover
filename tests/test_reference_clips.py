@@ -1,11 +1,7 @@
-"""RFP-T-1 synthetic regression harness.
+"""Reference regression harness.
 
-The roadmap originally specified eight curated CC0 clips covering
-static / karaoke / vertical-JP / motion-pan / dissolve / chyron / VHS /
-thin-Arabic edge cases. Sourcing rights-cleared clips is not practical
-for this autonomous pass, so we ship the *harness* with
-8 synthetic clips generated deterministically from a fixed seed. Each
-synthetic clip exercises a different code path:
+The fast unit harness still generates eight synthetic clips in a TempDir so
+ordinary backend changes get broad coverage without shipping large assets:
 
 - `static_dialogue`: still background + steady lower-third subtitle.
 - `motion_pan`: horizontal pan beneath the subtitle band.
@@ -20,10 +16,10 @@ synthetic clip exercises a different code path:
 - `gradient_background`: subtitle over a gradient (stresses the
    edge-ring color match).
 
-Each clip is generated once into a TempDir, processed through the
-backend, and the PSNR/SSIM on the inpainted region is asserted
-against a generous floor. Real-world clips will land in a later
-commit once the CC0 sourcing pass produces them.
+The committed corpus in ``tests/clips`` adds 10 deterministic MIT fixtures for
+motion-heavy, karaoke, vertical text, HDR-like ramps, thin/thick font, dissolve,
+shadow, and time-ranged layouts. Those clips carry source SHA-256 values,
+decoded output-frame SHA-256 baselines, and PSNR/SSIM floors in the manifest.
 
 Skipped when ffmpeg is missing (the lossless intermediate path needs
 it). Designed to run as part of the standard `python -m unittest
@@ -49,6 +45,11 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from backend import processor
+from backend.reference_corpus import (
+    REFERENCE_CORPUS_CATEGORY,
+    reference_manifest_entries,
+    run_reference_corpus,
+)
 
 
 def _have_ffmpeg() -> bool:
@@ -238,6 +239,39 @@ class RealClipManifestTests(unittest.TestCase):
                 missing,
                 f"Clip {idx} ({clip.get('filename', '?')}) missing: {missing}"
             )
+            if clip.get("failure_category") == REFERENCE_CORPUS_CATEGORY:
+                self.assertIn(
+                    "baseline",
+                    clip,
+                    f"Core reference clip {clip.get('filename', '?')} needs baseline",
+                )
+
+    def test_manifest_contains_committed_core_reference_corpus(self):
+        entries = reference_manifest_entries(self.MANIFEST, _HERE / "clips")
+        self.assertGreaterEqual(len(entries), 10)
+        self.assertLessEqual(len(entries), 20)
+        categories = {entry["failure_category"] for entry in entries}
+        self.assertEqual(categories, {REFERENCE_CORPUS_CATEGORY})
+        names = {Path(entry["filename"]).stem for entry in entries}
+        self.assertTrue({
+            "motion_pan", "karaoke_burnin", "vertical_jp",
+            "hdr_tone_ramp", "thin_font", "thick_font", "dissolve_cuts",
+        }.issubset(names))
+
+    @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
+    def test_committed_reference_corpus_matches_baselines(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_reference_corpus(
+                self.MANIFEST,
+                clips_dir=_HERE / "clips",
+                output_dir=tmpdir,
+            )
+        self.assertTrue(result["passed"], result["failures"])
+        self.assertEqual(result["clipCount"], 10)
+        for clip in result["clips"]:
+            self.assertTrue(clip["outputFrames"]["sha256"])
+            self.assertGreaterEqual(clip["metrics"]["psnr"], 0.0)
+            self.assertGreaterEqual(clip["metrics"]["ssim"], 0.0)
 
     def test_no_unmanifested_clips_in_directory(self):
         import json

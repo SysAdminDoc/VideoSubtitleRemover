@@ -1,22 +1,21 @@
 {
-  "schema_version": 1,
-  "description": "Reference clip manifest for regression testing. Each entry requires a license, contributor, SHA-256 hash, expected failure category, ProcessingConfig overrides, and metric floors. Tests refuse clips not listed here.",
   "benchmark_profiles": {
-    "static_logo_cleanup": {
-      "failure_category": "static_logo",
-      "config_profile": "static_logo_cleanup",
+    "core_reference": {
+      "failure_category": "core_reference",
       "required_metric_floors": [
-        "ssimVsReferenceMean",
-        "temporalConsistency"
+        "psnr",
+        "ssim"
       ],
       "tracked_metrics": [
-        "residualTextScoreMean",
-        "temporalFlickerScore"
+        "roi_psnr",
+        "roi_ssim",
+        "temporal_flicker_score",
+        "temporal_consistency"
       ]
     },
     "mask_free_subtitle_erasure": {
-      "failure_category": "mask_free_subtitle",
       "config_profile": "mask_free_subtitle_erasure",
+      "failure_category": "mask_free_subtitle",
       "required_evaluation_fields": [
         "subtitle_regions"
       ],
@@ -30,7 +29,398 @@
         "subtitleResidualTextScore",
         "temporalFlickerScore"
       ]
+    },
+    "static_logo_cleanup": {
+      "config_profile": "static_logo_cleanup",
+      "failure_category": "static_logo",
+      "required_metric_floors": [
+        "ssimVsReferenceMean",
+        "temporalConsistency"
+      ],
+      "tracked_metrics": [
+        "residualTextScoreMean",
+        "temporalFlickerScore"
+      ]
     }
   },
-  "clips": []
+  "clips": [
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "fd9893634f66f13f3750e073e57b479bb9cd63c87c8f97d99ac96b61920f974d",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "steady lower-third subtitle",
+      "failure_category": "core_reference",
+      "filename": "static_dialogue.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 9.739333,
+        "ssim": 0.675461
+      },
+      "sha256": "3d9bffa859a245e7adb7cfb926f24b970d99c9032934ae5d5cdeb0a7e4f0848a"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "a34e3169e5b5cb518faebd54c36226433f7d76b8c223b7304decbb04debb1ef1",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "moving background pan",
+      "failure_category": "core_reference",
+      "filename": "motion_pan.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 11.289908,
+        "ssim": 0.708734
+      },
+      "sha256": "ab124826841d308c1c2df9d4e0d7a9c4e403bd3810c06d672e4deae254eee069"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "0793f049176330134681962ab3e9dfe814db8735ceb0384055637bd45795fdb9",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "per-syllable karaoke highlights",
+      "failure_category": "core_reference",
+      "filename": "karaoke_burnin.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 12.767097,
+        "ssim": 0.801989
+      },
+      "sha256": "381f7fef152e2c664c2ea20b7a7a039c073281d762fbe552f65f7889252099e9"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "32a1957ae4ce1c2af610254e8bc9b2bff214042cd42f0102e7a60c3d924880f1",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          118,
+          10,
+          152,
+          88
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "vertical Japanese-style subtitle column",
+      "failure_category": "core_reference",
+      "filename": "vertical_jp.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 11.369872,
+        "ssim": 0.788859
+      },
+      "sha256": "d306e04ed99d56b312740a0060793663ef3bec6728f8235bb18e1f8e6dff4e18"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "7b72d8f5e23deb95c5f37df0e9886b0b7f434767966eeab30f1d53f7926277d5",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "cross-fade between scenes",
+      "failure_category": "core_reference",
+      "filename": "dissolve_cuts.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 9.338212,
+        "ssim": 0.683236
+      },
+      "sha256": "872be31164688de1aa439fd707f72be800f24250a7729a291c0c1304c902744c"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "e95439c4922e9cbc2f64e874cbcc15a39bdd3a5b9926c564b148c23845510619",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "thin 1-2 px strokes",
+      "failure_category": "core_reference",
+      "filename": "thin_font.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 16.564691,
+        "ssim": 0.725966
+      },
+      "sha256": "589690cb8875c5f97727afdec51f073bd407cd12abc3981f70d145699be1b7e2"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "770dcea1fc598e8723a44ff221d2ae886af7c2e9362d0f1dbec3e742c9cf7552",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "heavy block subtitles",
+      "failure_category": "core_reference",
+      "filename": "thick_font.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 9.686733,
+        "ssim": 0.625686
+      },
+      "sha256": "bf66844f2212ec19c0f149420afe99305faabf3fb24f3bf32c9a2f81c55c180d"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "831ccca191eaaa22f77810a24a25ed5f8244fb31c95d070c995e73cc5bb46240",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "HDR-like high contrast ramp",
+      "failure_category": "core_reference",
+      "filename": "hdr_tone_ramp.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 10.848053,
+        "ssim": 0.726822
+      },
+      "sha256": "8dd768d00cc843c592818a01c92a9a75c3827004e29fafd0bba8c6b197f0ebd7"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "0f681b0dc9b74bd007154399fd218bbac09da50daa43f47cca7d3ceb283a49bd",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_area": [
+          14,
+          58,
+          146,
+          92
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "outlined drop-shadow subtitle",
+      "failure_category": "core_reference",
+      "filename": "shadow_outline.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 9.489583,
+        "ssim": 0.656548
+      },
+      "sha256": "4860837a0a59c8a44ca923b713e23bac692c13f3dab0b7548b7dd1eac0a4a6b5"
+    },
+    {
+      "baseline": {
+        "frame_count": 16,
+        "height": 96,
+        "output_frames_sha256": "86c3cdcdbb58ff5e33508946b869051633d46f8ff58f7123ef1ef481d21ee5af",
+        "width": 160
+      },
+      "config": {
+        "adaptive_batch": false,
+        "decode_hw_accel": "off",
+        "device": "cpu",
+        "mode": "sttn",
+        "output_quality": 0,
+        "prefetch_decode": false,
+        "preserve_audio": false,
+        "quality_report": true,
+        "sttn_skip_detection": true,
+        "subtitle_region_spans": [
+          {
+            "end": 0.6666666666666666,
+            "rect": [
+              14,
+              58,
+              146,
+              92
+            ],
+            "start": 0.0
+          },
+          {
+            "end": 0.0,
+            "rect": [
+              14,
+              8,
+              146,
+              42
+            ],
+            "start": 0.6666666666666666
+          }
+        ],
+        "use_hw_encode": false
+      },
+      "contributor": "VideoSubtitleRemover deterministic fixture generator",
+      "description": "subtitle jumps between top and bottom",
+      "failure_category": "core_reference",
+      "filename": "moving_lower_third.mkv",
+      "license": "MIT",
+      "metric_floors": {
+        "psnr": 9.382655,
+        "ssim": 0.677731
+      },
+      "sha256": "74340c4c5f03ce3e9d42b28e8712d765f257c91aea6853b90b5334ca10f95872"
+    }
+  ],
+  "description": "Reference clip manifest for regression testing. Core reference entries are deterministic generated MIT fixtures with source SHA-256, decoded-output frame baselines, and PSNR/SSIM floors. Research benchmark entries may also use this manifest when their failure_category matches the benchmark.",
+  "schema_version": 2
 }

@@ -121,7 +121,11 @@ Those profiles report missing filters such as `loudnorm`, `libvmaf`, or
 
 ```powershell
 python -m unittest discover -s tests -v
+python -m backend.reference_corpus --json
 ```
+
+`build_exe.bat` also runs the committed reference corpus during local release
+evidence generation and records the result in `release-verification.json`.
 
 ## Usage
 

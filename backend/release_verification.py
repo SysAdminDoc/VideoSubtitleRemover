@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence
@@ -404,12 +405,38 @@ def _run_smoke(dist_dir: Path, timeout: float = 45.0) -> dict:
     return payload
 
 
+def _run_reference_corpus(timeout_note: str = "local release") -> dict:
+    payload = {
+        "schema": "vsr.reference_corpus.v1",
+        "ran": True,
+        "passed": False,
+        "clipCount": 0,
+        "failures": [],
+        "context": timeout_note,
+        "error": "",
+    }
+    try:
+        from backend.reference_corpus import run_reference_corpus
+
+        with tempfile.TemporaryDirectory(prefix="vsr-release-corpus-") as tmpdir:
+            result = run_reference_corpus(output_dir=tmpdir)
+        payload.update({
+            "passed": bool(result.get("passed")),
+            "clipCount": int(result.get("clipCount", 0)),
+            "failures": result.get("failures", []),
+        })
+    except Exception as exc:  # pragma: no cover - exercises installed env
+        payload["error"] = str(exc)
+    return payload
+
+
 def build_release_evidence(
     *,
     dist_dir: str | Path,
     hidden_imports: str | Sequence[str] = (),
     collect_data: str | Sequence[str] = (),
     run_smoke: bool = True,
+    run_reference_corpus: bool = False,
     env: Optional[Mapping[str, str]] = None,
 ) -> tuple[dict, dict, dict]:
     dist = Path(dist_dir)
@@ -467,6 +494,18 @@ def build_release_evidence(
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "onnxRuntimeProviders": onnxruntime_providers,
             "rapidocrEngines": rapidocr_engines,
+            "referenceCorpus": (
+                _run_reference_corpus()
+                if run_reference_corpus else
+                {
+                    "schema": "vsr.reference_corpus.v1",
+                    "ran": False,
+                    "passed": None,
+                    "clipCount": 0,
+                    "failures": [],
+                    "error": "reference corpus skipped",
+                }
+            ),
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {
@@ -502,6 +541,10 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     smoke = evidence.get("smokeLaunch", {})
     if isinstance(smoke, Mapping) and smoke.get("ran") and not smoke.get("passed"):
         yield "Smoke launch failed"
+    reference = evidence.get("releaseTools", {}).get("referenceCorpus", {})
+    if (isinstance(reference, Mapping)
+            and reference.get("ran") and not reference.get("passed")):
+        yield "Reference corpus regression failed"
     rapid = evidence.get("rapidocrModels", {})
     if isinstance(rapid, Mapping):
         package = rapid.get("package", {})
@@ -519,6 +562,7 @@ def write_release_evidence(
     hidden_imports: str | Sequence[str] = (),
     collect_data: str | Sequence[str] = (),
     run_smoke: bool = True,
+    run_reference_corpus: bool = False,
     strict: bool = False,
     env: Optional[Mapping[str, str]] = None,
 ) -> dict:
@@ -529,6 +573,7 @@ def write_release_evidence(
         hidden_imports=hidden_imports,
         collect_data=collect_data,
         run_smoke=run_smoke,
+        run_reference_corpus=run_reference_corpus,
         env=env,
     )
     outputs = {
@@ -570,6 +615,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default="permissive",
     )
     parser.add_argument("--skip-smoke", action="store_true")
+    parser.add_argument("--run-reference-corpus", action="store_true")
     args = parser.parse_args(argv)
     write_release_evidence(
         dist_dir=args.dist_dir,
@@ -577,6 +623,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         hidden_imports=args.hidden_imports,
         collect_data=args.collect_data,
         run_smoke=not args.skip_smoke,
+        run_reference_corpus=args.run_reference_corpus,
         strict=args.quality == "strict",
     )
     return 0

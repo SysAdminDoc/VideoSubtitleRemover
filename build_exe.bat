@@ -98,6 +98,7 @@ echo Generating local release evidence...
     --dist-dir "!DIST_DIR!" ^
     --hidden-imports "!HIDDEN_IMPORTS!" ^
     --collect-data "!COLLECT_DATA!" ^
+    --run-reference-corpus ^
     --quality permissive
 
 if errorlevel 1 (
