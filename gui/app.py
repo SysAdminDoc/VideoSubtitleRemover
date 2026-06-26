@@ -3014,6 +3014,102 @@ class VideoSubtitleRemoverApp:
             logger.warning("Support bundle save failed: %s", exc, exc_info=True)
             self._update_status("Support bundle could not be saved", "error")
 
+    @staticmethod
+    def _model_cache_missing_summary(status: dict) -> str:
+        missing = list((status or {}).get("missing_known_filenames", []) or [])
+        if not missing:
+            return ""
+        shown = ", ".join(missing[:3])
+        if len(missing) > 3:
+            shown += f", +{len(missing) - 3} more"
+        return f"; missing optional assets: {shown}"
+
+    def _export_model_cache_bundle(self):
+        """Export verified model-cache files to a portable zip."""
+        try:
+            initial = (
+                "vsr-model-cache-"
+                + datetime.now().strftime("%Y%m%d-%H%M%S")
+                + ".zip"
+            )
+            path = filedialog.asksaveasfilename(
+                parent=self.root,
+                title="Export model cache",
+                defaultextension=".zip",
+                filetypes=[("Model cache bundle", "*.zip"), ("All files", "*.*")],
+                initialfile=initial,
+            )
+            if not path:
+                return
+            from backend.cache_inventory import export_model_cache_bundle
+            result = export_model_cache_bundle(path)
+            missing = self._model_cache_missing_summary(
+                result.get("status_after_export", {})
+            )
+            skipped = len(result.get("skipped", []) or [])
+            suffix = f"; skipped {skipped} unsafe or invalid file(s)" if skipped else ""
+            self._update_status(
+                f"Exported {len(result.get('files', []))} model-cache file(s) "
+                f"to {Path(result['output']).name}{suffix}{missing}",
+                "warning" if skipped else "success",
+            )
+        except Exception as exc:
+            logger.warning("Model cache export failed: %s", exc, exc_info=True)
+            self._update_status("Model cache could not be exported", "error")
+
+    def _import_model_cache_bundle(self):
+        """Import a portable model-cache zip into the app model cache."""
+        try:
+            path = filedialog.askopenfilename(
+                parent=self.root,
+                title="Import model cache",
+                filetypes=[("Model cache bundle", "*.zip"), ("All files", "*.*")],
+            )
+            if not path:
+                return
+            from backend.cache_inventory import import_model_cache_bundle
+            result = import_model_cache_bundle(path)
+            try:
+                self.backend_status = installed_backend_status(self.config)
+            except Exception:
+                logger.warning("Backend status refresh after cache import failed",
+                               exc_info=True)
+            missing = self._model_cache_missing_summary(
+                result.get("status_after_import", {})
+            )
+            rejected = len(result.get("rejected", []) or [])
+            suffix = (
+                f"; rejected {rejected} unsafe or invalid file(s)"
+                if rejected else ""
+            )
+            self._update_status(
+                f"Imported {len(result.get('imported', []))} model-cache file(s)"
+                f"{suffix}{missing}",
+                "warning" if rejected else "success",
+            )
+        except Exception as exc:
+            logger.warning("Model cache import failed: %s", exc, exc_info=True)
+            self._update_status("Model cache could not be imported", "error")
+
+    def _open_model_cache_menu(self, anchor):
+        """Open model-cache actions from the About dialog."""
+        menu = make_themed_menu(self.root)
+        menu.add_command(
+            label="Export model cache...",
+            command=self._export_model_cache_bundle,
+        )
+        menu.add_command(
+            label="Import model cache...",
+            command=self._import_model_cache_bundle,
+        )
+        try:
+            menu.tk_popup(
+                anchor.winfo_rootx(),
+                anchor.winfo_rooty() + anchor.winfo_height() + 2,
+            )
+        finally:
+            menu.grab_release()
+
     def _build_footer(self, parent):
         """Footer status bar with a colored dot + message and a right-side hint."""
         footer = tk.Frame(parent, bg=Theme.BG_DARK)
@@ -3877,15 +3973,21 @@ class VideoSubtitleRemoverApp:
         actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
         actions_inner.pack(side="right", padx=16, pady=14)
 
-        ModernButton(actions_inner, text="Open log", width=110,
+        ModernButton(actions_inner, text="Open log", width=96,
                      command=self._open_log_file, style="ghost", size="md").pack(side="left")
-        ModernButton(actions_inner, text="Support bundle", width=142,
+        model_cache_btn = ModernButton(actions_inner, text="Model cache", width=116,
+                                       command=None, style="ghost", size="md")
+        model_cache_btn.command = (
+            lambda btn=model_cache_btn: self._open_model_cache_menu(btn)
+        )
+        model_cache_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        ModernButton(actions_inner, text="Support bundle", width=128,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text="Settings folder", width=140,
+        ModernButton(actions_inner, text="Settings folder", width=132,
                      command=self._open_settings_folder, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text="Close", width=90,
+        ModernButton(actions_inner, text="Close", width=84,
                      command=_close_about,
                      style="primary", size="md").pack(side="left", padx=(Theme.S_SM, 0))
 

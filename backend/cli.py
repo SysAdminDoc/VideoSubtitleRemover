@@ -495,6 +495,10 @@ def main():
                        help="Print cache directory inventory with sizes and exit.")
     parser.add_argument("--cache-clean", action="store_true",
                        help="Remove stale cache entries (checkpoints, proxies, TRT engines) and exit.")
+    parser.add_argument("--model-cache-export", metavar="PATH",
+                       help="Write a portable model-cache zip with SHA-256 manifest and exit.")
+    parser.add_argument("--model-cache-import", metavar="PATH",
+                       help="Import a verified portable model-cache zip into the app model cache and exit.")
     parser.add_argument("--support-bundle", metavar="PATH",
                        help="Write a redacted diagnostics zip and exit.")
     parser.add_argument("--validate-config", action="store_true",
@@ -551,6 +555,51 @@ def main():
         print("Cleaning stale VSR caches:")
         clean_cache(dry_run=False)
         sys.exit(0)
+
+    if args.model_cache_export and args.model_cache_import:
+        parser.error("--model-cache-export and --model-cache-import are mutually exclusive")
+
+    if args.model_cache_export:
+        from backend.cache_inventory import export_model_cache_bundle
+        try:
+            result = export_model_cache_bundle(args.model_cache_export)
+        except Exception as exc:
+            print(f"[model-cache] export failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(
+            f"[model-cache] exported {len(result['files'])} file(s) "
+            f"to {result['output']}"
+        )
+        missing = result["status_after_export"].get("missing_known_filenames", [])
+        if missing:
+            print(
+                "[model-cache] missing optional known assets: "
+                + ", ".join(missing)
+            )
+        if result.get("skipped"):
+            print(f"[model-cache] skipped {len(result['skipped'])} unsafe or invalid file(s)")
+        sys.exit(0)
+
+    if args.model_cache_import:
+        from backend.cache_inventory import import_model_cache_bundle
+        try:
+            result = import_model_cache_bundle(args.model_cache_import)
+        except Exception as exc:
+            print(f"[model-cache] import failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(
+            f"[model-cache] imported {len(result['imported'])} file(s) "
+            f"from {result['source']}"
+        )
+        if result.get("rejected"):
+            print(f"[model-cache] rejected {len(result['rejected'])} unsafe or invalid file(s)")
+        missing = result["status_after_import"].get("missing_known_filenames", [])
+        if missing:
+            print(
+                "[model-cache] missing optional known assets: "
+                + ", ".join(missing)
+            )
+        sys.exit(1 if result.get("rejected") and not result.get("imported") else 0)
 
     if args.self_test:
         from backend.support_bundle import run_self_test

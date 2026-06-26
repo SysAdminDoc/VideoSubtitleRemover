@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
-from backend.cache_inventory import discover_caches
+from backend.cache_inventory import discover_caches, model_cache_status
 from backend.crash_reporter import _path_scrub
 from backend.ffmpeg_profiles import (
     collect_ffmpeg_capability_profiles,
@@ -183,6 +183,7 @@ def _support_payload(*, app_version: str,
         "ffmpeg_profiles": collect_ffmpeg_capability_profiles(),
         "dependencies": _dependency_versions(),
         "backend_status": installed_backend_status(),
+        "model_cache": model_cache_status(),
         "security": {
             "opencv_libpng": opencv_libpng_status(),
         },

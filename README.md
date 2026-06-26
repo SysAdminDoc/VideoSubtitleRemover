@@ -282,6 +282,8 @@ before/after retry config in the next batch report.
 | `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes | Off |
 | `--cache-info` | Print cache directory inventory with sizes and exit | Off |
 | `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) | Off |
+| `--model-cache-export PATH` | Write a portable model-cache zip with SHA-256 manifest | - |
+| `--model-cache-import PATH` | Import a verified model-cache zip into the app model cache | - |
 | `--support-bundle PATH` | Write a redacted diagnostics zip and exit | - |
 | `--validate-config` | Print resolved config and exit | Off |
 | `--self-test` | Probe OCR engines, GPU providers, codecs, and FFmpeg capability profiles, then exit | Off |
@@ -423,6 +425,9 @@ to a bug report.
   dependency versions, settings summary, recent log lines, and batch report
   evidence. CLI equivalent:
   `python -m backend.cli --support-bundle support.zip`
+- About -> Model cache can export/import a portable cache bundle. CLI
+  equivalents: `python -m backend.cli --model-cache-export models.zip`
+  and `python -m backend.cli --model-cache-import models.zip`
 
 ## Project Structure
 

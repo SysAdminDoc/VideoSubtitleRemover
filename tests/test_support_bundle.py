@@ -79,6 +79,10 @@ class SupportBundleTests(unittest.TestCase):
                     "vsr.backend_status.v1",
                 )
                 self.assertIn("summary", support["backend_status"])
+                self.assertEqual(
+                    support["model_cache"]["schema"],
+                    "vsr.model_cache_status.v1",
+                )
                 self.assertIn("opencv_libpng", support["security"])
                 self.assertEqual(
                     support["security"]["opencv_libpng"]["fixed_version"],

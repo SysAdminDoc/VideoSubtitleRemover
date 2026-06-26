@@ -57,6 +57,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **Language-support truth in backend status.** README and Help now use the
   same language statement: the GUI exposes 52 selectable OCR language codes,
   while installed OCR engines report broader capacity separately.
+- **Portable model-cache bundles.** Help and CLI can export/import a
+  SHA-256-manifested model-cache zip into the app model cache, rejecting path
+  traversal, executable entries, and hash mismatches while reporting missing
+  optional known assets afterward.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

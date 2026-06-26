@@ -165,6 +165,9 @@ class GuiSmokeTests(unittest.TestCase):
 
             texts = []
             for widget in self._walk_widgets(app.root):
+                drawn_text = getattr(widget, "text", None)
+                if drawn_text:
+                    texts.append(str(drawn_text))
                 try:
                     text = widget.cget("text")
                 except tk.TclError:
@@ -179,6 +182,7 @@ class GuiSmokeTests(unittest.TestCase):
                 "GUI picker: 52 selectable OCR codes; installed OCR capacity: RapidOCR 100+.",
                 texts,
             )
+            self.assertIn("Model cache", texts)
             self.assertIn("No backend setup action needed.", texts)
             try:
                 dialog.grab_release()
