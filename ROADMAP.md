@@ -20,16 +20,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     Sources: https://huggingface.co/PaddlePaddle/PaddleOCR-VL
     https://arxiv.org/abs/2510.14528
 
-113. **PaddleOCR-VL-1.5 llama.cpp detector tier** -- optional detector
-     tier using PaddleOCR-VL via llama.cpp for CPU/edge deployment
-     without CUDA; concrete implementation path for #22/#23.
-     Priority: P2 detection. Effort: M. Confidence: medium-high.
-     Acceptance criteria:
-     - New tier in `backend/ocr_vlm.py` gated by `VSR_PADDLEOCR_VL=1`.
-     - Works on CPU without CUDA dependency.
-     - Falls back to standard PaddleOCR if llama.cpp is unavailable.
-     Source: https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.5
-
 ### Workflow / UX
 
 31. **Subtitle-area drag-refinement in-GUI** -- replace the modal
@@ -212,112 +202,148 @@ Speculative research bench; not commitments.
 
 ## Research-Driven Additions
 
+### P0 -- Security and decode safety
+
+- [ ] P0 -- Route untrusted PNG decoding around vulnerable OpenCV libpng
+  Why: OpenCV/libpng currently only warns, while PNG source reads still pass
+  through `cv2.imread` in GUI, CLI, processor, and frame-sequence paths.
+  Evidence: `backend/security_checks.py`, `backend/processor.py:920`,
+  `backend/io.py:642`, `gui/app.py:1256`, OpenCV issue #1186,
+  NVD CVE-2026-22801, Pillow 12.2.0
+  Touches: `backend/io.py`, `backend/processor.py`, `backend/cli.py`,
+  `gui/app.py`, `tests/test_hardening.py`, `tests/test_io_pipeline.py`,
+  `tests/test_gui_smoke.py`
+  Acceptance: A single safe image-read helper routes PNG input through Pillow
+  or fails closed whenever `opencv_libpng_status().vulnerable` is true; tests
+  patch vulnerable/fixed states and assert no untrusted PNG path calls
+  `cv2.imread` under the vulnerable state.
+  Complexity: M
+
 ### P1 -- Trust and release readiness
 
-- [ ] P1 -- Rebuild local release verification after GitHub Actions removal
-  Why: The workflow was removed in local-build mode, but most
-  release-evidence assertions now skip when `.github/workflows/build.yml`
-  is absent.
-  Evidence: `c4a4617`, `tests/test_release_workflow.py`, `build_exe.bat`,
-  `README.md`
-  Touches: `build_exe.bat`, `tests/test_release_workflow.py`,
-  `backend/onnx_model_info.py`, `backend/adapter_manifest.py`,
-  `backend/remote_model_policy.py`
-  Acceptance: A local release command emits `release-verification.json`,
-  SBOM/dependency evidence, hidden-import inventory, launcher/doc version
-  checks, RapidOCR/model-policy status, and smoke-launch status; tests pass
-  without `.github/workflows/build.yml`.
+- [ ] P1 -- Add advisory gating to local release evidence
+  Why: Release evidence records dependencies and an SBOM, but strict builds do
+  not fail on known high/critical advisories in bundled Python/native packages.
+  Evidence: `backend/release_verification.py`, `requirements.txt`,
+  ONNX Runtime v1.27.0, Pillow 12.2.0, NVD CVE-2025-32434,
+  NVD CVE-2026-22801
+  Touches: `backend/release_verification.py`, `build_exe.bat`,
+  `requirements.txt`, `tests/test_release_workflow.py`, `README.md`
+  Acceptance: `build_exe.bat` emits `release-advisories.json`; strict release
+  mode fails on unallowed high/critical advisories; the OpenCV/libpng exception
+  is explicit and removed automatically when runtime status reports a fixed
+  bundled libpng.
   Complexity: M
 
-- [ ] P1 -- Gate PyTorch LaMa hidden imports behind explicit opt-in
-  Why: `build_exe.bat` always includes `--hidden-import
-  simple_lama_inpainting` even though README says the PyTorch LaMa fallback
-  is disabled unless `VSR_ENABLE_PYTORCH_LAMA=1`.
-  Evidence: `build_exe.bat`, `README.md`, PyTorch CVE notes in
-  `requirements.txt`
-  Touches: `build_exe.bat`, `tests/test_release_workflow.py`,
-  `tests/test_cv2dnn_lama.py`
-  Acceptance: PyInstaller includes `simple_lama_inpainting` only when the
-  opt-in env var is set and the module is importable; tests assert default
-  bundles do not include the hidden import.
-  Complexity: S
-
-- [ ] P1 -- Add scaled mask-selector end-to-end regression coverage
-  Why: Recent mask-selection fixes cover save flow, but the high-risk path
-  still depends on canvas-to-image coordinate scaling, queued config
-  snapshots, preloaded rectangles, and video/image input differences.
-  Evidence: `8a2e29d`, `2afe087`, `gui/app.py` `_open_region_selector()`,
-  `tests/test_gui_smoke.py`
-  Touches: `gui/app.py`, `tests/test_gui_smoke.py`,
-  `tests/test_hardening.py`
-  Acceptance: A scripted GUI test opens a resized selector, preloads and
-  draws multiple rectangles, clears/re-saves, verifies app config, selected
-  queue item config, and mask-preview coordinates.
+- [ ] P1 -- Add FFmpeg capability profiles before long batches
+  Why: VVC, VMAF, loudnorm, hardware encoders, and FFmpeg Whisper depend on the
+  installed Windows FFmpeg build, but current probes are scattered and
+  encoder-only.
+  Evidence: `README.md`, `backend/support_bundle.py:run_self_test`,
+  `backend/release_verification.py`, FFmpeg docs, VideoHelp community threads
+  Touches: `backend/support_bundle.py`, `backend/release_verification.py`,
+  `backend/cli.py`, `gui/app.py`, `README.md`, `tests/test_support_bundle.py`
+  Acceptance: `--self-test` and the Help/backend panel report `basic`,
+  `advanced_quality`, `speech_fallback`, and `modern_codec` profiles with exact
+  missing filters/encoders; GUI warns before starting a batch whose selected
+  options exceed the current FFmpeg profile.
   Complexity: M
 
-- [ ] P1 -- Gracefully classify corrupt or truncated video input
-  Why: Corrupt media is a common support path for video tools; VSR should
-  report a failed item with actionable copy instead of surfacing raw OpenCV
-  or FFmpeg errors.
-  Evidence: `backend/io.py`, `backend/processor.py`, VideoHelp community
-  repair/removal threads
-  Touches: `backend/io.py`, `backend/processor.py`,
-  `tests/test_io_pipeline.py`, `tests/test_hardening.py`
-  Acceptance: Zero-byte, truncated, and unsupported-codec fixtures produce
-  failed queue records, concise log messages, and no leaked temp outputs.
+- [ ] P1 -- Turn quality-gate remediation into retry configs
+  Why: Review-needed outputs already carry ladder steps, but users still have to
+  translate remediation prose into settings manually.
+  Evidence: `backend/quality_gate.py`, `gui/app.py` review worklist and retry
+  flow, commercial subtitle-removal task flows
+  Touches: `backend/quality_gate.py`, `gui/app.py`, `gui/config.py`,
+  `tests/test_gui_review_worklist.py`, `tests/test_hardening.py`
+  Acceptance: A review-needed queue item exposes `Retry with suggested
+  settings`; each ladder step mutates only the affected item's config, records
+  the before/after config in the batch report, and requeues without changing
+  unrelated items.
   Complexity: M
 
 ### P2 -- Dependency, documentation, and UX hardening
 
-- [ ] P2 -- Verify RapidOCR PP-OCRv6 packaging compatibility
-  Why: RapidOCR 3.x can ship different PP-OCR model assets and package
-  layout; PyInstaller data collection and detector parsing must stay
-  compatible across the capped major range.
-  Evidence: RapidOCR releases, `backend/detection.py`,
-  `backend/paddle_compat.py`, `build_exe.bat`
-  Touches: `backend/detection.py`, `backend/onnx_model_info.py`,
-  `backend/dependency_caps.py`, `build_exe.bat`,
-  `tests/test_detection_pipeline.py`
-  Acceptance: RapidOCR 3.x detection works from source and PyInstaller
-  bundle; release evidence lists bundled RapidOCR ONNX files and hashes.
+- [ ] P2 -- Add time-ranged manual subtitle regions
+  Why: Manual masks are global today, so OCR-failure clips with changing
+  subtitle placement require overbroad regions or repeated batches.
+  Evidence: `gui/config.py` `subtitle_area` / `subtitle_areas`,
+  `backend/processor.py` fixed-mask path, SubtitleEdit/RapidVideOCR extraction
+  workflows, commercial timeline editors
+  Touches: `gui/config.py`, `backend/config.py`, `gui/app.py`,
+  `backend/processor.py`, `tests/test_gui_smoke.py`, `tests/test_hardening.py`
+  Acceptance: Users can define multiple regions with optional start/end times;
+  settings/preset/CLI config round-trip the new schema; processing applies the
+  correct region per frame and falls back to current global behavior when no
+  time spans are set.
+  Complexity: L
+
+- [ ] P2 -- Add verified portable model-cache export/import
+  Why: The app can inspect model caches but cannot prepare an air-gapped or
+  slow-network machine without re-downloading OCR, LaMa, or Whisper assets.
+  Evidence: `backend/model_downloads.py`, `backend/cache_inventory.py`,
+  `backend/model_hashes.py`, IOPaint model-management UX, offline-first product
+  promise
+  Touches: `backend/cache_inventory.py`, `backend/model_downloads.py`,
+  `backend/model_hashes.py`, `backend/support_bundle.py`, `backend/cli.py`,
+  `gui/app.py`, `tests/test_model_downloads.py`
+  Acceptance: CLI and Help UI can export a zip with a manifest of known model
+  files and hashes, import only verified files into the app model cache, reject
+  path traversal/unknown executable code, and report missing optional assets
+  afterward.
   Complexity: M
 
-- [ ] P2 -- Track fixed OpenCV/libpng wheel availability
-  Why: VSR can warn about vulnerable bundled libpng, but cannot eliminate
-  CVE-2026-22801 until opencv-python publishes wheels with libpng >= 1.6.54.
-  Evidence: `backend/security_checks.py`, `requirements.txt`, NVD
-  CVE-2026-22801, opencv-python release issue
-  Touches: `backend/security_checks.py`, `requirements.txt`, `README.md`,
-  `tests/test_hardening.py`
-  Acceptance: When a fixed opencv-python wheel is available, dependency
-  floor and warning tests are updated; until then the runtime warning and
-  README guidance remain accurate.
-  Complexity: S
-
-- [ ] P2 -- Sync architecture docs with local-build and PyTorch opt-in truth
-  Why: `docs/architecture.md` and repo working notes still mention removed
-  GitHub Actions release paths and older automatic PyTorch fallback behavior.
-  Evidence: `docs/architecture.md`, `CLAUDE.md`, `README.md`, `c4a4617`
-  Touches: `docs/architecture.md`, `CLAUDE.md`
-  Acceptance: Architecture docs describe local release verification, current
-  LaMa priority order, and the explicit PyTorch opt-in gate without pointing
-  agents at removed workflow files.
-  Complexity: S
-
-- [ ] P2 -- Add installed model and backend status panel
-  Why: Competitors such as IOPaint reduce setup friction with visible model
-  and backend state; VSR currently spreads this across startup chips, support
-  bundles, logs, and README troubleshooting.
-  Evidence: IOPaint, commercial subtitle-removal flows,
-  `backend/model_downloads.py`, `backend/support_bundle.py`, `gui/app.py`
-  Touches: `gui/app.py`, `backend/model_downloads.py`,
-  `backend/support_bundle.py`, `backend/onnx_model_info.py`
-  Acceptance: About/settings surface shows OCR/inpaint backends, required
-  model files, provider availability, hash status, and next action without
-  requiring a support bundle.
+- [ ] P2 -- Expose RapidOCR OpenVINO as CPU/Intel OCR option
+  Why: RapidOCR 3.9 and PaddleOCR 3.7 highlight PP-OCRv6/OpenVINO speedups,
+  while VSR currently treats RapidOCR mainly as an ONNX Runtime path.
+  Evidence: RapidOCR v3.9.0, PaddleOCR v3.7.0, `backend/detection.py`,
+  `setup.py`, `backend/model_downloads.py`
+  Touches: `backend/detection.py`, `backend/dependency_caps.py`, `setup.py`,
+  `backend/support_bundle.py`, `tests/test_detection_pipeline.py`
+  Acceptance: When OpenVINO dependencies are installed, VSR can select or
+  auto-prefer RapidOCR OpenVINO on CPU/Intel systems, reports the active OCR
+  engine/provider in backend status, and falls back to current RapidOCR/PaddleOCR
+  paths if initialization fails.
   Complexity: M
+
+- [ ] P2 -- Define NVIDIA ONNX Runtime CUDA provider migration path
+  Why: ONNX Runtime v1.27 deprecates CUDA 12 packages and VSR's LaMa ONNX
+  default needs clear CPU/CUDA/DirectML provider behavior on NVIDIA systems.
+  Evidence: ONNX Runtime v1.27.0, `backend/inpainters_onnx.py`,
+  `backend/onnx_model_info.py`, `setup.py`, `README.md`
+  Touches: `backend/inpainters_onnx.py`, `backend/onnx_model_info.py`,
+  `setup.py`, `backend/support_bundle.py`, `README.md`,
+  `tests/test_onnx_model_info.py`
+  Acceptance: Provider status distinguishes `onnxruntime`, `onnxruntime-gpu`
+  CUDA12/CUDA13, and DirectML; setup/docs recommend the tested NVIDIA ONNX path;
+  release evidence flags deprecated CUDA provider packages before shipping.
+  Complexity: M
+
+- [ ] P2 -- Sync language-support claims with engine reality
+  Why: README overview still says 12-language support while current
+  RapidOCR/PaddleOCR docs and feature bullets describe 50+ languages.
+  Evidence: `README.md`, PaddleOCR v3.7.0, RapidOCR v3.9.0, `gui/config.py`
+  Touches: `README.md`, `docs/architecture.md`, `gui/config.py`,
+  `tests/test_source_hygiene.py`
+  Acceptance: README/docs use one consistent language-support statement and the
+  Help/backend status can distinguish app-curated GUI languages from
+  engine-reported language capacity.
+  Complexity: S
 
 ### P3 -- Research bench
+
+- [ ] P3 -- Benchmark deterministic InpaintDelogo-style static-logo cleanup
+  Why: Static transparent logos and channel bugs are common community
+  complaints, and TBE has no temporal exposure when a fixed logo mask is present
+  in every frame.
+  Evidence: Purfview/InpaintDelogo, VideoHelp logo-removal threads,
+  `backend/presets.py` logo intent, `CLAUDE.md` TBE fixed-mask gotcha
+  Touches: `tests/clips/manifest.json`, `backend/presets.py`,
+  `backend/inpainters/external.py`, `backend/quality.py`
+  Acceptance: Benchmark-only harness compares current LaMa/cv2 static-logo
+  cleanup against an InpaintDelogo-style deterministic path on licensed clips;
+  no script execution or default dependency is added.
+  Complexity: M
 
 - [ ] P3 -- Benchmark mask-free subtitle erasure before adapter work
   Why: CLEAR and SEDiT are subtitle-specific, but need VSR reference-clip
