@@ -5,12 +5,15 @@ from pathlib import Path
 
 class ReleaseWorkflowInstallTests(unittest.TestCase):
     def setUp(self):
-        self.workflow = (
+        workflow_path = (
             Path(__file__).resolve().parents[1]
             / ".github"
             / "workflows"
             / "build.yml"
-        ).read_text(encoding="utf-8")
+        )
+        if not workflow_path.exists():
+            self.skipTest("GitHub Actions workflow is absent in local-build mode")
+        self.workflow = workflow_path.read_text(encoding="utf-8")
 
     def test_required_installs_use_last_exit_code_guard(self):
         self.assertIn("function Install-Required", self.workflow)

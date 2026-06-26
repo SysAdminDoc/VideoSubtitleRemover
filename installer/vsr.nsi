@@ -1,7 +1,7 @@
 ; Video Subtitle Remover Pro -- NSIS installer (RM-51)
 ;
 ; This script wraps the PyInstaller --onedir build into a one-click
-; installer. Run after the GitHub Actions build produces the
+; installer. Run after the local PyInstaller build produces the
 ; `dist/VideoSubtitleRemoverPro/` directory. Outputs
 ; `VideoSubtitleRemoverPro-Setup.exe` in the working directory.
 ;
@@ -23,7 +23,7 @@
 
 !define VERSIONMAJOR 3
 !define VERSIONMINOR 17
-!define VERSIONPATCH 2
+!define VERSIONPATCH 3
 
 Name "${APPNAME}"
 OutFile "VideoSubtitleRemoverPro-Setup.exe"

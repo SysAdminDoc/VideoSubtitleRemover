@@ -51,7 +51,7 @@ def consume_preset_import_notice() -> Optional[str]:
 # -- App identity -----------------------------------------------------------
 
 APP_NAME = "Video Subtitle Remover Pro"
-APP_VERSION = "3.17.2"
+APP_VERSION = "3.17.3"
 APP_AUTHOR = "SysAdminDoc"
 
 LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPro"

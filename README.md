@@ -4,7 +4,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.17.2-22c55e)
+![Version](https://img.shields.io/badge/version-3.17.3-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.10--3.13%20CUDA-blue)
@@ -26,7 +26,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 ## Features
 
 - **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
-- **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency) or simple-lama-inpainting (PyTorch fallback)
+- **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
 - **AUTO Inpaint Routing** -- Per-batch routing between TBE and LaMa based on exposure score
 - **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
@@ -48,7 +48,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
 - **Premium Dark UI** -- Cohesive design system with custom controls, rectangular status tiles, responsive workbench scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
-- **CI/CD Releases** -- Automated Windows builds via GitHub Actions, pip-audit scan, strict artifact/version/dependency verification, and winget submission support
+- **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, support bundles, and winget-ready installer metadata
 
 ## System Requirements
 
@@ -133,7 +133,7 @@ python -m unittest discover -s tests -v
 | Algorithm | Inpainting Engine | Speed | Quality | Best For |
 |-----------|-------------------|-------|---------|----------|
 | **STTN** | Temporal Background Exposure | Fastest | Great | Live-action video with changing subtitles (default) |
-| LAMA | Neural (LaMa ONNX or PyTorch) | Medium | Best still-frame | Images, animations, static backgrounds |
+| LAMA | Neural (LaMa ONNX/OpenCV DNN; PyTorch opt-in) | Medium | Best still-frame | Images, animations, static backgrounds |
 | ProPainter | TBE + LaMa refinement | Slowest | Best motion | Motion-heavy footage, thick/decorative text |
 
 > All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a TBE + LaMa refinement hybrid -- it is **not** the ICCV 2023 ProPainter model or weights (which carry a non-commercial NTU S-Lab license). This implementation uses only MIT-licensed code.
@@ -166,6 +166,10 @@ manifest before loading. Known SHA-256 mismatches fall back instead of
 deserializing the file. Legacy adapters without a pinned hash still run, but
 new strict adapters can require a known hash unless
 `VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded in release evidence.
+The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
+`VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
+crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or
+`VSR_OPENCV_LAMA` for automatic LaMa acceleration.
 
 ## CLI Usage
 
@@ -426,8 +430,7 @@ VideoSubtitleRemover/
 |-- build_exe.bat             # PyInstaller build script
 |-- requirements.txt          # Python dependencies
 |-- tests/                    # Focused regression coverage for hardened paths
-|-- .github/workflows/
-|   `-- build.yml             # CI/CD release workflow + pip-audit
+|-- .github/                  # Issue templates
 |-- assets/                   # Application assets
 |-- models/                   # AI model weights (auto-downloaded)
 `-- output/                   # Default output location
