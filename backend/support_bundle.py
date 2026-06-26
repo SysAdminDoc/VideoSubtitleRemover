@@ -17,6 +17,10 @@ from typing import Any, Iterable, Mapping, Optional
 
 from backend.cache_inventory import discover_caches
 from backend.crash_reporter import _path_scrub
+from backend.ffmpeg_profiles import (
+    collect_ffmpeg_capability_profiles,
+    ffmpeg_profile_entries,
+)
 from backend.model_downloads import installed_backend_status
 from backend.security_checks import opencv_libpng_status
 
@@ -176,6 +180,7 @@ def _support_payload(*, app_version: str,
             "ffmpeg": _tool_version("ffmpeg"),
             "ffprobe": _tool_version("ffprobe"),
         },
+        "ffmpeg_profiles": collect_ffmpeg_capability_profiles(),
         "dependencies": _dependency_versions(),
         "backend_status": installed_backend_status(),
         "security": {
@@ -332,7 +337,8 @@ def run_self_test() -> dict:
 
     Returns a dict of category -> list of {name, available, reason} entries.
     """
-    results = {"ocr": [], "inpaint": [], "gpu": [], "codec": []}
+    results = {"ocr": [], "inpaint": [], "gpu": [], "codec": [],
+               "ffmpeg_profiles": []}
 
     def _probe(category, name, fn):
         try:
@@ -434,5 +440,15 @@ def run_self_test() -> dict:
     _probe("codec", "AV1", _check_ffmpeg_encoder("av1", "libsvtav1"))
     _probe("codec", "VVC", _check_ffmpeg_encoder("vvc", "libvvenc"))
     _probe("codec", "NVENC", _check_ffmpeg_encoder("nvenc", "h264_nvenc"))
+    try:
+        results["ffmpeg_profiles"] = ffmpeg_profile_entries(
+            collect_ffmpeg_capability_profiles()
+        )
+    except Exception as exc:
+        results["ffmpeg_profiles"].append({
+            "name": "profiles",
+            "available": False,
+            "reason": str(exc)[:200],
+        })
 
     return results

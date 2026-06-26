@@ -5,8 +5,10 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 from backend.support_bundle import create_support_bundle
+from backend import ffmpeg_profiles
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -68,6 +70,10 @@ class SupportBundleTests(unittest.TestCase):
                 self.assertEqual(support["app_version"], "9.9.9")
                 self.assertIn("ffmpeg", support["tools"])
                 self.assertIn("ffprobe", support["tools"])
+                self.assertEqual(
+                    support["ffmpeg_profiles"]["schema"],
+                    "vsr.ffmpeg_profiles.v1",
+                )
                 self.assertEqual(
                     support["backend_status"]["schema"],
                     "vsr.backend_status.v1",
@@ -145,6 +151,86 @@ class SupportBundleTests(unittest.TestCase):
 
         self.assertIn("Support bundle", form)
         self.assertIn("python -m backend.cli --support-bundle", form)
+
+
+class FfmpegProfileTests(unittest.TestCase):
+    def _profiles(self, *, filters="", encoders="", ffmpeg=True, ffprobe=True):
+        def which(name):
+            if name == "ffmpeg" and ffmpeg:
+                return "ffmpeg"
+            if name == "ffprobe" and ffprobe:
+                return "ffprobe"
+            return None
+
+        def run_text(command, timeout):
+            if "-filters" in command:
+                return filters, ""
+            if "-encoders" in command:
+                return encoders, ""
+            return "ffmpeg version test", ""
+
+        with mock.patch.object(ffmpeg_profiles.shutil, "which", which):
+            with mock.patch.object(ffmpeg_profiles, "_run_ffmpeg_text", run_text):
+                return ffmpeg_profiles.collect_ffmpeg_capability_profiles()
+
+    def test_profiles_report_exact_missing_filters_and_encoder_groups(self):
+        payload = self._profiles(
+            filters=(
+                " ..C loudnorm         A->A       EBU R128 loudness\n"
+                " ..C whisper          A->A       Whisper filter\n"
+            ),
+            encoders=(
+                " V..... libx264       H.264\n"
+                " V..... libx265       H.265\n"
+                " V..... libsvtav1     AV1\n"
+            ),
+        )
+        by_name = {entry["name"]: entry for entry in payload["profiles"]}
+
+        self.assertFalse(by_name["advanced_quality"]["available"])
+        self.assertEqual(
+            by_name["advanced_quality"]["missing"]["filters"],
+            ["libvmaf"],
+        )
+        self.assertFalse(by_name["modern_codec"]["available"])
+        self.assertEqual(
+            by_name["modern_codec"]["missing"]["encoder_groups"][0]["name"],
+            "vvc",
+        )
+        self.assertIn("libvvenc", by_name["modern_codec"]["reason"])
+
+    def test_config_preflight_is_scoped_to_selected_options(self):
+        payload = self._profiles(
+            filters=" ..C loudnorm         A->A       EBU R128 loudness\n",
+            encoders=(
+                " V..... libx264       H.264\n"
+                " V..... libx265       H.265\n"
+            ),
+        )
+        from backend.config import ProcessingConfig
+
+        h265 = ProcessingConfig(output_codec="h265", preserve_audio=False)
+        self.assertEqual(
+            ffmpeg_profiles.missing_profile_requirements_for_config(h265, payload),
+            [],
+        )
+        vvc = ProcessingConfig(output_codec="vvc", preserve_audio=False)
+        missing = ffmpeg_profiles.missing_profile_requirements_for_config(
+            vvc,
+            payload,
+        )
+        self.assertEqual(missing[0]["profile"], "modern_codec")
+        self.assertIn("libvvenc", missing[0]["reason"])
+
+    def test_self_test_entries_include_four_profiles(self):
+        payload = self._profiles(filters="", encoders="", ffmpeg=False, ffprobe=False)
+        entries = ffmpeg_profiles.ffmpeg_profile_entries(payload)
+
+        self.assertEqual(
+            [entry["name"] for entry in entries],
+            ["basic", "advanced_quality", "speech_fallback", "modern_codec"],
+        )
+        self.assertIn("ffmpeg", entries[0]["reason"])
 
 
 if __name__ == "__main__":

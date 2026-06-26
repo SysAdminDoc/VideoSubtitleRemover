@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence
 
 from backend.adapter_manifest import release_manifest_status
+from backend.ffmpeg_profiles import collect_ffmpeg_capability_profiles
 from backend.onnx_model_info import rapidocr_release_provenance
 from backend.remote_model_policy import release_remote_model_status
 from backend.security_checks import opencv_libpng_status
@@ -438,6 +439,7 @@ def build_release_evidence(
             "pyinstaller": _tool_version([sys.executable, "-m", "PyInstaller", "--version"]),
             "ffmpeg": _tool_version(["ffmpeg", "-version"]),
             "ffmpegEncoders": _ffmpeg_encoder_status(),
+            "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {

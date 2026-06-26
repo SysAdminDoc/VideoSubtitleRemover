@@ -45,6 +45,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `release-advisories.json`; strict mode fails on unallowed high/critical
   advisories and records the temporary OpenCV/libpng exception until fixed
   wheels remove it automatically.
+- **FFmpeg capability profiles.** `--self-test`, support bundles, release
+  evidence, and the Help backend panel now report `basic`,
+  `advanced_quality`, `speech_fallback`, and `modern_codec` profiles with exact
+  missing filters/encoders; the GUI warns before starting a video batch whose
+  selected options exceed the installed FFmpeg build.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

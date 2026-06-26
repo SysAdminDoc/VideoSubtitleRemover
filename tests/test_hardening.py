@@ -62,6 +62,68 @@ def _has_display() -> bool:
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
+class GuiFfmpegProfilePreflightTests(unittest.TestCase):
+    def test_batch_start_warns_when_selected_codec_profile_is_missing(self):
+        app = gui.VideoSubtitleRemoverApp.__new__(gui.VideoSubtitleRemoverApp)
+        app.root = object()
+        app.queue_lock = threading.Lock()
+        app._update_status = unittest.mock.Mock()
+        app.ffmpeg_profiles = {}
+        app._current_ffmpeg_profiles = unittest.mock.Mock(return_value={
+            "schema": "vsr.ffmpeg_profiles.v1",
+            "profiles": [
+                {
+                    "name": "basic",
+                    "available": True,
+                    "missing": {"tools": [], "filters": [], "encoders": []},
+                    "reason": "ready",
+                },
+                {
+                    "name": "advanced_quality",
+                    "available": True,
+                    "missing": {"tools": [], "filters": [], "encoders": []},
+                    "reason": "ready",
+                },
+                {
+                    "name": "speech_fallback",
+                    "available": True,
+                    "missing": {"tools": [], "filters": [], "encoders": []},
+                    "reason": "ready",
+                },
+                {
+                    "name": "modern_codec",
+                    "available": False,
+                    "missing": {
+                        "encoder_groups": [{
+                            "name": "vvc",
+                            "any_of": ["libvvenc", "vvc_nvenc"],
+                        }],
+                    },
+                    "reason": "missing encoder groups: vvc (libvvenc/vvc_nvenc)",
+                },
+            ],
+        })
+        app.queue = [
+            gui.QueueItem(
+                id="vvc",
+                file_path="movie.mp4",
+                output_path="movie_no_sub.mp4",
+                config=gui.ProcessingConfig(
+                    output_codec="vvc",
+                    preserve_audio=False,
+                ),
+            )
+        ]
+
+        with unittest.mock.patch("gui.app.show_confirm", return_value=False) as confirm:
+            self.assertFalse(app._confirm_ffmpeg_profile_coverage())
+
+        detail = confirm.call_args.kwargs["detail"]
+        self.assertIn("movie.mp4", detail)
+        self.assertIn("libvvenc", detail)
+        app._update_status.assert_called_once()
+
+
 class GuiConfigHardeningTests(unittest.TestCase):
     def test_processing_config_from_dict_normalizes_invalid_values(self):
         cfg = gui.ProcessingConfig.from_dict(

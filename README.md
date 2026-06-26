@@ -46,7 +46,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Live Preview During Processing** -- 15 FPS throttled preview piped from the backend worker
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
 - **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
-- **Backend Status** -- Help shows OCR/inpaint backends, ONNX/OpenCV providers, required model files, hash state, and the next setup action
+- **Backend Status** -- Help shows OCR/inpaint backends, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
 - **Premium Dark UI** -- Cohesive design system with custom controls, rectangular status tiles, responsive workbench scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
 - **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, support bundles, and winget-ready installer metadata
@@ -111,6 +111,11 @@ python VideoSubtitleRemover.py
 ```powershell
 winget install ffmpeg
 ```
+
+Run `python -m backend.processor --self-test` to confirm the installed build's
+`basic`, `advanced_quality`, `speech_fallback`, and `modern_codec` profiles.
+Those profiles report missing filters such as `loudnorm`, `libvmaf`, or
+`whisper`, and missing encoders such as `libvvenc` before a long batch starts.
 
 ### Validation
 
@@ -276,7 +281,7 @@ review-needed outputs. A failed gate changes the batch row status to
 | `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) | Off |
 | `--support-bundle PATH` | Write a redacted diagnostics zip and exit | - |
 | `--validate-config` | Print resolved config and exit | Off |
-| `--self-test` | Probe OCR engines, GPU providers, and codecs, then exit | Off |
+| `--self-test` | Probe OCR engines, GPU providers, codecs, and FFmpeg capability profiles, then exit | Off |
 | `--auto-lang-probe` | Detect subtitle script/language from first frame and exit | Off |
 | `--skip-existing` | Skip files whose output already exists | Off |
 | `--no-prefetch` | Disable worker-thread frame prefetcher | Off |

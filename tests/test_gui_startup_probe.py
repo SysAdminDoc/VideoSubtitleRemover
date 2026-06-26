@@ -40,6 +40,10 @@ class StartupHardwareProbeTests(unittest.TestCase):
             "schema": "vsr.backend_status.v1",
             "summary": {"detection": "RapidOCR (ready)"},
         }
+        ffmpeg_profiles = {
+            "schema": "vsr.ffmpeg_profiles.v1",
+            "profiles": [{"name": "basic", "available": True}],
+        }
 
         with mock.patch("gui.app.detect_gpu", return_value=gpus):
             with mock.patch("gui.app.detect_ai_engines", return_value=engines):
@@ -48,7 +52,11 @@ class StartupHardwareProbeTests(unittest.TestCase):
                         "gui.app.installed_backend_status",
                         return_value=backend_status,
                     ):
-                        app._probe_startup_hardware()
+                        with mock.patch(
+                            "gui.app.collect_ffmpeg_capability_profiles",
+                            return_value=ffmpeg_profiles,
+                        ):
+                            app._probe_startup_hardware()
 
         self.assertEqual(len(app.root.after_calls), 1)
         delay, callback = app.root.after_calls[0]
@@ -56,7 +64,7 @@ class StartupHardwareProbeTests(unittest.TestCase):
         app._apply_startup_hardware_probe.assert_not_called()
         callback()
         app._apply_startup_hardware_probe.assert_called_once_with(
-            gpus, engines, True, backend_status
+            gpus, engines, True, backend_status, ffmpeg_profiles
         )
 
     def test_probe_drops_results_when_tk_loop_is_not_available(self):
@@ -71,7 +79,11 @@ class StartupHardwareProbeTests(unittest.TestCase):
                         "gui.app.installed_backend_status",
                         return_value={},
                     ):
-                        app._probe_startup_hardware()
+                        with mock.patch(
+                            "gui.app.collect_ffmpeg_capability_profiles",
+                            return_value={"schema": "vsr.ffmpeg_profiles.v1", "profiles": []},
+                        ):
+                            app._probe_startup_hardware()
 
         app._apply_startup_hardware_probe.assert_not_called()
 

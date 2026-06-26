@@ -68,6 +68,13 @@ from gui.widgets import (
     Toast, SegmentedPicker, DragDropFrame, QueueItemWidget,
     TextWidgetHandler,
 )
+from backend.ffmpeg_profiles import (
+    FFMPEG_PROFILE_SCHEMA,
+    collect_ffmpeg_capability_profiles,
+    ffmpeg_profile_entries,
+    missing_profile_requirements_for_config,
+    summarize_missing_profile_requirements,
+)
 from backend.model_downloads import installed_backend_status
 from backend.safe_image import safe_imread
 
@@ -155,6 +162,10 @@ class VideoSubtitleRemoverApp:
             },
         }
         self.ffmpeg_ready = False
+        self.ffmpeg_profiles = {
+            "schema": FFMPEG_PROFILE_SCHEMA,
+            "profiles": [],
+        }
         self._hardware_probe_pending = True
         self._hardware_probe_thread: Optional[threading.Thread] = None
         self._elapsed_timer_id = None
@@ -554,6 +565,14 @@ class VideoSubtitleRemoverApp:
             logger.warning("Startup FFmpeg probe failed", exc_info=True)
             ffmpeg_ready = False
         try:
+            ffmpeg_profiles = collect_ffmpeg_capability_profiles(timeout=8.0)
+        except Exception:
+            logger.warning("Startup FFmpeg profile probe failed", exc_info=True)
+            ffmpeg_profiles = {
+                "schema": FFMPEG_PROFILE_SCHEMA,
+                "profiles": [],
+            }
+        try:
             backend_status = installed_backend_status(getattr(self, "config", None))
         except Exception:
             logger.warning("Startup backend status probe failed", exc_info=True)
@@ -574,7 +593,8 @@ class VideoSubtitleRemoverApp:
             self.root.after(
                 0,
                 lambda: self._apply_startup_hardware_probe(
-                    gpus, ai_engines, ffmpeg_ready, backend_status
+                    gpus, ai_engines, ffmpeg_ready, backend_status,
+                    ffmpeg_profiles
                 ),
             )
         except (tk.TclError, RuntimeError):
@@ -586,6 +606,7 @@ class VideoSubtitleRemoverApp:
         ai_engines,
         ffmpeg_ready,
         backend_status=None,
+        ffmpeg_profiles=None,
     ):
         """Apply background probe results on the Tk main thread."""
         if self._shutdown_started:
@@ -594,6 +615,8 @@ class VideoSubtitleRemoverApp:
         self.ai_engines = ai_engines or self._fallback_ai_engines()
         if backend_status:
             self.backend_status = backend_status
+        if ffmpeg_profiles:
+            self.ffmpeg_profiles = ffmpeg_profiles
         self.ffmpeg_ready = bool(ffmpeg_ready)
         self._hardware_probe_pending = False
         self._apply_gpu_selection_from_config()
@@ -3683,6 +3706,23 @@ class VideoSubtitleRemoverApp:
             ("Hash status", summary.get("hash_status") or "Unknown"),
             ("Next action", summary.get("next_action") or "No action needed."),
         ]
+        profile_rows = [
+            (entry["name"], entry["available"], entry["reason"])
+            for entry in ffmpeg_profile_entries(
+                getattr(self, "ffmpeg_profiles", None)
+            )
+        ]
+        profile_labels = {
+            "basic": "FFmpeg basic",
+            "advanced_quality": "FFmpeg quality",
+            "speech_fallback": "FFmpeg speech",
+            "modern_codec": "FFmpeg codecs",
+        }
+        for name, available, reason in profile_rows:
+            rows.append((
+                profile_labels.get(name, "FFmpeg " + name),
+                ("ready" if available else reason),
+            ))
         card = tk.Frame(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER_SUBTLE)
         card.pack(fill="x", pady=(Theme.S_MD, 0))
@@ -3720,13 +3760,16 @@ class VideoSubtitleRemoverApp:
                 anchor="w",
                 width=12,
             ).grid(row=row_idx, column=0, sticky="nw", pady=3)
+            row_tone = (
+                self._backend_status_tone_color(tone)
+                if label == "Next action" else Theme.TEXT_PRIMARY
+            )
             tk.Label(
                 grid,
                 text=str(value),
                 font=f(Theme.F_BODY_SM, "bold" if row_idx < 2 else "normal"),
                 bg=Theme.BG_CARD,
-                fg=(self._backend_status_tone_color(tone)
-                    if row_idx == len(rows) - 1 else Theme.TEXT_PRIMARY),
+                fg=row_tone,
                 anchor="w",
                 justify="left",
                 wraplength=430,
@@ -5434,6 +5477,79 @@ class VideoSubtitleRemoverApp:
         except Exception:
             pass
 
+    def _current_ffmpeg_profiles(self) -> dict:
+        profiles = getattr(self, "ffmpeg_profiles", None)
+        if isinstance(profiles, dict) and profiles.get("profiles"):
+            return profiles
+        try:
+            profiles = collect_ffmpeg_capability_profiles(timeout=6.0)
+            self.ffmpeg_profiles = profiles
+            return profiles
+        except Exception as exc:
+            logger.warning("FFmpeg profile preflight failed", exc_info=True)
+            return {
+                "schema": FFMPEG_PROFILE_SCHEMA,
+                "profiles": [{
+                    "name": "basic",
+                    "available": False,
+                    "reason": str(exc)[:160],
+                    "missing": {},
+                }],
+            }
+
+    def _confirm_ffmpeg_profile_coverage(self) -> bool:
+        """Warn when pending video settings exceed the installed FFmpeg build."""
+        profiles = self._current_ffmpeg_profiles()
+        with self.queue_lock:
+            pending = [
+                item for item in self.queue
+                if item.status not in (
+                    ProcessingStatus.COMPLETE,
+                    ProcessingStatus.ERROR,
+                    ProcessingStatus.CANCELLED,
+                ) and is_video_file(item.file_path)
+            ]
+        issues = []
+        for item in pending:
+            missing = missing_profile_requirements_for_config(
+                item.config,
+                profiles,
+            )
+            if missing:
+                issues.append((item, missing))
+        if not issues:
+            return True
+
+        lines = []
+        for item, missing in issues[:4]:
+            name = Path(item.file_path).name
+            lines.append(
+                f"{name}: {summarize_missing_profile_requirements(missing)}"
+            )
+        if len(issues) > 4:
+            lines.append(f"...and {len(issues) - 4} more queued item(s).")
+        detail = (
+            "\n".join(lines)
+            + "\n\nContinuing may skip optional metrics, drop audio, or fall "
+              "back to a different encoder."
+        )
+        if show_confirm(
+            self.root,
+            title="FFmpeg capability warning",
+            message="Some selected batch options are not supported by this FFmpeg build.",
+            detail=detail,
+            confirm_label="Start anyway",
+            cancel_label="Review settings",
+            tone="warning",
+        ):
+            logger.warning("Starting despite FFmpeg capability gaps: %s", detail)
+            return True
+        self._update_status(
+            "Batch not started. Review FFmpeg-dependent settings or install a fuller FFmpeg build.",
+            "warning",
+        )
+        return False
+
     def _start_processing(self):
         """Start processing the queue."""
         if not self.queue:
@@ -5465,6 +5581,8 @@ class VideoSubtitleRemoverApp:
                     "warning",
                     toast=True,
                 )
+        if not self._confirm_ffmpeg_profile_coverage():
+            return
 
         self.is_processing = True
         self._stop_requested = False

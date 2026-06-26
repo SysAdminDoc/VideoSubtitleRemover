@@ -50,6 +50,26 @@ class ReleaseVerificationTests(unittest.TestCase):
                 return_value={"available": True, "hasLibvvenc": True},
             ),
             mock.patch(
+                "backend.release_verification.collect_ffmpeg_capability_profiles",
+                return_value={
+                    "schema": "vsr.ffmpeg_profiles.v1",
+                    "profiles": [
+                        {"name": "basic", "available": True, "reason": "ready"},
+                        {
+                            "name": "advanced_quality",
+                            "available": False,
+                            "reason": "missing filters: libvmaf",
+                        },
+                        {
+                            "name": "speech_fallback",
+                            "available": False,
+                            "reason": "missing filters: whisper",
+                        },
+                        {"name": "modern_codec", "available": True, "reason": "ready"},
+                    ],
+                },
+            ),
+            mock.patch(
                 "backend.release_verification._run_smoke",
                 return_value={"ran": True, "passed": True, "returncode": 0},
             ),
@@ -99,6 +119,10 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(evidence["sbom"]["componentCount"], 1)
         self.assertEqual(evidence["advisories"]["file"], "release-advisories.json")
         self.assertEqual(evidence["advisories"]["blocking"], 0)
+        self.assertEqual(
+            evidence["releaseTools"]["ffmpegProfiles"]["schema"],
+            "vsr.ffmpeg_profiles.v1",
+        )
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
