@@ -564,6 +564,7 @@ class QueueItem:
     soft_subtitle_probe_done: bool = False
     soft_subtitle_action: str = "burned_in"
     cancel_requested: bool = False
+    retry_config: Optional[dict] = None
 
 
 # -- Helpers ----------------------------------------------------------------
@@ -740,6 +741,11 @@ def save_queue_state(queue_items):
                 "file_path": item.file_path,
                 "output_path": item.output_path,
                 "config": item.config.to_dict() if item.config else {},
+                "retry_config": (
+                    item.retry_config
+                    if isinstance(getattr(item, "retry_config", None), dict)
+                    else None
+                ),
             })
         _write_json_atomic(QUEUE_STATE_FILE, {
             "schema": 1,

@@ -1481,6 +1481,7 @@ class QueueItemWidget(tk.Frame):
                  on_repeat: Callable = None, on_cancel_item: Callable = None,
                  on_override: Callable = None,
                  on_soft_action: Callable = None,
+                 on_retry_suggested: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER, takefocus=1)
@@ -1493,6 +1494,7 @@ class QueueItemWidget(tk.Frame):
         self.on_cancel_item = on_cancel_item
         self.on_override = on_override
         self.on_soft_action = on_soft_action
+        self.on_retry_suggested = on_retry_suggested
         self.is_selected = False
         self.focused = False
         self._surface_bg = Theme.BG_CARD
@@ -1611,6 +1613,14 @@ class QueueItemWidget(tk.Frame):
         menu.add_command(label="Open quality sheet",
                          command=self._open_quality_sheet,
                          state="normal" if self._quality_sheet_path() else "disabled")
+        menu.add_command(label="Retry with suggested settings",
+                         command=lambda: self.on_retry_suggested(self.item.id)
+                         if self.on_retry_suggested else None,
+                         state=(
+                             "normal"
+                             if self.on_retry_suggested and self._needs_quality_review()
+                             else "disabled"
+                         ))
         menu.add_command(label="Reveal output folder",
                          command=self._reveal_output,
                          state="normal" if is_complete else "disabled")
@@ -1782,6 +1792,15 @@ class QueueItemWidget(tk.Frame):
             return None
         path = Path(sheet)
         return path if path.exists() else None
+
+    def _needs_quality_review(self) -> bool:
+        report = getattr(self.item, "quality_report", None)
+        if not isinstance(report, dict):
+            return False
+        gate = report.get("quality_gate")
+        if isinstance(gate, dict) and gate.get("status") == "review":
+            return True
+        return str(report.get("tag") or "").strip().lower() == "review"
 
     def _open_quality_sheet(self):
         path = self._quality_sheet_path()

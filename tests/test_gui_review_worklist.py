@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -20,6 +21,8 @@ class GuiReviewWorklistTests(unittest.TestCase):
             (message, tone)
         )
         app._update_preview_actions = lambda: None
+        app._update_guidance_surface = lambda: None
+        app.is_processing = False
         return app
 
     def test_open_first_review_item_focuses_item_and_quality_sheet(self):
@@ -88,6 +91,111 @@ class GuiReviewWorklistTests(unittest.TestCase):
             self.assertTrue(opened)
             startfile.assert_called_once_with(str(md_report))
             popen.assert_not_called()
+
+    def test_retry_with_suggested_settings_mutates_only_review_item(self):
+        item = QueueItem(
+            id="review-item",
+            file_path="clip.mp4",
+            output_path="clip_no_sub.mp4",
+            config=ProcessingConfig(mask_dilate_px=8),
+            status=ProcessingStatus.COMPLETE,
+            quality_report={
+                "quality_gate": {
+                    "status": "review",
+                    "ladderStep": "increase-dilation",
+                    "reason": "residual text score high",
+                    "reasons": [{
+                        "metric": "residual_text_score",
+                        "ladder": "increase-dilation",
+                    }],
+                },
+            },
+        )
+        untouched = QueueItem(
+            id="other",
+            file_path="other.mp4",
+            output_path="other_no_sub.mp4",
+            config=ProcessingConfig(mask_dilate_px=8),
+            status=ProcessingStatus.COMPLETE,
+        )
+        record = {
+            "status": "review-needed",
+            "output": "clip_no_sub.mp4",
+            "output_name": "clip_no_sub.mp4",
+            "quality_gate": item.quality_report["quality_gate"],
+        }
+        app = self._app_stub(item, record)
+        app.queue.append(untouched)
+        app.queue_lock = threading.Lock()
+        app._update_queue_display = mock.Mock()
+
+        with mock.patch("gui.app.save_queue_state") as save_queue:
+            self.assertTrue(app._retry_review_item_with_suggested_settings(item.id))
+
+        self.assertEqual(item.status, ProcessingStatus.IDLE)
+        self.assertEqual(item.config.mask_dilate_px, 12)
+        self.assertEqual(untouched.config.mask_dilate_px, 8)
+        self.assertIsNone(item.quality_report)
+        self.assertEqual(
+            item.retry_config["changes"]["mask_dilate_px"],
+            {"before": 8, "after": 12},
+        )
+        save_queue.assert_called_once()
+
+    def test_retry_config_is_written_to_batch_record(self):
+        item = QueueItem(
+            id="retry-item",
+            file_path="clip.mp4",
+            output_path="clip_no_sub.mp4",
+            config=ProcessingConfig(mask_dilate_px=12),
+            retry_config={
+                "schema": "vsr.retry_config.v1",
+                "changes": {"mask_dilate_px": {"before": 8, "after": 12}},
+            },
+        )
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        app.queue = [item]
+        app.queue_lock = threading.Lock()
+        app.gpus = []
+        app._batch_report_records = {}
+
+        from backend import batch_report as _br
+        with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,64,48,24/1"):
+            with mock.patch.object(_br, "_probe_duration_seconds", return_value=2.0):
+                with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[]):
+                    app._prepare_batch_report_records()
+
+        record = app._batch_report_records[item.id]
+        self.assertEqual(
+            record["retry_config"]["changes"]["mask_dilate_px"]["after"],
+            12,
+        )
+
+    def test_global_settings_sync_skips_suggested_retry_items(self):
+        retry_item = QueueItem(
+            id="retry-item",
+            file_path="clip.mp4",
+            output_path="clip_no_sub.mp4",
+            config=ProcessingConfig(mask_dilate_px=12),
+            retry_config={"schema": "vsr.retry_config.v1"},
+        )
+        normal_item = QueueItem(
+            id="normal",
+            file_path="other.mp4",
+            output_path="other_no_sub.mp4",
+            config=ProcessingConfig(mask_dilate_px=8),
+        )
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        app.queue = [retry_item, normal_item]
+        app.queue_lock = threading.Lock()
+        app._make_processing_snapshot = mock.Mock(
+            return_value=ProcessingConfig(mask_dilate_px=16)
+        )
+        app._refresh_idle_output_paths = mock.Mock(return_value=0)
+
+        self.assertEqual(app._apply_current_settings_to_idle_items(), 1)
+        self.assertEqual(retry_item.config.mask_dilate_px, 12)
+        self.assertEqual(normal_item.config.mask_dilate_px, 16)
 
 
 if __name__ == "__main__":

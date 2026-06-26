@@ -423,7 +423,10 @@ class VideoSubtitleRemoverApp:
         updated = 0
         with self.queue_lock:
             for item in self.queue:
-                if item.status == ProcessingStatus.IDLE:
+                if (
+                    item.status == ProcessingStatus.IDLE
+                    and not isinstance(getattr(item, "retry_config", None), dict)
+                ):
                     item.config = ProcessingConfig.from_dict(snapshot.to_dict())
                     updated += 1
         output_updates = self._refresh_idle_output_paths()
@@ -1126,6 +1129,9 @@ class VideoSubtitleRemoverApp:
         if fallback_to_first:
             return next(iter(self.queue), None)
         return None
+
+    def _queue_item_by_id(self, item_id: str) -> Optional[QueueItem]:
+        return next((item for item in self.queue if item.id == item_id), None)
 
     def _set_workflow_stage(self, stage: int):
         """Update the compact workflow pills in the header."""
@@ -3637,15 +3643,23 @@ class VideoSubtitleRemoverApp:
             self._open_first_review_item()
             _close()
 
+        def _retry_suggested_and_close():
+            if self._retry_first_review_with_suggested_settings():
+                _close()
+
         if review_count > 0:
             ModernButton(actions_inner, text="Review first", width=122,
                          command=_review_first_and_close,
                          style="accent", size="md").pack(side="left")
+            ModernButton(actions_inner, text="Retry suggested", width=140,
+                         command=_retry_suggested_and_close,
+                         style="ghost", size="md").pack(
+                             side="left", padx=(Theme.S_SM, 0))
         if complete > 0:
             ModernButton(actions_inner, text="Open output", width=132,
                          command=_open_output_and_close,
-                         style="accent" if review_count == 0 else "ghost",
-                         size="md", icon="^").pack(
+                             style="accent" if review_count == 0 else "ghost",
+                             size="md", icon="^").pack(
                              side="left",
                              padx=(Theme.S_SM, 0) if review_count else 0,
                          )
@@ -4998,7 +5012,8 @@ class VideoSubtitleRemoverApp:
                                              on_repeat=self._repeat_item_with_settings,
                                              on_cancel_item=self._cancel_queue_item,
                                              on_override=self._open_per_file_overrides,
-                                             on_soft_action=self._set_soft_subtitle_action)
+                                             on_soft_action=self._set_soft_subtitle_action,
+                                             on_retry_suggested=self._retry_review_item_with_suggested_settings)
                     widget.pack(fill="x", pady=(0, 8))
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas
@@ -5765,6 +5780,9 @@ class VideoSubtitleRemoverApp:
                     },
                     soft_action=soft_action,
                 )
+                retry_config = getattr(item, "retry_config", None)
+                if isinstance(retry_config, dict):
+                    records[item.id]["retry_config"] = retry_config
             except Exception as exc:
                 logger.warning(
                     f"Batch preflight report failed for {Path(item.file_path).name}: {exc}"
@@ -5880,6 +5898,111 @@ class VideoSubtitleRemoverApp:
             f"Focused {record.get('output_name', 'the first review item')}",
             "warning",
         )
+
+    @staticmethod
+    def _retry_changes(before: dict, after: dict, patch: dict) -> dict:
+        changes = {}
+        for key in sorted(patch):
+            if before.get(key) != after.get(key):
+                changes[key] = {
+                    "before": before.get(key),
+                    "after": after.get(key),
+                }
+        return changes
+
+    def _review_record_for_item(self, item: QueueItem) -> Optional[dict]:
+        output_key = self._normalized_path_key(item.output_path)
+        for record in self._review_needed_records():
+            record_output = record.get("output")
+            if record_output and self._normalized_path_key(record_output) == output_key:
+                return record
+            if record.get("output_name") == Path(item.output_path).name:
+                return record
+        return None
+
+    def _quality_gate_for_item(self, item: QueueItem,
+                               record: Optional[dict] = None) -> dict:
+        report = item.quality_report if isinstance(item.quality_report, dict) else {}
+        gate = report.get("quality_gate")
+        if isinstance(gate, dict):
+            return gate
+        if isinstance(record, dict):
+            gate = record.get("quality_gate")
+            if isinstance(gate, dict):
+                return gate
+        return {}
+
+    def _retry_review_item_with_suggested_settings(self, item_id: str) -> bool:
+        if self.is_processing:
+            self._update_status("Stop the active batch before preparing a retry", "warning")
+            return False
+        item = self._queue_item_by_id(item_id)
+        if item is None:
+            self._update_status("The review item is no longer in the queue", "warning")
+            return False
+        record = self._review_record_for_item(item)
+        gate = self._quality_gate_for_item(item, record)
+        try:
+            from backend.quality_gate import retry_config_patch_for_gate
+            patch = retry_config_patch_for_gate(gate, item.config.to_dict())
+        except Exception as exc:
+            logger.warning("Could not build quality retry config", exc_info=True)
+            self._update_status(f"Could not prepare suggested retry: {exc}", "warning")
+            return False
+        if not patch:
+            self._update_status("No automatic retry settings are available for this review item", "warning")
+            return False
+
+        before = item.config.to_dict()
+        after_payload = dict(before)
+        after_payload.update(patch)
+        after_config = ProcessingConfig.from_dict(after_payload)
+        after = after_config.to_dict()
+        changes = self._retry_changes(before, after, patch)
+        if not changes:
+            self._update_status("Suggested retry settings already match this item", "info")
+            return False
+
+        item.config = after_config
+        item.status = ProcessingStatus.IDLE
+        item.progress = 0.0
+        item.message = "Ready to retry with suggested settings"
+        item.error = None
+        item.quality_report = None
+        item.started_at = None
+        item.completed_at = None
+        item.retry_config = {
+            "schema": "vsr.retry_config.v1",
+            "source": "quality_gate",
+            "ladderStep": str(gate.get("ladderStep") or ""),
+            "qualityGateReason": str(gate.get("reason") or ""),
+            "before": {key: value["before"] for key, value in changes.items()},
+            "after": {key: value["after"] for key, value in changes.items()},
+            "changes": changes,
+        }
+        self._set_selected_queue_item(item.id)
+        self._update_queue_display()
+        if item.id in self.queue_widgets:
+            self.queue_widgets[item.id].update_item(item)
+        save_queue_state(self.queue)
+        changed_keys = ", ".join(changes)
+        self._update_status(
+            f"Prepared retry for {Path(item.file_path).name}: {changed_keys}",
+            "success",
+            toast=True,
+        )
+        return True
+
+    def _retry_first_review_with_suggested_settings(self) -> bool:
+        records = self._review_needed_records()
+        if not records:
+            self._update_status("No quality review items are available", "info")
+            return False
+        item = self._queue_item_for_report_record(records[0])
+        if item is None:
+            self._update_status("The first review item is no longer in the queue", "warning")
+            return False
+        return self._retry_review_item_with_suggested_settings(item.id)
 
     @staticmethod
     def _preferred_batch_report_path(report_paths) -> Optional[Path]:
@@ -6730,6 +6853,8 @@ class VideoSubtitleRemoverApp:
                 item.config = cfg
                 if record.get("output_path"):
                     item.output_path = record["output_path"]
+                if isinstance(record.get("retry_config"), dict):
+                    item.retry_config = record["retry_config"]
         clear_queue_state()
         self._update_status(f"Restored {n} item{'s' if n != 1 else ''} from last session")
 

@@ -13,7 +13,7 @@ for every triggered check, and an actionable remediation suggestion.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 
 STATUS_PASSED = "passed"
@@ -72,6 +72,11 @@ _REMEDIATION = {
 
 _ALL_OPTIONAL_METRICS = ("vmaf", "roi_vmaf", "lpips", "dists",
                          "temporal_consistency")
+_ACTIONABLE_RETRY_STEPS = (
+    LADDER_INCREASE_DILATION,
+    LADDER_TEMPORAL_SMOOTH,
+    LADDER_ALTERNATE_INPAINTER,
+)
 
 
 def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
@@ -152,6 +157,110 @@ def quality_gate_not_applicable(reason: str) -> Dict[str, Any]:
         "degradedMetrics": [],
         "previewFramePaths": [],
     }
+
+
+def retry_config_patch_for_gate(
+    gate: Optional[Mapping[str, Any]],
+    config: Any = None,
+) -> Dict[str, Any]:
+    """Return config fields to change for a quality-gate retry.
+
+    The patch is deliberately small: it changes only settings tied to the
+    selected ladder step, so a retry remains auditable and does not rewrite
+    unrelated per-file overrides.
+    """
+    if not isinstance(gate, Mapping) or gate.get("status") != STATUS_REVIEW:
+        return {}
+    patch: Dict[str, Any] = {}
+    steps = _retry_steps_for_gate(gate)
+    for step in steps:
+        _apply_retry_step(step, patch, config)
+    if patch:
+        patch.setdefault("quality_report", True)
+    return patch
+
+
+def _retry_steps_for_gate(gate: Mapping[str, Any]) -> list[str]:
+    step = str(gate.get("ladderStep") or "")
+    if step != LADDER_MANUAL_REVIEW:
+        return [step] if step in _ACTIONABLE_RETRY_STEPS else []
+
+    steps: list[str] = []
+    reasons = gate.get("reasons") or []
+    if isinstance(reasons, (list, tuple)):
+        for reason in reasons:
+            if not isinstance(reason, Mapping):
+                continue
+            ladder = str(reason.get("ladder") or "")
+            metric = str(reason.get("metric") or "")
+            if ladder in _ACTIONABLE_RETRY_STEPS:
+                if ladder not in steps:
+                    steps.append(ladder)
+            elif metric in {"tag", "ssim", "vmaf"}:
+                if LADDER_ALTERNATE_INPAINTER not in steps:
+                    steps.append(LADDER_ALTERNATE_INPAINTER)
+    if not steps:
+        steps = [LADDER_ALTERNATE_INPAINTER]
+    return steps
+
+
+def _config_value(config: Any, name: str, default: Any) -> Any:
+    if isinstance(config, Mapping):
+        return config.get(name, default)
+    return getattr(config, name, default)
+
+
+def _coerce_int(value: Any, default: int) -> int:
+    try:
+        if isinstance(value, bool):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _mode_value(value: Any) -> str:
+    raw = getattr(value, "value", value)
+    return str(raw or "sttn").strip().lower()
+
+
+def _alternate_mode(config: Any, patch: Mapping[str, Any]) -> str:
+    current = _mode_value(patch.get("mode", _config_value(config, "mode", "sttn")))
+    if current in {"sttn", "auto"}:
+        return "lama"
+    if current == "lama":
+        return "propainter"
+    return "lama"
+
+
+def _apply_retry_step(step: str, patch: Dict[str, Any], config: Any) -> None:
+    if step == LADDER_INCREASE_DILATION:
+        current = _coerce_int(
+            patch.get("mask_dilate_px", _config_value(config, "mask_dilate_px", 8)),
+            8,
+        )
+        if current < 20:
+            patch["mask_dilate_px"] = min(20, current + 4)
+            return
+        feather = _coerce_int(
+            patch.get("mask_feather_px", _config_value(config, "mask_feather_px", 4)),
+            4,
+        )
+        patch["mask_feather_px"] = min(15, feather + 2)
+    elif step == LADDER_TEMPORAL_SMOOTH:
+        current = _coerce_int(
+            patch.get(
+                "temporal_smooth_radius",
+                _config_value(config, "temporal_smooth_radius", 0),
+            ),
+            0,
+        )
+        if current < 2:
+            patch["temporal_smooth_radius"] = 2
+        else:
+            patch["tbe_flow_warp"] = True
+    elif step == LADDER_ALTERNATE_INPAINTER:
+        patch["mode"] = _alternate_mode(config, patch)
 
 
 def _check_ssim(metrics: dict,

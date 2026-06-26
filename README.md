@@ -236,6 +236,9 @@ quality gate using ROI metrics, a cheap residual-text score, and an
 adjacent-frame temporal flicker score, plus any quality-sheet preview path for
 review-needed outputs. A failed gate changes the batch row status to
 `review-needed`; skipped and remux-only rows are marked `not_applicable`.
+Review-needed queue items expose **Retry with suggested settings**, which
+applies the quality gate's ladder step to that item only and records the
+before/after retry config in the next batch report.
 
 | Flag | Description | Default |
 |------|-------------|---------|

@@ -1986,6 +1986,56 @@ class QualityGateTests(unittest.TestCase):
         self.assertAlmostEqual(reason["threshold"], 0.025)
         self.assertEqual(reason["ladder"], "increase-dilation")
 
+    def test_retry_config_patches_follow_ladder_steps(self):
+        from backend.quality_gate import retry_config_patch_for_gate
+
+        self.assertEqual(
+            retry_config_patch_for_gate(
+                {"status": "review", "ladderStep": "increase-dilation"},
+                {"mask_dilate_px": 8},
+            )["mask_dilate_px"],
+            12,
+        )
+        self.assertEqual(
+            retry_config_patch_for_gate(
+                {"status": "review", "ladderStep": "temporal-smooth"},
+                {"temporal_smooth_radius": 0},
+            )["temporal_smooth_radius"],
+            2,
+        )
+        self.assertEqual(
+            retry_config_patch_for_gate(
+                {"status": "review", "ladderStep": "alternate-inpainter"},
+                {"mode": "sttn"},
+            )["mode"],
+            "lama",
+        )
+
+    def test_manual_review_retry_patch_combines_structured_reasons(self):
+        from backend.quality_gate import retry_config_patch_for_gate
+
+        patch = retry_config_patch_for_gate(
+            {
+                "status": "review",
+                "ladderStep": "manual-review",
+                "reasons": [
+                    {"metric": "residual_text_score", "ladder": "increase-dilation"},
+                    {"metric": "temporal_flicker_score", "ladder": "temporal-smooth"},
+                    {"metric": "ssim", "ladder": "alternate-inpainter"},
+                ],
+            },
+            {
+                "mode": "sttn",
+                "mask_dilate_px": 8,
+                "temporal_smooth_radius": 0,
+            },
+        )
+
+        self.assertEqual(patch["mask_dilate_px"], 12)
+        self.assertEqual(patch["temporal_smooth_radius"], 2)
+        self.assertEqual(patch["mode"], "lama")
+        self.assertTrue(patch["quality_report"])
+
 
 class LosslessIntermediateWriterTests(unittest.TestCase):
     """I-1: the intermediate writer must roundtrip frames losslessly when

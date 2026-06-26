@@ -50,6 +50,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `advanced_quality`, `speech_fallback`, and `modern_codec` profiles with exact
   missing filters/encoders; the GUI warns before starting a video batch whose
   selected options exceed the installed FFmpeg build.
+- **Quality-gate suggested retries.** Review-needed queue items now expose
+  `Retry with suggested settings`, mapping the quality ladder to per-item
+  config changes, requeueing only that item, and recording before/after retry
+  config in the next batch report.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.
