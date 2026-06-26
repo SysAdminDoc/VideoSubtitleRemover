@@ -30,6 +30,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   OpenCV version, bundled libpng version, fixed libpng floor, and warning state
   so fixed wheels can be confirmed at runtime while current wheels still need
   the untrusted-PNG caution.
+- **Architecture notes synced.** Local working notes now point at
+  `build_exe.bat` + `backend.release_verification` for release evidence and
+  describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.
 - **Native optional-engine crash hardening.** OCR, Whisper, LaMa, ProPainter,
   and GUI startup engine probes now use safe optional-import checks so broken
   native wheels do not get imported just to discover capabilities. The
