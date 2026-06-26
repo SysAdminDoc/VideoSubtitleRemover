@@ -269,6 +269,72 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertIsNone(item.config.subtitle_areas)
         self.assertIsNone(item.config.subtitle_region_spans)
 
+    def test_preview_region_drag_saves_and_refreshes_mask(self):
+        app = self._make_app(withdraw=False)
+        try:
+            source = Path(self._tmpdir.name) / "inline-region.png"
+            image = Image.new("RGB", (320, 180), (20, 24, 32))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((40, 124, 280, 154), fill=(235, 235, 235))
+            draw.text((80, 130), "subtitle text", fill=(0, 0, 0))
+            image.save(source)
+
+            with mock.patch.object(app, "_show_preview"):
+                self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+
+            app._open_region_selector()
+            app.root.update()
+            self.assertIsNotNone(app._preview_region_editor_state)
+            self.assertFalse(any(
+                isinstance(child, tk.Toplevel)
+                and child.title() == "Choose subtitle region"
+                for child in app.root.winfo_children()
+            ))
+
+            bounds = app._preview_region_image_bounds()
+            self.assertIsNotNone(bounds)
+            offset_x, offset_y, disp_w, disp_h = bounds
+            self.assertGreater(disp_w, 0)
+            self.assertGreater(disp_h, 0)
+
+            def widget_point(x, y):
+                src_w, src_h = app._preview_region_editor_state["source_size"]
+                return SimpleNamespace(
+                    x=offset_x + round(x * disp_w / src_w),
+                    y=offset_y + round(y * disp_h / src_h),
+                )
+
+            start = widget_point(40, 124)
+            end = widget_point(280, 154)
+            expected = app._normalized_region_rect(
+                app._preview_widget_to_image_point(start.x, start.y),
+                app._preview_widget_to_image_point(end.x, end.y),
+            )
+            self.assertTrue(all(
+                abs(actual - target) <= 1
+                for actual, target in zip(expected, (40, 124, 280, 154))
+            ))
+
+            with mock.patch.object(app, "_show_preview") as preview:
+                app._on_preview_region_press(start)
+                app._on_preview_region_drag(end)
+                self.assertEqual(
+                    app._preview_region_pending_rect,
+                    expected,
+                )
+                app._on_preview_region_release(end)
+
+            self.assertEqual(app.config.subtitle_area, expected)
+            self.assertEqual(app.config.subtitle_areas, [expected])
+            self.assertIsNone(app.config.subtitle_region_spans)
+            self.assertEqual(item.config.subtitle_area, expected)
+            self.assertEqual(item.config.subtitle_areas, [expected])
+            self.assertIsNone(app._preview_region_editor_state)
+            preview.assert_called_once_with(item, show_mask=True)
+        finally:
+            self._destroy_app(app)
+
     def test_region_selector_save_updates_visible_and_queued_config(self):
         app = self._make_app(withdraw=False)
         try:
@@ -286,7 +352,7 @@ class GuiSmokeTests(unittest.TestCase):
             item = app.queue[0]
             self.assertEqual(app._selected_queue_item_id, item.id)
 
-            app._open_region_selector()
+            app._open_region_selector_modal()
             app.root.update()
 
             selector = next(
@@ -352,7 +418,7 @@ class GuiSmokeTests(unittest.TestCase):
                     self.assertEqual(app._add_to_queue(str(source)), "added")
             item = app.queue[0]
 
-            app._open_region_selector()
+            app._open_region_selector_modal()
             app.root.update()
 
             selector = next(
@@ -424,7 +490,7 @@ class GuiSmokeTests(unittest.TestCase):
 
             with mock.patch.object(app.root, "winfo_screenwidth", return_value=300):
                 with mock.patch.object(app.root, "winfo_screenheight", return_value=200):
-                    app._open_region_selector()
+                    app._open_region_selector_modal()
             app.root.update()
 
             selector = next(

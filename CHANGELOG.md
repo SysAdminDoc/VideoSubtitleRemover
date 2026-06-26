@@ -24,6 +24,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   Windows ML bridge, Windows App SDK bootstrap, ONNX Runtime EP devices, and a
   tiny ONNX smoke model before any DirectML-to-Windows-ML migration work; README
   documents the current audit-only decision.
+- **Preview-pane subtitle region editing.** The preview card now lets users
+  drag a manual subtitle region directly on the selected frame and immediately
+  refreshes the mask preview with the saved coordinates; the advanced selector
+  remains available for timed and multi-region ranges.
 
 ### Fixed
 

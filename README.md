@@ -130,7 +130,7 @@ python -m unittest discover -s tests -v
 2. **Add files** -- Click to browse, right-click for folders, or drag & drop
 3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
 4. **Set language** if subtitles are non-English
-5. **Optionally set region** — Click "Set Region" to draw one or more subtitle rectangles; for moving layouts, enter start/end seconds and add timed ranges
+5. **Optionally set region** — select a queued item and drag on the preview for a fixed subtitle band, or use the settings card's Set Region action for multi-region and timed ranges
 6. **Start Processing** and monitor progress
 7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame
 

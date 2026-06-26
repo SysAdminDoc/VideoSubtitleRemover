@@ -190,6 +190,9 @@ class VideoSubtitleRemoverApp:
         self._last_batch_report_records: List[dict] = []
         self._model_download_guidance_seen: set = set()
         self._preview_request_id = 0
+        self._preview_region_editor_state = None
+        self._preview_region_drag_start = None
+        self._preview_region_pending_rect = None
         self._throbber_id = None
         self._throbber_phase = 0
         self._layout_mode = "wide"
@@ -970,6 +973,9 @@ class VideoSubtitleRemoverApp:
 
     def _set_selected_queue_item(self, item_id: Optional[str]):
         """Update queue item selection state."""
+        region_state = getattr(self, "_preview_region_editor_state", None)
+        if region_state and region_state.get("item_id") != item_id:
+            self._clear_preview_region_editor()
         self._selected_queue_item_id = item_id
         for wid, widget in self.queue_widgets.items():
             widget.set_selected(wid == item_id)
@@ -1272,7 +1278,10 @@ class VideoSubtitleRemoverApp:
                 and Path(selected.output_path).exists()
             )
             self.preview_ab_btn.set_enabled(ab_ready)
-        self._preview_label.config(cursor="hand2" if can_preview else "")
+        editing_region = bool(getattr(self, "_preview_region_editor_state", None))
+        self._preview_label.config(
+            cursor="crosshair" if editing_region else ("hand2" if can_preview else "")
+        )
 
         if selected:
             badge = status_ui(selected.status)
@@ -2037,7 +2046,7 @@ class VideoSubtitleRemoverApp:
         region_actions.pack(side="right", padx=Theme.S_MD, pady=Theme.S_MD)
 
         self.region_btn = ModernButton(region_actions, text="Set region", width=100,
-                                       command=self._open_region_selector, style="accent",
+                                       command=self._open_region_selector_modal, style="accent",
                                        size="sm")
         self.region_btn.pack(side="left")
 
@@ -2668,7 +2677,7 @@ class VideoSubtitleRemoverApp:
         )
         self.preview_region_btn.pack(side="left")
         Tooltip(self.preview_region_btn,
-                "Draw the subtitle region on the frame so the detector knows where to look.")
+                "Draw the subtitle region directly on the preview frame.")
         self.preview_mask_btn = ModernButton(
             preview_actions,
             text="Review mask",
@@ -2725,6 +2734,9 @@ class VideoSubtitleRemoverApp:
         self._preview_label.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_MD, Theme.S_LG))
         self._preview_photo = None
         self._preview_label.bind("<Double-Button-1>", self._open_preview_zoom)
+        self._preview_label.bind("<ButtonPress-1>", self._on_preview_region_press, add="+")
+        self._preview_label.bind("<B1-Motion>", self._on_preview_region_drag, add="+")
+        self._preview_label.bind("<ButtonRelease-1>", self._on_preview_region_release, add="+")
         Tooltip(self._preview_label,
                 "Double-click to view at full size. Use Set region above to draw the subtitle band.")
 
@@ -4117,6 +4129,248 @@ class VideoSubtitleRemoverApp:
         self._update_status(message)
 
     def _open_region_selector(self):
+        """Start direct preview-pane region editing, with modal fallback."""
+        selected = self._get_selected_queue_item(fallback_to_first=True)
+        if selected:
+            self._set_selected_queue_item(selected.id)
+            if self._start_preview_region_editor(selected):
+                return
+        self._open_region_selector_modal()
+
+    def _start_preview_region_editor(self, item: QueueItem) -> bool:
+        """Render the selected source frame as an inline draggable editor."""
+        if self.is_processing:
+            self._update_status(
+                "Stop the active batch before changing the subtitle region",
+                "warning",
+            )
+            return True
+        if not PIL_AVAILABLE:
+            self._update_status("Pillow required for preview region editing", "warning")
+            return False
+
+        try:
+            import cv2 as _cv2
+
+            raw_frame = None
+            if is_image_file(item.file_path):
+                raw_frame = safe_imread(item.file_path)
+            elif is_video_file(item.file_path):
+                cap = _cv2.VideoCapture(item.file_path)
+                try:
+                    if cap.isOpened():
+                        ok, frame = cap.read()
+                        raw_frame = frame if ok else None
+                finally:
+                    cap.release()
+            if raw_frame is None:
+                self._update_status(
+                    "Could not read the selected file for region editing",
+                    "warning",
+                )
+                return True
+
+            source_img = Image.fromarray(_cv2.cvtColor(raw_frame, _cv2.COLOR_BGR2RGB))
+            orig_w, orig_h = source_img.size
+            try:
+                max_w = max(220, self._preview_frame.winfo_width() - 36)
+            except Exception:
+                max_w = 390
+            max_h = 260
+            display_img = source_img.copy()
+            display_img.thumbnail((max_w, max_h), Image.LANCZOS)
+
+            timed_rects = self._active_timed_region_rects(
+                getattr(self.config, "subtitle_region_spans", None), 0.0
+            )
+            if timed_rects:
+                current_rects = timed_rects
+            elif getattr(self.config, "subtitle_areas", None):
+                current_rects = list(getattr(self.config, "subtitle_areas") or [])
+            elif getattr(self.config, "subtitle_area", None):
+                current_rects = [self.config.subtitle_area]
+            else:
+                current_rects = []
+
+            self._preview_request_id += 1
+            self._stop_throbber()
+            self._preview_region_editor_state = {
+                "item_id": item.id,
+                "source_size": (orig_w, orig_h),
+                "display_size": display_img.size,
+                "base_image": display_img,
+                "current_rects": [tuple(rect) for rect in current_rects],
+            }
+            self._preview_region_drag_start = None
+            self._preview_region_pending_rect = None
+            self.preview_title_label.config(
+                text=f"Draw subtitle region for {Path(item.file_path).name}"
+            )
+            self.preview_meta_label.config(
+                text="Drag over the subtitle text. Release to save and refresh the mask."
+            )
+            self._render_preview_region_editor()
+            self._update_preview_actions()
+            return True
+        except Exception as exc:
+            logger.warning("Inline region editor failed", exc_info=True)
+            self._update_status(f"Region editor unavailable: {exc}", "warning")
+            return True
+
+    def _clear_preview_region_editor(self):
+        """Clear direct region-edit state without changing the visible image."""
+        self._preview_region_editor_state = None
+        self._preview_region_drag_start = None
+        self._preview_region_pending_rect = None
+
+    def _preview_region_image_bounds(self):
+        """Return the preview image bounds within the label widget."""
+        state = getattr(self, "_preview_region_editor_state", None)
+        if not state:
+            return None
+        disp_w, disp_h = state["display_size"]
+        try:
+            widget_w = max(self._preview_label.winfo_width(), disp_w)
+            widget_h = max(self._preview_label.winfo_height(), disp_h)
+        except Exception:
+            widget_w, widget_h = disp_w, disp_h
+        offset_x = max(0, (widget_w - disp_w) // 2)
+        offset_y = max(0, (widget_h - disp_h) // 2)
+        return offset_x, offset_y, disp_w, disp_h
+
+    def _preview_widget_to_image_point(self, x: int, y: int):
+        """Convert preview-label coordinates to source image coordinates."""
+        state = getattr(self, "_preview_region_editor_state", None)
+        bounds = self._preview_region_image_bounds()
+        if not state or not bounds:
+            return None
+        offset_x, offset_y, disp_w, disp_h = bounds
+        orig_w, orig_h = state["source_size"]
+        px = min(max(0, int(x) - offset_x), disp_w)
+        py = min(max(0, int(y) - offset_y), disp_h)
+        img_x = int(round(px * orig_w / max(1, disp_w)))
+        img_y = int(round(py * orig_h / max(1, disp_h)))
+        return min(orig_w, max(0, img_x)), min(orig_h, max(0, img_y))
+
+    @staticmethod
+    def _normalized_region_rect(start, end):
+        x1, y1 = start
+        x2, y2 = end
+        return (
+            int(min(x1, x2)),
+            int(min(y1, y2)),
+            int(max(x1, x2)),
+            int(max(y1, y2)),
+        )
+
+    def _preview_region_rect_to_display(self, rect):
+        state = getattr(self, "_preview_region_editor_state", None)
+        if not state:
+            return None
+        orig_w, orig_h = state["source_size"]
+        disp_w, disp_h = state["display_size"]
+        x1, y1, x2, y2 = rect
+        return (
+            int(round(x1 * disp_w / max(1, orig_w))),
+            int(round(y1 * disp_h / max(1, orig_h))),
+            int(round(x2 * disp_w / max(1, orig_w))),
+            int(round(y2 * disp_h / max(1, orig_h))),
+        )
+
+    def _render_preview_region_editor(self):
+        """Render saved and in-progress rectangles over the preview image."""
+        state = getattr(self, "_preview_region_editor_state", None)
+        if not state or not PIL_AVAILABLE:
+            return
+        image = state["base_image"].copy().convert("RGBA")
+        draw = ImageDraw.Draw(image, "RGBA")
+
+        def rgba(hex_color: str, alpha: int):
+            r, g, b = self._hex_to_rgb(hex_color)
+            return r, g, b, alpha
+
+        for rect in state.get("current_rects", []):
+            display_rect = self._preview_region_rect_to_display(rect)
+            if not display_rect:
+                continue
+            draw.rectangle(
+                display_rect,
+                outline=rgba(Theme.GREEN_PRIMARY, 230),
+                fill=rgba(Theme.GREEN_PRIMARY, 52),
+                width=2,
+            )
+        pending = getattr(self, "_preview_region_pending_rect", None)
+        if pending:
+            display_rect = self._preview_region_rect_to_display(pending)
+            if display_rect:
+                draw.rectangle(
+                    display_rect,
+                    outline=rgba(Theme.BLUE_PRIMARY, 255),
+                    fill=rgba(Theme.BLUE_PRIMARY, 46),
+                    width=2,
+                )
+
+        self._preview_photo = ImageTk.PhotoImage(image.convert("RGB"))
+        self._preview_label.config(image=self._preview_photo, text="")
+
+    def _on_preview_region_press(self, event):
+        if not getattr(self, "_preview_region_editor_state", None):
+            return None
+        point = self._preview_widget_to_image_point(event.x, event.y)
+        if point is None:
+            return "break"
+        self._preview_region_drag_start = point
+        self._preview_region_pending_rect = self._normalized_region_rect(point, point)
+        self._render_preview_region_editor()
+        return "break"
+
+    def _on_preview_region_drag(self, event):
+        state = getattr(self, "_preview_region_editor_state", None)
+        if not state or not self._preview_region_drag_start:
+            return None
+        point = self._preview_widget_to_image_point(event.x, event.y)
+        if point is None:
+            return "break"
+        rect = self._normalized_region_rect(self._preview_region_drag_start, point)
+        self._preview_region_pending_rect = rect
+        x1, y1, x2, y2 = rect
+        self.preview_meta_label.config(
+            text=f"Release to save region ({x1}, {y1}) to ({x2}, {y2})."
+        )
+        self._render_preview_region_editor()
+        return "break"
+
+    def _on_preview_region_release(self, event):
+        state = getattr(self, "_preview_region_editor_state", None)
+        if not state or not self._preview_region_drag_start:
+            return None
+        point = self._preview_widget_to_image_point(event.x, event.y)
+        if point is None:
+            return "break"
+        rect = self._normalized_region_rect(self._preview_region_drag_start, point)
+        self._preview_region_drag_start = None
+        self._preview_region_pending_rect = None
+        x1, y1, x2, y2 = rect
+        if (x2 - x1) <= 10 or (y2 - y1) <= 5:
+            self.preview_meta_label.config(
+                text="Drag a larger subtitle region before releasing."
+            )
+            self._render_preview_region_editor()
+            return "break"
+
+        self.config.subtitle_area = rect
+        self.config.subtitle_areas = [rect]
+        self.config.subtitle_region_spans = None
+        self._apply_region_settings_to_idle_items()
+        self._update_region_label_display()
+        item = self._queue_item_by_id(state["item_id"])
+        self._clear_preview_region_editor()
+        self._update_status("Saved subtitle region from the preview", "success")
+        if item:
+            self._show_preview(item, show_mask=True)
+        return "break"
+
+    def _open_region_selector_modal(self):
         """Open a region-selector window with frame scrubbing (F-1) and
         multi-rectangle drawing (F-2).
 
@@ -5424,6 +5678,7 @@ class VideoSubtitleRemoverApp:
         If show_mask=True, run detection and overlay red boxes on the frame."""
         self._preview_request_id += 1
         preview_request_id = self._preview_request_id
+        self._clear_preview_region_editor()
         # Any switch cancels a running throbber so it can't overwrite later UI
         if not show_mask:
             self._stop_throbber()
