@@ -162,16 +162,33 @@ class ModelDownloadHintTests(unittest.TestCase):
                             "backend.onnx_model_info.rapidocr_release_provenance",
                             return_value=rapid,
                         ):
-                            with mock.patch.object(md.importlib.util, "find_spec",
-                                                   return_value=None):
-                                status = md.installed_backend_status(
-                                    _cfg(mode="lama"),
-                                    env,
-                                )
+                            with mock.patch.object(
+                                md,
+                                "collect_rapidocr_engine_status",
+                                return_value={
+                                    "schema": "vsr.rapidocr_engines.v1",
+                                    "preferredEngine": "openvino",
+                                    "preferredProvider": "OpenVINO CPU",
+                                    "engines": {
+                                        "openvino": {"available": True},
+                                        "onnxruntime": {"available": True},
+                                    },
+                                    "warnings": [],
+                                },
+                            ):
+                                with mock.patch.object(md.importlib.util,
+                                                       "find_spec",
+                                                       return_value=None):
+                                    status = md.installed_backend_status(
+                                        _cfg(mode="lama"),
+                                        env,
+                                    )
 
         self.assertEqual(status["schema"], "vsr.backend_status.v1")
         self.assertEqual(status["detection"][0]["status"], "ready")
         self.assertEqual(status["detection"][0]["model_count"], 3)
+        self.assertEqual(status["detection"][0]["provider"], "OpenVINO CPU")
+        self.assertIn("OpenVINO CPU", status["summary"]["detection"])
         self.assertIn("CUDAExecutionProvider", status["summary"]["providers"])
         self.assertIn("CUDA cuda12-pypi-stable", status["summary"]["providers"])
         self.assertEqual(

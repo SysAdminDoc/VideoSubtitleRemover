@@ -66,6 +66,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   Runtime package/provider state, recommend `onnxruntime-gpu>=1.21.0` for the
   stable NVIDIA CUDA 12 path, and flag legacy CUDA provider packages in release
   advisory evidence.
+- **RapidOCR OpenVINO routing.** RapidOCR now auto-prefers the OpenVINO engine
+  on CPU/Intel systems when `openvino` is installed, can be forced with
+  `VSR_RAPIDOCR_ENGINE=openvino`, falls back to ONNX Runtime on initialization
+  failure, and reports the preferred OCR engine in backend status and release
+  evidence.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

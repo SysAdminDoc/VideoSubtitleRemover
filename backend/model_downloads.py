@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
-from backend.dependency_caps import collect_onnxruntime_provider_status
+from backend.dependency_caps import (
+    collect_onnxruntime_provider_status,
+    collect_rapidocr_engine_status,
+)
 from backend.language_support import language_support_status
 from backend.remote_model_policy import resolve_remote_model_source
 
@@ -328,6 +331,7 @@ def _rapidocr_status() -> dict:
     from backend.onnx_model_info import rapidocr_release_provenance
 
     provenance = rapidocr_release_provenance()
+    engine_status = collect_rapidocr_engine_status()
     package = provenance.get("package", {})
     package_name = package.get("name") if isinstance(package, Mapping) else ""
     installed = bool(package_name)
@@ -358,6 +362,10 @@ def _rapidocr_status() -> dict:
         "model_families": list(provenance.get("model_families", [])),
         "required_assets": required,
         "missing_required_assets": missing_required,
+        "engines": engine_status.get("engines", {}),
+        "preferred_engine": engine_status.get("preferredEngine"),
+        "provider": engine_status.get("preferredProvider"),
+        "engine_warnings": list(engine_status.get("warnings", []) or []),
         "hash_status": "hashed" if model_count else "missing",
         "next_action": next_action,
     }
@@ -554,6 +562,8 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
         f"RapidOCR {rapid.get('model_count', 0)} model file(s)"
         if rapid.get("installed") else "RapidOCR not installed"
     )
+    if rapid.get("provider") and rapid.get("provider") != "none":
+        rapid_text += f"; {rapid.get('provider')}"
     lama_text = (
         f"{ready_lama.get('name')} {ready_lama.get('hash_status')}"
         if ready_lama else "LaMa neural weights not ready"
@@ -578,7 +588,17 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
         if ready_lama else "LaMa missing"
     )
     return {
-        "detection": f"{detection.get('name', 'OpenCV fallback')} ({detection.get('status', 'ready')})",
+        "detection": (
+            f"{detection.get('name', 'OpenCV fallback')}"
+            + (
+                f" via {detection.get('provider')}"
+                if detection.get("name") == "RapidOCR"
+                and detection.get("provider")
+                and detection.get("provider") != "none"
+                else ""
+            )
+            + f" ({detection.get('status', 'ready')})"
+        ),
         "inpainting": (
             f"{ready_lama.get('name')} ready"
             if ready_lama else "TBE/OpenCV ready; neural LaMa optional"

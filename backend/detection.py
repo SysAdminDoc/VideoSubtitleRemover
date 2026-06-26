@@ -14,6 +14,7 @@ the source coordinate space.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
@@ -60,7 +61,64 @@ def _rapidocr_directml_params(device: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def _build_rapidocr(rapid_cls, device: str):
+def _rapidocr_engine_preference() -> str:
+    return os.environ.get("VSR_RAPIDOCR_ENGINE", "auto").strip().lower()
+
+
+def _openvino_runtime_available() -> bool:
+    return _module_can_import(
+        "openvino",
+        logger=logger,
+        failure_context="RapidOCR OpenVINO engine probe skipped",
+    )
+
+
+def _rapidocr_openvino_params(rapid_module, device: str) -> Optional[Dict[str, Any]]:
+    preference = _rapidocr_engine_preference()
+    forced = preference in {"openvino", "ov"}
+    if preference in {"onnx", "onnxruntime", "cpu"}:
+        return None
+    if "cuda" in str(device).lower() and not forced:
+        return None
+    if not forced and str(device).lower() not in {"cpu", "directml"}:
+        return None
+    engine_type = getattr(rapid_module, "EngineType", None)
+    openvino_type = getattr(engine_type, "OPENVINO", None) if engine_type else None
+    if openvino_type is None:
+        if forced:
+            logger.info(
+                "RapidOCR OpenVINO requested, but the installed RapidOCR "
+                "package does not expose EngineType.OPENVINO; using ONNX "
+                "Runtime instead."
+            )
+        return None
+    if not _openvino_runtime_available():
+        if forced:
+            logger.info(
+                "RapidOCR OpenVINO requested, but openvino is not installed; "
+                "using ONNX Runtime instead."
+            )
+        return None
+    return {
+        "Det.engine_type": openvino_type,
+        "Cls.engine_type": openvino_type,
+        "Rec.engine_type": openvino_type,
+    }
+
+
+def _build_rapidocr(rapid_cls, device: str, rapid_module=None):
+    openvino_params = (
+        _rapidocr_openvino_params(rapid_module, device)
+        if rapid_module is not None else None
+    )
+    if openvino_params:
+        try:
+            return rapid_cls(params=openvino_params), "OpenVINO"
+        except Exception as exc:
+            logger.warning(
+                "RapidOCR OpenVINO engine init failed; retrying ONNX "
+                f"Runtime provider: {exc}"
+            )
     directml_params = _rapidocr_directml_params(device)
     if directml_params:
         try:
@@ -115,24 +173,36 @@ class SubtitleDetector:
         try:
             rapid_obj = None
             if _module_can_import("rapidocr"):
-                from rapidocr import RapidOCR as _RapidOCR
-                rapid_obj, rapid_provider = _build_rapidocr(_RapidOCR, self.device)
+                import rapidocr as _rapidocr_module
+                rapid_obj, rapid_provider = _build_rapidocr(
+                    _rapidocr_module.RapidOCR,
+                    self.device,
+                    _rapidocr_module,
+                )
             elif _module_can_import("rapidocr_onnxruntime"):
-                from rapidocr_onnxruntime import RapidOCR as _RapidOCR
-                rapid_obj, rapid_provider = _build_rapidocr(_RapidOCR, self.device)
+                import rapidocr_onnxruntime as _rapidocr_module
+                rapid_obj, rapid_provider = _build_rapidocr(
+                    _rapidocr_module.RapidOCR,
+                    self.device,
+                    _rapidocr_module,
+                )
             else:
                 raise ImportError("RapidOCR unavailable or failed import probe")
             if rapid_obj is not None:
                 self._rapid_model = rapid_obj
-                self._engine_name = (
-                    "RapidOCR (DirectML)"
-                    if rapid_provider == "DirectML"
-                    else "RapidOCR"
-                )
-                logger.info(
-                    f"RapidOCR loaded via ONNX Runtime {rapid_provider} "
-                    f"provider (lang={self.lang})"
-                )
+                self._engine_name = {
+                    "DirectML": "RapidOCR (DirectML)",
+                    "OpenVINO": "RapidOCR (OpenVINO)",
+                }.get(rapid_provider, "RapidOCR")
+                if rapid_provider == "OpenVINO":
+                    logger.info(
+                        f"RapidOCR loaded via OpenVINO engine (lang={self.lang})"
+                    )
+                else:
+                    logger.info(
+                        f"RapidOCR loaded via ONNX Runtime {rapid_provider} "
+                        f"provider (lang={self.lang})"
+                    )
                 return
         except ImportError:
             pass

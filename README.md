@@ -150,7 +150,7 @@ The app automatically selects the best available engine:
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
-| 1 | **RapidOCR** (ONNX PP-OCR) | `pip install "rapidocr>=2.0.0,<4.0.0"` | 100+ | 4-5x faster than PaddleOCR, leak-free (default) |
+| 1 | **RapidOCR** (ONNX/OpenVINO PP-OCR) | `pip install "rapidocr>=2.0.0,<4.0.0"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | ONNX Runtime by default; OpenVINO auto-preferred on CPU/Intel when installed |
 | 2 | PaddleOCR (3.x, PP-OCRv6 default in 3.7) | `pip install "paddleocr>=3.0.0,<4.0.0"` | 106 | High accuracy reference implementation; PP-OCRv5/v6 result payloads are supported |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
 | 4 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
@@ -170,11 +170,16 @@ CUDA 12.x ONNX Runtime path; CUDA 13.x currently requires ONNX Runtime
 nightly/custom wheels rather than the stable PyPI default. Backend status and
 release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
 channel, `onnxruntime-directml`, and the providers reported at runtime. On
-AMD/Intel systems, setup installs `onnxruntime-directml`. When ONNX Runtime
-reports `DmlExecutionProvider`, RapidOCR is initialized with its DirectML
-provider settings; unsupported RapidOCR versions or missing providers fall
-back to CPU automatically. RapidOCR legacy tuple output and current structured
-object/dict output are both normalized to the same axis-aligned detector boxes.
+AMD/Intel systems, setup installs `onnxruntime-directml`; on Intel systems it
+also tries `openvino>=2025.0.0` so RapidOCR can use its OpenVINO engine for
+CPU/iGPU OCR acceleration. Set `VSR_RAPIDOCR_ENGINE=onnxruntime` to force the
+default ONNX Runtime path or `VSR_RAPIDOCR_ENGINE=openvino` to request
+OpenVINO explicitly. When ONNX Runtime reports `DmlExecutionProvider`,
+RapidOCR is initialized with its DirectML provider settings; unsupported
+RapidOCR versions or missing providers fall back to CPU automatically.
+OpenVINO initialization failures also fall back to ONNX Runtime. RapidOCR
+legacy tuple output and current structured object/dict output are both
+normalized to the same axis-aligned detector boxes.
 Opt-in ONNX inpainters inspect their model `opset_import` metadata before
 creating a DirectML session; if the default ONNX opset is newer than DirectML's
 supported ceiling, VSR uses the CPU provider instead of failing at session

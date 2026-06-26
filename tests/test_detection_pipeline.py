@@ -97,6 +97,70 @@ class DetectionCascadeTests(unittest.TestCase):
         self.assertIsInstance(detector._rapid_model, FakeRapidOCR)
         self.assertIsNone(detector._paddle_model)
 
+    def test_rapidocr_openvino_preferred_for_cpu_when_available(self):
+        calls = []
+
+        class FakeRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        rapid = types.ModuleType("rapidocr")
+        rapid.RapidOCR = FakeRapidOCR
+        rapid.EngineType = types.SimpleNamespace(OPENVINO="openvino")
+
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                sys.modules,
+                {
+                    "backend.ocr_vlm": self._vlm_disabled_module(),
+                    "rapidocr": rapid,
+                    "openvino": types.ModuleType("openvino"),
+                },
+            ):
+                with mock.patch.dict(
+                    os.environ,
+                    {"VSR_RAPIDOCR_ENGINE": "auto"},
+                    clear=False,
+                ):
+                    detector = detection.SubtitleDetector(device="cpu", lang="en")
+
+        self.assertEqual(detector._engine_name, "RapidOCR (OpenVINO)")
+        self.assertEqual(calls[0]["params"]["Det.engine_type"], "openvino")
+        self.assertEqual(calls[0]["params"]["Rec.engine_type"], "openvino")
+
+    def test_rapidocr_openvino_falls_back_to_onnxruntime(self):
+        calls = []
+
+        class FakeRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+                if kwargs.get("params", {}).get("Det.engine_type") == "openvino":
+                    raise ImportError("openvino unavailable")
+
+        rapid = types.ModuleType("rapidocr")
+        rapid.RapidOCR = FakeRapidOCR
+        rapid.EngineType = types.SimpleNamespace(OPENVINO="openvino")
+
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                sys.modules,
+                {
+                    "backend.ocr_vlm": self._vlm_disabled_module(),
+                    "rapidocr": rapid,
+                    "openvino": types.ModuleType("openvino"),
+                },
+            ):
+                with mock.patch.dict(
+                    os.environ,
+                    {"VSR_RAPIDOCR_ENGINE": "auto"},
+                    clear=False,
+                ):
+                    detector = detection.SubtitleDetector(device="cpu", lang="en")
+
+        self.assertEqual(detector._engine_name, "RapidOCR")
+        self.assertIn("params", calls[0])
+        self.assertEqual(calls[1], {})
+
     def test_paddle_used_when_rapidocr_is_unavailable(self):
         blocked = {"rapidocr", "rapidocr_onnxruntime"}
         real_import = builtins.__import__

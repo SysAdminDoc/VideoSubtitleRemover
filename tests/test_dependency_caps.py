@@ -66,6 +66,37 @@ class DependencyCapTests(unittest.TestCase):
         self.assertIn("rapidocr-onnxruntime==2.0.0", problems[1])
         self.assertIn("paddleocr==4.0.0", problems[2])
 
+    def test_rapidocr_engine_status_prefers_openvino_when_available(self):
+        status = dependency_caps.collect_rapidocr_engine_status(
+            package_versions={
+                "rapidocr": "3.9.0",
+                "openvino": "2025.4.0",
+            },
+            openvino_devices=["CPU", "GPU"],
+        )
+
+        self.assertEqual(status["schema"], "vsr.rapidocr_engines.v1")
+        self.assertEqual(status["preferredEngine"], "openvino")
+        self.assertEqual(status["preferredProvider"], "OpenVINO CPU/GPU")
+        self.assertTrue(status["engines"]["openvino"]["available"])
+        self.assertEqual(status["warnings"], [])
+
+    def test_rapidocr_engine_status_keeps_onnxruntime_for_legacy_package(self):
+        status = dependency_caps.collect_rapidocr_engine_status(
+            package_versions={
+                "rapidocr-onnxruntime": "1.4.1",
+                "openvino": "2025.4.0",
+            },
+            openvino_devices=["CPU"],
+        )
+
+        self.assertEqual(status["preferredEngine"], "onnxruntime")
+        self.assertFalse(status["engines"]["openvino"]["available"])
+        self.assertEqual(
+            status["warnings"][0]["id"],
+            "RAPIDOCR-OPENVINO-UNSUPPORTED-PACKAGE",
+        )
+
     def test_onnxruntime_provider_status_distinguishes_cuda_and_directml(self):
         status = dependency_caps.collect_onnxruntime_provider_status(
             package_versions={

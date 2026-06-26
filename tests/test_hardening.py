@@ -746,7 +746,12 @@ class DirectMlProviderTests(unittest.TestCase):
             sys.modules,
             {"onnxruntime": fake_ort, "rapidocr": fake_rapid},
         ):
-            det = processor.SubtitleDetector(device="directml")
+            with mock.patch.dict(
+                os.environ,
+                {"VSR_RAPIDOCR_ENGINE": "onnxruntime"},
+                clear=False,
+            ):
+                det = processor.SubtitleDetector(device="directml")
 
         self.assertEqual(det._engine_name, "RapidOCR (DirectML)")
         self.assertEqual(
@@ -780,7 +785,12 @@ class DirectMlProviderTests(unittest.TestCase):
             sys.modules,
             {"onnxruntime": fake_ort, "rapidocr": fake_rapid},
         ):
-            det = processor.SubtitleDetector(device="directml")
+            with mock.patch.dict(
+                os.environ,
+                {"VSR_RAPIDOCR_ENGINE": "onnxruntime"},
+                clear=False,
+            ):
+                det = processor.SubtitleDetector(device="directml")
 
         self.assertEqual(det._engine_name, "RapidOCR")
         self.assertIn("params", calls[0])
@@ -804,7 +814,12 @@ class DirectMlProviderTests(unittest.TestCase):
             sys.modules,
             {"onnxruntime": fake_ort, "rapidocr": fake_rapid},
         ):
-            det = processor.SubtitleDetector(device="directml")
+            with mock.patch.dict(
+                os.environ,
+                {"VSR_RAPIDOCR_ENGINE": "onnxruntime"},
+                clear=False,
+            ):
+                det = processor.SubtitleDetector(device="directml")
 
         self.assertEqual(det._engine_name, "RapidOCR")
         self.assertEqual(calls, [{}])

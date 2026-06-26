@@ -26,6 +26,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 from backend.adapter_manifest import release_manifest_status
 from backend.dependency_caps import (
     collect_onnxruntime_provider_status,
+    collect_rapidocr_engine_status,
     onnxruntime_release_advisories,
 )
 from backend.ffmpeg_profiles import collect_ffmpeg_capability_profiles
@@ -424,6 +425,9 @@ def build_release_evidence(
     onnxruntime_providers = collect_onnxruntime_provider_status(
         package_versions=package_versions,
     )
+    rapidocr_engines = collect_rapidocr_engine_status(
+        package_versions=package_versions,
+    )
     advisories = collect_release_advisories(dependencies, env=env)
     hidden_payload = {
         "schema": "vsr.release_hidden_imports.v1",
@@ -462,6 +466,7 @@ def build_release_evidence(
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "onnxRuntimeProviders": onnxruntime_providers,
+            "rapidocrEngines": rapidocr_engines,
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {

@@ -82,6 +82,19 @@ class ReleaseVerificationTests(unittest.TestCase):
                 },
             ),
             mock.patch(
+                "backend.release_verification.collect_rapidocr_engine_status",
+                return_value={
+                    "schema": "vsr.rapidocr_engines.v1",
+                    "preferredEngine": "openvino",
+                    "preferredProvider": "OpenVINO CPU",
+                    "engines": {
+                        "openvino": {"available": True},
+                        "onnxruntime": {"available": True},
+                    },
+                    "warnings": [],
+                },
+            ),
+            mock.patch(
                 "backend.release_verification._run_smoke",
                 return_value={"ran": True, "passed": True, "returncode": 0},
             ),
@@ -138,6 +151,14 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(
             evidence["releaseTools"]["onnxRuntimeProviders"]["schema"],
             "vsr.onnxruntime_providers.v1",
+        )
+        self.assertEqual(
+            evidence["releaseTools"]["rapidocrEngines"]["schema"],
+            "vsr.rapidocr_engines.v1",
+        )
+        self.assertEqual(
+            evidence["releaseTools"]["rapidocrEngines"]["preferredProvider"],
+            "OpenVINO CPU",
         )
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")

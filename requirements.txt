@@ -48,6 +48,8 @@ Pillow>=12.2.0
 
 # For AMD/Intel (DirectML via ONNX Runtime):
 # pip install onnxruntime-directml>=1.18.0
+# Intel CPU/iGPU users can add OpenVINO for RapidOCR:
+# pip install openvino>=2025.0.0
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
@@ -58,8 +60,9 @@ Pillow>=12.2.0
 # Text Detection (install at least one, listed in priority order)
 # OCR engines are capped to their tested major versions; numpy/opencv stay
 # uncapped because the OpenCV 5 DNN path is the documented upgrade route.
-# RapidOCR runs PP-OCR via ONNX Runtime -- 4-5x faster than the upstream
-# paddlepaddle build and free of its long-standing memory-leak issues.
+# RapidOCR runs PP-OCR via ONNX Runtime by default, can use OpenVINO when
+# openvino is installed on CPU/Intel systems, and stays free of the upstream
+# paddlepaddle memory-leak issues.
 rapidocr>=2.0.0,<4.0.0; python_version>="3.10"
 rapidocr-onnxruntime>=1.4.0,<2.0.0; python_version<"3.10"
 paddleocr>=3.0.0,<4.0.0

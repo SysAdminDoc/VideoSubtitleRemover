@@ -22,6 +22,14 @@ OCR_DEPENDENCY_CAPS: Tuple[DependencyCap, ...] = (
     DependencyCap("paddleocr", "3.0.0", "4.0.0"),
 )
 
+RAPIDOCR_ENGINE_STATUS_SCHEMA = "vsr.rapidocr_engines.v1"
+RAPIDOCR_OPENVINO_MIN = "3.9.0"
+RAPIDOCR_ENGINE_PACKAGES = (
+    "rapidocr",
+    "rapidocr-onnxruntime",
+    "openvino",
+)
+
 ONNXRUNTIME_PROVIDER_STATUS_SCHEMA = "vsr.onnxruntime_providers.v1"
 ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.21.0"
 ONNXRUNTIME_GPU_STABLE_CUDA12_MIN = "1.19.0"
@@ -91,6 +99,117 @@ def _runtime_provider_probe() -> tuple[list[str], Optional[str], bool, str]:
         hasattr(ort, "preload_dlls"),
         "",
     )
+
+
+def _openvino_device_probe() -> tuple[list[str], str]:
+    try:
+        try:
+            from openvino import Core  # type: ignore
+        except ImportError:
+            from openvino.runtime import Core  # type: ignore
+        devices = list(getattr(Core(), "available_devices", []) or [])
+        return [str(item) for item in devices], ""
+    except Exception as exc:
+        return [], str(exc)
+
+
+def collect_rapidocr_engine_status(
+    *,
+    package_versions: Optional[Mapping[str, str]] = None,
+    openvino_devices: Optional[Sequence[str]] = None,
+    openvino_error: Optional[str] = None,
+) -> dict:
+    """Return RapidOCR runtime-engine facts for ONNX Runtime and OpenVINO."""
+    package_status = {
+        package: {
+            "installed": False,
+            "version": None,
+        }
+        for package in RAPIDOCR_ENGINE_PACKAGES
+    }
+    for package in RAPIDOCR_ENGINE_PACKAGES:
+        version = _installed_package_version(package, package_versions)
+        package_status[package] = {
+            "installed": version is not None,
+            "version": version,
+        }
+
+    rapid_version = package_status["rapidocr"]["version"]
+    legacy_version = package_status["rapidocr-onnxruntime"]["version"]
+    openvino_version = package_status["openvino"]["version"]
+    openvino_supported = bool(
+        rapid_version and _version_gte(rapid_version, RAPIDOCR_OPENVINO_MIN)
+    )
+    if openvino_devices is None:
+        if openvino_version:
+            openvino_devices, probed_error = _openvino_device_probe()
+            if openvino_error is None:
+                openvino_error = probed_error
+        else:
+            openvino_devices = []
+    openvino_error = "" if openvino_error is None else str(openvino_error)
+    openvino_available = bool(
+        openvino_supported and openvino_version and not openvino_error
+    )
+    onnx_available = bool(rapid_version or legacy_version)
+    preferred = (
+        "openvino" if openvino_available
+        else "onnxruntime" if onnx_available
+        else "none"
+    )
+    openvino_provider = (
+        "OpenVINO " + "/".join(str(item) for item in openvino_devices)
+        if openvino_devices else "OpenVINO"
+    )
+    warnings = []
+    if openvino_version and not openvino_supported:
+        warnings.append({
+            "id": "RAPIDOCR-OPENVINO-UNSUPPORTED-PACKAGE",
+            "severity": "medium",
+            "message": (
+                "openvino is installed, but RapidOCR OpenVINO routing "
+                f"requires rapidocr>={RAPIDOCR_OPENVINO_MIN}; upgrade "
+                "rapidocr or use the ONNX Runtime engine."
+            ),
+        })
+    if openvino_supported and openvino_version and openvino_error:
+        warnings.append({
+            "id": "RAPIDOCR-OPENVINO-PROBE-FAILED",
+            "severity": "medium",
+            "message": (
+                "RapidOCR OpenVINO dependencies are installed, but the "
+                f"OpenVINO runtime probe failed: {openvino_error}"
+            ),
+        })
+
+    return {
+        "schema": RAPIDOCR_ENGINE_STATUS_SCHEMA,
+        "packages": package_status,
+        "engines": {
+            "onnxruntime": {
+                "available": onnx_available,
+                "package": "rapidocr" if rapid_version else (
+                    "rapidocr-onnxruntime" if legacy_version else None
+                ),
+                "provider": "ONNX Runtime",
+            },
+            "openvino": {
+                "available": openvino_available,
+                "minimumRapidOCR": RAPIDOCR_OPENVINO_MIN,
+                "devices": [str(item) for item in openvino_devices],
+                "provider": openvino_provider,
+                "probeError": openvino_error,
+            },
+        },
+        "preferredEngine": preferred,
+        "preferredProvider": (
+            openvino_provider if preferred == "openvino"
+            else "ONNX Runtime" if preferred == "onnxruntime"
+            else "none"
+        ),
+        "selectionEnv": "VSR_RAPIDOCR_ENGINE",
+        "warnings": warnings,
+    }
 
 
 def collect_onnxruntime_provider_status(

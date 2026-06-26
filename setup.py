@@ -431,6 +431,17 @@ def install_dependencies(gpu_info=None):
                 "installing ONNX Runtime DirectML",
             )
             print(f"  [OK] ONNX Runtime DirectML installed")
+            if gpu_info.get("intel"):
+                print("  Installing OpenVINO runtime for RapidOCR...")
+                try:
+                    _run_pip_install(
+                        [pip, 'install', 'openvino>=2025.0.0'],
+                        "installing OpenVINO runtime",
+                    )
+                    print(f"  [OK] OpenVINO runtime installed")
+                except subprocess.CalledProcessError as exc:
+                    print(f"{Colors.YELLOW}  WARNING: OpenVINO install failed: {exc}{Colors.END}")
+                    print("  RapidOCR will use ONNX Runtime unless OpenVINO is installed manually.")
         elif gpu_info and gpu_info.get("nvidia") and not gpu_info.get("cuda_disabled_by_python"):
             print("  Installing ONNX Runtime CUDA provider...")
             print("  Stable PyPI onnxruntime-gpu is the CUDA 12.x path; CUDA 13 uses ONNX Runtime nightly/custom wheels.")

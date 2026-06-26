@@ -17,6 +17,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from backend.cache_inventory import discover_caches, model_cache_status
 from backend.crash_reporter import _path_scrub
+from backend.dependency_caps import collect_rapidocr_engine_status
 from backend.ffmpeg_profiles import (
     collect_ffmpeg_capability_profiles,
     ffmpeg_profile_entries,
@@ -37,6 +38,7 @@ _DEPENDENCY_PACKAGES = (
     "onnxruntime",
     "onnxruntime-gpu",
     "onnxruntime-directml",
+    "openvino",
     "paddleocr",
     "rapidocr",
     "rapidocr-onnxruntime",
@@ -355,7 +357,9 @@ def run_self_test() -> dict:
         try:
             from rapidocr import RapidOCR
             r = RapidOCR()
-            return True, f"rapidocr loaded"
+            status = collect_rapidocr_engine_status()
+            provider = status.get("preferredProvider") or "ONNX Runtime"
+            return True, f"rapidocr loaded ({provider})"
         except ImportError:
             try:
                 from rapidocr_onnxruntime import RapidOCR
