@@ -17,9 +17,12 @@ import json
 import sys
 import tempfile
 import threading
+import tkinter as tk
 import unittest
 from pathlib import Path
 from unittest import mock
+
+from PIL import Image, ImageDraw
 
 
 def _have_display() -> bool:
@@ -57,14 +60,25 @@ class GuiSmokeTests(unittest.TestCase):
         cls._gui_config.QUEUE_STATE_FILE = cls._orig_queue_state
         cls._tmpdir.cleanup()
 
-    def _make_app(self):
+    def _make_app(self, *, withdraw: bool = True):
         with mock.patch.object(
             self._g.VideoSubtitleRemoverApp,
             "_start_startup_hardware_probe",
         ):
-            app = self._g.VideoSubtitleRemoverApp()
-        app.root.withdraw()
+            with mock.patch.object(
+                self._g.VideoSubtitleRemoverApp,
+                "_maybe_restore_queue",
+            ):
+                app = self._g.VideoSubtitleRemoverApp()
+        if withdraw:
+            app.root.withdraw()
         return app
+
+    @staticmethod
+    def _walk_widgets(widget):
+        yield widget
+        for child in widget.winfo_children():
+            yield from GuiSmokeTests._walk_widgets(child)
 
     def test_construct_and_close(self):
         app = self._make_app()
@@ -141,6 +155,59 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertIsNone(item.config.subtitle_area)
         self.assertIsNone(item.config.subtitle_areas)
 
+    def test_region_selector_save_updates_visible_and_queued_config(self):
+        app = self._make_app(withdraw=False)
+        try:
+            from gui.widgets import ModernButton
+
+            source = Path(self._tmpdir.name) / "selector-source.png"
+            image = Image.new("RGB", (320, 180), (20, 24, 32))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((40, 124, 280, 154), fill=(235, 235, 235))
+            draw.text((80, 130), "subtitle text", fill=(0, 0, 0))
+            image.save(source)
+
+            with mock.patch.object(app, "_show_preview"):
+                self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+            self.assertEqual(app._selected_queue_item_id, item.id)
+
+            app._open_region_selector()
+            app.root.update()
+
+            selector = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "Choose subtitle region"
+            )
+            canvas = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, tk.Canvas)
+                and str(widget.cget("cursor")) == "cross"
+            )
+
+            canvas.event_generate("<ButtonPress-1>", x=40, y=124, when="now")
+            canvas.event_generate("<B1-Motion>", x=280, y=154, when="now")
+            canvas.event_generate("<ButtonRelease-1>", x=280, y=154, when="now")
+            app.root.update()
+
+            save_button = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Save"
+            )
+            save_button.command()
+            app.root.update()
+
+            expected = (40, 124, 280, 154)
+            self.assertEqual(app.config.subtitle_area, expected)
+            self.assertEqual(app.config.subtitle_areas, [expected])
+            self.assertEqual(item.config.subtitle_area, expected)
+            self.assertEqual(item.config.subtitle_areas, [expected])
+            self.assertFalse(selector.winfo_exists())
+        finally:
+            app.root.destroy()
+
     def test_apply_responsive_layout_no_op_when_unchanged(self):
         app = self._make_app()
         try:
@@ -185,82 +252,87 @@ class GuiSmokeTests(unittest.TestCase):
             app.root.destroy()
 
     def test_batch_report_files_written_for_completed_queue(self):
-        app = self._make_app()
-        try:
-            from backend import batch_report as _br
+        app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)
+        app.queue = []
+        app.queue_lock = threading.Lock()
+        app._batch_report_records = {}
+        app._last_batch_report_records = []
+        app._last_batch_report_paths = []
+        app._batch_started_at = self._g.datetime.now()
+        app.gpus = []
 
-            source = Path(self._tmpdir.name) / "batch-source.mp4"
-            output_dir = Path(self._tmpdir.name) / "batch-out"
-            output = output_dir / "batch-source_no_sub.mp4"
-            source.write_bytes(b"not a real video")
-            output_dir.mkdir(exist_ok=True)
-            item = self._g.QueueItem(
-                id="batch-report",
-                file_path=str(source),
-                output_path=str(output),
-                config=self._g.ProcessingConfig(),
-            )
-            app.queue.append(item)
-            app._batch_started_at = self._g.datetime.now()
+        from backend import batch_report as _br
 
-            with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,64,48,24/1"):
-                with mock.patch.object(_br, "_probe_duration_seconds", return_value=2.0):
-                    with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[]):
-                        app._prepare_batch_report_records()
+        source = Path(self._tmpdir.name) / "batch-source.mp4"
+        output_dir = Path(self._tmpdir.name) / "batch-out"
+        output = output_dir / "batch-source_no_sub.mp4"
+        source.write_bytes(b"not a real video")
+        output_dir.mkdir(exist_ok=True)
+        item = self._g.QueueItem(
+            id="batch-report",
+            file_path=str(source),
+            output_path=str(output),
+            config=self._g.ProcessingConfig(),
+        )
+        app.queue.append(item)
 
-            item.status = self._g.ProcessingStatus.COMPLETE
-            item.message = "Complete!"
-            item.quality_report = {
-                "tag": "Good",
-                "samples": 2,
-                "ssim": 0.99,
-                "roi_ssim": 0.98,
-            }
-            item.started_at = self._g.datetime.now()
-            item.completed_at = self._g.datetime.now()
+        with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,64,48,24/1"):
+            with mock.patch.object(_br, "_probe_duration_seconds", return_value=2.0):
+                with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[]):
+                    app._prepare_batch_report_records()
 
-            paths = app._write_batch_report_files()
-            payload = json.loads(
-                (output_dir / "vsr-batch-summary.json").read_text(encoding="utf-8")
-            )
+        item.status = self._g.ProcessingStatus.COMPLETE
+        item.message = "Complete!"
+        item.quality_report = {
+            "tag": "Good",
+            "samples": 2,
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+        }
+        item.started_at = self._g.datetime.now()
+        item.completed_at = self._g.datetime.now()
 
-            self.assertEqual(len(paths), 2)
-            self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
-            self.assertEqual(payload["kind"], "gui-batch")
-            self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
-            self.assertEqual(payload["files"][0]["input_name"], source.name)
-            self.assertEqual(payload["files"][0]["quality_gate"]["status"], "passed")
+        paths = app._write_batch_report_files()
+        payload = json.loads(
+            (output_dir / "vsr-batch-summary.json").read_text(encoding="utf-8")
+        )
 
-        finally:
-            app.root.destroy()
+        self.assertEqual(len(paths), 2)
+        self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
+        self.assertEqual(payload["kind"], "gui-batch")
+        self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
+        self.assertEqual(payload["files"][0]["input_name"], source.name)
+        self.assertEqual(payload["files"][0]["quality_gate"]["status"], "passed")
 
     def test_soft_subtitle_action_remuxes_without_backend_remover(self):
-        app = self._make_app()
-        try:
-            source = Path(self._tmpdir.name) / "remux.mkv"
-            output = Path(self._tmpdir.name) / "remux-out.mkv"
-            source.write_bytes(b"not a real video")
-            item = self._g.QueueItem(
-                id="soft-action",
-                file_path=str(source),
-                output_path=str(output),
-                config=self._g.ProcessingConfig(),
-                soft_subtitle_action="strip",
-            )
-            with mock.patch("backend.remux.remux_soft_subtitles") as remux:
-                with mock.patch(
-                    "backend.processor.SubtitleRemover",
-                    side_effect=AssertionError("backend remover should not load"),
-                ):
-                    app._process_item(item)
+        app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)
+        app.cancel_event = threading.Event()
+        app._batch_times = []
+        app._active_subprocess = None
+        app._active_remover = None
+        app._update_item_display = mock.Mock()
 
-            self.assertEqual(item.status, self._g.ProcessingStatus.COMPLETE)
-            self.assertEqual(item.progress, 1.0)
-            self.assertIn("stripped", item.message)
-            remux.assert_called_once()
+        source = Path(self._tmpdir.name) / "remux.mkv"
+        output = Path(self._tmpdir.name) / "remux-out.mkv"
+        source.write_bytes(b"not a real video")
+        item = self._g.QueueItem(
+            id="soft-action",
+            file_path=str(source),
+            output_path=str(output),
+            config=self._g.ProcessingConfig(),
+            soft_subtitle_action="strip",
+        )
+        with mock.patch("backend.remux.remux_soft_subtitles") as remux:
+            with mock.patch(
+                "backend.processor.SubtitleRemover",
+                side_effect=AssertionError("backend remover should not load"),
+            ):
+                app._process_item(item)
 
-        finally:
-            app.root.destroy()
+        self.assertEqual(item.status, self._g.ProcessingStatus.COMPLETE)
+        self.assertEqual(item.progress, 1.0)
+        self.assertIn("stripped", item.message)
+        remux.assert_called_once()
 
 
 if __name__ == "__main__":
