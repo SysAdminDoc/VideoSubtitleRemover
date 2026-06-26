@@ -55,7 +55,7 @@ from gui.utils import (
     SUPPORTED_EXTENSIONS, filepicker_pattern,
     get_app_dir, detect_gpu, format_time, format_size,
     is_video_file, is_image_file,
-    _CURATED_LANG_NAMES, _engine_supported_languages, _build_language_list,
+    _build_language_list,
     detect_ai_engines, detect_ffmpeg, get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
     _queue_item_info_text, truncate_middle,
@@ -155,6 +155,7 @@ class VideoSubtitleRemoverApp:
                 "detection": "Checking...",
                 "inpainting": "Checking...",
                 "providers": "Checking...",
+                "language_support": "Checking...",
                 "model_files": "Checking...",
                 "hash_status": "Checking...",
                 "next_action": "Backend status is still being probed.",
@@ -585,6 +586,7 @@ class VideoSubtitleRemoverApp:
                     "detection": "Unavailable",
                     "inpainting": "Unavailable",
                     "providers": "Unavailable",
+                    "language_support": "Unavailable",
                     "model_files": "Unavailable",
                     "hash_status": "Unavailable",
                     "next_action": "Open the support bundle for raw diagnostics.",
@@ -1889,10 +1891,9 @@ class VideoSubtitleRemoverApp:
         tk.Label(lang_row, text="Subtitle language", font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
-        # F-5: language list = the union of curated friendly names and
-        # any extra codes the active OCR engine declares it supports.
-        # PaddleOCR / RapidOCR ship 100+ languages; we expose the union
-        # so users can pick e.g. Thai or Polish without modifying code.
+        # F-5: language list = curated friendly names plus compatible
+        # OCR engine codes so users can pick e.g. Thai or Polish without
+        # modifying code. Backend status reports engine capacity separately.
         self._lang_display = _build_language_list()
         self._lang_labels = [f"{name} ({code})" for code, name in self._lang_display]
         self._lang_by_label = {label: code for label, (code, _) in
@@ -3716,6 +3717,7 @@ class VideoSubtitleRemoverApp:
             ("Detection", summary.get("detection") or "Unknown"),
             ("Inpainting", summary.get("inpainting") or "Unknown"),
             ("Providers", summary.get("providers") or "Unknown"),
+            ("Languages", summary.get("language_support") or "Unknown"),
             ("Model files", summary.get("model_files") or "Unknown"),
             ("Hash status", summary.get("hash_status") or "Unknown"),
             ("Next action", summary.get("next_action") or "No action needed."),

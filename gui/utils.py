@@ -7,10 +7,16 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional
 
 from backend.import_safety import module_can_import
 from backend.inpainters.lama import _pytorch_lama_allowed
+from backend.language_support import (
+    CURATED_LANGUAGE_NAMES as _CURATED_LANG_NAMES,
+    build_language_list as _build_language_list,
+    engine_supported_languages as _engine_supported_languages,
+    language_support_status,
+)
 
 if TYPE_CHECKING:
     pass
@@ -123,84 +129,6 @@ def is_image_file(path: str) -> bool:
 def filepicker_pattern(exts: frozenset) -> str:
     """Build a semicolon-joined *.ext pattern for tkinter file dialogs."""
     return ";".join(f"*{e}" for e in sorted(exts))
-
-
-_CURATED_LANG_NAMES: Tuple[Tuple[str, str], ...] = (
-    ("en", "English"),
-    ("ch", "Chinese"),
-    ("japan", "Japanese"),
-    ("ja", "Japanese"),
-    ("manga", "Manga / Anime (vertical JP via manga-ocr)"),
-    ("ko", "Korean"),
-    ("korean", "Korean"),
-    ("fr", "French"),
-    ("french", "French"),
-    ("de", "German"),
-    ("german", "German"),
-    ("es", "Spanish"),
-    ("spanish", "Spanish"),
-    ("pt", "Portuguese"),
-    ("portuguese", "Portuguese"),
-    ("ru", "Russian"),
-    ("ar", "Arabic"),
-    ("arabic", "Arabic"),
-    ("hi", "Hindi"),
-    ("it", "Italian"),
-    ("italian", "Italian"),
-    ("nl", "Dutch"),
-    ("pl", "Polish"),
-    ("tr", "Turkish"),
-    ("vi", "Vietnamese"),
-    ("th", "Thai"),
-    ("uk", "Ukrainian"),
-    ("sv", "Swedish"),
-    ("no", "Norwegian"),
-    ("da", "Danish"),
-    ("fi", "Finnish"),
-    ("cs", "Czech"),
-    ("hu", "Hungarian"),
-    ("ro", "Romanian"),
-    ("el", "Greek"),
-    ("he", "Hebrew"),
-    ("id", "Indonesian"),
-    ("ms", "Malay"),
-    ("fil", "Filipino"),
-)
-
-
-def _engine_supported_languages() -> List[str]:
-    codes: List[str] = []
-    paddle_compatible = [
-        "en", "ch", "chinese_cht", "japan", "korean", "ka",
-        "fr", "german", "it", "es", "pt", "ru", "ar", "hi",
-        "nl", "no", "pl", "tr", "th", "vi", "uk", "be",
-        "bg", "hr", "cs", "da", "et", "fi", "hu", "is",
-        "lv", "lt", "mt", "ro", "sk", "sl", "sv", "id", "ms",
-        "fa", "he", "el",
-    ]
-    codes.extend(paddle_compatible)
-    return codes
-
-
-def _build_language_list() -> List[Tuple[str, str]]:
-    pretty: Dict[str, str] = {}
-    for code, name in _CURATED_LANG_NAMES:
-        pretty.setdefault(code, name)
-    out: List[Tuple[str, str]] = []
-    seen: set = set()
-    out.append(("en", "English"))
-    seen.add("en")
-    for code, name in _CURATED_LANG_NAMES:
-        if code in seen:
-            continue
-        seen.add(code)
-        out.append((code, name))
-    for code in _engine_supported_languages():
-        if code in seen:
-            continue
-        seen.add(code)
-        out.append((code, pretty.get(code, code.upper())))
-    return out
 
 
 def detect_ai_engines() -> dict:

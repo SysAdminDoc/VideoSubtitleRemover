@@ -143,6 +143,10 @@ class GuiSmokeTests(unittest.TestCase):
                     "detection": "RapidOCR (ready)",
                     "inpainting": "LaMa ONNX ready",
                     "providers": "CPUExecutionProvider",
+                    "language_support": (
+                        "GUI picker: 52 selectable OCR codes; "
+                        "installed OCR capacity: RapidOCR 100+."
+                    ),
                     "model_files": "RapidOCR 3 model file(s); LaMa ONNX verified",
                     "hash_status": "verified",
                     "next_action": "No backend setup action needed.",
@@ -171,6 +175,10 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIn("BACKEND STATUS", texts)
             self.assertIn("LaMa ONNX ready", texts)
             self.assertIn("CPUExecutionProvider", texts)
+            self.assertIn(
+                "GUI picker: 52 selectable OCR codes; installed OCR capacity: RapidOCR 100+.",
+                texts,
+            )
             self.assertIn("No backend setup action needed.", texts)
             try:
                 dialog.grab_release()

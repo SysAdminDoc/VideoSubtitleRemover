@@ -54,6 +54,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `Retry with suggested settings`, mapping the quality ladder to per-item
   config changes, requeueing only that item, and recording before/after retry
   config in the next batch report.
+- **Language-support truth in backend status.** README and Help now use the
+  same language statement: the GUI exposes 52 selectable OCR language codes,
+  while installed OCR engines report broader capacity separately.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

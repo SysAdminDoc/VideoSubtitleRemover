@@ -163,6 +163,15 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(status["detection"][0]["status"], "ready")
         self.assertEqual(status["detection"][0]["model_count"], 3)
         self.assertIn("CPUExecutionProvider", status["summary"]["providers"])
+        self.assertEqual(
+            status["language_support"]["schema"],
+            "vsr.language_support.v1",
+        )
+        self.assertIn(
+            "52 selectable OCR codes",
+            status["summary"]["language_support"],
+        )
+        self.assertIn("RapidOCR 100+", status["summary"]["language_support"])
         self.assertIn("LaMa neural weights not ready",
                       status["summary"]["model_files"])
         self.assertIn("VSR_LAMA_ONNX", status["summary"]["next_action"])

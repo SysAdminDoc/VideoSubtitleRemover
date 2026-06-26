@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
+from backend.language_support import language_support_status
 from backend.remote_model_policy import resolve_remote_model_source
 
 
@@ -571,6 +572,11 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
             if ready_lama else "TBE/OpenCV ready; neural LaMa optional"
         ),
         "providers": provider_text,
+        "language_support": (
+            status.get("language_support", {}).get("summary")
+            if isinstance(status.get("language_support"), Mapping)
+            else "Language support status unavailable."
+        ),
         "model_files": f"{rapid_text}; {lama_text}",
         "hash_status": f"{rapid_hash}; {lama_hash}",
         "next_action": next_action,
@@ -627,6 +633,7 @@ def installed_backend_status(
         "selected_mode": _mode_value(config or object()),
         "providers": providers,
         "detection": detection,
+        "language_support": language_support_status(detection),
         "inpainting": inpainting,
         "pending_downloads": hints,
     }

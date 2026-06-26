@@ -70,6 +70,7 @@ from gui.utils import (  # noqa: F401
     get_file_info,
     is_image_file,
     is_video_file,
+    language_support_status,
     summarize_quality_reports,
     truncate_middle,
 )

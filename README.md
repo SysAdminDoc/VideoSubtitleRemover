@@ -21,7 +21,7 @@
 
 Video Subtitle Remover Pro uses real AI neural networks to remove hard-coded subtitles and text watermarks from videos and images. Unlike simple blur or crop methods, it intelligently fills in removed areas with content that matches the surrounding video.
 
-Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), enhanced with a professional interface, real LaMa inpainting, multi-engine detection, and 12-language support.
+Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), enhanced with a professional interface, real LaMa inpainting, multi-engine detection, and a 52-code language picker backed by broader OCR engine coverage.
 
 ## Features
 
@@ -34,7 +34,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame; backend honours every rect
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
-- **~50 Language Support** -- English / Chinese / Japanese / Korean / European, plus Thai, Vietnamese, Polish, Greek, Ukrainian, Filipino, Hebrew, Czech, and more
+- **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+
 - **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation
@@ -46,7 +46,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Live Preview During Processing** -- 15 FPS throttled preview piped from the backend worker
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
 - **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
-- **Backend Status** -- Help shows OCR/inpaint backends, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
+- **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
 - **Premium Dark UI** -- Cohesive design system with custom controls, rectangular status tiles, responsive workbench scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
 - **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, support bundles, and winget-ready installer metadata
