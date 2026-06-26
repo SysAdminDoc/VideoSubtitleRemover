@@ -271,6 +271,17 @@ try:
 except Exception as _exc:
     logger.debug(f"Diffusion inpainters module did not load: {_exc}")
 
+try:
+    from backend.inpainters.external import ExternalInpainter, is_available as _ext_available
+    if _ext_available():
+        _inpainter_registry.register(
+            "external",
+            lambda device, config: ExternalInpainter(device, config),
+        )
+        logger.info("External inpainter registered via VSR_EXTERNAL_INPAINTER")
+except Exception as _exc:
+    logger.debug(f"External inpainter did not load: {_exc}")
+
 
 class SubtitleRemover:
     """Coordinates detection and inpainting to remove subtitles from videos/images."""

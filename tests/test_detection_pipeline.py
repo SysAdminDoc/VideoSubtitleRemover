@@ -279,17 +279,17 @@ class ScriptClassificationTests(unittest.TestCase):
     def test_cjk(self):
         with _fresh_detection_module() as detection:
             self.assertEqual(
-                detection._classify_script("你好世界"), "cjk")
+                detection._classify_script(chr(0x4F60) + chr(0x597D) + chr(0x4E16) + chr(0x754C)), "cjk")
 
     def test_hangul(self):
         with _fresh_detection_module() as detection:
             self.assertEqual(
-                detection._classify_script("안녕하세요"), "hangul")
+                detection._classify_script(chr(0xAC00) + chr(0xB155) + chr(0xD558) + chr(0xC138) + chr(0xC694)), "hangul")
 
     def test_cyrillic(self):
         with _fresh_detection_module() as detection:
             self.assertEqual(
-                detection._classify_script("Привет"), "cyrillic")
+                detection._classify_script(chr(0x41F) + chr(0x440) + chr(0x438) + chr(0x432) + chr(0x435) + chr(0x442)), "cyrillic")
 
     def test_empty(self):
         with _fresh_detection_module() as detection:
@@ -298,7 +298,7 @@ class ScriptClassificationTests(unittest.TestCase):
     def test_mixed_cjk_dominant(self):
         with _fresh_detection_module() as detection:
             self.assertEqual(
-                detection._classify_script("你好Hi"), "cjk")
+                detection._classify_script(chr(0x4F60) + chr(0x597D) + "Hi"), "cjk")
 
 
 if __name__ == "__main__":
