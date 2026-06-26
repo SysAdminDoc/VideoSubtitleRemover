@@ -210,5 +210,49 @@ class ReferenceClipHarnessTests(unittest.TestCase):
         self.assertTrue(out)
 
 
+class RealClipManifestTests(unittest.TestCase):
+    """Validate the reference clip manifest and refuse unmanifested clips."""
+
+    MANIFEST = _HERE / "clips" / "manifest.json"
+    REQUIRED_CLIP_FIELDS = {
+        "filename", "license", "contributor", "sha256",
+        "failure_category", "config", "metric_floors",
+    }
+
+    def test_manifest_exists_and_parses(self):
+        self.assertTrue(self.MANIFEST.exists(),
+                        "tests/clips/manifest.json is missing")
+        import json
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        self.assertIn("schema_version", data)
+        self.assertIn("clips", data)
+        self.assertIsInstance(data["clips"], list)
+
+    def test_manifest_entries_have_required_fields(self):
+        import json
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        for idx, clip in enumerate(data["clips"]):
+            missing = self.REQUIRED_CLIP_FIELDS - set(clip.keys())
+            self.assertFalse(
+                missing,
+                f"Clip {idx} ({clip.get('filename', '?')}) missing: {missing}"
+            )
+
+    def test_no_unmanifested_clips_in_directory(self):
+        import json
+        clips_dir = _HERE / "clips"
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        allowed = {"manifest.json"}
+        for clip in data["clips"]:
+            allowed.add(clip["filename"])
+        for path in clips_dir.iterdir():
+            if path.is_file():
+                self.assertIn(
+                    path.name, allowed,
+                    f"Unmanifested clip: {path.name}. Add it to manifest.json"
+                    " or remove it from tests/clips/."
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
