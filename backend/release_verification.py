@@ -319,6 +319,14 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     smoke = evidence.get("smokeLaunch", {})
     if isinstance(smoke, Mapping) and smoke.get("ran") and not smoke.get("passed"):
         yield "Smoke launch failed"
+    rapid = evidence.get("rapidocrModels", {})
+    if isinstance(rapid, Mapping):
+        package = rapid.get("package", {})
+        package_name = (
+            package.get("name") if isinstance(package, Mapping) else ""
+        )
+        if package_name and not rapid.get("packaging_compatible"):
+            yield "RapidOCR packaged model evidence is incomplete"
 
 
 def write_release_evidence(

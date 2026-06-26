@@ -248,6 +248,35 @@ class RapidOCROutputParsingTests(unittest.TestCase):
         self.assertEqual(len(boxes), 1)
         self.assertEqual(boxes[0], (5, 10, 50, 30))
 
+    @unittest.skipUnless(
+        importlib.util.find_spec("rapidocr"),
+        "rapidocr not installed",
+    )
+    def test_installed_rapidocr_ppocrv6_detects_source_image(self):
+        from backend.detection import SubtitleDetector
+
+        frame = np.full((96, 320, 3), 255, dtype=np.uint8)
+        cv2.putText(
+            frame,
+            "TEST",
+            (20, 62),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.5,
+            (0, 0, 0),
+            3,
+            cv2.LINE_AA,
+        )
+        detector = SubtitleDetector(device="cpu", lang="en")
+        if detector._engine_name != "RapidOCR":
+            self.skipTest(f"RapidOCR unavailable, got {detector._engine_name}")
+
+        boxes = detector.detect(frame, threshold=0.1)
+
+        self.assertTrue(boxes)
+        x1, y1, x2, y2 = boxes[0]
+        self.assertLess(x1, x2)
+        self.assertLess(y1, y2)
+
 
 class CliCommandBuilderTests(unittest.TestCase):
     """Verify that _build_cli_command produces correct CLI strings."""

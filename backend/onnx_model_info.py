@@ -21,6 +21,7 @@ import logging
 import mmap
 import os
 from pathlib import Path
+import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from backend.model_hashes import hash_file
@@ -38,6 +39,8 @@ KNOWN_MODEL_OPSETS: Dict[str, int] = {
     "LaMa-ONNX (Carve/LaMa-ONNX)": 9,
     "MI-GAN-ONNX (Picsart)": 11,
 }
+
+RAPIDOCR_CONFIG_FILES = ("config.yaml", "default_models.yaml")
 
 
 class OnnxModelInfoError(ValueError):
@@ -190,6 +193,17 @@ def _rapidocr_model_dir() -> Optional[Path]:
     return models if models.is_dir() else None
 
 
+def _rapidocr_config_root(
+    package_root: Optional[Tuple[str, Path]],
+    rapid_dir: Optional[Path],
+) -> Optional[Path]:
+    if package_root is not None:
+        return package_root[1]
+    if rapid_dir is not None and rapid_dir.name.lower() == "models":
+        return rapid_dir.parent
+    return None
+
+
 def _rapidocr_package_version(import_name: str) -> Optional[str]:
     candidates = (
         ("rapidocr", "rapidocr"),
@@ -203,6 +217,91 @@ def _rapidocr_package_version(import_name: str) -> Optional[str]:
         except importlib.metadata.PackageNotFoundError:
             return None
     return None
+
+
+def _major_version(value: Optional[str]) -> Optional[int]:
+    if not value:
+        return None
+    match = re.search(r"\d+", value)
+    return int(match.group(0)) if match else None
+
+
+def _file_record(root: Path, name: str) -> Dict[str, object]:
+    path = root / name
+    record: Dict[str, object] = {
+        "name": name,
+        "path": str(path),
+        "exists": path.is_file(),
+        "bytes": None,
+        "sha256": None,
+    }
+    if path.is_file():
+        try:
+            record.update({
+                "bytes": path.stat().st_size,
+                "sha256": hash_file(path),
+            })
+        except OSError as exc:
+            record["error"] = str(exc)
+    return record
+
+
+def _rapidocr_required_assets(
+    models: Sequence[Dict[str, object]],
+    config_files: Sequence[Dict[str, object]],
+    package_version: Optional[str],
+) -> Tuple[List[Dict[str, object]], bool, List[str]]:
+    model_paths = [
+        str(item.get("relative_path") or item.get("filename") or "").lower()
+        for item in models
+    ]
+    families = sorted({
+        match.group(1)
+        for path in model_paths
+        for match in [re.search(r"(pp-ocrv\d+)", path, re.IGNORECASE)]
+        if match
+    })
+    major = _major_version(package_version)
+    requires_ppocrv6 = major is not None and major >= 3
+
+    def has_model(version: str, role: str) -> bool:
+        version = version.lower()
+        role_token = f"_{role}"
+        return any(version in path and role_token in path for path in model_paths)
+
+    required = [
+        {
+            "name": "RapidOCR config.yaml",
+            "required": True,
+            "present": any(
+                item.get("name") == "config.yaml" and item.get("exists")
+                for item in config_files
+            ),
+        },
+        {
+            "name": "RapidOCR default_models.yaml",
+            "required": True,
+            "present": any(
+                item.get("name") == "default_models.yaml" and item.get("exists")
+                for item in config_files
+            ),
+        },
+        {
+            "name": "PP-OCRv6 detection ONNX",
+            "required": requires_ppocrv6,
+            "present": has_model("pp-ocrv6", "det"),
+        },
+        {
+            "name": "PP-OCRv6 recognition ONNX",
+            "required": requires_ppocrv6,
+            "present": has_model("pp-ocrv6", "rec"),
+        },
+    ]
+    compatible = bool(models) and all(
+        (not item["required"]) or bool(item["present"])
+        for item in required
+    )
+    return required, compatible, families
 
 
 def rapidocr_release_provenance(
@@ -250,13 +349,25 @@ def rapidocr_release_provenance(
                     "error": str(exc),
                 })
             models.append(record)
+    config_root = _rapidocr_config_root(package_root, rapid_dir)
+    config_files = (
+        [_file_record(config_root, name) for name in RAPIDOCR_CONFIG_FILES]
+        if config_root is not None else []
+    )
+    required_assets, packaging_compatible, model_families = (
+        _rapidocr_required_assets(models, config_files, resolved_version)
+    )
     return {
         "package": {
             "name": resolved_package,
             "version": resolved_version,
         },
         "model_dir": str(rapid_dir) if rapid_dir else "",
+        "config_files": config_files,
         "model_count": len(models),
+        "model_families": model_families,
+        "required_assets": required_assets,
+        "packaging_compatible": packaging_compatible,
         "models": models,
         "missing": not models,
     }

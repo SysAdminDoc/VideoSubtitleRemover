@@ -33,7 +33,12 @@ class ReleaseVerificationTests(unittest.TestCase):
             ),
             mock.patch(
                 "backend.release_verification.rapidocr_release_provenance",
-                return_value={"package": "rapidocr", "modelCount": 2, "missing": []},
+                return_value={
+                    "package": {"name": "rapidocr", "version": "3.9.0"},
+                    "model_count": 3,
+                    "missing": False,
+                    "packaging_compatible": True,
+                },
             ),
             mock.patch(
                 "backend.release_verification._tool_version",
@@ -82,6 +87,7 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertTrue(all(item["bundled"] for item in evidence["launchers"]))
         self.assertTrue(evidence["smokeLaunch"]["passed"])
         self.assertEqual(evidence["sbom"]["componentCount"], 1)
+        self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
         self.assertEqual(sbom["components"][0]["name"], "Pillow")
@@ -129,6 +135,8 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("release-verification.json", self.bat)
         self.assertIn("release-hidden-imports.json", self.bat)
         self.assertIn("sbom.cdx.json", self.bat)
+        self.assertIn("call :maybe_collect_data rapidocr", self.bat)
+        self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)
         self.assertIn("Run_VSR_Pro.bat", self.bat)
         self.assertIn("Run_VSR_Pro_Debug.bat", self.bat)
         self.assertIn("Run_VSR_Pro.ps1", self.bat)
