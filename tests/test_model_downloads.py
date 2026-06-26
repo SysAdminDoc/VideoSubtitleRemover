@@ -28,7 +28,27 @@ class ModelDownloadHintTests(unittest.TestCase):
             with mock.patch.object(md.importlib.util, "find_spec", side_effect=find_spec):
                 self.assertEqual(md.pending_model_download_hints(_cfg(), env), ())
 
-    def test_lama_fallback_reports_weight_download(self):
+    def test_lama_fallback_reports_weight_download_when_opted_in(self):
+        from backend import model_downloads as md
+
+        def find_spec(name):
+            return object() if name == "simple_lama_inpainting" else None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "USERPROFILE": tmpdir,
+                "APPDATA": tmpdir,
+                "VSR_ENABLE_PYTORCH_LAMA": "1",
+            }
+            with mock.patch.object(md.importlib.util, "find_spec", side_effect=find_spec):
+                hints = md.pending_model_download_hints(_cfg(mode="lama"), env)
+
+        self.assertEqual(len(hints), 1)
+        self.assertEqual(hints[0].label, "LaMa inpainting weights")
+        self.assertIn("200 MB", hints[0].size_estimate)
+
+    def test_lama_fallback_does_not_report_download_when_disabled(self):
         from backend import model_downloads as md
 
         def find_spec(name):
@@ -39,9 +59,7 @@ class ModelDownloadHintTests(unittest.TestCase):
             with mock.patch.object(md.importlib.util, "find_spec", side_effect=find_spec):
                 hints = md.pending_model_download_hints(_cfg(mode="lama"), env)
 
-        self.assertEqual(len(hints), 1)
-        self.assertEqual(hints[0].label, "LaMa inpainting weights")
-        self.assertIn("200 MB", hints[0].size_estimate)
+        self.assertEqual(hints, ())
 
     def test_florence_pinned_revision_reports_huggingface_download(self):
         from backend import model_downloads as md
@@ -74,6 +92,64 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(len(hints), 1)
         self.assertEqual(hints[0].label, "Whisper small model")
         self.assertIn("460 MB", hints[0].size_estimate)
+
+    def test_installed_backend_status_is_privacy_safe_and_actionable(self):
+        from backend import model_downloads as md
+
+        rapid = {
+            "package": {"name": "rapidocr", "version": "3.9.0"},
+            "model_count": 3,
+            "model_families": ["pp-ocrv6"],
+            "required_assets": [
+                {"name": "RapidOCR config.yaml", "required": True, "present": True},
+                {"name": "PP-OCRv6 detection ONNX", "required": True, "present": True},
+            ],
+            "packaging_compatible": True,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"HOME": tmpdir, "USERPROFILE": tmpdir, "APPDATA": tmpdir}
+            with mock.patch.object(md, "_onnxruntime_provider_status",
+                                   return_value={
+                                       "available": True,
+                                       "version": "1.23.0",
+                                       "providers": ["CPUExecutionProvider"],
+                                       "next_action": "",
+                                   }):
+                with mock.patch.object(md, "_opencv_runtime_status",
+                                       return_value={
+                                           "available": True,
+                                           "version": "4.13.0",
+                                           "dnn_available": True,
+                                           "opencv5": False,
+                                           "next_action": "",
+                                       }):
+                    with mock.patch.object(md, "_module_status",
+                                           return_value={
+                                               "name": "PyTorch",
+                                               "available": False,
+                                               "version": None,
+                                               "status": "not_installed",
+                                               "next_action": "",
+                                           }):
+                        with mock.patch(
+                            "backend.onnx_model_info.rapidocr_release_provenance",
+                            return_value=rapid,
+                        ):
+                            with mock.patch.object(md.importlib.util, "find_spec",
+                                                   return_value=None):
+                                status = md.installed_backend_status(
+                                    _cfg(mode="lama"),
+                                    env,
+                                )
+
+        self.assertEqual(status["schema"], "vsr.backend_status.v1")
+        self.assertEqual(status["detection"][0]["status"], "ready")
+        self.assertEqual(status["detection"][0]["model_count"], 3)
+        self.assertIn("CPUExecutionProvider", status["summary"]["providers"])
+        self.assertIn("LaMa neural weights not ready",
+                      status["summary"]["model_files"])
+        self.assertIn("VSR_LAMA_ONNX", status["summary"]["next_action"])
+        self.assertNotIn(tmpdir, repr(status))
 
 
 if __name__ == "__main__":

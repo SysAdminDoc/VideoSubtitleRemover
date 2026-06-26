@@ -17,6 +17,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from backend.cache_inventory import discover_caches
 from backend.crash_reporter import _path_scrub
+from backend.model_downloads import installed_backend_status
 from backend.security_checks import opencv_libpng_status
 
 
@@ -176,6 +177,7 @@ def _support_payload(*, app_version: str,
             "ffprobe": _tool_version("ffprobe"),
         },
         "dependencies": _dependency_versions(),
+        "backend_status": installed_backend_status(),
         "security": {
             "opencv_libpng": opencv_libpng_status(),
         },

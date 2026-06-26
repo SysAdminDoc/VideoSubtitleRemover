@@ -68,6 +68,7 @@ from gui.widgets import (
     Toast, SegmentedPicker, DragDropFrame, QueueItemWidget,
     TextWidgetHandler,
 )
+from backend.model_downloads import installed_backend_status
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,18 @@ class VideoSubtitleRemoverApp:
         self.queue_lock = threading.Lock()
         self.gpus = []
         self.ai_engines = {"detection": [], "inpainting": []}
+        self.backend_status = {
+            "schema": "vsr.backend_status.v1",
+            "summary": {
+                "detection": "Checking...",
+                "inpainting": "Checking...",
+                "providers": "Checking...",
+                "model_files": "Checking...",
+                "hash_status": "Checking...",
+                "next_action": "Backend status is still being probed.",
+                "tone": "neutral",
+            },
+        }
         self.ffmpeg_ready = False
         self._hardware_probe_pending = True
         self._hardware_probe_thread: Optional[threading.Thread] = None
@@ -539,23 +552,47 @@ class VideoSubtitleRemoverApp:
         except Exception:
             logger.warning("Startup FFmpeg probe failed", exc_info=True)
             ffmpeg_ready = False
+        try:
+            backend_status = installed_backend_status(getattr(self, "config", None))
+        except Exception:
+            logger.warning("Startup backend status probe failed", exc_info=True)
+            backend_status = {
+                "schema": "vsr.backend_status.v1",
+                "summary": {
+                    "detection": "Unavailable",
+                    "inpainting": "Unavailable",
+                    "providers": "Unavailable",
+                    "model_files": "Unavailable",
+                    "hash_status": "Unavailable",
+                    "next_action": "Open the support bundle for raw diagnostics.",
+                    "tone": "warning",
+                },
+            }
 
         try:
             self.root.after(
                 0,
                 lambda: self._apply_startup_hardware_probe(
-                    gpus, ai_engines, ffmpeg_ready
+                    gpus, ai_engines, ffmpeg_ready, backend_status
                 ),
             )
         except (tk.TclError, RuntimeError):
             pass
 
-    def _apply_startup_hardware_probe(self, gpus, ai_engines, ffmpeg_ready):
+    def _apply_startup_hardware_probe(
+        self,
+        gpus,
+        ai_engines,
+        ffmpeg_ready,
+        backend_status=None,
+    ):
         """Apply background probe results on the Tk main thread."""
         if self._shutdown_started:
             return
         self.gpus = list(gpus or [])
         self.ai_engines = ai_engines or self._fallback_ai_engines()
+        if backend_status:
+            self.backend_status = backend_status
         self.ffmpeg_ready = bool(ffmpeg_ready)
         self._hardware_probe_pending = False
         self._apply_gpu_selection_from_config()
@@ -3623,6 +3660,78 @@ class VideoSubtitleRemoverApp:
         dialog.deiconify()
         dialog.grab_set()
 
+    @staticmethod
+    def _backend_status_tone_color(tone: str) -> str:
+        return {
+            "success": Theme.SUCCESS,
+            "warning": Theme.WARNING,
+            "error": Theme.ERROR,
+            "info": Theme.INFO,
+            "neutral": Theme.TEXT_SECONDARY,
+        }.get(str(tone or "").lower(), Theme.TEXT_SECONDARY)
+
+    def _build_backend_status_panel(self, parent):
+        """Render installed backend/model status in the About dialog."""
+        status = getattr(self, "backend_status", {}) or {}
+        summary = status.get("summary", {}) if isinstance(status, dict) else {}
+        rows = [
+            ("Detection", summary.get("detection") or "Unknown"),
+            ("Inpainting", summary.get("inpainting") or "Unknown"),
+            ("Providers", summary.get("providers") or "Unknown"),
+            ("Model files", summary.get("model_files") or "Unknown"),
+            ("Hash status", summary.get("hash_status") or "Unknown"),
+            ("Next action", summary.get("next_action") or "No action needed."),
+        ]
+        card = tk.Frame(parent, bg=Theme.BG_CARD, highlightthickness=1,
+                        highlightbackground=Theme.BORDER_SUBTLE)
+        card.pack(fill="x", pady=(Theme.S_MD, 0))
+
+        header = tk.Frame(card, bg=Theme.BG_CARD)
+        header.pack(fill="x", padx=14, pady=(10, 4))
+        tk.Label(
+            header,
+            text="BACKEND STATUS",
+            font=f(Theme.F_EYEBROW, "bold"),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_MUTED,
+        ).pack(side="left")
+        tone = str(summary.get("tone") or "neutral")
+        tk.Label(
+            header,
+            text=tone.upper(),
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_TERTIARY,
+            fg=self._backend_status_tone_color(tone),
+            padx=8,
+            pady=2,
+        ).pack(side="right")
+
+        grid = tk.Frame(card, bg=Theme.BG_CARD)
+        grid.pack(fill="x", padx=14, pady=(0, 10))
+        grid.columnconfigure(1, weight=1)
+        for row_idx, (label, value) in enumerate(rows):
+            tk.Label(
+                grid,
+                text=label,
+                font=f(Theme.F_BODY_SM),
+                bg=Theme.BG_CARD,
+                fg=Theme.TEXT_MUTED,
+                anchor="w",
+                width=12,
+            ).grid(row=row_idx, column=0, sticky="nw", pady=3)
+            tk.Label(
+                grid,
+                text=str(value),
+                font=f(Theme.F_BODY_SM, "bold" if row_idx < 2 else "normal"),
+                bg=Theme.BG_CARD,
+                fg=(self._backend_status_tone_color(tone)
+                    if row_idx == len(rows) - 1 else Theme.TEXT_PRIMARY),
+                anchor="w",
+                justify="left",
+                wraplength=430,
+            ).grid(row=row_idx, column=1, sticky="ew",
+                   pady=3, padx=(Theme.S_SM, 0))
+
     def _show_about(self):
         """Open a themed About dialog with version, credits, and quick links."""
         dialog = tk.Toplevel(self.root)
@@ -3631,6 +3740,13 @@ class VideoSubtitleRemoverApp:
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
+
+        def _close_about():
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
 
         outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
         outer.pack()
@@ -3664,8 +3780,13 @@ class VideoSubtitleRemoverApp:
             row.pack(fill="x", padx=14, pady=6)
             tk.Label(row, text=label, font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left")
-            tk.Label(row, text=value, font=f(Theme.F_BODY_SM, "bold"),
-                     bg=Theme.BG_CARD, fg=tone).pack(side="right")
+            display = truncate_middle(str(value), 58)
+            value_label = tk.Label(row, text=display,
+                                   font=f(Theme.F_BODY_SM, "bold"),
+                                   bg=Theme.BG_CARD, fg=tone)
+            value_label.pack(side="right")
+            if display != str(value):
+                Tooltip(value_label, str(value))
 
         det_label = ", ".join(self.ai_engines["detection"]) or "None"
         inp_label = ", ".join(self.ai_engines["inpainting"]) or "None"
@@ -3688,6 +3809,8 @@ class VideoSubtitleRemoverApp:
         except Exception:
             fact("Disk cache", "unavailable")
 
+        self._build_backend_status_panel(content)
+
         # Action row
         actions = tk.Frame(body, bg=Theme.BG_CARD)
         actions.pack(fill="x")
@@ -3703,10 +3826,11 @@ class VideoSubtitleRemoverApp:
                      command=self._open_settings_folder, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text="Close", width=90,
-                     command=dialog.destroy,
+                     command=_close_about,
                      style="primary", size="md").pack(side="left", padx=(Theme.S_SM, 0))
 
-        dialog.bind("<Escape>", lambda e: dialog.destroy())
+        dialog.bind("<Escape>", lambda e: _close_about())
+        dialog.protocol("WM_DELETE_WINDOW", _close_about)
 
         dialog.update_idletasks()
         try:
@@ -3935,6 +4059,7 @@ class VideoSubtitleRemoverApp:
             canvas.bind("<ButtonPress-1>", on_press)
             canvas.bind("<B1-Motion>", on_drag)
             canvas.bind("<ButtonRelease-1>", on_release)
+            canvas._vsr_region_drag_handlers = (on_press, on_drag, on_release)
 
             # Frame slider for videos.
             if is_video and frame_count > 1:

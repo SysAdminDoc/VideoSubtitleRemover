@@ -30,6 +30,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   OpenCV version, bundled libpng version, fixed libpng floor, and warning state
   so fixed wheels can be confirmed at runtime while current wheels still need
   the untrusted-PNG caution.
+- **Backend status panel.** The Help dialog and support bundle now show OCR
+  backends, inpaint backends, ONNX/OpenCV provider state, required model-file
+  presence, hash status, and the next setup action.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

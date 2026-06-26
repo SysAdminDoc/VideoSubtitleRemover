@@ -8,11 +8,12 @@ before the library blocks on network or cache work.
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from backend.remote_model_policy import resolve_remote_model_source
 
@@ -26,6 +27,7 @@ class ModelDownloadHint:
 
 
 _LAMA_FILENAMES = ("lama_fp32.onnx", "lama.onnx", "inpainting_lama_2025jan.onnx")
+_TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 _WHISPER_SIZES = {
     "tiny": "~75 MB",
     "base": "~145 MB",
@@ -42,6 +44,10 @@ def _module_available(name: str) -> bool:
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
         return False
+
+
+def _env_truthy(env: Mapping[str, str], name: str) -> bool:
+    return str(env.get(name, "") or "").strip().lower() in _TRUE_FLAG_VALUES
 
 
 def _home(env: Mapping[str, str]) -> Path:
@@ -153,7 +159,10 @@ def _append_lama_hints(hints: list[ModelDownloadHint], config, env: Mapping[str,
         return
     if _lama_weight_present(env):
         return
-    if _module_available("simple_lama_inpainting") or _module_available("simple_lama_inpainting.models"):
+    if not _env_truthy(env, "VSR_ENABLE_PYTORCH_LAMA"):
+        return
+    if (_module_available("simple_lama_inpainting")
+            or _module_available("simple_lama_inpainting.models")):
         hints.append(ModelDownloadHint(
             label="LaMa inpainting weights",
             size_estimate="~200 MB",
@@ -195,3 +204,411 @@ def pending_model_download_hints(
 def summarize_hints(hints: Iterable[ModelDownloadHint]) -> str:
     parts = [f"{h.label} ({h.size_estimate})" for h in hints]
     return "; ".join(parts)
+
+
+def _dist_version(package_name: str) -> Optional[str]:
+    try:
+        return importlib.metadata.version(package_name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _module_status(
+    label: str,
+    module_name: str,
+    *,
+    package_name: Optional[str] = None,
+    next_action: str = "",
+) -> dict:
+    available = _module_available(module_name)
+    return {
+        "name": label,
+        "available": available,
+        "version": _dist_version(package_name or module_name) if available else None,
+        "status": "available" if available else "not_installed",
+        "next_action": "" if available else next_action,
+    }
+
+
+def _onnxruntime_provider_status() -> dict:
+    if not _module_available("onnxruntime"):
+        return {
+            "available": False,
+            "version": None,
+            "providers": [],
+            "next_action": "Install onnxruntime or onnxruntime-directml for ONNX backends.",
+        }
+    try:
+        import onnxruntime as ort
+        providers = list(ort.get_available_providers())
+        version = getattr(ort, "__version__", None) or _dist_version("onnxruntime")
+        return {
+            "available": True,
+            "version": version,
+            "providers": providers,
+            "next_action": "" if providers else "Reinstall ONNX Runtime; no providers were reported.",
+        }
+    except Exception as exc:
+        return {
+            "available": False,
+            "version": _dist_version("onnxruntime"),
+            "providers": [],
+            "error": str(exc),
+            "next_action": "Repair ONNX Runtime; provider probing failed.",
+        }
+
+
+def _opencv_runtime_status() -> dict:
+    if not _module_available("cv2"):
+        return {
+            "available": False,
+            "version": None,
+            "dnn_available": False,
+            "opencv5": False,
+            "next_action": "Install opencv-python; OpenCV fallback is required.",
+        }
+    try:
+        import cv2
+        version = getattr(cv2, "__version__", "")
+        parts = []
+        for raw in version.split(".")[:3]:
+            digits = ""
+            for ch in raw:
+                if ch.isdigit():
+                    digits += ch
+                else:
+                    break
+            parts.append(int(digits) if digits else 0)
+        while len(parts) < 3:
+            parts.append(0)
+        opencv5 = tuple(parts) >= (5, 0, 0)
+        return {
+            "available": True,
+            "version": version or _dist_version("opencv-python"),
+            "dnn_available": hasattr(cv2, "dnn"),
+            "opencv5": opencv5,
+            "next_action": "" if opencv5 else "OpenCV DNN LaMa needs opencv-python 5.x when those wheels ship.",
+        }
+    except Exception as exc:
+        return {
+            "available": False,
+            "version": _dist_version("opencv-python"),
+            "dnn_available": False,
+            "opencv5": False,
+            "error": str(exc),
+            "next_action": "Repair OpenCV; runtime probing failed.",
+        }
+
+
+def _rapidocr_status() -> dict:
+    from backend.onnx_model_info import rapidocr_release_provenance
+
+    provenance = rapidocr_release_provenance()
+    package = provenance.get("package", {})
+    package_name = package.get("name") if isinstance(package, Mapping) else ""
+    installed = bool(package_name)
+    required = list(provenance.get("required_assets", []))
+    model_count = int(provenance.get("model_count") or 0)
+    compatible = bool(provenance.get("packaging_compatible"))
+    missing_required = [
+        item.get("name")
+        for item in required
+        if item.get("required") and not item.get("present")
+    ]
+    if not installed:
+        status = "not_installed"
+        next_action = "Install rapidocr for the fastest OCR path, or use PaddleOCR/EasyOCR/OpenCV fallback."
+    elif compatible:
+        status = "ready"
+        next_action = ""
+    else:
+        status = "incomplete"
+        next_action = "Reinstall RapidOCR or rebuild the bundle with RapidOCR model data collected."
+    return {
+        "name": "RapidOCR",
+        "available": installed and compatible,
+        "installed": installed,
+        "package": package,
+        "status": status,
+        "model_count": model_count,
+        "model_families": list(provenance.get("model_families", [])),
+        "required_assets": required,
+        "missing_required_assets": missing_required,
+        "hash_status": "hashed" if model_count else "missing",
+        "next_action": next_action,
+    }
+
+
+def _adapter_hash_status(adapter_name: str, model_path: Optional[str]) -> dict:
+    from backend.adapter_manifest import verify_adapter_path
+
+    if not model_path:
+        return {
+            "configured": False,
+            "exists": False,
+            "allowed": False,
+            "filename": None,
+            "hash_status": "missing",
+            "reason": "model file is not configured or discoverable",
+        }
+    result = verify_adapter_path(adapter_name, model_path)
+    payload = result.as_dict(include_path=False)
+    return {
+        "configured": True,
+        "exists": bool(payload.get("exists")),
+        "allowed": bool(payload.get("allowed")),
+        "filename": payload.get("filename"),
+        "hash_status": payload.get("hashStatus"),
+        "reason": payload.get("reason"),
+        "expected_filenames": payload.get("expectedFilenames", []),
+        "license": payload.get("license"),
+        "source_url": payload.get("sourceUrl"),
+    }
+
+
+def _discover_lama_weight(
+    env: Mapping[str, str],
+    env_var: str,
+    filenames: Sequence[str],
+    *,
+    include_opencv_cache: bool = False,
+) -> Optional[str]:
+    explicit = str(env.get(env_var, "") or "").strip()
+    if explicit and Path(explicit).is_file():
+        return explicit
+    home = _home(env)
+    search_dirs = [
+        _app_model_dir(env),
+        home / ".cache" / "huggingface" / "hub",
+    ]
+    if include_opencv_cache:
+        search_dirs.append(home / ".cache" / "opencv_models")
+    search_dirs.extend([
+        home / ".cache" / "torch" / "hub" / "checkpoints",
+        home / ".cache" / "simple_lama",
+    ])
+    for root in search_dirs:
+        if not root.is_dir():
+            continue
+        for name in filenames:
+            direct = root / name
+            if direct.is_file():
+                return str(direct)
+            try:
+                for match in root.rglob(name):
+                    if match.is_file():
+                        return str(match)
+            except OSError:
+                continue
+    return None
+
+
+def _lama_model_status(env: Mapping[str, str], providers: Mapping[str, Any]) -> list[dict]:
+    onnx_path = _discover_lama_weight(
+        env,
+        "VSR_LAMA_ONNX",
+        _LAMA_FILENAMES[:2],
+    )
+    opencv_path = _discover_lama_weight(
+        env,
+        "VSR_OPENCV_LAMA",
+        _LAMA_FILENAMES,
+        include_opencv_cache=True,
+    )
+    opencv_adapter = (
+        "opencv-lama"
+        if opencv_path and Path(opencv_path).name == "inpainting_lama_2025jan.onnx"
+        else "lama-onnx"
+    )
+    onnx_hash = _adapter_hash_status("lama-onnx", onnx_path)
+    opencv_hash = _adapter_hash_status(opencv_adapter, opencv_path)
+    ort_ready = bool(providers.get("onnxruntime", {}).get("available"))
+    opencv_ready = bool(providers.get("opencv", {}).get("opencv5"))
+    pytorch_opt_in = _env_truthy(env, "VSR_ENABLE_PYTORCH_LAMA")
+    simple_lama_available = _module_available("simple_lama_inpainting")
+
+    return [
+        {
+            "name": "Temporal Background Exposure",
+            "kind": "inpaint",
+            "available": True,
+            "status": "built_in",
+            "model_file": None,
+            "hash_status": "not_required",
+            "provider": "numpy/OpenCV",
+            "next_action": "",
+        },
+        {
+            "name": "LaMa ONNX",
+            "kind": "inpaint",
+            "available": ort_ready and bool(onnx_hash.get("allowed")),
+            "status": "ready" if ort_ready and onnx_hash.get("allowed") else "missing",
+            "model_file": onnx_hash.get("filename"),
+            "hash_status": onnx_hash.get("hash_status"),
+            "provider": "ONNX Runtime",
+            "expected_files": onnx_hash.get("expected_filenames", []),
+            "next_action": (
+                "" if ort_ready and onnx_hash.get("allowed")
+                else "Set VSR_LAMA_ONNX or place lama_fp32.onnx/lama.onnx in the app model cache."
+            ),
+        },
+        {
+            "name": "OpenCV DNN LaMa",
+            "kind": "inpaint",
+            "available": opencv_ready and bool(opencv_hash.get("allowed")),
+            "status": "ready" if opencv_ready and opencv_hash.get("allowed") else "not_ready",
+            "model_file": opencv_hash.get("filename"),
+            "hash_status": opencv_hash.get("hash_status"),
+            "provider": "OpenCV DNN",
+            "expected_files": opencv_hash.get("expected_filenames", []),
+            "next_action": (
+                "" if opencv_ready and opencv_hash.get("allowed")
+                else "Install OpenCV 5.x and set VSR_OPENCV_LAMA for the OpenCV DNN LaMa path."
+            ),
+        },
+        {
+            "name": "PyTorch LaMa",
+            "kind": "inpaint",
+            "available": pytorch_opt_in and simple_lama_available,
+            "status": (
+                "ready" if pytorch_opt_in and simple_lama_available
+                else "disabled" if simple_lama_available
+                else "not_installed"
+            ),
+            "model_file": "big-lama.pt" if simple_lama_available else None,
+            "hash_status": "known_hash" if simple_lama_available else "missing",
+            "provider": "PyTorch",
+            "opt_in_env": "VSR_ENABLE_PYTORCH_LAMA",
+            "next_action": (
+                "" if pytorch_opt_in and simple_lama_available
+                else "Set VSR_ENABLE_PYTORCH_LAMA=1 only if the PyTorch fallback is intentionally needed."
+            ),
+        },
+        {
+            "name": "OpenCV inpaint",
+            "kind": "inpaint",
+            "available": bool(providers.get("opencv", {}).get("available")),
+            "status": "built_in",
+            "model_file": None,
+            "hash_status": "not_required",
+            "provider": "OpenCV",
+            "next_action": "",
+        },
+    ]
+
+
+def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
+    detection_items = list(status.get("detection", []))
+    inpaint_items = list(status.get("inpainting", []))
+    providers = status.get("providers", {})
+    selected_mode = str(status.get("selected_mode") or "sttn").lower()
+    detection = next(
+        (item for item in detection_items if item.get("available")),
+        detection_items[-1] if detection_items else {},
+    )
+    lama_candidates = [
+        item for item in inpaint_items
+        if item.get("name") in {"LaMa ONNX", "OpenCV DNN LaMa", "PyTorch LaMa"}
+    ]
+    ready_lama = next((item for item in lama_candidates if item.get("available")), None)
+    ort = providers.get("onnxruntime", {})
+    provider_text = (
+        ", ".join(ort.get("providers", [])[:3])
+        if ort.get("available") else "ONNX Runtime not installed"
+    )
+    rapid = detection_items[0] if detection_items else {}
+    rapid_text = (
+        f"RapidOCR {rapid.get('model_count', 0)} model file(s)"
+        if rapid.get("installed") else "RapidOCR not installed"
+    )
+    lama_text = (
+        f"{ready_lama.get('name')} {ready_lama.get('hash_status')}"
+        if ready_lama else "LaMa neural weights not ready"
+    )
+    rapid_ready = rapid.get("status") == "ready"
+    next_action = str(rapid.get("next_action") or "") if not rapid_ready else ""
+    if not next_action and selected_mode in {"lama", "auto", "propainter"}:
+        if ready_lama is None:
+            onnx = next(
+                (item for item in lama_candidates if item.get("name") == "LaMa ONNX"),
+                {},
+            )
+            next_action = str(onnx.get("next_action") or "")
+    if not next_action:
+        next_action = "No backend setup action needed."
+    rapid_hash = (
+        "RapidOCR hashes recorded"
+        if rapid.get("model_count") else "RapidOCR hashes unavailable"
+    )
+    lama_hash = (
+        str(ready_lama.get("hash_status"))
+        if ready_lama else "LaMa missing"
+    )
+    return {
+        "detection": f"{detection.get('name', 'OpenCV fallback')} ({detection.get('status', 'ready')})",
+        "inpainting": (
+            f"{ready_lama.get('name')} ready"
+            if ready_lama else "TBE/OpenCV ready; neural LaMa optional"
+        ),
+        "providers": provider_text,
+        "model_files": f"{rapid_text}; {lama_text}",
+        "hash_status": f"{rapid_hash}; {lama_hash}",
+        "next_action": next_action,
+        "tone": "success" if ready_lama or detection.get("name") == "RapidOCR" else "warning",
+    }
+
+
+def installed_backend_status(
+    config=None,
+    env: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Return privacy-safe installed backend/model status for UI and support."""
+    source_env = os.environ if env is None else env
+    providers = {
+        "onnxruntime": _onnxruntime_provider_status(),
+        "opencv": _opencv_runtime_status(),
+        "torch": _module_status(
+            "PyTorch",
+            "torch",
+            next_action="Install torch only for opt-in PyTorch fallback paths.",
+        ),
+    }
+    detection = [
+        _rapidocr_status(),
+        _module_status(
+            "PaddleOCR",
+            "paddleocr",
+            next_action="Install paddleocr for the secondary OCR path.",
+        ),
+        _module_status(
+            "EasyOCR",
+            "easyocr",
+            next_action="Install easyocr for the legacy OCR fallback.",
+        ),
+        {
+            "name": "OpenCV fallback",
+            "available": bool(providers["opencv"].get("available")),
+            "status": "built_in",
+            "next_action": "",
+        },
+    ]
+    inpainting = _lama_model_status(source_env, providers)
+    hints = [
+        {
+            "label": hint.label,
+            "size_estimate": hint.size_estimate,
+            "detail": hint.detail,
+            "cache_hint": hint.cache_hint,
+        }
+        for hint in pending_model_download_hints(config or object(), source_env)
+    ]
+    status = {
+        "schema": "vsr.backend_status.v1",
+        "selected_mode": _mode_value(config or object()),
+        "providers": providers,
+        "detection": detection,
+        "inpainting": inpainting,
+        "pending_downloads": hints,
+    }
+    status["summary"] = _summarize_backend_status(status)
+    return status

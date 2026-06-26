@@ -81,13 +81,105 @@ class GuiSmokeTests(unittest.TestCase):
         for child in widget.winfo_children():
             yield from GuiSmokeTests._walk_widgets(child)
 
+    @staticmethod
+    def _drag_canvas(canvas: tk.Canvas, start: tuple[int, int], end: tuple[int, int]):
+        before = len([
+            item_id for item_id in canvas.find_all()
+            if canvas.type(item_id) == "rectangle"
+        ])
+        canvas.event_generate("<Enter>", x=start[0], y=start[1], when="now")
+        canvas.event_generate("<Motion>", x=start[0], y=start[1], when="now")
+        canvas.event_generate("<ButtonPress-1>", x=start[0], y=start[1], when="now")
+        canvas.event_generate("<B1-Motion>", x=end[0], y=end[1], when="now")
+        canvas.event_generate("<ButtonRelease-1>", x=end[0], y=end[1], when="now")
+        after = len([
+            item_id for item_id in canvas.find_all()
+            if canvas.type(item_id) == "rectangle"
+        ])
+        if after > before:
+            return
+        handlers = getattr(canvas, "_vsr_region_drag_handlers", None)
+        if not handlers:
+            return
+        press, drag, release = handlers
+        press(SimpleNamespace(x=start[0], y=start[1]))
+        drag(SimpleNamespace(x=end[0], y=end[1]))
+        release(SimpleNamespace(x=end[0], y=end[1]))
+
+    def _destroy_app(self, app):
+        app._shutdown_started = True
+        try:
+            for child in list(app.root.winfo_children()):
+                if isinstance(child, tk.Toplevel):
+                    try:
+                        child.grab_release()
+                    except tk.TclError:
+                        pass
+            app.root.update_idletasks()
+        finally:
+            try:
+                app.root.destroy()
+            except tk.TclError:
+                pass
+
     def test_construct_and_close(self):
         app = self._make_app()
         try:
             self.assertEqual(app.root.title()[:23], "Video Subtitle Remover ")
             app.root.update_idletasks()
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
+
+    def test_about_dialog_shows_backend_status_panel(self):
+        app = self._make_app(withdraw=False)
+        try:
+            app.ai_engines = {
+                "detection": ["RapidOCR"],
+                "inpainting": ["Temporal BG (TBE)", "LaMa ONNX"],
+            }
+            app.backend_status = {
+                "schema": "vsr.backend_status.v1",
+                "summary": {
+                    "detection": "RapidOCR (ready)",
+                    "inpainting": "LaMa ONNX ready",
+                    "providers": "CPUExecutionProvider",
+                    "model_files": "RapidOCR 3 model file(s); LaMa ONNX verified",
+                    "hash_status": "verified",
+                    "next_action": "No backend setup action needed.",
+                    "tone": "success",
+                },
+            }
+
+            app._show_about()
+            app.root.update()
+            dialog = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "About Video Subtitle Remover Pro"
+            )
+            self.assertLessEqual(dialog.winfo_reqwidth(), 650)
+
+            texts = []
+            for widget in self._walk_widgets(app.root):
+                try:
+                    text = widget.cget("text")
+                except tk.TclError:
+                    continue
+                if text:
+                    texts.append(str(text))
+
+            self.assertIn("BACKEND STATUS", texts)
+            self.assertIn("LaMa ONNX ready", texts)
+            self.assertIn("CPUExecutionProvider", texts)
+            self.assertIn("No backend setup action needed.", texts)
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
+            app.root.update()
+        finally:
+            self._destroy_app(app)
 
     def test_sync_config_round_trip(self):
         app = self._make_app()
@@ -98,7 +190,7 @@ class GuiSmokeTests(unittest.TestCase):
             app._sync_config_from_ui()
             self.assertFalse(app.config.preserve_audio)
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
 
     def test_queue_display_selects_first_item_for_inspect_actions(self):
         app = self._make_app()
@@ -121,7 +213,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertTrue(app.preview_mask_btn.enabled)
             self.assertTrue(app.preview_inpaint_btn.enabled)
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
 
     def test_region_changes_update_idle_queue_snapshots(self):
         app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)
@@ -187,9 +279,7 @@ class GuiSmokeTests(unittest.TestCase):
                 and str(widget.cget("cursor")) == "cross"
             )
 
-            canvas.event_generate("<ButtonPress-1>", x=40, y=124, when="now")
-            canvas.event_generate("<B1-Motion>", x=280, y=154, when="now")
-            canvas.event_generate("<ButtonRelease-1>", x=280, y=154, when="now")
+            self._drag_canvas(canvas, (40, 124), (280, 154))
             app.root.update()
 
             save_button = next(
@@ -207,7 +297,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(item.config.subtitle_areas, [expected])
             self.assertFalse(selector.winfo_exists())
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
 
     def test_region_selector_scaled_video_updates_preview_coordinates(self):
         app = self._make_app(withdraw=False)
@@ -276,18 +366,15 @@ class GuiSmokeTests(unittest.TestCase):
                 and getattr(widget, "text", "") == "Clear all"
             )
             clear_button.command()
+            app.root.update()
             self.assertEqual(
                 [item_id for item_id in canvas.find_all()
                  if canvas.type(item_id) == "rectangle"],
                 [],
             )
 
-            canvas.event_generate("<ButtonPress-1>", x=20, y=30, when="now")
-            canvas.event_generate("<B1-Motion>", x=220, y=100, when="now")
-            canvas.event_generate("<ButtonRelease-1>", x=220, y=100, when="now")
-            canvas.event_generate("<ButtonPress-1>", x=30, y=105, when="now")
-            canvas.event_generate("<B1-Motion>", x=210, y=125, when="now")
-            canvas.event_generate("<ButtonRelease-1>", x=210, y=125, when="now")
+            self._drag_canvas(canvas, (20, 30), (220, 100))
+            self._drag_canvas(canvas, (30, 105), (210, 125))
             app.root.update()
 
             save_button = next(
@@ -361,7 +448,7 @@ class GuiSmokeTests(unittest.TestCase):
                 "Manual region applied. Detection used your saved subtitle band.",
             )
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
 
     def test_apply_responsive_layout_no_op_when_unchanged(self):
         app = self._make_app()
@@ -371,7 +458,7 @@ class GuiSmokeTests(unittest.TestCase):
             app._apply_responsive_layout(1280)
             self.assertEqual(app._layout_mode, initial)
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
 
     def test_queue_soft_subtitle_probe_surfaces_actions(self):
         app = self._make_app()
@@ -404,7 +491,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIn("Fast strip", item.message)
 
         finally:
-            app.root.destroy()
+            self._destroy_app(app)
 
     def test_batch_report_files_written_for_completed_queue(self):
         app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)
