@@ -6080,6 +6080,19 @@ class VideoSubtitleRemoverApp:
                 raise ValueError(f"Unsupported file type: {Path(item.file_path).suffix}")
 
             if success:
+                actual_output_path = getattr(remover, "last_output_path", None)
+                if (
+                    actual_output_path
+                    and self._normalized_path_key(actual_output_path)
+                    != self._normalized_path_key(item.output_path)
+                ):
+                    logger.warning(
+                        "Output path changed after fallback encode: %s -> %s",
+                        item.output_path,
+                        actual_output_path,
+                    )
+                    item.output_path = str(actual_output_path)
+                    item.output_path_locked = True
                 item.status = ProcessingStatus.COMPLETE
                 item.progress = 1.0
                 item.error = None

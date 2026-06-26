@@ -307,6 +307,10 @@ class SubtitleRemover:
         # v3.12 quality report -- populated at end of process_video when
         # config.quality_report is on. None until the first run completes.
         self.last_quality_report: Optional[dict] = None
+        # Actual user-visible output path for the last run. This may differ
+        # from the requested path when FFmpeg cannot encode the requested
+        # container and the lossless intermediate is salvaged as .mkv.
+        self.last_output_path: Optional[str] = None
         # B-3: union-mask bbox accumulated while processing. The quality
         # report metric (PSNR/SSIM) used to be measured over the whole
         # frame, so the unchanged 80-95% of pixels dominated the score and
@@ -902,6 +906,7 @@ class SubtitleRemover:
 
     def process_image(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
+        self.last_output_path = None
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
@@ -925,6 +930,7 @@ class SubtitleRemover:
             if not boxes:
                 logger.info("No text detected, copying original")
                 _copy_file_atomic(input_path, output_path)
+                self.last_output_path = output_path
                 self._report_progress(1.0, "Complete (no text found)")
                 return True
 
@@ -950,6 +956,7 @@ class SubtitleRemover:
                 _promote_temp_output(temp_output, output_path)
             finally:
                 _cleanup_temp_output(temp_output)
+            self.last_output_path = output_path
             self._report_progress(1.0, "Complete!")
             return True
 
@@ -968,6 +975,7 @@ class SubtitleRemover:
 
     def process_video(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
+        self.last_output_path = None
         self._srt_entries = []
         self._quality_mask_bbox = None
         temp_dir = None
@@ -1458,36 +1466,40 @@ class SubtitleRemover:
                 logger.info(
                     f"Frame-sequence output written to {frame_out_dir}"
                 )
+                final_output_path = frame_out_dir
             else:
+                final_output_path = output_path
                 is_frame_sequence_input = Path(input_path).is_dir()
                 if self.config.preserve_audio and not is_frame_sequence_input:
-                    self._merge_audio(input_path, temp_video, output_path)
+                    final_output_path = self._merge_audio(
+                        input_path, temp_video, output_path)
                 else:
-                    self._reencode_or_copy(temp_video, output_path)
+                    final_output_path = self._reencode_or_copy(
+                        temp_video, output_path)
             if mask_writer is not None and mask_path and temp_mask_path:
                 _promote_temp_output(temp_mask_path, mask_path)
                 temp_mask_path = None
                 logger.info(f"Mask video written: {mask_path}")
 
             if self.config.export_srt and self._srt_entries:
-                srt_path = str(Path(output_path).with_suffix('.srt'))
+                srt_path = str(Path(final_output_path).with_suffix('.srt'))
                 self._write_srt(srt_path, fps, start_frame)
 
             # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
             # upscale, film-grain re-synthesis). Run after the main mux
             # so the user-visible output is the post-processed file;
             # each adapter degrades gracefully when its dep is missing.
-            self._run_post_restore_passes(output_path, temp_dir)
+            self._run_post_restore_passes(final_output_path, temp_dir)
 
             # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
-            self._write_nle_sidecar(input_path, output_path,
+            self._write_nle_sidecar(input_path, final_output_path,
                                      start_frame, end_frame, fps)
 
             # Quality report: PSNR/SSIM across a sample of unmasked regions
             if self.config.quality_report:
                 try:
                     metrics = self._compute_quality_report(
-                        input_path, output_path, start_frame, end_frame, fps)
+                        input_path, final_output_path, start_frame, end_frame, fps)
                     if metrics:
                         self.last_quality_report = metrics
                         tag_suffix = f" [{metrics['tag']}]" if metrics.get('tag') else ""
@@ -1509,6 +1521,7 @@ class SubtitleRemover:
                 except Exception as exc:
                     logger.warning(f"Quality report failed: {exc}", exc_info=True)
 
+            self.last_output_path = final_output_path
             self._report_progress(1.0, "Complete!")
             return True
 
@@ -1750,7 +1763,7 @@ class SubtitleRemover:
         )
         return salvage
 
-    def _reencode_or_copy(self, source: str, output: str):
+    def _reencode_or_copy(self, source: str, output: str) -> str:
         """Re-encode with preferred encoder, or salvage the intermediate
         if FFmpeg is unavailable or keeps failing."""
         temp_output = _allocate_temp_output_path(output)
@@ -1762,23 +1775,23 @@ class SubtitleRemover:
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(source))
             self._run_checked_ffmpeg(cmd, timeout)
             _promote_temp_output(temp_output, output)
+            return output
         except subprocess.CalledProcessError as e:
             if self._hw_encoder:
                 logger.warning(f"HW encoder failed, retrying with libx264: {e}")
                 self._hw_encoder = None
-                self._reencode_or_copy(source, output)
-                return
-            self._salvage_intermediate(source, output)
+                return self._reencode_or_copy(source, output)
+            return self._salvage_intermediate(source, output)
         except Exception as exc:
             logger.warning(
                 f"FFmpeg re-encode failed; salvaging intermediate: {exc}",
                 exc_info=True,
             )
-            self._salvage_intermediate(source, output)
+            return self._salvage_intermediate(source, output)
         finally:
             _cleanup_temp_output(temp_output)
 
-    def _merge_audio(self, original: str, processed: str, output: str):
+    def _merge_audio(self, original: str, processed: str, output: str) -> str:
         temp_output = _allocate_temp_output_path(output)
         try:
             _ensure_output_parent(output)
@@ -1853,26 +1866,26 @@ class SubtitleRemover:
             _promote_temp_output(temp_output, output)
             encoder_name = self._hw_encoder or 'libx264'
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")
+            return output
         except subprocess.TimeoutExpired:
             # Do not re-run ffmpeg after a duration-adaptive timeout --
             # salvage the intermediate into a container-correct path.
             logger.warning("FFmpeg audio merge timed out, saving video without audio")
-            self._salvage_intermediate(processed, output)
+            return self._salvage_intermediate(processed, output)
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
             if self._hw_encoder:
                 logger.warning(f"HW encoder failed, retrying with libx264: {e}")
                 self._hw_encoder = None
-                self._merge_audio(original, processed, output)
-                return
+                return self._merge_audio(original, processed, output)
             # The merge often fails on the AUDIO side (bad stream, odd
             # layout); a video-only encode to the requested container is
             # usually still possible and beats a mislabeled raw copy.
             logger.warning(f"Audio merge failed: {e}, encoding video without audio")
-            self._reencode_or_copy(processed, output)
+            return self._reencode_or_copy(processed, output)
         except FileNotFoundError:
             logger.warning("FFmpeg not found, saving video without audio")
-            self._salvage_intermediate(processed, output)
+            return self._salvage_intermediate(processed, output)
         finally:
             _cleanup_temp_output(temp_output)
 

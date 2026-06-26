@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import os
+import queue
 import sys
 from datetime import datetime
 import tkinter as tk
@@ -23,13 +24,14 @@ except ImportError:
     PIL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+_FORCE_QUOTED_CLI_VALUE_FLAGS = {"-i", "-o", "--watermark"}
 
 
 def _build_cli_command(item: QueueItem) -> str:
     """Build a CLI command string that reproduces an item's settings."""
-    parts = ["python -m backend.processor"]
-    parts.append(f'-i "{item.file_path}"')
-    parts.append(f'-o "{item.output_path}"')
+    args = ["python", "-m", "backend.processor"]
+    args.extend(["-i", item.file_path])
+    args.extend(["-o", item.output_path])
     cfg = item.config
     mode_map = {"STTN": "sttn", "LAMA": "lama", "ProPainter": "propainter",
                 "AUTO": "auto"}
@@ -38,106 +40,139 @@ def _build_cli_command(item: QueueItem) -> str:
         if hasattr(mode_str, "value"):
             mode_str = mode_str.value
         cli_mode = mode_map.get(str(mode_str), str(mode_str).lower())
-        parts.append(f"-m {cli_mode}")
+        args.extend(["-m", cli_mode])
     lang = getattr(cfg, "detection_lang", "en") or "en"
     if lang != "en":
-        parts.append(f"-l {lang}")
+        args.extend(["-l", lang])
     crf = getattr(cfg, "output_quality", 23)
     if crf != 23:
-        parts.append(f"--crf {crf}")
+        args.extend(["--crf", str(crf)])
     codec = getattr(cfg, "output_codec", "h264")
     if codec and codec != "h264":
-        parts.append(f"--codec {codec}")
+        args.extend(["--codec", str(codec)])
     threshold = getattr(cfg, "detection_threshold", 0.5)
     if threshold != 0.5:
-        parts.append(f"--threshold {threshold}")
+        args.extend(["--threshold", str(threshold)])
     dilate = getattr(cfg, "mask_dilate_px", 8)
     if dilate != 8:
-        parts.append(f"--mask-dilate {dilate}")
+        args.extend(["--mask-dilate", str(dilate)])
     feather = getattr(cfg, "mask_feather_px", 4)
     if feather != 4:
-        parts.append(f"--mask-feather {feather}")
+        args.extend(["--mask-feather", str(feather)])
     skip = getattr(cfg, "detection_frame_skip", 0)
     if skip:
-        parts.append(f"--frame-skip {skip}")
+        args.extend(["--frame-skip", str(skip)])
     edge_ring = getattr(cfg, "edge_ring_px", 2)
     if edge_ring != 2:
-        parts.append(f"--edge-ring {edge_ring}")
+        args.extend(["--edge-ring", str(edge_ring)])
     temporal = getattr(cfg, "temporal_smooth_radius", 0)
     if temporal:
-        parts.append(f"--temporal-smooth {temporal}")
+        args.extend(["--temporal-smooth", str(temporal)])
     if getattr(cfg, "lama_super_fast", False):
-        parts.append("--fast")
+        args.append("--fast")
     if not getattr(cfg, "preserve_audio", True):
-        parts.append("--no-audio")
+        args.append("--no-audio")
     if not getattr(cfg, "use_hw_encode", True):
-        parts.append("--no-hw-encode")
+        args.append("--no-hw-encode")
     if getattr(cfg, "detection_vertical", False):
-        parts.append("--vertical")
+        args.append("--vertical")
     start = getattr(cfg, "time_start", 0.0) or 0.0
     if start > 0:
-        parts.append(f"--start {start}")
+        args.extend(["--start", str(start)])
     end = getattr(cfg, "time_end", 0.0) or 0.0
     if end > 0:
-        parts.append(f"--end {end}")
+        args.extend(["--end", str(end)])
     loudnorm = getattr(cfg, "loudnorm_target", 0.0) or 0.0
     if loudnorm != 0.0:
-        parts.append(f"--loudnorm {loudnorm}")
+        args.extend(["--loudnorm", str(loudnorm)])
     if not getattr(cfg, "multi_audio_passthrough", True):
-        parts.append("--single-audio")
+        args.append("--single-audio")
     if getattr(cfg, "tbe_flow_warp", False):
-        parts.append("--flow-warp")
+        args.append("--flow-warp")
     if getattr(cfg, "colour_tune_enable", False):
-        parts.append("--colour-tune")
+        args.append("--colour-tune")
         tolerance = getattr(cfg, "colour_tune_tolerance", 25)
         if tolerance != 25:
-            parts.append(f"--colour-tolerance {tolerance}")
+            args.extend(["--colour-tolerance", str(tolerance)])
     if not getattr(cfg, "kalman_tracking", True):
-        parts.append("--no-kalman")
+        args.append("--no-kalman")
     if not getattr(cfg, "phash_skip_enable", True):
-        parts.append("--no-phash")
+        args.append("--no-phash")
     if getattr(cfg, "confidence_weighted_dilation", False):
-        parts.append("--confidence-dilate")
+        args.append("--confidence-dilate")
     if getattr(cfg, "whisper_fallback", False):
-        parts.append("--whisper-fallback")
+        args.append("--whisper-fallback")
         model = getattr(cfg, "whisper_model_size", "tiny")
         if model != "tiny":
-            parts.append(f"--whisper-model {model}")
+            args.extend(["--whisper-model", str(model)])
         backend = getattr(cfg, "whisper_backend", "faster-whisper")
         if backend != "faster-whisper":
-            parts.append(f"--whisper-backend {backend}")
+            args.extend(["--whisper-backend", str(backend)])
     if not getattr(cfg, "remove_subtitles", True):
-        parts.append("--keep-subtitles")
+        args.append("--keep-subtitles")
     if not getattr(cfg, "remove_chyrons", True):
-        parts.append("--keep-chyrons")
+        args.append("--keep-chyrons")
     if getattr(cfg, "karaoke_grouping", False):
-        parts.append("--karaoke-grouping")
+        args.append("--karaoke-grouping")
     if getattr(cfg, "export_srt", False):
-        parts.append("--export-srt")
+        args.append("--export-srt")
     if getattr(cfg, "export_mask_video", False):
-        parts.append("--export-mask")
+        args.append("--export-mask")
     if getattr(cfg, "output_frames", False):
-        parts.append("--output-frames")
+        args.append("--output-frames")
     if getattr(cfg, "quality_report", False):
-        parts.append("--quality-report")
+        args.append("--quality-report")
     if getattr(cfg, "quality_report_sheet", False):
-        parts.append("--quality-sheet")
+        args.append("--quality-sheet")
     nle = getattr(cfg, "nle_sidecar", "off")
     if nle and nle != "off":
-        parts.append(f"--nle-sidecar {nle}")
+        args.extend(["--nle-sidecar", str(nle)])
     wm = getattr(cfg, "watermark_image", "")
     if wm:
-        parts.append(f'--watermark "{wm}"')
+        args.extend(["--watermark", wm])
         wm_pos = getattr(cfg, "watermark_position", "bottom-right")
         if wm_pos != "bottom-right":
-            parts.append(f"--watermark-position {wm_pos}")
+            args.extend(["--watermark-position", str(wm_pos)])
         wm_op = getattr(cfg, "watermark_opacity", 1.0)
         if wm_op != 1.0:
-            parts.append(f"--watermark-opacity {wm_op}")
+            args.extend(["--watermark-opacity", str(wm_op)])
         wm_margin = getattr(cfg, "watermark_margin", 16)
         if wm_margin != 16:
-            parts.append(f"--watermark-margin {wm_margin}")
-    return " ".join(parts)
+            args.extend(["--watermark-margin", str(wm_margin)])
+    return " ".join(
+        _quote_cli_arg(
+            arg,
+            force=i > 0 and args[i - 1] in _FORCE_QUOTED_CLI_VALUE_FLAGS,
+        )
+        for i, arg in enumerate(args)
+    )
+
+
+def _quote_cli_arg(value: Any, *, force: bool = False) -> str:
+    """Quote for a copied Windows shell command, not just CreateProcess."""
+    text = str(value)
+    if not force and text and all(ch.isalnum() or ch in "._-/:\\"
+                    for ch in text):
+        return text
+    out = '"'
+    backslashes = 0
+    for ch in text:
+        if ch == "\\":
+            backslashes += 1
+            continue
+        if ch == '"':
+            out += "\\" * (backslashes * 2 + 1)
+            out += '"'
+            backslashes = 0
+            continue
+        if backslashes:
+            out += "\\" * backslashes
+            backslashes = 0
+        out += ch
+    if backslashes:
+        out += "\\" * (backslashes * 2)
+    out += '"'
+    return out
 
 
 from gui.utils import (
@@ -1869,20 +1904,31 @@ class TextWidgetHandler(logging.Handler):
         self.on_count_change = on_count_change
         self.warn_count = 0
         self.error_count = 0
+        self._pending: "queue.Queue[Tuple[str, int]]" = queue.Queue()
+        try:
+            self.text_widget.after(100, self._drain_pending)
+        except tk.TclError:
+            pass
 
     def emit(self, record):
         msg = self.format(record) + '\n'
-        # emit() runs on whichever thread issued the log record, so no
-        # synchronous widget query (winfo_exists) is allowed here --
-        # only `after`, which is thread-safe on threaded Tcl builds.
-        # _append re-checks existence on the main loop.
+        self._pending.put((msg, record.levelno))
+
+    def _drain_pending(self):
         try:
-            self.text_widget.after(0, self._append, msg, record.levelno)
+            if not int(self.text_widget.winfo_exists()):
+                return
         except tk.TclError:
-            # The widget went away; drop silently because the root is
-            # shutting down.
-            pass
-        except Exception:
+            return
+        for _ in range(200):
+            try:
+                msg, levelno = self._pending.get_nowait()
+            except queue.Empty:
+                break
+            self._append(msg, levelno)
+        try:
+            self.text_widget.after(100, self._drain_pending)
+        except tk.TclError:
             pass
 
     def _append(self, msg, levelno):

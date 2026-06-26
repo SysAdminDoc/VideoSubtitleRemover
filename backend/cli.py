@@ -24,6 +24,11 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 _RUNTIME_HELPERS_LOADED = False
+_path_key = None
+_probe_subtitle_streams = None
+_write_text_atomic = None
+SoftSubtitleAction = None
+remux_soft_subtitles = None
 
 
 def _load_runtime_helpers() -> None:
@@ -55,11 +60,24 @@ def _load_runtime_helpers() -> None:
         write_batch_reports,
     )
     from backend.io import (
-        _path_key,
-        _probe_subtitle_streams,
-        _write_text_atomic,
+        _path_key as _io_path_key,
+        _probe_subtitle_streams as _io_probe_subtitle_streams,
+        _write_text_atomic as _io_write_text_atomic,
     )
-    from backend.remux import SoftSubtitleAction, remux_soft_subtitles
+    from backend.remux import (
+        SoftSubtitleAction as _remux_soft_subtitle_action,
+        remux_soft_subtitles as _remux_soft_subtitles,
+    )
+    if _path_key is None:
+        _path_key = _io_path_key
+    if _probe_subtitle_streams is None:
+        _probe_subtitle_streams = _io_probe_subtitle_streams
+    if _write_text_atomic is None:
+        _write_text_atomic = _io_write_text_atomic
+    if SoftSubtitleAction is None:
+        SoftSubtitleAction = _remux_soft_subtitle_action
+    if remux_soft_subtitles is None:
+        remux_soft_subtitles = _remux_soft_subtitles
     _RUNTIME_HELPERS_LOADED = True
 
 
@@ -232,6 +250,18 @@ def _write_cli_batch_reports(out_dir: Path, records: list[dict], *,
     )
     print(f"[batch] wrote report {json_path}")
     print(f"[batch] wrote summary {md_path}")
+
+
+def _update_record_output_path(record: dict, actual_output_path: str) -> None:
+    """Keep batch evidence aligned when processing salvages to another path."""
+    actual = Path(actual_output_path)
+    record["output"] = str(actual)
+    record["output_name"] = actual.name
+    record["output_exists"] = actual.exists()
+    try:
+        record["output_parent_free_bytes"] = shutil.disk_usage(actual.parent).free
+    except OSError:
+        record["output_parent_free_bytes"] = None
 
 
 def main():
@@ -1061,6 +1091,9 @@ def main():
                         getattr(remover, "last_quality_report", None)
                         if ok else None
                     )
+                    actual_output = getattr(remover, "last_output_path", None)
+                    if ok and actual_output and _path_key(actual_output) != _path_key(record["output"]):
+                        _update_record_output_path(record, actual_output)
                     finish_batch_item(
                         record,
                         STATUS_HARDCODED_PROCESSED if ok else STATUS_FAILED,
@@ -1144,6 +1177,9 @@ def main():
     except KeyboardInterrupt:
         print("\n[file] Interrupted by user.")
         sys.exit(130)
+    actual_output = getattr(remover, "last_output_path", None)
+    if success and actual_output and _path_key(actual_output) != _path_key(args.output):
+        print(f"[file] actual-output={actual_output}")
     print(f"[file] {'completed' if success else 'failed'}")
     sys.exit(0 if success else 1)
 

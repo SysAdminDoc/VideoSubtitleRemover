@@ -143,7 +143,8 @@ class TikTokPresetSyntheticAbTests(unittest.TestCase):
             output = tmp / "cleaned.mp4"
             ok = remover.process_video(str(src_path), str(output))
             self.assertTrue(ok, f"pipeline failed for position={position}, auto_band={auto_band}")
-            return band, output.exists()
+            actual_output = Path(remover.last_output_path or output)
+            return band, actual_output.exists()
 
     def test_auto_band_outcome_on_synthetic_tiktok(self):
         """Document the actual behaviour of `auto_band=True` on each

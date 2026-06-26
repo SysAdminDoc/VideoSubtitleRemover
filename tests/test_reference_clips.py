@@ -128,7 +128,8 @@ class ReferenceClipHarnessTests(unittest.TestCase):
             remover._color_metadata = None
             ok = remover.process_video(str(src), str(output))
             self.assertTrue(ok, "pipeline must complete")
-            exists = output.exists()
+            actual_output = Path(remover.last_output_path or output)
+            exists = actual_output.exists()
             self.assertTrue(exists, "output file must be written")
             return exists
 

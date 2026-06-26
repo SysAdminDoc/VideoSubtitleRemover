@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -39,15 +40,35 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 600
 
 
-def _external_command() -> Optional[str]:
+def _strip_wrapping_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _split_external_command(command: str) -> List[str]:
+    """Split the trusted env command without corrupting Windows paths."""
+    try:
+        parts = shlex.split(command, posix=(os.name != "nt"))
+    except ValueError:
+        return []
+    return [_strip_wrapping_quotes(part) for part in parts if part]
+
+
+def _external_command() -> Optional[List[str]]:
     cmd = os.environ.get("VSR_EXTERNAL_INPAINTER", "").strip()
     if not cmd:
         return None
-    if shutil.which(cmd.split()[0]) is None:
-        logger.warning(
-            f"VSR_EXTERNAL_INPAINTER command not found: {cmd.split()[0]}")
+    parts = _split_external_command(cmd)
+    if not parts:
+        logger.warning("VSR_EXTERNAL_INPAINTER command could not be parsed")
         return None
-    return cmd
+    executable = parts[0]
+    if shutil.which(executable) is None and not Path(executable).is_file():
+        logger.warning(
+            f"VSR_EXTERNAL_INPAINTER command not found: {executable}")
+        return None
+    return parts
 
 
 def is_available() -> bool:
@@ -101,8 +122,7 @@ class ExternalInpainter(BaseInpainter):
             except Exception:
                 cfg_str = "{}"
 
-        import shlex
-        cmd_parts = shlex.split(self._cmd)
+        cmd_parts = list(self._cmd)
         cmd_parts.extend([
             "--input-dir", in_dir,
             "--mask-dir", mask_dir,

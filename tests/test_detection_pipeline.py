@@ -70,7 +70,6 @@ class DetectionCascadeTests(unittest.TestCase):
             attempts,
             [
                 "rapidocr",
-                "rapidocr_onnxruntime",
                 "backend.paddle_compat",
                 "surya.detection",
                 "easyocr",

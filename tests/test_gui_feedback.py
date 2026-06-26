@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -6,7 +7,10 @@ import unittest
 
 from gui import config as gui_config
 from gui.app import VideoSubtitleRemoverApp
+from gui.config import InpaintMode, ProcessingConfig, ProcessingStatus, QueueItem
 from gui.widgets import DragDropFrame
+from gui.widgets import TextWidgetHandler
+from gui.widgets import _build_cli_command
 
 
 class SettingsLoadFeedbackTests(unittest.TestCase):
@@ -28,7 +32,8 @@ class SettingsLoadFeedbackTests(unittest.TestCase):
                 self.assertIsInstance(cfg, gui_config.ProcessingConfig)
                 self.assertEqual(
                     gui_config.consume_settings_load_notice(),
-                    "Settings were corrupted and reset to defaults.",
+                    "Settings were corrupted and reset to defaults."
+                    " A backup was saved as settings.json.bak.",
                 )
                 self.assertIsNone(gui_config.consume_settings_load_notice())
             finally:
@@ -66,7 +71,8 @@ class SettingsLoadFeedbackTests(unittest.TestCase):
                 self.assertIsInstance(cfg, gui_config.ProcessingConfig)
                 self.assertEqual(
                     gui_config.consume_settings_load_notice(),
-                    "Settings were corrupted and reset to defaults.",
+                    "Settings were corrupted and reset to defaults."
+                    " A backup was saved as settings.json.bak.",
                 )
                 self.assertIn("file is too large", "\n".join(caught.output))
             finally:
@@ -114,6 +120,59 @@ class DropFeedbackTests(unittest.TestCase):
         self.assertIn("Added 2 items", messages[-1][0])
         self.assertIn("skipped 1 unsupported file", messages[-1][0])
         self.assertIn("skipped 1 missing file", messages[-1][0])
+
+
+class TextWidgetHandlerThreadingTests(unittest.TestCase):
+    def test_emit_queues_without_touching_tk_after(self):
+        class FakeText:
+            def __init__(self):
+                self.after_calls = 0
+
+            def after(self, *args):
+                self.after_calls += 1
+
+        fake = FakeText()
+        handler = TextWidgetHandler(fake)  # type: ignore[arg-type]
+        initial_after_calls = fake.after_calls
+        record = logging.LogRecord(
+            "test",
+            logging.WARNING,
+            __file__,
+            1,
+            "worker warning",
+            (),
+            None,
+        )
+
+        handler.emit(record)
+
+        self.assertEqual(fake.after_calls, initial_after_calls)
+        self.assertEqual(handler._pending.qsize(), 1)
+
+
+class QueueCliCommandTests(unittest.TestCase):
+    def test_cli_command_quotes_user_paths_and_values(self):
+        cfg = ProcessingConfig(
+            mode=InpaintMode.LAMA,
+            detection_lang="en",
+            output_quality=19,
+        )
+        cfg.watermark_image = r"C:\media\logo & proof.png"
+        cfg.watermark_position = "top-left"
+        item = QueueItem(
+            id="quoted",
+            file_path=r"C:\media\source & clip.mp4",
+            output_path=r"C:\media\out dir\cleaned & clip.mp4",
+            status=ProcessingStatus.IDLE,
+            config=cfg,
+        )
+
+        command = _build_cli_command(item)
+
+        self.assertIn(r'"C:\media\source & clip.mp4"', command)
+        self.assertIn(r'"C:\media\out dir\cleaned & clip.mp4"', command)
+        self.assertIn(r'--watermark "C:\media\logo & proof.png"', command)
+        self.assertIn("--watermark-position top-left", command)
 
 
 if __name__ == "__main__":
