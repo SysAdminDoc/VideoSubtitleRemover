@@ -44,37 +44,11 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     fonts, dissolves) with a nightly GHA run comparing output hashes and
     PSNR/SSIM scores to committed baselines.
 
-### Segmentation
-
-115. **SAM 3.1 text-prompt mask refinement** -- optional mask refinement
-     tier: after OCR detects subtitle regions, SAM 3 refines the mask to
-     pixel-perfect boundaries using a text prompt. Gated behind
-     `VSR_SAM3=1`.
-     Priority: P2 segmentation. Effort: L. Confidence: medium.
-     Acceptance criteria:
-     - Opt-in refinement step; falls back to current dilation-based mask
-       when SAM 3 is absent.
-     - Benchmark mask precision vs current approach on reference clips.
-     Dependencies: SAM 3 weights (~2 GB), torch runtime.
-     Source: https://github.com/facebookresearch/sam3
-
 ---
 
 ## Later
 
 ### Real reference inpainters (opt-in scaffolds exist; full integrations remain)
-
-59. **Real ProPainter** -- the actual `sczhou/ProPainter` reference with
-    RAFT flow propagation, wired as `InpaintMode.PROPAINTER_REAL`; the
-    TBE-based "ProPainter" stays the default fast path. ~400 MB weights
-    on first use.
-    Source: https://github.com/sczhou/ProPainter
-
-60. **DiffuEraser** -- diffusion-based; beats ProPainter on content
-    completeness and temporal consistency. Heavy (~5 GB weights, 8+ GB
-    VRAM); opt-in.
-    Sources: https://github.com/lixiaowen-xw/DiffuEraser
-    https://arxiv.org/html/2501.10018
 
 61. **Wan2.1-VACE** -- masked video-to-video editing; the 1.3B variant
     runs on consumer GPUs and beats ProPainter on motion coherence.
@@ -86,15 +60,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     guidance into a pre-trained video diffusion transformer; handles
     videos over one minute with ID consistency.
     Source: https://arxiv.org/html/2503.05639v1
-
-63. **CoCoCo** -- text-guided video inpainting with instance-aware region
-    selector; research-bench alternative to VideoPainter.
-    Source: https://github.com/zibojia/COCOCO
-
-64. **EraserDiT** -- diffusion-transformer inpainting tuned for high-res
-    subtitle removal; track through 2026, integrate once weights are
-    stable.
-    Source: https://arxiv.org/html/2506.12853v2
 
 65. **FloED** -- optical-flow guided efficient diffusion; mid-weight
     alternative when VACE is overkill but TBE leaves residuals on fast
@@ -108,11 +73,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     eliminating aggressive dilation. Memory propagation carries the seed
     through the clip.
     Source: https://github.com/facebookresearch/sam2
-
-67. **SAM 3 text-prompt segmentation** -- natural-language "segment all
-    burned-in text" without bounding boxes; effectively auto-mask.
-    Sources: https://github.com/facebookresearch/sam3
-    https://ai.meta.com/blog/segment-anything-model-3/
 
 68. **MatAnyone 2** -- video matting with learned quality evaluator;
     best-in-class for tracking a thin mobile mask across a clip.
@@ -153,8 +113,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 76. **NLE round-trip** -- accept an EDL / XML from Premiere or DaVinci as
     input and emit a matching sidecar with the cleaned video substituted
     (the output sidecar writer exists; EDL/XML ingest does not).
-
-### Distribution
 
 ### Simplification
 
@@ -246,30 +204,6 @@ Speculative research bench; not commitments.
 100. **Watermark addition pipeline** -- burn a user-specified PNG
      watermark at a configurable corner with fade-in/out after cleaning.
 
-101. **Mask-free subtitle erasure research lane** -- gated experimental
-     adapter family for CLEAR-class and SEDiT-class models, separate from
-     the mask-dependent diffusion scaffolds. Stays on the research bench
-     until one model runs locally through a thin adapter and benchmarks
-     well.
-     Priority: P1 research, P2 product. Effort: L. Confidence: medium.
-     Acceptance criteria:
-     - A `mask_free` backend category accepting frames plus optional
-       prompt/config, falling closed to AUTO/TBE when weights, licensing,
-       VRAM, or upstream APIs are unavailable.
-     - Adapter gated behind `VSR_EXPERIMENTAL_MASK_FREE=1`; never imports
-       Wan/DiffSynth at module import time; verifies weight hashes;
-       returns a structured "unavailable" reason instead of throwing.
-     - Does not route through `_create_mask`; current OCR/TBE path stays
-       default.
-     - Benchmark vs AUTO and TBE/LaMa on reference clips with PSNR/SSIM
-       plus the temporal metrics from #102, wall-clock s/frame, and peak
-       VRAM.
-     - Document license constraints before exposing any model in the GUI.
-     Sources:
-     https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal
-     https://arxiv.org/abs/2603.21901
-     https://arxiv.org/abs/2605.14894
-
 ---
 
 ## Explicitly not on the roadmap
@@ -292,8 +226,6 @@ Speculative research bench; not commitments.
 
 ## Research-Driven Additions
 
-### P2 (trust / test depth / hygiene)
-
 ### Later (research bench -- only if local, permissively licensed weights appear)
 
 - [ ] P3 -- ROSE object-removal bench adapter
@@ -310,125 +242,100 @@ Speculative research bench; not commitments.
   Acceptance: opt-in adapter behind an env gate; reports peak VRAM and s/frame in the quality report; falls closed to AUTO/TBE when unavailable.
   Complexity: L
 
-### P1 - Reliability and Hardening
+### Audit-sourced items
 
-- [ ] P1 -- RapidOCR 3.x compatibility testing and cap lift
-  Why: the `<3.0.0` pin blocks 9 months of improvements including a unified
-  package, CoreML engine, and TensorRT support; v3.8.0+ changed the constructor
-  and return types.
-  Evidence: RapidOCR v3.9.0 released 2026-06-23; v3.8.0 breaking changes noted
-  by Immich/docling-serve downstream consumers; RESEARCH open question.
-  Touches: `requirements.txt`, `backend/detection.py` (`_detect_rapid`),
-  `tests/test_detection_pipeline.py`
-  Acceptance: `_detect_rapid` handles v2.x and v3.x constructor + return types;
-  test covers both API shapes; cap changed to `<4.0.0`; no regression on
-  reference clips.
+- [ ] P1 -- Race condition: _preview_detector shared without locking
+  Why: mask-preview thread and batch-ETA-probe thread both read/write _preview_detector concurrently; concurrent detect() calls can corrupt internal model state.
+  Where: `gui/app.py` lines 4899-4901, 6005-6018
+
+- [ ] P2 -- _show_preview and _open_preview_zoom read video on Tk main thread
+  Why: cv2.VideoCapture.read() runs synchronously on the main thread, freezing the GUI for large files or network paths. The mask-preview path correctly dispatches to a background thread but the normal preview does not.
+  Where: `gui/app.py` lines 4859, 3252-3254
+
+- [ ] P2 -- _LosslessIntermediateWriter.write() has no timeout on pipe
+  Why: if ffmpeg stalls (disk full, process crash), stdin.write() blocks forever with no timeout mechanism; the release() method has a 300s timeout but write() does not.
+  Where: `backend/io.py` lines 718-719
+
+- [ ] P2 -- STATUS_UI dict captures Theme values at import time
+  Why: when apply_high_contrast_theme() mutates Theme class attributes, STATUS_UI still contains the old color strings; all status badges and progress bar colors use stale values after a theme swap.
+  Where: `gui/config.py` lines 96-137
+
+- [ ] P2 -- Unnormalized config fields accept arbitrary values
+  Why: notify_on_completion, confidence_weighted_dilation, confidence_dilation_scale, whisper_vad_model, whisper_vad_threshold, and whisper_min_speech_duration bypass normalized() coercion; corrupt settings values pass through unchecked.
+  Where: `gui/config.py` ProcessingConfig.normalized()
+
+- [ ] P3 -- Legacy adapters (fastdvdnet, transnetv2, migan-onnx) have no pinned hashes
+  Why: adapter_manifest entries with empty sha256 dicts and strict_unknown=False accept any file at the env-var path without integrity verification; fastdvdnet (remote_code_required=True) combined with torch.load creates an arbitrary code execution surface.
+  Where: `backend/adapter_manifest.py` lines 123-143, 296-306
+
+### Research refresh additions
+
+- [ ] P1 — Extend remote model provenance policy to every opt-in heavy model
+  Why: Optional VLM/segmentation/research adapters should all fail closed on unpinned or license-unknown remote model sources, matching the stricter Florence-2/CoTracker precedent.
+  Evidence: `backend/remote_model_policy.py`, `backend/ocr_vlm.py`, `backend/segmentation.py`; WatermarkRemover-AI GPU/dependency issue signal; PyTorch/OpenCV security advisories in `RESEARCH.md`.
+  Touches: `backend/remote_model_policy.py`, `backend/ocr_vlm.py`, `backend/segmentation.py`, `backend/model_downloads.py`, `.github/workflows/build.yml`, `tests/test_hardening.py`
+  Acceptance: every optional HF/torchhub/model-repo adapter resolves through one policy returning allowed/source/revision/license/provenance; unpinned remote refs fail closed; release verification records policy status; tests cover Qwen2.5-VL, PaddleOCR-VL, SAM2, MatAnyone, and CoTracker paths.
   Complexity: M
-  Source: https://github.com/RapidAI/RapidOCR/releases
 
-- [ ] P1 -- PP-OCRv6 model evaluation and auto-selection
-  Why: +5.1% recognition accuracy over PP-OCRv5, 5.2x CPU speedup, 50-language
-  single model (no model switching); ships inside PaddleOCR 3.7+ within the
-  existing pip floor.
-  Evidence: PP-OCRv6 paper (arXiv 2606.13108) and PaddleOCR 3.7.0 release;
-  benchmarks show 83.2% recognition accuracy at 34.5M params.
-  Touches: `backend/detection.py` (`_detect_paddle`), `backend/paddle_compat.py`,
-  `tests/test_detection_pipeline.py`
-  Acceptance: detection pipeline auto-selects PP-OCRv6 medium model when
-  PaddleOCR >= 3.7.0 is installed; accuracy validated on reference clips;
-  fallback to existing models on older PaddleOCR.
+- [ ] P1 — GUI queue autosave and crash restore
+  Why: CLI processing has recovery concepts, but GUI queue/session state is volatile; upstream and peer users repeatedly ask for progress save and autosaved queues.
+  Evidence: YaoFANGUK/video-subtitle-remover issue #224; VideOCR issue #132; current `QueueItem` and processing config flow in `gui/config.py` and `gui/app.py`.
+  Touches: `gui/app.py`, `gui/config.py`, `%APPDATA%\VideoSubtitleRemoverPro\queue_state.json`, `tests/test_gui_smoke.py`
+  Acceptance: queued idle/running/pending items and per-item configs persist atomically; restart shows a non-modal restore banner; completed/failed rows are not re-run unless selected; corrupt queue files are backed up and ignored.
   Complexity: M
-  Source: https://arxiv.org/html/2606.13108
 
-### P2 - Evidence Quality and Observability
-
-- [ ] P2 -- Refresh architecture map after module split and release additions
-  Why: stale architecture docs send contributors to the wrong files and make
-  future research repeat basic tree discovery.
-  Evidence: `docs/architecture.md` still reflects older GUI ownership, an older
-  backend map, a narrow test map, pre-VVC codec support, and an old "current as
-  of" marker; the current tree has `gui/app.py`, cache/update/security modules,
-  VVC/H.266 paths, and broader release/hardening tests.
-  Touches: `docs/architecture.md`, `README.md`
-  Acceptance: architecture docs name the current GUI and backend module
-  boundaries; include VVC/H.266, cache inventory, update checks, release
-  verification, and current test families; remove stale monolith guidance and
-  update the "current as of" marker.
-  Complexity: S
-
-- [ ] P2 -- GitHub issue templates with support-bundle prompt
-  Why: bug reports are unstructured and do not ask for the support bundle that
-  already ships; structured issue forms reduce back-and-forth and surface
-  reproducible details.
-  Evidence: RESEARCH security/reliability section; `backend/support_bundle.py`
-  exists but GitHub intake is a bare issue link; docs.github.com issue templates
-  support structured required fields.
-  Touches: `.github/ISSUE_TEMPLATE/bug_report.yml`,
-  `.github/ISSUE_TEMPLATE/feature_request.yml`
-  Acceptance: bug report form asks for VSR version, OS, GPU, support-bundle zip,
-  and reproduction steps; feature request form asks for use case and expected
-  behavior; both render correctly on GitHub.
-  Complexity: S
-  Source: https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests
-
-- [ ] P2 -- TkinterDnD2 bundling or visible degradation feedback
-  Why: native drag-drop silently fails without the optional `tkinterdnd2` package;
-  the drop area degrades to click-only with no user-visible indication, causing
-  confusion (issues #4/#5 reporter hit this).
-  Evidence: `gui/widgets.py:1252-1259` wraps TkinterDnD2 in a silent try/except;
-  issue #4 reporter could not drag files; EchoSubs and upstream both support
-  drag-drop out of the box.
-  Touches: `gui/widgets.py` (`DragDropFrame._setup_dnd`), `requirements.txt`,
-  `setup.py`
-  Acceptance: either TkinterDnD2 is installed by default (preferred), or the drop
-  area shows a visible note when drag-drop is unavailable (e.g. "Drag-drop
-  requires tkinterdnd2; click to browse").
-  Complexity: S
-
-- [ ] P2 -- FFmpeg 8 Whisper filter backend evaluation
-  Why: FFmpeg 8 ships a built-in Whisper filter for live transcription, which
-  could simplify or replace the project's `whisper_fallback.py` for subtitle-aware
-  processing without requiring Python ML dependencies.
-  Evidence: FFmpeg 8.0 "Huffman" release (2025-08-22) includes `whisper` filter;
-  `backend/whisper_fallback.py` already has `--whisper-backend ffmpeg` support but
-  performance/accuracy comparison against `faster-whisper` is not documented.
-  Touches: `backend/whisper_fallback.py`, `docs/architecture.md`
-  Acceptance: documented benchmark comparing FFmpeg Whisper filter vs
-  faster-whisper on 3+ reference clips (accuracy, speed, VRAM); recommendation
-  on default backend; architecture docs updated.
-  Complexity: S
-
-- [ ] P2 -- Document ProPainter name vs license distinction in user-facing docs
-  Why: VSR's "ProPainter" mode is TBE+LaMa (MIT-clean), not the ICCV 2023
-  ProPainter (NTU S-Lab non-commercial). CLAUDE.md documents this internally
-  but user-facing docs and the README algorithm table do not.
-  Evidence: ProPainter license is NTU S-Lab 1.0 (non-commercial only);
-  competitive analysis flags this as the single biggest legal confusion risk
-  for MIT-licensed tools; README Algorithm Comparison table says "ProPainter"
-  without clarification.
-  Touches: `README.md` (Algorithm Comparison table and credits section)
-  Acceptance: README algorithm table and credits section explicitly note that
-  VSR's ProPainter mode is a TBE+LaMa hybrid, not the ICCV 2023 ProPainter
-  weights or code.
-  Complexity: S
-
-### P3 - Operational Maturity
-
-- [ ] P3 -- Release SBOM and optional artifact provenance evidence
-  Why: release verification records useful details, but users and maintainers do
-  not get a standard CycloneDX/SPDX bill of materials or a provenance path for
-  the Windows binaries.
-  Evidence: `.github/workflows/build.yml` writes release-verification JSON and
-  pip evidence but no SBOM artifact; GitHub supports SBOM attestations with
-  repository-plan caveats, and CISA SBOM guidance treats component transparency
-  as supply-chain risk evidence.
-  Touches: `.github/workflows/build.yml`, `tests/test_release_workflow.py`
-  Acceptance: release builds emit a CycloneDX or SPDX JSON SBOM for bundled
-  Python/runtime dependencies; release-verification records the SBOM path and
-  hash; strict release fails if the SBOM is missing; GitHub artifact attestation
-  is added when repository visibility/plan supports it and skipped with a clear
-  note otherwise.
+- [ ] P1 — Temp/work directory selector with free-space preflight
+  Why: FFV1 intermediates, model caches, and final encodes can exhaust the default system drive before long jobs fail or hang.
+  Evidence: VideOCR issue #113; YaoFANGUK blur/bitrate and progress-failure issue traffic; `_LosslessIntermediateWriter` in `backend/io.py`; cache inventory support in the current app.
+  Touches: `gui/app.py`, `gui/config.py`, `backend/io.py`, `backend/processor.py`, `backend/cache_inventory.py`, `tests/test_io_pipeline.py`
+  Acceptance: GUI and CLI can set a work directory; preflight estimates intermediate/cache/output bytes from duration/resolution/codec and warns or fails before processing when free space is insufficient; support bundles record work-dir and free-space facts.
   Complexity: M
-  Sources:
-  https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations
-  https://www.cisa.gov/resources-tools/resources/2025-minimum-elements-software-bill-materials-sbom
+
+- [ ] P2 — Copy replayable CLI command from any queued or completed item
+  Why: Support and batch users need exact reproduction commands without manually translating GUI state.
+  Evidence: VideOCR issue #120; existing CLI support in `README.md`; per-item config snapshots in `QueueItem`.
+  Touches: `gui/widgets.py`, `gui/app.py`, `gui/config.py`, `backend/cli.py`, `tests/test_config.py`
+  Acceptance: queue context menu copies an equivalent CLI command plus a sidecar JSON config when needed; support-bundle/report mode can redact private absolute paths; test verifies GUI config to CLI config round-trip parity.
+  Complexity: S
+
+- [ ] P2 — One-shot acceleration and codec self-test
+  Why: Peer issue traffic clusters around GPU not being used, DirectML/CUDA setup confusion, and codec availability; VSR Pro should prove local providers before long batches start.
+  Evidence: YaoFANGUK GPU/requirements issues; WatermarkRemover-AI GPU/dependency discussions; `backend/support_bundle.py`; `.github/workflows/build.yml` FFmpeg encoder checks; ONNX Runtime and Windows ML docs.
+  Touches: `backend/support_bundle.py`, `backend/onnx_model_info.py`, `backend/encoder.py`, `backend/cli.py`, `gui/app.py`, `tests/test_release_workflow.py`
+  Acceptance: About dialog and CLI expose a synthetic self-test that probes RapidOCR, LaMa-ONNX provider selection, DirectML/CUDA/CPU availability, FFmpeg encoders, `libvvenc`, and whisper filter support; output gives actionable unavailable reasons and attaches to support bundles.
+  Complexity: M
+
+- [ ] P2 — License/hash manifest for real reference clips
+  Why: The reference-clip harness needs redistributable media; a manifest prevents legal ambiguity and stale quality baselines.
+  Evidence: `docs/edge_case_corpus.md`; existing ROADMAP #54; awesome-video-inpainting datasets; VideoHelp community failure cases.
+  Touches: `tests/test_reference_clips.py`, `tests/clips/manifest.json`, `docs/edge_case_corpus.md`, `backend/quality_gate.py`
+  Acceptance: each real clip fixture requires URL, license, contributor, SHA-256, expected failure category, `ProcessingConfig`, and metric floors; tests refuse unmanifested clips and print renewal guidance when baselines drift.
+  Complexity: S
+
+- [ ] P2 — Automatic OCR language hint for manual regions
+  Why: Users ask for auto language selection, and current RapidOCR/PaddleOCR releases make a local confidence-ranked probe feasible without cloud OCR.
+  Evidence: VideOCR issue #2; RapidOCR v3.9 PP-OCRv6 release; PaddleOCR v3.7 PP-OCRv6 release; current `detection_lang` and language picker flow in `gui/config.py` and `gui/app.py`.
+  Touches: `backend/detection.py`, `backend/paddle_compat.py`, `gui/app.py`, `gui/config.py`, `tests/test_detection.py`
+  Acceptance: from a selected region/sample frame, VSR Pro proposes a language or "uncertain" with confidence and never silently changes settings; CLI exposes `--auto-lang-probe`; tests cover CJK, Latin, and uncertain synthetic crops.
+  Complexity: M
+
+- [ ] P2 — Windows ML migration spike for AMD/Intel inference
+  Why: ONNX Runtime positions Windows ML as the preferred Windows path while DirectML EP is in sustained engineering; VSR Pro needs an evidence-backed upgrade route.
+  Evidence: ONNX Runtime Windows docs; Microsoft Windows ML overview; current DirectML paths in `gui/utils.py`, `backend/inpainters_onnx.py`, and `backend/detection.py`.
+  Touches: `backend/onnx_model_info.py`, `backend/inpainters_onnx.py`, `backend/detection.py`, `setup.py`, `Run_VSR_Pro.bat`, `tests/test_onnx_providers.py`
+  Acceptance: spike produces a minimal local inference probe for one OCR or inpaint ONNX model through Windows ML when available, documents packaging constraints, and keeps DirectML as default until performance and packaging parity are proven.
+  Complexity: M
+
+- [ ] P3 — Local target-intent parser for cleanup selection
+  Why: Peer tools show users expect "remove subtitles/logo/watermark in this region" workflows, and VSR Pro already has target-specific settings that can be mapped deterministically.
+  Evidence: videowipe `--intent`; GhostCut text-removal modes/API; current `remove_subtitles`, `remove_chyrons`, and `subtitle_areas` settings.
+  Touches: `backend/cli.py`, `gui/app.py`, `backend/presets.py`, `tests/test_config.py`
+  Acceptance: deterministic local parser maps phrases only to existing config fields, shows a review diff before applying, and never calls cloud or LLM services by default.
+  Complexity: M
+
+- [ ] P3 — External inpainter command contract
+  Why: A process-isolated bridge lets advanced users benchmark new research models without bundling incompatible licenses, weights, or dependency stacks.
+  Evidence: videowipe external model command; current `backend/inpainter_registry.py`; blocked ProPainter/DiffuEraser/CoTracker/MatAnyone license and dependency lanes in `Roadmap_Blocked.md` and `RESEARCH.md`.
+  Touches: `backend/inpainter_registry.py`, `backend/inpainters_diffusion.py`, `backend/cli.py`, `backend/adapter_manifest.py`, `tests/test_inpainter_registry.py`
+  Acceptance: env/CLI-gated external command receives input clip, mask directory, output path, and JSON contract; enforces timeout, path containment, exit-code semantics, license warning, and quality benchmark; GUI only surfaces adapters explicitly configured by the user.
+  Complexity: L
