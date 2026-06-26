@@ -145,6 +145,7 @@ class VideoSubtitleRemoverApp:
         self._output_dir: Optional[Path] = None  # None = use input_dir/output/
         self._preview_detector = None  # cached SubtitleDetector for mask preview
         self._preview_detector_lang = None  # lang the cached detector was created with
+        self._detector_lock = threading.Lock()  # serializes _preview_detector access
         self._cached_remover = None  # cached BackendRemover for batch reuse
         self._cached_remover_key = None  # (mode, device, lang) key for cache invalidation
         self._active_remover = None
@@ -4907,11 +4908,11 @@ class VideoSubtitleRemoverApp:
                 def _detect_bg():
                     try:
                         from backend.processor import SubtitleDetector
-                        # Reuse cached detector if lang hasn't changed
-                        if self._preview_detector is None or self._preview_detector_lang != lang:
-                            self._preview_detector = SubtitleDetector(lang=lang)
-                            self._preview_detector_lang = lang
-                        det = self._preview_detector
+                        with self._detector_lock:
+                            if self._preview_detector is None or self._preview_detector_lang != lang:
+                                self._preview_detector = SubtitleDetector(lang=lang)
+                                self._preview_detector_lang = lang
+                            det = self._preview_detector
                         if sub_areas:
                             boxes = sub_areas
                         else:
@@ -6014,12 +6015,13 @@ class VideoSubtitleRemoverApp:
                 if probe_frames <= 0:
                     return 0.0
                 from backend.processor import SubtitleDetector
-                detector = self._preview_detector
                 lang = first_video.config.detection_lang or "en"
-                if detector is None or self._preview_detector_lang != lang:
-                    detector = SubtitleDetector(lang=lang)
-                    self._preview_detector = detector
-                    self._preview_detector_lang = lang
+                with self._detector_lock:
+                    detector = self._preview_detector
+                    if detector is None or self._preview_detector_lang != lang:
+                        detector = SubtitleDetector(lang=lang)
+                        self._preview_detector = detector
+                        self._preview_detector_lang = lang
                 threshold = getattr(first_video.config, "detection_threshold", 0.5)
                 t0 = time.monotonic()
                 frames_done = 0

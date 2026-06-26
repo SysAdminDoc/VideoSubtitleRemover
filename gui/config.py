@@ -93,47 +93,28 @@ class ProcessingStatus(Enum):
     CANCELLED = "cancelled"
 
 
-STATUS_UI = {
-    ProcessingStatus.IDLE: {
-        "label": "Ready",
-        "color": Theme.TEXT_SECONDARY,
-        "bg": Theme.BG_TERTIARY,
-    },
-    ProcessingStatus.LOADING: {
-        "label": "Loading",
-        "color": Theme.INFO,
-        "bg": Theme.INFO_BG,
-    },
-    ProcessingStatus.DETECTING: {
-        "label": "Scanning",
-        "color": Theme.INFO,
-        "bg": Theme.INFO_BG,
-    },
-    ProcessingStatus.PROCESSING: {
-        "label": "Removing",
-        "color": Theme.SUCCESS,
-        "bg": Theme.SUCCESS_BG,
-    },
-    ProcessingStatus.MERGING: {
-        "label": "Finishing",
-        "color": Theme.WARNING,
-        "bg": Theme.WARNING_BG,
-    },
-    ProcessingStatus.COMPLETE: {
-        "label": "Complete",
-        "color": Theme.SUCCESS,
-        "bg": Theme.SUCCESS_BG,
-    },
-    ProcessingStatus.ERROR: {
-        "label": "Needs Attention",
-        "color": Theme.ERROR,
-        "bg": Theme.ERROR_BG,
-    },
-    ProcessingStatus.CANCELLED: {
-        "label": "Stopped",
-        "color": Theme.TEXT_MUTED,
-        "bg": Theme.BG_TERTIARY,
-    },
+STATUS_UI = None  # legacy name; use status_ui() instead
+
+_STATUS_LABELS = {
+    ProcessingStatus.IDLE: "Ready",
+    ProcessingStatus.LOADING: "Loading",
+    ProcessingStatus.DETECTING: "Scanning",
+    ProcessingStatus.PROCESSING: "Removing",
+    ProcessingStatus.MERGING: "Finishing",
+    ProcessingStatus.COMPLETE: "Complete",
+    ProcessingStatus.ERROR: "Needs Attention",
+    ProcessingStatus.CANCELLED: "Stopped",
+}
+
+_STATUS_THEME_KEYS = {
+    ProcessingStatus.IDLE: ("TEXT_SECONDARY", "BG_TERTIARY"),
+    ProcessingStatus.LOADING: ("INFO", "INFO_BG"),
+    ProcessingStatus.DETECTING: ("INFO", "INFO_BG"),
+    ProcessingStatus.PROCESSING: ("SUCCESS", "SUCCESS_BG"),
+    ProcessingStatus.MERGING: ("WARNING", "WARNING_BG"),
+    ProcessingStatus.COMPLETE: ("SUCCESS", "SUCCESS_BG"),
+    ProcessingStatus.ERROR: ("ERROR", "ERROR_BG"),
+    ProcessingStatus.CANCELLED: ("TEXT_MUTED", "BG_TERTIARY"),
 }
 
 # -- Coercion helpers -------------------------------------------------------
@@ -518,6 +499,20 @@ class ProcessingConfig:
         self.update_check = _coerce_bool(self.update_check, False)
         self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)
         self.output_frames = _coerce_bool(self.output_frames, False)
+        self.notify_on_completion = _coerce_bool(
+            self.notify_on_completion, True)
+        self.confidence_weighted_dilation = _coerce_bool(
+            self.confidence_weighted_dilation, False)
+        self.confidence_dilation_scale = _coerce_float(
+            self.confidence_dilation_scale, 1.5, 0.1, 10.0)
+        self.whisper_vad_model = _coerce_text(
+            self.whisper_vad_model, "", 256)
+        self.whisper_vad_threshold = _coerce_float(
+            self.whisper_vad_threshold, 0.5, 0.0, 1.0)
+        self.whisper_min_speech_duration = _coerce_float(
+            self.whisper_min_speech_duration, 0.0, 0.0, 30.0)
+        self.temporal_smooth_radius = _coerce_int(
+            self.temporal_smooth_radius, 0, 0, 10)
         return self
 
     @classmethod
@@ -572,12 +567,19 @@ class QueueItem:
 
 
 def status_ui(status: ProcessingStatus) -> dict:
-    return STATUS_UI.get(
-        status,
-        {"label": status.value.title(),
-         "color": Theme.TEXT_MUTED,
-         "bg": Theme.BG_TERTIARY},
-    )
+    keys = _STATUS_THEME_KEYS.get(status)
+    if keys is None:
+        return {
+            "label": status.value.title(),
+            "color": getattr(Theme, "TEXT_MUTED"),
+            "bg": getattr(Theme, "BG_TERTIARY"),
+        }
+    color_key, bg_key = keys
+    return {
+        "label": _STATUS_LABELS.get(status, status.value.title()),
+        "color": getattr(Theme, color_key),
+        "bg": getattr(Theme, bg_key),
+    }
 
 
 # -- Settings I/O -----------------------------------------------------------
