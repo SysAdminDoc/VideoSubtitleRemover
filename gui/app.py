@@ -4869,13 +4869,6 @@ class VideoSubtitleRemoverApp:
             def to_pil(bgr_frame):
                 return Image.fromarray(_cv2.cvtColor(bgr_frame, _cv2.COLOR_BGR2RGB))
 
-            raw_frame = load_first_frame_raw(item.file_path)
-            if raw_frame is None:
-                self.preview_title_label.config(text="Preview unavailable")
-                self.preview_meta_label.config(text="The selected file could not be read for preview.")
-                self._preview_label.config(text="Could not read file", image="")
-                return
-
             badge = status_ui(item.status)
             self.preview_status_chip.config(text=badge["label"], fg=badge["color"], bg=badge["bg"])
 
@@ -4885,139 +4878,186 @@ class VideoSubtitleRemoverApp:
                 max_w = 390
             max_h = 260
 
-            # Mask preview mode -- run detection in background thread
-            if show_mask:
-                self.preview_title_label.config(text=f"Detecting {Path(item.file_path).name}")
-                self.preview_meta_label.config(
-                    text="Running detection on the first frame..."
-                )
-                # Clear any existing preview image, then start animated throbber
-                self._preview_label.config(image="", text="")
-                self._preview_photo = None
-                self._start_throbber()
-                self._preview_label.update_idletasks()
-                frame_copy = raw_frame.copy()
-                lang = self.lang_var.get()
-                threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
-                # Match what processing will actually use: all manual
-                # regions when set, else the single back-compat rect.
-                sub_areas = list(getattr(self.config, "subtitle_areas", None) or [])
-                if not sub_areas and self.config.subtitle_area:
-                    sub_areas = [self.config.subtitle_area]
+            self.preview_title_label.config(
+                text=f"Loading {Path(item.file_path).name}...")
+            self.preview_meta_label.config(text="Reading first frame...")
+            self._preview_label.config(image="", text="")
+            self._preview_photo = None
+            lang = self.lang_var.get()
+            threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
+            sub_areas = list(getattr(self.config, "subtitle_areas", None) or [])
+            if not sub_areas and self.config.subtitle_area:
+                sub_areas = [self.config.subtitle_area]
+            item_file = item.file_path
+            item_id = item.id
+            item_status = item.status
+            item_output = item.output_path
+            item_quality = item.quality_report
+            item_soft = getattr(item, "soft_subtitle_streams", [])
 
-                def _detect_bg():
-                    try:
-                        from backend.processor import SubtitleDetector
-                        with self._detector_lock:
-                            if self._preview_detector is None or self._preview_detector_lang != lang:
-                                self._preview_detector = SubtitleDetector(lang=lang)
-                                self._preview_detector_lang = lang
-                            det = self._preview_detector
-                        if sub_areas:
-                            boxes = sub_areas
-                        else:
-                            boxes = det.detect(frame_copy, threshold)
-                        vis = frame_copy.copy()
-                        for (bx1, by1, bx2, by2) in boxes:
-                            _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
-                        img = to_pil(vis)
-                        img.thumbnail((max_w, max_h), Image.LANCZOS)
-                        engine = det._engine_name
-                        n = len(boxes)
-                        def _update_ui():
-                            if (preview_request_id != self._preview_request_id
-                                    or self._selected_queue_item_id != item.id):
+            def _preview_bg():
+                try:
+                    raw_frame = load_first_frame_raw(item_file)
+                    if raw_frame is None:
+                        def _no_frame():
+                            if preview_request_id != self._preview_request_id:
                                 return
                             self._stop_throbber()
-                            self._preview_photo = ImageTk.PhotoImage(img)
-                            self.preview_title_label.config(text=f"Detection mask for {Path(item.file_path).name}")
-                            if sub_areas:
-                                meta = "Manual region applied. Detection used your saved subtitle band."
-                            elif n:
-                                meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
-                            else:
-                                meta = ("No regions were found on the first frame. Try Set region, or lower the "
-                                        "Threshold in detailed controls.")
-                            self.preview_meta_label.config(text=meta)
+                            self.preview_title_label.config(
+                                text="Preview unavailable")
+                            self.preview_meta_label.config(
+                                text="The selected file could not be read.")
                             self._preview_label.config(
-                                image=self._preview_photo,
-                                text=f"{engine}: {n} detected" if n else "No text detected")
-                        self.root.after(0, _update_ui)
-                    except Exception as exc:
-                        def _show_error():
-                            if (preview_request_id != self._preview_request_id
-                                    or self._selected_queue_item_id != item.id):
-                                return
-                            self._stop_throbber()
-                            self.preview_title_label.config(text="Detection preview failed")
-                            self.preview_meta_label.config(text="The detection preview could not be generated.")
-                            self._preview_label.config(text=f"Detection error: {exc}", image="")
-                        self.root.after(0, _show_error)
+                                text="Could not read file", image="")
+                        self.root.after(0, _no_frame)
+                        return
 
-                threading.Thread(target=_detect_bg, daemon=True).start()
-                return
+                    if show_mask:
+                        self._preview_bg_mask(
+                            raw_frame, lang, threshold, sub_areas,
+                            item_file, item_id, preview_request_id,
+                            max_w, max_h, _cv2, to_pil)
+                    else:
+                        self._preview_bg_normal(
+                            raw_frame, item_file, item_id, item_status,
+                            item_output, item_quality, item_soft,
+                            preview_request_id, max_w, max_h,
+                            _cv2, to_pil, load_first_frame_raw)
+                except Exception as exc:
+                    def _err():
+                        if preview_request_id != self._preview_request_id:
+                            return
+                        self._stop_throbber()
+                        self.preview_title_label.config(
+                            text="Preview unavailable")
+                        self.preview_meta_label.config(
+                            text="An unexpected preview error occurred.")
+                        self._preview_label.config(
+                            text=f"Preview error: {exc}", image="")
+                    self.root.after(0, _err)
 
-            input_img = to_pil(raw_frame)
-
-            # Check if completed and output exists -- show before/after
-            output_img = None
-            if item.status == ProcessingStatus.COMPLETE and Path(item.output_path).exists():
-                out_frame = load_first_frame_raw(item.output_path)
-                if out_frame is not None:
-                    output_img = to_pil(out_frame)
-
-            if output_img:
-                half_w = max_w // 2 - 2
-                input_img.thumbnail((half_w, max_h), Image.LANCZOS)
-                output_img.thumbnail((half_w, max_h), Image.LANCZOS)
-                total_w = input_img.width + output_img.width + 4
-                total_h = max(input_img.height, output_img.height)
-                composite = Image.new("RGB", (total_w, total_h), (15, 23, 42))
-                composite.paste(input_img, (0, 0))
-                composite.paste(output_img, (input_img.width + 4, 0))
-                draw = ImageDraw.Draw(composite)
-                draw.line([(input_img.width + 1, 0), (input_img.width + 1, total_h)],
-                          fill="#22c55e", width=2)
-                draw.rectangle((10, 10, 82, 28), fill=self._hex_to_rgb(Theme.BG_TERTIARY))
-                draw.text((18, 14), "Source", fill=self._hex_to_rgb(Theme.TEXT_SECONDARY))
-                draw.rectangle((input_img.width + 16, 10, input_img.width + 96, 28),
-                               fill=self._hex_to_rgb(Theme.SUCCESS_BG))
-                draw.text((input_img.width + 24, 14), "Cleaned",
-                          fill=self._hex_to_rgb(Theme.SUCCESS))
-                self._preview_photo = ImageTk.PhotoImage(composite)
-                self.preview_title_label.config(text=f"Before / after for {Path(item.file_path).name}")
-                meta = ("Completed items show the source frame beside the cleaned result so you can "
-                        "spot-check the cleanup immediately.")
-                quality_note = format_quality_report(item.quality_report)
-                if quality_note:
-                    meta += f" Quality check: {quality_note}."
-                self.preview_meta_label.config(text=meta)
-                self._preview_label.config(image=self._preview_photo, text="")
-            else:
-                input_img.thumbnail((max_w, max_h), Image.LANCZOS)
-                self._preview_photo = ImageTk.PhotoImage(input_img)
-                self.preview_title_label.config(text=f"Source frame for {Path(item.file_path).name}")
-                soft_summary = _format_soft_subtitle_summary(
-                    getattr(item, "soft_subtitle_streams", [])
-                )
-                if soft_summary:
-                    preview_meta = (
-                        f"{soft_summary}. Right-click the queue item for fast "
-                        "strip/keep, or review the mask for burned-in cleanup."
-                    )
-                else:
-                    preview_meta = (
-                        "Use Set region to draw the subtitle band, or Review mask "
-                        "to confirm what the detector finds automatically."
-                    )
-                self.preview_meta_label.config(
-                    text=preview_meta
-                )
-                self._preview_label.config(image=self._preview_photo, text="")
+            threading.Thread(target=_preview_bg, daemon=True).start()
         except Exception as e:
             self.preview_title_label.config(text="Preview unavailable")
-            self.preview_meta_label.config(text="An unexpected preview error occurred.")
+            self.preview_meta_label.config(
+                text="An unexpected preview error occurred.")
             self._preview_label.config(text=f"Preview error: {e}", image="")
+
+    def _preview_bg_mask(self, raw_frame, lang, threshold, sub_areas,
+                          item_file, item_id, preview_request_id,
+                          max_w, max_h, _cv2, to_pil):
+        try:
+            from backend.processor import SubtitleDetector
+            with self._detector_lock:
+                if self._preview_detector is None or self._preview_detector_lang != lang:
+                    self._preview_detector = SubtitleDetector(lang=lang)
+                    self._preview_detector_lang = lang
+                det = self._preview_detector
+            frame_copy = raw_frame.copy()
+            if sub_areas:
+                boxes = sub_areas
+            else:
+                boxes = det.detect(frame_copy, threshold)
+            vis = frame_copy.copy()
+            for (bx1, by1, bx2, by2) in boxes:
+                _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
+            img = to_pil(vis)
+            img.thumbnail((max_w, max_h), Image.LANCZOS)
+            engine = det._engine_name
+            n = len(boxes)
+            def _update_mask():
+                if (preview_request_id != self._preview_request_id
+                        or self._selected_queue_item_id != item_id):
+                    return
+                self._stop_throbber()
+                self._preview_photo = ImageTk.PhotoImage(img)
+                self.preview_title_label.config(text=f"Detection mask for {Path(item_file).name}")
+                if sub_areas:
+                    meta = "Manual region applied. Detection used your saved subtitle band."
+                elif n:
+                    meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
+                else:
+                    meta = ("No regions were found on the first frame. Try Set region, or lower the "
+                            "Threshold in detailed controls.")
+                self.preview_meta_label.config(text=meta)
+                self._preview_label.config(
+                    image=self._preview_photo,
+                    text=f"{engine}: {n} detected" if n else "No text detected")
+            self.root.after(0, _update_mask)
+        except Exception as exc:
+            def _show_mask_error():
+                if (preview_request_id != self._preview_request_id
+                        or self._selected_queue_item_id != item_id):
+                    return
+                self._stop_throbber()
+                self.preview_title_label.config(text="Detection preview failed")
+                self.preview_meta_label.config(text="The detection preview could not be generated.")
+                self._preview_label.config(text=f"Detection error: {exc}", image="")
+            self.root.after(0, _show_mask_error)
+
+    def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,
+                            item_output, item_quality, item_soft,
+                            preview_request_id, max_w, max_h,
+                            _cv2, to_pil, load_first_frame_raw):
+        input_img = to_pil(raw_frame)
+
+        output_img = None
+        if item_status == ProcessingStatus.COMPLETE and Path(item_output).exists():
+            out_frame = load_first_frame_raw(item_output)
+            if out_frame is not None:
+                output_img = to_pil(out_frame)
+
+        if output_img:
+            half_w = max_w // 2 - 2
+            input_img.thumbnail((half_w, max_h), Image.LANCZOS)
+            output_img.thumbnail((half_w, max_h), Image.LANCZOS)
+            total_w = input_img.width + output_img.width + 4
+            total_h = max(input_img.height, output_img.height)
+            composite = Image.new("RGB", (total_w, total_h), (15, 23, 42))
+            composite.paste(input_img, (0, 0))
+            composite.paste(output_img, (input_img.width + 4, 0))
+            draw = ImageDraw.Draw(composite)
+            draw.line([(input_img.width + 1, 0), (input_img.width + 1, total_h)],
+                      fill="#22c55e", width=2)
+            draw.rectangle((10, 10, 82, 28), fill=self._hex_to_rgb(Theme.BG_TERTIARY))
+            draw.text((18, 14), "Source", fill=self._hex_to_rgb(Theme.TEXT_SECONDARY))
+            draw.rectangle((input_img.width + 16, 10, input_img.width + 96, 28),
+                           fill=self._hex_to_rgb(Theme.SUCCESS_BG))
+            draw.text((input_img.width + 24, 14), "Cleaned",
+                      fill=self._hex_to_rgb(Theme.SUCCESS))
+            photo = ImageTk.PhotoImage(composite)
+            title = f"Before / after for {Path(item_file).name}"
+            meta = ("Completed items show the source frame beside the cleaned result so you can "
+                    "spot-check the cleanup immediately.")
+            quality_note = format_quality_report(item_quality)
+            if quality_note:
+                meta += f" Quality check: {quality_note}."
+        else:
+            input_img.thumbnail((max_w, max_h), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(input_img)
+            title = f"Source frame for {Path(item_file).name}"
+            soft_summary = _format_soft_subtitle_summary(item_soft)
+            if soft_summary:
+                meta = (
+                    f"{soft_summary}. Right-click the queue item for fast "
+                    "strip/keep, or review the mask for burned-in cleanup."
+                )
+            else:
+                meta = (
+                    "Use Set region to draw the subtitle band, or Review mask "
+                    "to confirm what the detector finds automatically."
+                )
+
+        def _update_normal():
+            if (preview_request_id != self._preview_request_id
+                    or self._selected_queue_item_id != item_id):
+                return
+            self._stop_throbber()
+            self._preview_photo = photo
+            self.preview_title_label.config(text=title)
+            self.preview_meta_label.config(text=meta)
+            self._preview_label.config(image=self._preview_photo, text="")
+        self.root.after(0, _update_normal)
 
     def _retry_failed(self):
         """Reset failed/cancelled items so they can be reprocessed."""
