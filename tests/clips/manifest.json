@@ -13,6 +13,23 @@
         "residualTextScoreMean",
         "temporalFlickerScore"
       ]
+    },
+    "mask_free_subtitle_erasure": {
+      "failure_category": "mask_free_subtitle",
+      "config_profile": "mask_free_subtitle_erasure",
+      "required_evaluation_fields": [
+        "subtitle_regions"
+      ],
+      "required_metric_floors": [
+        "subtitleRemovalQuality",
+        "artifactScore"
+      ],
+      "tracked_metrics": [
+        "runtimeSeconds",
+        "secondsPerFrame",
+        "subtitleResidualTextScore",
+        "temporalFlickerScore"
+      ]
     }
   },
   "clips": []

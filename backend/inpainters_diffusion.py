@@ -17,6 +17,9 @@ input formats is the upstream project's concern):
 - RM-63 CoCoCoBackend (text-guided AAAI 2025).
 - RM-64 EraserDiTBackend (track only; experimental).
 - RM-65 FloedBackend (NevSNev/FloED, flow-guided efficient diffusion).
+- CLEAR / SEDiT mask-free subtitle erasure are tracked as research
+  benchmark candidates only; they are deliberately not registered as
+  inpainter modes here.
 
 The registry mode names live alongside the four core inpainters from
 inpainter_registry. Each scaffold falls back to TBE + cv2 inpainting
@@ -43,6 +46,35 @@ from backend.inpainters import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+MASK_FREE_RESEARCH_ADAPTERS = {
+    "clear": {
+        "display_name": "CLEAR",
+        "env_var": "VSR_CLEAR_WEIGHTS",
+        "adapter_manifest": "clear-maskfree",
+        "benchmark_category": "mask_free_subtitle",
+        "source_url": "https://huggingface.co/joeyz0z/CLEAR",
+        "default_registered": False,
+    },
+    "sedit": {
+        "display_name": "SEDiT",
+        "env_var": "VSR_SEDIT_WEIGHTS",
+        "adapter_manifest": "sedit-maskfree",
+        "benchmark_category": "mask_free_subtitle",
+        "source_url": "https://arxiv.org/abs/2509.18774",
+        "default_registered": False,
+    },
+}
+
+
+def mask_free_research_adapter_specs() -> List[dict]:
+    """Return mask-free subtitle-erasure research candidates.
+
+    These specs are for benchmark/reporting code only. They are not included in
+    ``_OPT_INS`` because no mask-free adapter is production-ready in VSR yet.
+    """
+    return [dict(value) for _key, value in sorted(MASK_FREE_RESEARCH_ADAPTERS.items())]
 
 
 def _env_enabled(name: str) -> bool:

@@ -11,6 +11,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   InpaintDelogo-style static-logo path, with manifest license/hash gates,
   structured quality metrics, and no new default dependency or user-facing
   mode.
+- **Mask-free subtitle-erasure research benchmark.** CLEAR/SEDiT candidates
+  are tracked as non-registering research specs with strict adapter manifest
+  entries, and a benchmark-only evaluator now records runtime, subtitle
+  removal quality, outside-region artifact score, and temporal stability for
+  supplied licensed outputs.
 
 ### Fixed
 
