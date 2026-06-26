@@ -332,6 +332,8 @@ def main():
                        help="Watermark opacity 0.0-1.0 (default 1.0).")
     parser.add_argument("--watermark-margin", type=int, default=16,
                        help="Watermark margin from edge in pixels (default 16).")
+    parser.add_argument("--nle-input", default="", metavar="PATH",
+                       help="Parse an EDL/FCPXML to extract time segments for processing.")
     parser.add_argument("--restyle", default="", metavar="PATH",
                        help="Re-burn an .srt or .ass subtitle file onto the cleaned output.")
     parser.add_argument("--restyle-style", default="", metavar="ASS_STYLE",
@@ -1093,6 +1095,46 @@ def main():
             print("[batch] Some items need attention. Review the errors above before retrying.")
         if reviews:
             print("[batch] Some outputs need manual review. See vsr-batch-summary for quality-gate details.")
+        sys.exit(0 if failures == 0 else 1)
+
+    if args.nle_input:
+        from backend.nle_sidecar import parse_nle_input
+        raw_fps = cap_fps = 24.0
+        try:
+            from backend.io import _probe_duration_seconds
+            import cv2 as _cv2
+            _c = _cv2.VideoCapture(args.input)
+            if _c.isOpened():
+                cap_fps = _c.get(_cv2.CAP_PROP_FPS) or 24.0
+                _c.release()
+        except Exception:
+            pass
+        segments = parse_nle_input(args.nle_input, cap_fps)
+        if not segments:
+            parser.error(f"No time segments found in: {args.nle_input}")
+        print(f"[nle] {len(segments)} segment(s) from {Path(args.nle_input).name}")
+        out_base = Path(args.output)
+        failures = 0
+        for idx, (seg_start, seg_end) in enumerate(segments, 1):
+            config.time_start = seg_start
+            config.time_end = seg_end
+            if len(segments) == 1:
+                seg_out = str(out_base)
+            else:
+                seg_out = str(
+                    out_base.parent
+                    / f"{out_base.stem}_seg{idx}{out_base.suffix}"
+                )
+            print(f"[nle] segment {idx}/{len(segments)}: "
+                  f"{seg_start:.2f}s - {seg_end:.2f}s -> {Path(seg_out).name}")
+            try:
+                ok = _process_one(args.input, seg_out)
+            except KeyboardInterrupt:
+                print("\n[nle] Interrupted by user.")
+                sys.exit(130)
+            if not ok:
+                failures += 1
+        print(f"[nle] {len(segments) - failures}/{len(segments)} segments completed")
         sys.exit(0 if failures == 0 else 1)
 
     print(f"[file] source={Path(args.input).name}")

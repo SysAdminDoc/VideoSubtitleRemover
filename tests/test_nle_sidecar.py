@@ -73,5 +73,50 @@ class NleSidecarEncodingTests(unittest.TestCase):
         self.assertEqual(from_lines, ["* FROM CLIP NAME: source name.mp4"])
 
 
+class NleIngestTests(unittest.TestCase):
+    def test_edl_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            edl_path = str(Path(tmpdir) / "out.edl")
+            nle_sidecar.write_edl(
+                edl_path, source="src.mp4", cleaned="clean.mp4",
+                fps=24.0, start_s=10.0, end_s=30.0,
+            )
+            segments = nle_sidecar.parse_edl(edl_path, fps=24.0)
+        self.assertEqual(len(segments), 1)
+        self.assertAlmostEqual(segments[0][0], 10.0, places=1)
+        self.assertAlmostEqual(segments[0][1], 30.0, places=1)
+
+    def test_fcpxml_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            xml_path = str(Path(tmpdir) / "out.fcpxml")
+            nle_sidecar.write_fcpxml(
+                xml_path, source="src.mp4", cleaned="clean.mp4",
+                fps=30.0, start_s=5.0, end_s=15.0,
+            )
+            segments = nle_sidecar.parse_fcpxml(xml_path)
+        self.assertEqual(len(segments), 1)
+        self.assertGreater(segments[0][1], segments[0][0])
+
+    def test_parse_nle_input_auto_detects_format(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            edl_path = str(Path(tmpdir) / "timeline.edl")
+            nle_sidecar.write_edl(
+                edl_path, source="src.mp4", cleaned="clean.mp4",
+                fps=24.0, start_s=0.0, end_s=60.0,
+            )
+            segments = nle_sidecar.parse_nle_input(edl_path, fps=24.0)
+        self.assertEqual(len(segments), 1)
+
+    def test_missing_file_returns_empty(self):
+        segments = nle_sidecar.parse_edl("/nonexistent/file.edl")
+        self.assertEqual(segments, [])
+
+    def test_smpte_to_seconds(self):
+        self.assertAlmostEqual(
+            nle_sidecar._smpte_to_seconds("01:00:00:00", 24.0), 3600.0)
+        self.assertAlmostEqual(
+            nle_sidecar._smpte_to_seconds("00:01:30:12", 24.0), 90.5)
+
+
 if __name__ == "__main__":
     unittest.main()

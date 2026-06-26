@@ -20,9 +20,13 @@ attempts to round-trip transitions or audio tracks; this is the
 from __future__ import annotations
 
 import datetime as _dt
+import logging
+import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 from xml.sax.saxutils import quoteattr
+
+logger = logging.getLogger(__name__)
 
 
 def _edl_comment_text(value: str) -> str:
@@ -123,3 +127,91 @@ def write_fcpxml(path: str, source: str, cleaned: str,
     )
     Path(path).write_text(payload, encoding="utf-8")
     return path
+
+
+_SMPTE_RE = re.compile(
+    r"(\d{1,2}):(\d{2}):(\d{2})[:;](\d{1,3})"
+)
+
+_EDL_EVENT_RE = re.compile(
+    r"^\s*\d{1,3}\s+\S+\s+[VA]\w*\s+\S+\s+"
+    r"(\d{1,2}:\d{2}:\d{2}[:;]\d{1,3})\s+"
+    r"(\d{1,2}:\d{2}:\d{2}[:;]\d{1,3})\s+"
+    r"(\d{1,2}:\d{2}:\d{2}[:;]\d{1,3})\s+"
+    r"(\d{1,2}:\d{2}:\d{2}[:;]\d{1,3})"
+)
+
+
+def _smpte_to_seconds(smpte: str, fps: float = 24.0) -> float:
+    m = _SMPTE_RE.match(smpte.strip())
+    if not m:
+        return 0.0
+    hh, mm, ss, ff = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+    rate = max(1, int(round(fps)))
+    return hh * 3600.0 + mm * 60.0 + ss + ff / rate
+
+
+def parse_edl(
+    path: str, fps: float = 24.0,
+) -> List[Tuple[float, float]]:
+    """Parse a CMX 3600 EDL and return (start_s, end_s) tuples for each
+    event's source in/out range. Ignores non-video events and comment
+    lines. Returns an empty list when the file cannot be read."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        logger.warning(f"Cannot read EDL: {exc}")
+        return []
+    segments = []
+    for line in text.splitlines():
+        m = _EDL_EVENT_RE.match(line)
+        if not m:
+            continue
+        src_in = _smpte_to_seconds(m.group(1), fps)
+        src_out = _smpte_to_seconds(m.group(2), fps)
+        if src_out > src_in:
+            segments.append((src_in, src_out))
+    return segments
+
+
+def parse_fcpxml(path: str) -> List[Tuple[float, float]]:
+    """Parse a minimal FCPXML and return (start_s, end_s) tuples for
+    each asset-clip's offset+duration. Uses the stdlib xml parser so no
+    extra dependency is needed. Returns an empty list on parse failure."""
+    try:
+        import xml.etree.ElementTree as ET
+        tree = ET.parse(path)
+    except Exception as exc:
+        logger.warning(f"Cannot parse FCPXML: {exc}")
+        return []
+
+    def _rational_to_seconds(val: str) -> float:
+        if not val:
+            return 0.0
+        val = val.strip().rstrip("s")
+        if "/" in val:
+            num, den = val.split("/", 1)
+            try:
+                return float(num) / float(den)
+            except (ValueError, ZeroDivisionError):
+                return 0.0
+        try:
+            return float(val)
+        except ValueError:
+            return 0.0
+
+    segments = []
+    for clip in tree.iter("asset-clip"):
+        offset = _rational_to_seconds(clip.get("offset", "0s"))
+        duration = _rational_to_seconds(clip.get("duration", "0s"))
+        if duration > 0:
+            segments.append((offset, offset + duration))
+    return segments
+
+
+def parse_nle_input(path: str, fps: float = 24.0) -> List[Tuple[float, float]]:
+    """Auto-detect EDL vs FCPXML and parse time segments."""
+    ext = Path(path).suffix.lower()
+    if ext in (".xml", ".fcpxml"):
+        return parse_fcpxml(path)
+    return parse_edl(path, fps)
