@@ -20,6 +20,7 @@ import threading
 import tkinter as tk
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from PIL import Image, ImageDraw
@@ -205,6 +206,160 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(item.config.subtitle_area, expected)
             self.assertEqual(item.config.subtitle_areas, [expected])
             self.assertFalse(selector.winfo_exists())
+        finally:
+            app.root.destroy()
+
+    def test_region_selector_scaled_video_updates_preview_coordinates(self):
+        app = self._make_app(withdraw=False)
+        try:
+            import cv2
+            import numpy as np
+            from gui.widgets import ModernButton
+
+            source = Path(self._tmpdir.name) / "selector-scaled.avi"
+            frame_w, frame_h = 960, 540
+            writer = cv2.VideoWriter(
+                str(source),
+                cv2.VideoWriter_fourcc(*"MJPG"),
+                10.0,
+                (frame_w, frame_h),
+            )
+            if not writer.isOpened():
+                self.skipTest("OpenCV video writer unavailable")
+            try:
+                for idx in range(2):
+                    image = Image.new("RGB", (frame_w, frame_h), (20 + idx, 24, 32))
+                    draw = ImageDraw.Draw(image)
+                    draw.rectangle((120, 420, 840, 500), fill=(235, 235, 235))
+                    writer.write(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
+            finally:
+                writer.release()
+
+            preload = (96, 104, 320, 184)
+            app.config.subtitle_area = preload
+            app.config.subtitle_areas = [preload]
+            with mock.patch.object(app, "_start_soft_subtitle_probe"):
+                with mock.patch.object(app, "_show_preview"):
+                    self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+
+            with mock.patch.object(app.root, "winfo_screenwidth", return_value=300):
+                with mock.patch.object(app.root, "winfo_screenheight", return_value=200):
+                    app._open_region_selector()
+            app.root.update()
+
+            selector = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "Choose subtitle region"
+            )
+            canvas = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, tk.Canvas)
+                and str(widget.cget("cursor")) == "cross"
+            )
+            self.assertEqual(int(canvas.cget("width")), 240)
+            self.assertEqual(int(canvas.cget("height")), 135)
+
+            scaled_preload = next(
+                item_id for item_id in canvas.find_all()
+                if canvas.type(item_id) == "rectangle"
+            )
+            self.assertEqual(
+                [round(value, 2) for value in canvas.coords(scaled_preload)],
+                [24.0, 26.0, 80.0, 46.0],
+            )
+
+            clear_button = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Clear all"
+            )
+            clear_button.command()
+            self.assertEqual(
+                [item_id for item_id in canvas.find_all()
+                 if canvas.type(item_id) == "rectangle"],
+                [],
+            )
+
+            canvas.event_generate("<ButtonPress-1>", x=20, y=30, when="now")
+            canvas.event_generate("<B1-Motion>", x=220, y=100, when="now")
+            canvas.event_generate("<ButtonRelease-1>", x=220, y=100, when="now")
+            canvas.event_generate("<ButtonPress-1>", x=30, y=105, when="now")
+            canvas.event_generate("<B1-Motion>", x=210, y=125, when="now")
+            canvas.event_generate("<ButtonRelease-1>", x=210, y=125, when="now")
+            app.root.update()
+
+            save_button = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Save"
+            )
+            save_button.command()
+            app.root.update()
+
+            expected = [(80, 120, 880, 400), (120, 420, 840, 500)]
+            self.assertEqual(app.config.subtitle_area, expected[0])
+            self.assertEqual(app.config.subtitle_areas, expected)
+            self.assertEqual(item.config.subtitle_area, expected[0])
+            self.assertEqual(item.config.subtitle_areas, expected)
+            self.assertFalse(selector.winfo_exists())
+
+            cap = cv2.VideoCapture(str(source))
+            try:
+                ok, raw_frame = cap.read()
+            finally:
+                cap.release()
+            self.assertTrue(ok)
+            calls = []
+
+            def rectangle(vis, pt1, pt2, color, width):
+                calls.append((pt1, pt2, color, width))
+                return vis
+
+            def to_pil(bgr):
+                return Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+
+            fake_cv2 = SimpleNamespace(rectangle=rectangle)
+
+            class FakeDetector:
+                _engine_name = "manual"
+
+                def detect(self, *_args, **_kwargs):
+                    raise AssertionError("manual preview should not detect")
+
+            app._preview_request_id += 1
+            request_id = app._preview_request_id
+            with mock.patch(
+                "backend.processor.SubtitleDetector",
+                return_value=FakeDetector(),
+            ):
+                app._preview_bg_mask(
+                    raw_frame,
+                    "en",
+                    0.5,
+                    app.config.subtitle_areas,
+                    item.file_path,
+                    item.id,
+                    request_id,
+                    390,
+                    260,
+                    fake_cv2,
+                    to_pil,
+                )
+            app.root.update()
+
+            self.assertEqual(
+                calls,
+                [
+                    ((80, 120), (880, 400), (0, 0, 255), 2),
+                    ((120, 420), (840, 500), (0, 0, 255), 2),
+                ],
+            )
+            self.assertEqual(
+                app.preview_meta_label.cget("text"),
+                "Manual region applied. Detection used your saved subtitle band.",
+            )
         finally:
             app.root.destroy()
 

@@ -14,6 +14,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **PyTorch LaMa packaging opt-in.** PyInstaller no longer hidden-imports
   `simple_lama_inpainting` by default; set `VSR_ENABLE_PYTORCH_LAMA=1` to
   include that legacy fallback when it is installed.
+- **Scaled mask-selector regression coverage.** GUI tests now exercise a
+  resized video selector with preloaded, cleared, and multi-region saved
+  rectangles, then verify the mask preview uses the saved image-space
+  coordinates.
 - **Native optional-engine crash hardening.** OCR, Whisper, LaMa, ProPainter,
   and GUI startup engine probes now use safe optional-import checks so broken
   native wheels do not get imported just to discover capabilities. The
