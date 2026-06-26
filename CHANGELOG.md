@@ -4,6 +4,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [3.17.3]
 
+### Added
+
+- **Static-logo cleanup research benchmark.** A benchmark-only harness now
+  compares the current per-frame cv2 cleanup against a deterministic
+  InpaintDelogo-style static-logo path, with manifest license/hash gates,
+  structured quality metrics, and no new default dependency or user-facing
+  mode.
+
 ### Fixed
 
 - **Local release evidence restored.** `build_exe.bat` now copies release

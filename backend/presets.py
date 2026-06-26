@@ -116,6 +116,24 @@ BUILTIN_PRESETS: Dict[str, Dict[str, object]] = {
 }
 
 
+BENCHMARK_PRESETS: Dict[str, Dict[str, object]] = {
+    "static_logo_cleanup": {
+        "description": "Benchmark-only static-logo removal profile.",
+        "fields": {
+            "mode": "LAMA",
+            "remove_subtitles": False,
+            "remove_chyrons": True,
+            "chyron_min_hits": 1,
+            "mask_dilate_px": 6,
+            "mask_feather_px": 6,
+            "edge_ring_px": 3,
+            "temporal_smooth_radius": 2,
+            "quality_report": True,
+        },
+    },
+}
+
+
 def _user_presets_path() -> Path:
     base = Path(os.environ.get("APPDATA", Path.home() / ".config")) / "VideoSubtitleRemoverPro"
     base.mkdir(parents=True, exist_ok=True)
@@ -167,6 +185,17 @@ def preset_fields(name: str,
     fields = payload.get("fields")
     if isinstance(fields, dict):
         return fields
+    return None
+
+
+def benchmark_preset_fields(name: str) -> Optional[Dict[str, object]]:
+    """Return fields for an internal benchmark profile, or None if unknown."""
+    payload = BENCHMARK_PRESETS.get(name)
+    if not payload:
+        return None
+    fields = payload.get("fields")
+    if isinstance(fields, dict):
+        return dict(fields)
     return None
 
 

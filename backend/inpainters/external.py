@@ -28,17 +28,95 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import cv2
 import numpy as np
 
-from backend.inpainters._common import BaseInpainter, _feather_blend
+from backend.inpainters._common import BaseInpainter, _cv2_inpaint, _feather_blend
 from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 600
+
+
+def _normalized_static_mask(masks: Sequence[np.ndarray]) -> Optional[np.ndarray]:
+    prepared: List[np.ndarray] = []
+    shape = None
+    for mask in masks:
+        if mask is None:
+            continue
+        arr = np.asarray(mask)
+        if arr.ndim == 3:
+            arr = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+        if arr.ndim != 2:
+            continue
+        if shape is None:
+            shape = arr.shape
+        if arr.shape != shape:
+            raise ValueError("all static-logo masks must have the same shape")
+        prepared.append((arr > 0).astype(np.uint8) * 255)
+    if not prepared:
+        return None
+    static = np.maximum.reduce(prepared)
+    return static if int(static.max()) > 0 else None
+
+
+def deterministic_static_logo_cleanup(
+    frames: Sequence[np.ndarray],
+    masks: Sequence[np.ndarray],
+    *,
+    radius: int = 7,
+    feather_px: int = 4,
+    temporal_blend: bool = True,
+) -> List[np.ndarray]:
+    """Deterministic static-logo removal candidate for benchmark runs.
+
+    The method never calls external commands or model weights. It unions the
+    fixed logo mask across the clip, performs per-frame OpenCV inpainting, then
+    optionally stabilizes the masked pixels with a temporal median. This gives
+    the research harness an InpaintDelogo-style no-dependency baseline to
+    compare against the current per-frame cv2 cleanup path.
+    """
+    frames = list(frames)
+    masks = list(masks)
+    if len(frames) != len(masks):
+        raise ValueError("frames and masks must have the same length")
+    if not frames:
+        return []
+    first_shape = frames[0].shape
+    for idx, frame in enumerate(frames):
+        if frame.shape != first_shape:
+            raise ValueError(f"frame {idx} shape does not match frame 0")
+    static_mask = _normalized_static_mask(masks)
+    if static_mask is None:
+        return [frame.copy() for frame in frames]
+    if static_mask.shape != first_shape[:2]:
+        raise ValueError("static-logo mask shape does not match frames")
+
+    filled_frames: List[np.ndarray] = []
+    for frame in frames:
+        filled_frames.append(_cv2_inpaint(frame, static_mask, radius, cv2.INPAINT_TELEA))
+
+    if temporal_blend and len(filled_frames) > 1:
+        stable = np.median(np.stack(filled_frames, axis=0), axis=0).astype(np.uint8)
+    else:
+        stable = None
+
+    outputs: List[np.ndarray] = []
+    for original, mask, filled in zip(frames, masks, filled_frames):
+        frame_mask = np.asarray(mask)
+        if frame_mask.ndim == 3:
+            frame_mask = cv2.cvtColor(frame_mask, cv2.COLOR_BGR2GRAY)
+        if int(frame_mask.max()) == 0:
+            outputs.append(original.copy())
+            continue
+        candidate = filled.copy()
+        if stable is not None:
+            candidate[frame_mask > 0] = stable[frame_mask > 0]
+        outputs.append(_feather_blend(original, candidate, frame_mask, feather_px))
+    return outputs
 
 
 def _strip_wrapping_quotes(value: str) -> str:

@@ -1,5 +1,19 @@
 {
   "schema_version": 1,
   "description": "Reference clip manifest for regression testing. Each entry requires a license, contributor, SHA-256 hash, expected failure category, ProcessingConfig overrides, and metric floors. Tests refuse clips not listed here.",
+  "benchmark_profiles": {
+    "static_logo_cleanup": {
+      "failure_category": "static_logo",
+      "config_profile": "static_logo_cleanup",
+      "required_metric_floors": [
+        "ssimVsReferenceMean",
+        "temporalConsistency"
+      ],
+      "tracked_metrics": [
+        "residualTextScoreMean",
+        "temporalFlickerScore"
+      ]
+    }
+  },
   "clips": []
 }

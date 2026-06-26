@@ -216,6 +216,158 @@ def temporal_consistency_score(
     return float(np.mean(scores)) if scores else None
 
 
+def _mask_bbox_from_masks(
+    masks: Sequence[np.ndarray],
+    *,
+    padding: int = 4,
+) -> Optional[Tuple[int, int, int, int]]:
+    if not masks:
+        return None
+    height = width = None
+    xs: List[np.ndarray] = []
+    ys: List[np.ndarray] = []
+    for mask in masks:
+        if mask is None:
+            continue
+        arr = np.asarray(mask)
+        if arr.ndim == 3:
+            arr = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+        if arr.ndim != 2:
+            continue
+        if height is None or width is None:
+            height, width = arr.shape[:2]
+        y, x = np.where(arr > 0)
+        if x.size:
+            xs.append(x)
+            ys.append(y)
+    if not xs or height is None or width is None:
+        return None
+    all_x = np.concatenate(xs)
+    all_y = np.concatenate(ys)
+    x1 = max(0, int(all_x.min()) - padding)
+    y1 = max(0, int(all_y.min()) - padding)
+    x2 = min(width, int(all_x.max()) + padding + 1)
+    y2 = min(height, int(all_y.max()) + padding + 1)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return x1, y1, x2, y2
+
+
+def _crop_bbox(frame: np.ndarray,
+               bbox: Optional[Tuple[int, int, int, int]]) -> np.ndarray:
+    if bbox is None:
+        return frame
+    x1, y1, x2, y2 = bbox
+    return frame[y1:y2, x1:x2]
+
+
+def _mean_optional(values: Sequence[Optional[float]]) -> Optional[float]:
+    clean = [float(v) for v in values if v is not None and np.isfinite(v)]
+    return float(np.mean(clean)) if clean else None
+
+
+def _static_logo_mask_coverage(masks: Sequence[np.ndarray]) -> float:
+    total_pixels = 0
+    masked_pixels = 0
+    for mask in masks:
+        if mask is None:
+            continue
+        arr = np.asarray(mask)
+        if arr.ndim == 3:
+            arr = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+        if arr.ndim != 2:
+            continue
+        total_pixels += int(arr.shape[0] * arr.shape[1])
+        masked_pixels += int(np.count_nonzero(arr))
+    if total_pixels <= 0:
+        return 0.0
+    return float(masked_pixels / total_pixels)
+
+
+def _best_method(
+    method_metrics: dict,
+    key: str,
+    *,
+    higher_is_better: bool = False,
+) -> Optional[str]:
+    candidates = []
+    for name, metrics in method_metrics.items():
+        value = metrics.get(key)
+        if isinstance(value, (int, float)) and np.isfinite(value):
+            candidates.append((float(value), name))
+    if not candidates:
+        return None
+    candidates.sort(reverse=higher_is_better)
+    return candidates[0][1]
+
+
+def compare_static_logo_cleanup(
+    original_frames: Sequence[np.ndarray],
+    method_outputs: dict,
+    masks: Sequence[np.ndarray],
+    *,
+    reference_frames: Optional[Sequence[np.ndarray]] = None,
+) -> dict:
+    """Compare static-logo cleanup outputs using dependency-free ROI metrics.
+
+    Lower residual/flicker is better; higher temporal consistency and reference
+    SSIM are better. This is a benchmark primitive, not a production quality
+    gate, so it returns all available metrics and omits unavailable optional
+    values instead of trying to judge pass/fail.
+    """
+    originals = list(original_frames)
+    masks = list(masks)
+    if len(originals) != len(masks):
+        raise ValueError("original frames and masks must have the same length")
+    if not originals:
+        raise ValueError("static-logo comparison needs at least one frame")
+    bbox = _mask_bbox_from_masks(masks)
+    refs = list(reference_frames) if reference_frames is not None else None
+    if refs is not None and len(refs) != len(originals):
+        raise ValueError("reference frames must match original frame count")
+
+    metrics_by_method = {}
+    for name, frames in sorted(method_outputs.items()):
+        output_frames = list(frames)
+        if len(output_frames) != len(originals):
+            raise ValueError(f"method {name!r} frame count does not match input")
+        roi_frames = [_crop_bbox(frame, bbox) for frame in output_frames]
+        residuals = [residual_text_score(frame) for frame in roi_frames]
+        samples = list(enumerate(roi_frames))
+        method_metrics = {
+            "roiFrameCount": len(roi_frames),
+            "residualTextScoreMean": _mean_optional(residuals),
+            "temporalFlickerScore": temporal_flicker_score(samples),
+            "temporalConsistency": temporal_consistency_score(roi_frames),
+        }
+        if refs is not None:
+            ref_scores: List[Optional[float]] = []
+            for ref, out in zip(refs, output_frames):
+                ref_roi = _crop_bbox(ref, bbox)
+                out_roi = _crop_bbox(out, bbox)
+                ref_scores.append(_ssim(ref_roi, out_roi))
+            method_metrics["ssimVsReferenceMean"] = _mean_optional(ref_scores)
+        metrics_by_method[str(name)] = method_metrics
+
+    return {
+        "maskCoverage": _static_logo_mask_coverage(masks),
+        "roiBbox": list(bbox) if bbox is not None else None,
+        "methods": metrics_by_method,
+        "winners": {
+            "lowestResidualText": _best_method(
+                metrics_by_method, "residualTextScoreMean"),
+            "lowestFlicker": _best_method(
+                metrics_by_method, "temporalFlickerScore"),
+            "highestTemporalConsistency": _best_method(
+                metrics_by_method, "temporalConsistency",
+                higher_is_better=True),
+            "highestReferenceSsim": _best_method(
+                metrics_by_method, "ssimVsReferenceMean",
+                higher_is_better=True),
+        },
+    }
+
+
 def _frame_to_tensor(frame: np.ndarray, device: str = "cpu"):
     """BGR uint8 frame -> torch float32 NCHW tensor in [0, 1]."""
     import torch
