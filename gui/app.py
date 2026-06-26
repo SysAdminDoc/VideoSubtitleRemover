@@ -212,7 +212,8 @@ class VideoSubtitleRemoverApp:
         # First-run welcome overlay (only shown once, then persisted)
         self._start_startup_hardware_probe()
         self._maybe_show_onboarding()
-        self._maybe_restore_queue()
+        if "--smoke-test" not in sys.argv:
+            self.root.after(500, self._maybe_restore_queue)
 
     def _on_close(self):
         """Stop processing, save settings, and close."""
