@@ -221,6 +221,51 @@ def burn_watermark(
     return None
 
 
+def burn_subtitles(
+    input_path: str,
+    output_path: str,
+    subtitle_path: str,
+    style_override: str = "",
+) -> Optional[str]:
+    """Re-burn a subtitle file (.srt or .ass) into the cleaned video.
+
+    Uses ffmpeg's subtitles filter. An optional ASS style override string
+    lets callers restyle the burned text (font, size, colour, position).
+    Returns the produced path on success, None when ffmpeg or the
+    subtitle file is missing.
+    """
+    if shutil.which("ffmpeg") is None:
+        logger.info("ffmpeg not on PATH; cannot burn subtitles")
+        return None
+    if not Path(subtitle_path).is_file():
+        logger.warning(f"Subtitle file not found: {subtitle_path}")
+        return None
+    sub_escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\\\:")
+    vf = f"subtitles='{sub_escaped}'"
+    if style_override:
+        vf += f":force_style='{style_override}'"
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
+        "-i", input_path,
+        "-vf", vf,
+        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
+        "-c:a", "copy", output_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
+        if Path(output_path).is_file():
+            logger.info(f"Subtitles re-burned: {output_path}")
+            return output_path
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            f"Subtitle burn failed: "
+            f"{exc.stderr.decode('utf-8', 'replace')[:400]}"
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("Subtitle burn timed out")
+    return None
+
+
 def add_film_grain(input_path: str, output_path: str,
                     strength: float = 0.04) -> Optional[str]:
     """RM-80: cheap additive film grain.

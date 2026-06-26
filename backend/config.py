@@ -123,6 +123,8 @@ class ProcessingConfig:
     watermark_position: str = "bottom-right"
     watermark_opacity: float = 1.0
     watermark_margin: int = 16
+    restyle_subtitle: str = ""
+    restyle_style: str = ""
     # RM-76 NLE round-trip sidecars. None = off; "edl" or "fcpxml"
     # writes a sibling sidecar next to the output naming the source
     # and the processed range.
@@ -485,6 +487,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.watermark_position = wm_pos
     config.watermark_opacity = _coerce_float(config.watermark_opacity, 1.0, 0.0, 1.0)
     config.watermark_margin = _coerce_int(config.watermark_margin, 16, 0, 500)
+    config.restyle_subtitle = _coerce_text(config.restyle_subtitle, "", 1024)
+    config.restyle_style = _coerce_text(config.restyle_style, "", 512)
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.confidence_weighted_dilation = _coerce_bool(

@@ -332,6 +332,10 @@ def main():
                        help="Watermark opacity 0.0-1.0 (default 1.0).")
     parser.add_argument("--watermark-margin", type=int, default=16,
                        help="Watermark margin from edge in pixels (default 16).")
+    parser.add_argument("--restyle", default="", metavar="PATH",
+                       help="Re-burn an .srt or .ass subtitle file onto the cleaned output.")
+    parser.add_argument("--restyle-style", default="", metavar="ASS_STYLE",
+                       help="ASS force_style override for --restyle (e.g. 'FontSize=24,PrimaryColour=&H00FFFFFF').")
     parser.add_argument("--whisper-model", default="tiny",
                        choices=["tiny", "base", "small", "medium",
                                 "large", "large-v2", "large-v3"],
@@ -672,6 +676,8 @@ def main():
         watermark_position=args.watermark_position,
         watermark_opacity=args.watermark_opacity,
         watermark_margin=args.watermark_margin,
+        restyle_subtitle=args.restyle,
+        restyle_style=args.restyle_style,
         swinir_restore=args.swinir,
         seedvr2_restore=args.seedvr2,
         preserve_color_metadata=not args.no_color_preserve,

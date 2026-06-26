@@ -1648,6 +1648,20 @@ class SubtitleRemover:
                     )
             except Exception as exc:
                 logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
+        if self.config.restyle_subtitle:
+            try:
+                from backend.post_restore import burn_subtitles
+                restyle_out = os.path.join(temp_dir, "restyled.mp4")
+                produced = burn_subtitles(
+                    output_path, restyle_out,
+                    subtitle_path=self.config.restyle_subtitle,
+                    style_override=self.config.restyle_style,
+                )
+                if produced and Path(produced).is_file():
+                    _promote_temp_output(produced, output_path)
+                    logger.info("Restyle subtitle burn pass complete")
+            except Exception as exc:
+                logger.warning(f"Restyle pass failed: {exc}", exc_info=True)
         if self.config.watermark_image:
             try:
                 from backend.post_restore import burn_watermark
