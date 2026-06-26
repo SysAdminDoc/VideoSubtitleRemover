@@ -132,11 +132,17 @@ def _load_json_config(path: str) -> dict:
 
 
 def _apply_auto_band_override(remover, input_path: str, *, auto_band: bool,
-                              base_subtitle_area, base_subtitle_areas):
+                              base_subtitle_area, base_subtitle_areas,
+                              base_subtitle_region_spans=None):
     """Reset per-file region overrides before optionally probing a fresh band."""
     remover.config.subtitle_area = base_subtitle_area
     remover.config.subtitle_areas = list(base_subtitle_areas) if base_subtitle_areas else None
-    if not auto_band or base_subtitle_area or base_subtitle_areas:
+    remover.config.subtitle_region_spans = (
+        list(base_subtitle_region_spans)
+        if base_subtitle_region_spans else None
+    )
+    if (not auto_band or base_subtitle_area or base_subtitle_areas
+            or base_subtitle_region_spans):
         return base_subtitle_area
     band = remover.detect_subtitle_band(input_path)
     remover.config.subtitle_area = band
@@ -845,6 +851,16 @@ def main():
                 [list(r) for r in config.subtitle_areas]
                 if config.subtitle_areas else None
             ),
+            "subtitle_region_spans": (
+                [
+                    {
+                        "rect": list(span["rect"]),
+                        "start": float(span.get("start", 0.0)),
+                        "end": float(span.get("end", 0.0)),
+                    }
+                    for span in (config.subtitle_region_spans or [])
+                ] or None
+            ),
             "mask_dilate_px": config.mask_dilate_px,
             "mask_feather_px": config.mask_feather_px,
             "edge_ring_px": config.edge_ring_px,
@@ -1033,6 +1049,10 @@ def main():
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     base_subtitle_area = config.subtitle_area
     base_subtitle_areas = list(config.subtitle_areas) if config.subtitle_areas else None
+    base_subtitle_region_spans = (
+        list(config.subtitle_region_spans)
+        if config.subtitle_region_spans else None
+    )
 
     def _process_one(inp: str, outp: str) -> bool:
         if args.skip_existing and Path(outp).exists():
@@ -1048,6 +1068,7 @@ def main():
             auto_band=False,
             base_subtitle_area=base_subtitle_area,
             base_subtitle_areas=base_subtitle_areas,
+            base_subtitle_region_spans=base_subtitle_region_spans,
         )
         ext = Path(inp).suffix.lower()
         if Path(inp).is_dir() or ext in video_exts:
@@ -1058,10 +1079,13 @@ def main():
                     auto_band=True,
                     base_subtitle_area=base_subtitle_area,
                     base_subtitle_areas=base_subtitle_areas,
+                    base_subtitle_region_spans=base_subtitle_region_spans,
                 )
                 if band:
                     print(f"[auto-band] {Path(inp).name}: {band}")
-                elif not (base_subtitle_area or base_subtitle_areas):
+                elif not (
+                        base_subtitle_area or base_subtitle_areas
+                        or base_subtitle_region_spans):
                     print(f"[auto-band] {Path(inp).name}: no dominant band, full-frame")
             ok = remover.process_video(inp, outp)
         else:

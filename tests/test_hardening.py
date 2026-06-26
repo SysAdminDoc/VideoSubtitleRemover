@@ -136,6 +136,11 @@ class GuiConfigHardeningTests(unittest.TestCase):
                 "sttn_max_load_num": "-20",
                 "subtitle_area": [10, 20, 5, 30],
                 "subtitle_areas": [[1, 2, 9, 12], ["bad"], [8, 8, 8, 20]],
+                "subtitle_region_spans": [
+                    {"rect": [2, 4, 20, 24], "start": "1.5", "end": "4"},
+                    {"rect": [8, 8, 8, 12], "start": "2", "end": "3"},
+                    [[4, 5, 30, 40], "bad", "1"],
+                ],
                 "detection_lang": " JA ",
                 "detection_threshold": "2.5",
                 "time_start": "15",
@@ -155,6 +160,13 @@ class GuiConfigHardeningTests(unittest.TestCase):
         self.assertEqual(cfg.sttn_max_load_num, 10)
         self.assertIsNone(cfg.subtitle_area)
         self.assertEqual(cfg.subtitle_areas, [(1, 2, 9, 12)])
+        self.assertEqual(
+            cfg.subtitle_region_spans,
+            [
+                {"rect": (2, 4, 20, 24), "start": 1.5, "end": 4.0},
+                {"rect": (4, 5, 30, 40), "start": 0.0, "end": 1.0},
+            ],
+        )
         self.assertEqual(cfg.detection_lang, "ja")
         self.assertEqual(cfg.detection_threshold, 0.9)
         self.assertEqual(cfg.time_start, 15.0)
@@ -212,6 +224,11 @@ class BackendHardeningTests(unittest.TestCase):
                 sttn_max_load_num="-2",
                 subtitle_area=[4, 4, 2, 10],
                 subtitle_areas=[[2, 3, 10, 12], ["bad"]],
+                subtitle_region_spans=[
+                    {"rect": [4, 5, 14, 20], "start": 2, "end": 8},
+                    {"region": [1, 1, 8, 8], "start": 5, "end": 4},
+                    {"rect": [0, 0, 0, 5], "start": 1, "end": 2},
+                ],
                 detection_threshold="9",
                 detection_lang=" EN ",
                 detection_frame_skip="-5",
@@ -229,6 +246,13 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertEqual(cfg.sttn_max_load_num, 1)
         self.assertIsNone(cfg.subtitle_area)
         self.assertEqual(cfg.subtitle_areas, [(2, 3, 10, 12)])
+        self.assertEqual(
+            cfg.subtitle_region_spans,
+            [
+                {"rect": (4, 5, 14, 20), "start": 2.0, "end": 8.0},
+                {"rect": (1, 1, 8, 8), "start": 5.0, "end": 0.0},
+            ],
+        )
         self.assertEqual(cfg.detection_threshold, 1.0)
         self.assertEqual(cfg.detection_lang, "en")
         self.assertEqual(cfg.detection_frame_skip, 0)
@@ -287,11 +311,28 @@ class BackendHardeningTests(unittest.TestCase):
             auto_band=True,
             base_subtitle_area=None,
             base_subtitle_areas=None,
+            base_subtitle_region_spans=None,
         )
 
         self.assertIsNone(band)
         self.assertIsNone(remover.config.subtitle_area)
         self.assertEqual(calls, ["clip-two.mp4"])
+
+    def test_timed_region_boxes_are_selected_by_frame_time(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.normalize_processing_config(
+            processor.ProcessingConfig(
+                subtitle_area=(1, 1, 99, 99),
+                subtitle_region_spans=[
+                    {"rect": [2, 2, 10, 12], "start": 0.5, "end": 1.0},
+                    {"rect": [12, 14, 40, 30], "start": 1.0, "end": 0},
+                ],
+            )
+        )
+
+        self.assertIsNone(remover._fixed_region_boxes(0.25))
+        self.assertEqual(remover._fixed_region_boxes(0.5), [(2, 2, 10, 12)])
+        self.assertEqual(remover._fixed_region_boxes(1.0), [(12, 14, 40, 30)])
 
 
 class MediaInputFailureTests(unittest.TestCase):
@@ -1339,7 +1380,8 @@ class ConfigFuzzTests(unittest.TestCase):
         "mode", "use_gpu", "gpu_id",
         "sttn_skip_detection", "sttn_neighbor_stride", "sttn_reference_length",
         "sttn_max_load_num", "lama_super_fast",
-        "subtitle_area", "subtitle_areas", "detection_lang",
+        "subtitle_area", "subtitle_areas", "subtitle_region_spans",
+        "detection_lang",
         "detection_threshold", "detection_frame_skip",
         "mask_dilate_px", "mask_feather_px", "edge_ring_px",
         "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
@@ -4290,6 +4332,67 @@ class EndToEndPipelineTests(unittest.TestCase):
             finally:
                 cap.release()
             self.assertGreaterEqual(frames_read, 20)
+
+    def test_pipeline_timed_regions_do_not_reuse_masks_outside_span(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not on PATH")
+
+        class RecordingInpainter:
+            def __init__(self):
+                self.mask_sums = []
+
+            def inpaint(self, frames, masks):
+                self.mask_sums.extend(int(mask.sum()) for mask in masks)
+                return frames
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = self._write_clip(tmp, n_frames=24, size=(64, 48))
+            output = tmp / "timed-cleaned.mp4"
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    sttn_max_load_num=6,
+                    subtitle_region_spans=[
+                        {"rect": (8, 36, 56, 44), "start": 0.0, "end": 0.5},
+                    ],
+                    preserve_audio=False,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                )
+            )
+            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+            remover.config = cfg
+            remover.detector = processor.SubtitleDetector.__new__(
+                processor.SubtitleDetector
+            )
+            remover.detector.device = "cpu"
+            remover.detector.lang = "en"
+            remover.detector._engine_name = "skip"
+            remover.detector._rapid_model = None
+            remover.detector._paddle_model = None
+            remover.detector._surya_det = None
+            remover.detector._easyocr_reader = None
+            recorder = RecordingInpainter()
+            remover.inpainter = recorder
+            remover.on_progress = None
+            remover.on_preview_frame = None
+            remover.live_preview_stride = 6
+            remover._hw_encoder = None
+            remover._srt_entries = []
+            remover.last_quality_report = None
+            remover._quality_mask_bbox = None
+
+            ok = remover.process_video(str(src), str(output))
+
+            self.assertTrue(ok, "process_video must succeed end-to-end")
+            self.assertEqual(len(recorder.mask_sums), 24)
+            self.assertGreater(recorder.mask_sums[0], 0)
+            self.assertGreater(recorder.mask_sums[11], 0)
+            self.assertEqual(recorder.mask_sums[12], 0)
+            self.assertEqual(recorder.mask_sums[-1], 0)
 
 
 class OcrCascadeOrderTests(unittest.TestCase):

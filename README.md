@@ -31,12 +31,12 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, and VVC when FFmpeg exposes `libvvenc`
-- **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame; backend honours every rect
+- **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame, optionally with start/end seconds for moving subtitle layouts
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+
 - **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
-- **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles
+- **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
 - **Quality Self-Test** -- PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, and an optional side-by-side comparison PNG
@@ -130,7 +130,7 @@ python -m unittest discover -s tests -v
 2. **Add files** -- Click to browse, right-click for folders, or drag & drop
 3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
 4. **Set language** if subtitles are non-English
-5. **Optionally set region** — Click "Set Region" to draw a rectangle on the subtitle area
+5. **Optionally set region** — Click "Set Region" to draw one or more subtitle rectangles; for moving layouts, enter start/end seconds and add timed ranges
 6. **Start Processing** and monitor progress
 7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame
 
@@ -302,6 +302,24 @@ before/after retry config in the next batch report.
 | `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
 | `--output-frames` | Write cleaned frames as individual PNGs instead of a video | Off |
 | `--json-log PATH` | Append a structured JSON-line log | - |
+
+`--config` accepts the same manual region schema used by the GUI. Use
+`subtitle_area` for one global rectangle, `subtitle_areas` for multiple global
+rectangles, or `subtitle_region_spans` for frame-time-specific masks:
+
+```json
+{
+  "subtitle_region_spans": [
+    {"rect": [80, 720, 1180, 820], "start": 0.0, "end": 14.5},
+    {"rect": [120, 40, 900, 150], "start": 14.5, "end": 0.0}
+  ],
+  "sttn_skip_detection": true
+}
+```
+
+`end: 0.0` means the region stays active through the end of the processed
+range. With `sttn_skip_detection` enabled, inactive timed ranges produce an
+empty mask instead of reusing a previous manual mask.
 
 ## Configuration
 

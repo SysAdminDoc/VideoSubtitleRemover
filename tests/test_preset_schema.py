@@ -114,6 +114,28 @@ class PresetSchemaTests(unittest.TestCase):
         self.assertIn("mask_dilate_px", fields)
         self.assertNotIn("update_check", fields)
 
+    def test_timed_region_spans_round_trip_when_requested(self):
+        config = gui_config.ProcessingConfig(
+            subtitle_region_spans=[
+                {"rect": (4, 8, 80, 32), "start": 1.5, "end": 3.0},
+            ]
+        )
+
+        ok = gui_config.save_user_preset(
+            "Timed mask",
+            "Timed region preset",
+            config,
+            fields=["subtitle_region_spans"],
+        )
+
+        self.assertTrue(ok)
+        target = gui_config.ProcessingConfig()
+        self.assertTrue(gui_config.apply_preset(target, "Timed mask"))
+        self.assertEqual(
+            target.subtitle_region_spans,
+            [{"rect": (4, 8, 80, 32), "start": 1.5, "end": 3.0}],
+        )
+
     def test_export_preset_filters_unsupported_existing_fields(self):
         gui_config.PRESETS_FILE.write_text(
             json.dumps({

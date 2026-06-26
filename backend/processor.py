@@ -903,9 +903,43 @@ class SubtitleRemover:
         except Exception as exc:
             logger.warning(f"SRT write failed: {exc}", exc_info=True)
 
-    def _fixed_region_boxes(self) -> Optional[List[Tuple[int, int, int, int]]]:
-        """Return explicit mask rects from config, preferring the multi-region
-        list if set, falling back to the single-rect legacy field."""
+    def _fixed_region_boxes(
+        self,
+        time_seconds: Optional[float] = None,
+    ) -> Optional[List[Tuple[int, int, int, int]]]:
+        """Return explicit mask rects from config for the current time.
+
+        Timed spans intentionally override the legacy global fields: a user who
+        defines time-ranged regions expects inactive ranges to stop masking
+        rather than silently falling back to a broad global rectangle.
+        """
+        spans = getattr(self.config, "subtitle_region_spans", None)
+        if spans:
+            try:
+                seconds = float(time_seconds or 0.0)
+            except (TypeError, ValueError):
+                seconds = 0.0
+            if not np.isfinite(seconds) or seconds < 0.0:
+                seconds = 0.0
+            active = []
+            for span in spans:
+                if not isinstance(span, dict):
+                    continue
+                rect = span.get("rect")
+                if not rect:
+                    continue
+                try:
+                    start = float(span.get("start", 0.0) or 0.0)
+                    end = float(span.get("end", 0.0) or 0.0)
+                except (TypeError, ValueError):
+                    start, end = 0.0, 0.0
+                if not np.isfinite(start) or start < 0.0:
+                    start = 0.0
+                if not np.isfinite(end) or end < 0.0:
+                    end = 0.0
+                if start <= seconds and (end <= 0.0 or seconds < end):
+                    active.append(tuple(rect))
+            return active or None
         if self.config.subtitle_areas:
             return list(self.config.subtitle_areas)
         if self.config.subtitle_area:
@@ -923,7 +957,7 @@ class SubtitleRemover:
                 raise ValueError(f"Could not load image: {input_path}")
 
             self._report_progress(0.3, "Detecting text regions...")
-            fixed = self._fixed_region_boxes()
+            fixed = self._fixed_region_boxes(0.0)
             confidences = None
             if fixed:
                 boxes = fixed
@@ -1200,7 +1234,7 @@ class SubtitleRemover:
             else:
                 reader = cap
             last_mask = None  # cached mask for frame-skip optimization
-            fixed_mask = None  # cached mask for skip_detection mode
+            fixed_mask_cache = {}  # cached masks for skip_detection mode
 
             # RM-27 Whisper fallback: pre-compute frame spans where
             # Whisper detected speech. When OCR returns no boxes for a
@@ -1277,7 +1311,10 @@ class SubtitleRemover:
                     logger.warning(f"Could not open mask video writer: {mask_path}")
                     mask_writer = None
 
-            fixed_boxes = self._fixed_region_boxes()
+            timed_region_spans = bool(getattr(
+                self.config, "subtitle_region_spans", None))
+            static_fixed_boxes = (
+                None if timed_region_spans else self._fixed_region_boxes())
 
             while True:
                 frames = []
@@ -1290,10 +1327,27 @@ class SubtitleRemover:
                     if not ret:
                         break
 
-                    if self.config.sttn_skip_detection and fixed_boxes:
-                        # Fixed region: create mask once and reuse for all frames
-                        if fixed_mask is None:
-                            fixed_mask = self._create_mask(frame.shape, fixed_boxes)
+                    absolute_idx = start_frame + frame_idx
+                    frame_seconds = absolute_idx / max(fps, 1.0)
+                    fixed_boxes = (
+                        self._fixed_region_boxes(frame_seconds)
+                        if timed_region_spans else static_fixed_boxes
+                    )
+
+                    if self.config.sttn_skip_detection and (
+                            fixed_boxes or timed_region_spans):
+                        # Fixed region: cache one mask per active rect set. With
+                        # timed spans, inactive frames get an explicit empty
+                        # mask so stale masks cannot leak across boundaries.
+                        if fixed_boxes:
+                            mask_key = tuple(tuple(r) for r in fixed_boxes)
+                            fixed_mask = fixed_mask_cache.get(mask_key)
+                            if fixed_mask is None:
+                                fixed_mask = self._create_mask(
+                                    frame.shape, fixed_boxes)
+                                fixed_mask_cache[mask_key] = fixed_mask
+                        else:
+                            fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                         frames.append(frame)
                         masks.append(fixed_mask)
                         frame_idx += 1
@@ -1303,7 +1357,9 @@ class SubtitleRemover:
                     # the frame is near-identical to the last detected one.
                     reuse_by_phash = False
                     cur_hash = None  # may be set below; reused to avoid double-compute
-                    if (self.config.phash_skip_enable and last_mask is not None
+                    if (not timed_region_spans
+                            and self.config.phash_skip_enable
+                            and last_mask is not None
                             and last_hash is not None):
                         cur_hash = _phash(frame)
                         if _phash_distance(cur_hash, last_hash) <= self.config.phash_skip_distance:
@@ -1312,8 +1368,8 @@ class SubtitleRemover:
                     # Keyframe-driven detection: if we have a keyframe index
                     # set, OCR only at I-frames, reuse last mask between.
                     reuse_by_keyframe = False
-                    if keyframe_set and last_mask is not None:
-                        absolute_idx = start_frame + frame_idx
+                    if (not timed_region_spans
+                            and keyframe_set and last_mask is not None):
                         if absolute_idx not in keyframe_set:
                             reuse_by_keyframe = True
 
@@ -1322,7 +1378,10 @@ class SubtitleRemover:
                         masks.append(last_mask)
                         frame_idx += 1
                         continue
-                    elif frame_skip > 0 and last_mask is not None and frame_idx % (frame_skip + 1) != 0:
+                    elif (not timed_region_spans
+                          and frame_skip > 0
+                          and last_mask is not None
+                          and frame_idx % (frame_skip + 1) != 0):
                         # Reuse cached mask for intermediate frames
                         frames.append(frame)
                         masks.append(last_mask)

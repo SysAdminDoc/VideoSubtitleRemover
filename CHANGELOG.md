@@ -71,6 +71,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `VSR_RAPIDOCR_ENGINE=openvino`, falls back to ONNX Runtime on initialization
   failure, and reports the preferred OCR engine in backend status and release
   evidence.
+- **Time-ranged manual subtitle regions.** The region selector can save
+  optional start/end seconds for manual masks, settings/presets/CLI JSON config
+  round-trip `subtitle_region_spans`, and processing disables stale mask reuse
+  across timed-region boundaries.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

@@ -71,7 +71,8 @@ MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
 # karaoke_x_gap_px, karaoke_y_overlap. All have backend-default values
 # so a missing key in a format-1 file resolves to the same behaviour
 # users saw before the bump -- no field-rename migration needed.
-VSR_SETTINGS_FORMAT = 2
+# Format 2 -> 3: added subtitle_region_spans for time-ranged manual masks.
+VSR_SETTINGS_FORMAT = 3
 
 # -- Enums ------------------------------------------------------------------
 
@@ -215,6 +216,60 @@ def _coerce_rect_list(value, *, label: Optional[str] = None,
     return rects or None
 
 
+def _coerce_region_span(value, *, label: Optional[str] = None,
+                        warn_invalid: bool = False) -> Optional[dict]:
+    rect_source = None
+    start = 0.0
+    end = 0.0
+    if isinstance(value, dict):
+        rect_source = (
+            value.get("rect")
+            or value.get("region")
+            or value.get("box")
+        )
+        if rect_source is None and all(k in value for k in ("x1", "y1", "x2", "y2")):
+            rect_source = [value.get("x1"), value.get("y1"),
+                           value.get("x2"), value.get("y2")]
+        start = value.get("start", value.get("start_seconds", 0.0))
+        end = value.get("end", value.get("end_seconds", 0.0))
+    elif isinstance(value, (list, tuple)):
+        if len(value) == 4:
+            rect_source = value
+        elif len(value) == 6:
+            rect_source = value[:4]
+            start = value[4]
+            end = value[5]
+        elif len(value) == 3:
+            rect_source = value[0]
+            start = value[1]
+            end = value[2]
+    rect = _coerce_rect(rect_source, label=label, warn_invalid=warn_invalid)
+    if rect is None:
+        return None
+    start_s = _coerce_float(start, 0.0, 0.0)
+    end_s = _coerce_float(end, 0.0, 0.0)
+    if end_s and end_s <= start_s:
+        end_s = 0.0
+    return {"rect": rect, "start": start_s, "end": end_s}
+
+
+def _coerce_region_span_list(value, *, label: Optional[str] = None,
+                             warn_invalid: bool = False) -> Optional[List[dict]]:
+    if not isinstance(value, (list, tuple)):
+        if warn_invalid:
+            logger.warning("Discarding invalid %s span list: %r",
+                           label or "region spans", value)
+        return None
+    spans = []
+    for index, item in enumerate(value):
+        item_label = f"{label or 'region_spans'}[{index}]"
+        span = _coerce_region_span(
+            item, label=item_label, warn_invalid=warn_invalid)
+        if span:
+            spans.append(span)
+    return spans or None
+
+
 def _coerce_gui_mode(value) -> InpaintMode:
     if isinstance(value, InpaintMode):
         return value
@@ -294,6 +349,7 @@ class ProcessingConfig:
     edge_ring_px: int = 2
 
     subtitle_areas: Optional[List[Tuple[int, int, int, int]]] = None
+    subtitle_region_spans: Optional[List[dict]] = None
     auto_band: bool = False
     export_srt: bool = False
     export_mask_video: bool = False
@@ -359,6 +415,18 @@ class ProcessingConfig:
                 payload[field_def.name] = (
                     [list(r) for r in value] if value else None
                 )
+            elif field_def.name == "subtitle_region_spans":
+                spans = _coerce_region_span_list(value) or []
+                payload[field_def.name] = (
+                    [
+                        {
+                            "rect": list(span["rect"]),
+                            "start": float(span.get("start", 0.0)),
+                            "end": float(span.get("end", 0.0)),
+                        }
+                        for span in spans
+                    ] or None
+                )
             else:
                 payload[field_def.name] = value
         payload["vsr_settings_format"] = VSR_SETTINGS_FORMAT
@@ -375,6 +443,8 @@ class ProcessingConfig:
         self.lama_super_fast = _coerce_bool(self.lama_super_fast, False)
         self.subtitle_area = _coerce_rect(self.subtitle_area)
         self.subtitle_areas = _coerce_rect_list(self.subtitle_areas)
+        self.subtitle_region_spans = _coerce_region_span_list(
+            self.subtitle_region_spans)
         self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
         self.detection_vertical = _coerce_bool(self.detection_vertical, False)
@@ -537,6 +607,9 @@ class ProcessingConfig:
             elif name == "subtitle_areas":
                 kwargs[name] = _coerce_rect_list(
                     raw, label=name, warn_invalid=raw is not None)
+            elif name == "subtitle_region_spans":
+                kwargs[name] = _coerce_region_span_list(
+                    raw, label=name, warn_invalid=raw is not None)
             else:
                 kwargs[name] = raw
         return cls(**kwargs).normalized()
@@ -656,6 +729,11 @@ def _migrate_settings(data: dict) -> dict:
         data = dict(data)
         data["vsr_settings_format"] = 2
         version = 2
+
+    if version < 3:
+        data = dict(data)
+        data["vsr_settings_format"] = 3
+        version = 3
 
     return data
 
@@ -823,6 +901,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "phash_skip_distance",
     "colour_tune_enable",
     "colour_tune_tolerance",
+    "subtitle_region_spans",
     "remove_subtitles",
     "remove_chyrons",
     "chyron_min_hits",

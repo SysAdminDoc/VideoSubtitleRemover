@@ -42,7 +42,8 @@ from gui.config import (
     InpaintMode, ProcessingStatus, STATUS_UI,
     ProcessingConfig, QueueItem,
     _coerce_bool, _coerce_int, _coerce_float, _coerce_text,
-    _coerce_rect, _coerce_rect_list, _coerce_gui_mode,
+    _coerce_rect, _coerce_rect_list, _coerce_region_span_list,
+    _coerce_gui_mode,
     _read_json_object, _write_json_atomic,
     _migrate_settings, consume_settings_load_notice, load_settings, save_settings,
     PRESETS_FILE, list_presets, apply_preset,
@@ -442,12 +443,17 @@ class VideoSubtitleRemoverApp:
             [tuple(region) for region in self.config.subtitle_areas]
             if self.config.subtitle_areas else None
         )
+        spans = _coerce_region_span_list(
+            getattr(self.config, "subtitle_region_spans", None))
         updated = 0
         with self.queue_lock:
             for item in self.queue:
                 if item.status == ProcessingStatus.IDLE:
                     item.config.subtitle_area = area
                     item.config.subtitle_areas = list(areas) if areas else None
+                    item.config.subtitle_region_spans = (
+                        list(spans) if spans else None
+                    )
                     item.config.normalized()
                     updated += 1
         if updated:
@@ -793,8 +799,17 @@ class VideoSubtitleRemoverApp:
 
     def _update_region_label_display(self):
         """Refresh the region summary line."""
+        spans = getattr(self.config, "subtitle_region_spans", None) or []
         areas = getattr(self.config, "subtitle_areas", None) or []
-        if len(areas) > 1:
+        if spans:
+            self.region_label.config(
+                text=f"Timed manual regions: {len(spans)} rectangle"
+                     f"{'s' if len(spans) != 1 else ''}",
+                fg=Theme.TEXT_PRIMARY,
+            )
+            self.region_meta.config(text="Time-ranged mask regions",
+                                    fg=Theme.SUCCESS)
+        elif len(areas) > 1:
             self.region_label.config(
                 text=f"Manual regions: {len(areas)} fixed rectangles",
                 fg=Theme.TEXT_PRIMARY,
@@ -811,8 +826,29 @@ class VideoSubtitleRemoverApp:
             self.region_label.config(text="Automatic subtitle detection", fg=Theme.TEXT_PRIMARY)
             self.region_meta.config(text="Recommended default", fg=Theme.TEXT_MUTED)
         if hasattr(self, "region_reset_btn"):
-            has_manual = bool(areas) or self.config.subtitle_area is not None
+            has_manual = (
+                bool(spans) or bool(areas)
+                or self.config.subtitle_area is not None
+            )
             self.region_reset_btn.set_enabled(has_manual and not self.is_processing)
+
+    @staticmethod
+    def _active_timed_region_rects(spans, seconds: float = 0.0):
+        """Return timed region rects active at ``seconds`` in GUI config shape."""
+        normalized = _coerce_region_span_list(spans) or []
+        try:
+            current = float(seconds)
+        except (TypeError, ValueError):
+            current = 0.0
+        if not math.isfinite(current) or current < 0.0:
+            current = 0.0
+        rects = []
+        for span in normalized:
+            start = float(span.get("start", 0.0) or 0.0)
+            end = float(span.get("end", 0.0) or 0.0)
+            if start <= current and (end <= 0.0 or current < end):
+                rects.append(tuple(span["rect"]))
+        return rects
 
     def _start_throbber(self):
         """Animate the preview area with a shimmer placeholder and moving dots
@@ -1288,7 +1324,12 @@ class VideoSubtitleRemoverApp:
                     frame = safe_imread(source)
                 if frame is None:
                     return None
-                region = getattr(self.config, "subtitle_area", None)
+                active_regions = self._active_timed_region_rects(
+                    getattr(self.config, "subtitle_region_spans", None), 0.0)
+                region = (
+                    active_regions[0] if active_regions
+                    else getattr(self.config, "subtitle_area", None)
+                )
                 from backend.detection import probe_language
                 return probe_language(frame, region=region)
             except Exception as exc:
@@ -1542,16 +1583,29 @@ class VideoSubtitleRemoverApp:
                     detection_threshold=snapshot_cfg.detection_threshold,
                     subtitle_area=snapshot_cfg.subtitle_area,
                     subtitle_areas=snapshot_cfg.subtitle_areas,
+                    subtitle_region_spans=snapshot_cfg.subtitle_region_spans,
                     mask_dilate_px=snapshot_cfg.mask_dilate_px,
                     mask_feather_px=snapshot_cfg.mask_feather_px,
                     tbe_enable=snapshot_cfg.tbe_enable,
                 )
                 remover = _Remover(backend_cfg)
                 # Single-frame inpaint -- detect, build mask, inpaint.
-                fixed = (snapshot_cfg.subtitle_areas
-                          or ([snapshot_cfg.subtitle_area] if snapshot_cfg.subtitle_area else None))
+                timed_fixed = self._active_timed_region_rects(
+                    getattr(snapshot_cfg, "subtitle_region_spans", None), 0.0)
+                timed_configured = bool(getattr(
+                    snapshot_cfg, "subtitle_region_spans", None))
+                fixed = timed_fixed or (
+                    None if timed_configured else (
+                        snapshot_cfg.subtitle_areas
+                        or ([snapshot_cfg.subtitle_area]
+                            if snapshot_cfg.subtitle_area else None)
+                    )
+                )
                 if fixed:
                     boxes = list(fixed)
+                elif (timed_configured
+                      and getattr(snapshot_cfg, "sttn_skip_detection", False)):
+                    boxes = []
                 else:
                     boxes = remover.detector.detect(
                         frame, snapshot_cfg.detection_threshold)
@@ -4069,9 +4123,9 @@ class VideoSubtitleRemoverApp:
         Drag = primary rect (or new rect when "Add another" was clicked).
         The frame slider re-loads the chosen frame so users can target a
         non-zero timecode for clips that open on a black intro card. The
-        backend already accepts a `subtitle_areas` list; once the user
-        clicks "Save" we write a single rect to `subtitle_area` (back-
-        compat) AND the full rect list to `subtitle_areas`.
+        backend accepts `subtitle_areas` for global regions and
+        `subtitle_region_spans` for optional start/end time windows. Legacy
+        saves still write the first rect to `subtitle_area` for compatibility.
         """
         source_path = None
         selected = self._get_selected_queue_item(fallback_to_first=True)
@@ -4136,9 +4190,13 @@ class VideoSubtitleRemoverApp:
             # release it joins the list. Adding another rect re-arms the
             # canvas for the next drag.
             rects: List[Tuple[int, int, int, int]] = []
-            preload = self.config.subtitle_areas or (
-                [self.config.subtitle_area] if self.config.subtitle_area else []
-            )
+            region_spans = _coerce_region_span_list(
+                getattr(self.config, "subtitle_region_spans", None)) or []
+            preload = []
+            if not region_spans:
+                preload = self.config.subtitle_areas or (
+                    [self.config.subtitle_area] if self.config.subtitle_area else []
+                )
             rects.extend([tuple(r) for r in preload if r])
 
             win = tk.Toplevel(self.root)
@@ -4169,6 +4227,13 @@ class VideoSubtitleRemoverApp:
                 for rid in rect_ids:
                     canvas.delete(rid)
                 rect_ids.clear()
+                for span in region_spans:
+                    x1, y1, x2, y2 = span["rect"]
+                    rect_ids.append(canvas.create_rectangle(
+                        x1 * scale, y1 * scale, x2 * scale, y2 * scale,
+                        outline=Theme.WARNING, width=2,
+                        stipple="gray50", fill=Theme.WARNING,
+                    ))
                 for (x1, y1, x2, y2) in rects:
                     rect_ids.append(canvas.create_rectangle(
                         x1 * scale, y1 * scale, x2 * scale, y2 * scale,
@@ -4255,27 +4320,141 @@ class VideoSubtitleRemoverApp:
                 )
                 slider.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
 
+            time_row = None
+            start_var = tk.StringVar()
+            end_var = tk.StringVar()
+            span_summary_var = tk.StringVar()
+            if is_video:
+                existing_starts = {round(float(s.get("start", 0.0)), 3)
+                                   for s in region_spans}
+                existing_ends = {round(float(s.get("end", 0.0)), 3)
+                                 for s in region_spans}
+                if len(existing_starts) == 1 and len(existing_ends) == 1:
+                    start_value = next(iter(existing_starts))
+                    end_value = next(iter(existing_ends))
+                    start_var.set(f"{start_value:g}" if start_value else "")
+                    end_var.set(f"{end_value:g}" if end_value else "")
+
+                time_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
+                time_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+                tk.Label(time_row, text="Start sec",
+                         font=f(Theme.F_META),
+                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
+                start_entry = tk.Entry(
+                    time_row, width=9, textvariable=start_var,
+                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                    insertbackground=Theme.TEXT_PRIMARY,
+                    relief="flat",
+                )
+                start_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+                tk.Label(time_row, text="End sec",
+                         font=f(Theme.F_META),
+                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
+                end_entry = tk.Entry(
+                    time_row, width=9, textvariable=end_var,
+                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                    insertbackground=Theme.TEXT_PRIMARY,
+                    relief="flat",
+                )
+                end_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+                span_summary_var.set(
+                    f"{len(region_spans)} timed region"
+                    f"{'s' if len(region_spans) != 1 else ''}"
+                    if region_spans else "Optional"
+                )
+                span_label = tk.Label(
+                    time_row, textvariable=span_summary_var,
+                    font=f(Theme.F_META),
+                    bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED,
+                )
+                span_label.pack(side="right")
+                win._vsr_start_entry = start_entry
+                win._vsr_end_entry = end_entry
+
             # Action row: Add another, Clear all, Save.
             actions = tk.Frame(win, bg=Theme.BG_OVERLAY)
             actions.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_MD))
 
             def _clear_all():
                 rects.clear()
+                region_spans.clear()
+                span_summary_var.set("Optional" if is_video else "")
                 _draw_saved_rects()
 
+            def _parse_time_inputs():
+                start_raw = start_var.get().strip() if is_video else ""
+                end_raw = end_var.get().strip() if is_video else ""
+                has_time = bool(start_raw or end_raw)
+                start_s = self._safe_float(start_raw, 0.0)
+                end_s = self._safe_float(end_raw, 0.0)
+                start_s = max(0.0, start_s)
+                end_s = max(0.0, end_s)
+                if end_s and end_s <= start_s:
+                    self._update_status(
+                        "Timed region end must be after start", "warning")
+                    return None
+                return has_time, start_s, end_s
+
+            def _add_timed_regions(close_on_empty: bool = False) -> bool:
+                parsed = _parse_time_inputs()
+                if parsed is None:
+                    return False
+                has_time, start_s, end_s = parsed
+                if not rects:
+                    if close_on_empty:
+                        return True
+                    self._update_status("Draw a region before adding a timed range", "warning")
+                    return False
+                if not is_video:
+                    return False
+                if not has_time and not region_spans:
+                    if not close_on_empty:
+                        self._update_status(
+                            "Enter a start or end second for a timed range",
+                            "warning",
+                        )
+                    return True if close_on_empty else False
+                for rect in rects:
+                    region_spans.append({
+                        "rect": tuple(rect),
+                        "start": start_s,
+                        "end": end_s,
+                    })
+                rects.clear()
+                start_var.set("")
+                end_var.set("")
+                span_summary_var.set(
+                    f"{len(region_spans)} timed region"
+                    f"{'s' if len(region_spans) != 1 else ''}"
+                )
+                _draw_saved_rects()
+                return True
+
             def _save_and_close():
-                # Single-rect back-compat field stores the union or the
-                # first rect; multi-rect field carries the full list.
+                if is_video and not _add_timed_regions(close_on_empty=True):
+                    return
+                spans = _coerce_region_span_list(region_spans) or []
                 if rects:
                     self.config.subtitle_areas = [tuple(r) for r in rects]
                     self.config.subtitle_area = rects[0]
+                    self.config.subtitle_region_spans = None
                     self._update_status(
                         f"Saved {len(rects)} subtitle region{'s' if len(rects) != 1 else ''}",
+                        "success",
+                    )
+                elif spans:
+                    self.config.subtitle_region_spans = spans
+                    self.config.subtitle_areas = None
+                    self.config.subtitle_area = None
+                    self._update_status(
+                        f"Saved {len(spans)} timed subtitle region"
+                        f"{'s' if len(spans) != 1 else ''}",
                         "success",
                     )
                 else:
                     self.config.subtitle_areas = None
                     self.config.subtitle_area = None
+                    self.config.subtitle_region_spans = None
                     self._update_status("Cleared manual subtitle regions", "info")
                 self._apply_region_settings_to_idle_items()
                 self._update_region_label_display()
@@ -4283,6 +4462,10 @@ class VideoSubtitleRemoverApp:
 
             ModernButton(actions, text="Clear all", command=_clear_all,
                          style="ghost", size="sm", width=92).pack(side="left")
+            if is_video:
+                ModernButton(actions, text="Add timed", command=_add_timed_regions,
+                             style="secondary", size="sm", width=96).pack(
+                                 side="left", padx=(Theme.S_SM, 0))
             ModernButton(actions, text="Save", command=_save_and_close,
                          style="primary", size="sm", width=92).pack(
                              side="right")
@@ -4297,7 +4480,7 @@ class VideoSubtitleRemoverApp:
                      font=f(Theme.F_BODY_SM, "bold"),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
             tk.Label(hint_frame,
-                     text="Scrub the slider to pick a frame where the subtitle is visible.",
+                     text="Scrub to a visible frame; enter seconds and use Add timed for moving subtitles.",
                      font=f(Theme.F_META),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
 
@@ -4324,12 +4507,14 @@ class VideoSubtitleRemoverApp:
                     logger.warning("Region selector capture release failed", exc_info=True)
 
     def _reset_region(self):
-        """Reset subtitle region to auto-detect. Clears BOTH region
-        fields -- the backend honours subtitle_areas as fixed masks, so
-        leaving it set would keep using the old rectangles while the UI
-        claims automatic detection."""
+        """Reset subtitle region to auto-detect.
+
+        Clears every manual-region field so the backend cannot keep using old
+        fixed or time-ranged rectangles while the UI claims automatic detection.
+        """
         self.config.subtitle_area = None
         self.config.subtitle_areas = None
+        self.config.subtitle_region_spans = None
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         self._update_status("Subtitle detection returned to automatic mode")
@@ -5284,8 +5469,14 @@ class VideoSubtitleRemoverApp:
             self._preview_photo = None
             lang = self.lang_var.get()
             threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
-            sub_areas = list(getattr(self.config, "subtitle_areas", None) or [])
-            if not sub_areas and self.config.subtitle_area:
+            timed_spans = getattr(self.config, "subtitle_region_spans", None) or []
+            timed_regions_configured = bool(timed_spans)
+            sub_areas = self._active_timed_region_rects(timed_spans, 0.0)
+            if (not sub_areas and not timed_regions_configured
+                    and getattr(self.config, "subtitle_areas", None)):
+                sub_areas = list(getattr(self.config, "subtitle_areas", None) or [])
+            if (not sub_areas and not timed_regions_configured
+                    and self.config.subtitle_area):
                 sub_areas = [self.config.subtitle_area]
             item_file = item.file_path
             item_id = item.id
@@ -5314,6 +5505,7 @@ class VideoSubtitleRemoverApp:
                     if show_mask:
                         self._preview_bg_mask(
                             raw_frame, lang, threshold, sub_areas,
+                            timed_regions_configured,
                             item_file, item_id, preview_request_id,
                             max_w, max_h, _cv2, to_pil)
                     else:
@@ -5343,6 +5535,7 @@ class VideoSubtitleRemoverApp:
             self._preview_label.config(text=f"Preview error: {e}", image="")
 
     def _preview_bg_mask(self, raw_frame, lang, threshold, sub_areas,
+                          timed_regions_configured,
                           item_file, item_id, preview_request_id,
                           max_w, max_h, _cv2, to_pil):
         try:
@@ -5355,6 +5548,9 @@ class VideoSubtitleRemoverApp:
             frame_copy = raw_frame.copy()
             if sub_areas:
                 boxes = sub_areas
+            elif (timed_regions_configured
+                  and getattr(self.config, "sttn_skip_detection", False)):
+                boxes = []
             else:
                 boxes = det.detect(frame_copy, threshold)
             vis = frame_copy.copy()
@@ -5371,8 +5567,12 @@ class VideoSubtitleRemoverApp:
                 self._stop_throbber()
                 self._preview_photo = ImageTk.PhotoImage(img)
                 self.preview_title_label.config(text=f"Detection mask for {Path(item_file).name}")
-                if sub_areas:
+                if sub_areas and timed_regions_configured:
+                    meta = "Timed manual region is active on the first frame."
+                elif sub_areas:
                     meta = "Manual region applied. Detection used your saved subtitle band."
+                elif timed_regions_configured:
+                    meta = "Timed manual regions are configured but inactive on the first frame."
                 elif n:
                     meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
                 else:
@@ -5553,8 +5753,13 @@ class VideoSubtitleRemoverApp:
             self.region_btn.set_enabled(not locked)
             if hasattr(self, "preview_region_btn"):
                 self.preview_region_btn.set_enabled(not locked)
+            has_manual_region = (
+                self.config.subtitle_area is not None
+                or bool(getattr(self.config, "subtitle_areas", None))
+                or bool(getattr(self.config, "subtitle_region_spans", None))
+            )
             self.region_reset_btn.set_enabled(
-                (not locked) and self.config.subtitle_area is not None)
+                (not locked) and has_manual_region)
             self.adv_toggle.set_enabled(not locked)
             if hasattr(self, "drop_area"):
                 self.drop_area.set_import_enabled(not locked)
@@ -6403,6 +6608,8 @@ class VideoSubtitleRemoverApp:
                 sam2_refine=getattr(item.config, 'sam2_refine', False),
                 edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
                 subtitle_areas=getattr(item.config, 'subtitle_areas', None),
+                subtitle_region_spans=getattr(
+                    item.config, 'subtitle_region_spans', None),
                 export_srt=getattr(item.config, 'export_srt', False),
                 export_mask_video=getattr(item.config, 'export_mask_video', False),
                 adaptive_batch=getattr(item.config, 'adaptive_batch', True),
@@ -6439,7 +6646,10 @@ class VideoSubtitleRemoverApp:
 
             # Auto subtitle-band detection -- run before the main pass so we
             # can pin the dominant band once per file. Cheap (30-frame probe).
-            if getattr(item.config, 'auto_band', False) and not item.config.subtitle_area:
+            if (getattr(item.config, 'auto_band', False)
+                    and not item.config.subtitle_area
+                    and not getattr(item.config, 'subtitle_areas', None)
+                    and not getattr(item.config, 'subtitle_region_spans', None)):
                 try:
                     # Use a minimal config just for the band probe
                     probe_cfg = BackendConfig(

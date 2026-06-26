@@ -170,6 +170,10 @@ class ProcessingConfig:
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
     # is ignored and every rect is added to the composite mask.
     subtitle_areas: Optional[List[Tuple[int, int, int, int]]] = None
+    # Time-ranged manual regions. Each entry is
+    # {"rect": (x1,y1,x2,y2), "start": seconds, "end": seconds}; end=0 means
+    # open-ended. When present, active rects are selected per video frame.
+    subtitle_region_spans: Optional[List[dict]] = None
 
     # Optional debug artifacts
     export_mask_video: bool = False   # write a B/W mp4 of the per-frame masks
@@ -378,6 +382,53 @@ def _coerce_rect_list(value) -> Optional[List[Tuple[int, int, int, int]]]:
     return rects or None
 
 
+def _coerce_region_span(value) -> Optional[dict]:
+    rect_source = None
+    start = 0.0
+    end = 0.0
+    if isinstance(value, dict):
+        rect_source = (
+            value.get("rect")
+            or value.get("region")
+            or value.get("box")
+        )
+        if rect_source is None and all(k in value for k in ("x1", "y1", "x2", "y2")):
+            rect_source = [value.get("x1"), value.get("y1"),
+                           value.get("x2"), value.get("y2")]
+        start = value.get("start", value.get("start_seconds", 0.0))
+        end = value.get("end", value.get("end_seconds", 0.0))
+    elif isinstance(value, (list, tuple)):
+        if len(value) == 4:
+            rect_source = value
+        elif len(value) == 6:
+            rect_source = value[:4]
+            start = value[4]
+            end = value[5]
+        elif len(value) == 3:
+            rect_source = value[0]
+            start = value[1]
+            end = value[2]
+    rect = _coerce_rect(rect_source)
+    if rect is None:
+        return None
+    start_s = _coerce_float(start, 0.0, 0.0)
+    end_s = _coerce_float(end, 0.0, 0.0)
+    if end_s and end_s <= start_s:
+        end_s = 0.0
+    return {"rect": rect, "start": start_s, "end": end_s}
+
+
+def _coerce_region_span_list(value) -> Optional[List[dict]]:
+    if not isinstance(value, (list, tuple)):
+        return None
+    spans = []
+    for item in value:
+        span = _coerce_region_span(item)
+        if span:
+            spans.append(span)
+    return spans or None
+
+
 _MODE_ALIASES = {
     "sttn": InpaintMode.STTN,
     "lama": InpaintMode.LAMA,
@@ -445,6 +496,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.lama_super_fast = _coerce_bool(config.lama_super_fast, False)
     config.subtitle_area = _coerce_rect(config.subtitle_area)
     config.subtitle_areas = _coerce_rect_list(config.subtitle_areas)
+    config.subtitle_region_spans = _coerce_region_span_list(
+        getattr(config, "subtitle_region_spans", None))
     config.detection_threshold = _coerce_float(config.detection_threshold, 0.5, 0.1, 1.0)
     config.detection_lang = _coerce_text(config.detection_lang, "en", 24).lower()
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)
@@ -571,4 +624,3 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.karaoke_x_gap_px = _coerce_int(config.karaoke_x_gap_px, 20, 0, 1024)
     config.karaoke_y_overlap = _coerce_float(config.karaoke_y_overlap, 0.5, 0.0, 1.0)
     return config
-

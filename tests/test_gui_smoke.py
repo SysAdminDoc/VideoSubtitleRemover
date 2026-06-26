@@ -245,6 +245,9 @@ class GuiSmokeTests(unittest.TestCase):
 
         app.config.subtitle_area = (10, 20, 110, 54)
         app.config.subtitle_areas = [(10, 20, 110, 54), (12, 60, 108, 76)]
+        app.config.subtitle_region_spans = [
+            {"rect": (14, 70, 114, 92), "start": 2.0, "end": 4.0}
+        ]
         self.assertEqual(app._apply_region_settings_to_idle_items(), 1)
 
         self.assertEqual(item.config.subtitle_area, (10, 20, 110, 54))
@@ -252,13 +255,19 @@ class GuiSmokeTests(unittest.TestCase):
             item.config.subtitle_areas,
             [(10, 20, 110, 54), (12, 60, 108, 76)],
         )
+        self.assertEqual(
+            item.config.subtitle_region_spans,
+            [{"rect": (14, 70, 114, 92), "start": 2.0, "end": 4.0}],
+        )
 
         app.config.subtitle_area = None
         app.config.subtitle_areas = None
+        app.config.subtitle_region_spans = None
         self.assertEqual(app._apply_region_settings_to_idle_items(), 1)
 
         self.assertIsNone(item.config.subtitle_area)
         self.assertIsNone(item.config.subtitle_areas)
+        self.assertIsNone(item.config.subtitle_region_spans)
 
     def test_region_selector_save_updates_visible_and_queued_config(self):
         app = self._make_app(withdraw=False)
@@ -307,6 +316,74 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app.config.subtitle_areas, [expected])
             self.assertEqual(item.config.subtitle_area, expected)
             self.assertEqual(item.config.subtitle_areas, [expected])
+            self.assertFalse(selector.winfo_exists())
+        finally:
+            self._destroy_app(app)
+
+    def test_region_selector_saves_timed_video_regions(self):
+        app = self._make_app(withdraw=False)
+        try:
+            import cv2
+            import numpy as np
+            from gui.widgets import ModernButton
+
+            source = Path(self._tmpdir.name) / "selector-timed.avi"
+            frame_w, frame_h = 320, 180
+            writer = cv2.VideoWriter(
+                str(source),
+                cv2.VideoWriter_fourcc(*"MJPG"),
+                10.0,
+                (frame_w, frame_h),
+            )
+            if not writer.isOpened():
+                self.skipTest("OpenCV video writer unavailable")
+            try:
+                for idx in range(4):
+                    image = Image.new("RGB", (frame_w, frame_h), (20, 24, 32))
+                    draw = ImageDraw.Draw(image)
+                    draw.rectangle((40, 120, 280, 152), fill=(235, 235, 235))
+                    draw.text((80, 128), f"subtitle {idx}", fill=(0, 0, 0))
+                    writer.write(cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
+            finally:
+                writer.release()
+
+            with mock.patch.object(app, "_start_soft_subtitle_probe"):
+                with mock.patch.object(app, "_show_preview"):
+                    self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+
+            app._open_region_selector()
+            app.root.update()
+
+            selector = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "Choose subtitle region"
+            )
+            canvas = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, tk.Canvas)
+                and str(widget.cget("cursor")) == "cross"
+            )
+            self._drag_canvas(canvas, (40, 120), (280, 152))
+            selector._vsr_start_entry.insert(0, "0.5")
+            selector._vsr_end_entry.insert(0, "1.4")
+            app.root.update()
+
+            save_button = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Save"
+            )
+            save_button.command()
+            app.root.update()
+
+            expected = [{"rect": (40, 120, 280, 152),
+                         "start": 0.5, "end": 1.4}]
+            self.assertIsNone(app.config.subtitle_area)
+            self.assertIsNone(app.config.subtitle_areas)
+            self.assertEqual(app.config.subtitle_region_spans, expected)
+            self.assertEqual(item.config.subtitle_region_spans, expected)
             self.assertFalse(selector.winfo_exists())
         finally:
             self._destroy_app(app)
@@ -438,6 +515,7 @@ class GuiSmokeTests(unittest.TestCase):
                     "en",
                     0.5,
                     app.config.subtitle_areas,
+                    False,
                     item.file_path,
                     item.id,
                     request_id,
