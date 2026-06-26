@@ -41,8 +41,8 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 54. **Reference-clip regression harness (remainder)** -- synthetic
     reference clips shipped; remaining: a `tests/clips/` corpus of 10-20
     edge-case clips (motion-heavy, karaoke, vertical JP, HDR, thin/thick
-    fonts, dissolves) with a nightly GHA run comparing output hashes and
-    PSNR/SSIM scores to committed baselines.
+    fonts, dissolves) with a scheduled local/release run comparing output
+    hashes and PSNR/SSIM scores to committed baselines.
 
 ---
 
@@ -110,10 +110,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     pair SVT-AV1 output with native film-grain synthesis.
     Source: https://trac.ffmpeg.org/wiki/Encode/AV1
 
-76. **NLE round-trip** -- accept an EDL / XML from Premiere or DaVinci as
-    input and emit a matching sidecar with the cleaned video substituted
-    (the output sidecar writer exists; EDL/XML ingest does not).
-
 ### Simplification
 
 117. **OpenCV 5 DNN for detection models** -- evaluate running RapidOCR's
@@ -163,9 +159,6 @@ Speculative research bench; not commitments.
 88. **Font-aware inpainting** -- classify subtitle font style and apply
     per-class mask dilation and feather presets.
 
-89. **Logo / watermark mode** -- persist the mask across the whole video
-    with TBE using the full video as the temporal window.
-
 90. **AI chat interface** -- optional side panel where a local LLM
     translates natural-language requests into `ProcessingConfig`
     mutations.
@@ -197,13 +190,6 @@ Speculative research bench; not commitments.
     Arabic/Hebrew mirroring of text, button order, and queue scroll.
     Depends on #97.
 
-99. **Restyle mode** -- after removal + SRT export, re-burn a translated
-    or restyled subtitle track via ffmpeg's `subtitles` filter with an
-    `.ass` template.
-
-100. **Watermark addition pipeline** -- burn a user-specified PNG
-     watermark at a configurable corner with fade-in/out after cleaning.
-
 ---
 
 ## Explicitly not on the roadmap
@@ -226,179 +212,142 @@ Speculative research bench; not commitments.
 
 ## Research-Driven Additions
 
-### P1 -- Trust and correctness
+### P1 -- Trust and release readiness
 
-- [ ] P1 -- **Fix Toast list mutation during iteration**
-  Why: `Toast._active` list is mutated by concurrent fade-out completions
-  while `_position()` iterates it, causing skipped toasts or IndexError.
-  Evidence: code audit of `gui/widgets.py` Toast._active list access
-  Touches: `gui/widgets.py` Toast._position(), Toast._fade_step()
-  Acceptance: Use a copy of the list in _position(); no crash on rapid
-  toast stacking.
-  Complexity: S
-
-- [ ] P1 -- **Disable import buttons during batch processing**
-  Why: DragDropFrame's `add_files_btn` and `add_folder_btn` in the empty
-  queue state are never disabled by `set_enabled()`, allowing file addition
-  mid-batch with race conditions against the queue lock.
-  Evidence: code audit of `gui/widgets.py` DragDropFrame, `gui/app.py`
-  _set_controls_enabled()
-  Touches: `gui/app.py` _set_controls_enabled(), `gui/widgets.py`
-  DragDropFrame
-  Acceptance: Import buttons disabled during processing; re-enabled on
-  completion/cancel.
-  Complexity: S
-
-- [ ] P1 -- **Clear SRT entries between process_video() calls**
-  Why: `_srt_entries` is appended to but never cleared between consecutive
-  calls to process_video(), producing contaminated SRT files when the same
-  SubtitleRemover instance processes multiple videos.
-  Evidence: code audit of `backend/processor.py` _srt_entries lifecycle
-  Touches: `backend/processor.py` process_video()
-  Acceptance: Each process_video() call starts with an empty SRT list;
-  test confirms no cross-run contamination.
-  Complexity: S
-
-- [ ] P1 -- **Complete CLI command builder for all config fields**
-  Why: `_build_cli_command()` emits only ~8 of 30+ ProcessingConfig
-  fields. Users copying CLI commands from the GUI context menu get
-  incomplete reproduction instructions. Missing: mask_feather_px,
-  whisper_fallback, karaoke_grouping, remove_chyrons, detection_vertical,
-  time_start, time_end, loudnorm_target, edge_ring_px, colour_tune_enable,
-  phash_skip_enable, kalman_tracking, temporal_smooth_radius, export_srt,
-  export_mask_video, output_frames, nle_sidecar, and more.
-  Evidence: code audit of `gui/widgets.py:28-68` vs backend/config.py
-  ProcessingConfig fields
-  Touches: `gui/widgets.py` _build_cli_command()
-  Acceptance: Every non-default ProcessingConfig field with a CLI
-  counterpart appears in the generated command. Round-trip test confirms
-  parity.
+- [ ] P1 -- Rebuild local release verification after GitHub Actions removal
+  Why: The workflow was removed in local-build mode, but most
+  release-evidence assertions now skip when `.github/workflows/build.yml`
+  is absent.
+  Evidence: `c4a4617`, `tests/test_release_workflow.py`, `build_exe.bat`,
+  `README.md`
+  Touches: `build_exe.bat`, `tests/test_release_workflow.py`,
+  `backend/onnx_model_info.py`, `backend/adapter_manifest.py`,
+  `backend/remote_model_policy.py`
+  Acceptance: A local release command emits `release-verification.json`,
+  SBOM/dependency evidence, hidden-import inventory, launcher/doc version
+  checks, RapidOCR/model-policy status, and smoke-launch status; tests pass
+  without `.github/workflows/build.yml`.
   Complexity: M
 
-### P2 -- Robustness and validation
+- [ ] P1 -- Gate PyTorch LaMa hidden imports behind explicit opt-in
+  Why: `build_exe.bat` always includes `--hidden-import
+  simple_lama_inpainting` even though README says the PyTorch LaMa fallback
+  is disabled unless `VSR_ENABLE_PYTORCH_LAMA=1`.
+  Evidence: `build_exe.bat`, `README.md`, PyTorch CVE notes in
+  `requirements.txt`
+  Touches: `build_exe.bat`, `tests/test_release_workflow.py`,
+  `tests/test_cv2dnn_lama.py`
+  Acceptance: PyInstaller includes `simple_lama_inpainting` only when the
+  opt-in env var is set and the module is importable; tests assert default
+  bundles do not include the hidden import.
+  Complexity: S
 
-- [ ] P2 -- **Graceful handling of corrupt/truncated video input**
-  Why: No graceful failure path for malformed MP4s, videos with missing
-  codecs, or truncated files. cv2.VideoCapture silently returns empty
-  reads, but ffprobe/ffmpeg crashes are unhandled.
-  Evidence: test gap analysis -- no test for corrupt input
-  Touches: `backend/io.py` _open_capture(), `backend/processor.py`
-  process_video()
-  Acceptance: Corrupt input produces a warning log and `failed` status
-  instead of a traceback. Test with a zero-byte and a truncated file.
+- [ ] P1 -- Add scaled mask-selector end-to-end regression coverage
+  Why: Recent mask-selection fixes cover save flow, but the high-risk path
+  still depends on canvas-to-image coordinate scaling, queued config
+  snapshots, preloaded rectangles, and video/image input differences.
+  Evidence: `8a2e29d`, `2afe087`, `gui/app.py` `_open_region_selector()`,
+  `tests/test_gui_smoke.py`
+  Touches: `gui/app.py`, `tests/test_gui_smoke.py`,
+  `tests/test_hardening.py`
+  Acceptance: A scripted GUI test opens a resized selector, preloads and
+  draws multiple rectangles, clears/re-saves, verifies app config, selected
+  queue item config, and mask-preview coordinates.
   Complexity: M
 
-- [ ] P2 -- **Cancel elapsed timer on processing error**
-  Why: `_elapsed_timer_id` is set on batch start but only cancelled on
-  close confirmation. If processing errors out, the timer fires
-  indefinitely until shutdown.
-  Evidence: code audit of `gui/app.py` _start_elapsed_timer() and
-  _on_processing_complete()
-  Touches: `gui/app.py` _on_processing_complete(), _on_processing_error()
-  Acceptance: Elapsed timer stops on any terminal processing state
-  (complete, error, cancelled).
-  Complexity: S
-
-- [ ] P2 -- **Validate ProcessingConfig device string format**
-  Why: `device` accepts any string (e.g., "gpu", "1"); invalid values
-  fail late in CUDA init instead of at config parse time.
-  Evidence: code audit of `backend/config.py` ProcessingConfig.device
-  Touches: `backend/config.py` normalized()
-  Acceptance: Only "cpu", "cuda:N", "directml" accepted; others raise
-  or fall back to "cpu" with a warning.
-  Complexity: S
-
-- [ ] P2 -- **Warn on unknown fields in JSON config overlays**
-  Why: CLI `--config` JSON overlays accept any key. Typos (e.g.,
-  `detectino_lang`) silently become defaults, frustrating users who
-  think their config applied.
-  Evidence: code audit of `backend/cli.py` _load_json_config()
-  Touches: `backend/cli.py` _load_json_config()
-  Acceptance: Unknown field names logged as warnings with did-you-mean
-  suggestions.
-  Complexity: S
-
-- [ ] P2 -- **Add `rapidocr` to support bundle dependency list**
-  Why: `_DEPENDENCY_PACKAGES` in support_bundle.py includes
-  `rapidocr-onnxruntime` but not `rapidocr`, so the primary OCR engine
-  version is missing from bug reports.
-  Evidence: code audit of `backend/support_bundle.py` line 24
-  Touches: `backend/support_bundle.py` _DEPENDENCY_PACKAGES
-  Acceptance: Support bundle captures rapidocr version when installed.
-  Complexity: S
-
-- [ ] P2 -- **Scrub work_directory from support bundles**
-  Why: `_SENSITIVE_KEYS` does not include `work_directory` (new field
-  from commit 38200b8), so user-chosen work directories could appear
-  unscrubbed in support bundles.
-  Evidence: code audit of `backend/support_bundle.py` _SENSITIVE_KEYS
-  Touches: `backend/support_bundle.py` _SENSITIVE_KEYS
-  Acceptance: work_directory redacted in support bundle output.
-  Complexity: S
-
-- [ ] P2 -- **Verify RapidOCR v3.9.0 PP-OCRv6 compatibility**
-  Why: RapidOCR v3.9.0 (June 2026) defaults to PP-OCRv6 det/rec models
-  with different filenames and doubled package size (15 MB to 29 MB).
-  Model paths, config loading, and PyInstaller data collection may need
-  updates.
-  Evidence: RapidOCR v3.9.0 release notes (github.com/RapidAI/RapidOCR)
-  Touches: `backend/detection.py` _build_rapidocr(), `build_exe.bat`
-  collect-data, `backend/dependency_caps.py`, `.github/workflows/build.yml`
-  Acceptance: Detection works identically with rapidocr 3.9.0; PyInstaller
-  bundle includes the new model files; release CI passes.
+- [ ] P1 -- Gracefully classify corrupt or truncated video input
+  Why: Corrupt media is a common support path for video tools; VSR should
+  report a failed item with actionable copy instead of surfacing raw OpenCV
+  or FFmpeg errors.
+  Evidence: `backend/io.py`, `backend/processor.py`, VideoHelp community
+  repair/removal threads
+  Touches: `backend/io.py`, `backend/processor.py`,
+  `tests/test_io_pipeline.py`, `tests/test_hardening.py`
+  Acceptance: Zero-byte, truncated, and unsupported-codec fixtures produce
+  failed queue records, concise log messages, and no leaked temp outputs.
   Complexity: M
 
-### P2 -- Testing gaps
+### P2 -- Dependency, documentation, and UX hardening
 
-- [ ] P2 -- **Test full OCR cascade failure path**
-  Why: No test verifies behavior when all OCR engines are absent AND the
-  OpenCV fallback is used. The current cascade test patches individual
-  engines but not the complete failure-to-fallback chain.
-  Evidence: test gap analysis of `tests/test_detection_pipeline.py`
-  Touches: `tests/test_detection_pipeline.py`
-  Acceptance: Test with all engine modules nulled in sys.modules confirms
-  OpenCV fallback returns boxes (or empty list with warning).
+- [ ] P2 -- Verify RapidOCR PP-OCRv6 packaging compatibility
+  Why: RapidOCR 3.x can ship different PP-OCR model assets and package
+  layout; PyInstaller data collection and detector parsing must stay
+  compatible across the capped major range.
+  Evidence: RapidOCR releases, `backend/detection.py`,
+  `backend/paddle_compat.py`, `build_exe.bat`
+  Touches: `backend/detection.py`, `backend/onnx_model_info.py`,
+  `backend/dependency_caps.py`, `build_exe.bat`,
+  `tests/test_detection_pipeline.py`
+  Acceptance: RapidOCR 3.x detection works from source and PyInstaller
+  bundle; release evidence lists bundled RapidOCR ONNX files and hashes.
+  Complexity: M
+
+- [ ] P2 -- Track fixed OpenCV/libpng wheel availability
+  Why: VSR can warn about vulnerable bundled libpng, but cannot eliminate
+  CVE-2026-22801 until opencv-python publishes wheels with libpng >= 1.6.54.
+  Evidence: `backend/security_checks.py`, `requirements.txt`, NVD
+  CVE-2026-22801, opencv-python release issue
+  Touches: `backend/security_checks.py`, `requirements.txt`, `README.md`,
+  `tests/test_hardening.py`
+  Acceptance: When a fixed opencv-python wheel is available, dependency
+  floor and warning tests are updated; until then the runtime warning and
+  README guidance remain accurate.
   Complexity: S
 
-- [ ] P2 -- **Test temp file cleanup on processing exception**
-  Why: `_cleanup_temp_output()` should fire when an exception occurs
-  mid-inpaint, but no test verifies this.
-  Evidence: test gap analysis
-  Touches: `tests/test_io_pipeline.py` or new test file
-  Acceptance: Simulated mid-processing exception leaves no temp files in
-  the output directory.
+- [ ] P2 -- Sync architecture docs with local-build and PyTorch opt-in truth
+  Why: `docs/architecture.md` and repo working notes still mention removed
+  GitHub Actions release paths and older automatic PyTorch fallback behavior.
+  Evidence: `docs/architecture.md`, `CLAUDE.md`, `README.md`, `c4a4617`
+  Touches: `docs/architecture.md`, `CLAUDE.md`
+  Acceptance: Architecture docs describe local release verification, current
+  LaMa priority order, and the explicit PyTorch opt-in gate without pointing
+  agents at removed workflow files.
   Complexity: S
 
-- [ ] P2 -- **Test queue autosave/restore round-trip**
-  Why: Queue autosave (commit 36737c4) has no dedicated test for the
-  save-crash-restore cycle.
-  Evidence: test gap analysis -- feature landed without round-trip test
-  Touches: `tests/` (new test)
-  Acceptance: Save queue state, clear, restore, verify items match.
-  Complexity: S
+- [ ] P2 -- Add installed model and backend status panel
+  Why: Competitors such as IOPaint reduce setup friction with visible model
+  and backend state; VSR currently spreads this across startup chips, support
+  bundles, logs, and README troubleshooting.
+  Evidence: IOPaint, commercial subtitle-removal flows,
+  `backend/model_downloads.py`, `backend/support_bundle.py`, `gui/app.py`
+  Touches: `gui/app.py`, `backend/model_downloads.py`,
+  `backend/support_bundle.py`, `backend/onnx_model_info.py`
+  Acceptance: About/settings surface shows OCR/inpaint backends, required
+  model files, provider availability, hash status, and next action without
+  requiring a support bundle.
+  Complexity: M
 
-- [ ] P2 -- **Test CLI numeric flag out-of-range behavior**
-  Why: `--mask-dilate`, `--crf`, `--frame-skip` and other numeric CLI
-  flags are parsed but never bounds-checked against ProcessingConfig
-  constraints before reaching the normalizer.
-  Evidence: code audit of `backend/cli.py` argparse definitions
-  Touches: `tests/` (new test), optionally `backend/cli.py` for
-  pre-normalization validation
-  Acceptance: Out-of-range values are clamped with a warning, not
-  silently accepted or crashed.
-  Complexity: S
+### P3 -- Research bench
 
-### Later (research bench -- only if local, permissively licensed weights appear)
+- [ ] P3 -- Benchmark mask-free subtitle erasure before adapter work
+  Why: CLEAR and SEDiT are subtitle-specific, but need VSR reference-clip
+  evidence before becoming user-facing modes.
+  Evidence: CLEAR Hugging Face release, SEDiT arXiv, `tests/clips/manifest.json`
+  Touches: `tests/clips/manifest.json`, `backend/inpainters_diffusion.py`,
+  `backend/adapter_manifest.py`
+  Acceptance: Benchmark-only harness records runtime, artifact score, and
+  subtitle-removal quality on licensed clips; no default dependency is added.
+  Complexity: M
 
-- [ ] P3 -- **VOID video inpainting adapter (opt-in)**
-  Why: VOID (Netflix, April 2026) is best-in-class open video inpainting,
-  HuggingFace weights available, won 64.8% user preference vs
-  Runway/ROSE/MiniMax/ProPainter. Handles object removal + physical
-  interactions (shadows, reflections).
-  Evidence: void-model.github.io, HuggingFace release
-  Touches: `backend/inpainters_diffusion.py` (new registration),
-  `backend/remote_model_policy.py` (new policy entry)
-  Acceptance: `--mode void` available when VSR_VOID=1 and model weights
-  present; falls back cleanly when absent.
+- [ ] P3 -- Add VOID as opt-in research adapter only if redistribution is safe
+  Why: VOID is strong general video inpainting research, but it is not
+  subtitle-specific and may be heavy/licensing-sensitive for default users.
+  Evidence: VOID project, VSR adapter policy in `backend/adapter_manifest.py`
+  Touches: `backend/inpainters_diffusion.py`,
+  `backend/remote_model_policy.py`, `backend/adapter_manifest.py`
+  Acceptance: `--mode void` registers only with `VSR_VOID=1`, verifies local
+  weights through the adapter manifest, and falls back cleanly when absent.
   Complexity: L
 
+- [ ] P3 -- Evaluate Windows ML as DirectML successor path
+  Why: ONNX Runtime DirectML remains useful today, but Microsoft positions
+  Windows ML as the forward local inference API; VSR should avoid locking new
+  adapter work to a shrinking provider path.
+  Evidence: ONNX Runtime DirectML docs, Microsoft Windows ML docs,
+  `backend/inpainters_onnx.py`, `backend/detection.py`
+  Touches: `backend/inpainters_onnx.py`, `backend/detection.py`,
+  `backend/onnx_model_info.py`, `tests/test_hardening.py`
+  Acceptance: A guarded provider probe proves whether Windows ML can run a
+  small ONNX smoke model from Python on Windows; decision documented in
+  README/ROADMAP before any migration.
+  Complexity: M

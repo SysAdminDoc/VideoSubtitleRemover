@@ -2,195 +2,100 @@
 
 ## Executive Summary
 
-Video Subtitle Remover Pro is a mature (v3.17.1, 32K Python LOC, 386 tests) Windows-first desktop tool for removing hardcoded subtitles via multi-engine OCR + TBE/LaMa-ONNX inpainting. Its strongest current shape is trustable local batch processing with codec breadth, quality reports, crash-resume, support bundles, and release verification. The codebase is well-split (gui/ + backend/ + 20 focused modules), and the feature set exceeds every OSS competitor surveyed.
-
-The highest-value direction is correctness hardening: a deep code audit surfaced 14 concrete bugs and validation gaps across GUI state management, CLI command generation, config validation, and subprocess lifecycle. These are P1/P2 fixes that improve every user's experience without new dependencies or model integrations.
-
-Top opportunities in priority order:
-
-1. Fix Toast cleanup race condition (list mutation during iteration).
-2. Disable import buttons during processing (prevents duplicate queue entries).
-3. Complete the CLI command builder (missing ~15 config fields, making "Copy CLI command" produce incorrect commands).
-4. Clear SRT entries between consecutive process_video() calls (cross-run contamination).
-5. Add graceful handling of corrupt/truncated video input.
-6. Validate ProcessingConfig device strings and enforce subtitle_area/subtitle_areas mutual exclusion.
-7. Add CLI numeric range validation and unknown-field warnings for JSON config overlays.
-8. Fix elapsed timer leak on processing error.
-9. Add missing test coverage: full cascade failure, temp cleanup on exception, subprocess termination on cancel, queue autosave round-trip.
-10. Update support bundle dependency list to include `rapidocr` and scrub `work_directory`.
+Video Subtitle Remover Pro is a Windows-first local desktop tool for removing hardcoded subtitles, chyrons, logos, and text watermarks from videos/images with a Python/tkinter GUI, CLI, FFmpeg I/O, OCR detection, TBE/LaMa/OpenCV inpainting, support bundles, and local PyInstaller/NSIS packaging. Verified locally: the product is now strongest as a privacy-preserving batch workstation with unusually strong recovery/evidence surfaces for an OSS media tool; the highest-value direction is release-truth hardening after GitHub Actions removal, mask-selection regression depth, dependency drift control, and selective model UX rather than broad new model sprawl. Top opportunities: local release verifier replacing skipped workflow checks; env-gated PyTorch LaMa bundling; mask-selector visual/coordinate regression suite; corrupt-media failure UX tests; RapidOCR PP-OCRv6 compatibility; OpenCV/libpng fixed-wheel tracking; installed model/backend status UI; Windows ML vs DirectML strategy; benchmark-only mask-free subtitle erasure adapters.
 
 ## Product Map
 
-- Core workflows: import video/images, choose automatic/manual/soft-subtitle flows, preview/refine masks, process through AUTO/TBE/LaMa-ONNX/OpenCV/Torch routes, review quality reports and batch summaries, restore from crash checkpoints.
-- User personas: Windows video editors, archive/restoration users with large batches, nontechnical GUI users, technical CLI/evidence users, privacy-sensitive users who reject cloud upload.
-- Platforms and distribution: Python/tkinter source, Windows .bat/PowerShell launchers, PyInstaller/NSIS release path, GitHub Actions CI/CD with SBOM/pip-audit/release verification, winget preparation, limited source-install on Linux/macOS.
-- Key integrations: FFmpeg/FFprobe decode/encode/remux, RapidOCR/PaddleOCR/Surya/EasyOCR/OpenCV/VLM detection cascade, ONNX Runtime DirectML/CUDA/CPU, PyTorch optional, JSON settings/checkpoints/reports, cache inventory, scrubbed support bundles.
+- Core workflows: queue videos/images, choose preset/mode/device/language, select or auto-detect subtitle regions, preview masks/inpainted frames, process batches, review quality reports/logs/support bundles, export SRT/mask/NLE sidecars.
+- User personas: Windows video editors, archival/restoration users, privacy-sensitive local users, batch operators, CLI users who need reproducible commands and diagnostic artifacts.
+- Platforms and distribution: local Python source, Windows launchers, PyInstaller `--onedir`, NSIS installer path, winget-ready metadata; `.github/workflows` is intentionally absent in the current local-build checkout.
+- Key integrations and data flows: FFmpeg/FFprobe decode/encode/remux, OpenCV image/video I/O, RapidOCR/PaddleOCR/EasyOCR/OpenCV detection cascade, optional VLM/OCR and segmentation adapters, ONNX Runtime DirectML/CUDA/CPU, optional PyTorch fallback, JSON settings/presets/checkpoints/batch reports.
 
 ## Competitive Landscape
 
-### YaoFANGUK/video-subtitle-remover (upstream)
-- Strengths: large user base, Apache-2.0, Docker/CPU/DirectML/CUDA package matrix, simple subtitle removal.
-- Learn from: packaging clarity for users who cannot build Python/GPU environments.
-- Avoid: weaker recovery/evidence surface; no quality reports, support bundles, or multi-engine fallback.
-
-### GhostCut / JollyToday
-- Strengths: automatic text/logo removal, batch scale, API workflow, adjacent translation/dubbing.
-- Learn from: target-mode clarity and integration-ready job semantics.
-- Avoid: cloud-only processing, credit/subscription economics.
-
-### EchoSubs
-- Strengths: offline desktop positioning, simple workflow, low-friction paid packaging.
-- Learn from: plain recovery expectations for nontechnical users.
-- Avoid: opaque quality claims without open benchmarks or CLI reproducibility.
-
-### videowipe
-- Strengths: PyPI/API/CLI distribution, natural-language intent, Docker CPU/GPU, external model command contract.
-- Learn from: replayable command surface and intent-to-config helper.
-- Avoid: GPL-by-default pressure and ProPainter-family bundled defaults.
-
-### IOPaint
-- Strengths: one-click installers, local web UI, CPU/GPU/Apple Silicon, model manager, plugin system.
-- Learn from: explicit model/plugin lifecycle and dependency status UI.
-- Avoid: drifting into a general image editor.
-
-### WatermarkRemover-AI
-- Strengths: Florence-2 + LaMA pipeline, fade mask handling, themes, multilingual UI.
-- Learn from: moving/fading watermark UX, community demand for GPU diagnostics and portable installs.
-- Avoid: dependency failures and ambiguous GPU state.
-
-### RapidVideOCR / VideOCR
-- Strengths: hard-subtitle extraction to SRT/ASS, local PaddleOCR, CLI.
-- Learn from: community requests for queue autosave, temp-dir selection, copy-CLI-command, auto language selection.
-- Avoid: cloud OCR fallback as default.
+- YaoFANGUK/video-subtitle-remover: mature upstream with simple GUI/package matrix. Learn from its low-friction user path; avoid weaker diagnostics and less explicit recovery evidence.
+- IOPaint: strong local model manager, plugin-like workflow, and installer story. Learn from model/backend status visibility; avoid becoming a general image editor.
+- Purfview/InpaintDelogo and VideoHelp workflows: practical FFmpeg/VapourSynth delogo approaches remain useful for static logos. Learn from deterministic local filters; avoid exposing script execution without the existing trust gates.
+- RapidVideOCR/VideOCR: focused hard-subtitle extraction to SRT/ASS. Learn from extraction-first workflows and language clarity; avoid cloud OCR defaults.
+- GhostCut, AniEraser/Media.io, HitPaw, Vmake: commercial tools sell convenience, batch text/logo removal, and clear tiers. Learn from task-mode clarity; avoid cloud-only processing, subscriptions, and opaque quality claims.
+- ProPainter/E2FGVI/VACE/VideoPainter/VOID/SAM2 family: stronger temporal coherence and segmentation research. Learn through opt-in adapters and benchmarks; avoid bundling heavy or license-unclear weights by default.
 
 ## Security, Privacy, and Reliability
 
-### Active Risks
-
-- **Toast cleanup race** (`gui/widgets.py`): `Toast._active` list is mutated during iteration in `_position()` when a concurrent fade-out completes. Can skip toasts or index out-of-bounds. Severity: low (cosmetic), but affects perceived polish.
-- **DragDropFrame buttons active during processing** (`gui/widgets.py`): `add_files_btn` and `add_folder_btn` in the empty queue state are never disabled by `set_enabled()`, so users can add files mid-batch, creating race conditions with the queue lock.
-- **SRT cross-run contamination** (`backend/processor.py`): `_srt_entries` is appended to but never cleared between calls to `process_video()`. A second run produces an SRT file containing the previous run's entries.
-- **Elapsed timer leak** (`gui/app.py`): `_elapsed_timer_id` is set on processing start but only cancelled on close confirmation. If processing errors out early, the timer keeps firing until shutdown.
-- **Selected queue item unprotected** (`gui/app.py`): `_selected_queue_item_id` is written from UI callbacks and read from preview logic without lock guards.
-
-### Verified Safe
-
-- `requirements.txt` pins around recent OpenCV/Pillow/RapidOCR/PaddleOCR CVEs.
-- CI runs pip-audit, SBOM generation, libpng advisory check, release evidence.
-- `Roadmap_Blocked.md` correctly tracks the OpenCV/libpng CVE-2026-22801 floor.
-- `backend/remote_model_policy.py` gates Florence-2, Qwen2.5-VL, SAM2, MatAnyone, CoTracker3.
-- Support bundles scrub sensitive keys and paths.
-
-### Missing Guards
-
-- **Support bundle dependency list** (`backend/support_bundle.py`): `_DEPENDENCY_PACKAGES` does not include `rapidocr` (only `rapidocr-onnxruntime`), so the primary OCR engine version is not captured in bug reports.
-- **Support bundle work_directory leak**: `_SENSITIVE_KEYS` does not include `work_directory` (new field from `38200b8`), so user-chosen work directories could appear unscrubbed.
-- **CLI command builder incomplete** (`gui/widgets.py:_build_cli_command`): Only emits ~8 of 30+ config fields. Missing: `mask_feather_px`, `whisper_fallback`, `karaoke_grouping`, `remove_chyrons`, `keep_subtitles`, `detection_vertical`, `time_start`, `time_end`, `loudnorm_target`, `edge_ring_px`, `colour_tune_enable`, `phash_skip_enable`, `kalman_tracking`, `temporal_smooth_radius`, `export_srt`, `export_mask_video`, `output_frames`, `auto_band`. Users copying CLI commands get incomplete reproduction instructions.
-- **No validation of `device` string**: `ProcessingConfig.device` accepts any string (e.g., "gpu", "1"); invalid values fail late in CUDA init instead of at config parse time.
-- **No mutual exclusion of `subtitle_area`/`subtitle_areas`**: Both can be set simultaneously; mask logic chooses one arbitrarily.
+- Verified risk: `build_exe.bat` always includes `--hidden-import simple_lama_inpainting` while README says PyTorch LaMa is disabled unless `VSR_ENABLE_PYTORCH_LAMA=1`; this can pull optional native/PyTorch code into release bundles contrary to the runtime trust posture.
+- Verified risk: `.github/workflows/build.yml` was removed in `c4a4617`, but `tests/test_release_workflow.py` now skips most release-evidence assertions when the workflow is absent; the local build path needs equivalent verifiable artifacts.
+- Verified risk: OpenCV currently cannot be forced to a fixed bundled libpng until opencv-python publishes a wheel with libpng >= 1.6.54; `backend/security_checks.py` warns, but release tooling should keep tracking the fixed-wheel state.
+- Verified risk: `docs/architecture.md` still describes removed GitHub Actions release paths and old automatic PyTorch fallback behavior, so implementation agents can reintroduce stale assumptions.
+- Verified safe: support bundles now include `rapidocr` and redact `work_directory` in `backend/support_bundle.py`.
+- Verified safe: `backend/config.py` normalizes invalid backend device strings to `cpu`, and `backend/cli.py` warns on unknown JSON config fields.
+- Verified safe: remote-code/model-adapter policy exists in `backend/remote_model_policy.py` and `backend/adapter_manifest.py`; keep new adapters behind the same policy.
 
 ## Architecture Assessment
 
-### Module Boundaries
-
-The backend module split (RFP-L-1) is healthy. GUI state in `gui/`, pipeline in `backend/`, clear re-export shim in `backend/processor.py`. The 7 backend submodules (detection, tracking, io, encoder, quality, inpainters, cli) have clean ownership.
-
-### Refactor Candidates
-
-- **`_build_cli_command`** (`gui/widgets.py:28-68`): Should walk `ProcessingConfig` fields systematically (like `to_dict` does) instead of a manual enumeration that drifts. Every new config field silently becomes invisible in copied commands.
-- **Normalization completeness** (`backend/config.py`): `normalized()` has explicit coercion for ~40 fields, but `work_directory` is normalized only in `gui/config.py`, not in the backend normalizer. CLI paths bypass the GUI normalizer.
-
-### Test Gaps
-
-- No test for full OCR cascade failure (all engines absent + no OpenCV fallback).
-- No test for `_cleanup_temp_output` invocation on mid-inpaint exceptions.
-- No test for FFmpeg subprocess termination behavior on cancel (SIGTERM vs SIGKILL).
-- No test for queue autosave/restore round-trip (feature landed at `36737c4`).
-- No test for corrupt/truncated video input (malformed MP4, missing codecs).
-- No test for CLI numeric flag out-of-range values flowing through to ProcessingConfig.
-- No test for JSON config overlay with unknown/typo field names.
-
-### Category Coverage Review
-
-- **Security**: Active CVE monitoring, pip-audit, model provenance -- strong.
-- **Accessibility**: High-contrast theme, keyboard selection, UIA scaffold -- adequate.
-- **i18n**: Scaffold exists but no `.mo` files -- future work (on ROADMAP).
-- **Observability**: JSON-line log, batch reports, support bundles -- strong.
-- **Testing**: 386 tests, 7.4K lines -- good coverage, specific gaps noted above.
-- **Distribution**: PyInstaller/NSIS/winget/GitHub Actions -- strong.
-- **Plugin ecosystem**: Inpainter registry exists; no filesystem auto-discovery -- intentional.
-- **Mobile**: Android/iOS ports on "under consideration" -- correct placement.
-- **Offline/resilience**: Checkpoint/resume, queue autosave -- recently improved.
-- **Multi-user**: Intentionally rejected (single-user desktop).
-- **Migration**: Settings schema versioning with `_migrate_settings()` -- adequate.
+- The `gui/` and `backend/` split is serviceable: GUI owns interaction state, backend owns processing/config, and adapters are lazy/gated.
+- The most fragile boundary is release verification: older strict-release checks lived in a now-removed workflow, while the current local scripts do not emit the same single evidence bundle.
+- The mask selector remains a high-risk UX path because it converts displayed canvas coordinates to image-space rectangles, persists both current config and queued snapshots, and has had recent regressions; current tests cover save flow but not enough scaled/resized/video/image combinations.
+- `backend/inpainters_diffusion.py` already has opt-in scaffolds; future research models should land first as benchmark/adapters with no default dependency.
+- Test gaps worth filling before more features: corrupt/truncated media, mask selector scaling, local release evidence, and packaging hidden-import policy.
+- Documentation gaps: `docs/architecture.md` and `CLAUDE.md` still mention GitHub Actions/old backend assumptions; README is closer to current truth.
+- Coverage: security/reliability and distribution are active roadmap work; accessibility/i18n/RTL already have scaffolds and remain in ROADMAP; observability is covered by logs, reports, and support bundles; plugin/mobile/multi-user/cloud are intentionally deferred or rejected; migration/upgrade work is handled through settings normalization, dependency caps, and release evidence.
 
 ## Rejected Ideas
 
-- **Cloud/SaaS integration** (GhostCut, Media.io, HitPaw, Vmake, Creatok): conflicts with local-first privacy. Source: competitive survey.
-- **Docker-first distribution**: useful for some Linux users but not the dominant Windows release path. Source: YaoFANGUK upstream.
-- **Bundled noncommercial model defaults** (Real ProPainter, DiffuEraser, COCOCO): license constraints. Source: Roadmap_Blocked.md.
-- **Full image-editor plugin marketplace**: too broad for a subtitle-removal tool. Source: IOPaint architecture.
-- **REST/multi-user server mode now**: local single-user reliability is higher priority. Source: architecture review.
-- **PyPI full-GUI distribution as priority**: Windows installer + winget serves the user base better. Source: community feedback.
-- **Mask-free removal as near-term default** (CLEAR, SEDiT): promising but unvalidated on VSR's workloads. Source: arxiv.org/abs/2603.21901, arxiv.org/abs/2605.14894.
-- **VOID as bundled default**: best-in-class results (Netflix, HuggingFace weights available) but targets general object removal, not subtitle-specific; large model, unclear license terms for redistribution. Track as opt-in research adapter. Source: void-model.github.io.
-- **Automatic `subtitle_area`/`subtitle_areas` mutual exclusion error**: enforcement would break existing settings files that carried both. Prefer silent precedence with logged warning.
+- Cloud upload/API processing from GhostCut/Media.io/HitPaw/Vmake: conflicts with the offline privacy promise.
+- Subscription/paywall model from commercial competitors: conflicts with the current MIT/local tool identity.
+- Docker-first distribution from upstream-style projects: useful for Linux power users, but secondary to Windows installer/winget.
+- Default bundled noncommercial/heavy research weights: licensing, size, and trust risk outweigh parity value.
+- Plugin marketplace now: `backend/inpainter_registry.py` and env-gated adapters are enough until local release verification is solid.
+- Mobile ports now: Android/iOS are plausible later, but current desktop reliability and packaging evidence are higher leverage.
+- Mask-free subtitle erasure as default now: CLEAR/SEDiT are promising but need VSR-specific benchmark evidence before user-facing placement.
 
 ## Sources
 
-### OSS and Direct Competitors
+### OSS and Adjacent
 
 - https://github.com/YaoFANGUK/video-subtitle-remover
 - https://github.com/KKenny0/videowipe
-- https://github.com/JollyToday/GhostCut_Remove_Video_Text
-- https://github.com/D-Ogi/WatermarkRemover-AI
-- https://github.com/Sanster/IOPaint
 - https://github.com/Purfview/InpaintDelogo
 - https://github.com/SWHL/RapidVideOCR
 - https://github.com/timminator/VideOCR
+- https://github.com/Sanster/IOPaint
+- https://github.com/sczhou/ProPainter
+- https://github.com/MCG-NKU/E2FGVI
+- https://github.com/facebookresearch/sam2
 
-### Commercial and Community Signal
+### Commercial and Community
 
 - https://jollytoday.com/subtitle-removal/
-- https://www.echosubs.com/remove-hardcoded-subtitles-offline
 - https://anieraser.media.io/remove-subtitles-from-video.html
+- https://www.hitpaw.com/remove-watermark/remove-subtitles-from-video.html
+- https://vmake.ai/remove-subtitle-from-video
+- https://www.echosubs.com/remove-hardcoded-subtitles-offline
 - https://forum.videohelp.com/threads/418629
 
-### Dependencies and Platform
+### Dependencies, Platform, Security
 
-- https://github.com/RapidAI/RapidOCR/releases (v3.9.0: PP-OCRv6 default models)
-- https://github.com/PaddlePaddle/PaddleOCR/releases (PP-OCRv6 June 2026)
-- https://onnxruntime.ai/docs/reference/releases-servicing.html (v1.27.0)
+- https://github.com/RapidAI/RapidOCR/releases
+- https://github.com/PaddlePaddle/PaddleOCR/releases
+- https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html
 - https://learn.microsoft.com/en-us/windows/ai/new-windows-ml/overview
 - https://github.com/opencv/opencv-python/issues/1186
+- https://ffmpeg.org/
+- https://pyinstaller.org/en/stable/CHANGES.html
 - https://nvd.nist.gov/vuln/detail/CVE-2025-32434
-- https://nvd.nist.gov/vuln/detail/CVE-2026-24747 (PyTorch torch.load RCE)
-- https://cnx-software.com/2026/06/10/opencv-5-release-new-dnn-engine-with-enhanced-onnx-and-llm-vlm-support-intel-arm-and-risc-v-hardware-optimizations/
-- https://pytorch.org/blog/pytorch-2-7/
-- https://pyinstaller.org/en/stable/CHANGES.html (6.21.0)
+- https://nvd.nist.gov/vuln/detail/CVE-2026-22801
+- https://nvd.nist.gov/vuln/detail/CVE-2026-25990
 
-### Research and SOTA
+### Research
 
 - https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal
-- https://arxiv.org/abs/2605.14894 (SEDiT mask-free subtitle erasure)
-- https://arxiv.org/abs/2503.05639 (VideoPainter)
-- https://rose2025-inpaint.github.io/
-- https://void-model.github.io/ (VOID, Netflix, HuggingFace weights available)
-- https://arxiv.org/abs/2506.12853 (EraserDiT, Mango TV)
-- https://arxiv.org/abs/2505.24873 (MiniMax-Remover)
-
-### Ecosystem Intelligence (June 2026)
-
-- RapidOCR v3.9.0 defaults to PP-OCRv6 det/rec models; package size doubled 15 MB to 29 MB; min Python bumped to 3.8.
-- OpenCV 5 released at CVPR June 2026: DNN fully rewritten, 22% to 80%+ ONNX operator coverage, CPU-only for now.
-- ONNX Runtime v1.27.0: WebGPU EP v0.1.0 shipped as standalone plugin; DirectML EP in sustained engineering (WinML is forward path).
-- PyTorch 2.7 stable: CUDA 12.8 wheels for Blackwell; Python 3.14 still has no CUDA wheels.
-- FFmpeg 8.0 "Huffman": whisper audio filter shipped for on-device ASR, VVC VA-API decode.
-- VOID (Netflix, April 2026): open-sourced on HuggingFace, removes objects + physical interactions, won 64.8% user preference vs Runway/ROSE/MiniMax/ProPainter.
+- https://arxiv.org/abs/2605.14894
+- https://arxiv.org/abs/2503.05639
+- https://github.com/ali-vilab/VACE
+- https://void-model.github.io/
 
 ## Open Questions
 
-- Needs live validation: which CC0/public-domain clips can be redistributed in `tests/clips/` for #54 without legal friction?
-- Needs live validation: does Windows ML expose a Python-packagable ONNX inference path suitable for VSR Pro today, or should DirectML remain the only AMD/Intel GPU path? DirectML EP is now in sustained engineering; WinML is the Microsoft-strategic forward path.
-- Needs live validation: which Windows FFmpeg distribution includes both `libvvenc` and `--enable-whisper` for VVC/Whisper default claims?
-- Needs live validation: does RapidOCR v3.9.0 PP-OCRv6 default model change break any existing detection path in VSR Pro? Model filenames and config paths may differ.
+- Needs live validation: which redistributable clips can be added to `tests/clips/` for mask-selection and corrupt-media regression without license friction?
+- Needs live validation: does Windows ML expose a Python-packagable inference path that should replace or sit beside ONNX Runtime DirectML for AMD/Intel users?
+- Needs live validation: which Windows FFmpeg distribution should be documented as the reference build for VVC, whisper filter, and libvmaf support?
