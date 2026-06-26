@@ -1,145 +1,149 @@
-import re
+import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from backend import release_verification
 
 
-class ReleaseWorkflowInstallTests(unittest.TestCase):
-    def setUp(self):
-        workflow_path = (
-            Path(__file__).resolve().parents[1]
-            / ".github"
-            / "workflows"
-            / "build.yml"
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class ReleaseVerificationTests(unittest.TestCase):
+    def _copy_release_inputs(self, dist_dir: Path):
+        for name in release_verification.DOCUMENTS + release_verification.LAUNCHERS:
+            source = ROOT / name
+            if source.exists():
+                (dist_dir / name).write_bytes(source.read_bytes())
+
+    def _patched_environment(self):
+        patches = [
+            mock.patch(
+                "backend.release_verification.collect_dependency_versions",
+                return_value=[{"name": "Pillow", "version": "12.2.0"}],
+            ),
+            mock.patch(
+                "backend.release_verification.release_manifest_status",
+                return_value=[{"name": "adapter-policy", "ok": True}],
+            ),
+            mock.patch(
+                "backend.release_verification.release_remote_model_status",
+                return_value=[{"name": "remote-model-policy", "ok": True}],
+            ),
+            mock.patch(
+                "backend.release_verification.rapidocr_release_provenance",
+                return_value={"package": "rapidocr", "modelCount": 2, "missing": []},
+            ),
+            mock.patch(
+                "backend.release_verification._tool_version",
+                return_value={"available": True, "version": "test-tool"},
+            ),
+            mock.patch(
+                "backend.release_verification._ffmpeg_encoder_status",
+                return_value={"available": True, "hasLibvvenc": True},
+            ),
+            mock.patch(
+                "backend.release_verification._run_smoke",
+                return_value={"ran": True, "passed": True, "returncode": 0},
+            ),
+        ]
+        return patches
+
+    def test_parse_hidden_imports_extracts_unique_module_names(self):
+        hidden = release_verification.parse_hidden_imports(
+            "--hidden-import cv2 --hidden-import=numpy "
+            "--hidden-import tkinter.ttk --hidden-import 'rapidocr' "
+            "--hidden-import cv2"
         )
-        if not workflow_path.exists():
-            self.skipTest("GitHub Actions workflow is absent in local-build mode")
-        self.workflow = workflow_path.read_text(encoding="utf-8")
+        self.assertEqual(hidden, ("cv2", "numpy", "rapidocr", "tkinter.ttk"))
 
-    def test_required_installs_use_last_exit_code_guard(self):
-        self.assertIn("function Install-Required", self.workflow)
-        self.assertIn("if ($LASTEXITCODE -ne 0)", self.workflow)
-        self.assertIn("throw \"Required dependency install failed: $Name\"", self.workflow)
+    def test_build_release_evidence_records_local_release_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp) / "VideoSubtitleRemoverPro"
+            dist_dir.mkdir()
+            self._copy_release_inputs(dist_dir)
 
-    def test_release_engines_are_required_or_explicitly_optional(self):
-        for group in (
-            "torch CPU runtime",
-            "core image stack",
-            "RapidOCR engines",
-            "LaMa inpainter",
-            "EasyOCR fallback",
-            "PyInstaller",
-        ):
-            self.assertIn(f'Install-Required "{group}"', self.workflow)
+            patches = self._patched_environment()
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+                evidence, hidden_payload, sbom = release_verification.build_release_evidence(
+                    dist_dir=dist_dir,
+                    hidden_imports=(
+                        "--hidden-import cv2 --hidden-import rapidocr_onnxruntime"
+                    ),
+                    collect_data="--collect-data rapidocr",
+                )
 
-        self.assertIn('Install-Optional "PaddleOCR"', self.workflow)
-        self.assertIn('Install-Optional "ONNX Runtime DirectML"', self.workflow)
-        self.assertIn('"rapidocr>=2.0.0,<4.0.0"', self.workflow)
-        self.assertIn('"rapidocr-onnxruntime>=1.4.0,<2.0.0"', self.workflow)
-        self.assertIn('"paddleocr>=3.0.0,<4.0.0"', self.workflow)
-        self.assertIn("OCR dependency version-cap check", self.workflow)
-        self.assertIn("python -m backend.dependency_caps", self.workflow)
-        self.assertNotIn('Install-Optional "torch-directml"', self.workflow)
-        self.assertNotIn("torch_directml", self.workflow)
+        self.assertEqual(evidence["schema"], "vsr.release_verification.v1")
+        self.assertEqual(evidence["errors"], [])
+        self.assertIn("cv2", evidence["hiddenImports"])
+        self.assertIn("rapidocr_onnxruntime", evidence["hiddenImports"])
+        self.assertTrue(all(item["bundled"] for item in evidence["documents"]))
+        self.assertTrue(all(item["bundled"] for item in evidence["launchers"]))
+        self.assertTrue(evidence["smokeLaunch"]["passed"])
+        self.assertEqual(evidence["sbom"]["componentCount"], 1)
+        self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
+        self.assertEqual(sbom["bomFormat"], "CycloneDX")
+        self.assertEqual(sbom["components"][0]["name"], "Pillow")
 
-    def test_native_command_try_catch_is_not_used_for_pip_installs(self):
-        self.assertNotIn("try {\n            python -m pip install", self.workflow)
+    def test_write_release_evidence_writes_json_outputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dist_dir = root / "dist"
+            evidence_dir = root / "evidence"
+            dist_dir.mkdir()
+            self._copy_release_inputs(dist_dir)
 
-    def test_winget_submission_is_secret_gated_and_non_interactive(self):
-        self.assertIn("id: winget", self.workflow)
-        self.assertIn("WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_PAT }}", self.workflow)
-        self.assertIn("steps.winget.outputs.has_token == 'true'", self.workflow)
-        self.assertIn("wingetcreate.exe update $packageId", self.workflow)
-        self.assertIn('$packageId = "SysAdminDoc.VideoSubtitleRemoverPro"', self.workflow)
-        self.assertIn("VideoSubtitleRemoverPro-$versionTag-Setup.exe", self.workflow)
-        self.assertIn("releases/download/$versionTag/$installerName", self.workflow)
-        self.assertIn('--urls "$installerUrl|x64|machine"', self.workflow)
-        self.assertIn("--submit", self.workflow)
-        self.assertIn("--token $env:WINGET_CREATE_GITHUB_TOKEN", self.workflow)
-        self.assertIn("--no-open", self.workflow)
+            patches = self._patched_environment()
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+                release_verification.write_release_evidence(
+                    dist_dir=dist_dir,
+                    evidence_dir=evidence_dir,
+                    hidden_imports="--hidden-import cv2",
+                    run_smoke=False,
+                )
 
-    def test_winget_tool_download_is_versioned_and_verified(self):
-        self.assertNotIn("https://aka.ms/wingetcreate/latest", self.workflow)
-        self.assertIn("$wingetCreateVersion = \"v1.12.8.0\"", self.workflow)
-        self.assertIn(
-            "https://github.com/microsoft/winget-create/releases/download/$wingetCreateVersion/wingetcreate.exe",
-            self.workflow,
-        )
-        self.assertIn(
-            "$wingetCreateSha256 = \"8BD738851B524885410112678E3771B341C5C716DE60FBBECB88AB0A363ED85D\"",
-            self.workflow,
-        )
-        self.assertIn("Get-FileHash .\\wingetcreate.exe -Algorithm SHA256", self.workflow)
-        self.assertIn("Get-AuthenticodeSignature .\\wingetcreate.exe", self.workflow)
-        self.assertIn("wingetcreate.exe hash mismatch", self.workflow)
-        self.assertIn("wingetcreate.exe signer is not Microsoft", self.workflow)
+            release_json = json.loads(
+                (evidence_dir / "release-verification.json").read_text(encoding="utf-8")
+            )
+            hidden_json = json.loads(
+                (evidence_dir / "release-hidden-imports.json").read_text(encoding="utf-8")
+            )
+            sbom_json = json.loads(
+                (evidence_dir / "sbom.cdx.json").read_text(encoding="utf-8")
+            )
 
-    def test_workflow_actions_follow_allowlist_policy(self):
-        self.assertIn("Action trust policy", self.workflow)
-        uses = re.findall(r"uses:\s*([^\s]+)", self.workflow)
-        self.assertEqual(
-            sorted(uses),
-            ["actions/checkout@v4", "actions/setup-python@v5"],
-        )
-
-    def test_strict_release_quality_verifies_artifacts(self):
-        self.assertIn("release_quality:", self.workflow)
-        self.assertIn("type: choice", self.workflow)
-        self.assertIn("- permissive", self.workflow)
-        self.assertIn("- strict", self.workflow)
-        self.assertIn(
-            "continue-on-error: ${{ github.event.inputs.release_quality != 'strict' }}",
-            self.workflow,
-        )
-        self.assertIn("Verify release artifacts", self.workflow)
-        self.assertIn("release-verification.json", self.workflow)
-        self.assertIn("Get-FileHash $Path -Algorithm SHA256", self.workflow)
-        self.assertIn("Required bundled document missing", self.workflow)
-        self.assertIn("Strict release requires NSIS installer artifact.", self.workflow)
-        self.assertIn("Get-AuthenticodeSignature $target", self.workflow)
-        self.assertIn("release-hidden-imports.json", self.workflow)
-        self.assertIn("hiddenImports", self.workflow)
-        self.assertIn("python -m pip list --format=json", self.workflow)
-        self.assertIn("dependencies", self.workflow)
-        self.assertIn("launchers", self.workflow)
-        self.assertIn("Required bundled launcher missing", self.workflow)
-        self.assertIn("Run_VSR_Pro.ps1", self.workflow)
-        self.assertIn("adapterSecurity", self.workflow)
-        self.assertIn("remoteModelSecurity", self.workflow)
-        self.assertIn("rapidocrModels", self.workflow)
-        self.assertIn("rapidocr_release_provenance", self.workflow)
-        self.assertIn("Strict release requires readable RapidOCR bundled ONNX models", self.workflow)
-        self.assertIn("ffmpeg -hide_banner -encoders", self.workflow)
-        self.assertIn("libvvenc", self.workflow)
-        self.assertIn("backend.remote_model_policy import release_remote_model_status", self.workflow)
-        self.assertIn("releaseTools", self.workflow)
-        self.assertIn("wingetcreate", self.workflow)
-        self.assertIn("backend.adapter_manifest import release_manifest_status", self.workflow)
-        self.assertIn("APP_VERSION $appVersion does not match release tag", self.workflow)
-        self.assertIn("README.md", self.workflow)
-        self.assertIn("CHANGELOG.md", self.workflow)
-        self.assertNotIn('@{ Path = "ROADMAP.md"', self.workflow)
-        self.assertIn("smokeLaunch", self.workflow)
-        self.assertIn("cyclonedx-bom", self.workflow)
-        self.assertIn("sbom.cdx.json", self.workflow)
-        self.assertIn("Strict release requires an SBOM artifact", self.workflow)
-
-    def test_signing_readiness_uses_step_output(self):
-        self.assertIn("id: signing", self.workflow)
-        self.assertIn("has_signing=", self.workflow)
-        self.assertIn("steps.signing.outputs.has_signing == 'true'", self.workflow)
-        self.assertNotIn("if: env.AZURE_SIGN_TENANT_ID != ''", self.workflow)
+        self.assertEqual(release_json["schema"], "vsr.release_verification.v1")
+        self.assertEqual(hidden_json["hiddenImports"], ["cv2"])
+        self.assertEqual(sbom_json["specVersion"], "1.5")
 
 
 class LocalBuildScriptTests(unittest.TestCase):
     def setUp(self):
-        self.bat = (
-            Path(__file__).resolve().parents[1] / "build_exe.bat"
-        ).read_text(encoding="utf-8")
+        self.bat = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
+
+    def test_build_script_generates_local_release_evidence(self):
+        self.assertIn("-m backend.release_verification", self.bat)
+        self.assertIn("--hidden-imports", self.bat)
+        self.assertIn("--collect-data", self.bat)
+        self.assertIn("release-verification.json", self.bat)
+        self.assertIn("release-hidden-imports.json", self.bat)
+        self.assertIn("sbom.cdx.json", self.bat)
+        self.assertIn("Run_VSR_Pro.bat", self.bat)
+        self.assertIn("Run_VSR_Pro_Debug.bat", self.bat)
+        self.assertIn("Run_VSR_Pro.ps1", self.bat)
+
+    def test_pytorch_lama_hidden_import_is_explicit_opt_in(self):
+        default_line = next(
+            line for line in self.bat.splitlines()
+            if line.startswith('set "HIDDEN_IMPORTS=')
+        )
+        self.assertNotIn("simple_lama_inpainting", default_line)
+        self.assertIn("VSR_ENABLE_PYTORCH_LAMA", self.bat)
+        self.assertIn("call :maybe_hidden_import simple_lama_inpainting", self.bat)
 
     def test_no_torch_directml_hidden_import(self):
         self.assertNotIn("torch_directml", self.bat)
-
-    def test_onnxruntime_packaging_not_removed(self):
         self.assertNotIn("torch-directml", self.bat)
 
 

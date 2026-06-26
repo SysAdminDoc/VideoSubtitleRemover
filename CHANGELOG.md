@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Local release evidence restored.** `build_exe.bat` now copies release
+  launchers into the PyInstaller bundle and emits `release-verification.json`,
+  `release-hidden-imports.json`, and `sbom.cdx.json` through
+  `backend.release_verification` so local-build releases keep the old audit
+  evidence without a GitHub Actions workflow.
+- **PyTorch LaMa packaging opt-in.** PyInstaller no longer hidden-imports
+  `simple_lama_inpainting` by default; set `VSR_ENABLE_PYTORCH_LAMA=1` to
+  include that legacy fallback when it is installed.
 - **Native optional-engine crash hardening.** OCR, Whisper, LaMa, ProPainter,
   and GUI startup engine probes now use safe optional-import checks so broken
   native wheels do not get imported just to discover capabilities. The

@@ -46,12 +46,17 @@ if exist "favicon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data favicon.ico;."
 if exist "icon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data icon.ico;."
 if exist "icons" set "DATA_ARGS=%DATA_ARGS% --add-data icons;icons"
 
-set "HIDDEN_IMPORTS=--hidden-import PIL._tkinter_finder --hidden-import cv2 --hidden-import numpy --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox --hidden-import simple_lama_inpainting"
+set "HIDDEN_IMPORTS=--hidden-import PIL._tkinter_finder --hidden-import cv2 --hidden-import numpy --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox"
 echo Detecting optional runtime modules for packaging...
 call :maybe_hidden_import rapidocr
 call :maybe_hidden_import rapidocr_onnxruntime
 call :maybe_hidden_import paddleocr
 call :maybe_hidden_import easyocr
+if /I "%VSR_ENABLE_PYTORCH_LAMA%"=="1" (
+    call :maybe_hidden_import simple_lama_inpainting
+) else (
+    echo   PyTorch LaMa fallback disabled for packaging; set VSR_ENABLE_PYTORCH_LAMA=1 to include it.
+)
 
 :: Collect data files (YAML configs + ONNX models) for OCR packages
 set "COLLECT_DATA="
@@ -82,9 +87,24 @@ if errorlevel 1 (
 
 set "DIST_DIR=dist\VideoSubtitleRemoverPro"
 if exist "!DIST_DIR!" (
-    for %%F in (README.md LICENSE CHANGELOG.md) do (
+    for %%F in (README.md LICENSE CHANGELOG.md Run_VSR_Pro.bat Run_VSR_Pro_Debug.bat Run_VSR_Pro.ps1) do (
         if exist "%%F" copy /Y "%%F" "!DIST_DIR!\%%F" >nul
     )
+)
+
+echo.
+echo Generating local release evidence...
+"%PYTHON%" -m backend.release_verification ^
+    --dist-dir "!DIST_DIR!" ^
+    --hidden-imports "!HIDDEN_IMPORTS!" ^
+    --collect-data "!COLLECT_DATA!" ^
+    --quality permissive
+
+if errorlevel 1 (
+    echo.
+    echo Release evidence generation failed.
+    pause
+    exit /b 1
 )
 
 echo.
@@ -94,6 +114,8 @@ echo ============================================================
 echo.
 echo  EXE Location: !DIST_DIR!\
 echo  Bundle docs: README.md, LICENSE, CHANGELOG.md
+echo  Bundle launchers: Run_VSR_Pro.bat, Run_VSR_Pro_Debug.bat, Run_VSR_Pro.ps1
+echo  Release evidence: release-verification.json, release-hidden-imports.json, sbom.cdx.json
 echo.
 echo  To distribute, zip the entire VideoSubtitleRemoverPro folder.
 echo.
