@@ -38,6 +38,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   snapshot when `VSR_VACE_AUTO_FETCH=1` and `huggingface-hub` is installed,
   verifies the checkpoint path through the adapter manifest, and surfaces
   first-run download guidance before falling back safely.
+- **VideoPainter strict local adapter.** `VSR_VIDEOPAINTER=1` now verifies a
+  local VideoPainter checkpoint root, supports a reviewed
+  `VSR_VIDEOPAINTER_COMMAND` wrapper over temp source/mask videos, records the
+  research/non-commercial license boundary in first-run guidance, and falls
+  back to TBE when the local wrapper or package is unavailable.
 
 ### Fixed
 

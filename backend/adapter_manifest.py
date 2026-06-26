@@ -188,6 +188,28 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         remote_code_required=False,
         allow_directories=True,
     ),
+    "videopainter": AdapterManifestEntry(
+        name="videopainter",
+        env_vars=(
+            "VSR_VIDEOPAINTER_CKPT_DIR",
+            "VSR_VIDEOPAINTER_MODEL_DIR",
+            "VSR_VIDEOPAINTER_WEIGHTS",
+            "VSR_VIDEOPAINTER_BRANCH_DIR",
+            "VSR_COGVIDEOX_MODEL_DIR",
+        ),
+        expected_filenames=(
+            "VideoPainter/checkpoints/branch/config.json",
+            "VideoPainter/checkpoints/branch/diffusion_pytorch_model.safetensors",
+            "VideoPainterID/checkpoints/pytorch_lora_weights.safetensors",
+            "CogVideoX-5b-I2V/model_index.json",
+        ),
+        sha256={},
+        license="VideoPainter research/non-commercial plus CogVideoX terms",
+        source_url="https://huggingface.co/TencentARC/VideoPainter",
+        preferred_format="reviewed local VideoPainter checkpoint directory",
+        remote_code_required=True,
+        allow_directories=True,
+    ),
     "transnetv2": AdapterManifestEntry(
         name="transnetv2",
         env_vars=("VSR_TRANSNETV2",),

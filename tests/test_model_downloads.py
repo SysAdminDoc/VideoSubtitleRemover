@@ -127,6 +127,25 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(hints[0].label, "Wan2.1-VACE 1.3B checkpoint")
         self.assertIn("huggingface_hub", hints[0].detail)
 
+    def test_videopainter_reports_checkpoint_and_wrapper_setup(self):
+        from backend import model_downloads as md
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "USERPROFILE": tmpdir,
+                "APPDATA": tmpdir,
+                "VSR_VIDEOPAINTER": "1",
+            }
+            with mock.patch.object(md.importlib.util, "find_spec", return_value=None):
+                hints = md.pending_model_download_hints(
+                    _cfg(mode="videopainter"), env)
+
+        labels = [hint.label for hint in hints]
+        self.assertIn("VideoPainter and CogVideoX checkpoints", labels)
+        self.assertIn("VideoPainter local wrapper", labels)
+        self.assertTrue(any("non-commercial" in hint.detail for hint in hints))
+
     def test_installed_backend_status_is_privacy_safe_and_actionable(self):
         from backend import model_downloads as md
 

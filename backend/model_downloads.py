@@ -33,6 +33,8 @@ class ModelDownloadHint:
 
 _LAMA_FILENAMES = ("lama_fp32.onnx", "lama.onnx", "inpainting_lama_2025jan.onnx")
 _VACE_REPO_ID = "Wan-AI/Wan2.1-VACE-1.3B"
+_VIDEOPAINTER_REPO_ID = "TencentARC/VideoPainter"
+_VIDEOPAINTER_BASE_REPO_ID = "THUDM/CogVideoX-5b-I2V"
 _TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 _WHISPER_SIZES = {
     "tiny": "~75 MB",
@@ -121,6 +123,32 @@ def _vace_checkpoint_present(env: Mapping[str, str]) -> bool:
         return True
     repo = str(env.get("VSR_VACE_REPO_ID") or _VACE_REPO_ID)
     return _hf_repo_cached(env, repo)
+
+
+def _videopainter_checkpoint_present(env: Mapping[str, str]) -> bool:
+    for key in (
+        "VSR_VIDEOPAINTER_CKPT_DIR",
+        "VSR_VIDEOPAINTER_MODEL_DIR",
+        "VSR_VIDEOPAINTER_WEIGHTS",
+        "VSR_VIDEOPAINTER_BRANCH_DIR",
+    ):
+        value = str(env.get(key, "") or "").strip()
+        if value and Path(value).exists():
+            return True
+    app_cache = _app_model_dir(env) / "videopainter"
+    if _has_any_file(app_cache, suffixes=(".safetensors", ".json", ".pt")):
+        return True
+    return (
+        _hf_repo_cached(env, _VIDEOPAINTER_REPO_ID)
+        or _hf_repo_cached(env, _VIDEOPAINTER_BASE_REPO_ID)
+    )
+
+
+def _videopainter_command_present(env: Mapping[str, str]) -> bool:
+    command = str(env.get("VSR_VIDEOPAINTER_COMMAND", "") or "").strip()
+    if not command:
+        return _module_available("videopainter")
+    return True
 
 
 def _hf_repo_cached(env: Mapping[str, str], repo: str) -> bool:
@@ -237,6 +265,33 @@ def _append_vace_hints(hints: list[ModelDownloadHint], config, env: Mapping[str,
         ))
 
 
+def _append_videopainter_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
+    mode = _mode_value(config)
+    if mode != "videopainter" and not _env_truthy(env, "VSR_VIDEOPAINTER"):
+        return
+    if not _videopainter_checkpoint_present(env):
+        hints.append(ModelDownloadHint(
+            label="VideoPainter and CogVideoX checkpoints",
+            size_estimate="multi-GB",
+            detail=(
+                "Download TencentARC/VideoPainter and THUDM/CogVideoX-5b-I2V "
+                "manually, review the research/non-commercial license terms, "
+                "then set VSR_VIDEOPAINTER_CKPT_DIR."
+            ),
+            cache_hint="%APPDATA%\\VideoSubtitleRemoverPro\\models\\videopainter",
+        ))
+    if not _videopainter_command_present(env):
+        hints.append(ModelDownloadHint(
+            label="VideoPainter local wrapper",
+            size_estimate="local checkout",
+            detail=(
+                "Set VSR_VIDEOPAINTER_COMMAND to a reviewed local wrapper "
+                "that accepts --input-video, --mask-video, and --output-video."
+            ),
+            cache_hint="local VideoPainter checkout",
+        ))
+
+
 def _append_whisper_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
     if not bool(getattr(config, "whisper_fallback", False)):
         return
@@ -264,6 +319,7 @@ def pending_model_download_hints(
     _append_detection_hints(hints, source_env)
     _append_lama_hints(hints, config, source_env)
     _append_vace_hints(hints, config, source_env)
+    _append_videopainter_hints(hints, config, source_env)
     _append_whisper_hints(hints, config, source_env)
     return tuple(hints)
 

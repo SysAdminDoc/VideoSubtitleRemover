@@ -197,11 +197,12 @@ benchmarked through the Windows ML path, VSR keeps DirectML as the AMD/Intel
 GPU route.
 
 Optional model paths such as `VSR_LAMA_ONNX`, `VSR_MIGAN_ONNX`,
-`VSR_FASTDVDNET`, `VSR_TRANSNETV2`, and `VSR_VACE_CKPT_DIR` are checked
-against a local adapter manifest before loading. Known SHA-256 mismatches fall
-back instead of deserializing the file. Legacy adapters without a pinned hash
-still run, but new strict adapters can require a known hash unless
-`VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded in release evidence.
+`VSR_FASTDVDNET`, `VSR_TRANSNETV2`, `VSR_VACE_CKPT_DIR`, and
+`VSR_VIDEOPAINTER_CKPT_DIR` are checked against a local adapter manifest before
+loading. Known SHA-256 mismatches fall back instead of deserializing the file.
+Legacy adapters without a pinned hash still run, but new strict adapters can
+require a known hash unless `VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded
+in release evidence.
 Local release evidence also writes `release-advisories.json`; strict mode
 blocks unallowed high/critical dependency advisories while keeping the current
 OpenCV/libpng exception explicit until fixed wheels are available.
@@ -209,6 +210,12 @@ Wan2.1-VACE is available as an opt-in registry mode: set `VSR_VACE=1`, install
 the reviewed upstream `vace` package, then either set `VSR_VACE_CKPT_DIR` to a
 local `Wan-AI/Wan2.1-VACE-1.3B` snapshot or set `VSR_VACE_AUTO_FETCH=1` with
 `huggingface-hub` installed to fetch it into the app model cache.
+VideoPainter is available only as a strict local research adapter: set
+`VSR_VIDEOPAINTER=1`, review the upstream research/non-commercial and CogVideoX
+license terms, set `VSR_VIDEOPAINTER_CKPT_DIR` to a local checkpoint root, set
+`VSR_VIDEOPAINTER_COMMAND` to a local wrapper that accepts `--input-video`,
+`--mask-video`, and `--output-video`, and opt in with
+`VSR_ALLOW_UNVERIFIED_MODELS=1` for unpinned research weights.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
 crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or

@@ -29,8 +29,12 @@ when the heavy model fails so the user always gets a result.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import shlex
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import List, Optional
@@ -277,7 +281,7 @@ class _VaceBackend(_DiffusionBackendBase):
             "remove subtitles and reconstruct the original background",
         )
         out = _call_vace_model(self._model, frames, masks, prompt)
-        out = _coerce_model_frames(out, len(frames))
+        out = _coerce_adapter_frames(out, len(frames), "VACE")
         return [
             _feather_blend(f, r, m, self.config.mask_feather_px)
             for f, r, m in zip(frames, out, masks)
@@ -436,13 +440,13 @@ def _pad_vace_inputs(frames: List[np.ndarray],
     return padded_frames, padded_masks
 
 
-def _write_vace_video(path: Path,
-                      frames: List[np.ndarray],
-                      *,
-                      fps: float,
-                      mask: bool = False) -> None:
+def _write_adapter_video(path: Path,
+                         frames: List[np.ndarray],
+                         *,
+                         fps: float,
+    mask: bool = False) -> None:
     if not frames:
-        raise RuntimeError("VACE input frame list is empty")
+        raise RuntimeError("adapter input frame list is empty")
     height, width = frames[0].shape[:2]
     writer = cv2.VideoWriter(
         str(path),
@@ -451,7 +455,7 @@ def _write_vace_video(path: Path,
         (int(width), int(height)),
     )
     if not writer.isOpened():
-        raise RuntimeError(f"Could not create VACE input video: {path}")
+        raise RuntimeError(f"Could not create adapter input video: {path}")
     try:
         for item in frames:
             if mask:
@@ -472,12 +476,12 @@ def _write_vace_video(path: Path,
         writer.release()
 
 
-def _read_vace_output_video(path: Path,
-                            expected_count: int,
-                            target_shape) -> List[np.ndarray]:
+def _read_adapter_output_video(path: Path,
+                               expected_count: int,
+                               target_shape) -> List[np.ndarray]:
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
-        raise RuntimeError(f"VACE output video could not be opened: {path}")
+        raise RuntimeError(f"adapter output video could not be opened: {path}")
     frames: List[np.ndarray] = []
     try:
         while len(frames) < expected_count:
@@ -491,7 +495,7 @@ def _read_vace_output_video(path: Path,
     finally:
         cap.release()
     if len(frames) != expected_count:
-        raise RuntimeError("VACE output frame count does not match input")
+        raise RuntimeError("adapter output frame count does not match input")
     return frames
 
 
@@ -513,8 +517,8 @@ def _run_vace_wan_script(main_fn,
         out_video = work / "out_video.mp4"
         save_dir = work / "results"
         fps = _vace_fps()
-        _write_vace_video(src_video, padded_frames, fps=fps)
-        _write_vace_video(src_mask, padded_masks, fps=fps, mask=True)
+        _write_adapter_video(src_video, padded_frames, fps=fps)
+        _write_adapter_video(src_mask, padded_masks, fps=fps, mask=True)
         args = {
             "model_name": os.environ.get("VSR_VACE_MODEL_NAME", "vace-1.3B"),
             "size": os.environ.get("VSR_VACE_SIZE", "480p"),
@@ -543,10 +547,10 @@ def _run_vace_wan_script(main_fn,
         result = main_fn(args)
         if isinstance(result, dict) and result.get("out_video"):
             out_video = Path(str(result["out_video"]))
-        return _read_vace_output_video(out_video, frame_count, frames[0].shape)
+        return _read_adapter_output_video(out_video, frame_count, frames[0].shape)
 
 
-def _coerce_model_frames(value, expected_count: int) -> List[np.ndarray]:
+def _coerce_adapter_frames(value, expected_count: int, label: str) -> List[np.ndarray]:
     if isinstance(value, dict):
         for key in ("frames", "video", "output", "outputs"):
             if key in value:
@@ -556,14 +560,14 @@ def _coerce_model_frames(value, expected_count: int) -> List[np.ndarray]:
         if value.ndim == 4:
             frames = [np.asarray(frame).astype(np.uint8) for frame in value]
             if len(frames) != expected_count:
-                raise RuntimeError("VACE output frame count does not match input")
+                raise RuntimeError(f"{label} output frame count does not match input")
             return frames
-        raise RuntimeError("VACE output ndarray must be T,H,W,C")
+        raise RuntimeError(f"{label} output ndarray must be T,H,W,C")
     if not isinstance(value, (list, tuple)):
-        raise RuntimeError("VACE output must be a frame list or ndarray")
+        raise RuntimeError(f"{label} output must be a frame list or ndarray")
     frames = [np.asarray(frame).astype(np.uint8) for frame in value]
     if len(frames) != expected_count:
-        raise RuntimeError("VACE output frame count does not match input")
+        raise RuntimeError(f"{label} output frame count does not match input")
     return frames
 
 
@@ -589,22 +593,333 @@ def _call_vace_model(model, frames, masks, prompt: str):
 # ---------------------------------------------------------------------------
 
 
+VIDEOPAINTER_DEFAULT_REPO_ID = "TencentARC/VideoPainter"
+VIDEOPAINTER_BASE_REPO_ID = "THUDM/CogVideoX-5b-I2V"
+
+
+def _strip_wrapping_quotes(value: str) -> str:
+    text = str(value)
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {'"', "'"}:
+        return text[1:-1]
+    return text
+
+
+def _split_adapter_command(command: str) -> List[str]:
+    try:
+        parts = shlex.split(command, posix=(os.name != "nt"))
+    except ValueError:
+        return []
+    return [_strip_wrapping_quotes(part) for part in parts if part]
+
+
+def _adapter_command_from_env(env_name: str) -> Optional[List[str]]:
+    raw = os.environ.get(env_name, "").strip()
+    if not raw:
+        return None
+    parts = _split_adapter_command(raw)
+    if not parts:
+        logger.warning("%s command could not be parsed", env_name)
+        return None
+    executable = parts[0]
+    if shutil.which(executable) is None and not Path(executable).is_file():
+        logger.warning("%s command not found: %s", env_name, executable)
+        return None
+    return parts
+
+
+def _adapter_config_dict(config: ProcessingConfig) -> dict:
+    try:
+        return config.to_dict() if hasattr(config, "to_dict") else dict(config)
+    except Exception:
+        return {}
+
+
+def _adapter_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _adapter_float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    if not np.isfinite(value) or value <= 0:
+        return default
+    return value
+
+
+def _configured_videopainter_path(env=None) -> Optional[Path]:
+    source = os.environ if env is None else env
+    for key in (
+        "VSR_VIDEOPAINTER_CKPT_DIR",
+        "VSR_VIDEOPAINTER_MODEL_DIR",
+        "VSR_VIDEOPAINTER_WEIGHTS",
+        "VSR_VIDEOPAINTER_BRANCH_DIR",
+    ):
+        value = str(source.get(key, "") or "").strip()
+        if value:
+            return Path(value)
+    return None
+
+
+def _videopainter_cache_dir(env=None) -> Path:
+    source = os.environ if env is None else env
+    appdata = str(source.get("APPDATA", "") or "").strip()
+    if appdata:
+        return (Path(appdata) / "VideoSubtitleRemoverPro" / "models"
+                / "videopainter")
+    home = str(source.get("USERPROFILE") or source.get("HOME") or "").strip()
+    base = Path(home) if home else Path.home()
+    return base / ".cache" / "VideoSubtitleRemoverPro" / "models" / "videopainter"
+
+
+def _verify_videopainter_checkpoint_path(path: Path) -> bool:
+    try:
+        from backend.adapter_manifest import (
+            log_adapter_verification,
+            verify_adapter_path,
+        )
+        result = verify_adapter_path("videopainter", str(path))
+        log_adapter_verification(result)
+        return bool(result.allowed)
+    except Exception as exc:
+        logger.warning(f"VideoPainter checkpoint verification failed: {exc}")
+        return False
+
+
+def _resolve_videopainter_checkpoint_dir(env=None) -> Optional[Path]:
+    source = os.environ if env is None else env
+    configured = _configured_videopainter_path(source)
+    candidates: List[Path] = []
+    if configured is not None:
+        candidates.append(configured.parent if configured.is_file() else configured)
+    candidates.append(_videopainter_cache_dir(source))
+    for candidate in candidates:
+        if candidate.exists() and _verify_videopainter_checkpoint_path(candidate):
+            return candidate
+    logger.info(
+        "VideoPainter enabled but no verified local checkpoint directory is "
+        "available. Set VSR_VIDEOPAINTER_CKPT_DIR after reviewing upstream "
+        "licenses and use VSR_ALLOW_UNVERIFIED_MODELS=1 for unpinned research "
+        "weights."
+    )
+    return None
+
+
+def _first_existing_path(paths: List[Path]) -> Optional[Path]:
+    for path in paths:
+        if path.exists():
+            return path
+    return None
+
+
+def _videopainter_paths(root: Path, env=None) -> dict:
+    source = os.environ if env is None else env
+    branch = str(source.get("VSR_VIDEOPAINTER_BRANCH_DIR", "") or "").strip()
+    base = str(source.get("VSR_COGVIDEOX_MODEL_DIR", "") or "").strip()
+    ident = str(source.get("VSR_VIDEOPAINTER_ID_DIR", "") or "").strip()
+    branch_path = Path(branch) if branch else (
+        _first_existing_path([
+            root / "VideoPainter" / "checkpoints" / "branch",
+            root / "checkpoints" / "branch",
+            root / "branch",
+        ]) or root / "VideoPainter" / "checkpoints" / "branch"
+    )
+    base_path = Path(base) if base else (
+        _first_existing_path([
+            root / "CogVideoX-5b-I2V",
+            root / "THUDM" / "CogVideoX-5b-I2V",
+        ]) or root / "CogVideoX-5b-I2V"
+    )
+    id_path = Path(ident) if ident else (
+        _first_existing_path([
+            root / "VideoPainterID" / "checkpoints",
+            root / "VideoPainterID",
+        ])
+    )
+    return {
+        "model_dir": root,
+        "branch_dir": branch_path,
+        "base_model_dir": base_path,
+        "id_adapter_dir": id_path,
+    }
+
+
+class _VideoPainterCommandAdapter:
+    """Run a reviewed local VideoPainter wrapper command over temp videos."""
+
+    def __init__(self, command: List[str], paths: dict, config: ProcessingConfig):
+        self._command = command
+        self._paths = paths
+        self._config = config
+        self._timeout = _adapter_int_env("VSR_VIDEOPAINTER_TIMEOUT", 7200)
+
+    def inpaint(self, frames=None, masks=None, prompt=None):
+        frame_list = [] if frames is None else list(frames)
+        mask_list = [] if masks is None else list(masks)
+        return _run_videopainter_command(
+            self._command,
+            self._paths,
+            self._config,
+            frame_list,
+            mask_list,
+            prompt or "remove subtitles and reconstruct the original background",
+            self._timeout,
+        )
+
+
+def _run_videopainter_command(command: List[str],
+                              paths: dict,
+                              config: ProcessingConfig,
+                              frames: List[np.ndarray],
+                              masks: List[np.ndarray],
+                              prompt: str,
+                              timeout: int) -> List[np.ndarray]:
+    if not frames or not masks:
+        return []
+    frame_count = min(len(frames), len(masks))
+    frames = frames[:frame_count]
+    masks = masks[:frame_count]
+    with tempfile.TemporaryDirectory(prefix="vsr_videopainter_") as tmpdir:
+        work = Path(tmpdir)
+        src_video = work / "src_video.mp4"
+        src_mask = work / "src_mask.mp4"
+        out_video = work / "out_video.mp4"
+        config_path = work / "config.json"
+        fps = _adapter_float_env("VSR_VIDEOPAINTER_FPS", 8.0)
+        _write_adapter_video(src_video, frames, fps=fps)
+        _write_adapter_video(src_mask, masks, fps=fps, mask=True)
+        payload = {
+            "adapter": "videopainter",
+            "prompt": prompt,
+            "fps": fps,
+            "frameCount": frame_count,
+            "modelDir": str(paths["model_dir"]),
+            "branchDir": str(paths["branch_dir"]),
+            "baseModelDir": str(paths["base_model_dir"]),
+            "idAdapterDir": (
+                str(paths["id_adapter_dir"])
+                if paths.get("id_adapter_dir") is not None else None
+            ),
+            "processingConfig": _adapter_config_dict(config),
+        }
+        config_path.write_text(json.dumps(payload, ensure_ascii=True),
+                               encoding="utf-8")
+        cmd = list(command) + [
+            "--input-video", str(src_video),
+            "--mask-video", str(src_mask),
+            "--output-video", str(out_video),
+            "--model-dir", str(paths["model_dir"]),
+            "--branch-dir", str(paths["branch_dir"]),
+            "--base-model-dir", str(paths["base_model_dir"]),
+            "--prompt", prompt,
+            "--config", str(config_path),
+        ]
+        if paths.get("id_adapter_dir") is not None:
+            cmd.extend(["--id-adapter-dir", str(paths["id_adapter_dir"])])
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=max(1, int(timeout)),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"VideoPainter command timed out after {timeout}s"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(f"VideoPainter command failed to start: {exc}") from exc
+        if result.returncode != 0:
+            stderr = (result.stderr or "")[-600:]
+            raise RuntimeError(
+                f"VideoPainter command exited {result.returncode}: {stderr}"
+            )
+        output_path = out_video
+        stdout = (result.stdout or "").strip()
+        if stdout.startswith("{"):
+            try:
+                data = json.loads(stdout)
+                if data.get("outputVideo"):
+                    output_path = Path(str(data["outputVideo"]))
+            except Exception:
+                pass
+        return _read_adapter_output_video(output_path, frame_count, frames[0].shape)
+
+
+def _call_videopainter_model(model, frames, masks, prompt: str):
+    for name in ("inpaint", "run", "mv2v"):
+        fn = getattr(model, name, None)
+        if fn is None:
+            continue
+        for args, kwargs in (
+            ((), {"frames": frames, "masks": masks, "prompt": prompt}),
+            ((frames, masks), {"prompt": prompt}),
+            ((frames, masks), {}),
+        ):
+            try:
+                return fn(*args, **kwargs)
+            except TypeError:
+                continue
+    raise RuntimeError("VideoPainter package missing inpaint/run/mv2v frame API")
+
+
 class _VideoPainterBackend(_DiffusionBackendBase):
     MODE_NAME = "videopainter"
     REPO_HINT = (
-        "Install via the upstream VideoPainter project and "
-        "set VSR_VIDEOPAINTER=1."
+        "Set VSR_VIDEOPAINTER_CKPT_DIR plus VSR_VIDEOPAINTER_COMMAND to a "
+        "reviewed local VideoPainter wrapper, or install a compatible local "
+        "videopainter package. The upstream sample is research/non-commercial."
     )
 
     def _load(self):
+        root = _resolve_videopainter_checkpoint_dir()
+        if root is None:
+            return None
+        paths = _videopainter_paths(root)
+        command = _adapter_command_from_env("VSR_VIDEOPAINTER_COMMAND")
+        if command is not None:
+            return _VideoPainterCommandAdapter(command, paths, self.config)
         try:
             from videopainter import VideoPainter  # type: ignore
-            return VideoPainter(device=self.device)
         except Exception:
             return None
+        for kwargs in (
+            {
+                "model_dir": str(paths["model_dir"]),
+                "branch_dir": str(paths["branch_dir"]),
+                "base_model_dir": str(paths["base_model_dir"]),
+                "device": self.device,
+            },
+            {"ckpt_dir": str(root), "device": self.device},
+            {"device": self.device},
+            {},
+        ):
+            try:
+                return VideoPainter(**kwargs)
+            except TypeError:
+                continue
+            except Exception:
+                logger.debug("VideoPainter constructor failed", exc_info=True)
+                return None
+        return None
 
     def _run_model(self, frames, masks):
-        out = self._model.inpaint(frames, masks)
+        prompt = os.environ.get(
+            "VSR_VIDEOPAINTER_PROMPT",
+            "remove subtitles and reconstruct the original background",
+        )
+        out = _call_videopainter_model(self._model, frames, masks, prompt)
+        out = _coerce_adapter_frames(out, len(frames), "VideoPainter")
         return [
             _feather_blend(f, r, m, self.config.mask_feather_px)
             for f, r, m in zip(frames, out, masks)
