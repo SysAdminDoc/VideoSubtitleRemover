@@ -16,6 +16,7 @@ import os
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -42,17 +43,26 @@ class GuiSmokeTests(unittest.TestCase):
         # clobber the developer's real %APPDATA%/VSR config.
         cls._tmpdir = tempfile.TemporaryDirectory()
         import VideoSubtitleRemover as g
+        from gui import config as gui_config
         cls._g = g
+        cls._gui_config = gui_config
         cls._orig_settings = g.SETTINGS_FILE
+        cls._orig_queue_state = gui_config.QUEUE_STATE_FILE
         g.SETTINGS_FILE = Path(cls._tmpdir.name) / "settings.json"
+        gui_config.QUEUE_STATE_FILE = Path(cls._tmpdir.name) / "queue_state.json"
 
     @classmethod
     def tearDownClass(cls):
         cls._g.SETTINGS_FILE = cls._orig_settings
+        cls._gui_config.QUEUE_STATE_FILE = cls._orig_queue_state
         cls._tmpdir.cleanup()
 
     def _make_app(self):
-        app = self._g.VideoSubtitleRemoverApp()
+        with mock.patch.object(
+            self._g.VideoSubtitleRemoverApp,
+            "_start_startup_hardware_probe",
+        ):
+            app = self._g.VideoSubtitleRemoverApp()
         app.root.withdraw()
         return app
 
@@ -74,6 +84,62 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertFalse(app.config.preserve_audio)
         finally:
             app.root.destroy()
+
+    def test_queue_display_selects_first_item_for_inspect_actions(self):
+        app = self._make_app()
+        try:
+            source = Path(self._tmpdir.name) / "inspect.png"
+            source.write_bytes(b"not a real image")
+            item = self._g.QueueItem(
+                id="inspect-target",
+                file_path=str(source),
+                output_path=str(source.with_name("inspect_no_sub.png")),
+                config=self._g.ProcessingConfig(),
+            )
+            app.queue.append(item)
+            app._selected_queue_item_id = None
+
+            app._update_queue_display()
+
+            self.assertEqual(app._selected_queue_item_id, item.id)
+            self.assertIs(app._get_selected_queue_item(), item)
+            self.assertTrue(app.preview_mask_btn.enabled)
+            self.assertTrue(app.preview_inpaint_btn.enabled)
+        finally:
+            app.root.destroy()
+
+    def test_region_changes_update_idle_queue_snapshots(self):
+        app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)
+        app.config = self._g.ProcessingConfig()
+        app.queue = []
+        app.queue_lock = threading.Lock()
+
+        source = Path(self._tmpdir.name) / "region.png"
+        source.write_bytes(b"not a real image")
+        item = self._g.QueueItem(
+            id="region-target",
+            file_path=str(source),
+            output_path=str(source.with_name("region_no_sub.png")),
+            config=self._g.ProcessingConfig(),
+        )
+        app.queue.append(item)
+
+        app.config.subtitle_area = (10, 20, 110, 54)
+        app.config.subtitle_areas = [(10, 20, 110, 54), (12, 60, 108, 76)]
+        self.assertEqual(app._apply_region_settings_to_idle_items(), 1)
+
+        self.assertEqual(item.config.subtitle_area, (10, 20, 110, 54))
+        self.assertEqual(
+            item.config.subtitle_areas,
+            [(10, 20, 110, 54), (12, 60, 108, 76)],
+        )
+
+        app.config.subtitle_area = None
+        app.config.subtitle_areas = None
+        self.assertEqual(app._apply_region_settings_to_idle_items(), 1)
+
+        self.assertIsNone(item.config.subtitle_area)
+        self.assertIsNone(item.config.subtitle_areas)
 
     def test_apply_responsive_layout_no_op_when_unchanged(self):
         app = self._make_app()
@@ -99,7 +165,8 @@ class GuiSmokeTests(unittest.TestCase):
                 "forced": False,
             }
             with mock.patch.object(app, "_start_soft_subtitle_probe"):
-                self.assertEqual(app._add_to_queue(str(source)), "added")
+                with mock.patch.object(app, "_show_preview"):
+                    self.assertEqual(app._add_to_queue(str(source)), "added")
 
             item = app.queue[0]
             app._apply_soft_subtitle_probe_records(item.id, [stream])

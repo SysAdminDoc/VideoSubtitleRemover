@@ -23,7 +23,7 @@
 
 !define VERSIONMAJOR 3
 !define VERSIONMINOR 17
-!define VERSIONPATCH 0
+!define VERSIONPATCH 2
 
 Name "${APPNAME}"
 OutFile "VideoSubtitleRemoverPro-Setup.exe"

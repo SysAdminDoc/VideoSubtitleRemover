@@ -406,6 +406,25 @@ class VideoSubtitleRemoverApp:
             self._update_queue_display()
         return updated
 
+    def _apply_region_settings_to_idle_items(self) -> int:
+        """Copy the current manual region fields into idle queue snapshots."""
+        area = tuple(self.config.subtitle_area) if self.config.subtitle_area else None
+        areas = (
+            [tuple(region) for region in self.config.subtitle_areas]
+            if self.config.subtitle_areas else None
+        )
+        updated = 0
+        with self.queue_lock:
+            for item in self.queue:
+                if item.status == ProcessingStatus.IDLE:
+                    item.config.subtitle_area = area
+                    item.config.subtitle_areas = list(areas) if areas else None
+                    item.config.normalized()
+                    updated += 1
+        if updated:
+            save_queue_state(self.queue)
+        return updated
+
     def _setup_styles(self):
         """Configure ttk styles for a cohesive dark theme."""
         style = ttk.Style()
@@ -1034,11 +1053,18 @@ class VideoSubtitleRemoverApp:
         self.status_hint.config(wraplength=520 if stacked else 360)
         self._render_header_chips()
 
-    def _get_selected_queue_item(self) -> Optional[QueueItem]:
-        """Return the currently selected queue item, if any."""
-        if not self._selected_queue_item_id:
-            return None
-        return next((item for item in self.queue if item.id == self._selected_queue_item_id), None)
+    def _get_selected_queue_item(self, fallback_to_first: bool = False) -> Optional[QueueItem]:
+        """Return the selected queue item, optionally falling back to the first item."""
+        if self._selected_queue_item_id:
+            selected = next(
+                (item for item in self.queue if item.id == self._selected_queue_item_id),
+                None,
+            )
+            if selected is not None:
+                return selected
+        if fallback_to_first:
+            return next(iter(self.queue), None)
+        return None
 
     def _set_workflow_stage(self, stage: int):
         """Update the compact workflow pills in the header."""
@@ -1158,13 +1184,13 @@ class VideoSubtitleRemoverApp:
             )
 
     def _open_selected_mask_preview(self):
-        item = self._get_selected_queue_item()
+        item = self._get_selected_queue_item(fallback_to_first=True)
         if item:
             self._show_preview(item, show_mask=True)
 
     def _probe_language_from_preview(self):
         """Auto-detect subtitle language from the selected queue item."""
-        item = self._get_selected_queue_item()
+        item = self._get_selected_queue_item(fallback_to_first=True)
         source = None
         if item:
             source = item.file_path
@@ -1236,7 +1262,7 @@ class VideoSubtitleRemoverApp:
         The window opens both video captures, holds them open for the
         duration of the modal, and composes a single image per scrub.
         """
-        item = self._get_selected_queue_item()
+        item = self._get_selected_queue_item(fallback_to_first=True)
         if item is None or item.status != ProcessingStatus.COMPLETE:
             self._update_status("Select a completed item first", "warning")
             return
@@ -1389,7 +1415,7 @@ class VideoSubtitleRemoverApp:
         """F-3: run a single-frame detect + inpaint pass on the selected
         item and render the result in the preview pane. Lets users A/B
         settings without committing a full batch run."""
-        item = self._get_selected_queue_item()
+        item = self._get_selected_queue_item(fallback_to_first=True)
         if item is None:
             self._update_status("Select a queue item first", "warning")
             return
@@ -3762,8 +3788,9 @@ class VideoSubtitleRemoverApp:
         compat) AND the full rect list to `subtitle_areas`.
         """
         source_path = None
-        selected = self._get_selected_queue_item()
+        selected = self._get_selected_queue_item(fallback_to_first=True)
         if selected:
+            self._set_selected_queue_item(selected.id)
             source_path = selected.file_path
         else:
             for item in self.queue:
@@ -3963,6 +3990,7 @@ class VideoSubtitleRemoverApp:
                     self.config.subtitle_areas = None
                     self.config.subtitle_area = None
                     self._update_status("Cleared manual subtitle regions", "info")
+                self._apply_region_settings_to_idle_items()
                 self._update_region_label_display()
                 win.destroy()
 
@@ -4015,6 +4043,7 @@ class VideoSubtitleRemoverApp:
         claims automatic detection."""
         self.config.subtitle_area = None
         self.config.subtitle_areas = None
+        self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         self._update_status("Subtitle detection returned to automatic mode")
 
@@ -4814,6 +4843,8 @@ class VideoSubtitleRemoverApp:
 
         if self._selected_queue_item_id and self._selected_queue_item_id in self.queue_widgets:
             self._set_selected_queue_item(self._selected_queue_item_id)
+        elif self.queue:
+            self._set_selected_queue_item(self.queue[0].id)
         else:
             self._set_selected_queue_item(None)
         self._refresh_action_states()
