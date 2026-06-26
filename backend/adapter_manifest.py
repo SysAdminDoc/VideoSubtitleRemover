@@ -281,7 +281,7 @@ def verify_adapter_path(
             unsafe_override=True,
             strict_unknown=strict_unknown,
         )
-    if strict_unknown:
+    if strict_unknown or entry.remote_code_required:
         return AdapterVerification(
             adapter=entry,
             path=str(path),
@@ -289,9 +289,14 @@ def verify_adapter_path(
             exists=True,
             allowed=False,
             hash_status="unknown",
-            reason="adapter model has no pinned SHA-256 in the manifest",
+            reason=(
+                "adapter requires remote code execution and has no "
+                "pinned SHA-256 in the manifest"
+                if entry.remote_code_required else
+                "adapter model has no pinned SHA-256 in the manifest"
+            ),
             unsafe_override=False,
-            strict_unknown=True,
+            strict_unknown=strict_unknown or entry.remote_code_required,
         )
     return AdapterVerification(
         adapter=entry,
