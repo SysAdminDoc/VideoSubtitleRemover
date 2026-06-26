@@ -453,6 +453,9 @@ def main():
                        help="Write a redacted diagnostics zip and exit.")
     parser.add_argument("--validate-config", action="store_true",
                        help="Print the resolved ProcessingConfig as JSON and exit.")
+    parser.add_argument("--self-test", action="store_true",
+                       help="Probe OCR engines, inpaint backends, GPU providers, "
+                            "and codecs, then print results and exit.")
     parser.add_argument("--json-log", metavar="PATH",
                        help="Append a structured JSON-line log at PATH.")
 
@@ -495,6 +498,16 @@ def main():
         from backend.cache_inventory import clean_cache
         print("Cleaning stale VSR caches:")
         clean_cache(dry_run=False)
+        sys.exit(0)
+
+    if args.self_test:
+        from backend.support_bundle import run_self_test
+        results = run_self_test()
+        for category, entries in results.items():
+            print(f"\n{category.upper()}")
+            for entry in entries:
+                mark = "OK" if entry["available"] else "  "
+                print(f"  [{mark}] {entry['name']}: {entry['reason']}")
         sys.exit(0)
 
     soft_mode_count = sum(

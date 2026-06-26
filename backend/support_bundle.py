@@ -317,3 +317,114 @@ def _redact_json(value: Any, key: str = "") -> Any:
     if isinstance(value, str):
         return redact_text(value)
     return value
+
+
+def run_self_test() -> dict:
+    """Probe OCR engines, inpaint backends, GPU providers, and codecs.
+
+    Returns a dict of category -> list of {name, available, reason} entries.
+    """
+    results = {"ocr": [], "inpaint": [], "gpu": [], "codec": []}
+
+    def _probe(category, name, fn):
+        try:
+            ok, reason = fn()
+            results[category].append({"name": name, "available": ok,
+                                       "reason": reason})
+        except Exception as exc:
+            results[category].append({"name": name, "available": False,
+                                       "reason": str(exc)[:200]})
+
+    def _check_rapidocr():
+        try:
+            from rapidocr import RapidOCR
+            r = RapidOCR()
+            return True, f"rapidocr loaded"
+        except ImportError:
+            try:
+                from rapidocr_onnxruntime import RapidOCR
+                return True, "rapidocr_onnxruntime loaded"
+            except ImportError:
+                return False, "rapidocr not installed"
+
+    def _check_paddleocr():
+        try:
+            import paddleocr
+            return True, f"paddleocr {getattr(paddleocr, '__version__', '?')}"
+        except ImportError:
+            return False, "paddleocr not installed"
+
+    def _check_easyocr():
+        try:
+            import easyocr
+            return True, "easyocr available"
+        except ImportError:
+            return False, "easyocr not installed"
+
+    def _check_lama_onnx():
+        try:
+            import onnxruntime
+            return True, f"onnxruntime {onnxruntime.__version__}"
+        except ImportError:
+            return False, "onnxruntime not installed"
+
+    def _check_lama_cv2dnn():
+        try:
+            import cv2
+            major = int(cv2.__version__.split(".")[0])
+            if major >= 5:
+                return True, f"opencv {cv2.__version__} (DNN available)"
+            return False, f"opencv {cv2.__version__} (DNN requires 5.0+)"
+        except Exception:
+            return False, "opencv not available"
+
+    def _check_cuda():
+        try:
+            import torch
+            if torch.cuda.is_available():
+                name = torch.cuda.get_device_name(0)
+                return True, f"CUDA: {name}"
+            return False, "CUDA not available"
+        except ImportError:
+            return False, "torch not installed"
+
+    def _check_directml():
+        try:
+            import onnxruntime as ort
+            if "DmlExecutionProvider" in ort.get_available_providers():
+                return True, "DirectML available"
+            return False, "DmlExecutionProvider not in providers"
+        except ImportError:
+            return False, "onnxruntime not installed"
+
+    def _check_ffmpeg_encoder(codec_name, encoder_name):
+        def _fn():
+            import shutil as _sh
+            import subprocess as _sp
+            if _sh.which("ffmpeg") is None:
+                return False, "ffmpeg not on PATH"
+            try:
+                result = _sp.run(
+                    ["ffmpeg", "-hide_banner", "-encoders"],
+                    capture_output=True, text=True, timeout=10)
+                if encoder_name in result.stdout:
+                    return True, f"{encoder_name} available"
+                return False, f"{encoder_name} not found in ffmpeg"
+            except Exception as e:
+                return False, str(e)[:100]
+        return _fn
+
+    _probe("ocr", "RapidOCR", _check_rapidocr)
+    _probe("ocr", "PaddleOCR", _check_paddleocr)
+    _probe("ocr", "EasyOCR", _check_easyocr)
+    _probe("inpaint", "LaMa-ONNX", _check_lama_onnx)
+    _probe("inpaint", "LaMa-CV2DNN", _check_lama_cv2dnn)
+    _probe("gpu", "CUDA", _check_cuda)
+    _probe("gpu", "DirectML", _check_directml)
+    _probe("codec", "H.264", _check_ffmpeg_encoder("h264", "libx264"))
+    _probe("codec", "H.265", _check_ffmpeg_encoder("h265", "libx265"))
+    _probe("codec", "AV1", _check_ffmpeg_encoder("av1", "libsvtav1"))
+    _probe("codec", "VVC", _check_ffmpeg_encoder("vvc", "libvvenc"))
+    _probe("codec", "NVENC", _check_ffmpeg_encoder("nvenc", "h264_nvenc"))
+
+    return results

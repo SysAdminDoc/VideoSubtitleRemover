@@ -259,6 +259,7 @@ review-needed outputs. A failed gate changes the batch row status to
 | `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) | Off |
 | `--support-bundle PATH` | Write a redacted diagnostics zip and exit | - |
 | `--validate-config` | Print resolved config and exit | Off |
+| `--self-test` | Probe OCR engines, GPU providers, and codecs, then exit | Off |
 | `--skip-existing` | Skip files whose output already exists | Off |
 | `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
 | `--output-frames` | Write cleaned frames as individual PNGs instead of a video | Off |
