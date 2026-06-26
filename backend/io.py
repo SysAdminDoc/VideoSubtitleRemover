@@ -715,6 +715,11 @@ class _LosslessIntermediateWriter:
         if frame is None:
             return
         if self._proc is not None and self._proc.stdin is not None:
+            if self._proc.poll() is not None:
+                raise BrokenPipeError(
+                    f"FFV1 ffmpeg process exited with code {self._proc.returncode}"
+                    " before frame could be written"
+                )
             try:
                 self._proc.stdin.write(frame.tobytes())
             except (BrokenPipeError, OSError) as exc:
