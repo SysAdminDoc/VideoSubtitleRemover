@@ -4092,5 +4092,89 @@ class DependencyFloorTests(unittest.TestCase):
         self.assertIn("Pillow>=12.2.0", workflow)
 
 
+class QueueAutosaveRoundTripTests(unittest.TestCase):
+    def setUp(self):
+        import gui.config as gui_config
+        self._tmp = tempfile.TemporaryDirectory()
+        self._old = gui_config.QUEUE_STATE_FILE
+        gui_config.QUEUE_STATE_FILE = Path(self._tmp.name) / "queue.json"
+
+    def tearDown(self):
+        import gui.config as gui_config
+        gui_config.QUEUE_STATE_FILE = self._old
+        self._tmp.cleanup()
+
+    def test_save_load_clear_round_trip(self):
+        import gui.config as gui_config
+        item = gui_config.QueueItem(
+            id="rt-1",
+            file_path="video.mp4",
+            output_path="cleaned.mp4",
+            config=gui_config.ProcessingConfig(
+                detection_lang="ja",
+                output_quality=18,
+            ),
+        )
+        gui_config.save_queue_state([item])
+        loaded = gui_config.load_queue_state()
+        self.assertIsNotNone(loaded)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["file_path"], "video.mp4")
+        self.assertEqual(loaded[0]["config"]["detection_lang"], "ja")
+        gui_config.clear_queue_state()
+        self.assertIsNone(gui_config.load_queue_state())
+
+    def test_non_idle_items_are_not_saved(self):
+        import gui.config as gui_config
+        idle = gui_config.QueueItem(
+            id="idle-1", file_path="a.mp4", output_path="a_out.mp4",
+            config=gui_config.ProcessingConfig(),
+        )
+        done = gui_config.QueueItem(
+            id="done-1", file_path="b.mp4", output_path="b_out.mp4",
+            config=gui_config.ProcessingConfig(),
+            status=gui_config.ProcessingStatus.COMPLETE,
+        )
+        gui_config.save_queue_state([idle, done])
+        loaded = gui_config.load_queue_state()
+        self.assertIsNotNone(loaded)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["file_path"], "a.mp4")
+
+
+class CliNumericRangeTests(unittest.TestCase):
+    def test_out_of_range_crf_is_clamped(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        cfg = ProcessingConfig(output_quality=100)
+        cfg = normalize_processing_config(cfg)
+        self.assertLessEqual(cfg.output_quality, 51)
+
+    def test_negative_mask_dilate_is_clamped(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        cfg = ProcessingConfig(mask_dilate_px=-5)
+        cfg = normalize_processing_config(cfg)
+        self.assertGreaterEqual(cfg.mask_dilate_px, 0)
+
+    def test_extreme_frame_skip_is_clamped(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        cfg = ProcessingConfig(detection_frame_skip=9999)
+        cfg = normalize_processing_config(cfg)
+        self.assertLessEqual(cfg.detection_frame_skip, 240)
+
+
+class TempCleanupOnExceptionTests(unittest.TestCase):
+    def test_temp_output_removed_after_simulated_error(self):
+        from backend.io import (
+            _allocate_temp_output_path,
+            _cleanup_temp_output,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = os.path.join(tmpdir, "output.mp4")
+            temp = _allocate_temp_output_path(output)
+            self.assertTrue(os.path.exists(temp))
+            _cleanup_temp_output(temp)
+            self.assertFalse(os.path.exists(temp))
+
+
 if __name__ == "__main__":
     unittest.main()

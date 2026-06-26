@@ -7,6 +7,9 @@ import unittest
 from contextlib import contextmanager
 from unittest import mock
 
+import cv2
+import numpy as np
+
 
 @contextmanager
 def _fresh_detection_module():
@@ -120,6 +123,25 @@ class DetectionCascadeTests(unittest.TestCase):
 
         self.assertEqual(detector._engine_name, "PaddleOCR")
         self.assertIs(detector._paddle_model, paddle_model)
+
+    def test_opencv_fallback_detect_returns_list(self):
+        from backend.detection import SubtitleDetector
+        detector = SubtitleDetector.__new__(SubtitleDetector)
+        detector.device = "cpu"
+        detector.lang = "en"
+        detector.vertical = False
+        detector._engine_name = "OpenCV fallback"
+        detector._rapid_model = None
+        detector._paddle_model = None
+        detector._surya_det = None
+        detector._surya_processor = None
+        detector._easyocr_reader = None
+        detector._vlm_detector = None
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(frame, "SUBTITLE TEXT", (100, 440),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+        boxes = detector.detect(frame, threshold=0.3)
+        self.assertIsInstance(boxes, list)
 
 
 class VerticalTextRotationTests(unittest.TestCase):

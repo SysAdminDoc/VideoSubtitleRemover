@@ -31,6 +31,7 @@ _DEPENDENCY_PACKAGES = (
     "onnxruntime",
     "onnxruntime-directml",
     "paddleocr",
+    "rapidocr",
     "rapidocr-onnxruntime",
     "easyocr",
     "sentry-sdk",
@@ -51,6 +52,7 @@ _SENSITIVE_KEYS = {
     "settings_file",
     "token",
     "window_geometry",
+    "work_directory",
 }
 _SENSITIVE_SUFFIXES = (
     "_dir",
