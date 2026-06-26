@@ -65,6 +65,27 @@ REMOTE_MODEL_POLICIES = {
         path_env="VSR_FLORENCE2_PATH",
         revision_env="VSR_FLORENCE2_REVISION",
     ),
+    "qwen25vl": RemoteModelPolicy(
+        name="qwen25vl",
+        repo="Qwen/Qwen2.5-VL-2B-Instruct",
+        path_env="VSR_QWEN25VL_PATH",
+        revision_env="VSR_QWEN25VL_REVISION",
+        executes_code=False,
+    ),
+    "sam2": RemoteModelPolicy(
+        name="sam2",
+        repo="facebookresearch/sam2",
+        path_env="VSR_SAM2_CHECKPOINT",
+        revision_env="VSR_SAM2_REVISION",
+        executes_code=False,
+    ),
+    "matanyone": RemoteModelPolicy(
+        name="matanyone",
+        repo="pq-yang/MatAnyone2",
+        path_env="VSR_MATANYONE_PATH",
+        revision_env="VSR_MATANYONE_REVISION",
+        executes_code=False,
+    ),
     "cotracker3": RemoteModelPolicy(
         name="cotracker3",
         repo="facebookresearch/co-tracker",

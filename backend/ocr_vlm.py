@@ -166,8 +166,18 @@ class _Qwen25VLDetector(_BaseVlmDetector):
             )
             return None
         try:
-            processor = AutoProcessor.from_pretrained(self.MODEL_ID)
-            model = Qwen2VLForConditionalGeneration.from_pretrained(self.MODEL_ID)
+            from backend.remote_model_policy import resolve_remote_model_source
+            source = resolve_remote_model_source("qwen25vl")
+            if not source.allowed:
+                logger.warning("Qwen2.5-VL disabled: %s", source.reason)
+                return None
+            model_ref = source.source or self.MODEL_ID
+            kwargs = {}
+            if source.revision:
+                kwargs["revision"] = source.revision
+            processor = AutoProcessor.from_pretrained(model_ref, **kwargs)
+            model = Qwen2VLForConditionalGeneration.from_pretrained(
+                model_ref, **kwargs)
             if "cuda" in self.device and torch.cuda.is_available():
                 model = model.to("cuda")
             model.eval()
