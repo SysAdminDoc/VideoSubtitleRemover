@@ -126,12 +126,22 @@ class ModelDownloadHintTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             env = {"HOME": tmpdir, "USERPROFILE": tmpdir, "APPDATA": tmpdir}
             with mock.patch.object(md, "_onnxruntime_provider_status",
-                                   return_value={
-                                       "available": True,
-                                       "version": "1.23.0",
-                                       "providers": ["CPUExecutionProvider"],
-                                       "next_action": "",
-                                   }):
+                                       return_value={
+                                           "available": True,
+                                           "version": "1.23.0",
+                                           "providers": [
+                                               "CUDAExecutionProvider",
+                                               "CPUExecutionProvider",
+                                           ],
+                                           "cuda": {
+                                               "packageInstalled": True,
+                                               "packageChannel": "cuda12-pypi-stable",
+                                           },
+                                           "directml": {
+                                               "packageInstalled": False,
+                                           },
+                                           "next_action": "",
+                                       }):
                 with mock.patch.object(md, "_opencv_runtime_status",
                                        return_value={
                                            "available": True,
@@ -162,7 +172,8 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(status["schema"], "vsr.backend_status.v1")
         self.assertEqual(status["detection"][0]["status"], "ready")
         self.assertEqual(status["detection"][0]["model_count"], 3)
-        self.assertIn("CPUExecutionProvider", status["summary"]["providers"])
+        self.assertIn("CUDAExecutionProvider", status["summary"]["providers"])
+        self.assertIn("CUDA cuda12-pypi-stable", status["summary"]["providers"])
         self.assertEqual(
             status["language_support"]["schema"],
             "vsr.language_support.v1",

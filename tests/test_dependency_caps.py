@@ -66,6 +66,41 @@ class DependencyCapTests(unittest.TestCase):
         self.assertIn("rapidocr-onnxruntime==2.0.0", problems[1])
         self.assertIn("paddleocr==4.0.0", problems[2])
 
+    def test_onnxruntime_provider_status_distinguishes_cuda_and_directml(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={
+                "onnxruntime-gpu": "1.21.0",
+                "onnxruntime-directml": "1.22.0",
+            },
+            providers=[
+                "CUDAExecutionProvider",
+                "DmlExecutionProvider",
+                "CPUExecutionProvider",
+            ],
+            runtime_version="1.21.0",
+            preload_dlls_available=True,
+        )
+
+        self.assertEqual(status["schema"], "vsr.onnxruntime_providers.v1")
+        self.assertEqual(status["cuda"]["packageChannel"], "cuda12-pypi-stable")
+        self.assertTrue(status["cuda"]["providerAvailable"])
+        self.assertTrue(status["directml"]["providerAvailable"])
+        self.assertEqual(status["warnings"], [])
+
+    def test_onnxruntime_release_advisory_flags_legacy_cuda_package(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={"onnxruntime-gpu": "1.17.3"},
+            providers=["CPUExecutionProvider"],
+            runtime_version="1.17.3",
+            preload_dlls_available=False,
+        )
+        advisories = dependency_caps.onnxruntime_release_advisories(status)
+
+        ids = {item["id"] for item in advisories}
+        self.assertIn("ORT-CUDA-LEGACY-PACKAGE", ids)
+        self.assertIn("ORT-CUDA-PRELOAD-MISSING", ids)
+        self.assertTrue(all(item["allowed"] for item in advisories))
+
 
 if __name__ == "__main__":
     unittest.main()

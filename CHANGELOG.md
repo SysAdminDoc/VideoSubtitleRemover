@@ -61,6 +61,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   SHA-256-manifested model-cache zip into the app model cache, rejecting path
   traversal, executable entries, and hash mismatches while reporting missing
   optional known assets afterward.
+- **ONNX Runtime provider migration status.** Backend status, support bundles,
+  release evidence, and setup now distinguish CPU, CUDA, and DirectML ONNX
+  Runtime package/provider state, recommend `onnxruntime-gpu>=1.21.0` for the
+  stable NVIDIA CUDA 12 path, and flag legacy CUDA provider packages in release
+  advisory evidence.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.

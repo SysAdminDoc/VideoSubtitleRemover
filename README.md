@@ -165,15 +165,20 @@ GGUF model, then set `VSR_PADDLEOCR_VL=1`; use
 `http://127.0.0.1:8080/v1`. If the server or PaddleOCRVL entrypoint is not
 available, detection falls back to the normal cascade.
 
-On AMD/Intel systems, setup installs `onnxruntime-directml`. When ONNX
-Runtime reports `DmlExecutionProvider`, RapidOCR is initialized with its
-DirectML provider settings; unsupported RapidOCR versions or missing
-providers fall back to CPU automatically. RapidOCR legacy tuple output and
-current structured object/dict output are both normalized to the same
-axis-aligned detector boxes. Opt-in ONNX inpainters inspect
-their model `opset_import` metadata before creating a DirectML session; if
-the default ONNX opset is newer than DirectML's supported ceiling, VSR uses
-the CPU provider instead of failing at session creation.
+On NVIDIA systems, setup installs `onnxruntime-gpu>=1.21.0` for the tested
+CUDA 12.x ONNX Runtime path; CUDA 13.x currently requires ONNX Runtime
+nightly/custom wheels rather than the stable PyPI default. Backend status and
+release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
+channel, `onnxruntime-directml`, and the providers reported at runtime. On
+AMD/Intel systems, setup installs `onnxruntime-directml`. When ONNX Runtime
+reports `DmlExecutionProvider`, RapidOCR is initialized with its DirectML
+provider settings; unsupported RapidOCR versions or missing providers fall
+back to CPU automatically. RapidOCR legacy tuple output and current structured
+object/dict output are both normalized to the same axis-aligned detector boxes.
+Opt-in ONNX inpainters inspect their model `opset_import` metadata before
+creating a DirectML session; if the default ONNX opset is newer than DirectML's
+supported ceiling, VSR uses the CPU provider instead of failing at session
+creation.
 
 Optional model paths such as `VSR_LAMA_ONNX`, `VSR_MIGAN_ONNX`,
 `VSR_FASTDVDNET`, and `VSR_TRANSNETV2` are checked against a local adapter

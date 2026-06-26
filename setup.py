@@ -431,6 +431,18 @@ def install_dependencies(gpu_info=None):
                 "installing ONNX Runtime DirectML",
             )
             print(f"  [OK] ONNX Runtime DirectML installed")
+        elif gpu_info and gpu_info.get("nvidia") and not gpu_info.get("cuda_disabled_by_python"):
+            print("  Installing ONNX Runtime CUDA provider...")
+            print("  Stable PyPI onnxruntime-gpu is the CUDA 12.x path; CUDA 13 uses ONNX Runtime nightly/custom wheels.")
+            try:
+                _run_pip_install(
+                    [pip, 'install', 'onnxruntime-gpu>=1.21.0'],
+                    "installing ONNX Runtime CUDA",
+                )
+                print(f"  [OK] ONNX Runtime CUDA provider installed")
+            except subprocess.CalledProcessError as exc:
+                print(f"{Colors.YELLOW}  WARNING: ONNX Runtime CUDA install failed: {exc}{Colors.END}")
+                print("  LaMa ONNX will use CPU/DirectML if available; PyTorch/Paddle paths are unchanged.")
 
         print(f"  [OK] All dependencies installed")
         return True

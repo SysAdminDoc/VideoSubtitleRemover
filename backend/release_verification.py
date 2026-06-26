@@ -24,6 +24,10 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence
 
 from backend.adapter_manifest import release_manifest_status
+from backend.dependency_caps import (
+    collect_onnxruntime_provider_status,
+    onnxruntime_release_advisories,
+)
 from backend.ffmpeg_profiles import collect_ffmpeg_capability_profiles
 from backend.onnx_model_info import rapidocr_release_provenance
 from backend.remote_model_policy import release_remote_model_status
@@ -280,6 +284,15 @@ def collect_release_advisories(
             ),
             mitigation="Update opencv-python once it bundles libpng >= 1.6.54.",
         ))
+    package_versions = {
+        str(dep.get("name") or "").lower().replace("_", "-"): str(dep.get("version") or "")
+        for dep in dependencies
+        if dep.get("name")
+    }
+    ort_status = collect_onnxruntime_provider_status(
+        package_versions=package_versions,
+    )
+    findings.extend(onnxruntime_release_advisories(ort_status))
 
     blocking = [item for item in findings if item.get("blocking")]
     return {
@@ -402,7 +415,15 @@ def build_release_evidence(
     hidden = parse_hidden_imports(hidden_imports)
     collected = tuple(str(collect_data).split()) if isinstance(collect_data, str) else tuple(collect_data)
     dependencies = collect_dependency_versions()
+    package_versions = {
+        str(dep.get("name") or "").lower().replace("_", "-"): str(dep.get("version") or "")
+        for dep in dependencies
+        if dep.get("name")
+    }
     sbom = build_cyclonedx_sbom(dependencies)
+    onnxruntime_providers = collect_onnxruntime_provider_status(
+        package_versions=package_versions,
+    )
     advisories = collect_release_advisories(dependencies, env=env)
     hidden_payload = {
         "schema": "vsr.release_hidden_imports.v1",
@@ -440,6 +461,7 @@ def build_release_evidence(
             "ffmpeg": _tool_version(["ffmpeg", "-version"]),
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
+            "onnxRuntimeProviders": onnxruntime_providers,
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {

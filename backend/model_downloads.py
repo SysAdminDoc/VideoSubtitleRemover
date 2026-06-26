@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
+from backend.dependency_caps import collect_onnxruntime_provider_status
 from backend.language_support import language_support_status
 from backend.remote_model_policy import resolve_remote_model_source
 
@@ -252,31 +253,33 @@ def _module_status(
 
 
 def _onnxruntime_provider_status() -> dict:
-    if not _module_available("onnxruntime"):
-        return {
-            "available": False,
-            "version": None,
-            "providers": [],
-            "next_action": "Install onnxruntime or onnxruntime-directml for ONNX backends.",
-        }
-    try:
-        import onnxruntime as ort
-        providers = list(ort.get_available_providers())
-        version = getattr(ort, "__version__", None) or _dist_version("onnxruntime")
-        return {
-            "available": True,
-            "version": version,
-            "providers": providers,
-            "next_action": "" if providers else "Reinstall ONNX Runtime; no providers were reported.",
-        }
-    except Exception as exc:
-        return {
-            "available": False,
-            "version": _dist_version("onnxruntime"),
-            "providers": [],
-            "error": str(exc),
-            "next_action": "Repair ONNX Runtime; provider probing failed.",
-        }
+    status = collect_onnxruntime_provider_status()
+    package_versions = [
+        str(item.get("version") or "")
+        for item in status.get("packages", {}).values()
+        if item.get("installed")
+    ]
+    version = status.get("runtimeVersion") or (package_versions[0] if package_versions else None)
+    warnings = list(status.get("warnings", []) or [])
+    if not version and not status.get("availableProviders"):
+        next_action = (
+            "Install onnxruntime, onnxruntime-gpu, or onnxruntime-directml "
+            "for ONNX backends."
+        )
+    elif warnings:
+        next_action = str(warnings[0].get("message") or "")
+    else:
+        next_action = ""
+    return {
+        "available": bool(version or status.get("availableProviders")),
+        "version": version,
+        "providers": list(status.get("availableProviders", []) or []),
+        "packages": status.get("packages", {}),
+        "cuda": status.get("cuda", {}),
+        "directml": status.get("directml", {}),
+        "warnings": warnings,
+        "next_action": next_action,
+    }
 
 
 def _opencv_runtime_status() -> dict:
@@ -537,6 +540,15 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
         ", ".join(ort.get("providers", [])[:3])
         if ort.get("available") else "ONNX Runtime not installed"
     )
+    cuda = ort.get("cuda", {}) if isinstance(ort.get("cuda"), Mapping) else {}
+    if cuda.get("packageInstalled"):
+        provider_text += f"; CUDA {cuda.get('packageChannel') or 'unknown'}"
+    directml = (
+        ort.get("directml", {})
+        if isinstance(ort.get("directml"), Mapping) else {}
+    )
+    if directml.get("packageInstalled"):
+        provider_text += "; DirectML package installed"
     rapid = detection_items[0] if detection_items else {}
     rapid_text = (
         f"RapidOCR {rapid.get('model_count', 0)} model file(s)"

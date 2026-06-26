@@ -35,6 +35,7 @@ _DEPENDENCY_PACKAGES = (
     "torch",
     "torchvision",
     "onnxruntime",
+    "onnxruntime-gpu",
     "onnxruntime-directml",
     "paddleocr",
     "rapidocr",

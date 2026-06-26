@@ -207,6 +207,22 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertTrue(any("onnxruntime-directml>=1.18.0" in call for call in calls))
         self.assertFalse(any("torch-directml" in call for call in calls))
 
+    def test_nvidia_dependencies_install_onnxruntime_gpu(self):
+        gpu_info = {
+            "nvidia": True,
+            "amd": False,
+            "intel": False,
+            "cuda_disabled_by_python": False,
+        }
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                ok = self.setup_mod.install_dependencies(gpu_info)
+
+        self.assertTrue(ok)
+        calls = [" ".join(call.args[0]) for call in run.call_args_list]
+        self.assertTrue(any("onnxruntime-gpu>=1.21.0" in call for call in calls))
+        self.assertFalse(any("onnxruntime-directml" in call for call in calls))
+
     def test_generated_launchers_match_tracked_files(self):
         root = Path(__file__).resolve().parents[1]
         launchers = [

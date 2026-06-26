@@ -70,6 +70,18 @@ class ReleaseVerificationTests(unittest.TestCase):
                 },
             ),
             mock.patch(
+                "backend.release_verification.collect_onnxruntime_provider_status",
+                return_value={
+                    "schema": "vsr.onnxruntime_providers.v1",
+                    "cuda": {
+                        "packageChannel": "cuda12-pypi-stable",
+                        "providerAvailable": True,
+                    },
+                    "directml": {"providerAvailable": False},
+                    "warnings": [],
+                },
+            ),
+            mock.patch(
                 "backend.release_verification._run_smoke",
                 return_value={"ran": True, "passed": True, "returncode": 0},
             ),
@@ -122,6 +134,10 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(
             evidence["releaseTools"]["ffmpegProfiles"]["schema"],
             "vsr.ffmpeg_profiles.v1",
+        )
+        self.assertEqual(
+            evidence["releaseTools"]["onnxRuntimeProviders"]["schema"],
+            "vsr.onnxruntime_providers.v1",
         )
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
@@ -177,6 +193,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                 "backend.release_verification.collect_dependency_versions",
                 return_value=[{"name": "torch", "version": "2.5.1"}],
             )
+
             with ExitStack() as stack:
                 for patch in patches:
                     stack.enter_context(patch)
@@ -189,6 +206,31 @@ class ReleaseVerificationTests(unittest.TestCase):
                     )
 
         self.assertIn("CVE-2025-32434", str(ctx.exception))
+
+    def test_release_advisories_include_onnxruntime_cuda_warnings(self):
+        deps = [{"name": "onnxruntime-gpu", "version": "1.17.3"}]
+        with mock.patch(
+            "backend.release_verification.collect_onnxruntime_provider_status",
+            return_value={
+                "schema": "vsr.onnxruntime_providers.v1",
+                "cuda": {
+                    "packageVersion": "1.17.3",
+                    "packageChannel": "legacy-cuda-package",
+                },
+                "warnings": [
+                    {
+                        "id": "ORT-CUDA-LEGACY-PACKAGE",
+                        "severity": "medium",
+                        "message": "legacy CUDA package",
+                    }
+                ],
+            },
+        ):
+            advisories = release_verification.collect_release_advisories(deps)
+
+        self.assertEqual(advisories["summary"]["blocking"], 0)
+        ids = {item["id"] for item in advisories["advisories"]}
+        self.assertIn("ORT-CUDA-LEGACY-PACKAGE", ids)
 
     def test_opencv_libpng_exception_is_removed_when_runtime_is_fixed(self):
         deps = [{"name": "opencv-python", "version": "4.13.0.92"}]
