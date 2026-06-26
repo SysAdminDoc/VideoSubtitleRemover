@@ -115,7 +115,7 @@ echo.
 echo  EXE Location: !DIST_DIR!\
 echo  Bundle docs: README.md, LICENSE, CHANGELOG.md
 echo  Bundle launchers: Run_VSR_Pro.bat, Run_VSR_Pro_Debug.bat, Run_VSR_Pro.ps1
-echo  Release evidence: release-verification.json, release-hidden-imports.json, sbom.cdx.json
+echo  Release evidence: release-verification.json, release-hidden-imports.json, release-advisories.json, sbom.cdx.json
 echo.
 echo  To distribute, zip the entire VideoSubtitleRemoverPro folder.
 echo.

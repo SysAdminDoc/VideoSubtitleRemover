@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -52,6 +53,14 @@ class ReleaseVerificationTests(unittest.TestCase):
                 "backend.release_verification._run_smoke",
                 return_value={"ran": True, "passed": True, "returncode": 0},
             ),
+            mock.patch(
+                "backend.release_verification.opencv_libpng_status",
+                return_value={
+                    "vulnerable": False,
+                    "libpng_version": "1.6.54",
+                    "fixed_version": "1.6.54",
+                },
+            ),
         ]
         return patches
 
@@ -69,9 +78,10 @@ class ReleaseVerificationTests(unittest.TestCase):
             dist_dir.mkdir()
             self._copy_release_inputs(dist_dir)
 
-            patches = self._patched_environment()
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
-                evidence, hidden_payload, sbom = release_verification.build_release_evidence(
+            with ExitStack() as stack:
+                for patch in self._patched_environment():
+                    stack.enter_context(patch)
+                evidence, hidden_payload, sbom, advisories = release_verification.build_release_evidence(
                     dist_dir=dist_dir,
                     hidden_imports=(
                         "--hidden-import cv2 --hidden-import rapidocr_onnxruntime"
@@ -87,10 +97,14 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertTrue(all(item["bundled"] for item in evidence["launchers"]))
         self.assertTrue(evidence["smokeLaunch"]["passed"])
         self.assertEqual(evidence["sbom"]["componentCount"], 1)
+        self.assertEqual(evidence["advisories"]["file"], "release-advisories.json")
+        self.assertEqual(evidence["advisories"]["blocking"], 0)
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
         self.assertEqual(sbom["components"][0]["name"], "Pillow")
+        self.assertEqual(advisories["schema"], "vsr.release_advisories.v1")
+        self.assertEqual(advisories["summary"]["blocking"], 0)
 
     def test_write_release_evidence_writes_json_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -100,8 +114,9 @@ class ReleaseVerificationTests(unittest.TestCase):
             dist_dir.mkdir()
             self._copy_release_inputs(dist_dir)
 
-            patches = self._patched_environment()
-            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            with ExitStack() as stack:
+                for patch in self._patched_environment():
+                    stack.enter_context(patch)
                 release_verification.write_release_evidence(
                     dist_dir=dist_dir,
                     evidence_dir=evidence_dir,
@@ -115,13 +130,66 @@ class ReleaseVerificationTests(unittest.TestCase):
             hidden_json = json.loads(
                 (evidence_dir / "release-hidden-imports.json").read_text(encoding="utf-8")
             )
+            advisory_json = json.loads(
+                (evidence_dir / "release-advisories.json").read_text(encoding="utf-8")
+            )
             sbom_json = json.loads(
                 (evidence_dir / "sbom.cdx.json").read_text(encoding="utf-8")
             )
 
         self.assertEqual(release_json["schema"], "vsr.release_verification.v1")
         self.assertEqual(hidden_json["hiddenImports"], ["cv2"])
+        self.assertEqual(advisory_json["schema"], "vsr.release_advisories.v1")
         self.assertEqual(sbom_json["specVersion"], "1.5")
+
+    def test_strict_release_fails_on_blocking_advisory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp) / "dist"
+            dist_dir.mkdir()
+            self._copy_release_inputs(dist_dir)
+
+            patches = self._patched_environment()
+            patches[0] = mock.patch(
+                "backend.release_verification.collect_dependency_versions",
+                return_value=[{"name": "torch", "version": "2.5.1"}],
+            )
+            with ExitStack() as stack:
+                for patch in patches:
+                    stack.enter_context(patch)
+                with self.assertRaises(SystemExit) as ctx:
+                    release_verification.write_release_evidence(
+                        dist_dir=dist_dir,
+                        evidence_dir=Path(tmp) / "evidence",
+                        strict=True,
+                        run_smoke=False,
+                    )
+
+        self.assertIn("CVE-2025-32434", str(ctx.exception))
+
+    def test_opencv_libpng_exception_is_removed_when_runtime_is_fixed(self):
+        deps = [{"name": "opencv-python", "version": "4.13.0.92"}]
+        with mock.patch(
+            "backend.release_verification.opencv_libpng_status",
+            return_value={
+                "vulnerable": True,
+                "libpng_version": "1.6.43",
+                "fixed_version": "1.6.54",
+            },
+        ):
+            vulnerable = release_verification.collect_release_advisories(deps)
+        with mock.patch(
+            "backend.release_verification.opencv_libpng_status",
+            return_value={
+                "vulnerable": False,
+                "libpng_version": "1.6.54",
+                "fixed_version": "1.6.54",
+            },
+        ):
+            fixed = release_verification.collect_release_advisories(deps)
+
+        self.assertEqual(vulnerable["advisories"][0]["id"], "CVE-2026-22801")
+        self.assertTrue(vulnerable["advisories"][0]["allowed"])
+        self.assertEqual(fixed["advisories"], [])
 
 
 class LocalBuildScriptTests(unittest.TestCase):
@@ -134,6 +202,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("--collect-data", self.bat)
         self.assertIn("release-verification.json", self.bat)
         self.assertIn("release-hidden-imports.json", self.bat)
+        self.assertIn("release-advisories.json", self.bat)
         self.assertIn("sbom.cdx.json", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)

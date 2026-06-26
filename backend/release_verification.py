@@ -26,6 +26,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 from backend.adapter_manifest import release_manifest_status
 from backend.onnx_model_info import rapidocr_release_provenance
 from backend.remote_model_policy import release_remote_model_status
+from backend.security_checks import opencv_libpng_status
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +34,7 @@ DOCUMENTS = ("README.md", "LICENSE", "CHANGELOG.md")
 LAUNCHERS = ("Run_VSR_Pro.bat", "Run_VSR_Pro_Debug.bat", "Run_VSR_Pro.ps1")
 VERSIONED_DOCS = ("README.md", "CHANGELOG.md")
 HIDDEN_IMPORT_RE = re.compile(r"--hidden-import(?:=|\s+)([^\s]+)")
+STRICT_BLOCKING_SEVERITIES = {"high", "critical"}
 
 
 def _read_config_constant(name: str, default: str) -> str:
@@ -152,6 +154,151 @@ def build_cyclonedx_sbom(dependencies: Sequence[Mapping[str, object]]) -> dict:
     }
 
 
+def _version_parts(value: object) -> tuple[int, ...]:
+    parts = []
+    for match in re.finditer(r"\d+", str(value or "")):
+        parts.append(int(match.group(0)))
+    return tuple(parts)
+
+
+def _version_lt(value: object, floor: str) -> bool:
+    current = _version_parts(value)
+    target = _version_parts(floor)
+    if not current or not target:
+        return False
+    width = max(len(current), len(target))
+    return current + (0,) * (width - len(current)) < target + (0,) * (width - len(target))
+
+
+def _version_gte(value: object, floor: str) -> bool:
+    current = _version_parts(value)
+    target = _version_parts(floor)
+    if not current or not target:
+        return False
+    width = max(len(current), len(target))
+    return current + (0,) * (width - len(current)) >= target + (0,) * (width - len(target))
+
+
+def _dependency_version(
+    dependencies: Sequence[Mapping[str, object]],
+    *names: str,
+) -> Optional[str]:
+    wanted = {name.lower().replace("_", "-") for name in names}
+    for dep in dependencies:
+        name = str(dep.get("name") or "").lower().replace("_", "-")
+        if name in wanted:
+            return str(dep.get("version") or "")
+    return None
+
+
+def _advisory(
+    *,
+    advisory_id: str,
+    package: str,
+    installed_version: str,
+    affected: str,
+    fixed_in: str,
+    severity: str,
+    source: str,
+    allowed: bool = False,
+    allow_reason: str = "",
+    mitigation: str = "",
+) -> dict:
+    severity_norm = severity.lower()
+    blocking = (
+        severity_norm in STRICT_BLOCKING_SEVERITIES
+        and not allowed
+    )
+    return {
+        "id": advisory_id,
+        "package": package,
+        "installedVersion": installed_version,
+        "affected": affected,
+        "fixedIn": fixed_in,
+        "severity": severity_norm,
+        "source": source,
+        "allowed": bool(allowed),
+        "allowReason": allow_reason,
+        "mitigation": mitigation,
+        "blocking": blocking,
+    }
+
+
+def collect_release_advisories(
+    dependencies: Sequence[Mapping[str, object]],
+    *,
+    env: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Collect deterministic release advisory evidence for strict builds."""
+    findings = []
+    torch_version = _dependency_version(dependencies, "torch", "pytorch")
+    if torch_version and _version_lt(torch_version, "2.6.0"):
+        findings.append(_advisory(
+            advisory_id="CVE-2025-32434",
+            package="torch",
+            installed_version=torch_version,
+            affected="<=2.5.1",
+            fixed_in="2.6.0",
+            severity="critical",
+            source="https://nvd.nist.gov/vuln/detail/CVE-2025-32434",
+            mitigation=(
+                "Do not ship builds with vulnerable torch; PyTorch LaMa is "
+                "packaging opt-in and should use torch >= 2.6.0."
+            ),
+        ))
+
+    pillow_version = _dependency_version(dependencies, "pillow", "pil")
+    if (pillow_version and _version_gte(pillow_version, "11.2.0")
+            and _version_lt(pillow_version, "11.3.0")):
+        findings.append(_advisory(
+            advisory_id="CVE-2025-48379",
+            package="Pillow",
+            installed_version=pillow_version,
+            affected=">=11.2.0,<11.3.0",
+            fixed_in="11.3.0",
+            severity="high",
+            source="https://nvd.nist.gov/vuln/detail/CVE-2025-48379",
+            mitigation="Upgrade Pillow before producing a strict release.",
+        ))
+
+    libpng = opencv_libpng_status()
+    if libpng.get("vulnerable") is True:
+        findings.append(_advisory(
+            advisory_id="CVE-2026-22801",
+            package="opencv-python bundled libpng",
+            installed_version=str(libpng.get("libpng_version") or "unknown"),
+            affected=">=1.6.26,<1.6.54",
+            fixed_in=str(libpng.get("fixed_version") or "1.6.54"),
+            severity="medium",
+            source="https://nvd.nist.gov/vuln/detail/CVE-2026-22801",
+            allowed=True,
+            allow_reason=(
+                "opencv-python has not shipped a fixed bundled libpng wheel; "
+                "user-supplied PNG still-image reads are routed through Pillow "
+                "while the runtime remains vulnerable."
+            ),
+            mitigation="Update opencv-python once it bundles libpng >= 1.6.54.",
+        ))
+
+    blocking = [item for item in findings if item.get("blocking")]
+    return {
+        "schema": "vsr.release_advisories.v1",
+        "generatedAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "policy": {
+            "strictBlocks": sorted(STRICT_BLOCKING_SEVERITIES),
+            "allowedRuntimeExceptions": [
+                item["id"] for item in findings if item.get("allowed")
+            ],
+        },
+        "advisories": findings,
+        "summary": {
+            "total": len(findings),
+            "blocking": len(blocking),
+            "allowed": sum(1 for item in findings if item.get("allowed")),
+        },
+    }
+
+
 def _tool_version(command: Sequence[str], timeout: float = 10.0) -> dict:
     exe = command[0]
     path = shutil.which(exe)
@@ -255,6 +402,7 @@ def build_release_evidence(
     collected = tuple(str(collect_data).split()) if isinstance(collect_data, str) else tuple(collect_data)
     dependencies = collect_dependency_versions()
     sbom = build_cyclonedx_sbom(dependencies)
+    advisories = collect_release_advisories(dependencies, env=env)
     hidden_payload = {
         "schema": "vsr.release_hidden_imports.v1",
         "hiddenImports": list(hidden),
@@ -301,9 +449,15 @@ def build_release_evidence(
             "file": "sbom.cdx.json",
             "componentCount": len(sbom.get("components", [])),
         },
+        "advisories": {
+            "file": "release-advisories.json",
+            "total": advisories["summary"]["total"],
+            "blocking": advisories["summary"]["blocking"],
+            "allowed": advisories["summary"]["allowed"],
+        },
     }
     evidence["errors"] = list(_validation_errors(evidence))
-    return evidence, hidden_payload, sbom
+    return evidence, hidden_payload, sbom, advisories
 
 
 def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
@@ -341,7 +495,7 @@ def write_release_evidence(
 ) -> dict:
     out_dir = Path(evidence_dir) if evidence_dir is not None else Path(dist_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    evidence, hidden_payload, sbom = build_release_evidence(
+    evidence, hidden_payload, sbom, advisories = build_release_evidence(
         dist_dir=dist_dir,
         hidden_imports=hidden_imports,
         collect_data=collect_data,
@@ -351,6 +505,7 @@ def write_release_evidence(
     outputs = {
         "release-verification.json": evidence,
         "release-hidden-imports.json": hidden_payload,
+        "release-advisories.json": advisories,
         "sbom.cdx.json": sbom,
     }
     for filename, payload in outputs.items():
@@ -358,10 +513,16 @@ def write_release_evidence(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-    if strict and evidence.get("errors"):
+    strict_errors = [str(err) for err in evidence.get("errors", [])]
+    strict_errors.extend(
+        f"{item.get('id')} {item.get('package')} {item.get('installedVersion')}"
+        for item in advisories.get("advisories", [])
+        if isinstance(item, Mapping) and item.get("blocking")
+    )
+    if strict and strict_errors:
         raise SystemExit(
             "Strict release verification failed:\n- "
-            + "\n- ".join(str(err) for err in evidence["errors"])
+            + "\n- ".join(strict_errors)
         )
     return evidence
 

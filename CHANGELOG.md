@@ -41,6 +41,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   through Pillow instead of OpenCV whenever the runtime reports a vulnerable
   bundled libpng, closing the untrusted-PNG read path until fixed OpenCV wheels
   ship.
+- **Release advisory gate.** Local release evidence now writes
+  `release-advisories.json`; strict mode fails on unallowed high/critical
+  advisories and records the temporary OpenCV/libpng exception until fixed
+  wheels remove it automatically.
 - **Architecture notes synced.** Local working notes now point at
   `build_exe.bat` + `backend.release_verification` for release evidence and
   describe the current ONNX > OpenCV DNN > PyTorch opt-in > cv2 LaMa chain.
