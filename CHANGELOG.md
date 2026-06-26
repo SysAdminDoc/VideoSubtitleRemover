@@ -43,6 +43,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `VSR_VIDEOPAINTER_COMMAND` wrapper over temp source/mask videos, records the
   research/non-commercial license boundary in first-run guidance, and falls
   back to TBE when the local wrapper or package is unavailable.
+- **FloED strict local adapter.** `VSR_FLOED=1` now verifies a local FloED
+  checkpoint, supports a reviewed `VSR_FLOED_COMMAND` wrapper over temp
+  frame/mask directories, reports missing checkpoint/wrapper setup, and falls
+  back to TBE when the local integration is unavailable.
 
 ### Fixed
 

@@ -198,11 +198,11 @@ GPU route.
 
 Optional model paths such as `VSR_LAMA_ONNX`, `VSR_MIGAN_ONNX`,
 `VSR_FASTDVDNET`, `VSR_TRANSNETV2`, `VSR_VACE_CKPT_DIR`, and
-`VSR_VIDEOPAINTER_CKPT_DIR` are checked against a local adapter manifest before
-loading. Known SHA-256 mismatches fall back instead of deserializing the file.
-Legacy adapters without a pinned hash still run, but new strict adapters can
-require a known hash unless `VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded
-in release evidence.
+`VSR_VIDEOPAINTER_CKPT_DIR`, and `VSR_FLOED_WEIGHTS` are checked against a
+local adapter manifest before loading. Known SHA-256 mismatches fall back
+instead of deserializing the file. Legacy adapters without a pinned hash still
+run, but new strict adapters can require a known hash unless
+`VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded in release evidence.
 Local release evidence also writes `release-advisories.json`; strict mode
 blocks unallowed high/critical dependency advisories while keeping the current
 OpenCV/libpng exception explicit until fixed wheels are available.
@@ -215,6 +215,11 @@ VideoPainter is available only as a strict local research adapter: set
 license terms, set `VSR_VIDEOPAINTER_CKPT_DIR` to a local checkpoint root, set
 `VSR_VIDEOPAINTER_COMMAND` to a local wrapper that accepts `--input-video`,
 `--mask-video`, and `--output-video`, and opt in with
+`VSR_ALLOW_UNVERIFIED_MODELS=1` for unpinned research weights.
+FloED is available as a strict local research adapter: set `VSR_FLOED=1`, set
+`VSR_FLOED_WEIGHTS` or `VSR_FLOED_CKPT_DIR` to a reviewed FloED checkpoint,
+set `VSR_FLOED_COMMAND` to a local wrapper that accepts `--input-dir`,
+`--mask-dir`, and `--output-dir`, and opt in with
 `VSR_ALLOW_UNVERIFIED_MODELS=1` for unpinned research weights.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can

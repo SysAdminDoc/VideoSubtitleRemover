@@ -35,6 +35,7 @@ _LAMA_FILENAMES = ("lama_fp32.onnx", "lama.onnx", "inpainting_lama_2025jan.onnx"
 _VACE_REPO_ID = "Wan-AI/Wan2.1-VACE-1.3B"
 _VIDEOPAINTER_REPO_ID = "TencentARC/VideoPainter"
 _VIDEOPAINTER_BASE_REPO_ID = "THUDM/CogVideoX-5b-I2V"
+_FLOED_SOURCE_URL = "https://github.com/NevSNev/FloED-main"
 _TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 _WHISPER_SIZES = {
     "tiny": "~75 MB",
@@ -148,6 +149,22 @@ def _videopainter_command_present(env: Mapping[str, str]) -> bool:
     command = str(env.get("VSR_VIDEOPAINTER_COMMAND", "") or "").strip()
     if not command:
         return _module_available("videopainter")
+    return True
+
+
+def _floed_checkpoint_present(env: Mapping[str, str]) -> bool:
+    for key in ("VSR_FLOED_WEIGHTS", "VSR_FLOED_CKPT", "VSR_FLOED_CKPT_DIR"):
+        value = str(env.get(key, "") or "").strip()
+        if value and Path(value).exists():
+            return True
+    app_cache = _app_model_dir(env) / "floed"
+    return _has_any_file(app_cache, suffixes=(".ckpt", ".safetensors", ".pth"))
+
+
+def _floed_command_present(env: Mapping[str, str]) -> bool:
+    command = str(env.get("VSR_FLOED_COMMAND", "") or "").strip()
+    if not command:
+        return _module_available("floed")
     return True
 
 
@@ -292,6 +309,33 @@ def _append_videopainter_hints(hints: list[ModelDownloadHint], config, env: Mapp
         ))
 
 
+def _append_floed_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
+    mode = _mode_value(config)
+    if mode != "floed" and not _env_truthy(env, "VSR_FLOED"):
+        return
+    if not _floed_checkpoint_present(env):
+        hints.append(ModelDownloadHint(
+            label="FloED checkpoint",
+            size_estimate="model-size dependent",
+            detail=(
+                "Download the FloED checkpoint from the upstream Apache-2.0 "
+                "repo release instructions, review provenance, then set "
+                "VSR_FLOED_WEIGHTS or VSR_FLOED_CKPT_DIR."
+            ),
+            cache_hint="%APPDATA%\\VideoSubtitleRemoverPro\\models\\floed",
+        ))
+    if not _floed_command_present(env):
+        hints.append(ModelDownloadHint(
+            label="FloED local wrapper",
+            size_estimate="local checkout",
+            detail=(
+                "Set VSR_FLOED_COMMAND to a reviewed local wrapper that "
+                "accepts --input-dir, --mask-dir, and --output-dir."
+            ),
+            cache_hint=_FLOED_SOURCE_URL,
+        ))
+
+
 def _append_whisper_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
     if not bool(getattr(config, "whisper_fallback", False)):
         return
@@ -320,6 +364,7 @@ def pending_model_download_hints(
     _append_lama_hints(hints, config, source_env)
     _append_vace_hints(hints, config, source_env)
     _append_videopainter_hints(hints, config, source_env)
+    _append_floed_hints(hints, config, source_env)
     _append_whisper_hints(hints, config, source_env)
     return tuple(hints)
 

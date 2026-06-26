@@ -51,6 +51,7 @@ from backend.inpainters import (
     _feather_blend,
     _temporal_background_expose,
 )
+from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
 
@@ -990,21 +991,239 @@ class _EraserDitBackend(_DiffusionBackendBase):
 # ---------------------------------------------------------------------------
 
 
+def _configured_floed_path(env=None) -> Optional[Path]:
+    source = os.environ if env is None else env
+    for key in ("VSR_FLOED_WEIGHTS", "VSR_FLOED_CKPT", "VSR_FLOED_CKPT_DIR"):
+        value = str(source.get(key, "") or "").strip()
+        if value:
+            return Path(value)
+    return None
+
+
+def _floed_cache_dir(env=None) -> Path:
+    source = os.environ if env is None else env
+    appdata = str(source.get("APPDATA", "") or "").strip()
+    if appdata:
+        return (Path(appdata) / "VideoSubtitleRemoverPro" / "models"
+                / "floed")
+    home = str(source.get("USERPROFILE") or source.get("HOME") or "").strip()
+    base = Path(home) if home else Path.home()
+    return base / ".cache" / "VideoSubtitleRemoverPro" / "models" / "floed"
+
+
+def _verify_floed_checkpoint_path(path: Path) -> bool:
+    try:
+        from backend.adapter_manifest import (
+            log_adapter_verification,
+            verify_adapter_path,
+        )
+        result = verify_adapter_path("floed", str(path))
+        log_adapter_verification(result)
+        return bool(result.allowed)
+    except Exception as exc:
+        logger.warning(f"FloED checkpoint verification failed: {exc}")
+        return False
+
+
+def _resolve_floed_checkpoint_path(env=None) -> Optional[Path]:
+    source = os.environ if env is None else env
+    configured = _configured_floed_path(source)
+    candidates: List[Path] = []
+    if configured is not None:
+        candidates.append(configured)
+    candidates.append(_floed_cache_dir(source))
+    for candidate in candidates:
+        if candidate.exists() and _verify_floed_checkpoint_path(candidate):
+            return candidate
+    logger.info(
+        "FloED enabled but no verified local checkpoint is available. Set "
+        "VSR_FLOED_WEIGHTS or VSR_FLOED_CKPT_DIR after reviewing the upstream "
+        "Apache-2.0 repo and use VSR_ALLOW_UNVERIFIED_MODELS=1 for unpinned "
+        "research weights."
+    )
+    return None
+
+
+def _write_adapter_frame_dirs(frames: List[np.ndarray],
+                              masks: List[np.ndarray],
+                              work: Path) -> tuple[Path, Path, List[str]]:
+    in_dir = work / "input"
+    mask_dir = work / "masks"
+    in_dir.mkdir()
+    mask_dir.mkdir()
+    names: List[str] = []
+    for idx, (frame, mask) in enumerate(zip(frames, masks)):
+        name = f"{idx:06d}.png"
+        names.append(name)
+        frame_arr = np.asarray(frame).astype(np.uint8)
+        mask_arr = np.asarray(mask)
+        if mask_arr.ndim == 3:
+            mask_arr = cv2.cvtColor(mask_arr, cv2.COLOR_BGR2GRAY)
+        mask_arr = np.where(mask_arr > 0, 255, 0).astype(np.uint8)
+        if not cv2.imwrite(str(in_dir / name), frame_arr):
+            raise RuntimeError(f"could not write adapter input frame: {name}")
+        if not cv2.imwrite(str(mask_dir / name), mask_arr):
+            raise RuntimeError(f"could not write adapter mask frame: {name}")
+    return in_dir, mask_dir, names
+
+
+def _read_adapter_frame_dir(out_dir: Path,
+                            names: List[str],
+                            target_frames: List[np.ndarray]) -> List[np.ndarray]:
+    output: List[np.ndarray] = []
+    for name, original in zip(names, target_frames):
+        path = out_dir / name
+        frame = safe_imread(path)
+        if frame is None:
+            raise RuntimeError(f"adapter output frame is missing: {path}")
+        if frame.shape[:2] != original.shape[:2]:
+            frame = cv2.resize(frame, (original.shape[1], original.shape[0]),
+                               interpolation=cv2.INTER_LINEAR)
+        output.append(frame.astype(np.uint8))
+    return output
+
+
+class _FloedCommandAdapter:
+    """Run a reviewed local FloED wrapper command over frame directories."""
+
+    def __init__(self, command: List[str], weights: Path, config: ProcessingConfig):
+        self._command = command
+        self._weights = weights
+        self._config = config
+        self._timeout = _adapter_int_env("VSR_FLOED_TIMEOUT", 7200)
+
+    def inpaint(self, frames=None, masks=None, prompt=None):
+        frame_list = [] if frames is None else list(frames)
+        mask_list = [] if masks is None else list(masks)
+        return _run_floed_command(
+            self._command,
+            self._weights,
+            self._config,
+            frame_list,
+            mask_list,
+            prompt or "remove subtitles and reconstruct the original background",
+            self._timeout,
+        )
+
+
+def _run_floed_command(command: List[str],
+                       weights: Path,
+                       config: ProcessingConfig,
+                       frames: List[np.ndarray],
+                       masks: List[np.ndarray],
+                       prompt: str,
+                       timeout: int) -> List[np.ndarray]:
+    if not frames or not masks:
+        return []
+    frame_count = min(len(frames), len(masks))
+    frames = frames[:frame_count]
+    masks = masks[:frame_count]
+    with tempfile.TemporaryDirectory(prefix="vsr_floed_") as tmpdir:
+        work = Path(tmpdir)
+        out_dir = work / "output"
+        out_dir.mkdir()
+        input_dir, mask_dir, names = _write_adapter_frame_dirs(frames, masks, work)
+        config_path = work / "config.json"
+        payload = {
+            "adapter": "floed",
+            "prompt": prompt,
+            "frameCount": frame_count,
+            "weights": str(weights),
+            "processingConfig": _adapter_config_dict(config),
+        }
+        config_path.write_text(json.dumps(payload, ensure_ascii=True),
+                               encoding="utf-8")
+        cmd = list(command) + [
+            "--input-dir", str(input_dir),
+            "--mask-dir", str(mask_dir),
+            "--output-dir", str(out_dir),
+            "--weights", str(weights),
+            "--prompt", prompt,
+            "--config", str(config_path),
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=max(1, int(timeout)),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"FloED command timed out after {timeout}s") from exc
+        except OSError as exc:
+            raise RuntimeError(f"FloED command failed to start: {exc}") from exc
+        if result.returncode != 0:
+            stderr = (result.stderr or "")[-600:]
+            raise RuntimeError(f"FloED command exited {result.returncode}: {stderr}")
+        stdout = (result.stdout or "").strip()
+        if stdout.startswith("{"):
+            try:
+                data = json.loads(stdout)
+                if data.get("outputDir"):
+                    out_dir = Path(str(data["outputDir"]))
+            except Exception:
+                pass
+        return _read_adapter_frame_dir(out_dir, names, frames)
+
+
+def _call_floed_model(model, frames, masks, prompt: str):
+    for name in ("inpaint", "run", "mv2v"):
+        fn = getattr(model, name, None)
+        if fn is None:
+            continue
+        for args, kwargs in (
+            ((), {"frames": frames, "masks": masks, "prompt": prompt}),
+            ((frames, masks), {"prompt": prompt}),
+            ((frames, masks), {}),
+        ):
+            try:
+                return fn(*args, **kwargs)
+            except TypeError:
+                continue
+    raise RuntimeError("FloED package missing inpaint/run/mv2v frame API")
+
+
 class _FloedBackend(_DiffusionBackendBase):
     MODE_NAME = "floed"
     REPO_HINT = (
-        "Install via the upstream FloED project and set VSR_FLOED=1."
+        "Set VSR_FLOED_WEIGHTS plus VSR_FLOED_COMMAND to a reviewed local "
+        "FloED wrapper, or install a compatible local floed package."
     )
 
     def _load(self):
+        weights = _resolve_floed_checkpoint_path()
+        if weights is None:
+            return None
+        command = _adapter_command_from_env("VSR_FLOED_COMMAND")
+        if command is not None:
+            return _FloedCommandAdapter(command, weights, self.config)
         try:
             from floed import FloED  # type: ignore
-            return FloED(device=self.device)
         except Exception:
             return None
+        for kwargs in (
+            {"weights": str(weights), "device": self.device},
+            {"ckpt_path": str(weights), "device": self.device},
+            {"checkpoint": str(weights), "device": self.device},
+            {"device": self.device},
+            {},
+        ):
+            try:
+                return FloED(**kwargs)
+            except TypeError:
+                continue
+            except Exception:
+                logger.debug("FloED constructor failed", exc_info=True)
+                return None
+        return None
 
     def _run_model(self, frames, masks):
-        out = self._model.inpaint(frames, masks)
+        prompt = os.environ.get(
+            "VSR_FLOED_PROMPT",
+            "remove subtitles and reconstruct the original background",
+        )
+        out = _call_floed_model(self._model, frames, masks, prompt)
+        out = _coerce_adapter_frames(out, len(frames), "FloED")
         return [
             _feather_blend(f, r, m, self.config.mask_feather_px)
             for f, r, m in zip(frames, out, masks)

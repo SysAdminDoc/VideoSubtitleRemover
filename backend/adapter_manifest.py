@@ -210,6 +210,27 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         remote_code_required=True,
         allow_directories=True,
     ),
+    "floed": AdapterManifestEntry(
+        name="floed",
+        env_vars=(
+            "VSR_FLOED_WEIGHTS",
+            "VSR_FLOED_CKPT",
+            "VSR_FLOED_CKPT_DIR",
+            "VSR_FLOED_COMMAND",
+        ),
+        expected_filenames=(
+            "floed.ckpt",
+            "floed.safetensors",
+            "motion_module.ckpt",
+            "animatediff.ckpt",
+        ),
+        sha256={},
+        license="Apache-2.0",
+        source_url="https://github.com/NevSNev/FloED-main",
+        preferred_format="reviewed local FloED checkpoint",
+        remote_code_required=True,
+        allow_directories=True,
+    ),
     "transnetv2": AdapterManifestEntry(
         name="transnetv2",
         env_vars=("VSR_TRANSNETV2",),
