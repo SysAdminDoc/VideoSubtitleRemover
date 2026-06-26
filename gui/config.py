@@ -58,6 +58,7 @@ LOG_DIR = Path(os.environ.get("APPDATA", Path.home())) / "VideoSubtitleRemoverPr
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
+QUEUE_STATE_FILE = LOG_DIR / "queue_state.json"
 MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
@@ -721,6 +722,55 @@ def save_settings(config: ProcessingConfig):
         logger.info(f"Settings saved to {settings_file}")
     except Exception as e:
         logger.warning(f"Could not save settings: {e}")
+
+
+# -- Queue state persistence ------------------------------------------------
+
+
+def save_queue_state(queue_items):
+    """Persist idle/pending queue items atomically."""
+    try:
+        records = []
+        for item in queue_items:
+            if item.status not in (ProcessingStatus.IDLE,):
+                continue
+            records.append({
+                "file_path": item.file_path,
+                "output_path": item.output_path,
+                "config": item.config.to_dict() if item.config else {},
+            })
+        _write_json_atomic(QUEUE_STATE_FILE, {
+            "schema": 1,
+            "items": records,
+        })
+    except Exception as exc:
+        logger.debug(f"Queue state save failed: {exc}")
+
+
+def load_queue_state():
+    """Load saved queue state. Returns a list of dicts or None."""
+    try:
+        if not QUEUE_STATE_FILE.exists():
+            return None
+        data = _read_json_object(QUEUE_STATE_FILE, "queue_state")
+        if data is None or data.get("schema") != 1:
+            return None
+        items = data.get("items")
+        if not isinstance(items, list) or not items:
+            return None
+        return items
+    except Exception as exc:
+        logger.debug(f"Queue state load failed: {exc}")
+        return None
+
+
+def clear_queue_state():
+    """Remove the saved queue state file."""
+    try:
+        if QUEUE_STATE_FILE.exists():
+            QUEUE_STATE_FILE.unlink()
+    except Exception:
+        pass
 
 
 # -- Preset library ---------------------------------------------------------

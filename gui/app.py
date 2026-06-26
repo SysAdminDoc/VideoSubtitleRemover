@@ -48,6 +48,7 @@ from gui.config import (
     save_user_preset, delete_user_preset, export_preset, import_preset,
     consume_preset_import_notice,
     status_ui, BUILTIN_PRESETS, _load_user_presets,
+    save_queue_state, load_queue_state, clear_queue_state,
 )
 from gui.utils import (
     SUPPORTED_EXTENSIONS, filepicker_pattern,
@@ -210,6 +211,7 @@ class VideoSubtitleRemoverApp:
         # First-run welcome overlay (only shown once, then persisted)
         self._start_startup_hardware_probe()
         self._maybe_show_onboarding()
+        self._maybe_restore_queue()
 
     def _on_close(self):
         """Stop processing, save settings, and close."""
@@ -4270,6 +4272,7 @@ class VideoSubtitleRemoverApp:
         if len(self.queue) == 1 and not self.is_processing:
             self._show_preview(item)
         logger.info(f"Queued: {Path(file_path).name} ({get_file_info(file_path)})")
+        save_queue_state(self.queue)
         return "added"
 
     def _open_sort_menu(self):
@@ -4611,6 +4614,7 @@ class VideoSubtitleRemoverApp:
         self._update_queue_display()
         if item:
             self._update_status(f"Removed {Path(item.file_path).name} from the queue")
+        save_queue_state(self.queue)
 
     def _clear_queue(self):
         """Clear all items from the queue."""
@@ -4635,6 +4639,7 @@ class VideoSubtitleRemoverApp:
         self._selected_queue_item_id = None
         self._update_queue_display()
         self._update_status("Queue cleared")
+        clear_queue_state()
 
     @staticmethod
     def _queue_item_needs_quality_review(item: QueueItem) -> bool:
@@ -6159,6 +6164,7 @@ class VideoSubtitleRemoverApp:
         self._cached_remover = None
         self._cached_remover_key = None
         report_paths = self._write_batch_report_files()
+        save_queue_state(self.queue)
         if self._shutdown_started:
             if self._taskbar:
                 self._taskbar.clear()
@@ -6298,6 +6304,43 @@ class VideoSubtitleRemoverApp:
             ctypes.windll.user32.MessageBeep(0)
         except Exception:
             pass
+
+    def _maybe_restore_queue(self):
+        """Restore saved queue items from a previous session."""
+        saved = load_queue_state()
+        if not saved:
+            return
+        valid = [r for r in saved if Path(r.get("file_path", "")).is_file()]
+        if not valid:
+            clear_queue_state()
+            return
+        n = len(valid)
+        label = f"{n} queued item{'s' if n != 1 else ''} from last session"
+        if not show_confirm(
+            self.root,
+            title="Restore queue?",
+            message=label,
+            detail="Idle items from your previous session were saved. Restore them to the queue?",
+            confirm_label="Restore",
+            cancel_label="Discard",
+        ):
+            clear_queue_state()
+            return
+        for record in valid:
+            cfg = ProcessingConfig.from_dict(record.get("config", {}))
+            self._add_to_queue(record["file_path"])
+            with self.queue_lock:
+                item = next(
+                    (i for i in reversed(self.queue)
+                     if i.file_path == record["file_path"]),
+                    None,
+                )
+            if item is not None:
+                item.config = cfg
+                if record.get("output_path"):
+                    item.output_path = record["output_path"]
+        clear_queue_state()
+        self._update_status(f"Restored {n} item{'s' if n != 1 else ''} from last session")
 
     def _queue_argv_files(self):
         """RM-58: queue files passed via sys.argv (e.g. 'Send to VSR')."""
