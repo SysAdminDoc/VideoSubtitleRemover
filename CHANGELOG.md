@@ -18,6 +18,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   resized video selector with preloaded, cleared, and multi-region saved
   rectangles, then verify the mask preview uses the saved image-space
   coordinates.
+- **Corrupt-video failure messages.** Empty, unreadable, truncated, and
+  unsupported-codec video inputs now fail before producing partial outputs,
+  keep temp files cleaned up, and show actionable queue/CLI messages instead
+  of a generic processing failure.
 - **Native optional-engine crash hardening.** OCR, Whisper, LaMa, ProPainter,
   and GUI startup engine probes now use safe optional-import checks so broken
   native wheels do not get imported just to discover capabilities. The

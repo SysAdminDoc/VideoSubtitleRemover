@@ -1091,13 +1091,17 @@ def main():
                         getattr(remover, "last_quality_report", None)
                         if ok else None
                     )
+                    failure_message = (
+                        getattr(remover, "last_error_message", None)
+                        or "Processing failed"
+                    )
                     actual_output = getattr(remover, "last_output_path", None)
                     if ok and actual_output and _path_key(actual_output) != _path_key(record["output"]):
                         _update_record_output_path(record, actual_output)
                     finish_batch_item(
                         record,
                         STATUS_HARDCODED_PROCESSED if ok else STATUS_FAILED,
-                        message="Processed" if ok else "Processing failed",
+                        message="Processed" if ok else failure_message,
                         elapsed_seconds=time.monotonic() - started,
                         quality_report=quality_report,
                     )
@@ -1180,6 +1184,10 @@ def main():
     actual_output = getattr(remover, "last_output_path", None)
     if success and actual_output and _path_key(actual_output) != _path_key(args.output):
         print(f"[file] actual-output={actual_output}")
+    if not success:
+        message = getattr(remover, "last_error_message", None)
+        if message:
+            print(f"[file] error={message}")
     print(f"[file] {'completed' if success else 'failed'}")
     sys.exit(0 if success else 1)
 

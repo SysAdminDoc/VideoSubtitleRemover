@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -229,6 +230,227 @@ class BackendHardeningTests(unittest.TestCase):
         self.assertIsNone(band)
         self.assertIsNone(remover.config.subtitle_area)
         self.assertEqual(calls, ["clip-two.mp4"])
+
+
+class MediaInputFailureTests(unittest.TestCase):
+    def _minimal_remover(self, work: Path):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            preserve_audio=False,
+            preserve_color_metadata=False,
+            deinterlace=False,
+            deinterlace_auto=False,
+            keyframe_detection=False,
+            prefetch_decode=False,
+            sttn_max_load_num=2,
+        )
+        remover.last_output_path = None
+        remover.last_error_message = None
+        remover.last_error_reason = None
+        remover._srt_entries = []
+        remover._quality_mask_bbox = None
+        remover._color_metadata = None
+        remover._active_writer = None
+        remover._active_subprocess = None
+        remover._teardown_requested = False
+        remover.on_preview_frame = None
+        remover.live_preview_stride = 6
+        remover._report_progress = lambda *_args, **_kwargs: None
+        remover._set_active_subprocess = lambda *_args, **_kwargs: None
+        remover._is_teardown_requested = lambda: False
+
+        def make_temp_dir():
+            path = work / "vsr-temp"
+            path.mkdir()
+            return str(path)
+
+        remover._make_temp_dir = make_temp_dir
+
+        class FakeDetector:
+            def detect(self, *_args, **_kwargs):
+                return []
+
+            def detect_with_confidence(self, *_args, **_kwargs):
+                return []
+
+        class FakeInpainter:
+            def inpaint(self, frames, _masks):
+                return frames
+
+        remover.detector = FakeDetector()
+        remover.inpainter = FakeInpainter()
+        return remover
+
+    def test_zero_byte_video_fails_cleanly_without_temp_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "empty.mp4"
+            output = work / "empty_no_sub.mp4"
+            source.write_bytes(b"")
+            remover = self._minimal_remover(work)
+
+            with self.assertLogs("backend.processor", level="WARNING") as logs:
+                ok = remover.process_video(str(source), str(output))
+
+            self.assertFalse(ok)
+            self.assertEqual(remover.last_error_reason, "empty_file")
+            self.assertIn("empty", remover.last_error_message.lower())
+            self.assertFalse(output.exists())
+            self.assertFalse((work / "vsr-temp").exists())
+            self.assertNotIn("Traceback", "\n".join(logs.output))
+
+    def test_partial_decode_fails_and_removes_work_dir(self):
+        import numpy as _np
+        from unittest import mock
+
+        class FakeCapture:
+            def __init__(self):
+                self.reads = 0
+                self.released = False
+
+            def isOpened(self):
+                return True
+
+            def get(self, prop):
+                if prop == processor.cv2.CAP_PROP_FPS:
+                    return 24.0
+                if prop == processor.cv2.CAP_PROP_FRAME_WIDTH:
+                    return 32
+                if prop == processor.cv2.CAP_PROP_FRAME_HEIGHT:
+                    return 24
+                if prop == processor.cv2.CAP_PROP_FRAME_COUNT:
+                    return 4
+                return 0
+
+            def set(self, *_args):
+                return True
+
+            def read(self):
+                self.reads += 1
+                if self.reads == 1:
+                    return True, _np.zeros((24, 32, 3), dtype=_np.uint8)
+                return False, None
+
+            def release(self):
+                self.released = True
+
+        class FakeWriter:
+            def __init__(self, path, *_args, **_kwargs):
+                self.path = path
+                self.writes = 0
+                self.released = False
+
+            def isOpened(self):
+                return True
+
+            def write(self, _frame):
+                self.writes += 1
+
+            def release(self):
+                self.released = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "partial.mp4"
+            output = work / "partial_no_sub.mp4"
+            source.write_bytes(b"not a real video, validation is mocked")
+            remover = self._minimal_remover(work)
+            fake_capture = FakeCapture()
+
+            with mock.patch("backend.processor._validate_video_input_file"):
+                with mock.patch("backend.processor._open_capture", return_value=fake_capture):
+                    with mock.patch(
+                        "backend.processor._LosslessIntermediateWriter",
+                        FakeWriter,
+                    ):
+                        ok = remover.process_video(str(source), str(output))
+
+            self.assertFalse(ok)
+            self.assertEqual(remover.last_error_reason, "truncated_decode")
+            self.assertIn("truncated", remover.last_error_message.lower())
+            self.assertFalse(output.exists())
+            self.assertFalse((work / "vsr-temp").exists())
+            self.assertTrue(fake_capture.released)
+
+    def test_unsupported_codec_is_actionable(self):
+        from unittest import mock
+
+        class ClosedCapture:
+            def isOpened(self):
+                return False
+
+            def release(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "unsupported.mp4"
+            output = work / "unsupported_no_sub.mp4"
+            source.write_bytes(b"video bytes")
+            remover = self._minimal_remover(work)
+
+            with mock.patch("backend.processor._validate_video_input_file"):
+                with mock.patch("backend.processor._open_capture", return_value=ClosedCapture()):
+                    with mock.patch(
+                        "backend.io._probe_video_stream_status",
+                        return_value={
+                            "available": True,
+                            "ok": True,
+                            "hasVideo": True,
+                            "codec": "fictional_codec",
+                            "width": 1920,
+                            "height": 1080,
+                            "error": "",
+                        },
+                    ):
+                        ok = remover.process_video(str(source), str(output))
+
+            self.assertFalse(ok)
+            self.assertEqual(remover.last_error_reason, "unsupported_codec")
+            self.assertIn("fictional_codec", remover.last_error_message)
+            self.assertIn("Convert it", remover.last_error_message)
+
+    def test_gui_failed_queue_item_uses_media_input_message(self):
+        from unittest import mock
+
+        app = gui.VideoSubtitleRemoverApp.__new__(gui.VideoSubtitleRemoverApp)
+        app._update_item_display = mock.Mock()
+        app._process_soft_subtitle_item = mock.Mock(return_value=False)
+        app._announce_model_download_guidance = mock.Mock()
+        app._gui_to_backend_mode = mock.Mock(return_value=processor.InpaintMode.STTN)
+        app._gui_to_backend_device = mock.Mock(return_value="cpu")
+        app._cached_remover = None
+        app._cached_remover_key = None
+        app._active_remover = None
+        app.cancel_event = threading.Event()
+        app._batch_times = []
+
+        class FakeBackendRemover:
+            def __init__(self, _config):
+                self.last_error_message = (
+                    "The selected video appears corrupt or incomplete."
+                )
+                self.last_quality_report = None
+                self.last_output_path = None
+
+            def process_video(self, *_args):
+                return False
+
+        item = gui.QueueItem(
+            id="bad-media",
+            file_path="bad.mp4",
+            output_path="bad_no_sub.mp4",
+            config=gui.ProcessingConfig(),
+        )
+        with mock.patch("backend.processor.SubtitleRemover", FakeBackendRemover):
+            app._process_item(item)
+
+        self.assertEqual(item.status, gui.ProcessingStatus.ERROR)
+        self.assertEqual(
+            item.message,
+            "The selected video appears corrupt or incomplete.",
+        )
+        self.assertEqual(item.error, item.message)
 
 
 class CoerceHardeningTests(unittest.TestCase):

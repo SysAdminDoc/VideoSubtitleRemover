@@ -39,6 +39,216 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+class MediaInputError(ValueError):
+    """User-actionable media input failure.
+
+    These errors are expected support cases, not programmer failures. Keep
+    the public message calm and concise; the detailed ffprobe/OpenCV text is
+    retained for debug logs only.
+    """
+
+    def __init__(
+        self,
+        user_message: str,
+        *,
+        reason: str,
+        path: str,
+        detail: str = "",
+    ):
+        super().__init__(user_message)
+        self.user_message = user_message
+        self.reason = reason
+        self.path = path
+        self.detail = detail
+
+
+_CORRUPT_VIDEO_MARKERS = (
+    "invalid data",
+    "moov atom not found",
+    "end of file",
+    "eof",
+    "truncated",
+    "partial file",
+    "could not find codec parameters",
+    "header damaged",
+)
+
+
+def _clean_probe_error(stderr: str) -> str:
+    lines = [line.strip() for line in (stderr or "").splitlines() if line.strip()]
+    return " | ".join(lines)[-600:]
+
+
+def _looks_corrupt_or_truncated(stderr: str) -> bool:
+    text = (stderr or "").lower()
+    return any(marker in text for marker in _CORRUPT_VIDEO_MARKERS)
+
+
+def _probe_video_stream_status(path: str) -> dict:
+    """Return a small ffprobe status payload for input validation."""
+    if shutil.which("ffprobe") is None:
+        return {
+            "available": False,
+            "ok": None,
+            "hasVideo": None,
+            "codec": "",
+            "width": None,
+            "height": None,
+            "error": "",
+        }
+    try:
+        cmd = [
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name,width,height",
+            "-of", "json", path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        return {
+            "available": True,
+            "ok": False,
+            "hasVideo": None,
+            "codec": "",
+            "width": None,
+            "height": None,
+            "error": str(exc),
+        }
+    error = _clean_probe_error(result.stderr)
+    if result.returncode != 0:
+        return {
+            "available": True,
+            "ok": False,
+            "hasVideo": None,
+            "codec": "",
+            "width": None,
+            "height": None,
+            "error": error,
+        }
+    try:
+        payload = json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        return {
+            "available": True,
+            "ok": False,
+            "hasVideo": None,
+            "codec": "",
+            "width": None,
+            "height": None,
+            "error": f"ffprobe returned invalid JSON: {exc}",
+        }
+    streams = payload.get("streams") if isinstance(payload, dict) else None
+    stream = streams[0] if isinstance(streams, list) and streams else {}
+    return {
+        "available": True,
+        "ok": True,
+        "hasVideo": bool(stream),
+        "codec": str(stream.get("codec_name") or "") if isinstance(stream, dict) else "",
+        "width": stream.get("width") if isinstance(stream, dict) else None,
+        "height": stream.get("height") if isinstance(stream, dict) else None,
+        "error": error,
+    }
+
+
+def _invalid_container_error(path: str, detail: str = "") -> MediaInputError:
+    if _looks_corrupt_or_truncated(detail):
+        return MediaInputError(
+            "The selected video appears corrupt or incomplete. Re-download, "
+            "remux, or convert it before retrying.",
+            reason="corrupt_or_truncated",
+            path=path,
+            detail=detail,
+        )
+    return MediaInputError(
+        "The selected file is not a readable video container. Convert it to a "
+        "standard MP4 or MKV before retrying.",
+        reason="invalid_container",
+        path=path,
+        detail=detail,
+    )
+
+
+def _validate_video_input_file(path: str) -> None:
+    """Reject common bad media inputs before decode/temporary outputs start."""
+    source = Path(path)
+    if source.is_dir():
+        return
+    try:
+        size = source.stat().st_size
+    except OSError as exc:
+        raise MediaInputError(
+            "The selected video could not be read. Check that the file still "
+            "exists and that you have permission to open it.",
+            reason="unreadable",
+            path=path,
+            detail=str(exc),
+        ) from exc
+    if size <= 0:
+        raise MediaInputError(
+            "The selected video is empty. Choose a non-empty video file.",
+            reason="empty_file",
+            path=path,
+        )
+    status = _probe_video_stream_status(path)
+    if status["available"] and status["ok"] is False:
+        raise _invalid_container_error(path, str(status.get("error") or ""))
+    if status["available"] and status["hasVideo"] is False:
+        raise MediaInputError(
+            "No video stream was found in the selected file.",
+            reason="no_video_stream",
+            path=path,
+            detail=str(status.get("error") or ""),
+        )
+
+
+def _video_capture_open_error(path: str, decode_path: str) -> MediaInputError:
+    status = _probe_video_stream_status(decode_path)
+    if status["available"] and status["ok"] is False:
+        return _invalid_container_error(path, str(status.get("error") or ""))
+    if status["available"] and status["hasVideo"] is False:
+        return MediaInputError(
+            "No video stream was found in the selected file.",
+            reason="no_video_stream",
+            path=path,
+            detail=str(status.get("error") or ""),
+        )
+    codec = str(status.get("codec") or "").strip()
+    codec_label = f" ({codec})" if codec else ""
+    return MediaInputError(
+        "This video uses a codec this build cannot decode"
+        f"{codec_label}. Convert it to H.264 or H.265 MP4 and retry.",
+        reason="unsupported_codec",
+        path=path,
+        detail=str(status.get("error") or ""),
+    )
+
+
+def _invalid_video_dimensions_error(path: str, width: int, height: int) -> MediaInputError:
+    return MediaInputError(
+        "The selected video reports invalid dimensions. Remux or convert it "
+        "before retrying.",
+        reason="invalid_dimensions",
+        path=path,
+        detail=f"{width}x{height}",
+    )
+
+
+def _video_decode_error(path: str, decoded_frames: int, expected_frames: int) -> MediaInputError:
+    if decoded_frames <= 0:
+        return MediaInputError(
+            "No video frames could be decoded from the selected file.",
+            reason="no_decodable_frames",
+            path=path,
+            detail=f"expected at least {expected_frames} frame(s)",
+        )
+    return MediaInputError(
+        "The video ended before all expected frames could be decoded. The file "
+        "may be truncated or damaged.",
+        reason="truncated_decode",
+        path=path,
+        detail=f"decoded {decoded_frames} of {expected_frames} frame(s)",
+    )
+
+
 def _terminate_subprocess(proc: subprocess.Popen, timeout: float = 2.0) -> None:
     """Terminate a subprocess, escalating to kill when it ignores shutdown."""
     try:

@@ -6107,11 +6107,16 @@ class VideoSubtitleRemoverApp:
                 self._batch_times.append(elapsed)
                 logger.info(f"Completed: {file_name} in {format_time(elapsed)}")
             else:
+                failure_message = (
+                    getattr(remover, "last_error_message", None)
+                    or "Processing failed"
+                )
                 item.status = ProcessingStatus.ERROR
-                item.message = "Processing failed"
+                item.message = failure_message
+                item.error = failure_message
                 item.quality_report = None
                 item.completed_at = datetime.now()
-                logger.error(f"Failed: {file_name}")
+                logger.error(f"Failed: {file_name}: {failure_message}")
             self._update_item_display(item)
 
         except InterruptedError:

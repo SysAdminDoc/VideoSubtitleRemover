@@ -42,7 +42,12 @@ logger = logging.getLogger(__name__)
 # but moved during the split is re-imported here so existing callers
 # (`from backend.processor import _open_capture`) keep working.
 from backend.io import (
+    MediaInputError,
     SubtitleStreamInfo,
+    _validate_video_input_file,
+    _video_capture_open_error,
+    _invalid_video_dimensions_error,
+    _video_decode_error,
     _probe_codec_for_log,
     _probe_audio_stream_count,
     _probe_subtitle_streams,
@@ -311,6 +316,8 @@ class SubtitleRemover:
         # from the requested path when FFmpeg cannot encode the requested
         # container and the lossless intermediate is salvaged as .mkv.
         self.last_output_path: Optional[str] = None
+        self.last_error_message: Optional[str] = None
+        self.last_error_reason: Optional[str] = None
         # B-3: union-mask bbox accumulated while processing. The quality
         # report metric (PSNR/SSIM) used to be measured over the whole
         # frame, so the unchanged 80-95% of pixels dominated the score and
@@ -931,6 +938,8 @@ class SubtitleRemover:
                 logger.info("No text detected, copying original")
                 _copy_file_atomic(input_path, output_path)
                 self.last_output_path = output_path
+                self.last_error_message = None
+                self.last_error_reason = None
                 self._report_progress(1.0, "Complete (no text found)")
                 return True
 
@@ -957,6 +966,8 @@ class SubtitleRemover:
             finally:
                 _cleanup_temp_output(temp_output)
             self.last_output_path = output_path
+            self.last_error_message = None
+            self.last_error_reason = None
             self._report_progress(1.0, "Complete!")
             return True
 
@@ -964,6 +975,8 @@ class SubtitleRemover:
             logger.info("Image processing cancelled")
             raise
         except Exception as e:
+            self.last_error_message = str(e)
+            self.last_error_reason = "image_processing_error"
             logger.error(f"Image processing error: {e}", exc_info=True)
             return False
 
@@ -984,9 +997,13 @@ class SubtitleRemover:
         writer = None
         mask_writer = None
         temp_mask_path = None
+        whisper_audio_dir = None
+        self.last_error_message = None
+        self.last_error_reason = None
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.0, "Opening video...")
+            _validate_video_input_file(input_path)
 
             # Optional deinterlace preprocessing. Produces a temp
             # progressive-scan mp4; the rest of the pipeline runs against
@@ -1077,7 +1094,7 @@ class SubtitleRemover:
                 input_fps=self.config.input_fps,
             )
             if not cap.isOpened():
-                raise ValueError(f"Could not open video: {decode_path}")
+                raise _video_capture_open_error(input_path, decode_path)
             # Stash the decode path so other routines (keyframe, audio merge)
             # can read it without re-resolving.
             self._decode_path = decode_path
@@ -1101,7 +1118,7 @@ class SubtitleRemover:
             total_frames = max(1, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
 
             if width == 0 or height == 0:
-                raise ValueError(f"Invalid video dimensions: {width}x{height}")
+                raise _invalid_video_dimensions_error(input_path, width, height)
 
             # Time range support. Guard against NaN / inf / negative values
             # coming from a malformed preset or CLI overlay -- never let them
@@ -1450,6 +1467,13 @@ class SubtitleRemover:
                     for m in masks:
                         mask_writer.write(m)
 
+            if frame_idx < frames_to_process:
+                raise _video_decode_error(
+                    input_path,
+                    decoded_frames=frame_idx,
+                    expected_frames=frames_to_process,
+                )
+
             # reader.release() (or cap.release() when prefetch is off)
             # also joins the worker thread and releases the underlying cap.
             reader.release()
@@ -1522,13 +1546,28 @@ class SubtitleRemover:
                     logger.warning(f"Quality report failed: {exc}", exc_info=True)
 
             self.last_output_path = final_output_path
+            self.last_error_message = None
+            self.last_error_reason = None
             self._report_progress(1.0, "Complete!")
             return True
 
         except InterruptedError:
             logger.info("Video processing cancelled")
             raise
+        except MediaInputError as e:
+            self.last_error_message = e.user_message
+            self.last_error_reason = e.reason
+            logger.warning(
+                "Video input rejected (%s): %s",
+                e.reason,
+                e.user_message,
+            )
+            if e.detail:
+                logger.debug("Video input rejection detail: %s", e.detail)
+            return False
         except Exception as e:
+            self.last_error_message = str(e)
+            self.last_error_reason = "video_processing_error"
             logger.error(f"Video processing error: {e}", exc_info=True)
             return False
         finally:
