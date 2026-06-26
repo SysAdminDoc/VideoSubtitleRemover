@@ -95,6 +95,24 @@ BUILTIN_PRESETS: Dict[str, Dict[str, object]] = {
             "kalman_tracking": True,
         },
     },
+    "Logo / Watermark removal": {
+        "description": "Remove persistent logos and watermarks. Uses LaMa "
+                       "for always-visible overlays that TBE cannot recover "
+                       "behind. Keeps dialogue subtitles.",
+        "fields": {
+            "mode": "LAMA",
+            "detection_threshold": 0.45,
+            "mask_dilate_px": 6,
+            "mask_feather_px": 6,
+            "edge_ring_px": 3,
+            "remove_subtitles": False,
+            "remove_chyrons": True,
+            "chyron_min_hits": 30,
+            "kalman_tracking": True,
+            "colour_tune_enable": True,
+            "colour_tune_tolerance": 20,
+        },
+    },
 }
 
 

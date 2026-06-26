@@ -322,6 +322,16 @@ def main():
                        help="Post-cleanup SeedVR2 restoration pass.")
     parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
                        help="Additive film grain after cleanup (0..0.5; 0 disables).")
+    parser.add_argument("--watermark", default="", metavar="PATH",
+                       help="Burn a PNG watermark onto the output after cleanup.")
+    parser.add_argument("--watermark-position", default="bottom-right",
+                       choices=["top-left", "top-right", "bottom-left",
+                                "bottom-right", "center"],
+                       help="Watermark corner position (default bottom-right).")
+    parser.add_argument("--watermark-opacity", type=float, default=1.0,
+                       help="Watermark opacity 0.0-1.0 (default 1.0).")
+    parser.add_argument("--watermark-margin", type=int, default=16,
+                       help="Watermark margin from edge in pixels (default 16).")
     parser.add_argument("--whisper-model", default="tiny",
                        choices=["tiny", "base", "small", "medium",
                                 "large", "large-v2", "large-v3"],
@@ -658,6 +668,10 @@ def main():
         whisper_min_speech_duration=args.ffmpeg_whisper_min_speech,
         upscale_factor=args.upscale,
         film_grain_strength=args.film_grain,
+        watermark_image=args.watermark,
+        watermark_position=args.watermark_position,
+        watermark_opacity=args.watermark_opacity,
+        watermark_margin=args.watermark_margin,
         swinir_restore=args.swinir,
         seedvr2_restore=args.seedvr2,
         preserve_color_metadata=not args.no_color_preserve,

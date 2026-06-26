@@ -160,6 +160,67 @@ def swinir_restore(input_path: str, output_path: str,
     return None
 
 
+_WM_POSITION_MAP = {
+    "top-left": ("overlay={margin}:{margin}",),
+    "top-right": ("overlay=W-w-{margin}:{margin}",),
+    "bottom-left": ("overlay={margin}:H-h-{margin}",),
+    "bottom-right": ("overlay=W-w-{margin}:H-h-{margin}",),
+    "center": ("overlay=(W-w)/2:(H-h)/2",),
+}
+
+
+def burn_watermark(
+    input_path: str,
+    output_path: str,
+    watermark_path: str,
+    position: str = "bottom-right",
+    opacity: float = 1.0,
+    margin: int = 16,
+) -> Optional[str]:
+    """Burn a PNG watermark onto the output at a named corner position.
+
+    Uses ffmpeg overlay filter. Returns the produced path on success,
+    None when ffmpeg or the watermark image is missing.
+    """
+    if shutil.which("ffmpeg") is None:
+        logger.info("ffmpeg not on PATH; cannot burn watermark")
+        return None
+    if not Path(watermark_path).is_file():
+        logger.warning(f"Watermark image not found: {watermark_path}")
+        return None
+    position = position.lower().strip()
+    overlay_tpl = _WM_POSITION_MAP.get(position, _WM_POSITION_MAP["bottom-right"])
+    overlay_expr = overlay_tpl[0].format(margin=margin)
+    filter_parts = []
+    if 0.0 < opacity < 1.0:
+        filter_parts.append(f"[1:v]format=rgba,colorchannelmixer=aa={opacity:.2f}[wm]")
+        filter_parts.append(f"[0:v][wm]{overlay_expr}")
+    else:
+        filter_parts.append(f"[0:v][1:v]{overlay_expr}")
+    filter_str = ";".join(filter_parts)
+    cmd = [
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
+        "-i", input_path,
+        "-i", watermark_path,
+        "-filter_complex", filter_str,
+        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
+        "-c:a", "copy", output_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
+        if Path(output_path).is_file():
+            logger.info(f"Watermark burned at {position}: {output_path}")
+            return output_path
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            f"Watermark burn failed: "
+            f"{exc.stderr.decode('utf-8', 'replace')[:400]}"
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("Watermark burn timed out")
+    return None
+
+
 def add_film_grain(input_path: str, output_path: str,
                     strength: float = 0.04) -> Optional[str]:
     """RM-80: cheap additive film grain.

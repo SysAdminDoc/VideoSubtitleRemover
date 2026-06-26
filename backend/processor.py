@@ -1648,6 +1648,22 @@ class SubtitleRemover:
                     )
             except Exception as exc:
                 logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
+        if self.config.watermark_image:
+            try:
+                from backend.post_restore import burn_watermark
+                wm_out = os.path.join(temp_dir, "watermarked.mp4")
+                produced = burn_watermark(
+                    output_path, wm_out,
+                    watermark_path=self.config.watermark_image,
+                    position=self.config.watermark_position,
+                    opacity=self.config.watermark_opacity,
+                    margin=self.config.watermark_margin,
+                )
+                if produced and Path(produced).is_file():
+                    _promote_temp_output(produced, output_path)
+                    logger.info("Watermark burn pass complete")
+            except Exception as exc:
+                logger.warning(f"Watermark burn failed: {exc}", exc_info=True)
 
     def _get_encode_args(self) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""

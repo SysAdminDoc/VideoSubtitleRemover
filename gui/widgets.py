@@ -125,6 +125,18 @@ def _build_cli_command(item: QueueItem) -> str:
     nle = getattr(cfg, "nle_sidecar", "off")
     if nle and nle != "off":
         parts.append(f"--nle-sidecar {nle}")
+    wm = getattr(cfg, "watermark_image", "")
+    if wm:
+        parts.append(f'--watermark "{wm}"')
+        wm_pos = getattr(cfg, "watermark_position", "bottom-right")
+        if wm_pos != "bottom-right":
+            parts.append(f"--watermark-position {wm_pos}")
+        wm_op = getattr(cfg, "watermark_opacity", 1.0)
+        if wm_op != 1.0:
+            parts.append(f"--watermark-opacity {wm_op}")
+        wm_margin = getattr(cfg, "watermark_margin", 16)
+        if wm_margin != 16:
+            parts.append(f"--watermark-margin {wm_margin}")
     return " ".join(parts)
 
 
