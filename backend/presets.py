@@ -150,3 +150,43 @@ def preset_fields(name: str,
     if isinstance(fields, dict):
         return fields
     return None
+
+
+_INTENT_RULES = [
+    ({"subtitle", "subtitles", "sub", "subs", "caption", "captions",
+      "dialogue", "dialog"},
+     {"remove_subtitles": True, "remove_chyrons": False}),
+    ({"logo", "watermark", "stamp", "branding", "channel"},
+     {"remove_subtitles": False, "remove_chyrons": True,
+      "chyron_min_hits": 1}),
+    ({"all", "everything", "text", "overlay"},
+     {"remove_subtitles": True, "remove_chyrons": True}),
+    ({"chyron", "lower-third", "lower third", "ticker", "banner"},
+     {"remove_subtitles": False, "remove_chyrons": True}),
+    ({"karaoke", "lyrics", "sing"},
+     {"remove_subtitles": True, "karaoke_grouping": True}),
+    ({"fast", "quick", "speed"},
+     {"lama_super_fast": True, "detection_frame_skip": 3}),
+    ({"quality", "best", "careful", "thorough"},
+     {"lama_super_fast": False, "detection_frame_skip": 0,
+      "quality_report": True}),
+]
+
+
+def parse_intent(phrase: str) -> Optional[Dict[str, object]]:
+    """Map a natural-language cleanup phrase to config field overrides.
+
+    Returns a dict of field changes, or None when the phrase does not
+    match any known pattern. Purely local and deterministic -- no cloud
+    or LLM calls.
+    """
+    if not phrase or not phrase.strip():
+        return None
+    words = set(phrase.lower().split())
+    merged = {}
+    matched = False
+    for triggers, fields in _INTENT_RULES:
+        if words & triggers:
+            merged.update(fields)
+            matched = True
+    return merged if matched else None

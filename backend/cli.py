@@ -459,6 +459,9 @@ def main():
     parser.add_argument("--auto-lang-probe", action="store_true",
                        help="Probe the first frame for script/language and print "
                             "a suggestion, then exit. Requires -i.")
+    parser.add_argument("--intent", metavar="PHRASE",
+                       help="Natural-language cleanup intent (e.g. 'remove subtitles',"
+                            " 'remove logo'). Prints config changes and exits.")
     parser.add_argument("--json-log", metavar="PATH",
                        help="Append a structured JSON-line log at PATH.")
 
@@ -511,6 +514,18 @@ def main():
             for entry in entries:
                 mark = "OK" if entry["available"] else "  "
                 print(f"  [{mark}] {entry['name']}: {entry['reason']}")
+        sys.exit(0)
+
+    if args.intent:
+        from backend.presets import parse_intent
+        changes = parse_intent(args.intent)
+        if changes is None:
+            print(f"No config changes matched for: {args.intent!r}",
+                  file=sys.stderr)
+            sys.exit(1)
+        print("Intent config changes:")
+        for key, value in sorted(changes.items()):
+            print(f"  {key}: {value}")
         sys.exit(0)
 
     if args.auto_lang_probe:

@@ -135,5 +135,38 @@ class PresetSchemaTests(unittest.TestCase):
         self.assertEqual(exported["fields"], {"mask_feather_px": 7})
 
 
+class IntentParserTests(unittest.TestCase):
+    def test_subtitle_intent(self):
+        from backend.presets import parse_intent
+        result = parse_intent("remove subtitles")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.get("remove_subtitles"))
+        self.assertFalse(result.get("remove_chyrons"))
+
+    def test_logo_intent(self):
+        from backend.presets import parse_intent
+        result = parse_intent("remove logo")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.get("remove_chyrons"))
+
+    def test_combined_intent(self):
+        from backend.presets import parse_intent
+        result = parse_intent("remove everything fast")
+        self.assertIsNotNone(result)
+        self.assertTrue(result.get("remove_subtitles"))
+        self.assertTrue(result.get("remove_chyrons"))
+        self.assertTrue(result.get("lama_super_fast"))
+
+    def test_unknown_intent(self):
+        from backend.presets import parse_intent
+        result = parse_intent("do something random")
+        self.assertIsNone(result)
+
+    def test_empty_intent(self):
+        from backend.presets import parse_intent
+        self.assertIsNone(parse_intent(""))
+        self.assertIsNone(parse_intent(None))
+
+
 if __name__ == "__main__":
     unittest.main()
