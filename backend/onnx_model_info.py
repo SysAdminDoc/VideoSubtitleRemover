@@ -16,13 +16,18 @@ that exceed the ceiling by dropping DML and falling back to CPU.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import contextlib
+import importlib
 import importlib.metadata
 import logging
 import mmap
 import os
 from pathlib import Path
 import re
+import tempfile
 from typing import Dict, List, Optional, Sequence, Tuple
+
+import numpy as np
 
 from backend.model_hashes import hash_file
 
@@ -41,6 +46,11 @@ KNOWN_MODEL_OPSETS: Dict[str, int] = {
 }
 
 RAPIDOCR_CONFIG_FILES = ("config.yaml", "default_models.yaml")
+WINDOWS_ML_PROBE_SCHEMA = "vsr.windows_ml_probe.v1"
+WINDOWS_ML_BRIDGE_MODULE = "winui3.microsoft.windows.ai.machinelearning"
+WINDOWS_ML_BOOTSTRAP_MODULE = (
+    "winui3.microsoft.windows.applicationmodel.dynamicdependency.bootstrap"
+)
 
 
 class OnnxModelInfoError(ValueError):
@@ -462,3 +472,313 @@ def print_audit_report(records: Optional[List[Dict[str, object]]] = None) -> Non
             continue
         compat = "OK" if rec["directml_compatible"] else "EXCEEDS CEILING"
         print(f"  {rec['source']}: opset {rec['max_default_opset']} [{compat}]")
+
+
+def _pb_varint(value: int) -> bytes:
+    out = bytearray()
+    value = int(value)
+    while value >= 0x80:
+        out.append((value & 0x7F) | 0x80)
+        value >>= 7
+    out.append(value)
+    return bytes(out)
+
+
+def _pb_field_varint(field: int, value: int) -> bytes:
+    return _pb_varint((field << 3) | 0) + _pb_varint(value)
+
+
+def _pb_field_bytes(field: int, payload: bytes) -> bytes:
+    return _pb_varint((field << 3) | 2) + _pb_varint(len(payload)) + payload
+
+
+def _tiny_identity_onnx_bytes() -> bytes:
+    """Return a minimal ONNX Identity model: float[1] -> float[1]."""
+    dim = _pb_field_varint(1, 1)
+    shape = _pb_field_bytes(1, dim)
+    tensor_type = _pb_field_varint(1, 1) + _pb_field_bytes(2, shape)
+    type_proto = _pb_field_bytes(1, tensor_type)
+
+    input_info = (
+        _pb_field_bytes(1, b"x")
+        + _pb_field_bytes(2, type_proto)
+    )
+    output_info = (
+        _pb_field_bytes(1, b"y")
+        + _pb_field_bytes(2, type_proto)
+    )
+    node = (
+        _pb_field_bytes(1, b"x")
+        + _pb_field_bytes(2, b"y")
+        + _pb_field_bytes(3, b"identity")
+        + _pb_field_bytes(4, b"Identity")
+    )
+    graph = (
+        _pb_field_bytes(1, node)
+        + _pb_field_bytes(2, b"vsr_windows_ml_smoke")
+        + _pb_field_bytes(11, input_info)
+        + _pb_field_bytes(12, output_info)
+    )
+    opset = _pb_field_varint(2, 13)
+    return (
+        _pb_field_varint(1, 7)
+        + _pb_field_bytes(2, b"VideoSubtitleRemover")
+        + _pb_field_bytes(7, graph)
+        + _pb_field_bytes(8, opset)
+    )
+
+
+def _module_imported(
+    module_name: str,
+    importer=importlib.import_module,
+):
+    try:
+        return importer(module_name), None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def _distribution_version(name: str) -> Optional[str]:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+    except Exception:
+        return None
+
+
+def _complete_async_operation(operation) -> None:
+    if operation is None:
+        return
+    if hasattr(operation, "get"):
+        operation.get()
+        return
+    if hasattr(operation, "result"):
+        operation.result()
+        return
+    try:
+        import inspect
+        import asyncio
+        if inspect.isawaitable(operation):
+            asyncio.run(operation)
+    except RuntimeError:
+        logger.debug("Windows ML async registration skipped inside running loop")
+
+
+def _ep_devices(ort_module) -> list[dict]:
+    get_devices = getattr(ort_module, "get_ep_devices", None)
+    if not callable(get_devices):
+        return []
+    devices = []
+    try:
+        for item in get_devices():
+            hardware = getattr(item, "hardware_device", None)
+            devices.append({
+                "epName": str(getattr(item, "ep_name", "")),
+                "deviceType": str(getattr(hardware, "type", "")),
+            })
+    except Exception as exc:
+        logger.debug(f"Windows ML EP device probe failed: {exc}")
+    return devices
+
+
+@contextlib.contextmanager
+def _windows_app_sdk_context(bootstrap_module):
+    initialize = getattr(bootstrap_module, "initialize", None)
+    options_type = getattr(bootstrap_module, "InitializeOptions", None)
+    option = getattr(options_type, "ON_NO_MATCH_SHOW_UI", None)
+    if not callable(initialize):
+        yield False
+        return
+    context = initialize(options=option) if option is not None else initialize()
+    if hasattr(context, "__enter__") and hasattr(context, "__exit__"):
+        with context:
+            yield True
+    else:
+        yield True
+
+
+def _register_windows_ml_eps(ml_module) -> bool:
+    catalog_type = getattr(ml_module, "ExecutionProviderCatalog", None)
+    get_default = getattr(catalog_type, "GetDefault", None)
+    if not callable(get_default):
+        return False
+    catalog = get_default()
+    register = getattr(catalog, "RegisterCertifiedAsync", None)
+    if not callable(register):
+        return False
+    _complete_async_operation(register())
+    return True
+
+
+def _run_windows_ml_smoke(ort_module,
+                          providers: Sequence[str],
+                          temp_dir: Optional[str | Path] = None) -> dict:
+    with tempfile.TemporaryDirectory(prefix="vsr_winml_",
+                                     dir=str(temp_dir) if temp_dir else None) as tmpdir:
+        model_path = Path(tmpdir) / "identity.onnx"
+        model_path.write_bytes(_tiny_identity_onnx_bytes())
+        selected = list(providers or [])
+        if not selected:
+            selected = ["CPUExecutionProvider"]
+        session = ort_module.InferenceSession(str(model_path), providers=selected)
+        actual = (
+            list(session.get_providers())
+            if hasattr(session, "get_providers") else selected
+        )
+        payload = np.array([3.0], dtype=np.float32)
+        output = session.run(None, {"x": payload})[0]
+        ok = bool(np.allclose(output, payload))
+        return {
+            "passed": ok,
+            "requestedProviders": selected,
+            "activeProviders": actual,
+        }
+
+
+def collect_windows_ml_probe(
+    *,
+    run_smoke: bool = True,
+    importer=importlib.import_module,
+    ort_module=None,
+    platform_name: Optional[str] = None,
+    temp_dir: Optional[str | Path] = None,
+) -> dict:
+    """Probe whether Windows ML is usable from Python without migrating.
+
+    The probe is guarded at every boundary: non-Windows hosts return
+    ``not_applicable``; missing pywinrt/Windows App SDK packages return a
+    blocked decision; smoke inference runs only after the bridge imports.
+    """
+    platform_name = platform_name or ("Windows" if os.name == "nt" else os.name)
+    result: Dict[str, object] = {
+        "schema": WINDOWS_ML_PROBE_SCHEMA,
+        "platform": platform_name,
+        "pythonBridgeModule": WINDOWS_ML_BRIDGE_MODULE,
+        "bootstrapModule": WINDOWS_ML_BOOTSTRAP_MODULE,
+        "pythonBridgeInstalled": False,
+        "bootstrapInstalled": False,
+        "onnxruntimeInstalled": False,
+        "onnxruntimeWindowsMlPackage": _distribution_version(
+            "onnxruntime-windowsml"),
+        "winui3MlPackage": (
+            _distribution_version("winui3-Microsoft.Windows.AI.MachineLearning")
+            or _distribution_version("wasdk-Microsoft.Windows.AI.MachineLearning")
+        ),
+        "availableProviders": [],
+        "epDevicesBeforeRegister": [],
+        "epDevicesAfterRegister": [],
+        "registeredCertifiedProviders": False,
+        "smoke": {"attempted": False, "passed": False},
+        "decision": "unknown",
+        "reason": "",
+        "errors": [],
+    }
+    if str(platform_name).lower() not in {"windows", "nt"}:
+        result.update({
+            "decision": "not_applicable",
+            "reason": "Windows ML is only available on Windows.",
+        })
+        return result
+
+    bootstrap, bootstrap_error = _module_imported(
+        WINDOWS_ML_BOOTSTRAP_MODULE, importer)
+    if bootstrap is None:
+        result["errors"].append(f"bootstrap import failed: {bootstrap_error}")
+    else:
+        result["bootstrapInstalled"] = True
+
+    ml_module, ml_error = _module_imported(WINDOWS_ML_BRIDGE_MODULE, importer)
+    if ml_module is None:
+        result["errors"].append(f"Windows ML bridge import failed: {ml_error}")
+        result.update({
+            "decision": "blocked",
+            "reason": (
+                "Python Windows ML bridge is not importable; install the "
+                "pywinrt Windows App SDK ML package before migration."
+            ),
+        })
+        return result
+    result["pythonBridgeInstalled"] = True
+
+    if ort_module is None:
+        ort_module, ort_error = _module_imported("onnxruntime", importer)
+        if ort_module is None:
+            result["errors"].append(f"onnxruntime import failed: {ort_error}")
+            result.update({
+                "decision": "blocked",
+                "reason": "onnxruntime is not importable from this Python.",
+            })
+            return result
+    result["onnxruntimeInstalled"] = True
+
+    get_providers = getattr(ort_module, "get_available_providers", None)
+    providers = list(get_providers() if callable(get_providers) else [])
+    result["availableProviders"] = providers
+    result["epDevicesBeforeRegister"] = _ep_devices(ort_module)
+
+    try:
+        context = (
+            _windows_app_sdk_context(bootstrap)
+            if bootstrap is not None else contextlib.nullcontext(False)
+        )
+        with context:
+            result["registeredCertifiedProviders"] = _register_windows_ml_eps(
+                ml_module)
+            result["epDevicesAfterRegister"] = _ep_devices(ort_module)
+    except Exception as exc:
+        result["errors"].append(f"Windows ML provider registration failed: {exc}")
+
+    if run_smoke:
+        result["smoke"] = {"attempted": True, "passed": False}
+        try:
+            smoke = _run_windows_ml_smoke(ort_module, providers, temp_dir)
+            result["smoke"] = {"attempted": True, **smoke}
+        except Exception as exc:
+            result["errors"].append(f"Windows ML smoke inference failed: {exc}")
+
+    if result.get("smoke", {}).get("passed"):
+        result.update({
+            "decision": "candidate",
+            "reason": (
+                "Windows ML Python bridge imported and ONNX Runtime executed "
+                "a tiny identity model; migration still needs real-model "
+                "benchmarking."
+            ),
+        })
+    else:
+        result.update({
+            "decision": "blocked",
+            "reason": (
+                "Windows ML Python path is not yet proven by the smoke model."
+            ),
+        })
+    return result
+
+
+def print_windows_ml_probe_report(status: Optional[dict] = None) -> None:
+    if status is None:
+        status = collect_windows_ml_probe()
+    print("Windows ML Python probe")
+    print(f"  Decision: {status.get('decision')} - {status.get('reason')}")
+    print(f"  Bridge: {status.get('pythonBridgeInstalled')} ({status.get('winui3MlPackage')})")
+    print(f"  Bootstrap: {status.get('bootstrapInstalled')}")
+    print(f"  ONNX Runtime: {status.get('onnxruntimeInstalled')} "
+          f"(onnxruntime-windowsml={status.get('onnxruntimeWindowsMlPackage')})")
+    print(f"  Providers: {', '.join(status.get('availableProviders') or []) or 'none'}")
+    before = status.get("epDevicesBeforeRegister") or []
+    after = status.get("epDevicesAfterRegister") or []
+    if before:
+        print("  EP devices before registration:")
+        for item in before:
+            print(f"    - {item.get('epName')} ({item.get('deviceType')})")
+    if after:
+        print("  EP devices after registration:")
+        for item in after:
+            print(f"    - {item.get('epName')} ({item.get('deviceType')})")
+    smoke = status.get("smoke") or {}
+    print(f"  Smoke: attempted={smoke.get('attempted')} passed={smoke.get('passed')}")
+    if smoke.get("activeProviders"):
+        print(f"  Smoke providers: {', '.join(smoke.get('activeProviders') or [])}")
+    for error in status.get("errors") or []:
+        print(f"  Warning: {error}")

@@ -44,6 +44,19 @@ def _onnxruntime_has_provider(provider: str) -> bool:
         return False
 
 
+def windows_ml_python_decision(run_smoke: bool = False) -> Dict[str, object]:
+    """Return the guarded Windows ML probe decision for diagnostics."""
+    try:
+        from backend.onnx_model_info import collect_windows_ml_probe
+        return collect_windows_ml_probe(run_smoke=run_smoke)
+    except Exception as exc:
+        return {
+            "schema": "vsr.windows_ml_probe.v1",
+            "decision": "blocked",
+            "reason": f"Windows ML probe failed: {exc}",
+        }
+
+
 def _rapidocr_directml_params(device: str) -> Optional[Dict[str, Any]]:
     if device != "directml":
         return None

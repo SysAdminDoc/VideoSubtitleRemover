@@ -20,6 +20,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   research inpainter mode, but it verifies local checkpoints through the
   adapter manifest before importing VOID code and falls back to TBE when
   weights or dependencies are absent.
+- **Windows ML migration probe.** `--audit-windows-ml` now checks the Python
+  Windows ML bridge, Windows App SDK bootstrap, ONNX Runtime EP devices, and a
+  tiny ONNX smoke model before any DirectML-to-Windows-ML migration work; README
+  documents the current audit-only decision.
 
 ### Fixed
 

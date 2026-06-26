@@ -495,6 +495,8 @@ def main():
                        help="Ignore embedded subtitle tracks and run burned-in cleanup normally.")
     parser.add_argument("--audit-onnx", action="store_true",
                        help="Audit all discoverable ONNX models for DirectML opset compatibility and exit.")
+    parser.add_argument("--audit-windows-ml", action="store_true",
+                       help="Probe the Windows ML Python path with a tiny ONNX smoke model and exit.")
     parser.add_argument("--scan-weights", action="store_true",
                        help="Scan cached model weights and verify SHA-256 against known hashes, then exit.")
     parser.add_argument("--cache-info", action="store_true",
@@ -544,6 +546,11 @@ def main():
     if args.audit_onnx:
         from backend.onnx_model_info import print_audit_report
         print_audit_report()
+        sys.exit(0)
+
+    if args.audit_windows_ml:
+        from backend.onnx_model_info import print_windows_ml_probe_report
+        print_windows_ml_probe_report()
         sys.exit(0)
 
     if args.scan_weights:

@@ -80,11 +80,26 @@ def _maybe_session(model_path: str, providers=None, adapter_name: str = "lama-on
 
 def _providers_for_device(device: str) -> List:
     """Return ONNX Runtime providers for the requested VSR device token."""
+    if device == "windowsml":
+        return ["CPUExecutionProvider"]
     if device == "directml":
         return ["DmlExecutionProvider", "CPUExecutionProvider"]
     if "cuda" in device:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
+
+
+def windows_ml_probe_decision(run_smoke: bool = False) -> dict:
+    """Diagnostic helper for deciding whether Windows ML is migration-ready."""
+    try:
+        from backend.onnx_model_info import collect_windows_ml_probe
+        return collect_windows_ml_probe(run_smoke=run_smoke)
+    except Exception as exc:
+        return {
+            "schema": "vsr.windows_ml_probe.v1",
+            "decision": "blocked",
+            "reason": f"Windows ML probe failed: {exc}",
+        }
 
 
 def _provider_name(provider) -> str:

@@ -184,6 +184,13 @@ Opt-in ONNX inpainters inspect their model `opset_import` metadata before
 creating a DirectML session; if the default ONNX opset is newer than DirectML's
 supported ceiling, VSR uses the CPU provider instead of failing at session
 creation.
+Windows ML is currently audit-only, not a replacement for ONNX Runtime
+DirectML. Run `python -m backend.processor --audit-windows-ml` on Windows to
+check whether the Python bridge, Windows App SDK bootstrap, ONNX Runtime EP
+device catalog, and a tiny ONNX identity-model smoke run are available. Until
+that probe passes on real user machines and the default OCR/inpaint models are
+benchmarked through the Windows ML path, VSR keeps DirectML as the AMD/Intel
+GPU route.
 
 Optional model paths such as `VSR_LAMA_ONNX`, `VSR_MIGAN_ONNX`,
 `VSR_FASTDVDNET`, and `VSR_TRANSNETV2` are checked against a local adapter
@@ -289,6 +296,7 @@ before/after retry config in the next batch report.
 | `--quality-report` | Compute PSNR/SSIM and VMAF when libvmaf is available | Off |
 | `--quality-sheet` | Side-by-side comparison PNG | Off |
 | `--audit-onnx` | Audit all ONNX models for DirectML opset compatibility and exit | Off |
+| `--audit-windows-ml` | Probe Windows ML Python bridge and tiny ONNX smoke inference | Off |
 | `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes | Off |
 | `--cache-info` | Print cache directory inventory with sizes and exit | Off |
 | `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) | Off |
