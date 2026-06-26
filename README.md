@@ -387,8 +387,10 @@ to a bug report.
 - Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup, or
   `Run_VSR_Pro.ps1` from PowerShell to see setup/launch errors there
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
-- If the log warns that OpenCV bundles libpng older than `1.6.54`, avoid
-  opening untrusted PNG files until `opencv-python` ships a fixed wheel
+- If the log or support bundle reports OpenCV's bundled libpng below
+  `1.6.54`, avoid opening untrusted PNG files. As of June 26, 2026,
+  opencv-python still needs a fixed bundled-libpng wheel; update this
+  guidance only when `security.opencv_libpng.vulnerable` reports `false`
 
 </details>
 

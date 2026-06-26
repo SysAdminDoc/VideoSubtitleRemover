@@ -26,6 +26,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   RapidOCR YAML config files, PP-OCR model families, required PP-OCRv6
   det/rec assets for RapidOCR 3.x, and compatibility status for PyInstaller
   bundles.
+- **OpenCV/libpng status evidence.** Support bundles now include the detected
+  OpenCV version, bundled libpng version, fixed libpng floor, and warning state
+  so fixed wheels can be confirmed at runtime while current wheels still need
+  the untrusted-PNG caution.
 - **Native optional-engine crash hardening.** OCR, Whisper, LaMa, ProPainter,
   and GUI startup engine probes now use safe optional-import checks so broken
   native wheels do not get imported just to discover capabilities. The

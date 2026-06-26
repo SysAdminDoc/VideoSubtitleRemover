@@ -1522,11 +1522,31 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
         info = "    PNG:                         build (ver 1.6.53)"
         self.assertEqual(parse_libpng_version(info), (1, 6, 53))
 
+    def test_opencv_libpng_status_reports_runtime_evidence(self):
+        from unittest import mock
+        from backend.security_checks import opencv_libpng_status
+
+        fake_cv2 = SimpleNamespace(
+            __version__="4.13.0",
+            getBuildInformation=lambda: "PNG: build (ver 1.6.53)",
+        )
+        with mock.patch.dict(sys.modules, {"cv2": fake_cv2}):
+            status = opencv_libpng_status()
+
+        self.assertTrue(status["available"])
+        self.assertEqual(status["opencv_version"], "4.13.0")
+        self.assertEqual(status["libpng_version"], "1.6.53")
+        self.assertEqual(status["fixed_version"], "1.6.54")
+        self.assertTrue(status["vulnerable"])
+        self.assertIn("CVE-2026-22801", status["warning"])
+        self.assertIsNone(status["error"])
+
     def test_libpng_warning_fires_below_fixed_floor(self):
         from unittest import mock
         from backend.security_checks import warn_if_vulnerable_opencv_libpng
 
         fake_cv2 = SimpleNamespace(
+            __version__="4.13.0",
             getBuildInformation=lambda: "PNG: build (ver 1.6.53)"
         )
         logger = mock.Mock()
@@ -1541,6 +1561,7 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
         from backend.security_checks import warn_if_vulnerable_opencv_libpng
 
         fake_cv2 = SimpleNamespace(
+            __version__="4.13.0",
             getBuildInformation=lambda: "PNG: build (ver 1.6.54)"
         )
         logger = mock.Mock()

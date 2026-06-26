@@ -68,6 +68,11 @@ class SupportBundleTests(unittest.TestCase):
                 self.assertEqual(support["app_version"], "9.9.9")
                 self.assertIn("ffmpeg", support["tools"])
                 self.assertIn("ffprobe", support["tools"])
+                self.assertIn("opencv_libpng", support["security"])
+                self.assertEqual(
+                    support["security"]["opencv_libpng"]["fixed_version"],
+                    "1.6.54",
+                )
                 self.assertEqual(support["facts"]["settings_file"], "<redacted>")
                 self.assertTrue(support["facts"]["ffmpeg_ready"])
 

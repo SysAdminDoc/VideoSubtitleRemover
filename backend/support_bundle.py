@@ -17,6 +17,7 @@ from typing import Any, Iterable, Mapping, Optional
 
 from backend.cache_inventory import discover_caches
 from backend.crash_reporter import _path_scrub
+from backend.security_checks import opencv_libpng_status
 
 
 SUPPORT_BUNDLE_SCHEMA = "vsr.support_bundle.v1"
@@ -175,6 +176,9 @@ def _support_payload(*, app_version: str,
             "ffprobe": _tool_version("ffprobe"),
         },
         "dependencies": _dependency_versions(),
+        "security": {
+            "opencv_libpng": opencv_libpng_status(),
+        },
         "caches": _cache_summary(),
         "facts": _redact_json(dict(extra_facts)),
     }
