@@ -221,6 +221,12 @@ FloED is available as a strict local research adapter: set `VSR_FLOED=1`, set
 set `VSR_FLOED_COMMAND` to a local wrapper that accepts `--input-dir`,
 `--mask-dir`, and `--output-dir`, and opt in with
 `VSR_ALLOW_UNVERIFIED_MODELS=1` for unpinned research weights.
+MatAnyone 2 is available as an opt-in mask refinement path for decorated or
+thin subtitle masks: pass `--matanyone-refine`, set `VSR_MATANYONE=1`, install
+the reviewed upstream `matanyone2` package, and set `VSR_MATANYONE_PATH` to a
+local checkpoint or snapshot after reviewing the NTU S-Lab License 1.0 terms.
+Unpinned PyTorch checkpoints require `VSR_ALLOW_UNVERIFIED_MODELS=1`; malformed
+or missing alpha mattes fall back to the original OCR/SAM mask.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
 crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or

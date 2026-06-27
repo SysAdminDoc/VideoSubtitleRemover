@@ -49,5 +49,86 @@ class Sam2RefinementTests(unittest.TestCase):
         self.assertIn("point_labels", predict_kwargs)
 
 
+class MatAnyoneRefinementTests(unittest.TestCase):
+    def test_matte_frame_normalizes_float_alpha(self):
+        from backend import segmentation as seg
+
+        class FakeModel:
+            def matte(self, frame, hint_mask):
+                alpha = np.zeros((16, 16), dtype=np.float32)
+                alpha[4:8, 5:9] = 0.75
+                return alpha
+
+        saved = dict(seg._MATANYONE_STATE)
+        try:
+            seg._MATANYONE_STATE.update({"probed": True, "model": FakeModel()})
+            frame = np.zeros((32, 32, 3), dtype=np.uint8)
+            hint = np.zeros((32, 32), dtype=np.uint8)
+            hint[8:16, 10:18] = 255
+
+            out = seg.matte_frame(frame, hint)
+        finally:
+            seg._MATANYONE_STATE.clear()
+            seg._MATANYONE_STATE.update(saved)
+
+        self.assertIsNotNone(out)
+        self.assertEqual(out.dtype, np.uint8)
+        self.assertEqual(out.shape, (32, 32))
+        self.assertGreaterEqual(int(out.max()), 190)
+
+    def test_refine_masks_preserves_empty_hints(self):
+        from backend import segmentation as seg
+
+        class FakeModel:
+            def matte_frames(self, frames, masks):
+                return [np.full(frame.shape[:2], 255, dtype=np.uint8) for frame in frames]
+
+        saved = dict(seg._MATANYONE_STATE)
+        try:
+            seg._MATANYONE_STATE.update({"probed": True, "model": FakeModel()})
+            frames = [np.zeros((16, 16, 3), dtype=np.uint8) for _ in range(2)]
+            empty = np.zeros((16, 16), dtype=np.uint8)
+            hint = np.zeros((16, 16), dtype=np.uint8)
+            hint[4:8, 4:8] = 255
+
+            out = seg.refine_masks_with_matanyone(frames, [empty, hint])
+        finally:
+            seg._MATANYONE_STATE.clear()
+            seg._MATANYONE_STATE.update(saved)
+
+        self.assertEqual(int(out[0].max()), 0)
+        self.assertEqual(int(out[1].min()), 255)
+
+    def test_processor_batch_refinement_uses_matanyone_flag(self):
+        from backend import processor
+        from backend import segmentation as seg
+
+        class FakeModel:
+            def matte_frames(self, frames, masks):
+                alpha = np.zeros(frames[0].shape[:2], dtype=np.uint8)
+                alpha[6:10, 6:10] = 255
+                return [alpha]
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            matanyone_refine=True,
+            device="cpu",
+        )
+        saved = dict(seg._MATANYONE_STATE)
+        try:
+            seg._MATANYONE_STATE.update({"probed": True, "model": FakeModel()})
+            frame = np.zeros((16, 16, 3), dtype=np.uint8)
+            mask = np.zeros((16, 16), dtype=np.uint8)
+            mask[2:14, 2:14] = 255
+
+            [out] = remover._refine_masks_with_matanyone([frame], [mask])
+        finally:
+            seg._MATANYONE_STATE.clear()
+            seg._MATANYONE_STATE.update(saved)
+
+        self.assertEqual(int(out[2:6, 2:14].max()), 0)
+        self.assertEqual(int(out[6:10, 6:10].min()), 255)
+
+
 if __name__ == "__main__":
     unittest.main()

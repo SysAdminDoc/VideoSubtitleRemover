@@ -535,6 +535,20 @@ class SubtitleRemover:
 
         return mask
 
+    def _refine_masks_with_matanyone(self,
+                                     frames: List[np.ndarray],
+                                     masks: List[np.ndarray]) -> List[np.ndarray]:
+        if not getattr(self.config, "matanyone_refine", False):
+            return masks
+        if not frames or not masks:
+            return masks
+        try:
+            from backend.segmentation import refine_masks_with_matanyone
+            return refine_masks_with_matanyone(frames, masks, self.config.device)
+        except Exception as exc:
+            logger.debug(f"MatAnyone 2 refinement skipped: {exc}")
+            return masks
+
     # -----------------------------------------------------------------
     # SRT export
     # -----------------------------------------------------------------
@@ -981,6 +995,7 @@ class SubtitleRemover:
             self._report_progress(0.5, f"Removing {len(boxes)} text regions...")
             mask = self._create_mask(image.shape, boxes, frame=image,
                                      confidences=confidences)
+            [mask] = self._refine_masks_with_matanyone([image], [mask])
             [result] = self.inpainter.inpaint([image], [mask])
 
             self._report_progress(0.9, "Saving result...")
@@ -1475,12 +1490,6 @@ class SubtitleRemover:
 
                     mask = self._create_mask(frame.shape, boxes, frame=frame,
                                              confidences=det_confs)
-                    # B-3: accumulate the union-mask bbox for the quality
-                    # report ROI. We track the bbox (not the per-frame mask
-                    # stack) to keep memory flat; the bbox is enough to
-                    # crop input and output for the metric pass.
-                    if self.config.quality_report:
-                        self._accumulate_quality_bbox(mask)
                     # Colour-tuned expansion -- grow the mask to match the
                     # dominant text colour inside each detected box.
                     if self.config.colour_tune_enable and boxes:
@@ -1501,6 +1510,15 @@ class SubtitleRemover:
 
                 if not frames:
                     break
+
+                masks = self._refine_masks_with_matanyone(frames, masks)
+                # B-3: accumulate the union-mask bbox for the quality report
+                # ROI after optional mask refiners have finalized the mask.
+                if self.config.quality_report:
+                    for m in masks:
+                        self._accumulate_quality_bbox(m)
+                if masks:
+                    last_mask = masks[-1]
 
                 progress = min(0.9, frame_idx / max(1, frames_to_process) * 0.8 + 0.1)
                 self._report_progress(progress, f"Processing frame {frame_idx}/{frames_to_process}...")

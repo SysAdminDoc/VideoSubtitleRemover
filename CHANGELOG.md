@@ -47,6 +47,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   checkpoint, supports a reviewed `VSR_FLOED_COMMAND` wrapper over temp
   frame/mask directories, reports missing checkpoint/wrapper setup, and falls
   back to TBE when the local integration is unavailable.
+- **MatAnyone 2 mask refinement.** `--matanyone-refine` now routes OCR/SAM
+  masks through a gated MatAnyone 2 alpha-matte adapter, verifies local
+  checkpoint/snapshot provenance through the adapter manifest, reports missing
+  opt-in/package/checkpoint setup, and falls back to the original mask on
+  missing or malformed alpha output.
 
 ### Fixed
 

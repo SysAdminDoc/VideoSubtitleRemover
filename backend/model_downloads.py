@@ -36,6 +36,8 @@ _VACE_REPO_ID = "Wan-AI/Wan2.1-VACE-1.3B"
 _VIDEOPAINTER_REPO_ID = "TencentARC/VideoPainter"
 _VIDEOPAINTER_BASE_REPO_ID = "THUDM/CogVideoX-5b-I2V"
 _FLOED_SOURCE_URL = "https://github.com/NevSNev/FloED-main"
+_MATANYONE_SOURCE_URL = "https://github.com/pq-yang/MatAnyone2"
+_MATANYONE_MODEL_ID = "PeiqingYang/MatAnyone2"
 _TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 _WHISPER_SIZES = {
     "tiny": "~75 MB",
@@ -166,6 +168,21 @@ def _floed_command_present(env: Mapping[str, str]) -> bool:
     if not command:
         return _module_available("floed")
     return True
+
+
+def _matanyone_checkpoint_present(env: Mapping[str, str]) -> bool:
+    value = str(env.get("VSR_MATANYONE_PATH", "") or "").strip()
+    if value and Path(value).exists():
+        return True
+    app_cache = _app_model_dir(env) / "matanyone2"
+    if _has_any_file(app_cache, suffixes=(".pth", ".safetensors", ".bin", ".json")):
+        return True
+    model_id = str(env.get("VSR_MATANYONE_MODEL_ID") or _MATANYONE_MODEL_ID)
+    return _hf_repo_cached(env, model_id)
+
+
+def _matanyone_package_present() -> bool:
+    return _module_available("matanyone2") or _module_available("matanyone")
 
 
 def _hf_repo_cached(env: Mapping[str, str], repo: str) -> bool:
@@ -336,6 +353,42 @@ def _append_floed_hints(hints: list[ModelDownloadHint], config, env: Mapping[str
         ))
 
 
+def _append_matanyone_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
+    if not bool(getattr(config, "matanyone_refine", False)) and not _env_truthy(env, "VSR_MATANYONE"):
+        return
+    if not _env_truthy(env, "VSR_MATANYONE"):
+        hints.append(ModelDownloadHint(
+            label="MatAnyone 2 opt-in",
+            size_estimate="local setup",
+            detail=(
+                "Set VSR_MATANYONE=1 only after reviewing the upstream "
+                "NTU S-Lab License 1.0 terms."
+            ),
+            cache_hint=_MATANYONE_SOURCE_URL,
+        ))
+    if not _matanyone_package_present():
+        hints.append(ModelDownloadHint(
+            label="MatAnyone 2 package",
+            size_estimate="local checkout",
+            detail=(
+                "Install the reviewed MatAnyone2 package from the upstream "
+                "repo before enabling --matanyone-refine."
+            ),
+            cache_hint=_MATANYONE_SOURCE_URL,
+        ))
+    if not _matanyone_checkpoint_present(env):
+        hints.append(ModelDownloadHint(
+            label="MatAnyone 2 checkpoint",
+            size_estimate="model-size dependent",
+            detail=(
+                "Set VSR_MATANYONE_PATH to a reviewed matanyone2.pth or "
+                "snapshot; unpinned PyTorch weights require "
+                "VSR_ALLOW_UNVERIFIED_MODELS=1."
+            ),
+            cache_hint="%APPDATA%\\VideoSubtitleRemoverPro\\models\\matanyone2",
+        ))
+
+
 def _append_whisper_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
     if not bool(getattr(config, "whisper_fallback", False)):
         return
@@ -365,6 +418,7 @@ def pending_model_download_hints(
     _append_vace_hints(hints, config, source_env)
     _append_videopainter_hints(hints, config, source_env)
     _append_floed_hints(hints, config, source_env)
+    _append_matanyone_hints(hints, config, source_env)
     _append_whisper_hints(hints, config, source_env)
     return tuple(hints)
 

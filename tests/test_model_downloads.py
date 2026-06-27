@@ -11,6 +11,7 @@ def _cfg(mode="sttn", **overrides):
         "whisper_backend": "faster-whisper",
         "whisper_model_size": "tiny",
         "whisper_model_path": "",
+        "matanyone_refine": False,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -163,6 +164,23 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertIn("FloED checkpoint", labels)
         self.assertIn("FloED local wrapper", labels)
         self.assertTrue(any("Apache-2.0" in hint.detail for hint in hints))
+
+    def test_matanyone_reports_opt_in_package_and_checkpoint_setup(self):
+        from backend import model_downloads as md
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"HOME": tmpdir, "USERPROFILE": tmpdir, "APPDATA": tmpdir}
+            with mock.patch.object(md.importlib.util, "find_spec", return_value=None):
+                hints = md.pending_model_download_hints(
+                    _cfg(matanyone_refine=True),
+                    env,
+                )
+
+        labels = [hint.label for hint in hints]
+        self.assertIn("MatAnyone 2 opt-in", labels)
+        self.assertIn("MatAnyone 2 package", labels)
+        self.assertIn("MatAnyone 2 checkpoint", labels)
+        self.assertTrue(any("NTU S-Lab License 1.0" in hint.detail for hint in hints))
 
     def test_installed_backend_status_is_privacy_safe_and_actionable(self):
         from backend import model_downloads as md

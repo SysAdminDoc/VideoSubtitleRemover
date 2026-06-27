@@ -421,6 +421,8 @@ def main():
                        help="Run a denoise pass on the detection-frame stream.")
     parser.add_argument("--sam2-refine", action="store_true",
                        help="SAM 2 mask refinement of detected boxes.")
+    parser.add_argument("--matanyone-refine", action="store_true",
+                       help="MatAnyone 2 alpha-matte refinement of masks.")
     parser.add_argument("--no-tbe", action="store_true",
                        help="Disable Temporal Background Exposure (STTN/ProPainter use cv2)")
     parser.add_argument("--no-adaptive-batch", action="store_true",
@@ -793,6 +795,7 @@ def main():
         tbe_scene_cut_use_transnetv2=args.transnetv2,
         detection_denoise=args.denoise_detect,
         sam2_refine=args.sam2_refine,
+        matanyone_refine=args.matanyone_refine,
         adaptive_batch=not args.no_adaptive_batch,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,

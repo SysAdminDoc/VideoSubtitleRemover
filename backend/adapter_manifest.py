@@ -231,6 +231,21 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         remote_code_required=True,
         allow_directories=True,
     ),
+    "matanyone2": AdapterManifestEntry(
+        name="matanyone2",
+        env_vars=("VSR_MATANYONE_PATH",),
+        expected_filenames=(
+            "matanyone2.pth",
+            "pytorch_model.bin",
+            "model.safetensors",
+        ),
+        sha256={},
+        license="NTU S-Lab License 1.0",
+        source_url="https://github.com/pq-yang/MatAnyone2",
+        preferred_format="reviewed local MatAnyone 2 checkpoint or snapshot",
+        remote_code_required=True,
+        allow_directories=True,
+    ),
     "transnetv2": AdapterManifestEntry(
         name="transnetv2",
         env_vars=("VSR_TRANSNETV2",),

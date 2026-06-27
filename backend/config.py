@@ -165,6 +165,9 @@ class ProcessingConfig:
     # RM-66: opt-in SAM 2 mask refinement. Tighter mask = less inpaint
     # area = cleaner output. Requires VSR_SAM2_CHECKPOINT + sam2 pkg.
     sam2_refine: bool = False
+    # RM-68: opt-in MatAnyone 2 alpha-matte refinement. Requires
+    # VSR_MATANYONE=1 plus a reviewed local install/checkpoint.
+    matanyone_refine: bool = False
     edge_ring_px: int = 2         # post-inpaint colour match ring width (0 disables)
 
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
@@ -564,6 +567,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.tbe_scene_cut_use_transnetv2, False)
     config.detection_denoise = _coerce_bool(config.detection_denoise, False)
     config.sam2_refine = _coerce_bool(config.sam2_refine, False)
+    config.matanyone_refine = _coerce_bool(config.matanyone_refine, False)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)
