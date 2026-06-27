@@ -613,7 +613,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     else:
         config.loudnorm_target = 0.0
     accel = _coerce_text(config.decode_hw_accel, "off", 16).lower()
-    if accel not in {"off", "auto", "any", "d3d11", "vaapi", "mfx"}:
+    if accel not in {
+        "off", "auto", "any", "d3d11", "vaapi", "mfx", "pynv", "nvdec",
+    }:
         accel = "off"
     config.decode_hw_accel = accel
     config.multi_audio_passthrough = _coerce_bool(config.multi_audio_passthrough, True)

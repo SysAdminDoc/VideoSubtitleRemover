@@ -560,6 +560,21 @@ def _opencv_runtime_status() -> dict:
         }
 
 
+def _pynv_decode_status(env: Mapping[str, str]) -> dict:
+    try:
+        from backend.decode_accel import pynv_decode_status
+        return pynv_decode_status(env)
+    except Exception as exc:
+        return {
+            "available": False,
+            "version": None,
+            "enabled": _env_truthy(env, "VSR_PYNVVIDEOCODEC"),
+            "status": "probe_failed",
+            "error": str(exc),
+            "next_action": "Repair PyNvVideoCodec installation; runtime probing failed.",
+        }
+
+
 def _rapidocr_status() -> dict:
     from backend.onnx_model_info import rapidocr_release_provenance
 
@@ -790,6 +805,12 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
     )
     if directml.get("packageInstalled"):
         provider_text += "; DirectML package installed"
+    pynv = providers.get("pynv_decode", {})
+    if isinstance(pynv, Mapping):
+        if pynv.get("available"):
+            provider_text += "; PyNvVideoCodec available"
+        elif pynv.get("enabled"):
+            provider_text += "; PyNvVideoCodec not installed"
     rapid = detection_items[0] if detection_items else {}
     rapid_text = (
         f"RapidOCR {rapid.get('model_count', 0)} model file(s)"
@@ -858,6 +879,7 @@ def installed_backend_status(
     providers = {
         "onnxruntime": _onnxruntime_provider_status(),
         "opencv": _opencv_runtime_status(),
+        "pynv_decode": _pynv_decode_status(source_env),
         "torch": _module_status(
             "PyTorch",
             "torch",

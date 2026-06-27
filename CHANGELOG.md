@@ -56,6 +56,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   CoTracker3 point-tracking helper to fill OCR-empty masks inside a video
   batch, requires a reviewed local checkout or pinned revision before
   `torch.hub` can load the model, and leaves non-empty OCR/SAM masks unchanged.
+- **PyNvVideoCodec decode option.** `--decode-accel pynv` / `nvdec` now routes
+  through the PyNvVideoCodec wrapper without requiring `VSR_PYNVVIDEOCODEC`,
+  supports the documented `SimpleDecoder` API plus the legacy decoder shape,
+  reports PyNv availability in backend status, and falls back to software
+  decode when unavailable.
 
 ### Fixed
 

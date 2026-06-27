@@ -637,7 +637,7 @@ class DecodeHwAccelCoerceTests(unittest.TestCase):
         self.assertEqual(cfg.decode_hw_accel, "off")
 
     def test_known_tokens_kept(self):
-        for token in ("off", "auto", "any", "d3d11", "vaapi", "mfx"):
+        for token in ("off", "auto", "any", "d3d11", "vaapi", "mfx", "pynv", "nvdec"):
             cfg = processor.normalize_processing_config(
                 processor.ProcessingConfig(decode_hw_accel=token)
             )
@@ -3372,6 +3372,69 @@ class DecodeAccelTests(unittest.TestCase):
         from backend.decode_accel import try_open_pynv
         cap = try_open_pynv("/nonexistent.mp4")
         self.assertIsNone(cap)
+
+    def test_pynv_simpledecoder_facade_reads_bgr(self):
+        import numpy as np
+        from unittest import mock
+        from backend.decode_accel import try_open_pynv
+
+        class SimpleDecoder:
+            def __init__(self, path, **kwargs):
+                self.path = path
+                self.kwargs = kwargs
+
+            def get_stream_metadata(self):
+                return {
+                    "width": 4,
+                    "height": 2,
+                    "average_fps": 24.0,
+                }
+
+            def __len__(self):
+                return 2
+
+            def __getitem__(self, idx):
+                if idx >= 2:
+                    raise IndexError(idx)
+                frame = np.zeros((2, 4, 3), dtype=np.uint8)
+                frame[:, :, 0] = 10
+                frame[:, :, 1] = 20
+                frame[:, :, 2] = 30
+                return frame
+
+        fake_module = types.ModuleType("PyNvVideoCodec")
+        fake_module.SimpleDecoder = SimpleDecoder
+        fake_module.OutputColorType = SimpleNamespace(RGB="rgb")
+        with mock.patch.dict(sys.modules, {"PyNvVideoCodec": fake_module}):
+            cap = try_open_pynv("clip.mp4")
+
+        self.assertIsNotNone(cap)
+        self.assertEqual(cap.get(processor.cv2.CAP_PROP_FRAME_WIDTH), 4.0)
+        self.assertEqual(cap.get(processor.cv2.CAP_PROP_FRAME_HEIGHT), 2.0)
+        self.assertEqual(cap.get(processor.cv2.CAP_PROP_FRAME_COUNT), 2.0)
+        ok, frame = cap.read()
+        self.assertTrue(ok)
+        self.assertEqual(frame.shape, (2, 4, 3))
+        self.assertEqual(frame[0, 0].tolist(), [30, 20, 10])
+        self.assertTrue(cap.set(processor.cv2.CAP_PROP_POS_FRAMES, 1))
+        ok, _frame = cap.read()
+        self.assertTrue(ok)
+        ok, _frame = cap.read()
+        self.assertFalse(ok)
+
+    def test_open_capture_routes_pynv_token(self):
+        from unittest import mock
+        from backend import io as _io
+
+        fake_cap = object()
+        with mock.patch(
+            "backend.decode_accel.try_open_pynv",
+            return_value=fake_cap,
+        ) as mocked:
+            cap = _io._open_capture("clip.mp4", "pynv")
+
+        self.assertIs(cap, fake_cap)
+        mocked.assert_called_once_with("clip.mp4")
 
     def test_rife_returns_none_without_dep(self):
         import numpy as _np

@@ -547,7 +547,9 @@ class ProcessingConfig:
         self.multi_audio_passthrough = _coerce_bool(
             self.multi_audio_passthrough, True)
         accel = _coerce_text(self.decode_hw_accel, "off", 16).lower()
-        if accel not in {"off", "auto", "any", "d3d11", "vaapi", "mfx"}:
+        if accel not in {
+            "off", "auto", "any", "d3d11", "vaapi", "mfx", "pynv", "nvdec",
+        }:
             accel = "off"
         self.decode_hw_accel = accel
         self.prefetch_decode = _coerce_bool(self.prefetch_decode, True)

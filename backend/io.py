@@ -706,7 +706,12 @@ def _open_capture(path: str, hw_accel: str = "off", *,
                 return cap
         except Exception as exc:
             logger.debug(f"VapourSynth bridge failed: {exc}")
-    if os.environ.get("VSR_PYNVVIDEOCODEC", "").strip().lower() in {"1", "true", "yes", "on"}:
+    pynv_requested = (
+        str(hw_accel or "").lower() in {"pynv", "pynvvideocodec", "nvdec"}
+        or os.environ.get("VSR_PYNVVIDEOCODEC", "").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if pynv_requested:
         try:
             from backend.decode_accel import try_open_pynv
             pynv = try_open_pynv(path)
@@ -714,6 +719,12 @@ def _open_capture(path: str, hw_accel: str = "off", *,
                 return pynv
         except Exception as exc:
             logger.debug(f"PyNvVideoCodec probe failed: {exc}")
+        if str(hw_accel or "").lower() in {"pynv", "pynvvideocodec", "nvdec"}:
+            logger.warning(
+                "PyNvVideoCodec decode was requested but unavailable; "
+                "falling back to software decode."
+            )
+            return cv2.VideoCapture(path)
     if hw_accel in (None, "", "off"):
         return cv2.VideoCapture(path)
     accel_map = {

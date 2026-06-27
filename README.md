@@ -233,6 +233,11 @@ set `VSR_COTRACKER=1`, and set either `VSR_COTRACKER_REPO` to a reviewed local
 co-tracker checkout or `VSR_COTRACKER_REF` to a pinned commit/tag before any
 `torch.hub` load is allowed. Set `VSR_COTRACKER_MODE=online` only if you need
 the online model; the default uses the offline CoTracker3 entrypoint.
+NVIDIA users can request PyNvVideoCodec decode with `--decode-accel pynv`
+or `--decode-accel nvdec` after installing NVIDIA's `PyNvVideoCodec` package.
+The decoder uses GPU-backed surfaces when available, then converts to CPU BGR
+frames for the current OpenCV/OCR/inpaint pipeline; missing packages or failed
+opens fall back to software decode.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
 crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or
@@ -311,7 +316,7 @@ before/after retry config in the next batch report.
 | `--frame-skip N` | Reuse mask for N frames (0=every frame) | 0 |
 | `--mask-dilate N` | Expand masks by N pixels | 8 |
 | `--no-hw-encode` | Force software encoding | Off |
-| `--decode-accel` | HW decode hint (off/auto/d3d11/vaapi/mfx) | off |
+| `--decode-accel` | HW decode hint (off/auto/d3d11/vaapi/mfx/pynv/nvdec) | off |
 | `--keep-chyrons` | Leave persistent text (logos / lower-thirds) | Off |
 | `--keep-subtitles` | Leave dialogue subtitles | Off |
 | `--karaoke-grouping` | Fuse per-syllable boxes on the same line | Off |
@@ -379,7 +384,7 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |
 | TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |
 | HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
-| HW Decode Hint | cv2 HW-accel hint with software fallback | off | off/auto/d3d11/vaapi/mfx |
+| HW Decode Hint | OpenCV/PyNvVideoCodec decode hint with software fallback | off | off/auto/d3d11/vaapi/mfx/pynv/nvdec |
 | Loudness Target | EBU R128 LUFS target (0 = off) | 0 | 0 or -70..-5 |
 | Multi-track Audio | Pass through every audio stream | On | On/Off |
 | Quality Sheet | Side-by-side PNG next to output | Off | On/Off |

@@ -477,8 +477,11 @@ def main():
     parser.add_argument("--loudnorm", type=float, default=0.0, metavar="LUFS",
                        help="EBU R128 loudness target in LUFS.")
     parser.add_argument("--decode-accel", default="off",
-                       choices=["off", "auto", "any", "d3d11", "vaapi", "mfx"],
-                       help="Hardware-decode hint for cv2.VideoCapture.")
+                       choices=[
+                           "off", "auto", "any", "d3d11", "vaapi", "mfx",
+                           "pynv", "nvdec",
+                       ],
+                       help="Hardware-decode hint (OpenCV or PyNvVideoCodec).")
     parser.add_argument("--single-audio", action="store_true",
                        help="Mux only the first audio stream.")
     parser.add_argument("--no-prefetch", action="store_true",
