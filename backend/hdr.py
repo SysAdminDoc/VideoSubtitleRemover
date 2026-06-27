@@ -1,26 +1,19 @@
-"""HDR / 10-bit pipeline helpers (RM-73 partial).
+"""HDR / 10-bit pipeline helpers (RM-73).
 
-Full 10-bit HDR support requires re-plumbing every internal pixel
-buffer from `uint8` to `uint16`. That is a large multi-file refactor
-the v3.13 cycle deliberately deferred (the current pipeline reads
-cv2 BGR8 frames; rewiring the full path costs touches in detector,
-inpainter, intermediate writer, AND every metric routine).
-
-What lands here is the *aware-passthrough* slice:
+The detector and inpainting models still consume 8-bit BGR working
+frames, but HDR outputs must not be encoded as H.264 or as an 8-bit
+stream. The processor keeps a high-bit source surface around those
+working frames when FFmpeg can decode BGR48LE. These helpers centralise
+the source color probe, final color tagging, and HDR-safe encoder
+policy so all mux paths use the same rules.
 
 - `probe_color_metadata(path)` reads HDR signalling via ffprobe so the
   user-facing log shows "Detected: BT.2020 / SMPTE2084 (PQ) HDR10" or
-  "BT.709 SDR" up front. This makes it explicit when a source is HDR
-  and the current build will deliver SDR.
+  "BT.709 SDR" up front.
 - `hdr_encode_args(metadata)` returns ffmpeg flags that re-apply the
-  source's colorspace tags to the final encode. Even though we process
-  in 8-bit BGR today, preserving the BT.2020 primaries / PQ transfer
-  tags on the output keeps the file marked correctly so downstream
-  players don't accidentally tone-map a tone-mapped result.
-
-Calling code uses these helpers in `process_video`'s encode arg
-construction; the heavyweight 16-bit refactor is tracked as a
-follow-up to this commit.
+  source's colorspace tags to the final encode.
+- `hdr_safe_codec(...)` and `hdr_pixel_format_args(...)` keep HDR
+  sources on HEVC / AV1 / VVC and request 10-bit output pixel formats.
 """
 
 from __future__ import annotations
@@ -33,6 +26,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+HDR_COMPATIBLE_CODECS = {"h265", "av1", "vvc"}
+HDR_DEFAULT_CODEC = "h265"
 
 
 @dataclass
@@ -110,3 +107,46 @@ def hdr_encode_args(meta: Optional[ColorMetadata]) -> List[str]:
     if meta.color_range:
         args += ["-color_range", meta.color_range]
     return args
+
+
+def hdr_safe_codec(requested_codec: str, meta: Optional[ColorMetadata]) -> str:
+    """Return a codec that can legally carry HDR signalling.
+
+    H.264 output is the application's historical default, but HDR10/HLG
+    delivery should use HEVC, AV1, or VVC. When an HDR source is detected
+    and the caller requested anything else, promote the encode to HEVC.
+    """
+    codec = (requested_codec or "").lower()
+    if meta is None or not meta.is_hdr:
+        return codec
+    if codec in HDR_COMPATIBLE_CODECS:
+        return codec
+    return HDR_DEFAULT_CODEC
+
+
+def hdr_pixel_format_args(
+    meta: Optional[ColorMetadata],
+    codec: str,
+    *,
+    hardware: bool = False,
+) -> List[str]:
+    """ffmpeg argv extension for 10-bit HDR output surfaces."""
+    if meta is None or not meta.is_hdr:
+        return []
+    if codec not in HDR_COMPATIBLE_CODECS:
+        return []
+    return ["-pix_fmt", "p010le" if hardware else "yuv420p10le"]
+
+
+def hdr_encoder_private_args(meta: Optional[ColorMetadata], codec: str) -> List[str]:
+    """Codec-specific HDR parameters that container color tags do not cover."""
+    if meta is None or not meta.is_hdr or codec != "h265":
+        return []
+    params = ["hdr-opt=1", "repeat-headers=1"]
+    if meta.color_primaries:
+        params.append(f"colorprim={meta.color_primaries}")
+    if meta.color_transfer:
+        params.append(f"transfer={meta.color_transfer}")
+    if meta.color_space:
+        params.append(f"colormatrix={meta.color_space}")
+    return ["-x265-params", ":".join(params)]

@@ -70,6 +70,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **HDR final encode safety.** HDR10/HLG sources with color preservation now
+  avoid invalid H.264 output by promoting default HDR encodes to HEVC,
+  decoding an FFmpeg `bgr48le` source surface when available, preserving
+  high-bit unmasked pixels through the FFV1 intermediate, disabling hardware
+  encoders for that HDR finalization path, and adding `-pix_fmt yuv420p10le`
+  alongside the preserved BT.2020/PQ/HLG color tags.
 - **NVIDIA setup now matches the torch security floor.** Windows CUDA setup
   now installs PyTorch from the cu128 wheel index for RTX 20/30/40/50-series
   GPUs, because the older cu118 index does not provide `torch>=2.10.0`, and

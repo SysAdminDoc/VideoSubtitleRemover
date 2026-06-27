@@ -445,11 +445,16 @@ by OpenCV's FFmpeg backend, which applies the correct YUV->RGB conversion
 for the signalled range, and the same tags are re-applied on write so
 players interpret the result the same way as the source.
 
-Note: the internal pixel pipeline is still 8-bit BGR, so true 10-bit HDR
-sources are tone-mapped to SDR (the output is tagged correctly but not
-10-bit). For standard SDR limited-range content, colors are preserved. If
-you still see a mismatch, attach the `ffprobe` color fields of your source
-to a bug report.
+For HDR10/HLG sources with color preservation enabled, VSR promotes the final
+encode to an HDR-capable codec when needed (default H.264 becomes HEVC),
+decodes a high-bit `bgr48le` source surface through FFmpeg when available, and
+requests a 10-bit output surface (`yuv420p10le`) before re-applying the source
+color tags. OCR and inpainting still operate on 8-bit BGR working copies, so
+the cleaned subtitle pixels are derived from that model path, but unmasked HDR
+pixels are kept from the high-bit source surface instead of being flattened
+through an invalid 8-bit H.264 HDR encode. For standard SDR limited-range
+content, colors are preserved. If you still see a mismatch, attach the
+`ffprobe` color fields of your source to a bug report.
 
 </details>
 

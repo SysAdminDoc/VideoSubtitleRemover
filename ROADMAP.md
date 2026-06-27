@@ -7,13 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### Format support
 
-73. **10-bit / HDR pipeline** -- HDR *metadata passthrough* shipped;
-    remaining: re-plumb processing as 16-bit numpy (current pipeline
-    clamps HDR10/HLG/DV to 8-bit SDR) and output via
-    `libx265 -pix_fmt yuv420p10le`. H.264 cannot encode HDR; HEVC or AV1
-    only. Dolby Vision needs a `dovi_tool` round-trip.
-    Source: https://codecalamity.com/encoding-uhd-4k-hdr10-videos-with-ffmpeg/
-
 74. **AV1 + VP9 decode verification (remainder)** -- HEVC/AV1 egress
     shipped; remaining: verify AV1/VP9 decode across all codepaths and
     pair SVT-AV1 output with native film-grain synthesis.

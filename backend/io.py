@@ -687,6 +687,165 @@ class _FrameSequenceCapture:
         return None
 
 
+class _FfmpegBgr48Capture:
+    """cv2.VideoCapture-shaped ffmpeg rawvideo reader for HDR surfaces.
+
+    OpenCV's normal video path returns 8-bit BGR for HDR10/HLG content.
+    This reader asks ffmpeg for BGR48LE so the processor can keep a
+    high-bit source surface around its existing 8-bit model inputs.
+    """
+
+    pixel_format = "bgr48le"
+
+    def __init__(
+        self,
+        path: str,
+        *,
+        width: int,
+        height: int,
+        fps: float,
+        frame_count: int,
+    ):
+        self._path = path
+        self._width = int(width)
+        self._height = int(height)
+        try:
+            fps_f = float(fps)
+        except (TypeError, ValueError):
+            fps_f = 30.0
+        self._fps = fps_f if np.isfinite(fps_f) and fps_f > 0 else 30.0
+        self._frame_count = max(1, int(frame_count))
+        self._pos = 0
+        self._proc: Optional[subprocess.Popen] = None
+        self._frame_bytes = self._width * self._height * 3 * 2
+        self._opened = (
+            shutil.which("ffmpeg") is not None
+            and self._width > 0
+            and self._height > 0
+            and self._frame_bytes > 0
+        )
+
+    def isOpened(self) -> bool:
+        return self._opened
+
+    def get(self, prop):
+        if prop == cv2.CAP_PROP_FPS:
+            return self._fps
+        if prop == cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self._width)
+        if prop == cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self._height)
+        if prop == cv2.CAP_PROP_FRAME_COUNT:
+            return float(self._frame_count)
+        if prop == cv2.CAP_PROP_POS_FRAMES:
+            return float(self._pos)
+        return 0.0
+
+    def set(self, prop, value) -> bool:
+        if prop != cv2.CAP_PROP_POS_FRAMES:
+            return False
+        try:
+            pos = int(value)
+        except (TypeError, ValueError):
+            pos = 0
+        self._pos = max(0, min(self._frame_count, pos))
+        self._restart()
+        return True
+
+    def _restart(self) -> None:
+        self.release()
+
+    def _ensure_proc(self) -> bool:
+        if not self._opened:
+            return False
+        if self._proc is not None and self._proc.poll() is None:
+            return True
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostats"]
+        if self._pos > 0:
+            cmd += ["-ss", f"{self._pos / max(self._fps, 1.0):.6f}"]
+        cmd += [
+            "-i", self._path,
+            "-map", "0:v:0",
+            "-an", "-sn",
+            "-f", "rawvideo",
+            "-pix_fmt", self.pixel_format,
+            "-",
+        ]
+        self._proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        return True
+
+    def read(self) -> Tuple[bool, Optional[np.ndarray]]:
+        if self._pos >= self._frame_count:
+            return False, None
+        if not self._ensure_proc() or self._proc is None or self._proc.stdout is None:
+            return False, None
+        data = self._proc.stdout.read(self._frame_bytes)
+        if len(data) != self._frame_bytes:
+            self.release()
+            return False, None
+        frame = np.frombuffer(data, dtype=np.uint16).reshape(
+            (self._height, self._width, 3)
+        ).copy()
+        self._pos += 1
+        return True, frame
+
+    def release(self) -> None:
+        proc = self._proc
+        self._proc = None
+        if proc is None:
+            return
+        try:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        except Exception:
+            pass
+        try:
+            if proc.stderr is not None:
+                proc.stderr.close()
+        except Exception:
+            pass
+        _terminate_subprocess(proc, timeout=2.0)
+
+
+def _open_bgr48_capture(path: str, *, input_fps: float = 24.0):
+    """Best-effort high-bit ffmpeg reader for HDR video files."""
+    if Path(path).is_dir() or shutil.which("ffmpeg") is None:
+        return None
+    cap = cv2.VideoCapture(path)
+    try:
+        if not cap.isOpened():
+            return None
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        try:
+            fps = float(fps)
+        except (TypeError, ValueError):
+            fps = 0.0
+        if not np.isfinite(fps) or fps <= 0:
+            fps = max(1.0, float(input_fps or 24.0))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if width <= 0 or height <= 0:
+            return None
+        reader = _FfmpegBgr48Capture(
+            path,
+            width=width,
+            height=height,
+            fps=fps,
+            frame_count=max(1, frame_count),
+        )
+        if reader.isOpened():
+            logger.info("HDR high-bit decode active: ffmpeg bgr48le rawvideo")
+            return reader
+        return None
+    finally:
+        cap.release()
+
+
 def _open_capture(path: str, hw_accel: str = "off", *,
                   input_fps: float = 24.0):
     """Open a frame source. Directory -> ``_FrameSequenceCapture``,
@@ -861,10 +1020,22 @@ class _LosslessIntermediateWriter:
     encode is the only lossy step in the pipeline. Falls back to
     ``cv2.VideoWriter('mp4v')`` when ffmpeg is missing."""
 
-    def __init__(self, path: str, width: int, height: int, fps: float):
+    def __init__(
+        self,
+        path: str,
+        width: int,
+        height: int,
+        fps: float,
+        *,
+        pixel_format: str = "bgr24",
+    ):
         self._path = path
         self._width = int(width)
         self._height = int(height)
+        self._pixel_format = (
+            "bgr48le" if str(pixel_format).lower() == "bgr48le" else "bgr24"
+        )
+        self._dtype = np.uint16 if self._pixel_format == "bgr48le" else np.uint8
         try:
             fps_f = float(fps)
         except (TypeError, ValueError):
@@ -885,13 +1056,14 @@ class _LosslessIntermediateWriter:
         try:
             cmd = [
                 "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
-                "-f", "rawvideo", "-pix_fmt", "bgr24",
+                "-f", "rawvideo", "-pix_fmt", self._pixel_format,
                 "-s", f"{self._width}x{self._height}",
                 "-r", f"{self._fps:.6f}",
                 "-i", "-",
                 "-c:v", "ffv1", "-level", "3", "-coder", "1",
                 "-context", "1", "-g", "1", "-slices", "16",
                 "-slicecrc", "1",
+                "-pix_fmt", self._pixel_format,
                 self._path,
             ]
             self._proc = subprocess.Popen(
@@ -902,7 +1074,8 @@ class _LosslessIntermediateWriter:
             self._lossless = True
             logger.info(
                 f"Intermediate writer: FFV1 lossless via ffmpeg stdin "
-                f"({self._width}x{self._height} @ {self._fps:.2f} fps)"
+                f"({self._width}x{self._height} @ {self._fps:.2f} fps, "
+                f"{self._pixel_format})"
             )
         except Exception as exc:
             self._open_fallback(f"ffmpeg Popen failed: {exc}")
@@ -931,12 +1104,23 @@ class _LosslessIntermediateWriter:
     def lossless(self) -> bool:
         return self._lossless
 
+    @property
+    def pixel_format(self) -> str:
+        return self._pixel_format
+
     def isOpened(self) -> bool:
         return self._opened
 
     def write(self, frame: np.ndarray) -> None:
         if frame is None:
             return
+        if frame.dtype != self._dtype:
+            if self._dtype == np.uint16:
+                frame = np.clip(frame, 0, 65535).astype(np.uint16)
+            else:
+                frame = np.clip(frame, 0, 255).astype(np.uint8)
+        if not frame.flags.c_contiguous:
+            frame = np.ascontiguousarray(frame)
         if self._proc is not None and self._proc.stdin is not None:
             if self._proc.poll() is not None:
                 raise BrokenPipeError(

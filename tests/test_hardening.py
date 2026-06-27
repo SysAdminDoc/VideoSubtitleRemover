@@ -2153,6 +2153,43 @@ class LosslessIntermediateWriterTests(unittest.TestCase):
                 self.assertEqual(delta, 0,
                                  f"frame {i} expected lossless roundtrip, got delta={delta}")
 
+    def test_writer_can_emit_bgr48le_intermediate(self):
+        if not self._have_ffmpeg() or shutil.which("ffprobe") is None:
+            self.skipTest("ffmpeg/ffprobe not on PATH")
+        import numpy as _np
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "intermediate_16.mkv")
+            w, h, fps = 8, 6, 6.0
+            writer = processor._LosslessIntermediateWriter(
+                path,
+                w,
+                h,
+                fps,
+                pixel_format="bgr48le",
+            )
+            self.assertTrue(writer.isOpened())
+            self.assertEqual(writer.pixel_format, "bgr48le")
+            frame = _np.full((h, w, 3), 42000, dtype=_np.uint16)
+            writer.write(frame)
+            writer.release()
+
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=pix_fmt",
+                    "-of", "default=nw=1:nk=1",
+                    path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(result.stdout.strip(), {"bgr48le", "gbrp16le"})
+
     def test_writer_fallback_when_ffmpeg_path_is_blank(self):
         # Simulate a missing ffmpeg by patching shutil.which inside the
         # processor module. The writer must open the cv2 fallback and stay
@@ -2920,6 +2957,67 @@ class HdrPipelineTests(unittest.TestCase):
         self.assertIn("-colorspace", args)
         self.assertIn("-color_range", args)
         self.assertTrue(meta.is_hdr)
+
+    def test_hdr_safe_codec_promotes_h264_to_h265(self):
+        from backend.hdr import ColorMetadata, hdr_safe_codec
+        meta = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+        )
+        self.assertEqual(hdr_safe_codec("h264", meta), "h265")
+        self.assertEqual(hdr_safe_codec("av1", meta), "av1")
+
+    def test_hdr_pixel_format_args_require_10bit_surface(self):
+        from backend.hdr import ColorMetadata, hdr_pixel_format_args
+        meta = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+        )
+        self.assertEqual(
+            hdr_pixel_format_args(meta, "h265"),
+            ["-pix_fmt", "yuv420p10le"],
+        )
+        self.assertEqual(
+            hdr_pixel_format_args(meta, "h265", hardware=True),
+            ["-pix_fmt", "p010le"],
+        )
+        self.assertEqual(hdr_pixel_format_args(meta, "h264"), [])
+
+    def test_hdr_encoder_private_args_emit_x265_color_params(self):
+        from backend.hdr import ColorMetadata, hdr_encoder_private_args
+        meta = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+        )
+        args = hdr_encoder_private_args(meta, "h265")
+        self.assertEqual(args[0], "-x265-params")
+        self.assertIn("colorprim=bt2020", args[1])
+        self.assertIn("transfer=smpte2084", args[1])
+        self.assertIn("colormatrix=bt2020nc", args[1])
+        self.assertEqual(hdr_encoder_private_args(meta, "av1"), [])
+
+    def test_processing_frame_downconverts_uint16_to_uint8(self):
+        frame = np.array([[[0, 257, 65535]]], dtype=np.uint16)
+        out = processor.SubtitleRemover._processing_frame(frame)
+        self.assertEqual(out.dtype, np.uint8)
+        self.assertEqual(out.tolist(), [[[0, 1, 255]]])
+
+    def test_high_bit_merge_preserves_unmasked_source(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(mask_feather_px=0)
+        source = np.full((2, 2, 3), 40000, dtype=np.uint16)
+        cleaned = np.full((2, 2, 3), 10, dtype=np.uint8)
+        mask = np.zeros((2, 2), dtype=np.uint8)
+        mask[0, 1] = 255
+
+        out = remover._merge_high_bit_output(source, cleaned, mask)
+
+        self.assertEqual(out.dtype, np.uint16)
+        self.assertEqual(int(out[0, 0, 0]), 40000)
+        self.assertEqual(int(out[0, 1, 0]), 2570)
 
     def test_probe_color_metadata_falls_back(self):
         from backend.hdr import probe_color_metadata
@@ -4129,6 +4227,57 @@ class OutputCodecTests(unittest.TestCase):
         remover.config.output_codec = "vvc"
         args = remover._get_encode_args()
         self.assertIn("libvvenc", args)
+
+    def test_hdr_h264_output_promotes_to_software_hevc_10bit(self):
+        from backend.hdr import ColorMetadata
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._hw_encoder = "h264_nvenc"
+        remover._color_metadata = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+            color_range="tv",
+        )
+        remover._hdr_codec_warning_logged = False
+        remover._hdr_software_warning_logged = False
+        remover.config = processor.ProcessingConfig(
+            output_codec="h264",
+            output_quality=22,
+            use_hw_encode=True,
+        )
+
+        args = remover._get_encode_args()
+
+        self.assertIn("libx265", args)
+        self.assertNotIn("h264_nvenc", args)
+        self.assertIn("-pix_fmt", args)
+        self.assertIn("yuv420p10le", args)
+        self.assertIn("-x265-params", args)
+        self.assertIn("-color_trc", args)
+        self.assertIn("smpte2084", args)
+
+    def test_hdr_preserves_explicit_av1_10bit_output(self):
+        from backend.hdr import ColorMetadata
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._hw_encoder = None
+        remover._color_metadata = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="arib-std-b67",
+            color_space="bt2020nc",
+        )
+        remover._hdr_codec_warning_logged = False
+        remover._hdr_software_warning_logged = False
+        remover.config = processor.ProcessingConfig(
+            output_codec="av1",
+            output_quality=28,
+            use_hw_encode=False,
+        )
+
+        args = remover._get_encode_args()
+
+        self.assertIn("libsvtav1", args)
+        self.assertIn("-pix_fmt", args)
+        self.assertIn("yuv420p10le", args)
 
 
 class ExtendedMetricsTests(unittest.TestCase):

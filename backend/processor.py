@@ -66,6 +66,7 @@ from backend.io import (
     _copy_file_atomic,
     _FrameSequenceCapture,
     _open_capture,
+    _open_bgr48_capture,
     _PrefetchReader,
     _LosslessIntermediateWriter,
     _FrameSequenceWriter,
@@ -329,6 +330,8 @@ class SubtitleRemover:
         # process_video once we know the input path. Used by _get_encode_args
         # to preserve HDR / BT.2020 tagging on the output.
         self._color_metadata = None
+        self._hdr_codec_warning_logged = False
+        self._hdr_software_warning_logged = False
         self._active_writer = None
         self._active_subprocess: Optional[subprocess.Popen] = None
         self._teardown_requested = False
@@ -1076,6 +1079,54 @@ class SubtitleRemover:
             frame = np.clip(frame, 0, 255).astype(np.uint8)
         return np.ascontiguousarray(frame)
 
+    @staticmethod
+    def _processing_frame(frame: np.ndarray) -> np.ndarray:
+        """Return the uint8 BGR working copy expected by OCR/inpainters."""
+        if frame.dtype == np.uint8:
+            return np.ascontiguousarray(frame)
+        if frame.dtype == np.uint16:
+            return np.ascontiguousarray(
+                np.clip(np.rint(frame.astype(np.float32) / 257.0), 0, 255)
+                .astype(np.uint8)
+            )
+        return np.ascontiguousarray(np.clip(frame, 0, 255).astype(np.uint8))
+
+    @staticmethod
+    def _is_high_bit_frame(frame: Any) -> bool:
+        return isinstance(frame, np.ndarray) and frame.dtype == np.uint16
+
+    def _merge_high_bit_output(
+        self,
+        source_frame: Optional[np.ndarray],
+        cleaned_frame: np.ndarray,
+        mask: Optional[np.ndarray],
+    ) -> np.ndarray:
+        """Blend the uint8 cleaned mask area back onto a uint16 source frame."""
+        if not self._is_high_bit_frame(source_frame):
+            return cleaned_frame
+        if source_frame.shape != cleaned_frame.shape:
+            return cleaned_frame
+        if mask is None or mask.shape != source_frame.shape[:2] or not np.any(mask):
+            return np.ascontiguousarray(source_frame)
+
+        cleaned16 = np.clip(
+            np.rint(cleaned_frame.astype(np.float32) * 257.0),
+            0,
+            65535,
+        )
+        feather = max(0, int(getattr(self.config, "mask_feather_px", 0) or 0))
+        if feather > 0:
+            k = feather * 2 + 1
+            alpha = cv2.GaussianBlur(mask, (k, k), 0).astype(np.float32) / 255.0
+        else:
+            alpha = (mask > 0).astype(np.float32)
+        alpha = np.clip(alpha, 0.0, 1.0)[..., None]
+        merged = (
+            source_frame.astype(np.float32) * (1.0 - alpha)
+            + cleaned16.astype(np.float32) * alpha
+        )
+        return np.ascontiguousarray(np.clip(np.rint(merged), 0, 65535).astype(np.uint16))
+
     def _rife_segment_has_scene_cut(self, frames: List[np.ndarray],
                                     start: int, end: int) -> bool:
         if end <= start + 1:
@@ -1210,11 +1261,9 @@ class SubtitleRemover:
             else:
                 decode_path = input_path
 
-            # RM-73 partial: probe source color signalling once so HDR
-            # / BT.2020 tags can be preserved on the output. The pixel
-            # pipeline is still 8-bit BGR; the tag passthrough at least
-            # keeps downstream players from accidentally tone-mapping a
-            # tone-mapped output.
+            # RM-73: probe source color signalling once so HDR / BT.2020
+            # sources can be encoded with HDR-compatible codecs, 10-bit
+            # output pixel formats, and matching final color tags.
             # RM-74: explicit AV1 / VP9 ingest validation. cv2 4.12+
             # decodes both via the ffmpeg backend on every supported
             # platform, but the codec field varies enough in the wild
@@ -1241,9 +1290,8 @@ class SubtitleRemover:
                         if meta.is_hdr:
                             logger.info(
                                 f"HDR source detected: {meta.label} -- "
-                                f"current pipeline is 8-bit BGR; output will "
-                                f"carry the source color tags but pixels are "
-                                f"tone-mapped to SDR."
+                                f"final encode will use HDR-safe 10-bit "
+                                f"HEVC/AV1/VVC output and source color tags."
                             )
                         else:
                             logger.info(f"Color signalling: {meta.label}")
@@ -1264,11 +1312,23 @@ class SubtitleRemover:
                 else:
                     logger.warning("Keyframe probe failed, falling back to pHash skip")
 
-            cap = _open_capture(
-                decode_path,
-                self.config.decode_hw_accel,
-                input_fps=self.config.input_fps,
-            )
+            cap = None
+            if self._source_is_hdr():
+                cap = _open_bgr48_capture(
+                    decode_path,
+                    input_fps=self.config.input_fps,
+                )
+                if cap is None:
+                    logger.warning(
+                        "HDR high-bit decode unavailable; falling back to "
+                        "OpenCV BGR8 decode."
+                    )
+            if cap is None:
+                cap = _open_capture(
+                    decode_path,
+                    self.config.decode_hw_accel,
+                    input_fps=self.config.input_fps,
+                )
             if not cap.isOpened():
                 raise _video_capture_open_error(input_path, decode_path)
             # Stash the decode path so other routines (keyframe, audio merge)
@@ -1292,6 +1352,9 @@ class SubtitleRemover:
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             total_frames = max(1, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+            high_bit_depth_surface = (
+                getattr(cap, "pixel_format", "") == "bgr48le"
+            )
 
             if width == 0 or height == 0:
                 raise _invalid_video_dimensions_error(input_path, width, height)
@@ -1348,7 +1411,11 @@ class SubtitleRemover:
             else:
                 temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
                 writer = _LosslessIntermediateWriter(
-                    temp_video_target, width, height, fps
+                    temp_video_target,
+                    width,
+                    height,
+                    fps,
+                    pixel_format="bgr48le" if high_bit_depth_surface else "bgr24",
                 )
                 self._active_writer = writer
                 temp_video = writer.path
@@ -1467,13 +1534,21 @@ class SubtitleRemover:
             while True:
                 frames = []
                 masks = []
+                source_frames = []
 
                 for _ in range(batch_size):
                     if start_frame + frame_idx >= end_frame:
                         break
-                    ret, frame = reader.read()
+                    ret, raw_frame = reader.read()
                     if not ret:
                         break
+                    source_frame = (
+                        raw_frame
+                        if high_bit_depth_surface
+                        and self._is_high_bit_frame(raw_frame)
+                        else None
+                    )
+                    frame = self._processing_frame(raw_frame)
 
                     absolute_idx = start_frame + frame_idx
                     frame_seconds = absolute_idx / max(fps, 1.0)
@@ -1498,6 +1573,7 @@ class SubtitleRemover:
                             fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                         frames.append(frame)
                         masks.append(fixed_mask)
+                        source_frames.append(source_frame)
                         frame_idx += 1
                         continue
 
@@ -1524,6 +1600,7 @@ class SubtitleRemover:
                     if reuse_by_phash or reuse_by_keyframe:
                         frames.append(frame)
                         masks.append(last_mask)
+                        source_frames.append(source_frame)
                         frame_idx += 1
                         continue
                     elif (not timed_region_spans
@@ -1533,6 +1610,7 @@ class SubtitleRemover:
                         # Reuse cached mask for intermediate frames
                         frames.append(frame)
                         masks.append(last_mask)
+                        source_frames.append(source_frame)
                         frame_idx += 1
                         continue
                     else:
@@ -1639,6 +1717,7 @@ class SubtitleRemover:
                         last_hash_frame_idx = frame_idx
                     frames.append(frame)
                     masks.append(mask)
+                    source_frames.append(source_frame)
                     frame_idx += 1
 
                 if not frames:
@@ -1660,7 +1739,12 @@ class SubtitleRemover:
                 results = self._inpaint_with_optional_rife_fast(frames, masks)
                 stride = max(1, self.live_preview_stride)
                 for offset, result in enumerate(results):
-                    writer.write(result)
+                    write_frame = self._merge_high_bit_output(
+                        source_frames[offset] if offset < len(source_frames) else None,
+                        result,
+                        masks[offset] if offset < len(masks) else None,
+                    )
+                    writer.write(write_frame)
                     if (self.on_preview_frame is not None and
                             (frame_idx - len(results) + offset) % stride == 0):
                         try:
@@ -1945,7 +2029,16 @@ class SubtitleRemover:
 
     def _get_encode_args(self) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
-        if self._hw_encoder and self.config.use_hw_encode:
+        codec = self._effective_output_codec()
+        hdr_mode = self._source_is_hdr()
+        if hdr_mode and self._hw_encoder and self.config.use_hw_encode:
+            if not getattr(self, "_hdr_software_warning_logged", False):
+                logger.info(
+                    "HDR source detected; using software encoder to guarantee "
+                    "10-bit yuv420p output."
+                )
+                self._hdr_software_warning_logged = True
+        if self._hw_encoder and self.config.use_hw_encode and not hdr_mode:
             if 'nvenc' in self._hw_encoder:
                 base = ['-c:v', self._hw_encoder, '-preset', 'p4',
                         '-cq', str(self.config.output_quality)]
@@ -1959,9 +2052,13 @@ class SubtitleRemover:
             else:
                 base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                         '-preset', 'medium']
-            return base + self._hdr_encode_args()
+            return (
+                base
+                + self._hdr_pixel_format_args(codec, hardware=True)
+                + self._hdr_encoder_private_args(codec)
+                + self._hdr_encode_args()
+            )
         # F-8: software fallback honours the chosen output codec.
-        codec = self.config.output_codec
         if codec == "h265":
             base = ['-c:v', 'libx265', '-crf', str(self.config.output_quality),
                     '-preset', 'medium']
@@ -1977,7 +2074,61 @@ class SubtitleRemover:
         else:
             base = ['-c:v', 'libx264', '-crf', str(self.config.output_quality),
                     '-preset', 'medium']
-        return base + self._hdr_encode_args()
+        return (
+            base
+            + self._hdr_pixel_format_args(codec)
+            + self._hdr_encoder_private_args(codec)
+            + self._hdr_encode_args()
+        )
+
+    def _source_is_hdr(self) -> bool:
+        meta = getattr(self, "_color_metadata", None)
+        return bool(
+            getattr(self.config, "preserve_color_metadata", True)
+            and meta is not None
+            and getattr(meta, "is_hdr", False)
+        )
+
+    def _effective_output_codec(self) -> str:
+        requested = getattr(self.config, "output_codec", "h264")
+        if not getattr(self.config, "preserve_color_metadata", True):
+            return requested
+        try:
+            from backend.hdr import hdr_safe_codec
+            codec = hdr_safe_codec(requested, getattr(self, "_color_metadata", None))
+        except Exception:
+            logger.warning("HDR codec policy failed", exc_info=True)
+            return requested
+        if codec != requested and not getattr(self, "_hdr_codec_warning_logged", False):
+            logger.info(
+                f"HDR output cannot use {requested}; promoting final encode to {codec}."
+            )
+            self._hdr_codec_warning_logged = True
+        return codec
+
+    def _hdr_pixel_format_args(self, codec: str, *, hardware: bool = False) -> List[str]:
+        if not self.config.preserve_color_metadata or self._color_metadata is None:
+            return []
+        try:
+            from backend.hdr import hdr_pixel_format_args
+            return hdr_pixel_format_args(
+                self._color_metadata,
+                codec,
+                hardware=hardware,
+            )
+        except Exception:
+            logger.warning("HDR pixel-format argument generation failed", exc_info=True)
+            return []
+
+    def _hdr_encoder_private_args(self, codec: str) -> List[str]:
+        if not self.config.preserve_color_metadata or self._color_metadata is None:
+            return []
+        try:
+            from backend.hdr import hdr_encoder_private_args
+            return hdr_encoder_private_args(self._color_metadata, codec)
+        except Exception:
+            logger.warning("HDR encoder-private argument generation failed", exc_info=True)
+            return []
 
     def _hdr_encode_args(self) -> List[str]:
         """RM-73 partial: re-tag the output with source color signalling."""
