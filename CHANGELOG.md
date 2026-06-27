@@ -52,6 +52,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   checkpoint/snapshot provenance through the adapter manifest, reports missing
   opt-in/package/checkpoint setup, and falls back to the original mask on
   missing or malformed alpha output.
+- **CoTracker3 mask propagation.** `--cotracker-propagate` now uses a gated
+  CoTracker3 point-tracking helper to fill OCR-empty masks inside a video
+  batch, requires a reviewed local checkout or pinned revision before
+  `torch.hub` can load the model, and leaves non-empty OCR/SAM masks unchanged.
 
 ### Fixed
 

@@ -347,6 +347,7 @@ class ProcessingConfig:
     detection_denoise: bool = False
     sam2_refine: bool = False
     matanyone_refine: bool = False
+    cotracker_propagate: bool = False
     edge_ring_px: int = 2
 
     subtitle_areas: Optional[List[Tuple[int, int, int, int]]] = None
@@ -500,6 +501,7 @@ class ProcessingConfig:
         self.detection_denoise = _coerce_bool(self.detection_denoise, False)
         self.sam2_refine = _coerce_bool(self.sam2_refine, False)
         self.matanyone_refine = _coerce_bool(self.matanyone_refine, False)
+        self.cotracker_propagate = _coerce_bool(self.cotracker_propagate, False)
         self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 20)
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
@@ -890,6 +892,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "detection_denoise",
     "sam2_refine",
     "matanyone_refine",
+    "cotracker_propagate",
     "edge_ring_px",
     "auto_band",
     "adaptive_batch",

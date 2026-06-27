@@ -168,6 +168,9 @@ class ProcessingConfig:
     # RM-68: opt-in MatAnyone 2 alpha-matte refinement. Requires
     # VSR_MATANYONE=1 plus a reviewed local install/checkpoint.
     matanyone_refine: bool = False
+    # RM-69: opt-in CoTracker3 sparse point propagation for OCR-empty
+    # frames. Requires VSR_COTRACKER=1 plus a reviewed local/pinned repo.
+    cotracker_propagate: bool = False
     edge_ring_px: int = 2         # post-inpaint colour match ring width (0 disables)
 
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
@@ -568,6 +571,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.detection_denoise = _coerce_bool(config.detection_denoise, False)
     config.sam2_refine = _coerce_bool(config.sam2_refine, False)
     config.matanyone_refine = _coerce_bool(config.matanyone_refine, False)
+    config.cotracker_propagate = _coerce_bool(config.cotracker_propagate, False)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)

@@ -38,6 +38,7 @@ _VIDEOPAINTER_BASE_REPO_ID = "THUDM/CogVideoX-5b-I2V"
 _FLOED_SOURCE_URL = "https://github.com/NevSNev/FloED-main"
 _MATANYONE_SOURCE_URL = "https://github.com/pq-yang/MatAnyone2"
 _MATANYONE_MODEL_ID = "PeiqingYang/MatAnyone2"
+_COTRACKER_SOURCE_URL = "https://github.com/facebookresearch/co-tracker"
 _TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 _WHISPER_SIZES = {
     "tiny": "~75 MB",
@@ -183,6 +184,10 @@ def _matanyone_checkpoint_present(env: Mapping[str, str]) -> bool:
 
 def _matanyone_package_present() -> bool:
     return _module_available("matanyone2") or _module_available("matanyone")
+
+
+def _cotracker_package_present() -> bool:
+    return _module_available("torch")
 
 
 def _hf_repo_cached(env: Mapping[str, str], repo: str) -> bool:
@@ -389,6 +394,36 @@ def _append_matanyone_hints(hints: list[ModelDownloadHint], config, env: Mapping
         ))
 
 
+def _append_cotracker_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
+    if not bool(getattr(config, "cotracker_propagate", False)) and not _env_truthy(env, "VSR_COTRACKER"):
+        return
+    if not _env_truthy(env, "VSR_COTRACKER"):
+        hints.append(ModelDownloadHint(
+            label="CoTracker3 opt-in",
+            size_estimate="local setup",
+            detail=(
+                "Set VSR_COTRACKER=1 only after configuring a reviewed local "
+                "co-tracker checkout or pinned revision."
+            ),
+            cache_hint=_COTRACKER_SOURCE_URL,
+        ))
+    if not _cotracker_package_present():
+        hints.append(ModelDownloadHint(
+            label="CoTracker3 PyTorch runtime",
+            size_estimate="package-size dependent",
+            detail="Install PyTorch before enabling --cotracker-propagate.",
+            cache_hint="https://pytorch.org/",
+        ))
+    source = resolve_remote_model_source("cotracker3", env)
+    if not source.allowed:
+        hints.append(ModelDownloadHint(
+            label="CoTracker3 trusted source",
+            size_estimate="local checkout or pinned ref",
+            detail=source.reason,
+            cache_hint=_COTRACKER_SOURCE_URL,
+        ))
+
+
 def _append_whisper_hints(hints: list[ModelDownloadHint], config, env: Mapping[str, str]) -> None:
     if not bool(getattr(config, "whisper_fallback", False)):
         return
@@ -418,6 +453,7 @@ def pending_model_download_hints(
     _append_vace_hints(hints, config, source_env)
     _append_videopainter_hints(hints, config, source_env)
     _append_floed_hints(hints, config, source_env)
+    _append_cotracker_hints(hints, config, source_env)
     _append_matanyone_hints(hints, config, source_env)
     _append_whisper_hints(hints, config, source_env)
     return tuple(hints)

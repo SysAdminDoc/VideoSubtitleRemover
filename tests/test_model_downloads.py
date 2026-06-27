@@ -12,6 +12,7 @@ def _cfg(mode="sttn", **overrides):
         "whisper_model_size": "tiny",
         "whisper_model_path": "",
         "matanyone_refine": False,
+        "cotracker_propagate": False,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -181,6 +182,23 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertIn("MatAnyone 2 package", labels)
         self.assertIn("MatAnyone 2 checkpoint", labels)
         self.assertTrue(any("NTU S-Lab License 1.0" in hint.detail for hint in hints))
+
+    def test_cotracker_reports_opt_in_and_trusted_source_setup(self):
+        from backend import model_downloads as md
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"HOME": tmpdir, "USERPROFILE": tmpdir, "APPDATA": tmpdir}
+            with mock.patch.object(md.importlib.util, "find_spec", return_value=None):
+                hints = md.pending_model_download_hints(
+                    _cfg(cotracker_propagate=True),
+                    env,
+                )
+
+        labels = [hint.label for hint in hints]
+        self.assertIn("CoTracker3 opt-in", labels)
+        self.assertIn("CoTracker3 PyTorch runtime", labels)
+        self.assertIn("CoTracker3 trusted source", labels)
+        self.assertTrue(any("pinned" in hint.detail for hint in hints))
 
     def test_installed_backend_status_is_privacy_safe_and_actionable(self):
         from backend import model_downloads as md

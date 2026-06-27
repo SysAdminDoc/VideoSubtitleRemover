@@ -130,5 +130,63 @@ class MatAnyoneRefinementTests(unittest.TestCase):
         self.assertEqual(int(out[6:10, 6:10].min()), 255)
 
 
+class CoTrackerPropagationTests(unittest.TestCase):
+    def test_propagates_empty_masks_from_anchor_translation(self):
+        from unittest import mock
+        from backend import segmentation as seg
+
+        def fake_tracks(frames, points, **_kwargs):
+            tracks = [
+                points,
+                [(x + 3, y + 2) for x, y in points],
+                [(x + 6, y + 4) for x, y in points],
+            ]
+            visibility = [[1.0] * len(points) for _ in tracks]
+            return tracks, visibility
+
+        frames = [np.zeros((24, 24, 3), dtype=np.uint8) for _ in range(3)]
+        anchor = np.zeros((24, 24), dtype=np.uint8)
+        anchor[4:8, 4:8] = 255
+        empty = np.zeros((24, 24), dtype=np.uint8)
+        existing = np.zeros((24, 24), dtype=np.uint8)
+        existing[12:16, 12:16] = 255
+
+        with mock.patch.object(seg, "track_points_with_visibility", side_effect=fake_tracks):
+            out = seg.propagate_masks_with_cotracker(
+                frames,
+                [anchor, empty, existing],
+            )
+
+        self.assertEqual(int(out[0][4:8, 4:8].min()), 255)
+        self.assertEqual(int(out[1][6:10, 7:11].min()), 255)
+        self.assertEqual(int(out[2][12:16, 12:16].min()), 255)
+        self.assertEqual(int(out[2][16:20, 18:22].max()), 0)
+
+    def test_processor_uses_cotracker_flag(self):
+        from unittest import mock
+        from backend import processor
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            cotracker_propagate=True,
+            device="cpu",
+        )
+        frames = [np.zeros((16, 16, 3), dtype=np.uint8) for _ in range(2)]
+        mask = np.zeros((16, 16), dtype=np.uint8)
+        mask[2:6, 2:6] = 255
+        empty = np.zeros((16, 16), dtype=np.uint8)
+        propagated = np.zeros((16, 16), dtype=np.uint8)
+        propagated[4:8, 4:8] = 255
+
+        with mock.patch(
+            "backend.segmentation.propagate_masks_with_cotracker",
+            return_value=[mask, propagated],
+        ) as mocked:
+            out = remover._propagate_masks_with_cotracker(frames, [mask, empty])
+
+        mocked.assert_called_once()
+        self.assertEqual(int(out[1][4:8, 4:8].min()), 255)
+
+
 if __name__ == "__main__":
     unittest.main()

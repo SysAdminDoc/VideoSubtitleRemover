@@ -635,61 +635,288 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
 _COTRACKER_STATE: dict = {"probed": False, "model": None}
 
 
-def _maybe_load_cotracker():
+def _tensor_to_numpy(value):
+    if value is None:
+        return None
+    try:
+        if hasattr(value, "detach"):
+            value = value.detach()
+        if hasattr(value, "cpu"):
+            value = value.cpu()
+        if hasattr(value, "numpy"):
+            return value.numpy()
+    except Exception:
+        pass
+    return np.asarray(value)
+
+
+def _to_device(value, device: str):
+    try:
+        return value.to(device)
+    except Exception:
+        return value
+
+
+def _cotracker_entrypoint() -> str:
+    mode = os.environ.get("VSR_COTRACKER_MODE", "offline").strip().lower()
+    return "cotracker3_online" if mode == "online" else "cotracker3_offline"
+
+
+def _maybe_load_cotracker(device: str = "cpu"):
     if _COTRACKER_STATE["probed"]:
         return _COTRACKER_STATE["model"]
     _COTRACKER_STATE["probed"] = True
     if not _env_set("VSR_COTRACKER"):
         return None
     try:
-        import torch  # type: ignore
         source = resolve_remote_model_source("cotracker3")
         if not source.allowed:
             logger.warning("CoTracker3 disabled: %s", source.reason)
             return None
+        import torch  # type: ignore
+        entrypoint = _cotracker_entrypoint()
         if source.source_type == "local":
             model = torch.hub.load(
                 source.source,
-                "cotracker3_online",
+                entrypoint,
                 source="local",
                 trust_repo=True,
             )
         else:
             model = torch.hub.load(
-                f"facebookresearch/co-tracker:{source.revision}",
-                "cotracker3_online",
+                f"{source.policy.repo}:{source.revision}",
+                entrypoint,
                 trust_repo=True,
             )
+        if hasattr(model, "to"):
+            model = model.to(device)
+        if hasattr(model, "eval"):
+            model.eval()
         _COTRACKER_STATE["model"] = model
         return model
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"CoTracker3 load failed: {exc}")
         return None
 
 
-def track_points(frames: List[np.ndarray],
-                  points: List[Tuple[int, int]]) -> Optional[List[List[Tuple[int, int]]]]:
-    """RM-69: track the named pixel points across the frame list.
-    Returns one (T, len(points)) coord list, or None when CoTracker3
-    is unavailable. Used by callers that need to confirm a karaoke
-    caret stays on the same line across a clip."""
-    model = _maybe_load_cotracker()
+def _prepare_cotracker_video(frames: List[np.ndarray]):
+    rgb_frames = []
+    for frame in frames:
+        arr = np.asarray(frame)
+        if arr.ndim == 2:
+            arr = cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_GRAY2RGB)
+        elif arr.ndim == 3 and arr.shape[2] == 4:
+            arr = cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_BGRA2RGB)
+        elif arr.ndim == 3:
+            arr = cv2.cvtColor(arr.astype(np.uint8), cv2.COLOR_BGR2RGB)
+        else:
+            return None
+        rgb_frames.append(arr)
+    return np.stack(rgb_frames, axis=0)
+
+
+def track_points_with_visibility(
+    frames: List[np.ndarray],
+    points: List[Tuple[int, int]],
+    *,
+    device: str = "cpu",
+    query_frame: int = 0,
+) -> Optional[Tuple[List[List[Tuple[int, int]]], List[List[float]]]]:
+    """Track points and return `(tracks, visibility)` per frame.
+
+    CoTracker expects query rows as `(frame_idx, x, y)`. The default offline
+    model can propagate from an anchor frame across the whole batch. Online
+    mode is still accepted for users who opt into it via VSR_COTRACKER_MODE,
+    but the function returns None if that model does not expose the same call
+    signature.
+    """
+    if not frames or not points:
+        return None
+    model = _maybe_load_cotracker(device)
     if model is None:
         return None
     try:
         import torch  # type: ignore
-        video = torch.from_numpy(np.stack(frames, axis=0)).permute(0, 3, 1, 2).unsqueeze(0).float()
+
+        video_np = _prepare_cotracker_video(frames)
+        if video_np is None:
+            return None
+        video = torch.from_numpy(video_np).permute(0, 3, 1, 2).unsqueeze(0).float()
+        video = _to_device(video, device)
+        query_idx = max(0, min(len(frames) - 1, int(query_frame)))
         query = torch.tensor(
-            [[0, x, y] for (x, y) in points],
+            [[query_idx, float(x), float(y)] for (x, y) in points],
             dtype=torch.float32,
         ).unsqueeze(0)
-        pred_tracks, _vis = model(video, queries=query)
-        out: List[List[Tuple[int, int]]] = []
-        for t in range(pred_tracks.shape[1]):
-            frame_points = [
-                (int(pt[0]), int(pt[1])) for pt in pred_tracks[0, t]
-            ]
-            out.append(frame_points)
-        return out
+        query = _to_device(query, device)
+        result = None
+        for kwargs in (
+            {"queries": query, "backward_tracking": True},
+            {"queries": query},
+        ):
+            try:
+                result = model(video, **kwargs)
+                break
+            except TypeError:
+                continue
+        if result is None:
+            return None
+        pred_tracks, pred_visibility = result
+        tracks_np = _tensor_to_numpy(pred_tracks)
+        vis_np = _tensor_to_numpy(pred_visibility)
+        if tracks_np is None:
+            return None
+        if tracks_np.ndim == 3:
+            tracks_np = tracks_np[None, ...]
+        if tracks_np.ndim != 4 or tracks_np.shape[-1] < 2:
+            return None
+        tracks_np = tracks_np[0]
+        if tracks_np.shape[0] != len(frames):
+            return None
+        if vis_np is None:
+            vis_np = np.ones(tracks_np.shape[:2], dtype=np.float32)
+        else:
+            if vis_np.ndim == 4 and vis_np.shape[-1] == 1:
+                vis_np = vis_np[..., 0]
+            if vis_np.ndim == 3:
+                vis_np = vis_np[0]
+            if vis_np.shape != tracks_np.shape[:2]:
+                vis_np = np.ones(tracks_np.shape[:2], dtype=np.float32)
+        out_tracks: List[List[Tuple[int, int]]] = []
+        out_vis: List[List[float]] = []
+        height, width = frames[0].shape[:2]
+        for t in range(tracks_np.shape[0]):
+            frame_points: List[Tuple[int, int]] = []
+            frame_vis: List[float] = []
+            for idx, point in enumerate(tracks_np[t]):
+                x = int(round(float(point[0])))
+                y = int(round(float(point[1])))
+                frame_points.append((
+                    max(0, min(width - 1, x)),
+                    max(0, min(height - 1, y)),
+                ))
+                frame_vis.append(float(vis_np[t, idx]))
+            out_tracks.append(frame_points)
+            out_vis.append(frame_vis)
+        return out_tracks, out_vis
     except Exception as exc:
         logger.warning(f"CoTracker3 inference failed: {exc}")
         return None
+
+
+def track_points(frames: List[np.ndarray],
+                  points: List[Tuple[int, int]],
+                  *,
+                  device: str = "cpu",
+                  query_frame: int = 0) -> Optional[List[List[Tuple[int, int]]]]:
+    """RM-69: track the named pixel points across the frame list.
+    Returns one (T, len(points)) coord list, or None when CoTracker3
+    is unavailable. Used by callers that need to confirm a karaoke
+    caret stays on the same line across a clip."""
+    result = track_points_with_visibility(
+        frames,
+        points,
+        device=device,
+        query_frame=query_frame,
+    )
+    if result is None:
+        return None
+    tracks, _visibility = result
+    return tracks
+
+
+def _sample_mask_points(mask: np.ndarray, max_points: int = 8) -> List[Tuple[int, int]]:
+    ys, xs = np.where(np.asarray(mask) > 0)
+    if xs.size == 0 or ys.size == 0:
+        return []
+    coords = np.column_stack((xs, ys))
+    order = np.argsort(coords[:, 0] + coords[:, 1])
+    coords = coords[order]
+    if coords.shape[0] > max_points:
+        idx = np.linspace(0, coords.shape[0] - 1, max_points).astype(int)
+        coords = coords[idx]
+    points = {(int(x), int(y)) for x, y in coords}
+    points.add((int(np.median(xs)), int(np.median(ys))))
+    return sorted(points)[:max_points]
+
+
+def _translate_mask(mask: np.ndarray, dx: float, dy: float) -> np.ndarray:
+    height, width = mask.shape[:2]
+    matrix = np.float32([[1.0, 0.0, float(dx)], [0.0, 1.0, float(dy)]])
+    return cv2.warpAffine(
+        np.asarray(mask).astype(np.uint8),
+        matrix,
+        (width, height),
+        flags=cv2.INTER_NEAREST,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+
+
+def propagate_masks_with_cotracker(
+    frames: List[np.ndarray],
+    masks: List[np.ndarray],
+    *,
+    device: str = "cpu",
+    visibility_threshold: float = 0.5,
+) -> List[np.ndarray]:
+    """Fill OCR-empty masks by translating a nearby positive mask.
+
+    The function is intentionally conservative: it never replaces a non-empty
+    OCR/SAM mask, and it skips propagation when too few tracked anchor points
+    remain visible or the estimated translation is implausibly large.
+    """
+    if not frames or not masks:
+        return list(masks)
+    frame_count = min(len(frames), len(masks))
+    frames = list(frames[:frame_count])
+    original = [np.asarray(mask).astype(np.uint8) for mask in masks[:frame_count]]
+    if frame_count < 2:
+        return original
+    positive = [idx for idx, mask in enumerate(original) if int(mask.max()) > 0]
+    empty = [idx for idx, mask in enumerate(original) if int(mask.max()) == 0]
+    if not positive or not empty:
+        return original
+
+    anchor_idx = positive[0]
+    anchor_mask = original[anchor_idx]
+    points = _sample_mask_points(anchor_mask)
+    if not points:
+        return original
+    result = track_points_with_visibility(
+        frames,
+        points,
+        device=device,
+        query_frame=anchor_idx,
+    )
+    if result is None:
+        return original
+    tracks, visibility = result
+    if len(tracks) != frame_count:
+        return original
+    base_points = np.asarray(tracks[anchor_idx], dtype=np.float32)
+    if base_points.shape[0] != len(points):
+        return original
+
+    out = list(original)
+    height, width = frames[0].shape[:2]
+    max_dx = width * 0.35
+    max_dy = height * 0.35
+    for idx in empty:
+        frame_points = np.asarray(tracks[idx], dtype=np.float32)
+        frame_vis = np.asarray(visibility[idx], dtype=np.float32)
+        valid = frame_vis >= float(visibility_threshold)
+        if frame_points.shape != base_points.shape or int(valid.sum()) < 2:
+            continue
+        deltas = frame_points[valid] - base_points[valid]
+        if deltas.size == 0:
+            continue
+        dx, dy = np.median(deltas, axis=0)
+        if not np.isfinite(dx) or not np.isfinite(dy):
+            continue
+        if abs(float(dx)) > max_dx or abs(float(dy)) > max_dy:
+            continue
+        shifted = _translate_mask(anchor_mask, float(dx), float(dy))
+        if int(shifted.max()) > 0:
+            out[idx] = shifted
+    return out

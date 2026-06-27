@@ -3133,7 +3133,7 @@ class SegmentationAdapterTests(unittest.TestCase):
         self._saved = {k: os.environ.pop(k, None) for k in (
             "VSR_SAM2_CHECKPOINT", "VSR_SAM2_CONFIG", "VSR_SAM3",
             "VSR_MATANYONE", "VSR_COTRACKER", "VSR_COTRACKER_REPO",
-            "VSR_COTRACKER_REF", "VSR_MATANYONE_PATH",
+            "VSR_COTRACKER_REF", "VSR_COTRACKER_MODE", "VSR_MATANYONE_PATH",
             "VSR_MATANYONE_REVISION", "VSR_MATANYONE_MODEL_ID",
             "VSR_MATANYONE_DEVICE", "VSR_ALLOW_UNVERIFIED_MODELS",
         )}

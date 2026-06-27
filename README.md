@@ -227,6 +227,12 @@ the reviewed upstream `matanyone2` package, and set `VSR_MATANYONE_PATH` to a
 local checkpoint or snapshot after reviewing the NTU S-Lab License 1.0 terms.
 Unpinned PyTorch checkpoints require `VSR_ALLOW_UNVERIFIED_MODELS=1`; malformed
 or missing alpha mattes fall back to the original OCR/SAM mask.
+CoTracker3 can fill OCR-empty masks inside a video batch by propagating sparse
+points from the nearest detected subtitle mask: pass `--cotracker-propagate`,
+set `VSR_COTRACKER=1`, and set either `VSR_COTRACKER_REPO` to a reviewed local
+co-tracker checkout or `VSR_COTRACKER_REF` to a pinned commit/tag before any
+`torch.hub` load is allowed. Set `VSR_COTRACKER_MODE=online` only if you need
+the online model; the default uses the offline CoTracker3 entrypoint.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
 crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or

@@ -549,6 +549,24 @@ class SubtitleRemover:
             logger.debug(f"MatAnyone 2 refinement skipped: {exc}")
             return masks
 
+    def _propagate_masks_with_cotracker(self,
+                                        frames: List[np.ndarray],
+                                        masks: List[np.ndarray]) -> List[np.ndarray]:
+        if not getattr(self.config, "cotracker_propagate", False):
+            return masks
+        if not frames or not masks:
+            return masks
+        try:
+            from backend.segmentation import propagate_masks_with_cotracker
+            return propagate_masks_with_cotracker(
+                frames,
+                masks,
+                device=self.config.device,
+            )
+        except Exception as exc:
+            logger.debug(f"CoTracker3 propagation skipped: {exc}")
+            return masks
+
     # -----------------------------------------------------------------
     # SRT export
     # -----------------------------------------------------------------
@@ -1511,6 +1529,7 @@ class SubtitleRemover:
                 if not frames:
                     break
 
+                masks = self._propagate_masks_with_cotracker(frames, masks)
                 masks = self._refine_masks_with_matanyone(frames, masks)
                 # B-3: accumulate the union-mask bbox for the quality report
                 # ROI after optional mask refiners have finalized the mask.

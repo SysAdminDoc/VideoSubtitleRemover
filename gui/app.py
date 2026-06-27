@@ -6862,6 +6862,7 @@ class VideoSubtitleRemoverApp:
                 detection_denoise=getattr(item.config, 'detection_denoise', False),
                 sam2_refine=getattr(item.config, 'sam2_refine', False),
                 matanyone_refine=getattr(item.config, 'matanyone_refine', False),
+                cotracker_propagate=getattr(item.config, 'cotracker_propagate', False),
                 edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
                 subtitle_areas=getattr(item.config, 'subtitle_areas', None),
                 subtitle_region_spans=getattr(
