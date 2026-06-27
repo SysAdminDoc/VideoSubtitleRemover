@@ -91,10 +91,8 @@ cd VideoSubtitleRemover
 python -m venv venv
 .\venv\Scripts\activate
 
-# Install PyTorch (choose one -- torch 2.7+ supports Python 3.9-3.13):
-# NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada):
-pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu118
-# NVIDIA RTX 50-series (Blackwell -- 5070/5080/5090, needs CUDA 12.8):
+# Install PyTorch (choose one -- Python 3.12/3.13 recommended for CUDA):
+# NVIDIA RTX 20/30/40/50-series:
 pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
 # CPU:
 pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
@@ -238,6 +236,11 @@ or `--decode-accel nvdec` after installing NVIDIA's `PyNvVideoCodec` package.
 The decoder uses GPU-backed surfaces when available, then converts to CPU BGR
 frames for the current OpenCV/OCR/inpaint pipeline; missing packages or failed
 opens fall back to software decode.
+Smooth-background clips can trade precision for throughput with
+`--rife-fast-stride N`: VSR inpaints keyframes every N frames, asks
+Practical-RIFE to synthesize the skipped cleaned frames when `practical-rife`
+is installed, and duplicates the nearer cleaned keyframe across scene cuts or
+missing RIFE adapters.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
 crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or
@@ -314,6 +317,7 @@ before/after retry config in the next batch report.
 | `--single-audio` | Mux only first audio stream | Off |
 | `--loudnorm <LUFS>` | EBU R128 loudness target (0 disables) | 0 |
 | `--frame-skip N` | Reuse mask for N frames (0=every frame) | 0 |
+| `--rife-fast-stride N` | Inpaint keyframes and synthesize skipped frames with Practical-RIFE | 0 |
 | `--mask-dilate N` | Expand masks by N pixels | 8 |
 | `--no-hw-encode` | Force software encoding | Off |
 | `--decode-accel` | HW decode hint (off/auto/d3d11/vaapi/mfx/pynv/nvdec) | off |

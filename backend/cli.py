@@ -393,6 +393,9 @@ def main():
                        help="Minimum speech duration for VAD segments (default 0).")
     parser.add_argument("--frame-skip", type=int, default=0,
                        help="Reuse detection mask for N frames between detections")
+    parser.add_argument("--rife-fast-stride", type=int, default=0,
+                       help=("Inpaint every Nth frame and synthesize skipped "
+                             "frames with Practical-RIFE (0 disables)."))
     parser.add_argument("--mask-dilate", type=int, default=8,
                        help="Mask dilation in pixels (0=off)")
     parser.add_argument("--confidence-dilate", action="store_true",
@@ -738,6 +741,8 @@ def main():
         parser.error("--end must be greater than or equal to --start")
     if args.frame_skip < 0:
         parser.error("--frame-skip must be zero or positive")
+    if args.rife_fast_stride < 0:
+        parser.error("--rife-fast-stride must be zero or positive")
     if args.mask_dilate < 0:
         parser.error("--mask-dilate must be zero or positive")
     if args.mask_feather < 0:
@@ -788,6 +793,7 @@ def main():
         time_start=args.start,
         time_end=args.end,
         detection_frame_skip=args.frame_skip,
+        rife_fast_stride=args.rife_fast_stride,
         mask_dilate_px=args.mask_dilate,
         confidence_weighted_dilation=args.confidence_dilate,
         mask_feather_px=args.mask_feather,
@@ -862,6 +868,7 @@ def main():
             "detection_lang": config.detection_lang,
             "detection_threshold": config.detection_threshold,
             "detection_frame_skip": config.detection_frame_skip,
+            "rife_fast_stride": config.rife_fast_stride,
             "subtitle_area": list(config.subtitle_area) if config.subtitle_area else None,
             "subtitle_areas": (
                 [list(r) for r in config.subtitle_areas]

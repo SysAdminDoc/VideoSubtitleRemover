@@ -61,9 +61,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   supports the documented `SimpleDecoder` API plus the legacy decoder shape,
   reports PyNv availability in backend status, and falls back to software
   decode when unavailable.
+- **RIFE-interpolated fast mode.** `--rife-fast-stride N` now raises the
+  effective detection stride, inpaints cleaned keyframes only, asks
+  Practical-RIFE to synthesize skipped frames, and duplicates the nearest
+  cleaned keyframe across scene cuts or missing adapters. The GUI performance
+  card persists the same stride, and the hardware-decode dropdown now exposes
+  `pynv` / `nvdec`.
 
 ### Fixed
 
+- **NVIDIA setup now matches the torch security floor.** Windows CUDA setup
+  now installs PyTorch from the cu128 wheel index for RTX 20/30/40/50-series
+  GPUs, because the older cu118 index does not provide `torch>=2.10.0`, and
+  the packaging-tool refresh keeps `setuptools<82` for torch compatibility.
+- **Local EXE build parser cleanup.** `build_exe.bat` no longer trips `cmd`
+  parsing while preparing OCR package data collection for PyInstaller.
 - **SAM 2 mask refinement now shrinks coarse boxes.** `--sam2-refine` now
   clears each detected rectangle before applying the prompted SAM 2 mask, uses
   the detected-mask center as a positive point prompt, preserves unrelated mask

@@ -56,14 +56,22 @@ class DetectionCascadeTests(unittest.TestCase):
                 raise ImportError(name)
             return real_import(name, globals, locals, fromlist, level)
 
+        def fake_can_import(name, **kwargs):
+            return name in {"rapidocr", "easyocr"}
+
         with _fresh_detection_module() as detection:
             with mock.patch.dict(
                 sys.modules,
                 {"backend.ocr_vlm": self._vlm_disabled_module()},
             ):
                 with mock.patch.dict(os.environ, {"VSR_ALLOW_GPL": ""}):
-                    with mock.patch("builtins.__import__", side_effect=fake_import):
-                        detector = detection.SubtitleDetector(device="cpu", lang="en")
+                    with mock.patch.object(
+                        detection,
+                        "_module_can_import",
+                        side_effect=fake_can_import,
+                    ):
+                        with mock.patch("builtins.__import__", side_effect=fake_import):
+                            detector = detection.SubtitleDetector(device="cpu", lang="en")
 
         self.assertEqual(detector._engine_name, "OpenCV fallback")
         self.assertEqual(

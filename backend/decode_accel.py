@@ -12,8 +12,8 @@ smooth between cuts. We expose a thin wrapper around the
 `practical-rife` Python package; users without RIFE installed fall
 back to the standard frame-by-frame path.
 
-Both adapters import lazily and return None on any failure so the
-caller transparently falls back to cv2.VideoCapture / dense inpaint.
+Both adapters import lazily and return None on any failure so callers
+transparently fall back to cv2.VideoCapture / nearest-keyframe reuse.
 """
 
 from __future__ import annotations
@@ -307,7 +307,7 @@ def maybe_interpolate_pair(prev_frame: np.ndarray,
     `next_frame` at time `t in [0, 1]` using Practical-RIFE.
 
     Returns the synthesised frame, or None when RIFE is unavailable.
-    The caller falls back to a duplicate of `next_frame`.
+    Callers fall back to a duplicate of the nearest cleaned keyframe.
     """
     if _RIFE_STATE["probed"] and _RIFE_STATE["model"] is None:
         return None

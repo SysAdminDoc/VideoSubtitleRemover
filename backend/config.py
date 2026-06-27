@@ -171,6 +171,9 @@ class ProcessingConfig:
     # RM-69: opt-in CoTracker3 sparse point propagation for OCR-empty
     # frames. Requires VSR_COTRACKER=1 plus a reviewed local/pinned repo.
     cotracker_propagate: bool = False
+    # RM-72: inpaint only every Nth frame, then synthesize intermediates with
+    # Practical-RIFE when available. 0/1 preserves the full per-frame path.
+    rife_fast_stride: int = 0
     edge_ring_px: int = 2         # post-inpaint colour match ring width (0 disables)
 
     # Multi-region masks: list of (x1,y1,x2,y2) rects. When set, subtitle_area
@@ -252,7 +255,8 @@ class ProcessingConfig:
 
     # Opt-in hardware-accelerated video decode hint for cv2.VideoCapture.
     # "off" (default) preserves the existing software path; "auto"/"any"
-    # lets cv2 pick; "d3d11" / "vaapi" / "mfx" target a specific backend.
+    # lets cv2 pick; "d3d11" / "vaapi" / "mfx" target a specific backend;
+    # "pynv" / "nvdec" routes through NVIDIA PyNvVideoCodec when installed.
     # _open_capture() falls back silently to software if HW returns empty
     # frames (cv2/FFmpeg known issue).
     decode_hw_accel: str = "off"
@@ -572,6 +576,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.sam2_refine = _coerce_bool(config.sam2_refine, False)
     config.matanyone_refine = _coerce_bool(config.matanyone_refine, False)
     config.cotracker_propagate = _coerce_bool(config.cotracker_propagate, False)
+    config.rife_fast_stride = _coerce_int(config.rife_fast_stride, 0, 0, 60)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)

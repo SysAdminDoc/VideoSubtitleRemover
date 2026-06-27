@@ -9,8 +9,11 @@ import tempfile
 import threading
 import types
 import unittest
+import unittest.mock
 from pathlib import Path
 from types import SimpleNamespace
+
+import numpy as np
 
 import VideoSubtitleRemover as gui
 from backend import processor
@@ -1397,7 +1400,7 @@ class ConfigFuzzTests(unittest.TestCase):
         # v3.13 GUI-exposed fields (B-1 + F-8).
         "loudnorm_target", "multi_audio_passthrough",
         "decode_hw_accel", "prefetch_decode", "prefetch_queue_size",
-        "input_fps", "quality_report_sheet",
+        "input_fps", "quality_report_sheet", "rife_fast_stride",
         "remove_subtitles", "remove_chyrons", "chyron_min_hits",
         "karaoke_grouping", "karaoke_x_gap_px", "karaoke_y_overlap",
         "output_codec",
@@ -1434,7 +1437,10 @@ class ConfigFuzzTests(unittest.TestCase):
             self.assertTrue(cfg.loudnorm_target == 0.0
                             or -70.0 <= cfg.loudnorm_target <= -5.0)
             self.assertIn(cfg.decode_hw_accel,
-                          {"off", "auto", "any", "d3d11", "vaapi", "mfx"})
+                          {"off", "auto", "any", "d3d11", "vaapi", "mfx",
+                           "pynv", "nvdec"})
+            self.assertGreaterEqual(cfg.rife_fast_stride, 0)
+            self.assertLessEqual(cfg.rife_fast_stride, 60)
             self.assertIn(cfg.output_codec, {"h264", "h265", "av1", "vvc"})
             self.assertIsInstance(cfg.multi_audio_passthrough, bool)
             self.assertGreaterEqual(cfg.input_fps, 1.0)
@@ -1462,7 +1468,10 @@ class ConfigFuzzTests(unittest.TestCase):
             self.assertTrue(cfg.loudnorm_target == 0.0 or
                             -70.0 <= cfg.loudnorm_target <= -5.0)
             self.assertIn(cfg.decode_hw_accel,
-                          {"off", "auto", "any", "d3d11", "vaapi", "mfx"})
+                          {"off", "auto", "any", "d3d11", "vaapi", "mfx",
+                           "pynv", "nvdec"})
+            self.assertGreaterEqual(cfg.rife_fast_stride, 0)
+            self.assertLessEqual(cfg.rife_fast_stride, 60)
             self.assertIsInstance(cfg.multi_audio_passthrough, bool)
 
 
@@ -1521,19 +1530,20 @@ class FfmpegTimeoutBudgetTests(unittest.TestCase):
 
 
 class GuiToBackendFieldWiringTests(unittest.TestCase):
-    """B-1: the 13 v3.13 backend fields must round-trip through the GUI
+    """Backend fields must round-trip through the GUI
     dataclass without being silently dropped, and reach the backend
     config when _process_item builds the BackendConfig."""
 
     EXPECTED_GUI_FIELDS = (
         "loudnorm_target", "multi_audio_passthrough", "decode_hw_accel",
         "prefetch_decode", "prefetch_queue_size", "input_fps",
-        "quality_report_sheet", "remove_subtitles", "remove_chyrons",
+        "quality_report_sheet", "rife_fast_stride",
+        "remove_subtitles", "remove_chyrons",
         "chyron_min_hits", "karaoke_grouping", "karaoke_x_gap_px",
         "karaoke_y_overlap",
     )
 
-    def test_all_thirteen_fields_declared_on_gui_dataclass(self):
+    def test_backend_fields_declared_on_gui_dataclass(self):
         cfg = gui.ProcessingConfig()
         for name in self.EXPECTED_GUI_FIELDS:
             self.assertTrue(
@@ -1542,7 +1552,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
                 "removed or never wired through B-1.",
             )
 
-    def test_all_thirteen_fields_persist_through_to_dict(self):
+    def test_backend_fields_persist_through_to_dict(self):
         cfg = gui.ProcessingConfig(
             loudnorm_target=-14.0,
             multi_audio_passthrough=False,
@@ -1551,6 +1561,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
             prefetch_queue_size=24,
             input_fps=30.0,
             quality_report_sheet=True,
+            rife_fast_stride=3,
             remove_subtitles=False,
             remove_chyrons=False,
             chyron_min_hits=120,
@@ -1565,6 +1576,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         restored = gui.ProcessingConfig.from_dict(payload)
         self.assertEqual(restored.loudnorm_target, -14.0)
         self.assertEqual(restored.decode_hw_accel, "d3d11")
+        self.assertEqual(restored.rife_fast_stride, 3)
         self.assertTrue(restored.karaoke_grouping)
         self.assertEqual(restored.chyron_min_hits, 120)
 
@@ -3443,6 +3455,93 @@ class DecodeAccelTests(unittest.TestCase):
         b = _np.full((8, 8, 3), 255, dtype=_np.uint8)
         if not is_rife_available():
             self.assertIsNone(maybe_interpolate_pair(a, b, 0.5))
+
+
+class RifeFastModePipelineTests(unittest.TestCase):
+    class _FakeInpainter:
+        def __init__(self):
+            self.calls = []
+
+        def inpaint(self, frames, masks):
+            self.calls.append((len(frames), len(masks)))
+            return [
+                np.full_like(frame, 20 + index * 40)
+                for index, frame in enumerate(frames)
+            ]
+
+    def _remover(self, stride=2):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.normalize_processing_config(
+            processor.ProcessingConfig(rife_fast_stride=stride)
+        )
+        remover.inpainter = self._FakeInpainter()
+        return remover
+
+    @staticmethod
+    def _frames(count):
+        return [
+            np.full((8, 8, 3), index, dtype=np.uint8)
+            for index in range(count)
+        ]
+
+    @staticmethod
+    def _masks(count):
+        return [np.zeros((8, 8), dtype=np.uint8) for _ in range(count)]
+
+    def test_config_clamps_rife_stride(self):
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(rife_fast_stride=999)
+        )
+        self.assertEqual(cfg.rife_fast_stride, 60)
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(rife_fast_stride=-3)
+        )
+        self.assertEqual(cfg.rife_fast_stride, 0)
+
+    def test_fast_mode_inpaints_keyframes_and_interpolates_middle_frames(self):
+        remover = self._remover(stride=2)
+        frames = self._frames(5)
+        masks = self._masks(5)
+
+        def interp(prev, next_frame, t):
+            return np.full_like(prev, int(t * 200))
+
+        with unittest.mock.patch(
+            "backend.processor._detect_scene_cuts",
+            return_value=[0],
+        ), unittest.mock.patch(
+            "backend.decode_accel.maybe_interpolate_pair",
+            side_effect=interp,
+        ) as mocked:
+            out = remover._inpaint_with_optional_rife_fast(frames, masks)
+
+        self.assertEqual(remover.inpainter.calls, [(3, 3)])
+        self.assertEqual(len(out), 5)
+        self.assertEqual(out[0][0, 0, 0], 20)
+        self.assertEqual(out[1][0, 0, 0], 100)
+        self.assertEqual(out[2][0, 0, 0], 60)
+        self.assertEqual(out[3][0, 0, 0], 100)
+        self.assertEqual(out[4][0, 0, 0], 100)
+        self.assertEqual(mocked.call_count, 2)
+
+    def test_scene_cut_uses_nearest_cleaned_keyframe_duplicate(self):
+        remover = self._remover(stride=2)
+        frames = self._frames(3)
+        masks = self._masks(3)
+
+        with unittest.mock.patch(
+            "backend.processor._detect_scene_cuts",
+            return_value=[0, 1],
+        ), unittest.mock.patch(
+            "backend.decode_accel.maybe_interpolate_pair",
+        ) as mocked:
+            out = remover._inpaint_with_optional_rife_fast(frames, masks)
+
+        self.assertEqual(remover.inpainter.calls, [(2, 2)])
+        mocked.assert_not_called()
+        self.assertEqual(out[0][0, 0, 0], 20)
+        self.assertEqual(out[1][0, 0, 0], 60)
+        self.assertEqual(out[2][0, 0, 0], 60)
 
 
 class VlmOcrAdapterTests(unittest.TestCase):

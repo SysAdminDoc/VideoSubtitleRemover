@@ -373,6 +373,9 @@ class VideoSubtitleRemoverApp:
             self.config.loudnorm_target = self._safe_float(self.loudnorm_var.get(), 0.0)
         if hasattr(self, 'decode_accel_var'):
             self.config.decode_hw_accel = self.decode_accel_var.get()
+        if hasattr(self, 'rife_stride_var'):
+            self.config.rife_fast_stride = self._safe_int(
+                self.rife_stride_var.get(), 0)
         if hasattr(self, 'prefetch_var'):
             self.config.prefetch_decode = self.prefetch_var.get()
         if hasattr(self, 'remove_subs_var'):
@@ -2381,11 +2384,29 @@ class VideoSubtitleRemoverApp:
         self.decode_accel_var = tk.StringVar(value=self.config.decode_hw_accel or "off")
         accel_combo = ttk.Combobox(
             accel_row, textvariable=self.decode_accel_var, width=10,
-            values=["off", "auto", "any", "d3d11", "vaapi", "mfx"],
+            values=["off", "auto", "any", "d3d11", "vaapi", "mfx", "pynv", "nvdec"],
             state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
         )
         accel_combo.pack(side="right")
         Tooltip(accel_combo, "Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames.")
+
+        rife_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
+        rife_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(rife_row, text="RIFE fast stride", font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+        self.rife_stride_var = tk.StringVar(
+            value=str(getattr(self.config, "rife_fast_stride", 0) or 0)
+        )
+        rife_entry = tk.Entry(
+            rife_row, width=5, bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY, font=f(Theme.F_BODY_SM),
+            insertbackground=Theme.TEXT_PRIMARY,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS,
+            relief="flat", bd=6, textvariable=self.rife_stride_var)
+        rife_entry.pack(side="right")
+        Tooltip(rife_entry, "0 disables. Values above 1 inpaint keyframes and synthesize skipped frames with Practical-RIFE when installed.")
 
         self.prefetch_var = tk.BooleanVar(value=self.config.prefetch_decode)
         prefetch_toggle = ModernToggle(
@@ -4782,6 +4803,14 @@ class VideoSubtitleRemoverApp:
             return default
 
     @staticmethod
+    def _safe_int(value: str, default: int = 0) -> int:
+        """Parse an int from a string, returning default on failure."""
+        try:
+            return int(value or default)
+        except (ValueError, TypeError):
+            return default
+
+    @staticmethod
     def _gui_to_backend_mode(gui_mode_value: str):
         """Map a GUI InpaintMode value onto the backend enum. The two
         enums are deliberately separate (see CLAUDE.md) -- this mapping
@@ -6863,6 +6892,7 @@ class VideoSubtitleRemoverApp:
                 sam2_refine=getattr(item.config, 'sam2_refine', False),
                 matanyone_refine=getattr(item.config, 'matanyone_refine', False),
                 cotracker_propagate=getattr(item.config, 'cotracker_propagate', False),
+                rife_fast_stride=getattr(item.config, 'rife_fast_stride', 0),
                 edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
                 subtitle_areas=getattr(item.config, 'subtitle_areas', None),
                 subtitle_region_spans=getattr(

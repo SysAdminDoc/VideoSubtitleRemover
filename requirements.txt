@@ -31,18 +31,18 @@ Pillow>=12.2.0
 # CUDA wheels. Python 3.14 currently resolves CPU-only torch on Windows;
 # setup.py blocks that NVIDIA path unless VSR_ALLOW_PY314_CPU=1 is set.
 
-# For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada, CUDA 11.8):
-# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu118
+# For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada):
+# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 # pip install onnxruntime-gpu>=1.21.0
 
 # For NVIDIA RTX 50-series (Blackwell, sm_120 -- e.g. RTX 5070/5080/5090):
-# Blackwell needs CUDA 12.8 wheels (torch 2.7+). The cu118/cu121 builds
-# have no Blackwell kernels and will error or fall back to CPU.
+# Blackwell needs CUDA 12.8 wheels. The cu118/cu121 builds have no Blackwell
+# kernels and do not carry the current torch security floor.
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
 # pip install onnxruntime-gpu>=1.21.0
-# (Run_VSR_Pro.bat / setup.py auto-detect 50-series and pick cu128 for you.)
+# (Run_VSR_Pro.bat / setup.py use cu128 for NVIDIA PyTorch wheels.)
 # CUDA 13 ONNX Runtime wheels are currently a nightly/custom-channel path,
 # not the stable PyPI default.
 

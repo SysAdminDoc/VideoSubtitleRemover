@@ -1054,6 +1054,114 @@ class SubtitleRemover:
             return tempfile.mkdtemp(prefix="vsr_", dir=work)
         return tempfile.mkdtemp(prefix="vsr_")
 
+    def _rife_fast_stride(self) -> int:
+        try:
+            stride = int(getattr(self.config, "rife_fast_stride", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+        return stride if stride > 1 else 0
+
+    @staticmethod
+    def _valid_output_frame(candidate: Any,
+                            fallback: np.ndarray) -> np.ndarray:
+        if candidate is None:
+            return fallback.copy()
+        try:
+            frame = np.asarray(candidate)
+        except Exception:
+            return fallback.copy()
+        if frame.shape != fallback.shape:
+            return fallback.copy()
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+        return np.ascontiguousarray(frame)
+
+    def _rife_segment_has_scene_cut(self, frames: List[np.ndarray],
+                                    start: int, end: int) -> bool:
+        if end <= start + 1:
+            return False
+        segment = frames[start:end + 1]
+        try:
+            cuts = _detect_scene_cuts(
+                segment,
+                threshold=getattr(self.config, "tbe_scene_cut_threshold", 0.35),
+                prefer_pyscenedetect=getattr(
+                    self.config, "tbe_scene_cut_use_pyscenedetect", False),
+                prefer_transnetv2=getattr(
+                    self.config, "tbe_scene_cut_use_transnetv2", False),
+            )
+        except Exception as exc:
+            logger.debug(f"RIFE scene-cut probe failed: {exc}")
+            return False
+        return any(cut > 0 for cut in cuts)
+
+    def _inpaint_with_optional_rife_fast(self,
+                                         frames: List[np.ndarray],
+                                         masks: List[np.ndarray]) -> List[np.ndarray]:
+        stride = self._rife_fast_stride()
+        if stride <= 1 or len(frames) < 3:
+            return self.inpainter.inpaint(frames, masks)
+
+        key_indices = list(range(0, len(frames), stride))
+        if key_indices[-1] != len(frames) - 1:
+            key_indices.append(len(frames) - 1)
+        if len(key_indices) >= len(frames):
+            return self.inpainter.inpaint(frames, masks)
+
+        key_frames = [frames[i] for i in key_indices]
+        key_masks = [masks[i] for i in key_indices]
+        key_results = self.inpainter.inpaint(key_frames, key_masks)
+        if len(key_results) != len(key_indices):
+            logger.warning(
+                "RIFE fast mode disabled for batch: inpainter returned "
+                f"{len(key_results)} keyframes for {len(key_indices)} inputs"
+            )
+            return self.inpainter.inpaint(frames, masks)
+
+        results: List[Optional[np.ndarray]] = [None] * len(frames)
+        for key_idx, cleaned in zip(key_indices, key_results):
+            results[key_idx] = self._valid_output_frame(cleaned, frames[key_idx])
+
+        try:
+            from backend.decode_accel import maybe_interpolate_pair
+        except Exception as exc:
+            logger.debug(f"Could not import RIFE adapter: {exc}")
+            maybe_interpolate_pair = None
+
+        interpolation_missing_logged = False
+        for left_pos, start_idx in enumerate(key_indices[:-1]):
+            end_idx = key_indices[left_pos + 1]
+            prev_clean = results[start_idx]
+            next_clean = results[end_idx]
+            if prev_clean is None or next_clean is None:
+                continue
+
+            scene_cut = self._rife_segment_has_scene_cut(
+                frames, start_idx, end_idx)
+            for out_idx in range(start_idx + 1, end_idx):
+                t = (out_idx - start_idx) / max(1, end_idx - start_idx)
+                fallback = prev_clean if t < 0.5 else next_clean
+                if scene_cut or maybe_interpolate_pair is None:
+                    results[out_idx] = fallback.copy()
+                    continue
+                interpolated = maybe_interpolate_pair(prev_clean, next_clean, t)
+                if interpolated is None:
+                    if not interpolation_missing_logged:
+                        logger.info(
+                            "RIFE fast mode is using nearest-keyframe fallback; "
+                            "install practical-rife to synthesize intermediates."
+                        )
+                        interpolation_missing_logged = True
+                    results[out_idx] = fallback.copy()
+                    continue
+                results[out_idx] = self._valid_output_frame(
+                    interpolated, fallback)
+
+        return [
+            result if result is not None else frames[idx].copy()
+            for idx, result in enumerate(results)
+        ]
+
     def process_video(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
         self.last_output_path = None
@@ -1252,6 +1360,13 @@ class SubtitleRemover:
             frame_idx = 0
             batch_size = self.config.sttn_max_load_num
             frame_skip = self.config.detection_frame_skip
+            rife_stride = self._rife_fast_stride()
+            if rife_stride:
+                frame_skip = max(frame_skip, rife_stride - 1)
+                logger.info(
+                    f"RIFE fast mode on: stride={rife_stride}, "
+                    f"effective detection frame-skip={frame_skip}"
+                )
 
             # Decoupled prefetch: wrap the capture in a worker that fills
             # a bounded frame queue while the main thread runs detection +
@@ -1542,7 +1657,7 @@ class SubtitleRemover:
                 progress = min(0.9, frame_idx / max(1, frames_to_process) * 0.8 + 0.1)
                 self._report_progress(progress, f"Processing frame {frame_idx}/{frames_to_process}...")
 
-                results = self.inpainter.inpaint(frames, masks)
+                results = self._inpaint_with_optional_rife_fast(frames, masks)
                 stride = max(1, self.live_preview_stride)
                 for offset, result in enumerate(results):
                     writer.write(result)

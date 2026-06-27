@@ -72,7 +72,8 @@ MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
 # so a missing key in a format-1 file resolves to the same behaviour
 # users saw before the bump -- no field-rename migration needed.
 # Format 2 -> 3: added subtitle_region_spans for time-ranged manual masks.
-VSR_SETTINGS_FORMAT = 3
+# Format 3 -> 4: added rife_fast_stride for opt-in keyframe interpolation.
+VSR_SETTINGS_FORMAT = 4
 
 # -- Enums ------------------------------------------------------------------
 
@@ -348,6 +349,7 @@ class ProcessingConfig:
     sam2_refine: bool = False
     matanyone_refine: bool = False
     cotracker_propagate: bool = False
+    rife_fast_stride: int = 0
     edge_ring_px: int = 2
 
     subtitle_areas: Optional[List[Tuple[int, int, int, int]]] = None
@@ -502,6 +504,7 @@ class ProcessingConfig:
         self.sam2_refine = _coerce_bool(self.sam2_refine, False)
         self.matanyone_refine = _coerce_bool(self.matanyone_refine, False)
         self.cotracker_propagate = _coerce_bool(self.cotracker_propagate, False)
+        self.rife_fast_stride = _coerce_int(self.rife_fast_stride, 0, 0, 60)
         self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 20)
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
@@ -741,6 +744,11 @@ def _migrate_settings(data: dict) -> dict:
         data["vsr_settings_format"] = 3
         version = 3
 
+    if version < 4:
+        data = dict(data)
+        data["vsr_settings_format"] = 4
+        version = 4
+
     return data
 
 
@@ -895,6 +903,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "sam2_refine",
     "matanyone_refine",
     "cotracker_propagate",
+    "rife_fast_stride",
     "edge_ring_px",
     "auto_band",
     "adaptive_batch",

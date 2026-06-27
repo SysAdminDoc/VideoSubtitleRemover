@@ -82,6 +82,28 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertNotIn("https://download.pytorch.org/whl/cu118", args)
         self.assertNotIn("https://download.pytorch.org/whl/cu128", args)
 
+    def test_nvidia_cuda_uses_cu128_index_for_torch_floor(self):
+        gpu_info = {
+            "nvidia": True,
+            "amd": False,
+            "intel": False,
+            "blackwell": False,
+            "cuda_disabled_by_python": False,
+        }
+        version = SimpleNamespace(major=3, minor=13, micro=0)
+
+        with mock.patch.object(self.setup_mod.platform, "system", return_value="Windows"):
+            with mock.patch.object(self.setup_mod.sys, "version_info", version):
+                with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+                    with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                        ok = self.setup_mod.install_pytorch(gpu_info)
+
+        self.assertTrue(ok)
+        args = run.call_args.args[0]
+        self.assertIn("torch>=2.10.0", args)
+        self.assertIn("https://download.pytorch.org/whl/cu128", args)
+        self.assertNotIn("https://download.pytorch.org/whl/cu118", args)
+
     def test_create_virtual_env_timeout_fails_with_guidance(self):
         timeout = self.setup_mod.VENV_CREATE_TIMEOUT_SECONDS
         exc = self.setup_mod.subprocess.TimeoutExpired(
@@ -236,6 +258,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
+        self.assertTrue(any("setuptools<82" in call for call in calls))
         self.assertTrue(any("onnxruntime-gpu>=1.21.0" in call for call in calls))
         self.assertFalse(any("onnxruntime-directml" in call for call in calls))
 

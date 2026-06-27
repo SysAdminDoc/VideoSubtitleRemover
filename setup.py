@@ -295,8 +295,7 @@ def install_pytorch(gpu_info):
             ], "installing CPU PyTorch")
         elif gpu_info["nvidia"] and gpu_info["blackwell"]:
             # Blackwell (RTX 50-series, sm_120) requires CUDA 12.8 wheels.
-            # The cu128 index ships torch >= 2.7 with Blackwell kernels;
-            # cu118/cu121 builds fail or fall back to CPU on these cards.
+            # The cu128 index also carries the current torch security floor.
             print(f"  Installing PyTorch with CUDA 12.8 (Blackwell) support...")
             _run_pip_install([
                 pip, 'install',
@@ -304,12 +303,12 @@ def install_pytorch(gpu_info):
                 '--index-url', 'https://download.pytorch.org/whl/cu128'
             ], "installing CUDA 12.8 PyTorch")
         elif gpu_info["nvidia"]:
-            print(f"  Installing PyTorch with CUDA support...")
+            print(f"  Installing PyTorch with CUDA 12.8 support...")
             _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
-                '--index-url', 'https://download.pytorch.org/whl/cu118'
-            ], "installing CUDA PyTorch")
+                '--index-url', 'https://download.pytorch.org/whl/cu128'
+            ], "installing CUDA 12.8 PyTorch")
         elif gpu_info["amd"] or gpu_info["intel"]:
             print(f"  Installing PyTorch CPU runtime for AMD/Intel fallback paths...")
             print(f"  DirectML acceleration is provided by ONNX Runtime, not torch-directml.")
@@ -384,7 +383,7 @@ def install_dependencies(gpu_info=None):
     try:
         print("  Refreshing packaging tools...")
         _run_pip_install(
-            [pip, 'install', '--upgrade', 'pip', 'setuptools', 'wheel'],
+            [pip, 'install', '--upgrade', 'pip', 'setuptools<82', 'wheel'],
             "refreshing packaging tools",
         )
 
