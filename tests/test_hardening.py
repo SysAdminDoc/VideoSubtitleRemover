@@ -2958,6 +2958,13 @@ class HdrPipelineTests(unittest.TestCase):
         self.assertIn("-color_range", args)
         self.assertTrue(meta.is_hdr)
 
+    def test_hdr_encode_args_skip_rgb_matrix_tags(self):
+        from backend.hdr import hdr_encode_args, ColorMetadata
+        meta = ColorMetadata(color_space="gbr", color_range="pc")
+        args = hdr_encode_args(meta)
+        self.assertNotIn("-colorspace", args)
+        self.assertIn("-color_range", args)
+
     def test_hdr_safe_codec_promotes_h264_to_h265(self):
         from backend.hdr import ColorMetadata, hdr_safe_codec
         meta = ColorMetadata(
@@ -3062,6 +3069,24 @@ class PostRestoreTests(unittest.TestCase):
             self.assertIsNone(result)
         finally:
             _shutil.which = original
+
+    def test_av1_native_grain_skips_additive_post_pass(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            output_codec="av1",
+            film_grain_strength=0.04,
+            use_hw_encode=False,
+        )
+        remover._hw_encoder = None
+        remover._color_metadata = None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "out.mp4"
+            output.write_bytes(b"placeholder")
+            with unittest.mock.patch(
+                "backend.post_restore.add_film_grain"
+            ) as add_grain:
+                remover._run_post_restore_passes(str(output), tmpdir)
+            add_grain.assert_not_called()
 
 
 class CrashReporterScaffoldTests(unittest.TestCase):
@@ -4279,6 +4304,23 @@ class OutputCodecTests(unittest.TestCase):
         self.assertIn("-pix_fmt", args)
         self.assertIn("yuv420p10le", args)
 
+    def test_av1_film_grain_uses_svtav1_native_param(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._hw_encoder = None
+        remover._color_metadata = None
+        remover.config = processor.ProcessingConfig(
+            output_codec="av1",
+            output_quality=30,
+            film_grain_strength=0.04,
+            use_hw_encode=False,
+        )
+
+        args = remover._get_encode_args()
+
+        self.assertIn("libsvtav1", args)
+        self.assertIn("-svtav1-params", args)
+        self.assertIn("film-grain=10", args)
+
 
 class ExtendedMetricsTests(unittest.TestCase):
     """RM-102: temporal quality metric expansion."""
@@ -4589,6 +4631,78 @@ class EndToEndPipelineTests(unittest.TestCase):
             writer.release()
         return Path(writer.path)
 
+    def _ffmpeg_has_encoder(self, *names: str) -> bool:
+        if shutil.which("ffmpeg") is None:
+            return False
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        text = result.stdout + result.stderr
+        return result.returncode == 0 and any(name in text for name in names)
+
+    def _write_modern_codec_clip(self, dir_path: Path, codec: str) -> Path:
+        if codec == "av1":
+            if self._ffmpeg_has_encoder("libsvtav1"):
+                encode_args = ["-c:v", "libsvtav1", "-preset", "13", "-crf", "40"]
+            elif self._ffmpeg_has_encoder("libaom-av1"):
+                encode_args = [
+                    "-c:v", "libaom-av1", "-cpu-used", "8", "-row-mt", "1",
+                    "-crf", "40", "-b:v", "0",
+                ]
+            else:
+                self.skipTest("no AV1 encoder available in ffmpeg")
+        elif codec == "vp9":
+            if not self._ffmpeg_has_encoder("libvpx-vp9"):
+                self.skipTest("no VP9 encoder available in ffmpeg")
+            encode_args = [
+                "-c:v", "libvpx-vp9", "-deadline", "realtime",
+                "-cpu-used", "8", "-crf", "42", "-b:v", "0",
+            ]
+        else:
+            raise AssertionError(f"unexpected codec fixture: {codec}")
+        out = dir_path / f"{codec}.mkv"
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=64x48:rate=12",
+            "-frames:v", "12", "-pix_fmt", "yuv420p",
+            *encode_args,
+            str(out),
+        ]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+        return out
+
+    def _stub_remover(self, cfg: processor.ProcessingConfig, inpainter):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = cfg
+        remover.detector = processor.SubtitleDetector.__new__(
+            processor.SubtitleDetector
+        )
+        remover.detector.device = "cpu"
+        remover.detector.lang = "en"
+        remover.detector._engine_name = "skip"
+        remover.detector._rapid_model = None
+        remover.detector._paddle_model = None
+        remover.detector._surya_det = None
+        remover.detector._easyocr_reader = None
+        remover.inpainter = inpainter
+        remover.on_progress = None
+        remover.on_preview_frame = None
+        remover.live_preview_stride = 6
+        remover._hw_encoder = None
+        remover._srt_entries = []
+        remover.last_quality_report = None
+        remover.last_output_path = None
+        remover.last_error_message = None
+        remover.last_error_reason = None
+        remover._quality_mask_bbox = None
+        remover._color_metadata = None
+        remover._hdr_codec_warning_logged = False
+        remover._hdr_software_warning_logged = False
+        return remover
+
     def test_pipeline_runs_with_skip_detection(self):
         if shutil.which("ffmpeg") is None:
             self.skipTest("ffmpeg not on PATH")
@@ -4646,6 +4760,50 @@ class EndToEndPipelineTests(unittest.TestCase):
             finally:
                 cap.release()
             self.assertGreaterEqual(frames_read, 20)
+
+    def test_av1_and_vp9_decode_serial_and_prefetch_paths(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not on PATH")
+
+        class PassthroughInpainter:
+            def inpaint(self, frames, masks):
+                return frames
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            for codec in ("av1", "vp9"):
+                src = self._write_modern_codec_clip(tmp, codec)
+                for label, prefetch, accel in (
+                    ("serial", False, "off"),
+                    ("prefetch_auto", True, "auto"),
+                ):
+                    output = tmp / f"{codec}_{label}_frames"
+                    cfg = processor.normalize_processing_config(
+                        processor.ProcessingConfig(
+                            mode=processor.InpaintMode.STTN,
+                            device="cpu",
+                            sttn_skip_detection=True,
+                            subtitle_area=(8, 36, 56, 44),
+                            preserve_audio=False,
+                            adaptive_batch=False,
+                            use_hw_encode=False,
+                            output_frames=True,
+                            input_fps=12.0,
+                            sttn_max_load_num=4,
+                            prefetch_decode=prefetch,
+                            decode_hw_accel=accel,
+                        )
+                    )
+                    remover = self._stub_remover(cfg, PassthroughInpainter())
+                    ok = remover.process_video(str(src), str(output))
+                    self.assertTrue(ok, f"{codec} {label} decode should succeed")
+                    actual = Path(remover.last_output_path or output)
+                    frames = sorted(actual.glob("frame_*.png"))
+                    self.assertGreaterEqual(
+                        len(frames),
+                        10,
+                        f"{codec} {label} should decode the generated clip",
+                    )
 
     def test_pipeline_timed_regions_do_not_reuse_masks_outside_span(self):
         if shutil.which("ffmpeg") is None:

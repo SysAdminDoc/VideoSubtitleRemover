@@ -30,7 +30,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **AUTO Inpaint Routing** -- Per-batch routing between TBE and LaMa based on exposure score
 - **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
-- **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, and VVC when FFmpeg exposes `libvvenc`
+- **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame, optionally with start/end seconds for moving subtitle layouts
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
@@ -336,6 +336,7 @@ before/after retry config in the next batch report.
 | `--burned-in-only` | Ignore embedded tracks and run visual cleanup normally | Off |
 | `--quality-report` | Compute PSNR/SSIM and VMAF when libvmaf is available | Off |
 | `--quality-sheet` | Side-by-side comparison PNG | Off |
+| `--film-grain STRENGTH` | Add film grain after cleanup; AV1 software output uses SVT-AV1 native grain, other codecs use FFmpeg noise (0..0.5) | 0 |
 | `--audit-onnx` | Audit all ONNX models for DirectML opset compatibility and exit | Off |
 | `--audit-windows-ml` | Probe Windows ML Python bridge and tiny ONNX smoke inference | Off |
 | `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes | Off |

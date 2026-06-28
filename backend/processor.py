@@ -1981,21 +1981,27 @@ class SubtitleRemover:
             except Exception as exc:
                 logger.warning(f"SeedVR2 pass failed: {exc}", exc_info=True)
         if self.config.film_grain_strength > 0.0:
-            try:
-                from backend.post_restore import add_film_grain
-                grain_out = os.path.join(temp_dir, "grainy.mp4")
-                produced = add_film_grain(
-                    output_path, grain_out,
-                    strength=self.config.film_grain_strength,
+            if self._uses_native_av1_film_grain():
+                logger.info(
+                    "SVT-AV1 native film grain was enabled during encode; "
+                    "skipping additive post-encode grain pass."
                 )
-                if produced and Path(produced).is_file():
-                    _promote_temp_output(produced, output_path)
-                    logger.info(
-                        f"Film-grain pass complete "
-                        f"(strength={self.config.film_grain_strength:.3f})"
+            else:
+                try:
+                    from backend.post_restore import add_film_grain
+                    grain_out = os.path.join(temp_dir, "grainy.mp4")
+                    produced = add_film_grain(
+                        output_path, grain_out,
+                        strength=self.config.film_grain_strength,
                     )
-            except Exception as exc:
-                logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
+                    if produced and Path(produced).is_file():
+                        _promote_temp_output(produced, output_path)
+                        logger.info(
+                            f"Film-grain pass complete "
+                            f"(strength={self.config.film_grain_strength:.3f})"
+                        )
+                except Exception as exc:
+                    logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
         if self.config.restyle_subtitle:
             try:
                 from backend.post_restore import burn_subtitles
@@ -2026,6 +2032,22 @@ class SubtitleRemover:
                     logger.info("Watermark burn pass complete")
             except Exception as exc:
                 logger.warning(f"Watermark burn failed: {exc}", exc_info=True)
+
+    def _uses_native_av1_film_grain(self) -> bool:
+        return bool(
+            self.config.film_grain_strength > 0.0
+            and self._effective_output_codec() == "av1"
+            and not (self._hw_encoder and self.config.use_hw_encode)
+        )
+
+    def _svt_av1_film_grain_args(self) -> List[str]:
+        if not self._uses_native_av1_film_grain():
+            return []
+        grain = max(
+            1,
+            min(50, int(round(float(self.config.film_grain_strength) * 255))),
+        )
+        return ["-svtav1-params", f"film-grain={grain}"]
 
     def _get_encode_args(self) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
@@ -2067,7 +2089,10 @@ class SubtitleRemover:
             # into the encoder's valid window. -preset 8 is the
             # speed/quality midpoint for libsvtav1.
             crf = min(63, self.config.output_quality)
-            base = ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
+            base = (
+                ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
+                + self._svt_av1_film_grain_args()
+            )
         elif codec == "vvc":
             base = ['-c:v', 'libvvenc', '-qp', str(self.config.output_quality),
                     '-preset', 'medium']

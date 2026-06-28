@@ -48,7 +48,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "fd9893634f66f13f3750e073e57b479bb9cd63c87c8f97d99ac96b61920f974d",
+        "output_frames_sha256": "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d",
         "width": 160
       },
       "config": {
@@ -75,8 +75,8 @@
       "filename": "static_dialogue.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.739333,
-        "ssim": 0.675461
+        "psnr": 9.962553,
+        "ssim": 0.676109
       },
       "sha256": "3d9bffa859a245e7adb7cfb926f24b970d99c9032934ae5d5cdeb0a7e4f0848a"
     },
@@ -84,7 +84,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "a34e3169e5b5cb518faebd54c36226433f7d76b8c223b7304decbb04debb1ef1",
+        "output_frames_sha256": "ce2d2d553076607382d1b2fe58fa2fb1d6b42c76ee39fcd7bf331e1975b9ab19",
         "width": 160
       },
       "config": {
@@ -111,8 +111,8 @@
       "filename": "motion_pan.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 11.289908,
-        "ssim": 0.708734
+        "psnr": 11.511499,
+        "ssim": 0.709657
       },
       "sha256": "ab124826841d308c1c2df9d4e0d7a9c4e403bd3810c06d672e4deae254eee069"
     },
@@ -120,7 +120,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "0793f049176330134681962ab3e9dfe814db8735ceb0384055637bd45795fdb9",
+        "output_frames_sha256": "536829d096e06159bfb278ec990eddfc08723d21eb7c6cfcef1f3bf7cc828a1c",
         "width": 160
       },
       "config": {
@@ -147,8 +147,8 @@
       "filename": "karaoke_burnin.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 12.767097,
-        "ssim": 0.801989
+        "psnr": 13.011953,
+        "ssim": 0.801191
       },
       "sha256": "381f7fef152e2c664c2ea20b7a7a039c073281d762fbe552f65f7889252099e9"
     },
@@ -156,7 +156,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "32a1957ae4ce1c2af610254e8bc9b2bff214042cd42f0102e7a60c3d924880f1",
+        "output_frames_sha256": "c4748bbdf4fcd14099fb245f1ae0473ffd83ef1962808dee66ddecdff9e5e5d7",
         "width": 160
       },
       "config": {
@@ -183,8 +183,8 @@
       "filename": "vertical_jp.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 11.369872,
-        "ssim": 0.788859
+        "psnr": 11.595561,
+        "ssim": 0.790289
       },
       "sha256": "d306e04ed99d56b312740a0060793663ef3bec6728f8235bb18e1f8e6dff4e18"
     },
@@ -192,7 +192,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "7b72d8f5e23deb95c5f37df0e9886b0b7f434767966eeab30f1d53f7926277d5",
+        "output_frames_sha256": "f6567cd4791a94fb9a16ebda29610e896e707a693c4ff2dd5de6ad050ab0e0de",
         "width": 160
       },
       "config": {
@@ -219,8 +219,8 @@
       "filename": "dissolve_cuts.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.338212,
-        "ssim": 0.683236
+        "psnr": 9.573811,
+        "ssim": 0.683976
       },
       "sha256": "872be31164688de1aa439fd707f72be800f24250a7729a291c0c1304c902744c"
     },
@@ -228,7 +228,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "e95439c4922e9cbc2f64e874cbcc15a39bdd3a5b9926c564b148c23845510619",
+        "output_frames_sha256": "d5e3f9aa1f684b4f0eb25b80af737ef6124df674a040aba59b47ac7656683293",
         "width": 160
       },
       "config": {
@@ -255,8 +255,8 @@
       "filename": "thin_font.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 16.564691,
-        "ssim": 0.725966
+        "psnr": 16.815226,
+        "ssim": 0.728001
       },
       "sha256": "589690cb8875c5f97727afdec51f073bd407cd12abc3981f70d145699be1b7e2"
     },
@@ -264,7 +264,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "770dcea1fc598e8723a44ff221d2ae886af7c2e9362d0f1dbec3e742c9cf7552",
+        "output_frames_sha256": "f4fe41c1666623009065432d4ecbe62401aae8717659cca3d37520e39ef16638",
         "width": 160
       },
       "config": {
@@ -291,8 +291,8 @@
       "filename": "thick_font.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.686733,
-        "ssim": 0.625686
+        "psnr": 9.924463,
+        "ssim": 0.626864
       },
       "sha256": "bf66844f2212ec19c0f149420afe99305faabf3fb24f3bf32c9a2f81c55c180d"
     },
@@ -300,7 +300,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "831ccca191eaaa22f77810a24a25ed5f8244fb31c95d070c995e73cc5bb46240",
+        "output_frames_sha256": "c1e55ad92baa08db97fa19c76a67abf70a73c211163c0642e9d66c7d0d34af58",
         "width": 160
       },
       "config": {
@@ -327,8 +327,8 @@
       "filename": "hdr_tone_ramp.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 10.848053,
-        "ssim": 0.726822
+        "psnr": 11.080396,
+        "ssim": 0.727572
       },
       "sha256": "8dd768d00cc843c592818a01c92a9a75c3827004e29fafd0bba8c6b197f0ebd7"
     },
@@ -336,7 +336,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "0f681b0dc9b74bd007154399fd218bbac09da50daa43f47cca7d3ceb283a49bd",
+        "output_frames_sha256": "0e04300a1a224d283b2c9eea24078c66eed5037f8c722b29d37eaf379dd69b62",
         "width": 160
       },
       "config": {
@@ -363,8 +363,8 @@
       "filename": "shadow_outline.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.489583,
-        "ssim": 0.656548
+        "psnr": 9.72442,
+        "ssim": 0.657428
       },
       "sha256": "4860837a0a59c8a44ca923b713e23bac692c13f3dab0b7548b7dd1eac0a4a6b5"
     },
@@ -372,7 +372,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "86c3cdcdbb58ff5e33508946b869051633d46f8ff58f7123ef1ef481d21ee5af",
+        "output_frames_sha256": "dfddb73935359e35c41994801083c65f3ce3253082146db4e3eb5c1a4e0b803a",
         "width": 160
       },
       "config": {
@@ -415,8 +415,8 @@
       "filename": "moving_lower_third.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.382655,
-        "ssim": 0.677731
+        "psnr": 9.579225,
+        "ssim": 0.678142
       },
       "sha256": "74340c4c5f03ce3e9d42b28e8712d765f257c91aea6853b90b5334ca10f95872"
     }

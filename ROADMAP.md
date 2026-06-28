@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 
 
-### Format support
-
-74. **AV1 + VP9 decode verification (remainder)** -- HEVC/AV1 egress
-    shipped; remaining: verify AV1/VP9 decode across all codepaths and
-    pair SVT-AV1 output with native film-grain synthesis.
-    Source: https://trac.ffmpeg.org/wiki/Encode/AV1
-
 ### Simplification
 
 117. **OpenCV 5 DNN for detection models** -- evaluate running RapidOCR's

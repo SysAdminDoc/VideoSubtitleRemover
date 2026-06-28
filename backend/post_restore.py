@@ -271,10 +271,9 @@ def add_film_grain(input_path: str, output_path: str,
     """RM-80: cheap additive film grain.
 
     Two paths:
-    - When the output codec is AV1 in `output_path` (libsvtav1), the
-      caller is better off enabling SVT-AV1's native film-grain table
-      via `-svtav1-params film-grain=10` directly during encode. The
-      additive path here is a fallback for H.264 / H.265 outputs.
+    - For software AV1 output, `SubtitleRemover` enables SVT-AV1's
+      native film-grain table during encode. The additive path here is
+      a fallback for H.264 / H.265 / hardware-encoder outputs.
     - For other codecs we use ffmpeg's `noise` filter to add per-channel
       uniform noise to every frame. `strength` is roughly the noise
       amplitude as a fraction of full-scale (0.04 ~= 10/255). Returns

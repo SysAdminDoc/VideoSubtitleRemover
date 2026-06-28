@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 HDR_COMPATIBLE_CODECS = {"h265", "av1", "vvc"}
 HDR_DEFAULT_CODEC = "h265"
+_UNSET_COLOR_VALUES = {"", "unknown", "unspecified"}
+_RGB_MATRIX_VALUES = {"gbr", "rgb"}
 
 
 @dataclass
@@ -98,13 +100,16 @@ def hdr_encode_args(meta: Optional[ColorMetadata]) -> List[str]:
     if meta is None:
         return []
     args: List[str] = []
-    if meta.color_primaries:
+    if meta.color_primaries and meta.color_primaries not in _UNSET_COLOR_VALUES:
         args += ["-color_primaries", meta.color_primaries]
-    if meta.color_transfer:
+    if meta.color_transfer and meta.color_transfer not in _UNSET_COLOR_VALUES:
         args += ["-color_trc", meta.color_transfer]
-    if meta.color_space:
+    if (
+            meta.color_space
+            and meta.color_space not in _UNSET_COLOR_VALUES
+            and meta.color_space not in _RGB_MATRIX_VALUES):
         args += ["-colorspace", meta.color_space]
-    if meta.color_range:
+    if meta.color_range and meta.color_range not in _UNSET_COLOR_VALUES:
         args += ["-color_range", meta.color_range]
     return args
 

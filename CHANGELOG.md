@@ -76,6 +76,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   high-bit unmasked pixels through the FFV1 intermediate, disabling hardware
   encoders for that HDR finalization path, and adding `-pix_fmt yuv420p10le`
   alongside the preserved BT.2020/PQ/HLG color tags.
+- **AV1 / VP9 decode and native AV1 grain.** Generated AV1 and VP9 fixtures
+  now verify serial decode plus prefetch/hardware-hint fallback paths, and
+  software AV1 output maps `film_grain_strength` to SVT-AV1's native
+  `film-grain` parameter instead of running the additive post-encode noise pass.
 - **NVIDIA setup now matches the torch security floor.** Windows CUDA setup
   now installs PyTorch from the cu128 wheel index for RTX 20/30/40/50-series
   GPUs, because the older cu118 index does not provide `torch>=2.10.0`, and
