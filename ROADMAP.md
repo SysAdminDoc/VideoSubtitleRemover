@@ -7,15 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-### P0 -- Release parity and trust
-
-- [ ] P0 — Publish current 3.17.3 release artifacts with verifiable evidence
-  Why: Local `APP_VERSION`, README, and CHANGELOG are at 3.17.3 while GitHub's latest release is still 3.17.1, weakening installer trust after prior false-positive and broken-load reports.
-  Evidence: `gui/config.py`, `README.md`, `CHANGELOG.md`, `gh release list`, GitHub issues #2 and #3, `backend/release_verification.py`
-  Touches: `build_exe.bat`, `backend/release_verification.py`, `README.md`, `CHANGELOG.md`, GitHub release/tag artifacts
-  Acceptance: GitHub has a `v3.17.3` release with current installer/portable artifact, SHA-256 hashes, `release-verification.json`, `release-advisories.json`, `sbom.cdx.json`, smoke evidence, explicit signed/unsigned status, and README download guidance pointing at the current tag.
-  Complexity: M
-
 ### P1 -- Trust and release readiness
 
 - [ ] P1 — Detect conflicting OpenCV wheel installs before runtime import drift
