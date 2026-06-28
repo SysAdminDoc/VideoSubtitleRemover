@@ -130,6 +130,13 @@ class ReleaseVerificationTests(unittest.TestCase):
         )
         self.assertEqual(hidden, ("cv2", "numpy", "rapidocr", "tkinter.ttk"))
 
+    def test_parse_runtime_hooks_normalizes_windows_paths(self):
+        hooks = release_verification.parse_runtime_hooks(
+            "--runtime-hook assets\\runtime_hook_mp.py "
+            "--runtime-hook=assets/runtime_hook_mp.py"
+        )
+        self.assertEqual(hooks, ("assets/runtime_hook_mp.py",))
+
     def test_build_release_evidence_records_local_release_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             dist_dir = Path(tmp) / "VideoSubtitleRemoverPro"
@@ -144,6 +151,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                     hidden_imports=(
                         "--hidden-import cv2 --hidden-import rapidocr_onnxruntime"
                     ),
+                    runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
                     collect_data="--collect-data rapidocr",
                 )
 
@@ -151,12 +159,20 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(evidence["errors"], [])
         self.assertIn("cv2", evidence["hiddenImports"])
         self.assertIn("rapidocr_onnxruntime", evidence["hiddenImports"])
+        self.assertEqual(evidence["runtimeHooks"], ["assets/runtime_hook_mp.py"])
         self.assertTrue(all(item["bundled"] for item in evidence["documents"]))
         self.assertTrue(all(item["bundled"] for item in evidence["launchers"]))
         self.assertTrue(evidence["smokeLaunch"]["passed"])
         self.assertEqual(evidence["sbom"]["componentCount"], 1)
         self.assertEqual(evidence["advisories"]["file"], "release-advisories.json")
         self.assertEqual(evidence["advisories"]["blocking"], 0)
+        self.assertEqual(
+            evidence["releaseTools"]["pyinstallerRuntimeHooks"][0]["name"],
+            "assets/runtime_hook_mp.py",
+        )
+        self.assertTrue(
+            evidence["releaseTools"]["pyinstallerRuntimeHooks"][0]["sourceExists"]
+        )
         self.assertEqual(
             evidence["releaseTools"]["ffmpegProfiles"]["schema"],
             "vsr.ffmpeg_profiles.v1",
@@ -180,6 +196,7 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertFalse(evidence["releaseTools"]["referenceCorpus"]["ran"])
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
+        self.assertEqual(hidden_payload["runtimeHooks"], ["assets/runtime_hook_mp.py"])
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
         self.assertEqual(sbom["components"][0]["name"], "Pillow")
         self.assertEqual(advisories["schema"], "vsr.release_advisories.v1")
@@ -200,6 +217,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                     dist_dir=dist_dir,
                     evidence_dir=evidence_dir,
                     hidden_imports="--hidden-import cv2",
+                    runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
                     run_smoke=False,
                 )
 
@@ -218,6 +236,7 @@ class ReleaseVerificationTests(unittest.TestCase):
 
         self.assertEqual(release_json["schema"], "vsr.release_verification.v1")
         self.assertEqual(hidden_json["hiddenImports"], ["cv2"])
+        self.assertEqual(hidden_json["runtimeHooks"], ["assets/runtime_hook_mp.py"])
         self.assertEqual(advisory_json["schema"], "vsr.release_advisories.v1")
         self.assertEqual(sbom_json["specVersion"], "1.5")
 
@@ -246,6 +265,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                     release_verification.build_release_evidence(
                         dist_dir=dist_dir,
                         run_reference_corpus=True,
+                        runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
                     )
                 )
 
@@ -280,6 +300,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                     release_verification.build_release_evidence(
                         dist_dir=dist_dir,
                         run_reference_corpus=True,
+                        runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
                     )
                 )
 
@@ -304,6 +325,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                     release_verification.write_release_evidence(
                         dist_dir=dist_dir,
                         evidence_dir=Path(tmp) / "evidence",
+                        runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
                         strict=True,
                         run_smoke=False,
                     )
@@ -368,7 +390,9 @@ class LocalBuildScriptTests(unittest.TestCase):
     def test_build_script_generates_local_release_evidence(self):
         self.assertIn("-m backend.release_verification", self.bat)
         self.assertIn("--hidden-imports", self.bat)
+        self.assertIn("--runtime-hooks", self.bat)
         self.assertIn("--collect-data", self.bat)
+        self.assertIn("--runtime-hook assets\\runtime_hook_mp.py", self.bat)
         self.assertIn("release-verification.json", self.bat)
         self.assertIn("release-hidden-imports.json", self.bat)
         self.assertIn("release-advisories.json", self.bat)
@@ -391,6 +415,15 @@ class LocalBuildScriptTests(unittest.TestCase):
     def test_no_torch_directml_hidden_import(self):
         self.assertNotIn("torch_directml", self.bat)
         self.assertNotIn("torch-directml", self.bat)
+
+    def test_entrypoint_and_runtime_hook_freeze_support_before_heavy_imports(self):
+        entry = (ROOT / "VideoSubtitleRemover.py").read_text(encoding="utf-8")
+        self.assertLess(
+            entry.index("multiprocessing.freeze_support()"),
+            entry.index("import logging"),
+        )
+        hook = (ROOT / "assets" / "runtime_hook_mp.py").read_text(encoding="utf-8")
+        self.assertIn("multiprocessing.freeze_support()", hook)
 
 
 if __name__ == "__main__":

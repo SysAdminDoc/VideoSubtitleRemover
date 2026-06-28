@@ -42,7 +42,9 @@ DOCUMENTS = ("README.md", "LICENSE", "CHANGELOG.md")
 LAUNCHERS = ("Run_VSR_Pro.bat", "Run_VSR_Pro_Debug.bat", "Run_VSR_Pro.ps1")
 VERSIONED_DOCS = ("README.md", "CHANGELOG.md")
 HIDDEN_IMPORT_RE = re.compile(r"--hidden-import(?:=|\s+)([^\s]+)")
+RUNTIME_HOOK_RE = re.compile(r"--runtime-hook(?:=|\s+)([^\s]+)")
 STRICT_BLOCKING_SEVERITIES = {"high", "critical"}
+REQUIRED_RUNTIME_HOOK = "assets/runtime_hook_mp.py"
 
 
 def _read_config_constant(name: str, default: str) -> str:
@@ -86,6 +88,21 @@ def parse_hidden_imports(value: str | Sequence[str]) -> tuple[str, ...]:
     return tuple(sorted(dict.fromkeys(name.strip("\"'") for name in found if name)))
 
 
+def parse_runtime_hooks(value: str | Sequence[str]) -> tuple[str, ...]:
+    """Return sorted PyInstaller runtime-hook paths."""
+    if isinstance(value, str):
+        text = value
+    else:
+        text = " ".join(str(part) for part in value)
+    found = RUNTIME_HOOK_RE.findall(text)
+    normalised = []
+    for raw in found:
+        item = raw.strip("\"'").replace("\\", "/")
+        if item and item not in normalised:
+            normalised.append(item)
+    return tuple(sorted(normalised))
+
+
 def _dist_file_status(root: Path, name: str) -> dict:
     source = ROOT / name
     bundled = root / name
@@ -100,6 +117,19 @@ def _dist_file_status(root: Path, name: str) -> dict:
         payload["sourceSha256"] = sha256_file(source)
     if bundled.is_file():
         payload["bundledSha256"] = sha256_file(bundled)
+    return payload
+
+
+def _source_file_status(name: str) -> dict:
+    normalised = str(name or "").replace("\\", "/")
+    source = ROOT / normalised
+    payload = {
+        "name": normalised,
+        "sourceExists": source.is_file(),
+        "sourceSha256": None,
+    }
+    if source.is_file():
+        payload["sourceSha256"] = sha256_file(source)
     return payload
 
 
@@ -435,6 +465,7 @@ def build_release_evidence(
     *,
     dist_dir: str | Path,
     hidden_imports: str | Sequence[str] = (),
+    runtime_hooks: str | Sequence[str] = (),
     collect_data: str | Sequence[str] = (),
     run_smoke: bool = True,
     run_reference_corpus: bool = False,
@@ -442,6 +473,7 @@ def build_release_evidence(
 ) -> tuple[dict, dict, dict]:
     dist = Path(dist_dir)
     hidden = parse_hidden_imports(hidden_imports)
+    hooks = parse_runtime_hooks(runtime_hooks)
     collected = tuple(str(collect_data).split()) if isinstance(collect_data, str) else tuple(collect_data)
     dependencies = collect_dependency_versions()
     package_versions = {
@@ -463,6 +495,7 @@ def build_release_evidence(
     hidden_payload = {
         "schema": "vsr.release_hidden_imports.v1",
         "hiddenImports": list(hidden),
+        "runtimeHooks": list(hooks),
         "collectData": list(collected),
     }
     documents = [_dist_file_status(dist, name) for name in DOCUMENTS]
@@ -484,6 +517,7 @@ def build_release_evidence(
         },
         "dependencies": dependencies,
         "hiddenImports": list(hidden),
+        "runtimeHooks": list(hooks),
         "adapterSecurity": list(release_manifest_status(env=env)),
         "remoteModelSecurity": list(release_remote_model_status(env=env)),
         "rapidocrModels": rapidocr_release_provenance(),
@@ -493,6 +527,9 @@ def build_release_evidence(
                 "version": sys.version.split()[0],
             },
             "pyinstaller": _tool_version([sys.executable, "-m", "PyInstaller", "--version"]),
+            "pyinstallerRuntimeHooks": [
+                _source_file_status(item) for item in hooks
+            ],
             "ffmpeg": _tool_version(["ffmpeg", "-version"]),
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
@@ -550,6 +587,15 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     if (isinstance(reference, Mapping)
             and reference.get("ran") and not reference.get("passed")):
         yield "Reference corpus regression failed"
+    runtime_hooks = evidence.get("releaseTools", {}).get("pyinstallerRuntimeHooks", [])
+    if isinstance(runtime_hooks, list):
+        hook_names = {
+            str(item.get("name") or "").replace("\\", "/")
+            for item in runtime_hooks
+            if isinstance(item, Mapping) and item.get("sourceExists")
+        }
+        if REQUIRED_RUNTIME_HOOK not in hook_names:
+            yield f"Required PyInstaller runtime hook missing: {REQUIRED_RUNTIME_HOOK}"
     rapid = evidence.get("rapidocrModels", {})
     if isinstance(rapid, Mapping):
         package = rapid.get("package", {})
@@ -565,6 +611,7 @@ def write_release_evidence(
     dist_dir: str | Path,
     evidence_dir: str | Path | None = None,
     hidden_imports: str | Sequence[str] = (),
+    runtime_hooks: str | Sequence[str] = (),
     collect_data: str | Sequence[str] = (),
     run_smoke: bool = True,
     run_reference_corpus: bool = False,
@@ -576,6 +623,7 @@ def write_release_evidence(
     evidence, hidden_payload, sbom, advisories = build_release_evidence(
         dist_dir=dist_dir,
         hidden_imports=hidden_imports,
+        runtime_hooks=runtime_hooks,
         collect_data=collect_data,
         run_smoke=run_smoke,
         run_reference_corpus=run_reference_corpus,
@@ -613,6 +661,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--dist-dir", default="dist/VideoSubtitleRemoverPro")
     parser.add_argument("--evidence-dir", default="")
     parser.add_argument("--hidden-imports", default="")
+    parser.add_argument("--runtime-hooks", default="")
     parser.add_argument("--collect-data", default="")
     parser.add_argument(
         "--quality",
@@ -626,6 +675,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dist_dir=args.dist_dir,
         evidence_dir=args.evidence_dir or None,
         hidden_imports=args.hidden_imports,
+        runtime_hooks=args.runtime_hooks,
         collect_data=args.collect_data,
         run_smoke=not args.skip_smoke,
         run_reference_corpus=args.run_reference_corpus,

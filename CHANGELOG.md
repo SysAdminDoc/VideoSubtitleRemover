@@ -123,6 +123,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   issue form for redistributable real media, and the reference-corpus manifest
   validator requires source URL, license proof, retrieval date, and rights
   confirmation before any real/community fixture can enter `tests/clips`.
+- **Frozen-build multiprocessing guard.** The GUI entry point now calls
+  `multiprocessing.freeze_support()` before app imports, PyInstaller builds
+  include a runtime hook that repeats the guard for worker imports, and release
+  evidence records the runtime hook before strict release validation passes.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.

@@ -64,13 +64,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P1 -- Additional release hardening
 
-- [ ] P1 - Add frozen-build multiprocessing guards and runtime-hook evidence
-  Why: PyInstaller documents recursive spawn loops when frozen apps or dependencies use multiprocessing without early `freeze_support()`, and this repo's entry point/build path does not currently install that guard before heavy imports.
-  Evidence: `VideoSubtitleRemover.py`, `build_exe.bat`, `VideoSubtitleRemoverPro.spec`, PyInstaller multiprocessing guidance
-  Touches: `VideoSubtitleRemover.py`, `build_exe.bat`, `VideoSubtitleRemoverPro.spec` or its replacement, new runtime hook asset, `backend/release_verification.py`, `tests/test_release_workflow.py`
-  Acceptance: `multiprocessing.freeze_support()` runs before GUI/OpenCV/ML imports in frozen launches; PyInstaller builds include a runtime hook that also calls it; release evidence records the hook; frozen smoke proves one GUI process and no recursive child storm.
-  Complexity: M
-
 - [ ] P1 - Preload ONNX Runtime CUDA DLLs before CUDA provider sessions
   Why: ONNX Runtime documents CUDA/cuDNN DLL preload support, while VSR only reports whether `preload_dlls` exists and then creates CUDA sessions without using it.
   Evidence: ONNX Runtime CUDA Execution Provider docs, `backend/dependency_caps.py`, `backend/inpainters_onnx.py`, `backend/inpainters/lama.py`

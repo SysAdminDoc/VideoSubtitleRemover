@@ -37,6 +37,7 @@ if errorlevel 1 (
 
 set "ICON_ARG="
 if exist "icon.ico" set "ICON_ARG=--icon icon.ico"
+set "RUNTIME_HOOKS=--runtime-hook assets\runtime_hook_mp.py"
 
 set "DATA_ARGS=--add-data backend;backend"
 if exist "assets" set "DATA_ARGS=%DATA_ARGS% --add-data assets;assets"
@@ -73,6 +74,7 @@ echo.
     --windowed ^
     %ICON_ARG% ^
     --name "VideoSubtitleRemoverPro" ^
+    !RUNTIME_HOOKS! ^
     %DATA_ARGS% ^
     !HIDDEN_IMPORTS! ^
     !COLLECT_DATA! ^
@@ -97,6 +99,7 @@ echo Generating local release evidence...
 "%PYTHON%" -m backend.release_verification ^
     --dist-dir "!DIST_DIR!" ^
     --hidden-imports "!HIDDEN_IMPORTS!" ^
+    --runtime-hooks "!RUNTIME_HOOKS!" ^
     --collect-data "!COLLECT_DATA!" ^
     --run-reference-corpus ^
     --quality permissive

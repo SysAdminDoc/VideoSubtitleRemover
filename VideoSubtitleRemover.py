@@ -9,6 +9,9 @@ See APP_VERSION for the running version -- the docstring deliberately omits
 a hardcoded number so there is a single source of truth.
 """
 
+import multiprocessing
+multiprocessing.freeze_support()
+
 import logging
 import logging.handlers
 import sys
