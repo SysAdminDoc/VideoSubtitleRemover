@@ -80,6 +80,10 @@ class SupportBundleTests(unittest.TestCase):
                 )
                 self.assertIn("summary", support["backend_status"])
                 self.assertEqual(
+                    support["dependency_diagnostics"]["opencv"]["schema"],
+                    "vsr.opencv_wheels.v1",
+                )
+                self.assertEqual(
                     support["model_cache"]["schema"],
                     "vsr.model_cache_status.v1",
                 )

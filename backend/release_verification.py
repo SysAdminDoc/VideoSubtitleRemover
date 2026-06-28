@@ -26,6 +26,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 from backend.adapter_manifest import release_manifest_status
 from backend.dependency_caps import (
+    collect_opencv_wheel_status,
     collect_onnxruntime_provider_status,
     collect_rapidocr_engine_status,
     onnxruntime_release_advisories,
@@ -452,6 +453,9 @@ def build_release_evidence(
     onnxruntime_providers = collect_onnxruntime_provider_status(
         package_versions=package_versions,
     )
+    opencv_wheels = collect_opencv_wheel_status(
+        package_versions=package_versions,
+    )
     rapidocr_engines = collect_rapidocr_engine_status(
         package_versions=package_versions,
     )
@@ -492,6 +496,7 @@ def build_release_evidence(
             "ffmpeg": _tool_version(["ffmpeg", "-version"]),
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
+            "opencvWheels": opencv_wheels,
             "onnxRuntimeProviders": onnxruntime_providers,
             "rapidocrEngines": rapidocr_engines,
             "referenceCorpus": (

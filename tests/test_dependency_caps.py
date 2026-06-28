@@ -132,6 +132,43 @@ class DependencyCapTests(unittest.TestCase):
         self.assertIn("ORT-CUDA-PRELOAD-MISSING", ids)
         self.assertTrue(all(item["allowed"] for item in advisories))
 
+    def test_opencv_wheel_status_reports_single_owner(self):
+        status = dependency_caps.collect_opencv_wheel_status(
+            package_versions={"opencv-python": "4.12.0.88"},
+            imported_version="4.12.0",
+            imported_file="C:/repo/venv/Lib/site-packages/cv2/__init__.py",
+            dnn_available=True,
+        )
+
+        self.assertEqual(status["schema"], "vsr.opencv_wheels.v1")
+        self.assertFalse(status["conflict"])
+        self.assertEqual(status["installedDistributions"], ["opencv-python"])
+        self.assertEqual(status["imported"]["owner"], "opencv-python")
+        self.assertEqual(status["imported"]["version"], "4.12.0")
+        self.assertTrue(status["imported"]["dnnAvailable"])
+        self.assertEqual(status["warnings"], [])
+
+    def test_opencv_wheel_status_flags_conflicting_wheels(self):
+        status = dependency_caps.collect_opencv_wheel_status(
+            package_versions={
+                "opencv-python": "4.12.0.88",
+                "opencv-contrib-python-headless": "4.12.0.88",
+            },
+            imported_version="4.12.0",
+            imported_file="C:/repo/venv/Lib/site-packages/cv2/__init__.py",
+        )
+
+        self.assertTrue(status["conflict"])
+        self.assertEqual(status["imported"]["owner"], "ambiguous")
+        self.assertEqual(
+            status["warnings"][0]["id"],
+            "OPENCV-WHEEL-CONFLICT",
+        )
+        commands = status["remediation"]["commands"]
+        self.assertEqual(len(commands), 2)
+        self.assertIn("opencv-contrib-python-headless", commands[0])
+        self.assertEqual(commands[1], 'python -m pip install "opencv-python>=4.12.0"')
+
 
 if __name__ == "__main__":
     unittest.main()

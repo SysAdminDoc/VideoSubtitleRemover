@@ -114,6 +114,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   OpenCV version, bundled libpng version, fixed libpng floor, and warning state
   so fixed wheels can be confirmed at runtime while current wheels still need
   the untrusted-PNG caution.
+- **OpenCV wheel conflict diagnostics.** Self-test, backend status, support
+  bundles, and release evidence now report installed OpenCV wheel variants,
+  imported `cv2` version/file ownership, conflict warnings, and exact
+  uninstall/reinstall remediation when contrib/headless packages shadow each
+  other.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.

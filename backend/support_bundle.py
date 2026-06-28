@@ -17,7 +17,10 @@ from typing import Any, Iterable, Mapping, Optional
 
 from backend.cache_inventory import discover_caches, model_cache_status
 from backend.crash_reporter import _path_scrub
-from backend.dependency_caps import collect_rapidocr_engine_status
+from backend.dependency_caps import (
+    collect_opencv_wheel_status,
+    collect_rapidocr_engine_status,
+)
 from backend.ffmpeg_profiles import (
     collect_ffmpeg_capability_profiles,
     ffmpeg_profile_entries,
@@ -185,6 +188,9 @@ def _support_payload(*, app_version: str,
         },
         "ffmpeg_profiles": collect_ffmpeg_capability_profiles(),
         "dependencies": _dependency_versions(),
+        "dependency_diagnostics": {
+            "opencv": collect_opencv_wheel_status(),
+        },
         "backend_status": installed_backend_status(),
         "model_cache": model_cache_status(),
         "security": {
@@ -342,6 +348,7 @@ def run_self_test() -> dict:
     Returns a dict of category -> list of {name, available, reason} entries.
     """
     results = {"ocr": [], "inpaint": [], "gpu": [], "codec": [],
+               "dependency": [],
                "ffmpeg_profiles": []}
 
     def _probe(category, name, fn):
@@ -446,6 +453,23 @@ def run_self_test() -> dict:
     _probe("codec", "AV1", _check_ffmpeg_encoder("av1", "libsvtav1"))
     _probe("codec", "VVC", _check_ffmpeg_encoder("vvc", "libvvenc"))
     _probe("codec", "NVENC", _check_ffmpeg_encoder("nvenc", "h264_nvenc"))
+    opencv_status = collect_opencv_wheel_status()
+    opencv_warnings = list(opencv_status.get("warnings", []) or [])
+    imported = opencv_status.get("imported", {})
+    owner = imported.get("owner") if isinstance(imported, Mapping) else ""
+    version = imported.get("version") if isinstance(imported, Mapping) else ""
+    file_path = imported.get("file") if isinstance(imported, Mapping) else ""
+    reason = (
+        str(opencv_warnings[0].get("message"))
+        if opencv_warnings else
+        f"cv2 {version or 'unknown'} from {owner or 'unknown'} at {file_path or 'unknown'}"
+    )
+    results["dependency"].append({
+        "name": "OpenCV wheel ownership",
+        "available": bool(imported.get("available")) and not opencv_warnings
+        if isinstance(imported, Mapping) else False,
+        "reason": reason,
+    })
     try:
         results["ffmpeg_profiles"] = ffmpeg_profile_entries(
             collect_ffmpeg_capability_profiles()

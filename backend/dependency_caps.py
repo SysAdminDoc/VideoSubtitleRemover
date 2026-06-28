@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib.metadata as metadata
+import json
 import re
+import subprocess
 import sys
 from typing import Iterable, List, Mapping, Optional, Sequence, Tuple
 
@@ -38,6 +40,18 @@ ONNXRUNTIME_PACKAGES = (
     "onnxruntime-gpu",
     "onnxruntime-directml",
 )
+OPENCV_WHEEL_STATUS_SCHEMA = "vsr.opencv_wheels.v1"
+OPENCV_PACKAGES = (
+    "opencv-python",
+    "opencv-contrib-python",
+    "opencv-python-headless",
+    "opencv-contrib-python-headless",
+)
+OPENCV_REMEDIATION_COMMANDS = (
+    "python -m pip uninstall -y opencv-python opencv-contrib-python "
+    "opencv-python-headless opencv-contrib-python-headless",
+    "python -m pip install \"opencv-python>=4.12.0\"",
+)
 
 
 def _version_key(value: str) -> Tuple[int, int, int]:
@@ -69,6 +83,204 @@ def _installed_package_version(
         return metadata.version(package)
     except metadata.PackageNotFoundError:
         return None
+
+
+def _normalise_package_name(value: str) -> str:
+    return str(value).lower().replace("_", "-")
+
+
+def _opencv_owner_candidates(package_versions: Optional[Mapping[str, str]]) -> list[str]:
+    installed = [
+        package
+        for package in OPENCV_PACKAGES
+        if _installed_package_version(package, package_versions)
+    ]
+    if package_versions is not None:
+        return installed
+    try:
+        top_level = metadata.packages_distributions().get("cv2", [])
+    except Exception:
+        top_level = []
+    candidates = []
+    installed_set = set(installed)
+    for name in top_level:
+        normalised = _normalise_package_name(name)
+        if normalised in installed_set and normalised not in candidates:
+            candidates.append(normalised)
+    return candidates or installed
+
+
+def _opencv_versions_compatible(imported_version: str, package_version: str) -> bool:
+    if not imported_version or not package_version:
+        return True
+    return (
+        package_version == imported_version
+        or package_version.startswith(imported_version + ".")
+        or imported_version.startswith(package_version + ".")
+    )
+
+
+def _opencv_import_probe(timeout: float = 8.0) -> tuple[Optional[str], Optional[str], bool, str]:
+    script = (
+        "import json\n"
+        "try:\n"
+        "    import cv2\n"
+        "    print(json.dumps({\n"
+        "        'version': getattr(cv2, '__version__', '') or '',\n"
+        "        'file': getattr(cv2, '__file__', '') or '',\n"
+        "        'dnn': hasattr(cv2, 'dnn'),\n"
+        "        'error': '',\n"
+        "    }))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'version': None, 'file': None, 'dnn': False, 'error': str(exc)}))\n"
+    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return None, None, False, f"cv2 import probe timed out after {timeout:g}s"
+    except OSError as exc:
+        return None, None, False, str(exc)
+    try:
+        payload = json.loads((proc.stdout or "").splitlines()[-1])
+    except (IndexError, json.JSONDecodeError):
+        stderr = (proc.stderr or "").strip()
+        return None, None, False, stderr or f"cv2 import probe failed with exit {proc.returncode}"
+    return (
+        payload.get("version"),
+        payload.get("file"),
+        bool(payload.get("dnn")),
+        str(payload.get("error") or ""),
+    )
+
+
+def collect_opencv_wheel_status(
+    *,
+    package_versions: Optional[Mapping[str, str]] = None,
+    imported_version: Optional[str] = None,
+    imported_file: Optional[str] = None,
+    import_error: Optional[str] = None,
+    dnn_available: Optional[bool] = None,
+    probe_timeout: float = 8.0,
+) -> dict:
+    """Return OpenCV wheel ownership/conflict facts for support evidence."""
+    package_status = {
+        package: {
+            "installed": False,
+            "version": None,
+        }
+        for package in OPENCV_PACKAGES
+    }
+    for package in OPENCV_PACKAGES:
+        version = _installed_package_version(package, package_versions)
+        package_status[package] = {
+            "installed": version is not None,
+            "version": version,
+        }
+
+    probe_import = (
+        imported_version is None
+        and imported_file is None
+        and import_error is None
+        and dnn_available is None
+    )
+    if probe_import:
+        imported_version, imported_file, dnn_available, import_error = (
+            _opencv_import_probe(timeout=probe_timeout)
+        )
+    else:
+        import_error = "" if import_error is None else str(import_error)
+        dnn_available = bool(dnn_available)
+
+    installed = [
+        package for package, status in package_status.items()
+        if status["installed"]
+    ]
+    owner_candidates = _opencv_owner_candidates(package_versions)
+    if import_error:
+        imported_owner = "not-imported"
+    elif len(owner_candidates) == 1:
+        imported_owner = owner_candidates[0]
+    elif len(owner_candidates) > 1:
+        imported_owner = "ambiguous"
+    elif imported_version or imported_file:
+        imported_owner = "unknown"
+    else:
+        imported_owner = "not-installed"
+
+    conflict = len(installed) > 1
+    warnings = []
+    remediation_text = (
+        "Run: "
+        + " && ".join(OPENCV_REMEDIATION_COMMANDS)
+        + " to leave exactly one OpenCV wheel installed."
+    )
+    if conflict:
+        warnings.append({
+            "id": "OPENCV-WHEEL-CONFLICT",
+            "severity": "high",
+            "message": (
+                "Multiple OpenCV Python wheels are installed; cv2 imports can "
+                "drift between opencv-python, contrib, and headless variants. "
+                + remediation_text
+            ),
+        })
+    if import_error and installed:
+        warnings.append({
+            "id": "OPENCV-IMPORT-FAILED",
+            "severity": "high",
+            "message": (
+                "OpenCV Python wheel metadata is installed, but importing cv2 "
+                f"failed: {import_error}. {remediation_text}"
+            ),
+        })
+    if not installed and (imported_version or imported_file):
+        warnings.append({
+            "id": "OPENCV-UNOWNED-CV2",
+            "severity": "medium",
+            "message": (
+                "cv2 imported, but no known OpenCV wheel metadata was found; "
+                + remediation_text
+            ),
+        })
+    if imported_owner in package_status and imported_version:
+        owner_version = str(package_status[imported_owner]["version"] or "")
+        if not _opencv_versions_compatible(str(imported_version), owner_version):
+            warnings.append({
+                "id": "OPENCV-VERSION-DRIFT",
+                "severity": "medium",
+                "message": (
+                    f"cv2.__version__ reports {imported_version}, but "
+                    f"{imported_owner} metadata reports {owner_version}. "
+                    + remediation_text
+                ),
+            })
+
+    return {
+        "schema": OPENCV_WHEEL_STATUS_SCHEMA,
+        "packages": package_status,
+        "installedDistributions": installed,
+        "conflict": conflict,
+        "imported": {
+            "available": bool((imported_version or imported_file) and not import_error),
+            "version": imported_version,
+            "file": imported_file,
+            "owner": imported_owner,
+            "ownerCandidates": owner_candidates,
+            "dnnAvailable": bool(dnn_available),
+            "error": import_error or "",
+        },
+        "remediation": {
+            "commands": list(OPENCV_REMEDIATION_COMMANDS),
+            "summary": remediation_text,
+        },
+        "warnings": warnings,
+    }
 
 
 def _onnxruntime_gpu_channel(version: Optional[str]) -> str:

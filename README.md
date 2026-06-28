@@ -113,7 +113,8 @@ winget install ffmpeg
 Run `python -m backend.processor --self-test` to confirm the installed build's
 `basic`, `advanced_quality`, `speech_fallback`, and `modern_codec` profiles.
 Those profiles report missing filters such as `loudnorm`, `libvmaf`, or
-`whisper`, and missing encoders such as `libvvenc` before a long batch starts.
+`whisper`, missing encoders such as `libvvenc`, and OpenCV wheel ownership
+before a long batch starts.
 
 ### Validation
 
@@ -497,6 +498,9 @@ content, colors are preserved. If you still see a mismatch, attach the
   `1.6.54`, avoid opening untrusted PNG files. As of June 26, 2026,
   opencv-python still needs a fixed bundled-libpng wheel; update this
   guidance only when `security.opencv_libpng.vulnerable` reports `false`
+- If self-test, backend status, or a support bundle reports multiple OpenCV
+  wheels, run the printed `pip uninstall` command for every OpenCV variant,
+  then reinstall one wheel, normally `opencv-python>=4.12.0`
 
 </details>
 

@@ -82,6 +82,19 @@ class ReleaseVerificationTests(unittest.TestCase):
                 },
             ),
             mock.patch(
+                "backend.release_verification.collect_opencv_wheel_status",
+                return_value={
+                    "schema": "vsr.opencv_wheels.v1",
+                    "conflict": False,
+                    "imported": {
+                        "owner": "opencv-python",
+                        "version": "4.12.0",
+                        "file": "cv2/__init__.py",
+                    },
+                    "warnings": [],
+                },
+            ),
+            mock.patch(
                 "backend.release_verification.collect_rapidocr_engine_status",
                 return_value={
                     "schema": "vsr.rapidocr_engines.v1",
@@ -151,6 +164,10 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(
             evidence["releaseTools"]["onnxRuntimeProviders"]["schema"],
             "vsr.onnxruntime_providers.v1",
+        )
+        self.assertEqual(
+            evidence["releaseTools"]["opencvWheels"]["schema"],
+            "vsr.opencv_wheels.v1",
         )
         self.assertEqual(
             evidence["releaseTools"]["rapidocrEngines"]["schema"],

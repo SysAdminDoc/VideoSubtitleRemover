@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
 
 from backend.dependency_caps import (
+    collect_opencv_wheel_status,
     collect_onnxruntime_provider_status,
     collect_rapidocr_engine_status,
 )
@@ -520,16 +521,26 @@ def _onnxruntime_provider_status() -> dict:
 
 def _opencv_runtime_status() -> dict:
     if not _module_available("cv2"):
+        wheel_status = collect_opencv_wheel_status(import_error="cv2 module not found")
         return {
             "available": False,
             "version": None,
             "dnn_available": False,
             "opencv5": False,
+            "wheel_status": wheel_status,
+            "warnings": list(wheel_status.get("warnings", []) or []),
             "next_action": "Install opencv-python; OpenCV fallback is required.",
         }
     try:
         import cv2
         version = getattr(cv2, "__version__", "")
+        dnn_available = hasattr(cv2, "dnn")
+        wheel_status = collect_opencv_wheel_status(
+            imported_version=version,
+            imported_file=str(getattr(cv2, "__file__", "") or ""),
+            dnn_available=dnn_available,
+        )
+        warnings = list(wheel_status.get("warnings", []) or [])
         parts = []
         for raw in version.split(".")[:3]:
             digits = ""
@@ -542,20 +553,28 @@ def _opencv_runtime_status() -> dict:
         while len(parts) < 3:
             parts.append(0)
         opencv5 = tuple(parts) >= (5, 0, 0)
+        next_action = "" if opencv5 else "OpenCV DNN LaMa needs opencv-python 5.x when those wheels ship."
+        if warnings:
+            next_action = str(wheel_status.get("remediation", {}).get("summary") or next_action)
         return {
             "available": True,
             "version": version or _dist_version("opencv-python"),
-            "dnn_available": hasattr(cv2, "dnn"),
+            "dnn_available": dnn_available,
             "opencv5": opencv5,
-            "next_action": "" if opencv5 else "OpenCV DNN LaMa needs opencv-python 5.x when those wheels ship.",
+            "wheel_status": wheel_status,
+            "warnings": warnings,
+            "next_action": next_action,
         }
     except Exception as exc:
+        wheel_status = collect_opencv_wheel_status(import_error=str(exc))
         return {
             "available": False,
             "version": _dist_version("opencv-python"),
             "dnn_available": False,
             "opencv5": False,
             "error": str(exc),
+            "wheel_status": wheel_status,
+            "warnings": list(wheel_status.get("warnings", []) or []),
             "next_action": "Repair OpenCV; runtime probing failed.",
         }
 

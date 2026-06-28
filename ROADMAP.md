@@ -9,13 +9,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P1 -- Trust and release readiness
 
-- [ ] P1 — Detect conflicting OpenCV wheel installs before runtime import drift
-  Why: `opencv-python`, `opencv-contrib-python`, and headless variants can shadow each other, but support/release evidence currently reports versions without diagnosing which wheel actually owns `cv2`.
-  Evidence: `backend/support_bundle.py`, `backend/dependency_caps.py`, `requirements.txt`, OpenCV/libpng advisory tracking in `backend/security_checks.py`
-  Touches: `backend/dependency_caps.py`, `backend/support_bundle.py`, `backend/release_verification.py`, `backend/model_downloads.py`, `tests/test_dependency_caps.py`, `tests/test_support_bundle.py`
-  Acceptance: Self-test, support bundle, backend status, and release evidence flag multiple installed OpenCV distributions, show the imported `cv2.__file__`/version owner, and print exact uninstall/install remediation without breaking normal single-wheel installs.
-  Complexity: M
-
 - [ ] P1 — Add real edge-case corpus intake and license validator
   Why: The project asks for CC0/public-domain real clips but only ships synthetic fixtures and has no dedicated GitHub intake form or manifest guard for real-source provenance.
   Evidence: `docs/edge_case_corpus.md`, `.github/ISSUE_TEMPLATE/`, `tests/clips/manifest.json`, `tests/test_reference_clips.py`, YaoFANGUK issues #200 and #232
