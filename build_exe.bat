@@ -16,7 +16,6 @@ set "PYTHON=venv\Scripts\python.exe"
 if not exist "%PYTHON%" (
     echo ERROR: Virtual environment not found.
     echo Run setup.py first to create the environment.
-    pause
     exit /b 1
 )
 
@@ -30,7 +29,6 @@ if errorlevel 1 (
     "%PYTHON%" -m pip install pyinstaller
     if errorlevel 1 (
         echo Failed to install PyInstaller.
-        pause
         exit /b 1
     )
 )
@@ -83,7 +81,6 @@ echo.
 if errorlevel 1 (
     echo.
     echo Build failed! Check errors above.
-    pause
     exit /b 1
 )
 
@@ -107,7 +104,6 @@ echo Generating local release evidence...
 if errorlevel 1 (
     echo.
     echo Release evidence generation failed.
-    pause
     exit /b 1
 )
 
@@ -123,7 +119,6 @@ echo  Release evidence: release-verification.json, release-hidden-imports.json, 
 echo.
 echo  To distribute, zip the entire VideoSubtitleRemoverPro folder.
 echo.
-pause
 exit /b 0
 
 :maybe_hidden_import

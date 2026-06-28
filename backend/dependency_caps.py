@@ -10,6 +10,11 @@ import subprocess
 import sys
 from typing import Iterable, List, Mapping, Optional, Sequence, Tuple
 
+from backend.onnxruntime_cuda import (
+    collect_onnxruntime_cuda_preload_status,
+    preload_status_from_mapping,
+)
+
 
 @dataclass(frozen=True)
 class DependencyCap:
@@ -430,6 +435,7 @@ def collect_onnxruntime_provider_status(
     providers: Optional[Sequence[str]] = None,
     runtime_version: Optional[str] = None,
     preload_dlls_available: Optional[bool] = None,
+    preload_status: Optional[Mapping[str, object]] = None,
 ) -> dict:
     """Return package/provider facts for ONNX Runtime CPU, CUDA, and DirectML."""
     package_status = {
@@ -460,6 +466,11 @@ def collect_onnxruntime_provider_status(
     gpu_channel = _onnxruntime_gpu_channel(gpu_version)
     cuda_provider = "CUDAExecutionProvider" in providers
     directml_provider = "DmlExecutionProvider" in providers
+    cuda_preload_status = preload_status_from_mapping(
+        preload_status
+        if preload_status is not None
+        else collect_onnxruntime_cuda_preload_status()
+    )
     warnings = []
     if gpu_version and gpu_channel == "legacy-cuda-package":
         warnings.append({
@@ -490,6 +501,20 @@ def collect_onnxruntime_provider_status(
                 "for reliable Windows CUDA DLL loading."
             ),
         })
+    if (
+        gpu_version
+        and cuda_preload_status.get("attempted")
+        and not cuda_preload_status.get("succeeded")
+    ):
+        reason = str(cuda_preload_status.get("error") or "unknown error")
+        warnings.append({
+            "id": "ORT-CUDA-PRELOAD-FAILED",
+            "severity": "medium",
+            "message": (
+                "onnxruntime.preload_dlls() failed before a CUDA provider "
+                f"session: {reason}"
+            ),
+        })
 
     return {
         "schema": ONNXRUNTIME_PROVIDER_STATUS_SCHEMA,
@@ -503,6 +528,7 @@ def collect_onnxruntime_provider_status(
             "packageChannel": gpu_channel,
             "providerAvailable": cuda_provider,
             "preloadDllsAvailable": bool(preload_dlls_available),
+            "preloadStatus": cuda_preload_status,
             "recommendedPackage": (
                 f"onnxruntime-gpu>={ONNXRUNTIME_GPU_RECOMMENDED_MIN}"
             ),
@@ -531,6 +557,7 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
         if warning.get("id") not in {
             "ORT-CUDA-LEGACY-PACKAGE",
             "ORT-CUDA-PRELOAD-MISSING",
+            "ORT-CUDA-PRELOAD-FAILED",
         }:
             continue
         advisories.append({

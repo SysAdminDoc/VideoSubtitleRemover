@@ -76,6 +76,16 @@ class ReleaseVerificationTests(unittest.TestCase):
                     "cuda": {
                         "packageChannel": "cuda12-pypi-stable",
                         "providerAvailable": True,
+                        "preloadStatus": {
+                            "schema": "vsr.onnxruntime_cuda_preload.v1",
+                            "needed": True,
+                            "attempted": True,
+                            "available": True,
+                            "succeeded": True,
+                            "callCount": 1,
+                            "lastProviders": ["CUDAExecutionProvider"],
+                            "error": "",
+                        },
                     },
                     "directml": {"providerAvailable": False},
                     "warnings": [],
@@ -180,6 +190,11 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(
             evidence["releaseTools"]["onnxRuntimeProviders"]["schema"],
             "vsr.onnxruntime_providers.v1",
+        )
+        self.assertTrue(
+            evidence["releaseTools"]["onnxRuntimeProviders"]["cuda"][
+                "preloadStatus"
+            ]["succeeded"]
         )
         self.assertEqual(
             evidence["releaseTools"]["opencvWheels"]["schema"],
@@ -393,6 +408,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("--runtime-hooks", self.bat)
         self.assertIn("--collect-data", self.bat)
         self.assertIn("--runtime-hook assets\\runtime_hook_mp.py", self.bat)
+        self.assertNotIn("pause", self.bat.lower())
         self.assertIn("release-verification.json", self.bat)
         self.assertIn("release-hidden-imports.json", self.bat)
         self.assertIn("release-advisories.json", self.bat)

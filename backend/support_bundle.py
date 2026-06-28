@@ -18,6 +18,7 @@ from typing import Any, Iterable, Mapping, Optional
 from backend.cache_inventory import discover_caches, model_cache_status
 from backend.crash_reporter import _path_scrub
 from backend.dependency_caps import (
+    collect_onnxruntime_provider_status,
     collect_opencv_wheel_status,
     collect_rapidocr_engine_status,
 )
@@ -190,6 +191,7 @@ def _support_payload(*, app_version: str,
         "dependencies": _dependency_versions(),
         "dependency_diagnostics": {
             "opencv": collect_opencv_wheel_status(),
+            "onnxruntime": collect_onnxruntime_provider_status(),
         },
         "backend_status": installed_backend_status(),
         "model_cache": model_cache_status(),

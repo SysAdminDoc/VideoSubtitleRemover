@@ -84,6 +84,14 @@ class SupportBundleTests(unittest.TestCase):
                     "vsr.opencv_wheels.v1",
                 )
                 self.assertEqual(
+                    support["dependency_diagnostics"]["onnxruntime"]["schema"],
+                    "vsr.onnxruntime_providers.v1",
+                )
+                self.assertIn(
+                    "preloadStatus",
+                    support["dependency_diagnostics"]["onnxruntime"]["cuda"],
+                )
+                self.assertEqual(
                     support["model_cache"]["schema"],
                     "vsr.model_cache_status.v1",
                 )

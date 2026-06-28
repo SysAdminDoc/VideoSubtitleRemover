@@ -62,15 +62,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: A documented local-only CPU container or isolated install recipe launches `python -m backend.processor --self-test` and a tiny CLI smoke without GitHub Actions, cloud upload, or replacing the Windows launcher as the primary path.
   Complexity: M
 
-### P1 -- Additional release hardening
-
-- [ ] P1 - Preload ONNX Runtime CUDA DLLs before CUDA provider sessions
-  Why: ONNX Runtime documents CUDA/cuDNN DLL preload support, while VSR only reports whether `preload_dlls` exists and then creates CUDA sessions without using it.
-  Evidence: ONNX Runtime CUDA Execution Provider docs, `backend/dependency_caps.py`, `backend/inpainters_onnx.py`, `backend/inpainters/lama.py`
-  Touches: `backend/inpainters_onnx.py`, `backend/inpainters/lama.py`, `backend/dependency_caps.py`, `backend/support_bundle.py`, `backend/release_verification.py`, `tests/test_dependency_caps.py`, `tests/test_hardening.py`
-  Acceptance: Before the first CUDA `InferenceSession`, VSR calls `onnxruntime.preload_dlls()` when available, records success/failure in backend status/support/release evidence, and falls back cleanly to current provider order when unavailable.
-  Complexity: M
-
 ### P2 -- Setup repair
 
 - [ ] P2 - Make setup and launcher repair non-interactive

@@ -127,6 +127,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   `multiprocessing.freeze_support()` before app imports, PyInstaller builds
   include a runtime hook that repeats the guard for worker imports, and release
   evidence records the runtime hook before strict release validation passes.
+- **ONNX Runtime CUDA preload.** CUDA ONNX sessions now call
+  `onnxruntime.preload_dlls()` before session creation when available, and
+  backend status, support bundles, and release evidence record the preload
+  success or failure for diagnostics.
+- **Non-interactive local build.** `build_exe.bat` now exits with a status code
+  after success or failure instead of pausing for a keypress during automation.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.

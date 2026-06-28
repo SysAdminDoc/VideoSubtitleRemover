@@ -110,13 +110,44 @@ class DependencyCapTests(unittest.TestCase):
             ],
             runtime_version="1.21.0",
             preload_dlls_available=True,
+            preload_status={
+                "needed": True,
+                "attempted": True,
+                "available": True,
+                "succeeded": True,
+                "callCount": 1,
+                "lastProviders": ["CUDAExecutionProvider"],
+            },
         )
 
         self.assertEqual(status["schema"], "vsr.onnxruntime_providers.v1")
         self.assertEqual(status["cuda"]["packageChannel"], "cuda12-pypi-stable")
         self.assertTrue(status["cuda"]["providerAvailable"])
+        self.assertTrue(status["cuda"]["preloadStatus"]["succeeded"])
         self.assertTrue(status["directml"]["providerAvailable"])
         self.assertEqual(status["warnings"], [])
+
+    def test_onnxruntime_provider_status_reports_failed_cuda_preload(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={"onnxruntime-gpu": "1.21.0"},
+            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            runtime_version="1.21.0",
+            preload_dlls_available=True,
+            preload_status={
+                "needed": True,
+                "attempted": True,
+                "available": True,
+                "succeeded": False,
+                "error": "missing cudnn64.dll",
+                "lastProviders": ["CUDAExecutionProvider"],
+            },
+        )
+
+        self.assertEqual(
+            status["cuda"]["preloadStatus"]["error"],
+            "missing cudnn64.dll",
+        )
+        self.assertEqual(status["warnings"][0]["id"], "ORT-CUDA-PRELOAD-FAILED")
 
     def test_onnxruntime_release_advisory_flags_legacy_cuda_package(self):
         status = dependency_caps.collect_onnxruntime_provider_status(

@@ -72,6 +72,8 @@ def _maybe_session(model_path: str, providers=None, adapter_name: str = "lama-on
         if providers is None:
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         providers = _providers_after_opset_audit(model_path, providers)
+        from backend.onnxruntime_cuda import preload_onnxruntime_cuda_dlls_if_needed
+        preload_onnxruntime_cuda_dlls_if_needed(ort, providers)
         return ort.InferenceSession(model_path, providers=providers)
     except Exception as exc:
         logger.warning(f"Failed to load ONNX session {model_path!r}: {exc}")

@@ -226,9 +226,11 @@ def _try_onnx_session(model_path: str, device: str):
             _providers_after_opset_audit,
             _providers_for_device,
         )
+        from backend.onnxruntime_cuda import preload_onnxruntime_cuda_dlls_if_needed
         providers = _providers_after_opset_audit(
             model_path, _providers_for_device(device)
         )
+        preload_onnxruntime_cuda_dlls_if_needed(ort, providers)
     except Exception:
         providers = ["CPUExecutionProvider"]
     try:

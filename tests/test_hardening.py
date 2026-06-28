@@ -763,6 +763,99 @@ class DirectMlProviderTests(unittest.TestCase):
             )
         self.assertEqual(providers, ["DmlExecutionProvider", "CPUExecutionProvider"])
 
+    def test_onnx_session_preloads_cuda_dlls_before_session(self):
+        from backend import adapter_manifest as manifest
+        from backend import inpainters_onnx
+        from backend.onnxruntime_cuda import (
+            collect_onnxruntime_cuda_preload_status,
+            reset_onnxruntime_cuda_preload_status,
+        )
+        from unittest import mock
+
+        events = []
+
+        class FakeOrt:
+            __version__ = "1.21.0"
+
+            @staticmethod
+            def preload_dlls():
+                events.append("preload")
+
+            @staticmethod
+            def InferenceSession(model_path, providers):
+                events.append("session")
+                return object()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "model.onnx"
+            model.write_bytes(b"model")
+            reset_onnxruntime_cuda_preload_status()
+            try:
+                with mock.patch.object(
+                    manifest,
+                    "verify_adapter_path",
+                    return_value=SimpleNamespace(allowed=True),
+                ), mock.patch.object(
+                    manifest, "log_adapter_verification"
+                ), mock.patch.dict(sys.modules, {"onnxruntime": FakeOrt}):
+                    session = inpainters_onnx._maybe_session(
+                        str(model),
+                        ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                        "lama-onnx",
+                    )
+                status = collect_onnxruntime_cuda_preload_status()
+            finally:
+                reset_onnxruntime_cuda_preload_status()
+
+        self.assertIsNotNone(session)
+        self.assertEqual(events, ["preload", "session"])
+        self.assertTrue(status["attempted"])
+        self.assertTrue(status["succeeded"])
+        self.assertEqual(status["callCount"], 1)
+
+    def test_onnx_session_records_missing_cuda_preload_without_blocking(self):
+        from backend import adapter_manifest as manifest
+        from backend import inpainters_onnx
+        from backend.onnxruntime_cuda import (
+            collect_onnxruntime_cuda_preload_status,
+            reset_onnxruntime_cuda_preload_status,
+        )
+        from unittest import mock
+
+        class FakeOrt:
+            __version__ = "1.20.0"
+
+            @staticmethod
+            def InferenceSession(model_path, providers):
+                return object()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "model.onnx"
+            model.write_bytes(b"model")
+            reset_onnxruntime_cuda_preload_status()
+            try:
+                with mock.patch.object(
+                    manifest,
+                    "verify_adapter_path",
+                    return_value=SimpleNamespace(allowed=True),
+                ), mock.patch.object(
+                    manifest, "log_adapter_verification"
+                ), mock.patch.dict(sys.modules, {"onnxruntime": FakeOrt}):
+                    session = inpainters_onnx._maybe_session(
+                        str(model),
+                        ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                        "lama-onnx",
+                    )
+                status = collect_onnxruntime_cuda_preload_status()
+            finally:
+                reset_onnxruntime_cuda_preload_status()
+
+        self.assertIsNotNone(session)
+        self.assertTrue(status["attempted"])
+        self.assertFalse(status["available"])
+        self.assertFalse(status["succeeded"])
+        self.assertIn("unavailable", status["error"])
+
     def test_easyocr_gpu_flag_is_cuda_only(self):
         det = processor.SubtitleDetector.__new__(processor.SubtitleDetector)
         det.device = "directml"

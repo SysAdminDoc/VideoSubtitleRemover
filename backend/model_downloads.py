@@ -507,6 +507,16 @@ def _onnxruntime_provider_status() -> dict:
         next_action = str(warnings[0].get("message") or "")
     else:
         next_action = ""
+    cuda = status.get("cuda", {}) if isinstance(status.get("cuda"), Mapping) else {}
+    preload = (
+        cuda.get("preloadStatus", {})
+        if isinstance(cuda.get("preloadStatus"), Mapping) else {}
+    )
+    if preload.get("attempted") and not preload.get("succeeded"):
+        next_action = (
+            "Repair CUDA/cuDNN DLL visibility; ONNX Runtime preload failed: "
+            + str(preload.get("error") or "unknown error")
+        )
     return {
         "available": bool(version or status.get("availableProviders")),
         "version": version,
