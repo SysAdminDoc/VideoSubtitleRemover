@@ -4813,7 +4813,7 @@ class VideoSubtitleRemoverApp:
     @staticmethod
     def _gui_to_backend_mode(gui_mode_value: str):
         """Map a GUI InpaintMode value onto the backend enum. The two
-        enums are deliberately separate (see CLAUDE.md) -- this mapping
+        enums are deliberately separate -- this mapping
         is the single place they meet."""
         from backend.processor import InpaintMode as _BM
         return {
