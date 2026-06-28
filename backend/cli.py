@@ -258,6 +258,13 @@ def _write_cli_batch_reports(out_dir: Path, records: list[dict], *,
     print(f"[batch] wrote summary {md_path}")
 
 
+def _print_output_quality_preflight(preflight: dict) -> None:
+    from backend.output_quality_preflight import output_quality_preflight_messages
+
+    for message in output_quality_preflight_messages(preflight):
+        print(f"[quality-preflight] {message}")
+
+
 def _update_record_output_path(record: dict, actual_output_path: str) -> None:
     """Keep batch evidence aligned when processing salvages to another path."""
     actual = Path(actual_output_path)
@@ -998,6 +1005,7 @@ def main():
                             "mode": "soft-subtitles",
                             "device": "cpu",
                             "output_codec": "copy",
+                            "output_quality": config.output_quality,
                         },
                         skip_existing=args.skip_existing,
                         soft_action=soft_action.value,
@@ -1154,6 +1162,9 @@ def main():
                     checkpoint_done=checkpoint_done,
                 )
                 records.append(record)
+                _print_output_quality_preflight(
+                    record.get("output_quality_preflight") or {}
+                )
                 print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
                 if record["planned_result"] == STATUS_SKIPPED_EXISTING:
                     print(f"[skip] {src.name} (output exists)")
@@ -1247,6 +1258,12 @@ def main():
         if not segments:
             parser.error(f"No time segments found in: {args.nle_input}")
         print(f"[nle] {len(segments)} segment(s) from {Path(args.nle_input).name}")
+        nle_preflight = make_batch_item_record(
+            args.input,
+            args.output,
+            config=config,
+        ).get("output_quality_preflight") or {}
+        _print_output_quality_preflight(nle_preflight)
         out_base = Path(args.output)
         failures = 0
         for idx, (seg_start, seg_end) in enumerate(segments, 1):
@@ -1273,6 +1290,12 @@ def main():
 
     print(f"[file] source={Path(args.input).name}")
     print(f"[file] output={args.output}")
+    single_preflight = make_batch_item_record(
+        args.input,
+        args.output,
+        config=config,
+    ).get("output_quality_preflight") or {}
+    _print_output_quality_preflight(single_preflight)
     try:
         success = _process_one(args.input, args.output)
     except KeyboardInterrupt:

@@ -133,6 +133,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   success or failure for diagnostics.
 - **Non-interactive local build.** `build_exe.bat` now exits with a status code
   after success or failure instead of pausing for a keypress during automation.
+- **Source-aware output quality preflight.** CLI runs, GUI batches, and batch
+  reports now compare source codec/resolution/bitrate against the selected
+  output codec and CRF, warn when settings may soften the result, and persist
+  the safer recommendation plus continued-after-warning state.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.

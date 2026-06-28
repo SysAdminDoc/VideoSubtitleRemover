@@ -9,13 +9,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P1 -- Trust and release readiness
 
-- [ ] P1 — Add source-aware output quality and blur-risk preflight
-  Why: Competing-tool users report blurred/lower-bitrate outputs, and VSR has quality metrics but no preflight warning when selected codec/quality settings are likely below the source.
-  Evidence: YaoFANGUK issue #200, `backend/quality_gate.py`, `backend/batch_report.py`, `backend/encoder.py`, README quality-report docs
-  Touches: `backend/encoder.py`, `backend/quality_gate.py`, `backend/batch_report.py`, `gui/app.py`, `backend/cli.py`, tests for bitrate/CRF decision paths
-  Acceptance: For each input, CLI/GUI preflight compares source bitrate/resolution/codec against selected output quality and warns or suggests safer codec/quality settings before processing; batch reports persist the recommendation and whether the user overrode it.
-  Complexity: M
-
 - [ ] P1 — Expand accessibility announcements and focus traversal coverage
   Why: UIA announcements and focusable custom widgets exist, but custom Canvas controls and major dialogs still need broader semantic/state coverage for screen-reader and keyboard users.
   Evidence: `backend/a11y.py`, `gui/widgets.py`, `gui/app.py`, `tests/test_gui_settings_lock.py`, `tests/test_confirm_dialog.py`

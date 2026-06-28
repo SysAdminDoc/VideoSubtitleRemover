@@ -22,6 +22,11 @@ from backend.io import (
     _probe_subtitle_streams,
     _write_text_atomic,
 )
+from backend.output_quality_preflight import (
+    evaluate_output_quality_preflight,
+    output_quality_preflight_not_applicable,
+    output_quality_preflight_messages,
+)
 from backend.quality_gate import (
     evaluate_quality_gate,
     quality_gate_not_applicable,
@@ -72,6 +77,11 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         checkpoint_done=checkpoint_done,
         soft_action=soft_action,
     )
+    quality_preflight = _output_quality_preflight_for_record(
+        input_file,
+        config,
+        planned_result,
+    )
     return {
         "input": str(input_file),
         "input_name": input_file.name,
@@ -88,6 +98,8 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "mode": str(_config_value(config, "mode", "")),
         "device": str(_config_value(config, "device", "")),
         "output_codec": str(_config_value(config, "output_codec", "")),
+        "output_quality": _safe_int(_config_value(config, "output_quality", 23)),
+        "output_quality_preflight": quality_preflight,
         "duration_seconds": round(float(duration), 3),
         "estimated_seconds": _estimate_seconds(
             duration,
@@ -119,6 +131,24 @@ def planned_batch_status(*, output_exists: bool, skip_existing: bool,
     if soft_action in {"strip", "keep_all"}:
         return STATUS_SOFT_REMUXED
     return STATUS_HARDCODED_PROCESSED
+
+
+def _output_quality_preflight_for_record(
+    input_file: Path,
+    config: Any,
+    planned_result: str,
+) -> dict:
+    if planned_result == STATUS_SOFT_REMUXED:
+        return output_quality_preflight_not_applicable(
+            config,
+            "soft-subtitle remux copies the video stream",
+        )
+    if planned_result in {STATUS_SKIPPED_EXISTING, STATUS_CHECKPOINT_DONE}:
+        return output_quality_preflight_not_applicable(
+            config,
+            "planned row does not process video",
+        )
+    return evaluate_output_quality_preflight(str(input_file), config)
 
 
 def finish_batch_item(record: dict, status: str, *,
@@ -294,10 +324,11 @@ def _markdown_summary(payload: dict) -> str:
         f"- Completed: {_escape_md(payload.get('completed_at', ''))}",
         f"- Files: {payload.get('count', 0)}",
         "",
-        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Quality | Message |",
-        "|---|---|---|---|---:|---|---:|---:|---|---|",
+        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Message |",
+        "|---|---|---|---|---:|---|---:|---:|---|---|---|",
     ]
     review_notes: List[str] = []
+    preflight_notes: List[str] = []
     for record in payload.get("files", []):
         lines.append(
             "| "
@@ -310,11 +341,20 @@ def _markdown_summary(payload: dict) -> str:
                 _escape_md(record.get("source_codec", "")),
                 str(record.get("subtitle_stream_count", 0)),
                 _format_seconds(record.get("elapsed_seconds")),
+                _format_quality_preflight(record.get("output_quality_preflight")),
                 _format_quality_gate(record.get("quality_gate")),
                 _escape_md(record.get("message", "")),
             ])
             + " |"
         )
+        preflight = record.get("output_quality_preflight")
+        if isinstance(preflight, dict) and preflight.get("status") == "warning":
+            messages = output_quality_preflight_messages(preflight)
+            if messages:
+                preflight_notes.append(
+                    f"- **{_escape_md(record.get('input_name', '?'))}**: "
+                    + _escape_md(" ".join(messages))
+                )
         gate = record.get("quality_gate")
         if isinstance(gate, dict) and gate.get("status") == "review":
             remediation = gate.get("remediation", "")
@@ -323,6 +363,11 @@ def _markdown_summary(payload: dict) -> str:
                     f"- **{_escape_md(record.get('input_name', '?'))}** "
                     f"({gate.get('ladderStep', '')}): {_escape_md(remediation)}"
                 )
+    if preflight_notes:
+        lines.append("")
+        lines.append("### Output quality preflight notes")
+        lines.append("")
+        lines.extend(preflight_notes)
     if review_notes:
         lines.append("")
         lines.append("### Quality review notes")
@@ -384,4 +429,16 @@ def _format_quality_gate(value: Any) -> str:
     step = str(value.get("ladderStep") or "")
     if status and step and step not in {"none", "not-applicable", "not-run"}:
         return _escape_md(f"{status} ({step})")
+    return _escape_md(status)
+
+
+def _format_quality_preflight(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    status = str(value.get("status") or "")
+    if status != "warning":
+        return _escape_md(status)
+    messages = output_quality_preflight_messages(value)
+    if messages:
+        return _escape_md("warning")
     return _escape_md(status)

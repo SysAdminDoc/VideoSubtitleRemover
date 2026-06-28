@@ -2560,6 +2560,82 @@ class SoftSubtitleRemuxTests(unittest.TestCase):
 
 
 class BatchReportTests(unittest.TestCase):
+    def test_output_quality_preflight_warns_for_high_crf_source_risk(self):
+        from backend.output_quality_preflight import (
+            evaluate_output_quality_preflight,
+            output_quality_preflight_messages,
+        )
+
+        cfg = SimpleNamespace(output_codec="h264", output_quality=31)
+        preflight = evaluate_output_quality_preflight(
+            "clip.mp4",
+            cfg,
+            source={
+                "ok": True,
+                "codec": "h264",
+                "width": 1920,
+                "height": 1080,
+                "bitrate_bps": 14_000_000,
+                "bitrate_source": "stream",
+                "frame_rate": "30000/1001",
+            },
+        )
+
+        self.assertEqual(preflight["schema"], "vsr.output_quality_preflight.v1")
+        self.assertEqual(preflight["status"], "warning")
+        self.assertTrue(preflight["overrideRequired"])
+        self.assertTrue(preflight["overridden"])
+        self.assertEqual(preflight["source"]["bitrate_bps"], 14_000_000)
+        self.assertIn("CRF", output_quality_preflight_messages(preflight)[0])
+        self.assertIn("Suggested safer output setting", preflight["recommendation"])
+
+    def test_output_quality_preflight_ignores_remux_copy(self):
+        from backend.output_quality_preflight import evaluate_output_quality_preflight
+
+        preflight = evaluate_output_quality_preflight(
+            "clip.mkv",
+            {"output_codec": "copy", "output_quality": 23},
+            source={
+                "ok": True,
+                "codec": "h264",
+                "width": 1920,
+                "height": 1080,
+                "bitrate_bps": 10_000_000,
+            },
+        )
+
+        self.assertEqual(preflight["status"], "not_applicable")
+        self.assertEqual(preflight["warnings"], [])
+
+    def test_batch_report_marks_soft_remux_quality_preflight_not_applicable(self):
+        from unittest import mock
+        from backend import batch_report as _br
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "clip.mkv"
+            output = work / "out" / "clip_no_sub.mkv"
+            source.write_bytes(b"video")
+            cfg = SimpleNamespace(output_codec="h264", output_quality=31)
+
+            with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,1920,1080,30000/1001"):
+                with mock.patch.object(_br, "_probe_duration_seconds", return_value=12.5):
+                    with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[]):
+                        with mock.patch.object(_br, "evaluate_output_quality_preflight") as evaluate:
+                            record = _br.make_batch_item_record(
+                                str(source),
+                                str(output),
+                                config=cfg,
+                                soft_action="strip",
+                            )
+
+        evaluate.assert_not_called()
+        self.assertEqual(
+            record["output_quality_preflight"]["status"],
+            "not_applicable",
+        )
+        self.assertIn("remux", record["output_quality_preflight"]["reason"])
+
     def test_choose_batch_output_path_honors_skip_existing(self):
         from backend.batch_report import choose_batch_output_path
 
@@ -2613,14 +2689,34 @@ class BatchReportTests(unittest.TestCase):
                 device="cuda:0",
                 output_codec="h265",
             )
+            preflight = {
+                "schema": "vsr.output_quality_preflight.v1",
+                "status": "warning",
+                "source": {
+                    "codec": "h264",
+                    "width": 1920,
+                    "height": 1080,
+                    "bitrate_bps": 14_000_000,
+                },
+                "output": {"codec": "h265", "crf": 30},
+                "warnings": [{
+                    "id": "OUTPUT-CRF-SOURCE-RISK",
+                    "message": "CRF 30 is above the source-aware recommendation.",
+                }],
+                "recommendation": "Suggested safer output setting: CRF 22 or lower.",
+                "overrideRequired": True,
+                "overridden": True,
+                "reason": "",
+            }
             with mock.patch.object(_br, "_probe_codec_for_log", return_value="h264,1920,1080,30000/1001"):
                 with mock.patch.object(_br, "_probe_duration_seconds", return_value=12.5):
                     with mock.patch.object(_br, "_probe_subtitle_streams", return_value=[stream]):
-                        record = _br.make_batch_item_record(
-                            str(source),
-                            str(output),
-                            config=cfg,
-                        )
+                        with mock.patch.object(_br, "evaluate_output_quality_preflight", return_value=preflight):
+                            record = _br.make_batch_item_record(
+                                str(source),
+                                str(output),
+                                config=cfg,
+                            )
             _br.finish_batch_item(
                 record,
                 _br.STATUS_HARDCODED_PROCESSED,
@@ -2653,6 +2749,11 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["source_width"], 1920)
         self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
         self.assertGreater(payload["files"][0]["estimated_seconds"], 0)
+        self.assertEqual(
+            payload["files"][0]["output_quality_preflight"]["status"],
+            "warning",
+        )
+        self.assertTrue(payload["files"][0]["output_quality_preflight"]["overridden"])
         self.assertEqual(payload["files"][0]["quality_gate"]["status"], "review")
         self.assertEqual(
             payload["files"][0]["quality_gate"]["ladderStep"],
@@ -2667,6 +2768,8 @@ class BatchReportTests(unittest.TestCase):
         self.assertIsInstance(payload["files"][0]["quality_gate"]["reasons"], list)
         self.assertIn("degradedMetrics", payload["files"][0]["quality_gate"])
         self.assertIn("| review-needed | clip.mkv | clip_no_sub.mkv |", markdown)
+        self.assertIn("Output quality preflight notes", markdown)
+        self.assertIn("Suggested safer output setting", markdown)
         self.assertIn("review (manual-review)", markdown)
         self.assertIn("Quality review notes", markdown)
 

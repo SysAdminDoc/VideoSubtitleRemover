@@ -287,13 +287,17 @@ burned-in cleanup.
 Pattern batches and GUI batches write `vsr-batch-summary.json` and
 `vsr-batch-summary.md` next to their outputs when they finish. The report
 records each input, selected output path, codec/duration/subtitle preflight
-data, planned action, final status, and elapsed time for skipped,
-checkpointed, remuxed, processed, or failed files. When quality reports are
-enabled, batch summaries also include a `passed`, `review`, or `unknown`
-quality gate using ROI metrics, a cheap residual-text score, and an
-adjacent-frame temporal flicker score, plus any quality-sheet preview path for
-review-needed outputs. A failed gate changes the batch row status to
-`review-needed`; skipped and remux-only rows are marked `not_applicable`.
+data, source-aware output-quality warning, planned action, final status, and
+elapsed time for skipped, checkpointed, remuxed, processed, or failed files.
+Before processing, CLI and GUI batches compare source codec/resolution/bitrate
+against the selected output codec and CRF; risky settings are shown as
+preflight warnings, and the report records the safer recommendation plus that
+the user continued after the warning. When quality reports are enabled, batch
+summaries also include a `passed`, `review`, or `unknown` quality gate using
+ROI metrics, a cheap residual-text score, and an adjacent-frame temporal
+flicker score, plus any quality-sheet preview path for review-needed outputs.
+A failed gate changes the batch row status to `review-needed`; skipped and
+remux-only rows are marked `not_applicable`.
 Review-needed queue items expose **Retry with suggested settings**, which
 applies the quality gate's ladder step to that item only and records the
 before/after retry config in the next batch report.

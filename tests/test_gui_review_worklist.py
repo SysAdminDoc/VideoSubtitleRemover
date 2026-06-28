@@ -75,6 +75,33 @@ class GuiReviewWorklistTests(unittest.TestCase):
 
         self.assertIs(app._queue_item_for_report_record(record), item)
 
+    def test_output_quality_preflight_warning_updates_status(self):
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        app._status_messages = []
+        app._update_status = lambda message, tone="info", **kwargs: app._status_messages.append(
+            (message, tone, kwargs)
+        )
+        app._batch_report_records = {
+            "item-1": {
+                "input_name": "clip.mp4",
+                "output_quality_preflight": {
+                    "status": "warning",
+                    "warnings": [{
+                        "message": "CRF 31 is above the source-aware recommendation."
+                    }],
+                    "recommendation": "Suggested safer output setting: CRF 21 or lower.",
+                },
+            }
+        }
+
+        app._warn_output_quality_preflight()
+
+        self.assertEqual(len(app._status_messages), 1)
+        message, tone, kwargs = app._status_messages[0]
+        self.assertEqual(tone, "warning")
+        self.assertTrue(kwargs["toast"])
+        self.assertIn("Output quality preflight warning", message)
+
     def test_open_batch_report_prefers_markdown_without_shell(self):
         app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
         with tempfile.TemporaryDirectory() as tmp:

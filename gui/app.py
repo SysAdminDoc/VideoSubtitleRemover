@@ -6207,6 +6207,7 @@ class VideoSubtitleRemoverApp:
         self._probe_eta_seconds = 0.0
         self._batch_started_at = datetime.now()
         self._prepare_batch_report_records()
+        self._warn_output_quality_preflight()
         self._write_batch_preflight_plan()
         self._last_batch_report_paths = []
         self._refresh_action_states()
@@ -6370,6 +6371,7 @@ class VideoSubtitleRemoverApp:
                         "mode": item.config.mode.value,
                         "device": self._batch_report_device(item),
                         "output_codec": getattr(item.config, "output_codec", "h264"),
+                        "output_quality": getattr(item.config, "output_quality", 23),
                     },
                     soft_action=soft_action,
                 )
@@ -6381,6 +6383,35 @@ class VideoSubtitleRemoverApp:
                     f"Batch preflight report failed for {Path(item.file_path).name}: {exc}"
                 )
         self._batch_report_records = records
+
+    def _warn_output_quality_preflight(self):
+        from backend.output_quality_preflight import output_quality_preflight_messages
+
+        records = getattr(self, "_batch_report_records", {}) or {}
+        warning_items = []
+        for record in records.values():
+            preflight = record.get("output_quality_preflight")
+            if not isinstance(preflight, dict):
+                continue
+            messages = output_quality_preflight_messages(preflight)
+            if messages:
+                warning_items.append((record.get("input_name", "input"), messages))
+        if not warning_items:
+            return
+        count = len(warning_items)
+        first_name, first_messages = warning_items[0]
+        first = first_messages[0] if first_messages else "review output settings"
+        self._update_status(
+            f"Output quality preflight warning for {count} item(s): {first_name} - {first}",
+            "warning",
+            toast=True,
+        )
+        for name, messages in warning_items:
+            logger.warning(
+                "Output quality preflight for %s: %s",
+                name,
+                " ".join(messages),
+            )
 
     def _finalize_batch_report_records(self) -> List[dict]:
         from backend.batch_report import (
