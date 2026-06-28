@@ -1619,8 +1619,8 @@ model weight downloads.
 - **Engine probe**: About dialog and the in-GUI badge now report
   "Temporal BG (TBE)" as an always-available inpainting engine and
   prefer RapidOCR in the detection chain when installed.
-- **Docs**: requirements.txt pins the new RapidOCR dependency. CLAUDE.md
-  and README.md reflect the new temporal pipeline and detection priority.
+- **Docs**: requirements.txt pins the new RapidOCR dependency. README.md
+  reflects the new temporal pipeline and detection priority.
 
 ## [v3.7.0] - 2026-04-17
 
@@ -1677,6 +1677,6 @@ Premium polish pass. No behavioral changes; dramatic UX/UI refinement.
 - Simplify drop zone text to just 'Drag & Drop Files Here'
 - Changed: Update badge to v3.4.0
 - v3.4.0: DPI-safe responsive GUI overhaul
-- Changed: Update README badge and CLAUDE.md for v3.3.0
+- Changed: Update README badge for v3.3.0
 - v3.3.0: Real AI inpainting, multi-engine detection, comprehensive GUI overhaul
 - Added: Add files via upload
