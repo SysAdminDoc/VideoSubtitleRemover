@@ -84,3 +84,28 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Touches: `Dockerfile` or local container recipe, `.dockerignore`, `README.md`, setup smoke command, release docs
   Acceptance: A documented local-only CPU container or isolated install recipe launches `python -m backend.processor --self-test` and a tiny CLI smoke without GitHub Actions, cloud upload, or replacing the Windows launcher as the primary path.
   Complexity: M
+
+### P1 -- Additional release hardening
+
+- [ ] P1 - Add frozen-build multiprocessing guards and runtime-hook evidence
+  Why: PyInstaller documents recursive spawn loops when frozen apps or dependencies use multiprocessing without early `freeze_support()`, and this repo's entry point/build path does not currently install that guard before heavy imports.
+  Evidence: `VideoSubtitleRemover.py`, `build_exe.bat`, `VideoSubtitleRemoverPro.spec`, PyInstaller multiprocessing guidance
+  Touches: `VideoSubtitleRemover.py`, `build_exe.bat`, `VideoSubtitleRemoverPro.spec` or its replacement, new runtime hook asset, `backend/release_verification.py`, `tests/test_release_workflow.py`
+  Acceptance: `multiprocessing.freeze_support()` runs before GUI/OpenCV/ML imports in frozen launches; PyInstaller builds include a runtime hook that also calls it; release evidence records the hook; frozen smoke proves one GUI process and no recursive child storm.
+  Complexity: M
+
+- [ ] P1 - Preload ONNX Runtime CUDA DLLs before CUDA provider sessions
+  Why: ONNX Runtime documents CUDA/cuDNN DLL preload support, while VSR only reports whether `preload_dlls` exists and then creates CUDA sessions without using it.
+  Evidence: ONNX Runtime CUDA Execution Provider docs, `backend/dependency_caps.py`, `backend/inpainters_onnx.py`, `backend/inpainters/lama.py`
+  Touches: `backend/inpainters_onnx.py`, `backend/inpainters/lama.py`, `backend/dependency_caps.py`, `backend/support_bundle.py`, `backend/release_verification.py`, `tests/test_dependency_caps.py`, `tests/test_hardening.py`
+  Acceptance: Before the first CUDA `InferenceSession`, VSR calls `onnxruntime.preload_dlls()` when available, records success/failure in backend status/support/release evidence, and falls back cleanly to current provider order when unavailable.
+  Complexity: M
+
+### P2 -- Setup repair
+
+- [ ] P2 - Make setup and launcher repair non-interactive
+  Why: `setup.py` prompts on an existing `venv`, but launcher-driven first-run and repair flows should not block on stdin or leave users manually deleting broken environments.
+  Evidence: `setup.py`, `Run_VSR_Pro.bat`, `Run_VSR_Pro.ps1`, SysAdminDoc issue #3, YaoFANGUK install issues #228 and #231
+  Touches: `setup.py`, `Run_VSR_Pro.bat`, `Run_VSR_Pro.ps1`, `Run_VSR_Pro_Debug.bat`, `tests/test_setup_bootstrap.py`, README troubleshooting
+  Acceptance: Launchers detect missing/broken venv state and run setup in unattended repair mode; `setup.py --repair` safely recreates only the repo-local venv after boundary checks; interactive prompts are never used by launcher paths; tests cover keep, repair, unsafe-path refusal, and timeout messaging.
+  Complexity: M
