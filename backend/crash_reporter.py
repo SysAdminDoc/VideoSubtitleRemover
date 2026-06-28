@@ -22,8 +22,7 @@ We deliberately DO NOT ship:
 - OCR text (privacy)
 - The full Python environment / installed packages
 
-Strict opt-in is the contract from CLAUDE.md and the project
-philosophy. Default off; the scaffold lands so a user who wants
+Strict opt-in is the project philosophy. Default off; the scaffold lands so a user who wants
 crash visibility can wire it without monkey-patching.
 """
 
