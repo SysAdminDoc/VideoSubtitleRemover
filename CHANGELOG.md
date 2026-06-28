@@ -119,6 +119,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   imported `cv2` version/file ownership, conflict warnings, and exact
   uninstall/reinstall remediation when contrib/headless packages shadow each
   other.
+- **Edge-case clip intake gate.** GitHub now has a dedicated edge-case clip
+  issue form for redistributable real media, and the reference-corpus manifest
+  validator requires source URL, license proof, retrieval date, and rights
+  confirmation before any real/community fixture can enter `tests/clips`.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.

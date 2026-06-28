@@ -15,6 +15,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
+from urllib.parse import urlparse
 
 import cv2
 import numpy as np
@@ -46,6 +47,25 @@ REQUIRED_FIELDS = {
     "config",
     "metric_floors",
     "baseline",
+}
+SYNTHETIC_SOURCE_TYPES = {
+    "",
+    "generated",
+    "synthetic",
+    "deterministic",
+}
+REAL_SOURCE_TYPES = {
+    "real",
+    "real-world",
+    "community",
+    "public-domain",
+    "cc0",
+}
+REAL_SOURCE_REQUIRED_FIELDS = {
+    "url",
+    "license_url",
+    "retrieved_at",
+    "rights_confirmation",
 }
 
 
@@ -88,6 +108,65 @@ def _valid_sha256(value: object) -> bool:
     return len(text) == 64 and all(c in "0123456789abcdef" for c in text)
 
 
+def _normalise_license(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
+def _normalise_source_type(value: object) -> str:
+    return str(value or "").strip().lower().replace("_", "-")
+
+
+def _valid_http_url(value: object) -> bool:
+    text = str(value or "").strip()
+    parsed = urlparse(text)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _validate_real_clip_source(entry: Mapping[str, object], filename: str) -> None:
+    source_type = _normalise_source_type(entry.get("source_type"))
+    if source_type in SYNTHETIC_SOURCE_TYPES:
+        return
+    if source_type not in REAL_SOURCE_TYPES:
+        raise ReferenceCorpusError(
+            f"reference clip {filename} has unsupported source_type "
+            f"{entry.get('source_type')!r}"
+        )
+    source = entry.get("source")
+    if not isinstance(source, Mapping):
+        raise ReferenceCorpusError(
+            f"real reference clip {filename} needs source metadata"
+        )
+    missing = [
+        field for field in sorted(REAL_SOURCE_REQUIRED_FIELDS)
+        if not str(source.get(field) or "").strip()
+    ]
+    if missing:
+        raise ReferenceCorpusError(
+            f"real reference clip {filename} missing source fields: {missing}"
+        )
+    if not _valid_http_url(source.get("url")):
+        raise ReferenceCorpusError(
+            f"real reference clip {filename} needs an http(s) source url"
+        )
+    if not _valid_http_url(source.get("license_url")):
+        raise ReferenceCorpusError(
+            f"real reference clip {filename} needs an http(s) license url"
+        )
+    source_license = _normalise_license(source.get("license"))
+    clip_license = _normalise_license(entry.get("license"))
+    if source_license and source_license != clip_license:
+        raise ReferenceCorpusError(
+            f"real reference clip {filename} source license "
+            f"{source.get('license')!r} does not match clip license "
+            f"{entry.get('license')!r}"
+        )
+    confirmation = str(source.get("rights_confirmation") or "").strip().lower()
+    if "redistribut" not in confirmation and "public domain" not in confirmation:
+        raise ReferenceCorpusError(
+            f"real reference clip {filename} needs redistribution confirmation"
+        )
+
+
 def reference_manifest_entries(
     manifest_path: Path | str = DEFAULT_MANIFEST,
     clips_dir: Path | str | None = None,
@@ -113,6 +192,7 @@ def reference_manifest_entries(
                 f"license {entry.get('license')!r}"
             )
         filename = _safe_manifest_filename(entry.get("filename"))
+        _validate_real_clip_source(entry, filename)
         path = root / filename
         if not path.is_file():
             raise ReferenceCorpusError(f"reference clip file is missing: {filename}")

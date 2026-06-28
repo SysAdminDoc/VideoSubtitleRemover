@@ -47,6 +47,7 @@ if str(_ROOT) not in sys.path:
 from backend import processor
 from backend.reference_corpus import (
     REFERENCE_CORPUS_CATEGORY,
+    ReferenceCorpusError,
     reference_manifest_entries,
     run_reference_corpus,
 )
@@ -287,6 +288,74 @@ class RealClipManifestTests(unittest.TestCase):
                     f"Unmanifested clip: {path.name}. Add it to manifest.json"
                     " or remove it from tests/clips/."
                 )
+
+    def test_real_clip_manifest_requires_source_metadata(self):
+        import hashlib
+        import json
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            clip = root / "real_sample.mkv"
+            clip.write_bytes(b"tiny redistributable clip placeholder")
+            digest = hashlib.sha256(clip.read_bytes()).hexdigest()
+            manifest = root / "manifest.json"
+            entry = {
+                "filename": clip.name,
+                "license": "CC0-1.0",
+                "contributor": "unit-test",
+                "sha256": digest,
+                "failure_category": REFERENCE_CORPUS_CATEGORY,
+                "config": {
+                    "mode": "sttn",
+                    "sttn_skip_detection": True,
+                    "subtitle_area": [0, 0, 8, 8],
+                },
+                "metric_floors": {"psnr": 0.0, "ssim": 0.0},
+                "baseline": {
+                    "output_frames_sha256": "0" * 64,
+                    "frame_count": 1,
+                    "width": 8,
+                    "height": 8,
+                },
+                "source_type": "real",
+            }
+            manifest.write_text(json.dumps({"clips": [entry]}), encoding="utf-8")
+
+            with self.assertRaisesRegex(ReferenceCorpusError, "source metadata"):
+                reference_manifest_entries(manifest, root)
+
+            entry["source"] = {
+                "url": "https://images.nasa.gov/details/example",
+                "license": "CC0-1.0",
+                "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+                "retrieved_at": "2026-06-28",
+                "rights_confirmation": (
+                    "The source page permits redistribution in this corpus."
+                ),
+            }
+            manifest.write_text(json.dumps({"clips": [entry]}), encoding="utf-8")
+
+            entries = reference_manifest_entries(manifest, root)
+            self.assertEqual(entries[0]["source"]["url"], entry["source"]["url"])
+
+            entry["source"]["license"] = "MIT"
+            manifest.write_text(json.dumps({"clips": [entry]}), encoding="utf-8")
+            with self.assertRaisesRegex(ReferenceCorpusError, "does not match"):
+                reference_manifest_entries(manifest, root)
+
+    def test_edge_case_issue_template_collects_intake_metadata(self):
+        template = _ROOT / ".github" / "ISSUE_TEMPLATE" / "edge_case.yml"
+        self.assertTrue(template.exists(), "edge-case issue template is missing")
+        text = template.read_text(encoding="utf-8")
+        for required in (
+            "Clip URL",
+            "License proof URL",
+            "Rights confirmation",
+            "Reproduction settings",
+            "Before and after evidence",
+            "NASA public-domain media",
+            "Library of Congress public-domain media",
+        ):
+            self.assertIn(required, text)
 
 
 if __name__ == "__main__":

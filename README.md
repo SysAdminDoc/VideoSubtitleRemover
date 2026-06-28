@@ -298,6 +298,16 @@ Review-needed queue items expose **Retry with suggested settings**, which
 applies the quality gate's ladder step to that item only and records the
 before/after retry config in the next batch report.
 
+### Reference Clip Contributions
+
+Use the **Edge-case clip** GitHub issue form before adding real media to
+`tests/clips/`. Real fixtures must be short, redistributable with this
+MIT-licensed project, and manifest-backed with SHA-256, source URL, license
+proof URL, retrieval date, rights confirmation, reproduction settings, and
+metric floors. Good starting sources are NASA public-domain media, Library of
+Congress public-domain media, Wikimedia Commons compatible-license files, or a
+clip you shot and grant as CC0.
+
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-i`, `--input` | Input file path | Required |

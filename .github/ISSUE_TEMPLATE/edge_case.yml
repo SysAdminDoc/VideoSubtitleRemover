@@ -1,0 +1,105 @@
+name: Edge-case clip
+description: Submit a redistributable short clip for the reference corpus.
+title: "[Edge case]: "
+labels: ["corpus", "edge-case"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Submit only clips you can legally redistribute with this MIT-licensed
+        project. Good sources include NASA public-domain media,
+        Library of Congress public-domain media, Wikimedia Commons compatible
+        license files, or a clip you shot and grant as CC0.
+  - type: dropdown
+    id: failure-category
+    attributes:
+      label: Failure category
+      description: Pick the single behavior this clip should protect.
+      options:
+        - OCR misread
+        - Karaoke timing or grouping
+        - Chyron vs subtitle
+        - Vertical CJK text
+        - Thin font
+        - Scene dissolve or cut
+        - Static logo or watermark
+        - HDR or color signalling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: failure-description
+    attributes:
+      label: Current failure
+      description: Describe what VSR does wrong and what should happen.
+      placeholder: The subtitle leaves a one-frame residual during...
+    validations:
+      required: true
+  - type: input
+    id: clip-url
+    attributes:
+      label: Clip URL
+      description: Public URL for the exact short clip or source page.
+      placeholder: https://images.nasa.gov/details/...
+    validations:
+      required: true
+  - type: dropdown
+    id: license
+    attributes:
+      label: License
+      description: The clip must be redistributable by this MIT project.
+      options:
+        - CC0-1.0
+        - Public domain
+        - CC-BY-4.0
+        - I shot this and grant CC0
+        - Other compatible license
+    validations:
+      required: true
+  - type: input
+    id: license-url
+    attributes:
+      label: License proof URL
+      description: Link to the page proving the license or public-domain status.
+      placeholder: https://creativecommons.org/publicdomain/zero/1.0/
+    validations:
+      required: true
+  - type: checkboxes
+    id: rights-confirmation
+    attributes:
+      label: Rights confirmation
+      options:
+        - label: I confirm this clip can be redistributed in this MIT-licensed repository and regression corpus.
+          required: true
+  - type: textarea
+    id: media-summary
+    attributes:
+      label: Media summary
+      description: Keep the clip 8-15 seconds when possible. Do not re-encode unless needed to trim.
+      placeholder: 10s MKV, 1920x1080, H.264, burned-in English subtitle at bottom.
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Reproduction settings
+      description: Paste CLI flags or the relevant settings.json snippet.
+      placeholder: |
+        python -m backend.processor -i sample.mkv -o cleaned.mp4 --quality-report ...
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Before and after evidence
+      description: Attach one or two frame screenshots showing the failure.
+      placeholder: Attach images here or link to public frame captures.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: Mention if the clip has audio, HDR metadata, multiple text regions, or timing-sensitive subtitles.
+    validations:
+      required: false

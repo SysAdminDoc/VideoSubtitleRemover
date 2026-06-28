@@ -9,13 +9,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P1 -- Trust and release readiness
 
-- [ ] P1 — Add real edge-case corpus intake and license validator
-  Why: The project asks for CC0/public-domain real clips but only ships synthetic fixtures and has no dedicated GitHub intake form or manifest guard for real-source provenance.
-  Evidence: `docs/edge_case_corpus.md`, `.github/ISSUE_TEMPLATE/`, `tests/clips/manifest.json`, `tests/test_reference_clips.py`, YaoFANGUK issues #200 and #232
-  Touches: `.github/ISSUE_TEMPLATE/edge_case.yml`, `backend/reference_corpus.py`, `tests/test_reference_clips.py`, `tests/clips/manifest.json`, `README.md`
-  Acceptance: Contributors can file an edge-case clip issue with URL/license/settings/screenshots; manifest validation rejects missing license/source/fixture metadata for real clips; at least one tiny CC0/public-domain fixture path is documented or wired without inflating default test runtime.
-  Complexity: M
-
 - [ ] P1 — Add source-aware output quality and blur-risk preflight
   Why: Competing-tool users report blurred/lower-bitrate outputs, and VSR has quality metrics but no preflight warning when selected codec/quality settings are likely below the source.
   Evidence: YaoFANGUK issue #200, `backend/quality_gate.py`, `backend/batch_report.py`, `backend/encoder.py`, README quality-report docs
