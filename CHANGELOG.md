@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Local isolated smoke path.** `tools/local_smoke.py` now runs
+  `python -m backend.processor --self-test` plus a generated-image CLI cleanup,
+  and `Dockerfile` / `.dockerignore` provide a local CPU-only container recipe
+  for reproducing the smoke without replacing the Windows launcher.
 - **GUI controller extraction.** Queue processing, pause/stop orchestration,
   live preview/region editing, batch quality review, support bundle/model-cache
   dialogs, and backend-status panels now live in focused `gui/*_controller.py`

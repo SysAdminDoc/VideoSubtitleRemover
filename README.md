@@ -123,10 +123,23 @@ before a long batch starts.
 ```powershell
 python -m unittest discover -s tests -v
 python -m backend.reference_corpus --json
+python tools/local_smoke.py
 ```
 
 `build_exe.bat` also runs the committed reference corpus during local release
 evidence generation and records the result in `release-verification.json`.
+
+For an isolated CPU smoke without touching the Windows launcher, run the same
+check in the local container recipe:
+
+```powershell
+docker build -t vsr-pro-smoke .
+docker run --rm vsr-pro-smoke
+```
+
+The container path installs only the minimal CPU smoke dependencies, runs
+`python -m backend.processor --self-test`, then processes a generated tiny
+image through the CLI with a fixed mask.
 
 ## Usage
 
@@ -553,6 +566,8 @@ content, colors are preserved. If you still see a mismatch, attach the
 ```
 VideoSubtitleRemover/
 |-- VideoSubtitleRemover.py   # Main GUI application
+|-- Dockerfile                # Local CPU-only smoke container recipe
+|-- .dockerignore             # Excludes build outputs, models, and venvs
 |-- gui/
 |   |-- app.py                # Main Tk shell and shared UI state
 |   |-- processing_controller.py  # Queue worker, pause/stop, reports, notify
@@ -587,6 +602,7 @@ VideoSubtitleRemover/
 |-- build_exe.bat             # PyInstaller build script
 |-- requirements.txt          # Python dependencies
 |-- tests/                    # Focused regression coverage for hardened paths
+|-- tools/                    # Local developer smoke helpers
 |-- .github/                  # Issue templates
 |-- assets/                   # Application assets
 |-- models/                   # AI model weights (auto-downloaded)
