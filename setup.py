@@ -8,6 +8,7 @@ Run: python setup.py
 
 import os
 import sys
+import argparse
 import subprocess
 import platform
 import shutil
@@ -220,20 +221,20 @@ def detect_gpu():
     return gpu_info
 
 
-def create_virtual_env():
+def create_virtual_env(repair=False):
     """Create virtual environment."""
     print(f"\n{Colors.BLUE}[3/6]{Colors.END} Creating virtual environment...")
     
     venv_path = Path("venv")
     
     if venv_path.exists():
-        print(f"  Virtual environment already exists")
-        response = input(f"  Recreate? (y/N): ").strip().lower()
-        if response == 'y':
-            if not _remove_existing_venv(venv_path):
-                return False
-        else:
+        if not repair:
+            print("  Virtual environment already exists; keeping it.")
+            print("  Run setup.py --repair to recreate the repo-local venv.")
             return True
+        print("  Repair requested; recreating the repo-local virtual environment.")
+        if not _remove_existing_venv(venv_path):
+            return False
     
     try:
         _run_setup_command(
@@ -496,15 +497,23 @@ title Video Subtitle Remover Pro
 :: Change to script directory
 cd /d "%~dp0"
 
-:: Check if venv exists
+set "VSR_SETUP_REPAIR=0"
+
 if not exist "venv\\Scripts\\python.exe" (
+    set "VSR_SETUP_REPAIR=1"
+) else (
+    "venv\\Scripts\\python.exe" -c "import cv2, PIL, numpy" >nul 2>nul
+    if errorlevel 1 set "VSR_SETUP_REPAIR=1"
+)
+
+if "%VSR_SETUP_REPAIR%"=="1" (
     echo.
     echo  ============================================================
     echo   VIDEO SUBTITLE REMOVER PRO
     echo  ============================================================
     echo.
-    echo  First-time setup required.
-    echo  Preparing the runtime and dependencies...
+    echo  Runtime setup or repair required.
+    echo  Preparing the runtime and dependencies without prompts...
     echo.
     python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" >nul 2>nul
     if not errorlevel 1 (
@@ -513,7 +522,7 @@ if not exist "venv\\Scripts\\python.exe" (
         echo  Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup.
         echo.
     )
-    python setup.py
+    python setup.py --repair
     if errorlevel 1 (
         echo.
         echo  Setup did not complete. Review the messages above, then try again.
@@ -550,14 +559,23 @@ title Video Subtitle Remover Pro (Debug)
 
 cd /d "%~dp0"
 
+set "VSR_SETUP_REPAIR=0"
+
 if not exist "venv\\Scripts\\python.exe" (
+    set "VSR_SETUP_REPAIR=1"
+) else (
+    "venv\\Scripts\\python.exe" -c "import cv2, PIL, numpy" >nul 2>nul
+    if errorlevel 1 set "VSR_SETUP_REPAIR=1"
+)
+
+if "%VSR_SETUP_REPAIR%"=="1" (
     echo.
     echo  ============================================================
     echo   VIDEO SUBTITLE REMOVER PRO (DEBUG)
     echo  ============================================================
     echo.
-    echo  First-time setup required.
-    echo  Preparing the runtime and dependencies...
+    echo  Runtime setup or repair required.
+    echo  Preparing the runtime and dependencies without prompts...
     echo.
     python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" >nul 2>nul
     if not errorlevel 1 (
@@ -566,7 +584,7 @@ if not exist "venv\\Scripts\\python.exe" (
         echo  Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup.
         echo.
     )
-    python setup.py
+    python setup.py --repair
     if errorlevel 1 (
         echo.
         echo  Setup did not complete. Review the messages above, then try again.
@@ -592,14 +610,22 @@ pause
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-if (-not (Test-Path ".\\venv\\Scripts\\python.exe")) {
+$needsRepair = -not (Test-Path ".\\venv\\Scripts\\python.exe")
+if (-not $needsRepair) {
+    & ".\\venv\\Scripts\\python.exe" -c "import cv2, PIL, numpy" 1>$null 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $needsRepair = $true
+    }
+}
+
+if ($needsRepair) {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host " VIDEO SUBTITLE REMOVER PRO" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "First-time setup required." -ForegroundColor Yellow
-    Write-Host "Preparing the runtime and dependencies..." -ForegroundColor Yellow
+    Write-Host "Runtime setup or repair required." -ForegroundColor Yellow
+    Write-Host "Preparing the runtime and dependencies without prompts..." -ForegroundColor Yellow
     Write-Host ""
     python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" 2>$null
     if ($LASTEXITCODE -eq 0) {
@@ -608,7 +634,7 @@ if (-not (Test-Path ".\\venv\\Scripts\\python.exe")) {
         Write-Host "Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup." -ForegroundColor Yellow
         Write-Host ""
     }
-    python setup.py
+    python setup.py --repair
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "Setup did not complete. Review the messages above, then try again." -ForegroundColor Red
@@ -640,8 +666,22 @@ exit 1
     print(f"  [OK] Created Run_VSR_Pro.ps1")
 
 
-def main():
+def parse_setup_args(argv=None):
+    """Parse setup command-line options."""
+    parser = argparse.ArgumentParser(
+        description="Prepare the Video Subtitle Remover Pro runtime."
+    )
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        help="Recreate the repo-local venv after safety checks, without prompting.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
     """Main setup function."""
+    args = parse_setup_args(argv)
     print_banner()
     
     if platform.system() != "Windows":
@@ -656,7 +696,7 @@ def main():
     gpu_info = detect_gpu()
     
     # Step 3: Create virtual environment
-    if not create_virtual_env():
+    if not create_virtual_env(repair=args.repair):
         sys.exit(1)
     
     # Step 4: Install PyTorch

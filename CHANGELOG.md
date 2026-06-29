@@ -84,6 +84,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   now installs PyTorch from the cu128 wheel index for RTX 20/30/40/50-series
   GPUs, because the older cu118 index does not provide `torch>=2.10.0`, and
   the packaging-tool refresh keeps `setuptools<82` for torch compatibility.
+- **Unattended setup repair.** Launchers now probe the virtual environment for
+  core packages and call `setup.py --repair` when it is missing or broken,
+  while plain `setup.py` keeps an existing `venv` without prompting.
 - **Local EXE build parser cleanup.** `build_exe.bat` no longer trips `cmd`
   parsing while preparing OCR package data collection for PyInstaller.
 - **SAM 2 mask refinement now shrinks coarse boxes.** `--sam2-refine` now

@@ -2,14 +2,22 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-if (-not (Test-Path ".\venv\Scripts\python.exe")) {
+$needsRepair = -not (Test-Path ".\venv\Scripts\python.exe")
+if (-not $needsRepair) {
+    & ".\venv\Scripts\python.exe" -c "import cv2, PIL, numpy" 1>$null 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $needsRepair = $true
+    }
+}
+
+if ($needsRepair) {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host " VIDEO SUBTITLE REMOVER PRO" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "First-time setup required." -ForegroundColor Yellow
-    Write-Host "Preparing the runtime and dependencies..." -ForegroundColor Yellow
+    Write-Host "Runtime setup or repair required." -ForegroundColor Yellow
+    Write-Host "Preparing the runtime and dependencies without prompts..." -ForegroundColor Yellow
     Write-Host ""
     python -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 14) else 1)" 2>$null
     if ($LASTEXITCODE -eq 0) {
@@ -18,7 +26,7 @@ if (-not (Test-Path ".\venv\Scripts\python.exe")) {
         Write-Host "Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup." -ForegroundColor Yellow
         Write-Host ""
     }
-    python setup.py
+    python setup.py --repair
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "Setup did not complete. Review the messages above, then try again." -ForegroundColor Red

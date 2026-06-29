@@ -45,12 +45,3 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Touches: `Dockerfile` or local container recipe, `.dockerignore`, `README.md`, setup smoke command, release docs
   Acceptance: A documented local-only CPU container or isolated install recipe launches `python -m backend.processor --self-test` and a tiny CLI smoke without GitHub Actions, cloud upload, or replacing the Windows launcher as the primary path.
   Complexity: M
-
-### P2 -- Setup repair
-
-- [ ] P2 - Make setup and launcher repair non-interactive
-  Why: `setup.py` prompts on an existing `venv`, but launcher-driven first-run and repair flows should not block on stdin or leave users manually deleting broken environments.
-  Evidence: `setup.py`, `Run_VSR_Pro.bat`, `Run_VSR_Pro.ps1`, SysAdminDoc issue #3, YaoFANGUK install issues #228 and #231
-  Touches: `setup.py`, `Run_VSR_Pro.bat`, `Run_VSR_Pro.ps1`, `Run_VSR_Pro_Debug.bat`, `tests/test_setup_bootstrap.py`, README troubleshooting
-  Acceptance: Launchers detect missing/broken venv state and run setup in unattended repair mode; `setup.py --repair` safely recreates only the repo-local venv after boundary checks; interactive prompts are never used by launcher paths; tests cover keep, repair, unsafe-path refusal, and timeout messaging.
-  Complexity: M

@@ -121,16 +121,33 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertIn("Timed out", output)
         self.assertIn("rerun setup.py", output)
 
+    def test_existing_virtual_env_kept_without_prompt_by_default(self):
+        old_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                Path("venv").mkdir()
+                with mock.patch("builtins.input", side_effect=AssertionError("stdin prompt")):
+                    with mock.patch.object(self.setup_mod.shutil, "rmtree") as rmtree:
+                        with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                            ok = self.setup_mod.create_virtual_env()
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertTrue(ok)
+        rmtree.assert_not_called()
+        run.assert_not_called()
+
     def test_recreate_virtual_env_removes_only_repo_local_venv(self):
         old_cwd = Path.cwd()
         with tempfile.TemporaryDirectory() as tmp:
             try:
                 os.chdir(tmp)
                 Path("venv").mkdir()
-                with mock.patch("builtins.input", return_value="y"):
+                with mock.patch("builtins.input", side_effect=AssertionError("stdin prompt")):
                     with mock.patch.object(self.setup_mod.shutil, "rmtree") as rmtree:
                         with mock.patch.object(self.setup_mod.subprocess, "run") as run:
-                            ok = self.setup_mod.create_virtual_env()
+                            ok = self.setup_mod.create_virtual_env(repair=True)
             finally:
                 os.chdir(old_cwd)
 
@@ -144,12 +161,12 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
             try:
                 os.chdir(tmp)
                 Path("venv").mkdir()
-                with mock.patch("builtins.input", return_value="y"):
+                with mock.patch("builtins.input", side_effect=AssertionError("stdin prompt")):
                     with mock.patch.object(self.setup_mod, "_is_reparse_point", return_value=True):
                         with mock.patch.object(self.setup_mod.shutil, "rmtree") as rmtree:
                             with mock.patch.object(self.setup_mod.subprocess, "run") as run:
                                 with mock.patch("builtins.print") as printed:
-                                    ok = self.setup_mod.create_virtual_env()
+                                    ok = self.setup_mod.create_virtual_env(repair=True)
             finally:
                 os.chdir(old_cwd)
 
@@ -262,6 +279,10 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertTrue(any("onnxruntime-gpu>=1.21.0" in call for call in calls))
         self.assertFalse(any("onnxruntime-directml" in call for call in calls))
 
+    def test_repair_argument_enables_unattended_recreate_mode(self):
+        self.assertFalse(self.setup_mod.parse_setup_args([]).repair)
+        self.assertTrue(self.setup_mod.parse_setup_args(["--repair"]).repair)
+
     def test_generated_launchers_match_tracked_files(self):
         root = Path(__file__).resolve().parents[1]
         launchers = [
@@ -284,6 +305,16 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
                     self.assertEqual(generated, tracked[name], name)
             finally:
                 os.chdir(old_cwd)
+
+        for name, content in tracked.items():
+            self.assertIn("setup.py --repair", content, name)
+            self.assertIn("import cv2, PIL, numpy", content, name)
+            self.assertNotIn("setup.py\n", content, name)
+
+    def test_setup_script_has_no_stdin_prompt(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "setup.py").read_text(encoding="utf-8")
+        self.assertNotIn("input(", source)
 
 
 if __name__ == "__main__":

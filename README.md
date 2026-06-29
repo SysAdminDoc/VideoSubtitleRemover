@@ -72,6 +72,8 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
    - Detects your GPU and installs appropriate packages
    - Installs PaddleOCR, EasyOCR, and LaMa inpainting
    - Launches the application
+   - On later launches, verifies core packages and repairs a broken `venv`
+     without stdin prompts
    - Use `Run_VSR_Pro_Debug.bat` for a visible troubleshooting console, or
      `Run_VSR_Pro.ps1` when you prefer launching from PowerShell
 
@@ -504,7 +506,8 @@ content, colors are preserved. If you still see a mismatch, attach the
 <summary><b>Application won't start</b></summary>
 
 - Ensure Python 3.10+ is installed; use Python 3.12 or 3.13 for NVIDIA CUDA
-- Delete `venv` folder and re-run setup
+- Re-run a launcher to auto-repair a missing or broken `venv`, or run
+  `python setup.py --repair` from the repo root for the same unattended repair
 - Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup, or
   `Run_VSR_Pro.ps1` from PowerShell to see setup/launch errors there
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
