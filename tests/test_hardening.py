@@ -3107,6 +3107,13 @@ class I18nScaffoldTests(unittest.TestCase):
     """RM-97: gettext scaffold must pass strings through unchanged when
     no catalog is bound, and bind cleanly when one is."""
 
+    class _FakeTranslations:
+        def __init__(self, mapping):
+            self.mapping = dict(mapping)
+
+        def gettext(self, text):
+            return self.mapping.get(text, text)
+
     def test_passthrough_without_catalog(self):
         from backend import i18n
         i18n.bind_locale(None)
@@ -3121,6 +3128,36 @@ class I18nScaffoldTests(unittest.TestCase):
         i18n.bind_locale("zz")
         self.assertEqual(i18n._("Start batch"), "Start batch")
         self.assertFalse(i18n.is_translation_active())
+
+    def test_status_ui_uses_bound_catalog_and_missing_keys_fall_back(self):
+        from backend import i18n
+        from gui.config import ProcessingStatus, status_ui
+
+        previous = i18n._active_translation
+        try:
+            i18n._active_translation = self._FakeTranslations({
+                "Ready": "Listo",
+                "Ready to process": "Listo para procesar",
+                "Remove": "Quitar",
+                "Start batch": "Iniciar lote",
+            })
+
+            self.assertEqual(i18n.tr("Start batch"), "Iniciar lote")
+            self.assertEqual(i18n.tr("Missing key"), "Missing key")
+            self.assertEqual(status_ui(ProcessingStatus.IDLE)["label"], "Listo")
+        finally:
+            i18n._active_translation = previous
+
+    def test_locale_template_contains_representative_gui_strings(self):
+        pot = Path("locale/vsr.pot").read_text(encoding="utf-8")
+        for expected in (
+            'msgid "Start batch"',
+            'msgid "Settings"',
+            'msgid "Backend status and app version."',
+            'msgid "Per-file overrides"',
+            'msgid "Preview tools are locked while a batch is running."',
+        ):
+            self.assertIn(expected, pot)
 
 
 class A11yScaffoldTests(unittest.TestCase):

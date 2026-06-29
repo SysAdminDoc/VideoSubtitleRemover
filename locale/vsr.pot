@@ -9,15 +9,14 @@
 #   4. Drop the .mo next to the .po. The GUI auto-binds on startup
 #      when the user's locale matches.
 #
-# Keys below are the first wave of strings extracted from the GUI; a
-# follow-up commit will route every label through gettext('_') so this
-# template stays exhaustive.
+# Extracted from gettext `_()` and documented GUI `tr()` aliases.
+# Equivalent xgettext keywords: -k_ -ktr
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: VSR 3.13.0\n"
+"Project-Id-Version: VSR 3.17.3\n"
 "Report-Msgid-Bugs-To: github.com/SysAdminDoc/VideoSubtitleRemover/issues\n"
-"POT-Creation-Date: 2026-05-25 12:00+0000\n"
+"POT-Creation-Date: 2026-06-29 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -25,137 +24,1007 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-msgid "Start batch"
+msgid "0 disables. Values above 1 inpaint keyframes and synthesize skipped frames with Practical-RIFE when installed."
 msgstr ""
 
-msgid "Stop batch"
-msgstr ""
-
-msgid "Stopping..."
-msgstr ""
-
-msgid "Add files"
-msgstr ""
-
-msgid "Choose folder"
-msgstr ""
-
-msgid "Set region"
-msgstr ""
-
-msgid "Reset"
-msgstr ""
-
-msgid "Preview cleanup"
+msgid "0 uses the full clip"
 msgstr ""
 
 msgid "A/B compare"
 msgstr ""
 
-msgid "Review mask"
+msgid "About {app_name}"
 msgstr ""
 
-msgid "Full size"
+msgid "ACTIVITY"
 msgstr ""
 
-msgid "Override settings for this file..."
+msgid "Activity log cleared"
 msgstr ""
 
-msgid "Repeat with these settings"
+msgid "Adaptive batch sizing (probe free VRAM on init)"
 msgstr ""
 
-msgid "Cancel this item"
+msgid "Adaptive mask reuse (perceptual hash)"
 msgstr ""
 
-msgid "Remove from queue"
+msgid "Add a file to the queue first"
 msgstr ""
 
-msgid "Ready to process"
+msgid "Add every supported media file from a folder."
 msgstr ""
 
-msgid "Complete!"
+msgid "Add files to the queue"
 msgstr ""
 
-msgid "Processing failed"
+msgid "Add files, review a sample frame, then start."
 msgstr ""
 
-msgid "Cancelled"
+msgid "Add files, review one sample, then run the batch."
 msgstr ""
 
-msgid "Settings"
+msgid "Add media to the queue before starting."
 msgstr ""
 
-msgid "Profile"
+msgid "Add timed"
 msgstr ""
 
-msgid "Workflow"
-msgstr ""
-
-msgid "Detection"
-msgstr ""
-
-msgid "Output"
-msgstr ""
-
-msgid "Audio"
-msgstr ""
-
-msgid "Performance"
-msgstr ""
-
-msgid "Editorial"
-msgstr ""
-
-msgid "Video range"
+msgid "Add videos or images to build a cleanup batch. Originals stay untouched."
 msgstr ""
 
 msgid "Algorithm"
 msgstr ""
 
-msgid "Compute device"
+msgid "All Files"
 msgstr ""
 
-msgid "Subtitle language"
+msgid "All files"
 msgstr ""
 
-msgid "Sensitivity"
+msgid "All Supported"
 msgstr ""
 
-msgid "Mask dilate"
+msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr ""
 
-msgid "Mask feather"
+msgid "Application status"
 msgstr ""
 
-msgid "Output codec"
+msgid "Audio"
 msgstr ""
 
-msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
+msgid "Auto-create an output folder beside each source"
 msgstr ""
 
-msgid "Preserve the source audio track"
+msgid "Auto-deinterlace interlaced sources (yadif)"
 msgstr ""
 
-msgid "Pass through every audio stream (Bluray/DVD multi-track)"
+msgid "Auto-detect subtitle band on load"
 msgstr ""
 
-msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
+msgid "Auto-detect the subtitle language from a sample frame."
 msgstr ""
 
-msgid "High-contrast theme (restart required)"
+msgid "Automatic subtitle detection"
 msgstr ""
 
-msgid "Quality report sheet (side-by-side PNG comparison)"
+msgid "BACKEND STATUS"
+msgstr ""
+
+msgid "Backend status and app version."
+msgstr ""
+
+msgid "Backend status is still being probed."
+msgstr ""
+
+msgid "Batch finished"
+msgstr ""
+
+msgid "Batch finished with issues"
+msgstr ""
+
+msgid "Build your batch"
+msgstr ""
+
+msgid "Built-in preset names are reserved."
 msgstr ""
 
 msgid "Cancel"
 msgstr ""
 
-msgid "Save"
+msgid "Cancel this item"
+msgstr ""
+
+msgid "Check for updates on startup"
+msgstr ""
+
+msgid "Checking FFmpeg availability for audio preservation..."
+msgstr ""
+
+msgid "Choose a folder to clean"
+msgstr ""
+
+msgid "Choose files"
+msgstr ""
+
+msgid "Choose files or a folder below. Originals stay untouched."
+msgstr ""
+
+msgid "Choose files to clean"
+msgstr ""
+
+msgid "Choose folder"
+msgstr ""
+
+msgid "Choose one or more videos or images to add to the queue."
+msgstr ""
+
+msgid "Cleanup algorithm"
+msgstr ""
+
+msgid "Clear"
+msgstr ""
+
+msgid "Clear all"
+msgstr ""
+
+msgid "Clear filter"
+msgstr ""
+
+msgid "Clear queue"
+msgstr ""
+
+msgid "Clear the filter or search for part of a filename."
+msgstr ""
+
+msgid "Click a queue item, then use Set region or Review mask."
+msgstr ""
+
+msgid "Click Import or drag files onto the queue"
 msgstr ""
 
 msgid "Close"
 msgstr ""
 
-msgid "About"
+msgid "Colour-tuned mask expansion"
+msgstr ""
+
+msgid "COMPLETED"
+msgstr ""
+
+msgid "Completed outputs are ready. Review the outliers or open the log for details."
+msgstr ""
+
+msgid "Compute"
+msgstr ""
+
+msgid "Compute device"
+msgstr ""
+
+msgid "Compute PSNR / SSIM quality report after run"
+msgstr ""
+
+msgid "Confidence-weighted dilation"
+msgstr ""
+
+msgid "Copy CLI command"
+msgstr ""
+
+msgid "Copy source path"
+msgstr ""
+
+msgid "CPU mode"
+msgstr ""
+
+msgid "CPU only"
+msgstr ""
+
+msgid "Custom location"
+msgstr ""
+
+msgid "Decouples cv2.VideoCapture.read() from the detect+inpaint critical path. On by default."
+msgstr ""
+
+msgid "Default workflow"
+msgstr ""
+
+msgid "Detect"
+msgstr ""
+
+msgid "DETECTING"
+msgstr ""
+
+msgid "Detecting"
+msgstr ""
+
+msgid "Detecting hardware..."
+msgstr ""
+
+msgid "Detecting language..."
+msgstr ""
+
+msgid "Detecting..."
+msgstr ""
+
+msgid "Detection"
+msgstr ""
+
+msgid "Detection engines"
+msgstr ""
+
+msgid "Device"
+msgstr ""
+
+msgid "disabled"
+msgstr ""
+
+msgid "Disk cache"
+msgstr ""
+
+msgid "Double-click to view at full size. Use Set region above to draw the subtitle band."
+msgstr ""
+
+msgid "Drag a larger subtitle region before releasing."
+msgstr ""
+
+msgid "drag and drop available"
+msgstr ""
+
+msgid "Drag files here, choose files, or choose a folder. Originals stay untouched."
+msgstr ""
+
+msgid "Drag over the subtitle text. Release to save and refresh the mask."
+msgstr ""
+
+msgid "Drag to add a region. Drag again for multi-region."
+msgstr ""
+
+msgid "Draw subtitle region for {name}"
+msgstr ""
+
+msgid "Draw the subtitle region directly on the preview frame."
+msgstr ""
+
+msgid "EBU R128 loudness target"
+msgstr ""
+
+msgid "enabled"
+msgstr ""
+
+msgid "End (s)"
+msgstr ""
+
+msgid "End sec"
+msgstr ""
+
+msgid "Export"
+msgstr ""
+
+msgid "Export debug mask video (.mask.mp4)"
+msgstr ""
+
+msgid "Export detected text as .srt sidecar"
+msgstr ""
+
+msgid "Export model cache"
+msgstr ""
+
+msgid "Export model cache..."
+msgstr ""
+
+msgid "FAILED"
+msgstr ""
+
+msgid "Farneback optical flow aligns frames before TBE aggregation. Slower but cleaner on pans and zooms."
+msgstr ""
+
+msgid "Fast remux and keep embedded subtitles"
+msgstr ""
+
+msgid "Fast strip embedded subtitles"
+msgstr ""
+
+msgid "FFmpeg"
+msgstr ""
+
+msgid "FFmpeg basic"
+msgstr ""
+
+msgid "FFmpeg codecs"
+msgstr ""
+
+msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
+msgstr ""
+
+msgid "FFmpeg quality"
+msgstr ""
+
+msgid "FFmpeg ready"
+msgstr ""
+
+msgid "FFmpeg speech"
+msgstr ""
+
+msgid "FFmpeg {name}"
+msgstr ""
+
+msgid "ffprobe-checks the input for combing; runs ffmpeg yadif if detected."
+msgstr ""
+
+msgid "File size (largest first)"
+msgstr ""
+
+msgid "File size (smallest first)"
+msgstr ""
+
+msgid "Filename (A -> Z)"
+msgstr ""
+
+msgid "Filename (Z -> A)"
+msgstr ""
+
+msgid "Filter"
+msgstr ""
+
+msgid "Finish processing this item before using A/B compare."
+msgstr ""
+
+msgid "Fixed mask region"
+msgstr ""
+
+msgid "Fixed mask regions"
+msgstr ""
+
+msgid "Flow-warped temporal exposure (motion-heavy)"
+msgstr ""
+
+msgid "focused"
+msgstr ""
+
+msgid "Frame"
+msgstr ""
+
+msgid "Frame {current}/{total} ({percent}%)"
+msgstr ""
+
+msgid "Full size"
+msgstr ""
+
+msgid "Give this preset a short name."
+msgstr ""
+
+msgid "Got it"
+msgstr ""
+
+msgid "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering."
+msgstr ""
+
+msgid "h264 is universal; h265 and av1 cut bitrate ~50% on 4K; vvc (H.266) needs FFmpeg with libvvenc. Uses NVENC/QSV/AMF when available."
+msgstr ""
+
+msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
+msgstr ""
+
+msgid "Hardware-decode hint"
+msgstr ""
+
+msgid "Hash status"
+msgstr ""
+
+msgid "Help"
+msgstr ""
+
+msgid "Hide activity"
+msgstr ""
+
+msgid "Hide detailed controls"
+msgstr ""
+
+msgid "High-contrast theme (restart required)"
+msgstr ""
+
+msgid "Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames."
+msgstr ""
+
+msgid "Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."
+msgstr ""
+
+msgid "If hardware encoding fails the app retries automatically with libx264."
+msgstr ""
+
+msgid "Image Files"
+msgstr ""
+
+msgid "Import"
+msgstr ""
+
+msgid "Import files or choose a folder to start."
+msgstr ""
+
+msgid "Import model cache..."
+msgstr ""
+
+msgid "Info"
+msgstr ""
+
+msgid "Inpainting"
+msgstr ""
+
+msgid "Inpainting engines"
+msgstr ""
+
+msgid "Input"
+msgstr ""
+
+msgid "Inspect"
+msgstr ""
+
+msgid "Install Pillow to enable image preview tools."
+msgstr ""
+
+msgid "Install Pillow to enable previews and visual inspection tools."
+msgstr ""
+
+msgid "Kalman box tracking (flicker reduction)"
+msgstr ""
+
+msgid "Kalman tracks lasting longer than ~3s are treated as chyrons."
+msgstr ""
+
+msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
+msgstr ""
+
+msgid "Keyframe-driven detection (OCR only at I-frames)"
+msgstr ""
+
+msgid "LaMa fast mode - favor speed over fill detail"
+msgstr ""
+
+msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
+msgstr ""
+
+msgid "Languages"
+msgstr ""
+
+msgid "Large speedup for long videos. Falls back to pHash skip if ffprobe is missing."
+msgstr ""
+
+msgid "Live preview: {file_name}"
+msgstr ""
+
+msgid "Load a preset JSON file into the user library."
+msgstr ""
+
+msgid "Log file"
+msgstr ""
+
+msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
+msgstr ""
+
+msgid "Manual region: ({x1}, {y1}) to ({x2}, {y2})"
+msgstr ""
+
+msgid "Manual regions: {count} fixed rectangles"
+msgstr ""
+
+msgid "Measured {items} completed item{item_suffix} across {samples} sampled frame{sample_suffix}. Higher is generally better."
+msgstr ""
+
+msgid "Missing"
+msgstr ""
+
+msgid "Mode"
+msgstr ""
+
+msgid "Model cache"
+msgstr ""
+
+msgid "Model cache bundle"
+msgstr ""
+
+msgid "Model files"
+msgstr ""
+
+msgid "Mux every audio stream from the source. Off keeps only the first track."
+msgstr ""
+
+msgid "Name the current cleanup settings and save them to the user preset library."
+msgstr ""
+
+msgid "Needs attention"
+msgstr ""
+
+msgid "Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."
+msgstr ""
+
+msgid "Next action"
+msgstr ""
+
+msgid "No action needed."
+msgstr ""
+
+msgid "No completed outputs are available yet."
+msgstr ""
+
+msgid "No failed or stopped items need retry."
+msgstr ""
+
+msgid "No FFmpeg"
+msgstr ""
+
+msgid "No media queued"
+msgstr ""
+
+msgid "No queued items match this search"
+msgstr ""
+
+msgid "None"
+msgstr ""
+
+msgid "not selected"
+msgstr ""
+
+msgid "Open a frame slider that wipes between source and cleaned output."
+msgstr ""
+
+msgid "Open log"
+msgstr ""
+
+msgid "Open log file"
+msgstr ""
+
+msgid "Open output"
+msgstr ""
+
+msgid "Open quality sheet"
+msgstr ""
+
+msgid "Open report"
+msgstr ""
+
+msgid "Open result"
+msgstr ""
+
+msgid "Open the selected source frame in a larger viewer."
+msgstr ""
+
+msgid "OpenCV fallback"
+msgstr ""
+
+msgid "Opened the log file"
+msgstr ""
+
+msgid "Opened the settings folder"
+msgstr ""
+
+msgid "Optional"
+msgstr ""
+
+msgid "Output codec"
+msgstr ""
+
+msgid "OUTPUT LOCATION"
+msgstr ""
+
+msgid "Outputs are ready for review"
+msgstr ""
+
+msgid "Outputs are ready to review."
+msgstr ""
+
+msgid "Override settings for this file..."
+msgstr ""
+
+msgid "Override settings: {name}"
+msgstr ""
+
+msgid "Pass through every audio stream (Bluray/DVD multi-track)"
+msgstr ""
+
+msgid "Per-file overrides"
+msgstr ""
+
+msgid "Preserve the source audio track"
+msgstr ""
+
+msgid "Preset"
+msgstr ""
+
+msgid "Prevents background aggregation across hard cuts. Turn off if your footage is uncut."
+msgstr ""
+
+msgid "Preview a sample frame"
+msgstr ""
+
+msgid "Preview source frame"
+msgstr ""
+
+msgid "Preview tools are locked while a batch is running."
+msgstr ""
+
+msgid "Preview tools are locked while the batch is running."
+msgstr ""
+
+msgid "Preview tools are ready. Review the mask or test cleanup before starting."
+msgstr ""
+
+msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
+msgstr ""
+
+msgid "Providers"
+msgstr ""
+
+msgid "Quality report sheet (side-by-side PNG comparison)"
+msgstr ""
+
+msgid "Queue"
+msgstr ""
+
+msgid "Ready"
+msgstr ""
+
+msgid "ready"
+msgstr ""
+
+msgid "Ready to process"
+msgstr ""
+
+msgid "Recommended default"
+msgstr ""
+
+msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
+msgstr ""
+
+msgid "Remove"
+msgstr ""
+
+msgid "Remove dialogue subtitles (short-lived OCR tracks)"
+msgstr ""
+
+msgid "Remove from queue"
+msgstr ""
+
+msgid "Remove persistent text (logos, tickers, lower-thirds)"
+msgstr ""
+
+msgid "Rename output..."
+msgstr ""
+
+msgid "Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report."
+msgstr ""
+
+msgid "Repeat last"
+msgstr ""
+
+msgid "Repeat with these settings"
+msgstr ""
+
+msgid "Reset"
+msgstr ""
+
+msgid "Retry failed"
+msgstr ""
+
+msgid "Retry suggested"
+msgstr ""
+
+msgid "Retry with suggested settings"
+msgstr ""
+
+msgid "Reuse a fixed subtitle region (skip per-frame scanning)"
+msgstr ""
+
+msgid "Reveal output folder"
+msgstr ""
+
+msgid "Reverse current order"
+msgstr ""
+
+msgid "REVIEW"
+msgstr ""
+
+msgid "Review first"
+msgstr ""
+
+msgid "Review mask"
+msgstr ""
+
+msgid "Review queued files before starting."
+msgstr ""
+
+msgid "Review subtitle mask"
+msgstr ""
+
+msgid "RIFE fast stride"
+msgstr ""
+
+msgid "Rotates each frame 90 CCW before OCR so columnar CJK reads as a line. Boxes rotate back to the source frame."
+msgstr ""
+
+msgid "Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."
+msgstr ""
+
+msgid "Run"
+msgstr ""
+
+msgid "Run a batch first to repeat its settings."
+msgstr ""
+
+msgid "Run burned-in cleanup instead"
+msgstr ""
+
+msgid "Run detect + inpaint on the first frame of the selected item."
+msgstr ""
+
+msgid "Run detection on the selected item and show the first-frame mask."
+msgstr ""
+
+msgid "Runtime log"
+msgstr ""
+
+msgid "Sampled quality check"
+msgstr ""
+
+msgid "Samples 10 random frames, compares input vs output; logged and shown in the batch summary."
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Save as..."
+msgstr ""
+
+msgid "Save preset"
+msgstr ""
+
+msgid "Save support bundle"
+msgstr ""
+
+msgid "Save the current setup as a preset"
+msgstr ""
+
+msgid "Saved redacted support bundle to {name}"
+msgstr ""
+
+msgid "Scale mask dilation inversely with OCR confidence: low-confidence boxes get more padding, high-confidence boxes stay tight."
+msgstr ""
+
+msgid "Scale the TBE window to fit free VRAM. Prevents OOM on 4K, unlocks headroom on 24 GB cards."
+msgstr ""
+
+msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
+msgstr ""
+
+msgid "Scrub to a visible frame; enter seconds and use Add timed for moving subtitles."
+msgstr ""
+
+msgid "Select a completed queue item to compare source and output."
+msgstr ""
+
+msgid "Select a queue item to enable mask review, test cleanup, and zoom."
+msgstr ""
+
+msgid "Select a queue item to enable preview tools."
+msgstr ""
+
+msgid "Select a queued item to enable preview tools."
+msgstr ""
+
+msgid "Select Output Directory"
+msgstr ""
+
+msgid "selected"
+msgstr ""
+
+msgid "Sensitivity"
+msgstr ""
+
+msgid "Set region"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Settings folder"
+msgstr ""
+
+msgid "Show activity"
+msgstr ""
+
+msgid "Show detailed controls"
+msgstr ""
+
+msgid "Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."
+msgstr ""
+
+msgid "Skip repeated detection when you have already set a precise subtitle region."
+msgstr ""
+
+msgid "Slowest stage"
+msgstr ""
+
+msgid "Smooths per-frame OCR jitter and fills single-frame misses. Recommended."
+msgstr ""
+
+msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
+msgstr ""
+
+msgid "Some items need attention"
+msgstr ""
+
+msgid "Sort"
+msgstr ""
+
+msgid "Split TBE batches at scene cuts"
+msgstr ""
+
+msgid "Start (s)"
+msgstr ""
+
+msgid "Start batch"
+msgstr ""
+
+msgid "Start sec"
+msgstr ""
+
+msgid "Status (pending first)"
+msgstr ""
+
+msgid "Stop batch"
+msgstr ""
+
+msgid "Stop is already in progress."
+msgstr ""
+
+msgid "STOPPED"
+msgstr ""
+
+msgid "Stopping..."
+msgstr ""
+
+msgid "Stops karaoke captions leaking original text through the gaps between syllables."
+msgstr ""
+
+msgid "Structured JSON log"
+msgstr ""
+
+msgid "Subtitle language"
+msgstr ""
+
+msgid "SUBTITLE REGION"
+msgstr ""
+
+msgid "Support bundle"
+msgstr ""
+
+msgid "Support bundle could not be saved"
+msgstr ""
+
+msgid "Switched to the {profile} profile"
+msgstr ""
+
+msgid "Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."
+msgstr ""
+
+msgid "Test cleanup"
+msgstr ""
+
+msgid "The batch is already running."
+msgstr ""
+
+msgid "The cleaned output file is not available on disk."
+msgstr ""
+
+msgid "The log file could not be opened"
+msgstr ""
+
+msgid "The log file is not available yet"
+msgstr ""
+
+msgid "The queue is already empty."
+msgstr ""
+
+msgid "The settings folder could not be opened"
+msgstr ""
+
+msgid "These apply to this queued item only and survive a global settings change."
+msgstr ""
+
+msgid "Three first-run cues: import media, inspect the region, and run the batch."
+msgstr ""
+
+msgid "Three things that make batch cleanup painless."
+msgstr ""
+
+msgid "Time-ranged mask regions"
+msgstr ""
+
+msgid "Timed manual regions: {count} rectangle{suffix}"
+msgstr ""
+
+msgid "Total time {elapsed} - {count} item{suffix} processed"
+msgstr ""
+
+msgid "Tracks the chyron classifier marks as dialogue subtitles."
+msgstr ""
+
+msgid "unavailable"
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
+msgstr ""
+
+msgid "User preset"
+msgstr ""
+
+msgid "Version {version}"
+msgstr ""
+
+msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
+msgstr ""
+
+msgid "Video Files"
+msgstr ""
+
+msgid "Video Subtitle Remover"
+msgstr ""
+
+msgid "Videos and images supported"
+msgstr ""
+
+msgid "Wait for the active batch to finish before comparing output."
+msgstr ""
+
+msgid "Wait for the active batch to finish before editing regions."
+msgstr ""
+
+msgid "Wait for the current batch to finish."
+msgstr ""
+
+msgid "Waiting"
+msgstr ""
+
+msgid "Welcome"
+msgstr ""
+
+msgid "Welcome to {app_name}"
+msgstr ""
+
+msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
+msgstr ""
+
+msgid "Worker-thread frame prefetch (overlap decode and inpaint)"
+msgstr ""
+
+msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
+msgstr ""
+
+msgid "Write the current preset to a shareable JSON file."
+msgstr ""
+
+msgid "Writes a black-and-white mp4 of the per-frame detection mask alongside the output."
+msgstr ""
+
+msgid "Writes an .srt file next to the output using OCR text and timings."
+msgstr ""
+
+msgid "{count} error{suffix}"
+msgstr ""
+
+msgid "{count} GPU{suffix}"
+msgstr ""
+
+msgid "{count} items"
+msgstr ""
+
+msgid "{count} queued and ready to process"
+msgstr ""
+
+msgid "{count} warning{suffix}"
+msgstr ""
+
+msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
 msgstr ""

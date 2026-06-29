@@ -14,6 +14,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from backend.i18n import tr
 from gui.theme import Theme, f, mono
 from gui.config import ProcessingStatus, QueueItem, STATUS_UI, status_ui
 from backend.a11y import (
@@ -1027,16 +1028,22 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
 
     dialog = tk.Toplevel(parent)
     dialog.withdraw()
-    dialog.title(title)
+    title_text = tr(title)
+    message_text = tr(message)
+    detail_text = tr(detail) if detail else ""
+    confirm_text = tr(confirm_label)
+    cancel_text = tr(cancel_label)
+
+    dialog.title(title_text)
     dialog.configure(bg=Theme.BG_OVERLAY)
     dialog.resizable(False, False)
     dialog.transient(parent)
     set_accessible_metadata(
         dialog,
         role="dialog",
-        label=title,
+        label=title_text,
         state="modal",
-        description=" ".join(part for part in (message, detail) if part),
+        description=" ".join(part for part in (message_text, detail_text) if part),
     )
 
     outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
@@ -1048,15 +1055,15 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
     content = tk.Frame(body, bg=Theme.BG_SECONDARY)
     content.pack(padx=28, pady=(24, 14))
 
-    tk.Label(content, text=title, font=f(Theme.F_HEADING, "bold"),
+    tk.Label(content, text=title_text, font=f(Theme.F_HEADING, "bold"),
              bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
              anchor="w", justify="left").pack(anchor="w")
-    tk.Label(content, text=message, font=f(Theme.F_BODY),
+    tk.Label(content, text=message_text, font=f(Theme.F_BODY),
              bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
              anchor="w", justify="left", wraplength=420).pack(
                  anchor="w", pady=(6, 0))
-    if detail:
-        tk.Label(content, text=detail, font=f(Theme.F_BODY_SM),
+    if detail_text:
+        tk.Label(content, text=detail_text, font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  anchor="w", justify="left", wraplength=420).pack(
                      anchor="w", pady=(8, 0))
@@ -1076,11 +1083,11 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
         dialog.grab_release()
         dialog.destroy()
 
-    cancel_btn = ModernButton(inner_actions, text=cancel_label, width=96,
+    cancel_btn = ModernButton(inner_actions, text=cancel_text, width=96,
                               command=_cancel, style="ghost", size="md")
     cancel_btn.pack(side="left")
 
-    confirm_btn = ModernButton(inner_actions, text=confirm_label, width=118,
+    confirm_btn = ModernButton(inner_actions, text=confirm_text, width=118,
                                command=_confirm, style=tone, size="md")
     confirm_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
@@ -1109,7 +1116,7 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
     else:
         confirm_btn.focus_set()
     announce(
-        f"{title}. {message}",
+        f"{title_text}. {message_text}",
         importance="high" if tone == "danger" else "normal",
     )
     dialog.wait_window()
@@ -1522,14 +1529,14 @@ class DragDropFrame(tk.Frame):
         glyph.pack()
 
         # Main text
-        main_text = tk.Label(inner, text="Add files to the queue",
+        main_text = tk.Label(inner, text=tr("Add files to the queue"),
                             font=f(Theme.F_TITLE, "bold"), bg=self.normal_bg,
                             fg=Theme.TEXT_PRIMARY)
         main_text.pack(pady=(2, 0))
 
         # Sub text -- updated after DnD setup to reflect actual capabilities
         self._sub_text = tk.Label(inner,
-                           text="Drag files here, choose files, or choose a folder. Originals stay untouched.",
+                           text=tr("Drag files here, choose files, or choose a folder. Originals stay untouched."),
                            font=f(Theme.F_BODY_SM), bg=self.normal_bg,
                            fg=Theme.TEXT_SECONDARY, justify="center", wraplength=480)
         self._sub_text.pack(pady=(6, 12))
@@ -1538,18 +1545,18 @@ class DragDropFrame(tk.Frame):
         actions = tk.Frame(inner, bg=self.normal_bg)
         actions.pack()
 
-        self.add_files_btn = ModernButton(actions, text="Choose files", width=124,
+        self.add_files_btn = ModernButton(actions, text=tr("Choose files"), width=124,
                                           command=self._open_file_dialog,
                                           style="accent", size="md")
         self.add_files_btn.pack(side="left")
 
-        self.add_folder_btn = ModernButton(actions, text="Choose folder", width=118,
+        self.add_folder_btn = ModernButton(actions, text=tr("Choose folder"), width=118,
                                            command=self._open_folder_dialog,
                                            style="secondary", size="md")
         self.add_folder_btn.pack(side="left", padx=(8, 0))
 
         support_text = tk.Label(inner,
-                                text="Videos and images supported",
+                                text=tr("Videos and images supported"),
                                 font=f(Theme.F_META, "bold"), bg=self.normal_bg,
                                 fg=Theme.TEXT_DISABLED)
         support_text.pack(pady=(12, 0))
@@ -1578,7 +1585,7 @@ class DragDropFrame(tk.Frame):
             pass
         if not self._dnd_available:
             self._sub_text.config(
-                text="Choose files or a folder below. Originals stay untouched."
+                text=tr("Choose files or a folder below. Originals stay untouched.")
             )
         self._sync_a11y()
 
@@ -1607,11 +1614,11 @@ class DragDropFrame(tk.Frame):
         set_accessible_metadata(
             self,
             role="drop target",
-            label="Add files to the queue",
+            label=tr("Add files to the queue"),
             state=_state_text(
-                "enabled" if self.import_enabled else "disabled",
-                "focused" if self.focused else "",
-                "drag and drop available" if self._dnd_available else "",
+                tr("enabled") if self.import_enabled else tr("disabled"),
+                tr("focused") if self.focused else "",
+                tr("drag and drop available") if self._dnd_available else "",
             ),
             description=self._sub_text.cget("text"),
         )
@@ -1640,12 +1647,12 @@ class DragDropFrame(tk.Frame):
         if not getattr(self, "import_enabled", True):
             return
         files = filedialog.askopenfilenames(
-            title="Choose files to clean",
+            title=tr("Choose files to clean"),
             filetypes=[
-                ("All Supported", filepicker_pattern(SUPPORTED_EXTENSIONS)),
-                ("Video Files", filepicker_pattern(VIDEO_EXTENSIONS)),
-                ("Image Files", filepicker_pattern(IMAGE_EXTENSIONS)),
-                ("All Files", "*.*"),
+                (tr("All Supported"), filepicker_pattern(SUPPORTED_EXTENSIONS)),
+                (tr("Video Files"), filepicker_pattern(VIDEO_EXTENSIONS)),
+                (tr("Image Files"), filepicker_pattern(IMAGE_EXTENSIONS)),
+                (tr("All Files"), "*.*"),
             ]
         )
         if files:
@@ -1654,7 +1661,7 @@ class DragDropFrame(tk.Frame):
     def _open_folder_dialog(self):
         if not getattr(self, "import_enabled", True):
             return
-        folder = filedialog.askdirectory(title="Choose a folder to clean")
+        folder = filedialog.askdirectory(title=tr("Choose a folder to clean"))
         if folder:
             self.on_drop([folder])
 
@@ -1768,7 +1775,7 @@ class QueueItemWidget(tk.Frame):
         self.bottom_row = tk.Frame(self.container, bg=self._surface_bg)
         self.bottom_row.pack(fill="x")
 
-        self.message_label = tk.Label(self.bottom_row, text=item.message or "Ready to process",
+        self.message_label = tk.Label(self.bottom_row, text=item.message or tr("Ready to process"),
                                       font=f(Theme.F_BODY_SM), bg=self._surface_bg,
                                       fg=Theme.TEXT_SECONDARY, anchor="w")
         self.message_label.pack(side="left", fill="x", expand=True)
@@ -1781,12 +1788,12 @@ class QueueItemWidget(tk.Frame):
         self.actions_row = tk.Frame(self.container, bg=self._surface_bg)
         self.actions_row.pack(fill="x", pady=(Theme.S_MD, 0))
 
-        self.remove_btn = ModernButton(self.actions_row, text="Remove", width=78,
+        self.remove_btn = ModernButton(self.actions_row, text=tr("Remove"), width=78,
                                        command=lambda: self.on_remove(self.item.id),
                                        style="ghost", size="sm")
         self.remove_btn.pack(side="left")
 
-        self.open_btn = ModernButton(self.actions_row, text="Open result", width=104,
+        self.open_btn = ModernButton(self.actions_row, text=tr("Open result"), width=104,
                                      command=self._open_output, style="accent",
                                      size="sm")
         self.open_btn.pack(side="right")
@@ -1820,18 +1827,18 @@ class QueueItemWidget(tk.Frame):
         is_complete = (self.item.status == ProcessingStatus.COMPLETE
                        and Path(self.item.output_path).exists())
 
-        menu.add_command(label="Preview source frame",
+        menu.add_command(label=tr("Preview source frame"),
                          command=self._request_preview)
-        menu.add_command(label="Review subtitle mask",
+        menu.add_command(label=tr("Review subtitle mask"),
                          command=self._request_mask_preview)
         menu.add_separator()
-        menu.add_command(label="Open result",
+        menu.add_command(label=tr("Open result"),
                          command=self._open_output,
                          state="normal" if is_complete else "disabled")
-        menu.add_command(label="Open quality sheet",
+        menu.add_command(label=tr("Open quality sheet"),
                          command=self._open_quality_sheet,
                          state="normal" if self._quality_sheet_path() else "disabled")
-        menu.add_command(label="Retry with suggested settings",
+        menu.add_command(label=tr("Retry with suggested settings"),
                          command=lambda: self.on_retry_suggested(self.item.id)
                          if self.on_retry_suggested else None,
                          state=(
@@ -1839,56 +1846,56 @@ class QueueItemWidget(tk.Frame):
                              if self.on_retry_suggested and self._needs_quality_review()
                              else "disabled"
                          ))
-        menu.add_command(label="Reveal output folder",
+        menu.add_command(label=tr("Reveal output folder"),
                          command=self._reveal_output,
                          state="normal" if is_complete else "disabled")
         menu.add_separator()
         # Only allow renaming output before processing has started.
         rename_allowed = self.item.status == ProcessingStatus.IDLE and self.on_rename is not None
-        menu.add_command(label="Rename output...",
+        menu.add_command(label=tr("Rename output..."),
                          command=lambda: self.on_rename(self.item.id) if self.on_rename else None,
                          state="normal" if rename_allowed else "disabled")
-        menu.add_command(label="Copy source path",
+        menu.add_command(label=tr("Copy source path"),
                          command=self._copy_source_path)
-        menu.add_command(label="Copy CLI command",
+        menu.add_command(label=tr("Copy CLI command"),
                          command=self._copy_cli_command)
         # RM-28: re-queue the same source with the snapshot of settings
         # that was active on this item. Useful when re-running with a
         # tweaked global config but you still want exactly the same
         # per-file overrides as a previous run.
         if self.on_repeat is not None:
-            menu.add_command(label="Repeat with these settings",
+            menu.add_command(label=tr("Repeat with these settings"),
                              command=lambda: self.on_repeat(self.item.id))
         # F-7: per-item cancel. Only meaningful while the item is
         # actively running -- on IDLE entries we surface "Remove"
         # below as the equivalent action.
         if self.on_cancel_item is not None and is_active:
-            menu.add_command(label="Cancel this item",
+            menu.add_command(label=tr("Cancel this item"),
                              command=lambda: self.on_cancel_item(self.item.id))
         # RM-29: open the per-file override dialog so users can change
         # mode / language / sensitivity for a single queued item
         # without touching the global settings.
         if self.on_override is not None and self.item.status == ProcessingStatus.IDLE:
-            menu.add_command(label="Override settings for this file...",
+            menu.add_command(label=tr("Override settings for this file..."),
                              command=lambda: self.on_override(self.item.id))
         if (self.on_soft_action is not None
                 and self.item.status == ProcessingStatus.IDLE
                 and getattr(self.item, "soft_subtitle_streams", None)):
             menu.add_separator()
             menu.add_command(
-                label="Fast strip embedded subtitles",
+                label=tr("Fast strip embedded subtitles"),
                 command=lambda: self.on_soft_action(self.item.id, "strip"),
             )
             menu.add_command(
-                label="Fast remux and keep embedded subtitles",
+                label=tr("Fast remux and keep embedded subtitles"),
                 command=lambda: self.on_soft_action(self.item.id, "keep_all"),
             )
             menu.add_command(
-                label="Run burned-in cleanup instead",
+                label=tr("Run burned-in cleanup instead"),
                 command=lambda: self.on_soft_action(self.item.id, "burned_in"),
             )
         menu.add_separator()
-        menu.add_command(label="Remove from queue",
+        menu.add_command(label=tr("Remove from queue"),
                          command=lambda: self.on_remove(self.item.id),
                          state="disabled" if is_active else "normal")
 
@@ -2045,11 +2052,11 @@ class QueueItemWidget(tk.Frame):
             label=Path(self.item.file_path).name,
             state=_state_text(
                 badge["label"],
-                "selected" if self.is_selected else "not selected",
-                "focused" if self.focused else "",
+                tr("selected") if self.is_selected else tr("not selected"),
+                tr("focused") if self.focused else "",
             ),
             value=f"{pct}% complete",
-            description=self.item.message or "Ready to process",
+            description=self.item.message or tr("Ready to process"),
         )
 
     def accessibility_snapshot(self) -> dict:
@@ -2062,7 +2069,7 @@ class QueueItemWidget(tk.Frame):
         self.info_label.config(text=_queue_item_info_text(item))
         self.progress_bar.set_progress(item.progress)
         self.progress_bar.set_color(self._get_status_color())
-        status_message = truncate_middle(item.message or "Ready to process", 74)
+        status_message = truncate_middle(item.message or tr("Ready to process"), 74)
         message_color = {
             ProcessingStatus.COMPLETE: Theme.SUCCESS,
             ProcessingStatus.ERROR: Theme.ERROR,

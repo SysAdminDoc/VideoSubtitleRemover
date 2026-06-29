@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **GUI gettext wiring.** Core onboarding, queue, settings, preview, region,
+  status, confirmation, batch-summary, and About/backend-status strings now use
+  the documented `tr()` gettext alias; `locale/vsr.pot` was refreshed from the
+  wired call sites, and tests prove translated queue/status rendering with
+  fallback for missing keys.
 - **Batch stage timing evidence.** Batch JSON/Markdown reports, support
   bundles, and completion/review surfaces now include decode, OCR, mask,
   inpaint, encode, mux, and quality-analysis timings with slowest-stage

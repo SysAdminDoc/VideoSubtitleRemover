@@ -34,7 +34,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame, optionally with start/end seconds for moving subtitle layouts
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
-- **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+
+- **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; core GUI surfaces are wired for gettext catalogs dropped into `locale/<lang>/LC_MESSAGES/vsr.mo`
 - **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation

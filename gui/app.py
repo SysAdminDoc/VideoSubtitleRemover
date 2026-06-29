@@ -78,6 +78,7 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.safe_image import safe_imread
+from backend.i18n import tr
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class VideoSubtitleRemoverApp:
                 "language_support": "Checking...",
                 "model_files": "Checking...",
                 "hash_status": "Checking...",
-                "next_action": "Backend status is still being probed.",
+                "next_action": tr("Backend status is still being probed."),
                 "tone": "neutral",
             },
         }
@@ -691,14 +692,14 @@ class VideoSubtitleRemoverApp:
             return
         if self._hardware_probe_pending:
             self.ffmpeg_warning_label.config(
-                text="Checking FFmpeg availability for audio preservation...",
+                text=tr("Checking FFmpeg availability for audio preservation..."),
                 fg=Theme.INFO,
             )
             if not self.ffmpeg_warning_label.winfo_ismapped():
                 self.ffmpeg_warning_label.pack(anchor="w", pady=(Theme.S_XS, 0))
         elif not self.ffmpeg_ready:
             self.ffmpeg_warning_label.config(
-                text="FFmpeg is not available, so outputs will be saved without original audio until it is installed.",
+                text=tr("FFmpeg is not available, so outputs will be saved without original audio until it is installed."),
                 fg=Theme.WARNING,
             )
             if not self.ffmpeg_warning_label.winfo_ismapped():
@@ -717,21 +718,21 @@ class VideoSubtitleRemoverApp:
                 idx, weight=0, uniform="")
         if self._hardware_probe_pending:
             chip_data = [
-                ("Device", "Detecting...", Theme.INFO),
-                ("Detection", "Detecting...", Theme.INFO),
-                ("Audio", "Detecting...", Theme.INFO),
+                (tr("Device"), tr("Detecting..."), Theme.INFO),
+                (tr("Detection"), tr("Detecting..."), Theme.INFO),
+                (tr("Audio"), tr("Detecting..."), Theme.INFO),
             ]
         else:
-            gpu_short = truncate_middle(self.gpus[0]["name"], 26) if self.gpus else "CPU mode"
+            gpu_short = truncate_middle(self.gpus[0]["name"], 26) if self.gpus else tr("CPU mode")
             gpu_fg = Theme.SUCCESS if self.gpus else Theme.WARNING
             detection = self.ai_engines.get("detection", [])
-            det_short = detection[0] if detection else "OpenCV fallback"
-            audio_short = "FFmpeg ready" if self.ffmpeg_ready else "No FFmpeg"
+            det_short = detection[0] if detection else tr("OpenCV fallback")
+            audio_short = tr("FFmpeg ready") if self.ffmpeg_ready else tr("No FFmpeg")
             audio_fg = Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING
             chip_data = [
-                ("Device", gpu_short, gpu_fg),
-                ("Detection", det_short, Theme.INFO),
-                ("Audio", audio_short, audio_fg),
+                (tr("Device"), gpu_short, gpu_fg),
+                (tr("Detection"), det_short, Theme.INFO),
+                (tr("Audio"), audio_short, audio_fg),
             ]
         compact = (
             getattr(self, "_layout_mode", "wide") == "stacked"
@@ -765,15 +766,15 @@ class VideoSubtitleRemoverApp:
         """Consistent section header: eyebrow label + title + hint line."""
         bg = parent.cget("bg")
         if eyebrow:
-            tk.Label(parent, text=eyebrow.upper(), font=f(Theme.F_EYEBROW, "bold"),
+            tk.Label(parent, text=tr(eyebrow).upper(), font=f(Theme.F_EYEBROW, "bold"),
                      bg=bg, fg=Theme.TEXT_MUTED).pack(
                          anchor="w", padx=pad_x, pady=(pad_top, 0))
-        tk.Label(parent, text=title, font=f(Theme.F_HEADING, "bold"),
+        tk.Label(parent, text=tr(title), font=f(Theme.F_HEADING, "bold"),
                  bg=bg, fg=Theme.TEXT_PRIMARY).pack(
                      anchor="w", padx=pad_x,
                      pady=(2 if eyebrow else pad_top, 0))
         if hint:
-            tk.Label(parent, text=hint, font=f(Theme.F_BODY_SM),
+            tk.Label(parent, text=tr(hint), font=f(Theme.F_BODY_SM),
                      bg=bg, fg=Theme.TEXT_MUTED, wraplength=560,
                      justify="left").pack(anchor="w", padx=pad_x, pady=(4, Theme.S_MD))
 
@@ -785,7 +786,7 @@ class VideoSubtitleRemoverApp:
     def _card_header(self, parent, eyebrow: str, title: str, bg=Theme.BG_CARD,
                      pad_x: int = 16, pad_top: int = 14):
         """Card-internal section header with a single clear title."""
-        tk.Label(parent, text=title, font=f(Theme.F_TITLE, "bold"),
+        tk.Label(parent, text=tr(title), font=f(Theme.F_TITLE, "bold"),
                  bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x, pady=(pad_top, 10))
 
     def _divider(self, parent, pad: int = 0):
@@ -797,11 +798,11 @@ class VideoSubtitleRemoverApp:
         if self._output_dir:
             display = truncate_middle(str(self._output_dir), 54)
             self.output_dir_label.config(text=display, fg=Theme.TEXT_PRIMARY)
-            self.output_dir_meta.config(text="Custom location")
+            self.output_dir_meta.config(text=tr("Custom location"))
         else:
-            self.output_dir_label.config(text="Auto-create an output folder beside each source",
+            self.output_dir_label.config(text=tr("Auto-create an output folder beside each source"),
                                          fg=Theme.TEXT_PRIMARY)
-            self.output_dir_meta.config(text="Default workflow")
+            self.output_dir_meta.config(text=tr("Default workflow"))
 
     def _update_region_label_display(self):
         """Refresh the region summary line."""
@@ -809,28 +810,29 @@ class VideoSubtitleRemoverApp:
         areas = getattr(self.config, "subtitle_areas", None) or []
         if spans:
             self.region_label.config(
-                text=f"Timed manual regions: {len(spans)} rectangle"
-                     f"{'s' if len(spans) != 1 else ''}",
+                text=tr("Timed manual regions: {count} rectangle{suffix}").format(
+                    count=len(spans), suffix="s" if len(spans) != 1 else ""),
                 fg=Theme.TEXT_PRIMARY,
             )
-            self.region_meta.config(text="Time-ranged mask regions",
+            self.region_meta.config(text=tr("Time-ranged mask regions"),
                                     fg=Theme.SUCCESS)
         elif len(areas) > 1:
             self.region_label.config(
-                text=f"Manual regions: {len(areas)} fixed rectangles",
+                text=tr("Manual regions: {count} fixed rectangles").format(count=len(areas)),
                 fg=Theme.TEXT_PRIMARY,
             )
-            self.region_meta.config(text="Fixed mask regions", fg=Theme.SUCCESS)
+            self.region_meta.config(text=tr("Fixed mask regions"), fg=Theme.SUCCESS)
         elif self.config.subtitle_area:
             x1, y1, x2, y2 = self.config.subtitle_area
             self.region_label.config(
-                text=f"Manual region: ({x1}, {y1}) to ({x2}, {y2})",
+                text=tr("Manual region: ({x1}, {y1}) to ({x2}, {y2})").format(
+                    x1=x1, y1=y1, x2=x2, y2=y2),
                 fg=Theme.TEXT_PRIMARY,
             )
-            self.region_meta.config(text="Fixed mask region", fg=Theme.SUCCESS)
+            self.region_meta.config(text=tr("Fixed mask region"), fg=Theme.SUCCESS)
         else:
-            self.region_label.config(text="Automatic subtitle detection", fg=Theme.TEXT_PRIMARY)
-            self.region_meta.config(text="Recommended default", fg=Theme.TEXT_MUTED)
+            self.region_label.config(text=tr("Automatic subtitle detection"), fg=Theme.TEXT_PRIMARY)
+            self.region_meta.config(text=tr("Recommended default"), fg=Theme.TEXT_MUTED)
         if hasattr(self, "region_reset_btn"):
             has_manual = (
                 bool(spans) or bool(areas)
@@ -875,7 +877,7 @@ class VideoSubtitleRemoverApp:
     def _throbber_tick(self):
         if not PIL_AVAILABLE:
             self._preview_label.config(
-                text="Detecting" + "." * (self._throbber_phase % 4))
+                text=tr("Detecting") + "." * (self._throbber_phase % 4))
             try:
                 self._throbber_id = self.root.after(240, self._throbber_tick)
                 self._throbber_phase += 1
@@ -899,7 +901,7 @@ class VideoSubtitleRemoverApp:
                 x = cx - 18 + i * 18
                 d.ellipse([(x - r, cy - r), (x + r, cy + r)],
                           fill=self._hex_to_rgb(color))
-            d.text((cx - 42, cy + 22), "DETECTING",
+            d.text((cx - 42, cy + 22), tr("DETECTING"),
                    fill=self._hex_to_rgb(Theme.TEXT_MUTED))
             self._preview_photo = ImageTk.PhotoImage(base)
             self._preview_label.config(image=self._preview_photo, text="")
@@ -928,17 +930,19 @@ class VideoSubtitleRemoverApp:
                 self._preview_label.config(image=self._preview_photo, text="")
             if total:
                 pct = int(cur_idx / max(1, total) * 100)
-                self.preview_title_label.config(text=f"Live preview: {file_name}")
+                self.preview_title_label.config(
+                    text=tr("Live preview: {file_name}").format(file_name=file_name))
                 self.preview_meta_label.config(
-                    text=f"Frame {cur_idx}/{total} ({pct}%)")
+                    text=tr("Frame {current}/{total} ({percent}%)").format(
+                        current=cur_idx, total=total, percent=pct))
         except Exception:
             pass
 
     def _set_preview_placeholder(self, title: str, body: str):
         """Show the empty-state preview guidance with a subtle illustration."""
         self._stop_throbber()
-        self.preview_title_label.config(text=title)
-        self.preview_meta_label.config(text=body)
+        self.preview_title_label.config(text=tr(title))
+        self.preview_meta_label.config(text=tr(body))
         # Render a minimalist placeholder card via PIL (if available) so the
         # preview never collapses to empty space.
         if PIL_AVAILABLE:
@@ -980,18 +984,18 @@ class VideoSubtitleRemoverApp:
         """Show a calm, actionable preview failure state."""
         self._stop_throbber()
         self._preview_photo = None
-        self.preview_title_label.config(text=title)
-        self.preview_meta_label.config(text=body)
-        self._preview_label.config(text=label, image="")
+        self.preview_title_label.config(text=tr(title))
+        self.preview_meta_label.config(text=tr(body))
+        self._preview_label.config(text=tr(label), image="")
 
         tone_map = {
-            "error": ("Needs attention", Theme.ERROR, Theme.ERROR_BG),
-            "warning": ("Needs attention", Theme.WARNING, Theme.WARNING_BG),
-            "info": ("Info", Theme.INFO, Theme.INFO_BG),
+            "error": (tr("Needs attention"), Theme.ERROR, Theme.ERROR_BG),
+            "warning": (tr("Needs attention"), Theme.WARNING, Theme.WARNING_BG),
+            "info": (tr("Info"), Theme.INFO, Theme.INFO_BG),
         }
         chip_text, chip_fg, chip_bg = tone_map.get(
             tone,
-            ("Waiting", Theme.TEXT_MUTED, Theme.BG_TERTIARY),
+            (tr("Waiting"), Theme.TEXT_MUTED, Theme.BG_TERTIARY),
         )
         try:
             self.preview_status_chip.config(text=chip_text, fg=chip_fg, bg=chip_bg)
@@ -1029,60 +1033,60 @@ class VideoSubtitleRemoverApp:
             if can_stop or can_start:
                 start_reason = ""
             elif not has_queue:
-                start_reason = "Add media to the queue before starting."
+                start_reason = tr("Add media to the queue before starting.")
             elif self._stop_requested:
-                start_reason = "Stop is already in progress."
+                start_reason = tr("Stop is already in progress.")
             else:
-                start_reason = "The batch is already running."
+                start_reason = tr("The batch is already running.")
             self.start_btn.set_enabled(can_stop or can_start, reason=start_reason)
         if hasattr(self, "open_output_btn"):
             self.open_output_btn.set_enabled(
                 has_complete,
-                reason="No completed outputs are available yet.",
+                reason=tr("No completed outputs are available yet."),
             )
         if hasattr(self, "retry_btn"):
             self.retry_btn.set_enabled(
                 (not batch_busy) and has_retry,
                 reason=(
-                    "Wait for the current batch to finish."
-                    if batch_busy else "No failed or stopped items need retry."
+                    tr("Wait for the current batch to finish.")
+                    if batch_busy else tr("No failed or stopped items need retry.")
                 ),
             )
         if hasattr(self, "clear_btn"):
             self.clear_btn.set_enabled(
                 (not batch_busy) and has_queue,
                 reason=(
-                    "Wait for the current batch to finish."
-                    if batch_busy else "The queue is already empty."
+                    tr("Wait for the current batch to finish.")
+                    if batch_busy else tr("The queue is already empty.")
                 ),
             )
         if hasattr(self, "repeat_btn"):
             self.repeat_btn.set_enabled(
                 (not batch_busy) and self._last_completed_config() is not None,
                 reason=(
-                    "Wait for the current batch to finish."
-                    if batch_busy else "Run a batch first to repeat its settings."
+                    tr("Wait for the current batch to finish.")
+                    if batch_busy else tr("Run a batch first to repeat its settings.")
                 ),
             )
         if hasattr(self, "batch_label") and not batch_busy:
             pending = sum(1 for item in self.queue if item.status == ProcessingStatus.IDLE)
             if pending:
                 self.batch_label.config(
-                    text=f"{pending} queued and ready to process",
+                    text=tr("{count} queued and ready to process").format(count=pending),
                     fg=Theme.TEXT_SECONDARY,
                 )
             elif has_complete:
                 self.batch_label.config(
-                    text="Outputs are ready for review",
+                    text=tr("Outputs are ready for review"),
                     fg=Theme.SUCCESS,
                 )
             elif has_retry:
                 self.batch_label.config(
-                    text="Some items need attention",
+                    text=tr("Some items need attention"),
                     fg=Theme.WARNING,
                 )
             else:
-                self.batch_label.config(text="Ready", fg=Theme.TEXT_MUTED)
+                self.batch_label.config(text=tr("Ready"), fg=Theme.TEXT_MUTED)
         self._update_preview_actions()
         self._update_guidance_surface()
 
@@ -1316,10 +1320,10 @@ class VideoSubtitleRemoverApp:
             hint = "Start the batch when the preview framing looks right."
 
         self._set_workflow_stage(stage)
-        self.header_guidance_title.config(text=title)
-        self.header_guidance_body.config(text=body)
+        self.header_guidance_title.config(text=tr(title))
+        self.header_guidance_body.config(text=tr(body))
         if hasattr(self, "status_hint"):
-            self.status_hint.config(text=hint)
+            self.status_hint.config(text=tr(hint))
 
     def _update_preview_actions(self):
         """Enable preview tools only when they make sense for the selection."""
@@ -1328,18 +1332,18 @@ class VideoSubtitleRemoverApp:
         selected = self._get_selected_queue_item()
         can_preview = bool(selected and PIL_AVAILABLE)
         if self.is_processing:
-            unavailable_reason = "Preview tools are locked while a batch is running."
+            unavailable_reason = tr("Preview tools are locked while a batch is running.")
         elif not selected:
-            unavailable_reason = "Select a queued item to enable preview tools."
+            unavailable_reason = tr("Select a queued item to enable preview tools.")
         elif not PIL_AVAILABLE:
-            unavailable_reason = "Install Pillow to enable image preview tools."
+            unavailable_reason = tr("Install Pillow to enable image preview tools.")
         else:
             unavailable_reason = ""
 
         if hasattr(self, "preview_region_btn"):
             self.preview_region_btn.set_enabled(
                 not self.is_processing,
-                reason="Wait for the active batch to finish before editing regions.",
+                reason=tr("Wait for the active batch to finish before editing regions."),
             )
         self.preview_mask_btn.set_enabled(
             bool(selected) and not self.is_processing,
@@ -1363,13 +1367,13 @@ class VideoSubtitleRemoverApp:
             if ab_ready:
                 ab_reason = ""
             elif self.is_processing:
-                ab_reason = "Wait for the active batch to finish before comparing output."
+                ab_reason = tr("Wait for the active batch to finish before comparing output.")
             elif not selected:
-                ab_reason = "Select a completed queue item to compare source and output."
+                ab_reason = tr("Select a completed queue item to compare source and output.")
             elif selected.status != ProcessingStatus.COMPLETE:
-                ab_reason = "Finish processing this item before using A/B compare."
+                ab_reason = tr("Finish processing this item before using A/B compare.")
             else:
-                ab_reason = "The cleaned output file is not available on disk."
+                ab_reason = tr("The cleaned output file is not available on disk.")
             self.preview_ab_btn.set_enabled(ab_ready, reason=ab_reason)
         editing_region = bool(getattr(self, "_preview_region_editor_state", None))
         self._preview_label.config(
@@ -1378,22 +1382,22 @@ class VideoSubtitleRemoverApp:
 
         if hasattr(self, "preview_action_hint"):
             if self.is_processing:
-                hint = "Preview tools are locked while the batch is running."
+                hint = tr("Preview tools are locked while the batch is running.")
                 hint_fg = Theme.WARNING
             elif not selected:
-                hint = "Select a queue item to enable mask review, test cleanup, and zoom."
+                hint = tr("Select a queue item to enable mask review, test cleanup, and zoom.")
                 hint_fg = Theme.TEXT_MUTED
             elif not PIL_AVAILABLE:
-                hint = "Install Pillow to enable previews and visual inspection tools."
+                hint = tr("Install Pillow to enable previews and visual inspection tools.")
                 hint_fg = Theme.WARNING
             elif (
                 selected.status == ProcessingStatus.COMPLETE
                 and Path(selected.output_path).exists()
             ):
-                hint = "Preview tools are ready. Use A/B compare to inspect the cleaned output."
+                hint = tr("Preview tools are ready. Use A/B compare to inspect the cleaned output.")
                 hint_fg = Theme.SUCCESS
             else:
-                hint = "Preview tools are ready. Review the mask or test cleanup before starting."
+                hint = tr("Preview tools are ready. Review the mask or test cleanup before starting.")
                 hint_fg = Theme.TEXT_SECONDARY
             self.preview_action_hint.config(text=hint, fg=hint_fg)
 
@@ -1406,7 +1410,7 @@ class VideoSubtitleRemoverApp:
             )
         else:
             self.preview_status_chip.config(
-                text="Waiting",
+                text=tr("Waiting"),
                 fg=Theme.TEXT_MUTED,
                 bg=Theme.BG_TERTIARY,
             )
@@ -1428,9 +1432,9 @@ class VideoSubtitleRemoverApp:
                 break
         if not source:
             self._update_status(
-                "Add a file to the queue first", "warning")
+                tr("Add a file to the queue first"), "warning")
             return
-        self._update_status("Detecting language...", "info")
+        self._update_status(tr("Detecting language..."), "info")
 
         def _probe():
             try:
@@ -1848,15 +1852,15 @@ class VideoSubtitleRemoverApp:
         left.pack(side="left", fill="both", expand=True)
         self._header_left = left
 
-        tk.Label(left, text="Video Subtitle Remover",
+        tk.Label(left, text=tr("Video Subtitle Remover"),
                  font=f(Theme.F_DISPLAY, "bold"), bg=Theme.BG_SECONDARY,
                  fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(left, text=f"Version {APP_VERSION}",
+        tk.Label(left, text=tr("Version {version}").format(version=APP_VERSION),
                  font=f(Theme.F_META, "bold"), bg=Theme.BG_SECONDARY,
                  fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
         tk.Label(
             left,
-            text="Add files, review one sample, then run the batch.",
+            text=tr("Add files, review one sample, then run the batch."),
             font=f(Theme.F_BODY),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_SECONDARY,
@@ -1867,7 +1871,7 @@ class VideoSubtitleRemoverApp:
         self._header_right = right
 
         # About / help
-        help_btn = ModernButton(right, text="Help", width=80,
+        help_btn = ModernButton(right, text=tr("Help"), width=80,
                                 command=self._show_about, style="ghost",
                                 size="sm", icon="?")
         help_btn.pack(anchor="e")
@@ -1885,7 +1889,7 @@ class VideoSubtitleRemoverApp:
         pills_row = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
         pills_row.pack(side="left", anchor="w")
         self._workflow_steps_row = pills_row
-        for idx, step_label in enumerate(("Import", "Inspect", "Run"), start=1):
+        for idx, step_label in enumerate((tr("Import"), tr("Inspect"), tr("Run")), start=1):
             pill_frame = tk.Frame(pills_row, bg=Theme.BG_CARD,
                                   highlightthickness=1, highlightbackground=Theme.BORDER)
             badge_lbl = tk.Label(pill_frame, text=str(idx),
@@ -1910,7 +1914,7 @@ class VideoSubtitleRemoverApp:
 
         self.header_guidance_title = tk.Label(
             guidance_copy,
-            text="Build your batch",
+            text=tr("Build your batch"),
             font=f(Theme.F_TITLE, "bold"),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_PRIMARY,
@@ -1918,7 +1922,7 @@ class VideoSubtitleRemoverApp:
         self.header_guidance_title.pack(anchor="w")
         self.header_guidance_body = tk.Label(
             guidance_copy,
-            text="Import files or choose a folder to start.",
+            text=tr("Import files or choose a folder to start."),
             font=f(Theme.F_BODY_SM),
             wraplength=680,
             justify="left",
@@ -1951,7 +1955,7 @@ class VideoSubtitleRemoverApp:
         label_col = tk.Frame(out_row, bg=Theme.BG_CARD)
         label_col.pack(side="left", fill="x", expand=True)
 
-        tk.Label(label_col, text="OUTPUT LOCATION", font=f(Theme.F_EYEBROW, "bold"),
+        tk.Label(label_col, text=tr("OUTPUT LOCATION"), font=f(Theme.F_EYEBROW, "bold"),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(anchor="w")
 
         self.output_dir_label = tk.Label(label_col, text="", font=f(Theme.F_BODY, "bold"),
@@ -1965,12 +1969,12 @@ class VideoSubtitleRemoverApp:
         actions = tk.Frame(out_row, bg=Theme.BG_CARD)
         actions.pack(side="right", padx=(Theme.S_MD, 0))
 
-        choose_btn = ModernButton(actions, text="Choose folder", width=120,
+        choose_btn = ModernButton(actions, text=tr("Choose folder"), width=120,
                                   command=self._choose_output_dir, style="accent",
                                   size="sm")
         choose_btn.pack(side="left")
 
-        reset_btn = ModernButton(actions, text="Reset", width=76,
+        reset_btn = ModernButton(actions, text=tr("Reset"), width=76,
                                  command=self._reset_output_dir, style="ghost",
                                  size="sm")
         reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
@@ -2002,7 +2006,7 @@ class VideoSubtitleRemoverApp:
         preset_row = tk.Frame(profile_panel, bg=Theme.BG_CARD)
         preset_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, Theme.S_SM))
 
-        tk.Label(preset_row, text="Preset", font=f(Theme.F_BODY_SM),
+        tk.Label(preset_row, text=tr("Preset"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
         self.preset_var = tk.StringVar(value="(custom)")
@@ -2016,27 +2020,27 @@ class VideoSubtitleRemoverApp:
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_applied)
 
         save_preset_btn = ModernButton(
-            preset_row, text="Save as...", command=self._save_preset_dialog,
+            preset_row, text=tr("Save as..."), command=self._save_preset_dialog,
             size="sm", style="ghost",
         )
         save_preset_btn.pack(side="left")
 
         export_preset_btn = ModernButton(
-            preset_row, text="Export", command=self._export_preset_dialog,
+            preset_row, text=tr("Export"), command=self._export_preset_dialog,
             size="sm", style="ghost",
         )
         export_preset_btn.pack(side="left", padx=(Theme.S_XS, 0))
-        Tooltip(export_preset_btn, "Write the current preset to a shareable JSON file.")
+        Tooltip(export_preset_btn, tr("Write the current preset to a shareable JSON file."))
 
         import_preset_btn = ModernButton(
-            preset_row, text="Import", command=self._import_preset_dialog,
+            preset_row, text=tr("Import"), command=self._import_preset_dialog,
             size="sm", style="ghost",
         )
         import_preset_btn.pack(side="left", padx=(Theme.S_XS, 0))
-        Tooltip(import_preset_btn, "Load a preset JSON file into the user library.")
+        Tooltip(import_preset_btn, tr("Load a preset JSON file into the user library."))
 
         # Algorithm -- segmented picker replaces the Combobox for speed + clarity
-        tk.Label(profile_panel, text="Algorithm", font=f(Theme.F_BODY_SM),
+        tk.Label(profile_panel, text=tr("Algorithm"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(
                      anchor="w", padx=Theme.S_LG)
 
@@ -2046,7 +2050,7 @@ class VideoSubtitleRemoverApp:
             value=self.mode_var.get(),
             command=self._on_mode_picker_changed,
             bg=Theme.BG_CARD,
-            group_label="Cleanup algorithm",
+            group_label=tr("Cleanup algorithm"),
         )
         self.mode_picker.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
 
@@ -2059,11 +2063,11 @@ class VideoSubtitleRemoverApp:
         row2 = tk.Frame(profile_panel, bg=Theme.BG_CARD)
         row2.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
 
-        tk.Label(row2, text="Compute device", font=f(Theme.F_BODY_SM),
+        tk.Label(row2, text=tr("Compute device"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
         self.gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
-                                      values=["Detecting hardware..."],
+                                      values=[tr("Detecting hardware...")],
                                       style="Dark.TCombobox", state="disabled",
                                       font=f(Theme.F_BODY_SM))
         self.gpu_combo.pack(side="right")
@@ -2073,7 +2077,7 @@ class VideoSubtitleRemoverApp:
         lang_row = tk.Frame(profile_panel, bg=Theme.BG_CARD)
         lang_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
 
-        tk.Label(lang_row, text="Subtitle language", font=f(Theme.F_BODY_SM),
+        tk.Label(lang_row, text=tr("Subtitle language"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
 
         # F-5: language list = curated friendly names plus compatible
@@ -2093,12 +2097,12 @@ class VideoSubtitleRemoverApp:
         self.lang_combo.pack(side="right")
         self.lang_combo.bind("<<ComboboxSelected>>", self._on_lang_changed)
         self._lang_detect_btn = ModernButton(
-            lang_row, text="Detect", width=68,
+            lang_row, text=tr("Detect"), width=68,
             command=self._probe_language_from_preview,
             style="ghost", size="sm")
         self._lang_detect_btn.pack(side="right", padx=(0, Theme.S_SM))
         Tooltip(self._lang_detect_btn,
-                "Auto-detect the subtitle language from a sample frame.")
+                tr("Auto-detect the subtitle language from a sample frame."))
 
         # ---- Workflow card ----------------------------------------------
         workflow_panel = self._create_card(settings)
@@ -2111,29 +2115,29 @@ class VideoSubtitleRemoverApp:
 
         self.skip_check = ModernToggle(
             checks_frame,
-            text="Reuse a fixed subtitle region (skip per-frame scanning)",
+            text=tr("Reuse a fixed subtitle region (skip per-frame scanning)"),
             variable=self.skip_detection_var,
         )
         self.skip_check.pack(anchor="w")
-        Tooltip(self.skip_check, "Skip repeated detection when you have already set a precise subtitle region.")
+        Tooltip(self.skip_check, tr("Skip repeated detection when you have already set a precise subtitle region."))
 
         self.lama_check = ModernToggle(
             checks_frame,
-            text="LaMa fast mode - favor speed over fill detail",
+            text=tr("LaMa fast mode - favor speed over fill detail"),
             variable=self.lama_fast_var,
         )
         self.lama_check.pack(anchor="w", pady=(Theme.S_SM, 0))
-        Tooltip(self.lama_check, "LaMa fast mode is useful for quick passes and lower-resolution drafts.")
+        Tooltip(self.lama_check, tr("LaMa fast mode is useful for quick passes and lower-resolution drafts."))
 
         self.preserve_audio_check = ModernToggle(
             checks_frame,
-            text="Preserve the source audio track",
+            text=tr("Preserve the source audio track"),
             variable=self.preserve_audio_var,
         )
         self.preserve_audio_check.pack(anchor="w", pady=(Theme.S_SM, 0))
         self.ffmpeg_warning_label = tk.Label(
             checks_frame,
-            text="Checking FFmpeg availability for audio preservation...",
+            text=tr("Checking FFmpeg availability for audio preservation..."),
             font=f(Theme.F_META),
             bg=Theme.BG_CARD,
             fg=Theme.INFO,
@@ -2151,7 +2155,7 @@ class VideoSubtitleRemoverApp:
         region_text = tk.Frame(region_surface, bg=Theme.BG_TERTIARY)
         region_text.pack(side="left", fill="x", expand=True, padx=Theme.S_MD, pady=Theme.S_MD)
 
-        tk.Label(region_text, text="SUBTITLE REGION", font=f(Theme.F_EYEBROW, "bold"),
+        tk.Label(region_text, text=tr("SUBTITLE REGION"), font=f(Theme.F_EYEBROW, "bold"),
                  bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED).pack(anchor="w")
 
         self.region_label = tk.Label(region_text, text="", font=f(Theme.F_BODY, "bold"),
@@ -2167,12 +2171,12 @@ class VideoSubtitleRemoverApp:
         region_actions = tk.Frame(region_surface, bg=Theme.BG_TERTIARY)
         region_actions.pack(side="right", padx=Theme.S_MD, pady=Theme.S_MD)
 
-        self.region_btn = ModernButton(region_actions, text="Set region", width=100,
+        self.region_btn = ModernButton(region_actions, text=tr("Set region"), width=100,
                                        command=self._open_region_selector_modal, style="accent",
                                        size="sm")
         self.region_btn.pack(side="left")
 
-        self.region_reset_btn = ModernButton(region_actions, text="Reset", width=76,
+        self.region_reset_btn = ModernButton(region_actions, text=tr("Reset"), width=76,
                                              command=self._reset_region, style="ghost",
                                              size="sm")
         self.region_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
@@ -2182,7 +2186,7 @@ class VideoSubtitleRemoverApp:
         adv_frame.pack(fill="x", pady=(Theme.S_MD, 0))
 
         self.adv_visible = False
-        self.adv_toggle = ModernButton(adv_frame, text="Show detailed controls", width=188,
+        self.adv_toggle = ModernButton(adv_frame, text=tr("Show detailed controls"), width=188,
                                        command=self._toggle_advanced,
                                        style="ghost", size="sm", icon="+")
         self.adv_toggle.pack(anchor="w")
@@ -2221,13 +2225,13 @@ class VideoSubtitleRemoverApp:
             value=self.config.confidence_weighted_dilation)
         conf_dilate_toggle = ModernToggle(
             det_frame,
-            text="Confidence-weighted dilation",
+            text=tr("Confidence-weighted dilation"),
             variable=self.conf_dilate_var,
         )
         conf_dilate_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(conf_dilate_toggle,
-                "Scale mask dilation inversely with OCR confidence: "
-                "low-confidence boxes get more padding, high-confidence boxes stay tight.")
+                tr("Scale mask dilation inversely with OCR confidence: "
+                   "low-confidence boxes get more padding, high-confidence boxes stay tight."))
         self._create_slider(det_frame, "Mask feather", 0, 15,
                             self.config.mask_feather_px, "mask_feather_px",
                             hint="Soft-blend the removal edge for seamless boundaries.")
@@ -2238,66 +2242,66 @@ class VideoSubtitleRemoverApp:
         self.auto_band_var = tk.BooleanVar(value=self.config.auto_band)
         auto_band_toggle = ModernToggle(
             det_frame,
-            text="Auto-detect subtitle band on load",
+            text=tr("Auto-detect subtitle band on load"),
             variable=self.auto_band_var,
         )
         auto_band_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(auto_band_toggle, "Scan the first 30 frames and pin the dominant subtitle band before processing.")
+        Tooltip(auto_band_toggle, tr("Scan the first 30 frames and pin the dominant subtitle band before processing."))
 
         self.flow_warp_var = tk.BooleanVar(value=self.config.tbe_flow_warp)
         flow_toggle = ModernToggle(
             det_frame,
-            text="Flow-warped temporal exposure (motion-heavy)",
+            text=tr("Flow-warped temporal exposure (motion-heavy)"),
             variable=self.flow_warp_var,
         )
         flow_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(flow_toggle, "Farneback optical flow aligns frames before TBE aggregation. Slower but cleaner on pans and zooms.")
+        Tooltip(flow_toggle, tr("Farneback optical flow aligns frames before TBE aggregation. Slower but cleaner on pans and zooms."))
 
         self.scene_split_var = tk.BooleanVar(value=self.config.tbe_scene_cut_split)
         scene_toggle = ModernToggle(
             det_frame,
-            text="Split TBE batches at scene cuts",
+            text=tr("Split TBE batches at scene cuts"),
             variable=self.scene_split_var,
         )
         scene_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(scene_toggle, "Prevents background aggregation across hard cuts. Turn off if your footage is uncut.")
+        Tooltip(scene_toggle, tr("Prevents background aggregation across hard cuts. Turn off if your footage is uncut."))
 
         self.kalman_var = tk.BooleanVar(value=self.config.kalman_tracking)
         kalman_toggle = ModernToggle(
             det_frame,
-            text="Kalman box tracking (flicker reduction)",
+            text=tr("Kalman box tracking (flicker reduction)"),
             variable=self.kalman_var,
         )
         kalman_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(kalman_toggle, "Smooths per-frame OCR jitter and fills single-frame misses. Recommended.")
+        Tooltip(kalman_toggle, tr("Smooths per-frame OCR jitter and fills single-frame misses. Recommended."))
 
         self.phash_var = tk.BooleanVar(value=self.config.phash_skip_enable)
         phash_toggle = ModernToggle(
             det_frame,
-            text="Adaptive mask reuse (perceptual hash)",
+            text=tr("Adaptive mask reuse (perceptual hash)"),
             variable=self.phash_var,
         )
         phash_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(phash_toggle, "Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots.")
+        Tooltip(phash_toggle, tr("Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."))
 
         self.colour_tune_var = tk.BooleanVar(value=self.config.colour_tune_enable)
         colour_toggle = ModernToggle(
             det_frame,
-            text="Colour-tuned mask expansion",
+            text=tr("Colour-tuned mask expansion"),
             variable=self.colour_tune_var,
         )
         colour_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(colour_toggle, "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering.")
+        Tooltip(colour_toggle, tr("Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering."))
 
         # RM-24: vertical-text toggle for Japanese tategaki / classical CN.
         self.vertical_text_var = tk.BooleanVar(value=getattr(self.config, "detection_vertical", False))
         vertical_toggle = ModernToggle(
             det_frame,
-            text="Vertical text mode (Japanese tategaki / classical Chinese)",
+            text=tr("Vertical text mode (Japanese tategaki / classical Chinese)"),
             variable=self.vertical_text_var,
         )
         vertical_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(vertical_toggle, "Rotates each frame 90 CCW before OCR so columnar CJK reads as a line. Boxes rotate back to the source frame.")
+        Tooltip(vertical_toggle, tr("Rotates each frame 90 CCW before OCR so columnar CJK reads as a line. Boxes rotate back to the source frame."))
 
         tk.Frame(det_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
@@ -2313,16 +2317,16 @@ class VideoSubtitleRemoverApp:
         self.hw_encode_var = tk.BooleanVar(value=self.config.use_hw_encode)
         self.hw_encode_check = ModernToggle(
             quality_frame,
-            text="Hardware encoding (NVENC / QSV / AMF) with software fallback",
+            text=tr("Hardware encoding (NVENC / QSV / AMF) with software fallback"),
             variable=self.hw_encode_var,
         )
         self.hw_encode_check.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(self.hw_encode_check, "If hardware encoding fails the app retries automatically with libx264.")
+        Tooltip(self.hw_encode_check, tr("If hardware encoding fails the app retries automatically with libx264."))
 
         # F-8: output codec selector lives next to the HW-encode toggle.
         codec_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
         codec_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        tk.Label(codec_row, text="Output codec", font=f(Theme.F_BODY_SM),
+        tk.Label(codec_row, text=tr("Output codec"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.output_codec_var = tk.StringVar(value=getattr(self.config, "output_codec", "h264"))
         codec_combo = ttk.Combobox(
@@ -2332,61 +2336,61 @@ class VideoSubtitleRemoverApp:
         )
         codec_combo.pack(side="right")
         Tooltip(codec_combo,
-                "h264 is universal; h265 and av1 cut bitrate ~50% on 4K; vvc (H.266) needs FFmpeg with libvvenc. Uses NVENC/QSV/AMF when available.")
+                tr("h264 is universal; h265 and av1 cut bitrate ~50% on 4K; vvc (H.266) needs FFmpeg with libvvenc. Uses NVENC/QSV/AMF when available."))
 
         self.adaptive_batch_var = tk.BooleanVar(value=self.config.adaptive_batch)
         adaptive_toggle = ModernToggle(
             quality_frame,
-            text="Adaptive batch sizing (probe free VRAM on init)",
+            text=tr("Adaptive batch sizing (probe free VRAM on init)"),
             variable=self.adaptive_batch_var,
         )
         adaptive_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(adaptive_toggle, "Scale the TBE window to fit free VRAM. Prevents OOM on 4K, unlocks headroom on 24 GB cards.")
+        Tooltip(adaptive_toggle, tr("Scale the TBE window to fit free VRAM. Prevents OOM on 4K, unlocks headroom on 24 GB cards."))
 
         self.export_srt_var = tk.BooleanVar(value=self.config.export_srt)
         srt_toggle = ModernToggle(
             quality_frame,
-            text="Export detected text as .srt sidecar",
+            text=tr("Export detected text as .srt sidecar"),
             variable=self.export_srt_var,
         )
         srt_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(srt_toggle, "Writes an .srt file next to the output using OCR text and timings.")
+        Tooltip(srt_toggle, tr("Writes an .srt file next to the output using OCR text and timings."))
 
         self.export_mask_var = tk.BooleanVar(value=self.config.export_mask_video)
         mask_toggle = ModernToggle(
             quality_frame,
-            text="Export debug mask video (.mask.mp4)",
+            text=tr("Export debug mask video (.mask.mp4)"),
             variable=self.export_mask_var,
         )
         mask_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(mask_toggle, "Writes a black-and-white mp4 of the per-frame detection mask alongside the output.")
+        Tooltip(mask_toggle, tr("Writes a black-and-white mp4 of the per-frame detection mask alongside the output."))
 
         self.deinterlace_var = tk.BooleanVar(value=self.config.deinterlace_auto)
         deinterlace_toggle = ModernToggle(
             quality_frame,
-            text="Auto-deinterlace interlaced sources (yadif)",
+            text=tr("Auto-deinterlace interlaced sources (yadif)"),
             variable=self.deinterlace_var,
         )
         deinterlace_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(deinterlace_toggle, "ffprobe-checks the input for combing; runs ffmpeg yadif if detected.")
+        Tooltip(deinterlace_toggle, tr("ffprobe-checks the input for combing; runs ffmpeg yadif if detected."))
 
         self.keyframe_var = tk.BooleanVar(value=self.config.keyframe_detection)
         keyframe_toggle = ModernToggle(
             quality_frame,
-            text="Keyframe-driven detection (OCR only at I-frames)",
+            text=tr("Keyframe-driven detection (OCR only at I-frames)"),
             variable=self.keyframe_var,
         )
         keyframe_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(keyframe_toggle, "Large speedup for long videos. Falls back to pHash skip if ffprobe is missing.")
+        Tooltip(keyframe_toggle, tr("Large speedup for long videos. Falls back to pHash skip if ffprobe is missing."))
 
         self.quality_report_var = tk.BooleanVar(value=self.config.quality_report)
         quality_toggle = ModernToggle(
             quality_frame,
-            text="Compute PSNR / SSIM quality report after run",
+            text=tr("Compute PSNR / SSIM quality report after run"),
             variable=self.quality_report_var,
         )
         quality_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(quality_toggle, "Samples 10 random frames, compares input vs output; logged and shown in the batch summary.")
+        Tooltip(quality_toggle, tr("Samples 10 random frames, compares input vs output; logged and shown in the batch summary."))
 
         # Video Range card
         time_frame = self._create_card(self.adv_panel)
@@ -2396,7 +2400,7 @@ class VideoSubtitleRemoverApp:
         time_inner = tk.Frame(time_frame, bg=Theme.BG_CARD)
         time_inner.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
 
-        tk.Label(time_inner, text="Start (s)", font=f(Theme.F_BODY_SM),
+        tk.Label(time_inner, text=tr("Start (s)"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.time_start_entry = tk.Entry(
             time_inner, width=7, bg=Theme.BG_TERTIARY,
@@ -2409,7 +2413,7 @@ class VideoSubtitleRemoverApp:
         self.time_start_entry.insert(0, str(self.config.time_start or 0))
         self.time_start_entry.pack(side="left", padx=(Theme.S_SM, Theme.S_MD))
 
-        tk.Label(time_inner, text="End (s)", font=f(Theme.F_BODY_SM),
+        tk.Label(time_inner, text=tr("End (s)"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.time_end_entry = tk.Entry(
             time_inner, width=7, bg=Theme.BG_TERTIARY,
@@ -2422,7 +2426,7 @@ class VideoSubtitleRemoverApp:
         self.time_end_entry.insert(0, str(self.config.time_end or 0))
         self.time_end_entry.pack(side="left", padx=(Theme.S_SM, 0))
 
-        tk.Label(time_inner, text="0 uses the full clip", font=f(Theme.F_META),
+        tk.Label(time_inner, text=tr("0 uses the full clip"), font=f(Theme.F_META),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left", padx=(Theme.S_MD, 0))
 
         # ---- v3.13 GUI-exposed knobs ------------------------------------
@@ -2434,29 +2438,29 @@ class VideoSubtitleRemoverApp:
         self.remove_subs_var = tk.BooleanVar(value=self.config.remove_subtitles)
         remove_subs_toggle = ModernToggle(
             editorial_frame,
-            text="Remove dialogue subtitles (short-lived OCR tracks)",
+            text=tr("Remove dialogue subtitles (short-lived OCR tracks)"),
             variable=self.remove_subs_var,
         )
         remove_subs_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
-        Tooltip(remove_subs_toggle, "Tracks the chyron classifier marks as dialogue subtitles.")
+        Tooltip(remove_subs_toggle, tr("Tracks the chyron classifier marks as dialogue subtitles."))
 
         self.remove_chyrons_var = tk.BooleanVar(value=self.config.remove_chyrons)
         remove_chyrons_toggle = ModernToggle(
             editorial_frame,
-            text="Remove persistent text (logos, tickers, lower-thirds)",
+            text=tr("Remove persistent text (logos, tickers, lower-thirds)"),
             variable=self.remove_chyrons_var,
         )
         remove_chyrons_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(remove_chyrons_toggle, "Kalman tracks lasting longer than ~3s are treated as chyrons.")
+        Tooltip(remove_chyrons_toggle, tr("Kalman tracks lasting longer than ~3s are treated as chyrons."))
 
         self.karaoke_grouping_var = tk.BooleanVar(value=self.config.karaoke_grouping)
         karaoke_toggle = ModernToggle(
             editorial_frame,
-            text="Karaoke grouping: fuse per-syllable boxes on the same line",
+            text=tr("Karaoke grouping: fuse per-syllable boxes on the same line"),
             variable=self.karaoke_grouping_var,
         )
         karaoke_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(karaoke_toggle, "Stops karaoke captions leaking original text through the gaps between syllables.")
+        Tooltip(karaoke_toggle, tr("Stops karaoke captions leaking original text through the gaps between syllables."))
 
         # Audio card: loudnorm target + multi-track passthrough
         audio_frame = self._create_card(self.adv_panel)
@@ -2466,15 +2470,15 @@ class VideoSubtitleRemoverApp:
         self.multi_audio_var = tk.BooleanVar(value=self.config.multi_audio_passthrough)
         multi_audio_toggle = ModernToggle(
             audio_frame,
-            text="Pass through every audio stream (Bluray/DVD multi-track)",
+            text=tr("Pass through every audio stream (Bluray/DVD multi-track)"),
             variable=self.multi_audio_var,
         )
         multi_audio_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
-        Tooltip(multi_audio_toggle, "Mux every audio stream from the source. Off keeps only the first track.")
+        Tooltip(multi_audio_toggle, tr("Mux every audio stream from the source. Off keeps only the first track."))
 
         loudnorm_row = tk.Frame(audio_frame, bg=Theme.BG_CARD)
         loudnorm_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        tk.Label(loudnorm_row, text="EBU R128 loudness target", font=f(Theme.F_BODY_SM),
+        tk.Label(loudnorm_row, text=tr("EBU R128 loudness target"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.loudnorm_var = tk.StringVar(value=str(self.config.loudnorm_target or 0.0))
         loudnorm_entry = tk.Entry(
@@ -2487,7 +2491,7 @@ class VideoSubtitleRemoverApp:
             relief="flat", bd=6, textvariable=self.loudnorm_var)
         loudnorm_entry.pack(side="left", padx=(Theme.S_SM, Theme.S_MD))
         tk.Label(loudnorm_row,
-                 text="LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23.",
+                 text=tr("LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."),
                  font=f(Theme.F_META),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left")
 
@@ -2498,7 +2502,7 @@ class VideoSubtitleRemoverApp:
 
         accel_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
         accel_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
-        tk.Label(accel_row, text="Hardware-decode hint", font=f(Theme.F_BODY_SM),
+        tk.Label(accel_row, text=tr("Hardware-decode hint"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.decode_accel_var = tk.StringVar(value=self.config.decode_hw_accel or "off")
         accel_combo = ttk.Combobox(
@@ -2507,11 +2511,11 @@ class VideoSubtitleRemoverApp:
             state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
         )
         accel_combo.pack(side="right")
-        Tooltip(accel_combo, "Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames.")
+        Tooltip(accel_combo, tr("Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames."))
 
         rife_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
         rife_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        tk.Label(rife_row, text="RIFE fast stride", font=f(Theme.F_BODY_SM),
+        tk.Label(rife_row, text=tr("RIFE fast stride"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.rife_stride_var = tk.StringVar(
             value=str(getattr(self.config, "rife_fast_stride", 0) or 0)
@@ -2525,36 +2529,36 @@ class VideoSubtitleRemoverApp:
             highlightcolor=Theme.BORDER_FOCUS,
             relief="flat", bd=6, textvariable=self.rife_stride_var)
         rife_entry.pack(side="right")
-        Tooltip(rife_entry, "0 disables. Values above 1 inpaint keyframes and synthesize skipped frames with Practical-RIFE when installed.")
+        Tooltip(rife_entry, tr("0 disables. Values above 1 inpaint keyframes and synthesize skipped frames with Practical-RIFE when installed."))
 
         self.prefetch_var = tk.BooleanVar(value=self.config.prefetch_decode)
         prefetch_toggle = ModernToggle(
             perf_frame,
-            text="Worker-thread frame prefetch (overlap decode and inpaint)",
+            text=tr("Worker-thread frame prefetch (overlap decode and inpaint)"),
             variable=self.prefetch_var,
         )
         prefetch_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(prefetch_toggle, "Decouples cv2.VideoCapture.read() from the detect+inpaint critical path. On by default.")
+        Tooltip(prefetch_toggle, tr("Decouples cv2.VideoCapture.read() from the detect+inpaint critical path. On by default."))
 
         # Quality sheet toggle (lives under Output but kept separate so we
         # don't disturb the existing Output card layout)
         self.quality_sheet_var = tk.BooleanVar(value=self.config.quality_report_sheet)
         quality_sheet_toggle = ModernToggle(
             quality_frame,
-            text="Quality report sheet (side-by-side PNG comparison)",
+            text=tr("Quality report sheet (side-by-side PNG comparison)"),
             variable=self.quality_sheet_var,
         )
         quality_sheet_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
-        Tooltip(quality_sheet_toggle, "Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report.")
+        Tooltip(quality_sheet_toggle, tr("Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report."))
 
         self.json_log_var = tk.BooleanVar(value=getattr(self.config, "json_log_enabled", False))
         json_log_toggle = ModernToggle(
             quality_frame,
-            text="Structured JSON log",
+            text=tr("Structured JSON log"),
             variable=self.json_log_var,
         )
         json_log_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
-        Tooltip(json_log_toggle, "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing.")
+        Tooltip(json_log_toggle, tr("Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."))
 
         # RM-96: high-contrast theme toggle. Takes effect on next launch
         # because re-skinning every live widget mid-session would force
@@ -2562,20 +2566,20 @@ class VideoSubtitleRemoverApp:
         self.high_contrast_var = tk.BooleanVar(value=getattr(self.config, "high_contrast", False))
         hc_toggle = ModernToggle(
             quality_frame,
-            text="High-contrast theme (restart required)",
+            text=tr("High-contrast theme (restart required)"),
             variable=self.high_contrast_var,
         )
         hc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
-        Tooltip(hc_toggle, "Alternative palette tuned for low-vision users. Persists across sessions.")
+        Tooltip(hc_toggle, tr("Alternative palette tuned for low-vision users. Persists across sessions."))
 
         self.update_check_var = tk.BooleanVar(value=getattr(self.config, "update_check", False))
         uc_toggle = ModernToggle(
             quality_frame,
-            text="Check for updates on startup",
+            text=tr("Check for updates on startup"),
             variable=self.update_check_var,
         )
         uc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
-        Tooltip(uc_toggle, "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry.")
+        Tooltip(uc_toggle, tr("When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."))
 
         self._update_region_label_display()
         self._update_mode_options()
@@ -2588,7 +2592,7 @@ class VideoSubtitleRemoverApp:
         row = tk.Frame(parent, bg=parent_bg)
         row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 2))
 
-        tk.Label(row, text=label, font=f(Theme.F_BODY_SM),
+        tk.Label(row, text=tr(label), font=f(Theme.F_BODY_SM),
                  bg=parent_bg, fg=Theme.TEXT_SECONDARY,
                  width=16, anchor="w").pack(side="left")
 
@@ -2602,7 +2606,7 @@ class VideoSubtitleRemoverApp:
         value_label.pack()
 
         slider = ModernSlider(row, from_=min_val, to=max_val, value=default,
-                              bg=parent_bg, accessible_label=label)
+                              bg=parent_bg, accessible_label=tr(label))
         slider.pack(side="left", fill="x", expand=True, padx=(Theme.S_SM, 0))
         self._settings_sliders.append(slider)
 
@@ -2613,7 +2617,7 @@ class VideoSubtitleRemoverApp:
         slider.command = on_change
 
         if hint:
-            tk.Label(parent, text=hint, font=f(Theme.F_META),
+            tk.Label(parent, text=tr(hint), font=f(Theme.F_META),
                      bg=parent_bg, fg=Theme.TEXT_MUTED,
                      anchor="w", justify="left").pack(
                          fill="x", padx=(Theme.S_LG, Theme.S_LG),
@@ -2624,11 +2628,11 @@ class VideoSubtitleRemoverApp:
         self.adv_visible = not self.adv_visible
         if self.adv_visible:
             self.adv_toggle.icon = "-"
-            self.adv_toggle.set_text("Hide detailed controls")
+            self.adv_toggle.set_text(tr("Hide detailed controls"))
             self.adv_panel.pack(fill="x")
         else:
             self.adv_toggle.icon = "+"
-            self.adv_toggle.set_text("Show detailed controls")
+            self.adv_toggle.set_text(tr("Show detailed controls"))
             self.adv_panel.pack_forget()
 
     def _build_queue_section(self, parent):
@@ -2642,10 +2646,10 @@ class VideoSubtitleRemoverApp:
         heading = tk.Frame(header, bg=Theme.BG_SECONDARY)
         heading.pack(side="left", fill="x", expand=True)
 
-        tk.Label(heading, text="Queue",
+        tk.Label(heading, text=tr("Queue"),
                  font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(heading, text="Review queued files before starting.",
+        tk.Label(heading, text=tr("Review queued files before starting."),
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  wraplength=360, justify="left").pack(anchor="w", pady=(2, 0))
@@ -2670,11 +2674,11 @@ class VideoSubtitleRemoverApp:
 
         self.queue_total_pill.pack(side="left")
         # done/err pills get shown conditionally in _update_queue_display
-        self.queue_count.config(text="0 items")
+        self.queue_count.config(text=tr("{count} items").format(count=0))
 
         # Sort button -- hidden until queue has >= 3 items
         self._sort_btn = ModernButton(
-            count_cluster, text="Sort", width=72,
+            count_cluster, text=tr("Sort"), width=72,
             command=self._open_sort_menu, style="ghost", size="sm")
         # packed conditionally in _update_queue_display
 
@@ -2685,7 +2689,7 @@ class VideoSubtitleRemoverApp:
         meta_row = tk.Frame(batch_frame, bg=Theme.BG_SECONDARY)
         meta_row.pack(fill="x")
 
-        self.batch_label = tk.Label(meta_row, text="Ready",
+        self.batch_label = tk.Label(meta_row, text=tr("Ready"),
                                     font=f(Theme.F_META, "bold"),
                                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED)
         self.batch_label.pack(side="left")
@@ -2715,7 +2719,7 @@ class VideoSubtitleRemoverApp:
         filter_inner = tk.Frame(self._queue_filter_frame, bg=Theme.BG_TERTIARY)
         filter_inner.pack(fill="x", padx=Theme.S_SM, pady=2)
 
-        tk.Label(filter_inner, text="Filter", font=f(Theme.F_META, "bold"),
+        tk.Label(filter_inner, text=tr("Filter"), font=f(Theme.F_META, "bold"),
                  bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED).pack(
                      side="left", padx=(Theme.S_SM, Theme.S_SM))
         self._queue_filter_entry = tk.Entry(
@@ -2734,7 +2738,7 @@ class VideoSubtitleRemoverApp:
             lambda e: self._queue_filter_frame.config(highlightbackground=Theme.BORDER),
         )
         self._queue_filter_clear = ModernButton(
-            filter_inner, text="Clear", width=68,
+            filter_inner, text=tr("Clear"), width=68,
             command=lambda: self._queue_filter_var.set(""),
             style="ghost", size="sm")
         self._queue_filter_clear.pack(side="right", padx=(Theme.S_SM, 0))
@@ -2780,13 +2784,13 @@ class VideoSubtitleRemoverApp:
         preview_text = tk.Frame(preview_header, bg=Theme.BG_CARD)
         preview_text.pack(side="left", fill="x", expand=True)
 
-        self.preview_title_label = tk.Label(preview_text, text="Preview a sample frame",
+        self.preview_title_label = tk.Label(preview_text, text=tr("Preview a sample frame"),
                                             font=f(Theme.F_TITLE, "bold"),
                                             bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY)
         self.preview_title_label.pack(anchor="w")
         self.preview_meta_label = tk.Label(
             preview_text,
-            text="Click a queue item, then use Set region or Review mask.",
+            text=tr("Click a queue item, then use Set region or Review mask."),
             font=f(Theme.F_META), wraplength=360,
             justify="left", bg=Theme.BG_CARD,
             fg=Theme.TEXT_MUTED)
@@ -2796,7 +2800,7 @@ class VideoSubtitleRemoverApp:
         preview_status.pack(side="right", anchor="ne")
         self.preview_status_chip = tk.Label(
             preview_status,
-            text="Waiting",
+            text=tr("Waiting"),
             font=f(Theme.F_META, "bold"),
             bg=Theme.BG_TERTIARY,
             fg=Theme.TEXT_MUTED,
@@ -2809,7 +2813,7 @@ class VideoSubtitleRemoverApp:
         preview_actions.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         self.preview_region_btn = ModernButton(
             preview_actions,
-            text="Set region",
+            text=tr("Set region"),
             width=96,
             command=self._open_region_selector,
             style="accent",
@@ -2817,10 +2821,10 @@ class VideoSubtitleRemoverApp:
         )
         self.preview_region_btn.pack(side="left")
         Tooltip(self.preview_region_btn,
-                "Draw the subtitle region directly on the preview frame.")
+                tr("Draw the subtitle region directly on the preview frame."))
         self.preview_mask_btn = ModernButton(
             preview_actions,
-            text="Review mask",
+            text=tr("Review mask"),
             width=102,
             command=self._open_selected_mask_preview,
             style="ghost",
@@ -2828,10 +2832,10 @@ class VideoSubtitleRemoverApp:
         )
         self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_mask_btn,
-                "Run detection on the selected item and show the first-frame mask.")
+                tr("Run detection on the selected item and show the first-frame mask."))
         self.preview_zoom_btn = ModernButton(
             preview_actions,
-            text="Full size",
+            text=tr("Full size"),
             width=86,
             command=self._open_preview_zoom,
             style="ghost",
@@ -2839,13 +2843,13 @@ class VideoSubtitleRemoverApp:
         )
         self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_zoom_btn,
-                "Open the selected source frame in a larger viewer.")
+                tr("Open the selected source frame in a larger viewer."))
         # F-3: cheap inpaint preview for the first frame of the selected
         # item. Runs detect + inpaint once and renders the result inline
         # so users can A/B settings before committing the batch.
         self.preview_inpaint_btn = ModernButton(
             preview_actions,
-            text="Test cleanup",
+            text=tr("Test cleanup"),
             width=112,
             command=self._open_selected_inpaint_preview,
             style="ghost",
@@ -2853,11 +2857,11 @@ class VideoSubtitleRemoverApp:
         )
         self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_inpaint_btn,
-                "Run detect + inpaint on the first frame of the selected item.")
+                tr("Run detect + inpaint on the first frame of the selected item."))
         # RM-30: A/B flicker scrubber for completed items.
         self.preview_ab_btn = ModernButton(
             preview_actions,
-            text="A/B compare",
+            text=tr("A/B compare"),
             width=102,
             command=self._open_ab_scrubber,
             style="ghost",
@@ -2865,11 +2869,11 @@ class VideoSubtitleRemoverApp:
         )
         self.preview_ab_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_ab_btn,
-                "Open a frame slider that wipes between source and cleaned output.")
+                tr("Open a frame slider that wipes between source and cleaned output."))
 
         self.preview_action_hint = tk.Label(
             self._preview_frame,
-            text="Select a queue item to enable preview tools.",
+            text=tr("Select a queue item to enable preview tools."),
             font=f(Theme.F_META),
             bg=Theme.BG_CARD,
             fg=Theme.TEXT_MUTED,
@@ -2894,7 +2898,7 @@ class VideoSubtitleRemoverApp:
         self._preview_label.bind("<B1-Motion>", self._on_preview_region_drag, add="+")
         self._preview_label.bind("<ButtonRelease-1>", self._on_preview_region_release, add="+")
         Tooltip(self._preview_label,
-                "Double-click to view at full size. Use Set region above to draw the subtitle band.")
+                tr("Double-click to view at full size. Use Set region above to draw the subtitle band."))
 
         # Action bar -- primary row first, secondary queue actions below.
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
@@ -2905,27 +2909,27 @@ class VideoSubtitleRemoverApp:
         secondary_actions = tk.Frame(btn_frame, bg=Theme.BG_SECONDARY)
         secondary_actions.pack(fill="x", pady=(Theme.S_SM, 0))
 
-        self.start_btn = ModernButton(primary_actions, text="Start batch", width=180,
+        self.start_btn = ModernButton(primary_actions, text=tr("Start batch"), width=180,
                                      command=self._start_processing,
                                      style="primary", size="lg", icon=">")
         self.start_btn.pack(side="left")
 
-        self.open_output_btn = ModernButton(primary_actions, text="Open output", width=132,
+        self.open_output_btn = ModernButton(primary_actions, text=tr("Open output"), width=132,
                                             command=self._open_output_folder,
                                             style="ghost", size="lg", icon="^")
         self.open_output_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.retry_btn = ModernButton(secondary_actions, text="Retry failed", width=124,
+        self.retry_btn = ModernButton(secondary_actions, text=tr("Retry failed"), width=124,
                                       command=self._retry_failed,
                                       style="ghost", size="lg")
         self.retry_btn.pack(side="left")
 
-        self.repeat_btn = ModernButton(secondary_actions, text="Repeat last", width=120,
+        self.repeat_btn = ModernButton(secondary_actions, text=tr("Repeat last"), width=120,
                                       command=self._repeat_last_job,
                                       style="ghost", size="lg")
         self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.clear_btn = ModernButton(secondary_actions, text="Clear queue", width=120,
+        self.clear_btn = ModernButton(secondary_actions, text=tr("Clear queue"), width=120,
                                      command=self._clear_queue,
                                      style="ghost", size="lg")
         self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
@@ -2950,11 +2954,11 @@ class VideoSubtitleRemoverApp:
             icon.create_rectangle(x - 5, 20, x + 5, 40,
                                   fill=Theme.BG_TERTIARY, outline="")
 
-        tk.Label(self.empty_container, text="No media queued",
+        tk.Label(self.empty_container, text=tr("No media queued"),
                  font=f(Theme.F_TITLE, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(pady=(Theme.S_MD, 4))
         tk.Label(self.empty_container,
-                 text="Add videos or images to build a cleanup batch. Originals stay untouched.",
+                 text=tr("Add videos or images to build a cleanup batch. Originals stay untouched."),
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  wraplength=340, justify="center").pack()
@@ -2963,24 +2967,24 @@ class VideoSubtitleRemoverApp:
         actions.pack(pady=(Theme.S_MD, 0))
         choose_files = ModernButton(
             actions,
-            text="Choose files",
+            text=tr("Choose files"),
             width=116,
             command=self._open_file_picker,
             style="accent",
             size="sm",
         )
         choose_files.pack(side="left")
-        Tooltip(choose_files, "Choose one or more videos or images to add to the queue.")
+        Tooltip(choose_files, tr("Choose one or more videos or images to add to the queue."))
         choose_folder = ModernButton(
             actions,
-            text="Choose folder",
+            text=tr("Choose folder"),
             width=122,
             command=self._open_folder_picker,
             style="ghost",
             size="sm",
         )
         choose_folder.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(choose_folder, "Add every supported media file from a folder.")
+        Tooltip(choose_folder, tr("Add every supported media file from a folder."))
 
     def _ensure_filter_empty_state(self):
         """Create the queue filter empty state on demand."""
@@ -2996,7 +3000,7 @@ class VideoSubtitleRemoverApp:
 
         self._filter_empty_title = tk.Label(
             self._filter_empty_container,
-            text="No queued items match this search",
+            text=tr("No queued items match this search"),
             font=f(Theme.F_TITLE, "bold"),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_SECONDARY,
@@ -3004,7 +3008,7 @@ class VideoSubtitleRemoverApp:
         self._filter_empty_title.pack(pady=(Theme.S_MD, 4))
         self._filter_empty_body = tk.Label(
             self._filter_empty_container,
-            text="Clear the filter or search for part of a filename.",
+            text=tr("Clear the filter or search for part of a filename."),
             font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED,
@@ -3014,7 +3018,7 @@ class VideoSubtitleRemoverApp:
         self._filter_empty_body.pack()
         ModernButton(
             self._filter_empty_container,
-            text="Clear filter",
+            text=tr("Clear filter"),
             width=110,
             command=lambda: self._queue_filter_var.set(""),
             style="ghost",
@@ -3082,9 +3086,9 @@ class VideoSubtitleRemoverApp:
         # Title cluster (left)
         title_cluster = tk.Frame(log_header, bg=Theme.BG_SECONDARY)
         title_cluster.pack(side="left")
-        tk.Label(title_cluster, text="ACTIVITY", font=f(Theme.F_EYEBROW, "bold"),
+        tk.Label(title_cluster, text=tr("ACTIVITY"), font=f(Theme.F_EYEBROW, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w")
-        tk.Label(title_cluster, text="Runtime log",
+        tk.Label(title_cluster, text=tr("Runtime log"),
                  font=f(Theme.F_BODY, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w", pady=(2, 0))
 
@@ -3099,18 +3103,18 @@ class VideoSubtitleRemoverApp:
             bg=Theme.ERROR_BG, fg=Theme.ERROR, padx=8, pady=3)
 
         self._log_visible = True
-        self._log_toggle_btn = ModernButton(log_header, text="Hide activity", width=120,
+        self._log_toggle_btn = ModernButton(log_header, text=tr("Hide activity"), width=120,
                                             command=self._toggle_log_panel,
                                             style="ghost", size="sm")
         self._log_toggle_btn.pack(side="left", padx=(Theme.S_MD, 0))
 
         open_log_btn = ModernButton(
-            log_header, text="Open log file", width=118,
+            log_header, text=tr("Open log file"), width=118,
             command=self._open_log_file,
             style="ghost", size="sm")
         open_log_btn.pack(side="right")
 
-        clear_log_btn = ModernButton(log_header, text="Clear", width=72,
+        clear_log_btn = ModernButton(log_header, text=tr("Clear"), width=72,
                                      command=self._clear_log,
                                      style="ghost", size="sm")
         clear_log_btn.pack(side="right", padx=(0, Theme.S_SM))
@@ -3145,23 +3149,27 @@ class VideoSubtitleRemoverApp:
         self._log_visible = not self._log_visible
         if self._log_visible:
             self._log_body.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_SM, Theme.S_LG))
-            self._log_toggle_btn.set_text("Hide activity")
+            self._log_toggle_btn.set_text(tr("Hide activity"))
         else:
             self._log_body.pack_forget()
-            self._log_toggle_btn.set_text("Show activity")
+            self._log_toggle_btn.set_text(tr("Show activity"))
 
     def _update_log_badges(self, warn_count: int, error_count: int):
         """Show/hide warn/error count pills in the log header (always before toggle)."""
         try:
             if warn_count > 0:
                 self._log_warn_badge.config(
-                    text=f"{warn_count} warning{'s' if warn_count != 1 else ''}")
+                    text=tr("{count} warning{suffix}").format(
+                        count=warn_count,
+                        suffix="s" if warn_count != 1 else ""))
                 self._log_warn_badge.pack(side="left", padx=(0, Theme.S_XS))
             else:
                 self._log_warn_badge.pack_forget()
             if error_count > 0:
                 self._log_error_badge.config(
-                    text=f"{error_count} error{'s' if error_count != 1 else ''}")
+                    text=tr("{count} error{suffix}").format(
+                        count=error_count,
+                        suffix="s" if error_count != 1 else ""))
                 self._log_error_badge.pack(side="left", padx=(0, Theme.S_XS))
             else:
                 self._log_error_badge.pack_forget()
@@ -3175,25 +3183,25 @@ class VideoSubtitleRemoverApp:
         self.log_text.config(state="disabled")
         if hasattr(self, "_log_handler"):
             self._log_handler.reset_counts()
-        self._update_status("Activity log cleared")
+        self._update_status(tr("Activity log cleared"))
 
     def _open_log_file(self):
         """Reveal the current log file in the system shell."""
         if not LOG_FILE.exists():
-            self._update_status("The log file is not available yet", "warning")
+            self._update_status(tr("The log file is not available yet"), "warning")
             return
         try:
             os.startfile(str(LOG_FILE))
-            self._update_status("Opened the log file", "info")
+            self._update_status(tr("Opened the log file"), "info")
         except Exception:
-            self._update_status("The log file could not be opened", "warning")
+            self._update_status(tr("The log file could not be opened"), "warning")
 
     def _open_settings_folder(self):
         try:
             os.startfile(str(LOG_DIR))
-            self._update_status("Opened the settings folder", "info")
+            self._update_status(tr("Opened the settings folder"), "info")
         except Exception:
-            self._update_status("The settings folder could not be opened", "warning")
+            self._update_status(tr("The settings folder could not be opened"), "warning")
 
     def _save_support_bundle(self):
         """Save a redacted diagnostics zip for bug reports."""
@@ -3205,9 +3213,9 @@ class VideoSubtitleRemoverApp:
             )
             path = filedialog.asksaveasfilename(
                 parent=self.root,
-                title="Save support bundle",
+                title=tr("Save support bundle"),
                 defaultextension=".zip",
-                filetypes=[("Support bundle", "*.zip"), ("All files", "*.*")],
+                filetypes=[(tr("Support bundle"), "*.zip"), (tr("All files"), "*.*")],
                 initialfile=initial,
             )
             if not path:
@@ -3229,12 +3237,13 @@ class VideoSubtitleRemoverApp:
                 },
             )
             self._update_status(
-                f"Saved redacted support bundle to {Path(bundle).name}",
+                tr("Saved redacted support bundle to {name}").format(
+                    name=Path(bundle).name),
                 "success",
             )
         except Exception as exc:
             logger.warning("Support bundle save failed: %s", exc, exc_info=True)
-            self._update_status("Support bundle could not be saved", "error")
+            self._update_status(tr("Support bundle could not be saved"), "error")
 
     @staticmethod
     def _model_cache_missing_summary(status: dict) -> str:
@@ -3256,9 +3265,9 @@ class VideoSubtitleRemoverApp:
             )
             path = filedialog.asksaveasfilename(
                 parent=self.root,
-                title="Export model cache",
+                title=tr("Export model cache"),
                 defaultextension=".zip",
-                filetypes=[("Model cache bundle", "*.zip"), ("All files", "*.*")],
+                filetypes=[(tr("Model cache bundle"), "*.zip"), (tr("All files"), "*.*")],
                 initialfile=initial,
             )
             if not path:
@@ -3317,11 +3326,11 @@ class VideoSubtitleRemoverApp:
         """Open model-cache actions from the About dialog."""
         menu = make_themed_menu(self.root)
         menu.add_command(
-            label="Export model cache...",
+            label=tr("Export model cache..."),
             command=self._export_model_cache_bundle,
         )
         menu.add_command(
-            label="Import model cache...",
+            label=tr("Import model cache..."),
             command=self._import_model_cache_bundle,
         )
         try:
@@ -3349,7 +3358,7 @@ class VideoSubtitleRemoverApp:
             1, 1, 9, 9, fill=Theme.TEXT_SECONDARY, outline="")
         self.status_dot.pack(side="left", padx=(0, Theme.S_SM), pady=2)
 
-        self.status_label = tk.Label(left, text="Ready to process",
+        self.status_label = tk.Label(left, text=tr("Ready to process"),
                                      font=f(Theme.F_BODY_SM, "bold"),
                                      bg=Theme.BG_DARK, fg=Theme.TEXT_SECONDARY, anchor="w")
         self.status_label.pack(side="left")
@@ -3358,16 +3367,16 @@ class VideoSubtitleRemoverApp:
             set_accessible_metadata(
                 self.status_label,
                 role="status",
-                label="Application status",
+                label=tr("Application status"),
                 state="neutral",
-                value="Ready to process",
+                value=tr("Ready to process"),
             )
         except Exception:
             pass
 
         self.status_hint = tk.Label(
             footer,
-            text="Add files, review a sample frame, then start.",
+            text=tr("Add files, review a sample frame, then start."),
             font=f(Theme.F_META),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_MUTED,
@@ -3377,10 +3386,10 @@ class VideoSubtitleRemoverApp:
     def _get_algo_description(self) -> str:
         """Get description for current algorithm."""
         descriptions = {
-            "Auto": "Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames.",
-            "STTN": "Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action.",
-            "LAMA": "Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame.",
-            "ProPainter": "Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN.",
+            "Auto": tr("Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."),
+            "STTN": tr("Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."),
+            "LAMA": tr("Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."),
+            "ProPainter": tr("Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."),
         }
         return descriptions.get(self.mode_var.get(), "")
 
@@ -3389,7 +3398,9 @@ class VideoSubtitleRemoverApp:
         self.config.mode = InpaintMode(self.mode_var.get())
         self.algo_desc.config(text=self._get_algo_description())
         self._update_mode_options()
-        self._update_status(f"Switched to the {self.mode_var.get()} profile")
+        self._update_status(
+            tr("Switched to the {profile} profile").format(
+                profile=self.mode_var.get()))
 
     def _on_mode_picker_changed(self, value: str):
         """Segmented picker callback -- keep `mode_var` and the combobox path
@@ -3489,7 +3500,7 @@ class VideoSubtitleRemoverApp:
 
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
-        dialog.title("Save preset")
+        dialog.title(tr("Save preset"))
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -3498,11 +3509,11 @@ class VideoSubtitleRemoverApp:
             set_accessible_metadata(
                 dialog,
                 role="dialog",
-                label="Save preset",
+                label=tr("Save preset"),
                 state="modal",
                 description=(
-                    "Name the current cleanup settings and save them "
-                    "to the user preset library."
+                    tr("Name the current cleanup settings and save them "
+                       "to the user preset library.")
                 ),
             )
         except Exception:
@@ -3516,11 +3527,11 @@ class VideoSubtitleRemoverApp:
         content = tk.Frame(body, bg=Theme.BG_SECONDARY)
         content.pack(padx=28, pady=(24, 14))
 
-        tk.Label(content, text="Save the current setup as a preset",
+        tk.Label(content, text=tr("Save the current setup as a preset"),
                  font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
         tk.Label(content,
-                 text="Use a short name you will recognize later. Saving to an existing user preset name will update it.",
+                 text=tr("Use a short name you will recognize later. Saving to an existing user preset name will update it."),
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  justify="left", wraplength=420).pack(anchor="w", pady=(6, Theme.S_LG))
@@ -3531,7 +3542,7 @@ class VideoSubtitleRemoverApp:
         def entry_row(label_text: str, initial: str = ""):
             row = tk.Frame(form, bg=Theme.BG_SECONDARY)
             row.pack(fill="x", pady=(0, Theme.S_MD))
-            tk.Label(row, text=label_text, font=f(Theme.F_BODY_SM),
+            tk.Label(row, text=tr(label_text), font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
             entry = tk.Entry(
                 row, bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
@@ -3545,9 +3556,9 @@ class VideoSubtitleRemoverApp:
             return entry
 
         name_entry = entry_row("Preset name")
-        desc_entry = entry_row("Description", "User preset")
+        desc_entry = entry_row("Description", tr("User preset"))
 
-        helper = tk.Label(content, text="Built-in preset names are reserved.",
+        helper = tk.Label(content, text=tr("Built-in preset names are reserved."),
                           font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
                           fg=Theme.TEXT_MUTED)
         helper.pack(anchor="w")
@@ -3567,22 +3578,22 @@ class VideoSubtitleRemoverApp:
 
         def _submit():
             name = name_entry.get().strip()
-            description = desc_entry.get().strip() or "User preset"
+            description = desc_entry.get().strip() or tr("User preset")
             if not name:
-                error_label.config(text="Give this preset a short name.")
+                error_label.config(text=tr("Give this preset a short name."))
                 name_entry.focus_set()
                 try:
                     from backend.a11y import announce
-                    announce("Give this preset a short name.", importance="high")
+                    announce(tr("Give this preset a short name."), importance="high")
                 except Exception:
                     pass
                 return
             if name in BUILTIN_PRESETS:
-                error_label.config(text="Built-in preset names are reserved.")
+                error_label.config(text=tr("Built-in preset names are reserved."))
                 name_entry.focus_set()
                 try:
                     from backend.a11y import announce
-                    announce("Built-in preset names are reserved.", importance="high")
+                    announce(tr("Built-in preset names are reserved."), importance="high")
                 except Exception:
                     pass
                 return
@@ -3590,9 +3601,9 @@ class VideoSubtitleRemoverApp:
             dialog.grab_release()
             dialog.destroy()
 
-        ModernButton(actions_inner, text="Cancel", width=96,
+        ModernButton(actions_inner, text=tr("Cancel"), width=96,
                      command=_cancel, style="ghost", size="md").pack(side="left")
-        ModernButton(actions_inner, text="Save preset", width=120,
+        ModernButton(actions_inner, text=tr("Save preset"), width=120,
                      command=_submit, style="primary", size="md").pack(
                          side="left", padx=(Theme.S_SM, 0))
 
@@ -3680,11 +3691,11 @@ class VideoSubtitleRemoverApp:
             set_accessible_metadata(
                 dialog,
                 role="dialog",
-                label=f"Welcome to {APP_NAME}",
+                label=tr("Welcome to {app_name}").format(app_name=APP_NAME),
                 state="modal",
                 description=(
-                    "Three first-run cues: import media, inspect the "
-                    "region, and run the batch."
+                    tr("Three first-run cues: import media, inspect the "
+                       "region, and run the batch.")
                 ),
             )
         except Exception:
@@ -3701,7 +3712,7 @@ class VideoSubtitleRemoverApp:
         # Headline
         hero = tk.Frame(content, bg=Theme.BG_SECONDARY)
         hero.pack(anchor="w")
-        tk.Label(hero, text="Welcome", font=f(Theme.F_DISPLAY, "bold"),
+        tk.Label(hero, text=tr("Welcome"), font=f(Theme.F_DISPLAY, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(
                      side="left")
         tk.Label(hero, text=f"v{APP_VERSION}", font=f(Theme.F_BODY_SM),
@@ -3709,7 +3720,7 @@ class VideoSubtitleRemoverApp:
                      side="left", padx=(Theme.S_SM, 0), pady=(14, 0))
 
         tk.Label(content,
-                 text="Three things that make batch cleanup painless.",
+                 text=tr("Three things that make batch cleanup painless."),
                  font=f(Theme.F_BODY),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(
                      anchor="w", pady=(4, Theme.S_LG))
@@ -3732,10 +3743,10 @@ class VideoSubtitleRemoverApp:
                         "warning": Theme.WARNING}.get(tone, Theme.TEXT_SECONDARY)
             tk.Label(top, text=num, font=f(Theme.F_BODY_SM, "bold"),
                      bg=badge_bg, fg=badge_fg, padx=8, pady=2).pack(side="left")
-            tk.Label(top, text=heading, font=f(Theme.F_BODY, "bold"),
+            tk.Label(top, text=tr(heading), font=f(Theme.F_BODY, "bold"),
                      bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY).pack(
                          side="left", padx=(Theme.S_SM, 0))
-            tk.Label(inner, text=body_text, font=f(Theme.F_BODY_SM),
+            tk.Label(inner, text=tr(body_text), font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY,
                      wraplength=220, justify="left", anchor="w").pack(
                          anchor="w", pady=(Theme.S_SM, 0))
@@ -3766,7 +3777,7 @@ class VideoSubtitleRemoverApp:
             dialog.grab_release()
             dialog.destroy()
 
-        ModernButton(actions_inner, text="Got it", width=118,
+        ModernButton(actions_inner, text=tr("Got it"), width=118,
                      command=_close, style="primary", size="md").pack(
                          side="left")
 
@@ -3842,7 +3853,7 @@ class VideoSubtitleRemoverApp:
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(
                      side="left", padx=(0, Theme.S_LG), pady=Theme.S_MD)
-        ModernButton(header, text="Close", width=86,
+        ModernButton(header, text=tr("Close"), width=86,
                      command=win.destroy, style="ghost", size="sm").pack(
                          side="right", padx=Theme.S_LG, pady=Theme.S_SM)
 
@@ -3903,7 +3914,7 @@ class VideoSubtitleRemoverApp:
 
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
-        dialog.title("Batch finished")
+        dialog.title(tr("Batch finished"))
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -3916,7 +3927,10 @@ class VideoSubtitleRemoverApp:
         content = tk.Frame(body, bg=Theme.BG_SECONDARY)
         content.pack(padx=32, pady=(26, 16))
 
-        title_text = "Batch finished" if is_clean else "Batch finished with issues"
+        title_text = (
+            tr("Batch finished")
+            if is_clean else tr("Batch finished with issues")
+        )
         title_color = Theme.SUCCESS if is_clean else Theme.WARNING
         try:
             from backend.a11y import set_accessible_metadata
@@ -3935,20 +3949,25 @@ class VideoSubtitleRemoverApp:
         tk.Label(content, text=title_text, font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=title_color).pack(anchor="w")
         if elapsed:
-            tk.Label(content, text=f"Total time {elapsed}  -  {total} item"
-                                   f"{'s' if total != 1 else ''} processed",
+            tk.Label(content, text=tr(
+                         "Total time {elapsed} - {count} item{suffix} processed"
+                     ).format(
+                         elapsed=elapsed,
+                         count=total,
+                         suffix="s" if total != 1 else "",
+                     ),
                      font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(
                          anchor="w", pady=(2, 0))
         if is_clean:
-            summary_note = "Outputs are ready to review."
+            summary_note = tr("Outputs are ready to review.")
         elif review_count:
-            summary_note = (
+            summary_note = tr(
                 "Some completed outputs need a closer look. Start with "
                 "the quality review item, then retry failed items if needed."
             )
         else:
-            summary_note = (
+            summary_note = tr(
                 "Completed outputs are ready. Review the outliers or "
                 "open the log for details."
             )
@@ -3983,14 +4002,14 @@ class VideoSubtitleRemoverApp:
             ).pack(pady=(0, 10))
             return p
 
-        stat(stats, "COMPLETED", complete, Theme.SUCCESS, Theme.SUCCESS_BG).pack(
+        stat(stats, tr("COMPLETED"), complete, Theme.SUCCESS, Theme.SUCCESS_BG).pack(
             side="left")
-        stat(stats, "FAILED", errors, Theme.ERROR, Theme.ERROR_BG).pack(
+        stat(stats, tr("FAILED"), errors, Theme.ERROR, Theme.ERROR_BG).pack(
             side="left", padx=(Theme.S_SM, 0))
-        stat(stats, "STOPPED", cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
+        stat(stats, tr("STOPPED"), cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
             side="left", padx=(Theme.S_SM, 0))
         if review_count:
-            stat(stats, "REVIEW", review_count, Theme.WARNING, Theme.WARNING_BG).pack(
+            stat(stats, tr("REVIEW"), review_count, Theme.WARNING, Theme.WARNING_BG).pack(
                 side="left", padx=(Theme.S_SM, 0))
 
         slow_stage = None
@@ -4003,17 +4022,17 @@ class VideoSubtitleRemoverApp:
             stage_card.pack(fill="x", pady=(Theme.S_LG, 0))
             tk.Label(
                 stage_card,
-                text="Slowest stage",
+                text=tr("Slowest stage"),
                 font=f(Theme.F_BODY_SM, "bold"),
                 bg=Theme.BG_CARD,
                 fg=Theme.TEXT_PRIMARY,
             ).pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_MD, 0))
             tk.Label(
                 stage_card,
-                text=(
-                    f"{slow_text} dominated this run. Open the report for "
-                    "per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
-                ),
+                text=tr(
+                    "{stage} dominated this run. Open the report for per-item "
+                    "decode, OCR, mask, inpaint, encode, mux, and quality timings."
+                ).format(stage=slow_text),
                 font=f(Theme.F_META),
                 bg=Theme.BG_CARD,
                 fg=Theme.TEXT_MUTED,
@@ -4028,7 +4047,7 @@ class VideoSubtitleRemoverApp:
 
             tk.Label(
                 quality_card,
-                text="Sampled quality check",
+                text=tr("Sampled quality check"),
                 font=f(Theme.F_BODY_SM, "bold"),
                 bg=Theme.BG_CARD,
                 fg=Theme.TEXT_PRIMARY,
@@ -4038,10 +4057,14 @@ class VideoSubtitleRemoverApp:
             samples = int(quality_summary.get("samples", 0) or 0)
             tk.Label(
                 quality_card,
-                text=(
-                    f"Measured {items_measured} completed item"
-                    f"{'s' if items_measured != 1 else ''} across {samples} sampled frame"
-                    f"{'s' if samples != 1 else ''}. Higher is generally better."
+                text=tr(
+                    "Measured {items} completed item{item_suffix} across "
+                    "{samples} sampled frame{sample_suffix}. Higher is generally better."
+                ).format(
+                    items=items_measured,
+                    item_suffix="s" if items_measured != 1 else "",
+                    samples=samples,
+                    sample_suffix="s" if samples != 1 else "",
                 ),
                 font=f(Theme.F_META),
                 bg=Theme.BG_CARD,
@@ -4088,20 +4111,20 @@ class VideoSubtitleRemoverApp:
 
         if review_count > 0:
             default_button = ModernButton(
-                actions_inner, text="Review first", width=122,
+                actions_inner, text=tr("Review first"), width=122,
                 command=_review_first_and_close,
                 style="accent", size="md",
             )
             default_button.pack(side="left")
             retry_button = ModernButton(
-                actions_inner, text="Retry suggested", width=140,
+                actions_inner, text=tr("Retry suggested"), width=140,
                 command=_retry_suggested_and_close,
                 style="ghost", size="md",
             )
             retry_button.pack(side="left", padx=(Theme.S_SM, 0))
         if complete > 0:
             open_button = ModernButton(
-                actions_inner, text="Open output", width=132,
+                actions_inner, text=tr("Open output"), width=132,
                 command=_open_output_and_close,
                 style="accent" if review_count == 0 else "ghost",
                 size="md", icon="^",
@@ -4118,7 +4141,7 @@ class VideoSubtitleRemoverApp:
                 self._open_batch_report_path(report_paths)
                 _close()
             report_button = ModernButton(
-                actions_inner, text="Open report", width=116,
+                actions_inner, text=tr("Open report"), width=116,
                 command=_open_report_and_close,
                 style="ghost", size="md",
             )
@@ -4127,7 +4150,7 @@ class VideoSubtitleRemoverApp:
             report_button.pack(side="left", padx=(Theme.S_SM, 0))
         if errors > 0:
             log_button = ModernButton(
-                actions_inner, text="Open log", width=104,
+                actions_inner, text=tr("Open log"), width=104,
                 command=self._open_log_file,
                 style="ghost", size="md",
             )
@@ -4136,7 +4159,7 @@ class VideoSubtitleRemoverApp:
             log_button.pack(side="left", padx=(Theme.S_SM, 0))
         if errors > 0 or cancelled > 0:
             retry_failed_button = ModernButton(
-                actions_inner, text="Retry failed", width=110,
+                actions_inner, text=tr("Retry failed"), width=110,
                 command=_retry_failed_and_close,
                 style="ghost", size="md",
             )
@@ -4144,7 +4167,7 @@ class VideoSubtitleRemoverApp:
                 default_button = retry_failed_button
             retry_failed_button.pack(side="left", padx=(Theme.S_SM, 0))
         close_button = ModernButton(
-            actions_inner, text="Close", width=92,
+            actions_inner, text=tr("Close"), width=92,
             command=_close, style="primary", size="md",
         )
         close_button.pack(side="left", padx=(Theme.S_SM, 0))
@@ -4185,13 +4208,13 @@ class VideoSubtitleRemoverApp:
         status = getattr(self, "backend_status", {}) or {}
         summary = status.get("summary", {}) if isinstance(status, dict) else {}
         rows = [
-            ("Detection", summary.get("detection") or "Unknown"),
-            ("Inpainting", summary.get("inpainting") or "Unknown"),
-            ("Providers", summary.get("providers") or "Unknown"),
-            ("Languages", summary.get("language_support") or "Unknown"),
-            ("Model files", summary.get("model_files") or "Unknown"),
-            ("Hash status", summary.get("hash_status") or "Unknown"),
-            ("Next action", summary.get("next_action") or "No action needed."),
+            (tr("Detection"), summary.get("detection") or tr("Unknown")),
+            (tr("Inpainting"), summary.get("inpainting") or tr("Unknown")),
+            (tr("Providers"), summary.get("providers") or tr("Unknown")),
+            (tr("Languages"), summary.get("language_support") or tr("Unknown")),
+            (tr("Model files"), summary.get("model_files") or tr("Unknown")),
+            (tr("Hash status"), summary.get("hash_status") or tr("Unknown")),
+            (tr("Next action"), summary.get("next_action") or tr("No action needed.")),
         ]
         profile_rows = [
             (entry["name"], entry["available"], entry["reason"])
@@ -4200,15 +4223,15 @@ class VideoSubtitleRemoverApp:
             )
         ]
         profile_labels = {
-            "basic": "FFmpeg basic",
-            "advanced_quality": "FFmpeg quality",
-            "speech_fallback": "FFmpeg speech",
-            "modern_codec": "FFmpeg codecs",
+            "basic": tr("FFmpeg basic"),
+            "advanced_quality": tr("FFmpeg quality"),
+            "speech_fallback": tr("FFmpeg speech"),
+            "modern_codec": tr("FFmpeg codecs"),
         }
         for name, available, reason in profile_rows:
             rows.append((
-                profile_labels.get(name, "FFmpeg " + name),
-                ("ready" if available else reason),
+                profile_labels.get(name, tr("FFmpeg {name}").format(name=name)),
+                (tr("ready") if available else reason),
             ))
         card = tk.Frame(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER_SUBTLE)
@@ -4218,7 +4241,7 @@ class VideoSubtitleRemoverApp:
         header.pack(fill="x", padx=14, pady=(10, 4))
         tk.Label(
             header,
-            text="BACKEND STATUS",
+            text=tr("BACKEND STATUS"),
             font=f(Theme.F_EYEBROW, "bold"),
             bg=Theme.BG_CARD,
             fg=Theme.TEXT_MUTED,
@@ -4249,7 +4272,7 @@ class VideoSubtitleRemoverApp:
             ).grid(row=row_idx, column=0, sticky="nw", pady=3)
             row_tone = (
                 self._backend_status_tone_color(tone)
-                if label == "Next action" else Theme.TEXT_PRIMARY
+                if label == tr("Next action") else Theme.TEXT_PRIMARY
             )
             tk.Label(
                 grid,
@@ -4267,7 +4290,7 @@ class VideoSubtitleRemoverApp:
         """Open a themed About dialog with version, credits, and quick links."""
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
-        dialog.title(f"About {APP_NAME}")
+        dialog.title(tr("About {app_name}").format(app_name=APP_NAME))
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -4277,9 +4300,9 @@ class VideoSubtitleRemoverApp:
             set_accessible_metadata(
                 dialog,
                 role="dialog",
-                label=f"About {APP_NAME}",
+                label=tr("About {app_name}").format(app_name=APP_NAME),
                 state="modal",
-                description=str(status.get("next_action") or "Backend status and app version."),
+                description=str(status.get("next_action") or tr("Backend status and app version.")),
             )
         except Exception:
             pass
@@ -4309,7 +4332,7 @@ class VideoSubtitleRemoverApp:
         title_stack.pack(side="left")
         tk.Label(title_stack, text=APP_NAME, font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(title_stack, text=f"Version {APP_VERSION}",
+        tk.Label(title_stack, text=tr("Version {version}").format(version=APP_VERSION),
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
 
@@ -4321,7 +4344,7 @@ class VideoSubtitleRemoverApp:
         def fact(label, value, tone=Theme.TEXT_PRIMARY):
             row = tk.Frame(fact_card, bg=Theme.BG_CARD)
             row.pack(fill="x", padx=14, pady=6)
-            tk.Label(row, text=label, font=f(Theme.F_BODY_SM),
+            tk.Label(row, text=tr(label), font=f(Theme.F_BODY_SM),
                      bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left")
             display = truncate_middle(str(value), 58)
             value_label = tk.Label(row, text=display,
@@ -4331,26 +4354,30 @@ class VideoSubtitleRemoverApp:
             if display != str(value):
                 Tooltip(value_label, str(value))
 
-        det_label = ", ".join(self.ai_engines["detection"]) or "None"
-        inp_label = ", ".join(self.ai_engines["inpainting"]) or "None"
+        det_label = ", ".join(self.ai_engines["detection"]) or tr("None")
+        inp_label = ", ".join(self.ai_engines["inpainting"]) or tr("None")
         gpu_count = len(self.gpus)
-        gpu_label = f"{gpu_count} GPU{'s' if gpu_count != 1 else ''}" if self.gpus else "CPU only"
+        gpu_label = (
+            tr("{count} GPU{suffix}").format(
+                count=gpu_count, suffix="s" if gpu_count != 1 else "")
+            if self.gpus else tr("CPU only")
+        )
 
-        fact("Detection engines", det_label, Theme.INFO)
-        fact("Inpainting engines", inp_label, Theme.SUCCESS)
-        fact("Compute", gpu_label,
+        fact(tr("Detection engines"), det_label, Theme.INFO)
+        fact(tr("Inpainting engines"), inp_label, Theme.SUCCESS)
+        fact(tr("Compute"), gpu_label,
              Theme.SUCCESS if self.gpus else Theme.WARNING)
-        fact("FFmpeg", "Ready" if self.ffmpeg_ready else "Missing",
+        fact(tr("FFmpeg"), tr("Ready") if self.ffmpeg_ready else tr("Missing"),
              Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING)
-        fact("Input", "Click Import or drag files onto the queue")
-        fact("Settings", str(SETTINGS_FILE))
-        fact("Log file", str(LOG_FILE))
+        fact(tr("Input"), tr("Click Import or drag files onto the queue"))
+        fact(tr("Settings"), str(SETTINGS_FILE))
+        fact(tr("Log file"), str(LOG_FILE))
         try:
             from backend.cache_inventory import discover_caches, _format_bytes
             total = sum(e.total_bytes for e in discover_caches())
-            fact("Disk cache", _format_bytes(total))
+            fact(tr("Disk cache"), _format_bytes(total))
         except Exception:
-            fact("Disk cache", "unavailable")
+            fact(tr("Disk cache"), tr("unavailable"))
 
         self._build_backend_status_panel(content)
 
@@ -4360,21 +4387,21 @@ class VideoSubtitleRemoverApp:
         actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
         actions_inner.pack(side="right", padx=16, pady=14)
 
-        ModernButton(actions_inner, text="Open log", width=96,
+        ModernButton(actions_inner, text=tr("Open log"), width=96,
                      command=self._open_log_file, style="ghost", size="md").pack(side="left")
-        model_cache_btn = ModernButton(actions_inner, text="Model cache", width=116,
+        model_cache_btn = ModernButton(actions_inner, text=tr("Model cache"), width=116,
                                        command=None, style="ghost", size="md")
         model_cache_btn.command = (
             lambda btn=model_cache_btn: self._open_model_cache_menu(btn)
         )
         model_cache_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text="Support bundle", width=128,
+        ModernButton(actions_inner, text=tr("Support bundle"), width=128,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text="Settings folder", width=132,
+        ModernButton(actions_inner, text=tr("Settings folder"), width=132,
                      command=self._open_settings_folder, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text="Close", width=84,
+        ModernButton(actions_inner, text=tr("Close"), width=84,
                      command=_close_about,
                      style="primary", size="md").pack(side="left", padx=(Theme.S_SM, 0))
 
@@ -4424,7 +4451,7 @@ class VideoSubtitleRemoverApp:
 
     def _choose_output_dir(self):
         """Let user pick a custom output directory."""
-        d = filedialog.askdirectory(title="Select Output Directory")
+        d = filedialog.askdirectory(title=tr("Select Output Directory"))
         if d:
             self._output_dir = Path(d)
             self._update_output_label()
@@ -4528,10 +4555,11 @@ class VideoSubtitleRemoverApp:
             self._preview_region_drag_start = None
             self._preview_region_pending_rect = None
             self.preview_title_label.config(
-                text=f"Draw subtitle region for {Path(item.file_path).name}"
+                text=tr("Draw subtitle region for {name}").format(
+                    name=Path(item.file_path).name)
             )
             self.preview_meta_label.config(
-                text="Drag over the subtitle text. Release to save and refresh the mask."
+                text=tr("Drag over the subtitle text. Release to save and refresh the mask.")
             )
             self._render_preview_region_editor()
             self._update_preview_actions()
@@ -4662,7 +4690,8 @@ class VideoSubtitleRemoverApp:
         self._preview_region_pending_rect = rect
         x1, y1, x2, y2 = rect
         self.preview_meta_label.config(
-            text=f"Release to save region ({x1}, {y1}) to ({x2}, {y2})."
+            text=tr("Release to save region ({x1}, {y1}) to ({x2}, {y2}).").format(
+                x1=x1, y1=y1, x2=x2, y2=y2)
         )
         self._render_preview_region_editor()
         return "break"
@@ -4680,7 +4709,7 @@ class VideoSubtitleRemoverApp:
         x1, y1, x2, y2 = rect
         if (x2 - x1) <= 10 or (y2 - y1) <= 5:
             self.preview_meta_label.config(
-                text="Drag a larger subtitle region before releasing."
+                text=tr("Drag a larger subtitle region before releasing.")
             )
             self._render_preview_region_editor()
             return "break"
@@ -4888,7 +4917,7 @@ class VideoSubtitleRemoverApp:
             if is_video and frame_count > 1:
                 slider_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
                 slider_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
-                tk.Label(slider_row, text="Frame",
+                tk.Label(slider_row, text=tr("Frame"),
                          font=f(Theme.F_BODY_SM),
                          bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
                 ts_label = tk.Label(slider_row, text="00:00:00",
@@ -4933,7 +4962,7 @@ class VideoSubtitleRemoverApp:
 
                 time_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
                 time_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
-                tk.Label(time_row, text="Start sec",
+                tk.Label(time_row, text=tr("Start sec"),
                          font=f(Theme.F_META),
                          bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
                 start_entry = tk.Entry(
@@ -4943,7 +4972,7 @@ class VideoSubtitleRemoverApp:
                     relief="flat",
                 )
                 start_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
-                tk.Label(time_row, text="End sec",
+                tk.Label(time_row, text=tr("End sec"),
                          font=f(Theme.F_META),
                          bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
                 end_entry = tk.Entry(
@@ -4956,7 +4985,7 @@ class VideoSubtitleRemoverApp:
                 span_summary_var.set(
                     f"{len(region_spans)} timed region"
                     f"{'s' if len(region_spans) != 1 else ''}"
-                    if region_spans else "Optional"
+                    if region_spans else tr("Optional")
                 )
                 span_label = tk.Label(
                     time_row, textvariable=span_summary_var,
@@ -4974,7 +5003,7 @@ class VideoSubtitleRemoverApp:
             def _clear_all():
                 rects.clear()
                 region_spans.clear()
-                span_summary_var.set("Optional" if is_video else "")
+                span_summary_var.set(tr("Optional") if is_video else "")
                 _draw_saved_rects()
 
             def _parse_time_inputs():
@@ -5056,27 +5085,27 @@ class VideoSubtitleRemoverApp:
                 self._update_region_label_display()
                 win.destroy()
 
-            ModernButton(actions, text="Clear all", command=_clear_all,
+            ModernButton(actions, text=tr("Clear all"), command=_clear_all,
                          style="ghost", size="sm", width=92).pack(side="left")
             if is_video:
-                ModernButton(actions, text="Add timed", command=_add_timed_regions,
+                ModernButton(actions, text=tr("Add timed"), command=_add_timed_regions,
                              style="secondary", size="sm", width=96).pack(
                                  side="left", padx=(Theme.S_SM, 0))
-            ModernButton(actions, text="Save", command=_save_and_close,
+            ModernButton(actions, text=tr("Save"), command=_save_and_close,
                          style="primary", size="sm", width=92).pack(
                              side="right")
-            ModernButton(actions, text="Cancel", command=win.destroy,
+            ModernButton(actions, text=tr("Cancel"), command=win.destroy,
                          style="ghost", size="sm", width=92).pack(
                              side="right", padx=(0, Theme.S_SM))
 
             hint_frame = tk.Frame(win, bg=Theme.BG_OVERLAY)
             hint_frame.pack(fill="x", pady=(0, Theme.S_MD))
             tk.Label(hint_frame,
-                     text="Drag to add a region. Drag again for multi-region.",
+                     text=tr("Drag to add a region. Drag again for multi-region."),
                      font=f(Theme.F_BODY_SM, "bold"),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
             tk.Label(hint_frame,
-                     text="Scrub to a visible frame; enter seconds and use Add timed for moving subtitles.",
+                     text=tr("Scrub to a visible frame; enter seconds and use Add timed for moving subtitles."),
                      font=f(Theme.F_META),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
 
@@ -5462,19 +5491,19 @@ class VideoSubtitleRemoverApp:
                 "Sorting is disabled while a batch is running", "warning")
             return
         menu = make_themed_menu(self.root)
-        menu.add_command(label="Filename (A -> Z)",
+        menu.add_command(label=tr("Filename (A -> Z)"),
                          command=lambda: self._sort_queue("name_asc"))
-        menu.add_command(label="Filename (Z -> A)",
+        menu.add_command(label=tr("Filename (Z -> A)"),
                          command=lambda: self._sort_queue("name_desc"))
         menu.add_separator()
-        menu.add_command(label="File size (largest first)",
+        menu.add_command(label=tr("File size (largest first)"),
                          command=lambda: self._sort_queue("size_desc"))
-        menu.add_command(label="File size (smallest first)",
+        menu.add_command(label=tr("File size (smallest first)"),
                          command=lambda: self._sort_queue("size_asc"))
         menu.add_separator()
-        menu.add_command(label="Status (pending first)",
+        menu.add_command(label=tr("Status (pending first)"),
                          command=lambda: self._sort_queue("status"))
-        menu.add_command(label="Reverse current order",
+        menu.add_command(label=tr("Reverse current order"),
                          command=lambda: self._sort_queue("reverse"))
         try:
             bx = self._sort_btn.winfo_rootx()
@@ -5539,7 +5568,9 @@ class VideoSubtitleRemoverApp:
             return
 
         dialog = tk.Toplevel(self.root)
-        dialog.title(f"Override settings: {Path(item.file_path).name}")
+        dialog.title(
+            tr("Override settings: {name}").format(
+                name=Path(item.file_path).name))
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
@@ -5552,18 +5583,18 @@ class VideoSubtitleRemoverApp:
         content = tk.Frame(body, bg=Theme.BG_SECONDARY)
         content.pack(padx=24, pady=(20, 12))
 
-        tk.Label(content, text="Per-file overrides",
+        tk.Label(content, text=tr("Per-file overrides"),
                  font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
         tk.Label(content,
-                 text="These apply to this queued item only and survive a global settings change.",
+                 text=tr("These apply to this queued item only and survive a global settings change."),
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
                  wraplength=380, justify="left").pack(anchor="w", pady=(2, Theme.S_LG))
 
         # Mode picker.
         mode_var = tk.StringVar(value=item.config.mode.value)
-        tk.Label(content, text="Mode", font=f(Theme.F_BODY_SM),
+        tk.Label(content, text=tr("Mode"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
         mode_picker = SegmentedPicker(
             content,
@@ -5577,7 +5608,7 @@ class VideoSubtitleRemoverApp:
         # Detection language.
         lang_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
         lang_row.pack(fill="x", pady=(0, Theme.S_SM))
-        tk.Label(lang_row, text="Subtitle language", font=f(Theme.F_BODY_SM),
+        tk.Label(lang_row, text=tr("Subtitle language"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
         lang_codes = [code for code, _ in self._lang_display]
         lang_var = tk.StringVar(value=item.config.detection_lang)
@@ -5597,7 +5628,7 @@ class VideoSubtitleRemoverApp:
         sens_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
         sens_row.pack(fill="x", pady=(Theme.S_SM, Theme.S_SM))
         sens_var = tk.IntVar(value=int(round(item.config.detection_threshold * 100)))
-        tk.Label(sens_row, text="Sensitivity", font=f(Theme.F_BODY_SM),
+        tk.Label(sens_row, text=tr("Sensitivity"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
         sens_label = tk.Label(sens_row, text=f"{sens_var.get()}%",
                               font=f(Theme.F_BODY_SM, "bold"),
@@ -5625,7 +5656,7 @@ class VideoSubtitleRemoverApp:
         # Output codec.
         codec_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
         codec_row.pack(fill="x", pady=(0, Theme.S_SM))
-        tk.Label(codec_row, text="Output codec", font=f(Theme.F_BODY_SM),
+        tk.Label(codec_row, text=tr("Output codec"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
         codec_var = tk.StringVar(value=getattr(item.config, "output_codec", "h264"))
         ttk.Combobox(
@@ -5659,9 +5690,9 @@ class VideoSubtitleRemoverApp:
             )
             dialog.destroy()
 
-        ModernButton(actions_inner, text="Cancel", command=dialog.destroy,
+        ModernButton(actions_inner, text=tr("Cancel"), command=dialog.destroy,
                      style="ghost", size="md", width=96).pack(side="left")
-        ModernButton(actions_inner, text="Save", command=_save,
+        ModernButton(actions_inner, text=tr("Save"), command=_save,
                      style="primary", size="md", width=96).pack(
                          side="left", padx=(Theme.S_SM, 0))
 
@@ -5993,7 +6024,8 @@ class VideoSubtitleRemoverApp:
             "info": Theme.INFO,
         }
         color = colors.get(tone, Theme.TEXT_SECONDARY)
-        self.status_label.config(text=self._footer_status_text(message), fg=color)
+        display_message = tr(message)
+        self.status_label.config(text=self._footer_status_text(display_message), fg=color)
         try:
             self.status_dot.itemconfig(self._status_dot_item, fill=color)
         except Exception:
@@ -6004,17 +6036,17 @@ class VideoSubtitleRemoverApp:
             set_accessible_metadata(
                 self.status_label,
                 role="status",
-                label="Application status",
+                label=tr("Application status"),
                 state=tone,
-                value=message,
+                value=display_message,
             )
             if toast or tone in {"error", "warning", "success"}:
-                announce(message, importance="high" if tone == "error" else "normal")
+                announce(display_message, importance="high" if tone == "error" else "normal")
         except Exception:
             pass
         if toast:
             try:
-                Toast.show(self.root, message, tone=tone)
+                Toast.show(self.root, display_message, tone=tone)
             except Exception:
                 pass
 
@@ -6541,7 +6573,7 @@ class VideoSubtitleRemoverApp:
         self._set_settings_locked(True)
         self.start_btn.set_style("danger")
         self.start_btn.icon = "x"
-        self.start_btn.set_text("Stop batch")
+        self.start_btn.set_text(tr("Stop batch"))
         self._batch_times = []
         # F-9: the ETA probe loads an OCR model and detects 30 frames --
         # far too slow for the Tk main thread. _process_queue runs it on
@@ -6583,7 +6615,7 @@ class VideoSubtitleRemoverApp:
 
         self.start_btn.set_style("primary")
         self.start_btn.icon = "x"
-        self.start_btn.set_text("Stopping...")
+        self.start_btn.set_text(tr("Stopping..."))
         self._refresh_action_states()
         self._update_status(
             "Stopping after the current step. Finished outputs stay on disk.",
@@ -7685,7 +7717,7 @@ class VideoSubtitleRemoverApp:
             return
         self.start_btn.set_style("primary")
         self.start_btn.icon = ">"
-        self.start_btn.set_text("Start batch")
+        self.start_btn.set_text(tr("Start batch"))
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
         self.batch_progress.set_progress(0)
         self.batch_label.config(text="Ready", fg=Theme.TEXT_MUTED)

@@ -9,13 +9,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 -- Dependency, documentation, and UX hardening
 
-- [ ] P2 — Wire gettext extraction through user-facing GUI strings
-  Why: `backend/i18n.py` and `locale/vsr.pot` are only scaffolding until main GUI strings are wrapped and extraction is testable.
-  Evidence: `backend/i18n.py`, `locale/vsr.pot`, `gui/app.py`, `gui/widgets.py`, `tests/test_hardening.py`
-  Touches: `gui/app.py`, `gui/widgets.py`, `backend/i18n.py`, `locale/vsr.pot`, tests for extraction and fallback behavior
-  Acceptance: Core visible strings in onboarding, queue, settings, dialogs, status, errors, and About/backend status use `_()` or a documented alias; extraction refresh updates `locale/vsr.pot`; a test catalog proves at least one non-English string renders while missing keys fall back to source text.
-  Complexity: L
-
 - [ ] P2 — Add cooperative pause/resume checkpoints for long videos
   Why: VSR can skip completed files, but competitor issue streams show users expect long-running removals to pause and resume without restarting the current video.
   Evidence: YaoFANGUK issues #222 and #224, `README.md` crash-resume note, `backend/processor.py`, `gui/config.py` queue state

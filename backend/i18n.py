@@ -5,14 +5,14 @@ actual translations land. The scaffold provides:
 
 - A `_()` helper that returns the input string unchanged when no
   catalog is bound, and the translated string otherwise.
+- A `tr()` alias for GUI modules where `_` would collide with common
+  throwaway loop variables. Extraction commands should include
+  `-k_ -ktr`.
 - A `bind_locale(lang)` entry point the GUI calls at startup. The
   lookup walks `locale/<lang>/LC_MESSAGES/vsr.mo` and falls back to
   English when the catalog is missing.
-- A `messages.pot`-style "extract every UI string" pass is the
-  responsibility of a follow-up commit that wires gettext-style
-  markup through every user-facing label. This scaffold lands so a
-  contributor can drop a `.po` file in and immediately get
-  partial translation, without first negotiating the framework.
+- A `messages.pot`-style template at `locale/vsr.pot` that is refreshed
+  from the GUI call sites using the same `_`/`tr` keywords.
 
 The module imports cleanly when `gettext` is missing because gettext
 is stdlib; the only way it disappears is on broken-up CPython builds
@@ -91,6 +91,11 @@ def _(text: str) -> str:
 def gettext_passthrough(text: str) -> str:
     """Public alias of `_` for places where `_` would clash with a
     local variable name."""
+    return _(text)
+
+
+def tr(text: str) -> str:
+    """Documented GUI alias for gettext extraction (`xgettext -ktr`)."""
     return _(text)
 
 

@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from backend.i18n import tr
 from gui.theme import Theme
 
 logger = logging.getLogger(__name__)
@@ -657,13 +658,13 @@ def status_ui(status: ProcessingStatus) -> dict:
     keys = _STATUS_THEME_KEYS.get(status)
     if keys is None:
         return {
-            "label": status.value.title(),
+            "label": tr(status.value.title()),
             "color": getattr(Theme, "TEXT_MUTED"),
             "bg": getattr(Theme, "BG_TERTIARY"),
         }
     color_key, bg_key = keys
     return {
-        "label": _STATUS_LABELS.get(status, status.value.title()),
+        "label": tr(_STATUS_LABELS.get(status, status.value.title())),
         "color": getattr(Theme, color_key),
         "bg": getattr(Theme, bg_key),
     }
