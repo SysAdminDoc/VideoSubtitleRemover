@@ -516,6 +516,38 @@ class MediaInputFailureTests(unittest.TestCase):
             self.assertIn("fictional_codec", remover.last_error_message)
             self.assertIn("Convert it", remover.last_error_message)
 
+    def test_process_image_records_stage_timings(self):
+        class FakeDetector:
+            def detect(self, *_args, **_kwargs):
+                return [(4, 4, 28, 18)]
+
+        class FakeInpainter:
+            def inpaint(self, frames, _masks):
+                return frames
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "source.png"
+            output = work / "source_clean.png"
+            image = np.full((32, 48, 3), 128, dtype=np.uint8)
+            self.assertTrue(processor.cv2.imwrite(str(source), image))
+
+            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+            remover.config = processor.ProcessingConfig()
+            remover.detector = FakeDetector()
+            remover.inpainter = FakeInpainter()
+            remover.on_progress = None
+            remover.last_stage_timings = remover._empty_stage_timings()
+
+            ok = remover.process_image(str(source), str(output))
+            output_exists = output.exists()
+
+        self.assertTrue(ok)
+        self.assertTrue(output_exists)
+        for stage in ("decode", "ocr", "mask", "inpaint", "encode"):
+            self.assertIn(stage, remover.last_stage_timings)
+            self.assertGreaterEqual(remover.last_stage_timings[stage], 0.0)
+
     def test_gui_failed_queue_item_uses_media_input_message(self):
         from unittest import mock
 
@@ -2722,6 +2754,15 @@ class BatchReportTests(unittest.TestCase):
                 _br.STATUS_HARDCODED_PROCESSED,
                 message="Processed",
                 elapsed_seconds=3.25,
+                stage_timings={
+                    "decode": 0.5,
+                    "ocr": 1.25,
+                    "mask": 0.25,
+                    "inpaint": 2.0,
+                    "encode": 0.75,
+                    "mux": 0.4,
+                    "quality": 0.2,
+                },
                 quality_report={
                     "tag": "Review",
                     "samples": 3,
@@ -2749,11 +2790,17 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["source_width"], 1920)
         self.assertEqual(payload["files"][0]["subtitle_stream_count"], 1)
         self.assertGreater(payload["files"][0]["estimated_seconds"], 0)
+        self.assertEqual(payload["stage_summary"]["slowest_stage"]["name"], "inpaint")
+        self.assertEqual(payload["files"][0]["dominant_stage"]["name"], "inpaint")
+        self.assertEqual(payload["files"][0]["stage_timings"]["ocr"], 1.25)
         self.assertEqual(
             payload["files"][0]["output_quality_preflight"]["status"],
             "warning",
         )
         self.assertTrue(payload["files"][0]["output_quality_preflight"]["overridden"])
+        self.assertIn("Stage timing summary", markdown)
+        self.assertIn("Per-item stage timings", markdown)
+        self.assertIn("slowest inpaint 2.0s", markdown)
         self.assertEqual(payload["files"][0]["quality_gate"]["status"], "review")
         self.assertEqual(
             payload["files"][0]["quality_gate"]["ladderStep"],

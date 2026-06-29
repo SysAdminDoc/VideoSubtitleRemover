@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Batch stage timing evidence.** Batch JSON/Markdown reports, support
+  bundles, and completion/review surfaces now include decode, OCR, mask,
+  inpaint, encode, mux, and quality-analysis timings with slowest-stage
+  summaries for diagnosing bottlenecks.
 - **Static-logo cleanup research benchmark.** A benchmark-only harness now
   compares the current per-frame cv2 cleanup against a deterministic
   InpaintDelogo-style static-logo path, with manifest license/hash gates,

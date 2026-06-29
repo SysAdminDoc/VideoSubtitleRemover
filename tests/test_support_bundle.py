@@ -34,11 +34,17 @@ class SupportBundleTests(unittest.TestCase):
             report = root / "vsr-batch-summary.json"
             report.write_text(
                 json.dumps({
+                    "stage_summary": {
+                        "slowest_stage": {"name": "ocr", "seconds": 3.0},
+                        "stage_totals": {"ocr": 3.0, "mux": 0.2},
+                    },
                     "files": [{
                         "input": "C:/Users/example/Videos/source.mp4",
                         "output": "D:/Exports/source_clean.mp4",
                         "input_name": "source.mp4",
                         "status": "failed",
+                        "stage_timings": {"ocr": 3.0, "mux": 0.2},
+                        "dominant_stage": {"name": "ocr", "seconds": 3.0},
                     }],
                 }),
                 encoding="utf-8",
@@ -127,6 +133,12 @@ class SupportBundleTests(unittest.TestCase):
                 self.assertEqual(record["input"], "<redacted>")
                 self.assertEqual(record["output"], "<redacted>")
                 self.assertEqual(record["input_name"], "source.mp4")
+                self.assertEqual(record["stage_timings"]["ocr"], 3.0)
+                self.assertEqual(record["dominant_stage"]["name"], "ocr")
+                self.assertEqual(
+                    redacted_report["stage_summary"]["slowest_stage"]["name"],
+                    "ocr",
+                )
 
     def test_bundle_adds_zip_suffix(self):
         with tempfile.TemporaryDirectory() as tmp:

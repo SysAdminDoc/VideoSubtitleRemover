@@ -33,6 +33,8 @@ import shutil
 import subprocess
 import tempfile
 import traceback
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional, Tuple, List, Callable
 
@@ -293,6 +295,16 @@ except Exception as _exc:
 class SubtitleRemover:
     """Coordinates detection and inpainting to remove subtitles from videos/images."""
 
+    _STAGE_TIMING_KEYS = (
+        "decode",
+        "ocr",
+        "mask",
+        "inpaint",
+        "encode",
+        "mux",
+        "quality",
+    )
+
     def __init__(self, config: ProcessingConfig = None):
         self.config = normalize_processing_config(config or ProcessingConfig())
         self.detector = SubtitleDetector(
@@ -314,6 +326,7 @@ class SubtitleRemover:
         # v3.12 quality report -- populated at end of process_video when
         # config.quality_report is on. None until the first run completes.
         self.last_quality_report: Optional[dict] = None
+        self.last_stage_timings: dict[str, float] = self._empty_stage_timings()
         # Actual user-visible output path for the last run. This may differ
         # from the requested path when FFmpeg cannot encode the requested
         # container and the lossless intermediate is salvaged as .mkv.
@@ -385,6 +398,26 @@ class SubtitleRemover:
                     f"Inpainter: {self.config.mode.value} | "
                     f"Device: {self.config.device}"
                     f"{' | HW encode: ' + self._hw_encoder if self._hw_encoder else ''}")
+
+    def _empty_stage_timings(self) -> dict[str, float]:
+        return {stage: 0.0 for stage in self._STAGE_TIMING_KEYS}
+
+    def _reset_stage_timings(self) -> None:
+        self.last_stage_timings = self._empty_stage_timings()
+
+    @contextmanager
+    def _time_stage(self, stage: str):
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            if stage not in self.last_stage_timings:
+                self.last_stage_timings[stage] = 0.0
+            self.last_stage_timings[stage] = round(
+                self.last_stage_timings.get(stage, 0.0)
+                + max(0.0, time.monotonic() - started),
+                6,
+            )
 
     def _set_active_subprocess(self, proc: Optional[subprocess.Popen]) -> None:
         self._active_subprocess = proc
@@ -984,29 +1017,33 @@ class SubtitleRemover:
     def process_image(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
         self.last_output_path = None
+        self._reset_stage_timings()
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
-            image = safe_imread(input_path)
+            with self._time_stage("decode"):
+                image = safe_imread(input_path)
             if image is None:
                 raise ValueError(f"Could not load image: {input_path}")
 
             self._report_progress(0.3, "Detecting text regions...")
             fixed = self._fixed_region_boxes(0.0)
             confidences = None
-            if fixed:
-                boxes = fixed
-            elif self.config.confidence_weighted_dilation:
-                results = self.detector.detect_with_confidence(
-                    image, self.config.detection_threshold)
-                boxes = [(x1, y1, x2, y2) for x1, y1, x2, y2, _ in results]
-                confidences = [c for _, _, _, _, c in results]
-            else:
-                boxes = self.detector.detect(image, self.config.detection_threshold)
+            with self._time_stage("ocr"):
+                if fixed:
+                    boxes = fixed
+                elif self.config.confidence_weighted_dilation:
+                    results = self.detector.detect_with_confidence(
+                        image, self.config.detection_threshold)
+                    boxes = [(x1, y1, x2, y2) for x1, y1, x2, y2, _ in results]
+                    confidences = [c for _, _, _, _, c in results]
+                else:
+                    boxes = self.detector.detect(image, self.config.detection_threshold)
 
             if not boxes:
                 logger.info("No text detected, copying original")
-                _copy_file_atomic(input_path, output_path)
+                with self._time_stage("encode"):
+                    _copy_file_atomic(input_path, output_path)
                 self.last_output_path = output_path
                 self.last_error_message = None
                 self.last_error_reason = None
@@ -1014,26 +1051,29 @@ class SubtitleRemover:
                 return True
 
             self._report_progress(0.5, f"Removing {len(boxes)} text regions...")
-            mask = self._create_mask(image.shape, boxes, frame=image,
-                                     confidences=confidences)
-            [mask] = self._refine_masks_with_matanyone([image], [mask])
-            [result] = self.inpainter.inpaint([image], [mask])
+            with self._time_stage("mask"):
+                mask = self._create_mask(image.shape, boxes, frame=image,
+                                         confidences=confidences)
+                [mask] = self._refine_masks_with_matanyone([image], [mask])
+            with self._time_stage("inpaint"):
+                [result] = self.inpainter.inpaint([image], [mask])
 
             self._report_progress(0.9, "Saving result...")
             ext = Path(output_path).suffix.lower()
             temp_output = _allocate_temp_output_path(output_path)
             try:
-                if ext in ('.jpg', '.jpeg'):
-                    ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                elif ext == '.png':
-                    ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
-                elif ext == '.webp':
-                    ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_WEBP_QUALITY, 95])
-                else:
-                    ok = cv2.imwrite(str(temp_output), result)
-                if not ok:
-                    raise IOError(f"Failed to write output image: {output_path}")
-                _promote_temp_output(temp_output, output_path)
+                with self._time_stage("encode"):
+                    if ext in ('.jpg', '.jpeg'):
+                        ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                    elif ext == '.png':
+                        ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+                    elif ext == '.webp':
+                        ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_WEBP_QUALITY, 95])
+                    else:
+                        ok = cv2.imwrite(str(temp_output), result)
+                    if not ok:
+                        raise IOError(f"Failed to write output image: {output_path}")
+                    _promote_temp_output(temp_output, output_path)
             finally:
                 _cleanup_temp_output(temp_output)
             self.last_output_path = output_path
@@ -1216,6 +1256,7 @@ class SubtitleRemover:
     def process_video(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
         self.last_output_path = None
+        self._reset_stage_timings()
         self._srt_entries = []
         self._quality_mask_bbox = None
         temp_dir = None
@@ -1402,27 +1443,28 @@ class SubtitleRemover:
             # so the pipeline still produces output, just at the old
             # quality.
             use_frame_output = getattr(self.config, "output_frames", False)
-            if use_frame_output:
-                frame_out_dir = output_path
-                if not frame_out_dir.endswith(os.sep):
-                    frame_out_dir = str(Path(output_path).with_suffix(""))
-                writer = _FrameSequenceWriter(frame_out_dir)
-                temp_video = None
-            else:
-                temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
-                writer = _LosslessIntermediateWriter(
-                    temp_video_target,
-                    width,
-                    height,
-                    fps,
-                    pixel_format="bgr48le" if high_bit_depth_surface else "bgr24",
-                )
-                self._active_writer = writer
-                temp_video = writer.path
-                if not writer.isOpened():
-                    raise ValueError(
-                        f"Could not create video writer for: {temp_video}"
+            with self._time_stage("encode"):
+                if use_frame_output:
+                    frame_out_dir = output_path
+                    if not frame_out_dir.endswith(os.sep):
+                        frame_out_dir = str(Path(output_path).with_suffix(""))
+                    writer = _FrameSequenceWriter(frame_out_dir)
+                    temp_video = None
+                else:
+                    temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
+                    writer = _LosslessIntermediateWriter(
+                        temp_video_target,
+                        width,
+                        height,
+                        fps,
+                        pixel_format="bgr48le" if high_bit_depth_surface else "bgr24",
                     )
+                    self._active_writer = writer
+                    temp_video = writer.path
+                    if not writer.isOpened():
+                        raise ValueError(
+                            f"Could not create video writer for: {temp_video}"
+                        )
 
             frame_idx = 0
             batch_size = self.config.sttn_max_load_num
@@ -1441,13 +1483,14 @@ class SubtitleRemover:
             # (.set / .get / .read) after this point -- the worker owns it.
             # Seek + metadata reads above happen *before* the wrap, so this
             # is safe; cleanup goes through `reader.release()`.
-            if self.config.prefetch_decode:
-                qsize = self.config.prefetch_queue_size or max(8, batch_size * 2)
-                reader = _PrefetchReader(cap, max_frames=frames_to_process,
-                                          queue_size=qsize)
-                logger.info(f"Prefetch decode on (queue={qsize})")
-            else:
-                reader = cap
+            with self._time_stage("decode"):
+                if self.config.prefetch_decode:
+                    qsize = self.config.prefetch_queue_size or max(8, batch_size * 2)
+                    reader = _PrefetchReader(cap, max_frames=frames_to_process,
+                                              queue_size=qsize)
+                    logger.info(f"Prefetch decode on (queue={qsize})")
+                else:
+                    reader = cap
             last_mask = None  # cached mask for frame-skip optimization
             fixed_mask_cache = {}  # cached masks for skip_detection mode
 
@@ -1539,16 +1582,17 @@ class SubtitleRemover:
                 for _ in range(batch_size):
                     if start_frame + frame_idx >= end_frame:
                         break
-                    ret, raw_frame = reader.read()
-                    if not ret:
-                        break
-                    source_frame = (
-                        raw_frame
-                        if high_bit_depth_surface
-                        and self._is_high_bit_frame(raw_frame)
-                        else None
-                    )
-                    frame = self._processing_frame(raw_frame)
+                    with self._time_stage("decode"):
+                        ret, raw_frame = reader.read()
+                        if not ret:
+                            break
+                        source_frame = (
+                            raw_frame
+                            if high_bit_depth_surface
+                            and self._is_high_bit_frame(raw_frame)
+                            else None
+                        )
+                        frame = self._processing_frame(raw_frame)
 
                     absolute_idx = start_frame + frame_idx
                     frame_seconds = absolute_idx / max(fps, 1.0)
@@ -1566,11 +1610,13 @@ class SubtitleRemover:
                             mask_key = tuple(tuple(r) for r in fixed_boxes)
                             fixed_mask = fixed_mask_cache.get(mask_key)
                             if fixed_mask is None:
-                                fixed_mask = self._create_mask(
-                                    frame.shape, fixed_boxes)
+                                with self._time_stage("mask"):
+                                    fixed_mask = self._create_mask(
+                                        frame.shape, fixed_boxes)
                                 fixed_mask_cache[mask_key] = fixed_mask
                         else:
-                            fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                            with self._time_stage("mask"):
+                                fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                         frames.append(frame)
                         masks.append(fixed_mask)
                         source_frames.append(source_frame)
@@ -1618,69 +1664,70 @@ class SubtitleRemover:
                         # frame copy before OCR. Output pixels stay
                         # unchanged because the inpainter still runs
                         # against `frame`, not `det_frame`.
-                        if self.config.detection_denoise:
-                            try:
-                                from backend.preprocess import fastdvdnet_denoise_frame
-                                det_frame = fastdvdnet_denoise_frame(frame)
-                            except Exception as exc:
-                                logger.warning(
-                                    f"Detection denoise fell back: {exc}",
-                                    exc_info=True,
-                                )
+                        with self._time_stage("ocr"):
+                            if self.config.detection_denoise:
+                                try:
+                                    from backend.preprocess import fastdvdnet_denoise_frame
+                                    det_frame = fastdvdnet_denoise_frame(frame)
+                                except Exception as exc:
+                                    logger.warning(
+                                        f"Detection denoise fell back: {exc}",
+                                        exc_info=True,
+                                    )
+                                    det_frame = frame
+                            else:
                                 det_frame = frame
-                        else:
-                            det_frame = frame
-                        det_confs = None
-                        if self.config.confidence_weighted_dilation:
-                            det_results = self.detector.detect_with_confidence(
-                                det_frame, self.config.detection_threshold)
-                            detected_boxes = [
-                                (x1, y1, x2, y2)
-                                for x1, y1, x2, y2, _ in det_results
-                            ]
-                            det_confs = [c for _, _, _, _, c in det_results]
-                        else:
-                            detected_boxes = self.detector.detect(
-                                det_frame, self.config.detection_threshold)
-                        # Karaoke grouping: fuse per-syllable boxes on the
-                        # same line before tracking so Kalman sees one
-                        # composite per line, not one per syllable.
-                        if self.config.karaoke_grouping and detected_boxes:
-                            detected_boxes = _group_horizontal_line(
-                                detected_boxes,
-                                x_gap_px=self.config.karaoke_x_gap_px,
-                                y_overlap_ratio=self.config.karaoke_y_overlap,
-                            )
                             det_confs = None
-                        # Smooth jitter + fill single-frame misses via Kalman
-                        if tracker is not None:
-                            smoothed = tracker.update(list(detected_boxes))
-                            det_confs = None
-                        else:
-                            smoothed = list(detected_boxes)
-                        # Chyron / subtitle filter: when either remove flag is
-                        # off we drop the matching tracks before mask creation.
-                        # No-op when both are True (default v3.12 behaviour).
-                        if (tracker is not None
-                                and (not self.config.remove_chyrons
-                                     or not self.config.remove_subtitles)):
-                            cats = tracker.categorize(self.config.chyron_min_hits)
-                            smoothed = [
-                                b for b, c in zip(smoothed, cats)
-                                if (c == "chyron" and self.config.remove_chyrons)
-                                or (c == "subtitle" and self.config.remove_subtitles)
-                            ]
-                            det_confs = None
-                        # If fixed boxes are set without skip_detection, union them
-                        # with per-frame detections so users can pin a region AND
-                        # still clean incidental text elsewhere.
-                        if fixed_boxes:
-                            boxes = list(fixed_boxes) + smoothed
-                            det_confs = None
-                        else:
-                            boxes = smoothed
-                        if self.config.export_srt:
-                            self._collect_srt_entry(frame, frame_idx, detected_boxes)
+                            if self.config.confidence_weighted_dilation:
+                                det_results = self.detector.detect_with_confidence(
+                                    det_frame, self.config.detection_threshold)
+                                detected_boxes = [
+                                    (x1, y1, x2, y2)
+                                    for x1, y1, x2, y2, _ in det_results
+                                ]
+                                det_confs = [c for _, _, _, _, c in det_results]
+                            else:
+                                detected_boxes = self.detector.detect(
+                                    det_frame, self.config.detection_threshold)
+                            # Karaoke grouping: fuse per-syllable boxes on the
+                            # same line before tracking so Kalman sees one
+                            # composite per line, not one per syllable.
+                            if self.config.karaoke_grouping and detected_boxes:
+                                detected_boxes = _group_horizontal_line(
+                                    detected_boxes,
+                                    x_gap_px=self.config.karaoke_x_gap_px,
+                                    y_overlap_ratio=self.config.karaoke_y_overlap,
+                                )
+                                det_confs = None
+                            # Smooth jitter + fill single-frame misses via Kalman
+                            if tracker is not None:
+                                smoothed = tracker.update(list(detected_boxes))
+                                det_confs = None
+                            else:
+                                smoothed = list(detected_boxes)
+                            # Chyron / subtitle filter: when either remove flag is
+                            # off we drop the matching tracks before mask creation.
+                            # No-op when both are True (default v3.12 behaviour).
+                            if (tracker is not None
+                                    and (not self.config.remove_chyrons
+                                         or not self.config.remove_subtitles)):
+                                cats = tracker.categorize(self.config.chyron_min_hits)
+                                smoothed = [
+                                    b for b, c in zip(smoothed, cats)
+                                    if (c == "chyron" and self.config.remove_chyrons)
+                                    or (c == "subtitle" and self.config.remove_subtitles)
+                                ]
+                                det_confs = None
+                            # If fixed boxes are set without skip_detection, union them
+                            # with per-frame detections so users can pin a region AND
+                            # still clean incidental text elsewhere.
+                            if fixed_boxes:
+                                boxes = list(fixed_boxes) + smoothed
+                                det_confs = None
+                            else:
+                                boxes = smoothed
+                            if self.config.export_srt:
+                                self._collect_srt_entry(frame, frame_idx, detected_boxes)
 
                     # RM-27: when OCR returned no boxes for this frame
                     # AND Whisper found speech in this timecode, mask a
@@ -1699,16 +1746,17 @@ class SubtitleRemover:
                                           int(w_full * 0.95), h_full - 4)]
                                 break
 
-                    mask = self._create_mask(frame.shape, boxes, frame=frame,
-                                             confidences=det_confs)
-                    # Colour-tuned expansion -- grow the mask to match the
-                    # dominant text colour inside each detected box.
-                    if self.config.colour_tune_enable and boxes:
-                        mask = _expand_mask_by_color(
-                            frame, mask, boxes,
-                            tolerance=self.config.colour_tune_tolerance,
-                            padding=4,
-                        )
+                    with self._time_stage("mask"):
+                        mask = self._create_mask(frame.shape, boxes, frame=frame,
+                                                 confidences=det_confs)
+                        # Colour-tuned expansion -- grow the mask to match the
+                        # dominant text colour inside each detected box.
+                        if self.config.colour_tune_enable and boxes:
+                            mask = _expand_mask_by_color(
+                                frame, mask, boxes,
+                                tolerance=self.config.colour_tune_tolerance,
+                                padding=4,
+                            )
                     last_mask = mask
                     if self.config.phash_skip_enable:
                         # Reuse the hash computed above for the skip-check if
@@ -1723,28 +1771,32 @@ class SubtitleRemover:
                 if not frames:
                     break
 
-                masks = self._propagate_masks_with_cotracker(frames, masks)
-                masks = self._refine_masks_with_matanyone(frames, masks)
-                # B-3: accumulate the union-mask bbox for the quality report
-                # ROI after optional mask refiners have finalized the mask.
-                if self.config.quality_report:
-                    for m in masks:
-                        self._accumulate_quality_bbox(m)
+                with self._time_stage("mask"):
+                    masks = self._propagate_masks_with_cotracker(frames, masks)
+                    masks = self._refine_masks_with_matanyone(frames, masks)
+                    # B-3: accumulate the union-mask bbox for the quality report
+                    # ROI after optional mask refiners have finalized the mask.
+                    if self.config.quality_report:
+                        for m in masks:
+                            self._accumulate_quality_bbox(m)
                 if masks:
                     last_mask = masks[-1]
 
                 progress = min(0.9, frame_idx / max(1, frames_to_process) * 0.8 + 0.1)
                 self._report_progress(progress, f"Processing frame {frame_idx}/{frames_to_process}...")
 
-                results = self._inpaint_with_optional_rife_fast(frames, masks)
+                with self._time_stage("inpaint"):
+                    results = self._inpaint_with_optional_rife_fast(frames, masks)
                 stride = max(1, self.live_preview_stride)
+                with self._time_stage("encode"):
+                    for offset, result in enumerate(results):
+                        write_frame = self._merge_high_bit_output(
+                            source_frames[offset] if offset < len(source_frames) else None,
+                            result,
+                            masks[offset] if offset < len(masks) else None,
+                        )
+                        writer.write(write_frame)
                 for offset, result in enumerate(results):
-                    write_frame = self._merge_high_bit_output(
-                        source_frames[offset] if offset < len(source_frames) else None,
-                        result,
-                        masks[offset] if offset < len(masks) else None,
-                    )
-                    writer.write(write_frame)
                     if (self.on_preview_frame is not None and
                             (frame_idx - len(results) + offset) % stride == 0):
                         try:
@@ -1760,8 +1812,9 @@ class SubtitleRemover:
                                 exc_info=True,
                             )
                 if mask_writer is not None:
-                    for m in masks:
-                        mask_writer.write(m)
+                    with self._time_stage("encode"):
+                        for m in masks:
+                            mask_writer.write(m)
 
             if frame_idx < frames_to_process:
                 raise _video_decode_error(
@@ -1775,51 +1828,55 @@ class SubtitleRemover:
             reader.release()
             reader = None
             cap = None
-            writer.release()
+            with self._time_stage("encode"):
+                writer.release()
             writer = None
             if mask_writer is not None:
-                mask_writer.release()
+                with self._time_stage("encode"):
+                    mask_writer.release()
                 mask_writer = None
 
             self._report_progress(0.9, "Merging audio...")
-            if use_frame_output:
-                logger.info(
-                    f"Frame-sequence output written to {frame_out_dir}"
-                )
-                final_output_path = frame_out_dir
-            else:
-                final_output_path = output_path
-                is_frame_sequence_input = Path(input_path).is_dir()
-                if self.config.preserve_audio and not is_frame_sequence_input:
-                    final_output_path = self._merge_audio(
-                        input_path, temp_video, output_path)
+            with self._time_stage("mux"):
+                if use_frame_output:
+                    logger.info(
+                        f"Frame-sequence output written to {frame_out_dir}"
+                    )
+                    final_output_path = frame_out_dir
                 else:
-                    final_output_path = self._reencode_or_copy(
-                        temp_video, output_path)
-            if mask_writer is not None and mask_path and temp_mask_path:
-                _promote_temp_output(temp_mask_path, mask_path)
-                temp_mask_path = None
-                logger.info(f"Mask video written: {mask_path}")
+                    final_output_path = output_path
+                    is_frame_sequence_input = Path(input_path).is_dir()
+                    if self.config.preserve_audio and not is_frame_sequence_input:
+                        final_output_path = self._merge_audio(
+                            input_path, temp_video, output_path)
+                    else:
+                        final_output_path = self._reencode_or_copy(
+                            temp_video, output_path)
+                if mask_writer is not None and mask_path and temp_mask_path:
+                    _promote_temp_output(temp_mask_path, mask_path)
+                    temp_mask_path = None
+                    logger.info(f"Mask video written: {mask_path}")
 
-            if self.config.export_srt and self._srt_entries:
-                srt_path = str(Path(final_output_path).with_suffix('.srt'))
-                self._write_srt(srt_path, fps, start_frame)
+                if self.config.export_srt and self._srt_entries:
+                    srt_path = str(Path(final_output_path).with_suffix('.srt'))
+                    self._write_srt(srt_path, fps, start_frame)
 
-            # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
-            # upscale, film-grain re-synthesis). Run after the main mux
-            # so the user-visible output is the post-processed file;
-            # each adapter degrades gracefully when its dep is missing.
-            self._run_post_restore_passes(final_output_path, temp_dir)
+                # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
+                # upscale, film-grain re-synthesis). Run after the main mux
+                # so the user-visible output is the post-processed file;
+                # each adapter degrades gracefully when its dep is missing.
+                self._run_post_restore_passes(final_output_path, temp_dir)
 
-            # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
-            self._write_nle_sidecar(input_path, final_output_path,
-                                     start_frame, end_frame, fps)
+                # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
+                self._write_nle_sidecar(input_path, final_output_path,
+                                         start_frame, end_frame, fps)
 
             # Quality report: PSNR/SSIM across a sample of unmasked regions
             if self.config.quality_report:
                 try:
-                    metrics = self._compute_quality_report(
-                        input_path, final_output_path, start_frame, end_frame, fps)
+                    with self._time_stage("quality"):
+                        metrics = self._compute_quality_report(
+                            input_path, final_output_path, start_frame, end_frame, fps)
                     if metrics:
                         self.last_quality_report = metrics
                         tag_suffix = f" [{metrics['tag']}]" if metrics.get('tag') else ""

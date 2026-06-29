@@ -753,6 +753,15 @@ class GuiSmokeTests(unittest.TestCase):
             "ssim": 0.99,
             "roi_ssim": 0.98,
         }
+        item.stage_timings = {
+            "decode": 0.25,
+            "ocr": 0.75,
+            "mask": 0.1,
+            "inpaint": 1.5,
+            "encode": 0.4,
+            "mux": 0.2,
+            "quality": 0.0,
+        }
         item.started_at = self._g.datetime.now()
         item.completed_at = self._g.datetime.now()
 
@@ -767,6 +776,8 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
         self.assertEqual(payload["files"][0]["input_name"], source.name)
         self.assertEqual(payload["files"][0]["quality_gate"]["status"], "passed")
+        self.assertEqual(payload["files"][0]["dominant_stage"]["name"], "inpaint")
+        self.assertEqual(payload["stage_summary"]["slowest_stage"]["name"], "inpaint")
 
     def test_soft_subtitle_action_remuxes_without_backend_remover(self):
         app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)

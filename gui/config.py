@@ -642,6 +642,7 @@ class QueueItem:
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
     quality_report: Optional[dict] = None
+    stage_timings: dict = field(default_factory=dict)
     soft_subtitle_streams: List[dict] = field(default_factory=list)
     soft_subtitle_probe_done: bool = False
     soft_subtitle_action: str = "burned_in"

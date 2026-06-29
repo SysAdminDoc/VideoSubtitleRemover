@@ -9,13 +9,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 -- Dependency, documentation, and UX hardening
 
-- [ ] P2 — Record per-stage timings in batch reports and support bundles
-  Why: Per-item elapsed time exists, but users and maintainers cannot tell whether decode, OCR, mask creation, inpaint, encode, mux, or quality analysis caused a slow or failed run.
-  Evidence: `backend/batch_report.py`, `backend/processor.py`, `backend/support_bundle.py`, `gui/widgets.py`, YaoFANGUK issues #224 and #222
-  Touches: `backend/processor.py`, `backend/batch_report.py`, `backend/support_bundle.py`, `gui/app.py`, `tests/test_hardening.py`, `tests/test_support_bundle.py`
-  Acceptance: Batch summary JSON/Markdown and support bundles include per-stage duration totals per item plus run-level slowest-stage summaries; GUI completion/review surfaces show the dominant slow stage without changing successful processing output.
-  Complexity: M
-
 - [ ] P2 — Wire gettext extraction through user-facing GUI strings
   Why: `backend/i18n.py` and `locale/vsr.pot` are only scaffolding until main GUI strings are wrapped and extraction is testable.
   Evidence: `backend/i18n.py`, `locale/vsr.pot`, `gui/app.py`, `gui/widgets.py`, `tests/test_hardening.py`

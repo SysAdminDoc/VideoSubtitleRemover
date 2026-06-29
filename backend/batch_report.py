@@ -42,6 +42,15 @@ STATUS_HARDCODED_PROCESSED = "hardcoded-processed"
 STATUS_REVIEW_NEEDED = "review-needed"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
+STAGE_TIMING_KEYS = (
+    "decode",
+    "ocr",
+    "mask",
+    "inpaint",
+    "encode",
+    "mux",
+    "quality",
+)
 
 
 def choose_batch_output_path(source_path: str, out_dir: Path, suffix: str,
@@ -95,6 +104,8 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "status": STATUS_PENDING,
         "message": "",
         "elapsed_seconds": None,
+        "stage_timings": _empty_stage_timings(),
+        "dominant_stage": None,
         "mode": str(_config_value(config, "mode", "")),
         "device": str(_config_value(config, "device", "")),
         "output_codec": str(_config_value(config, "output_codec", "")),
@@ -154,11 +165,17 @@ def _output_quality_preflight_for_record(
 def finish_batch_item(record: dict, status: str, *,
                       message: str = "",
                       elapsed_seconds: Optional[float] = None,
-                      quality_report: Optional[dict] = None) -> dict:
+                      quality_report: Optional[dict] = None,
+                      stage_timings: Optional[dict] = None) -> dict:
     record["status"] = status
     record["message"] = message
     if elapsed_seconds is not None:
         record["elapsed_seconds"] = round(max(0.0, float(elapsed_seconds)), 3)
+    if stage_timings is not None:
+        record["stage_timings"] = _stage_timings_record(stage_timings)
+    else:
+        record["stage_timings"] = _stage_timings_record(record.get("stage_timings"))
+    record["dominant_stage"] = _dominant_stage(record["stage_timings"])
     if quality_report is not None:
         record["quality_report"] = _quality_report_record(quality_report)
         gate = _quality_gate_record(quality_report)
@@ -214,6 +231,7 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
         "elapsed_seconds": round(max(0.0, (completed - started).total_seconds()), 3),
         "count": len(records),
         "counts": _counts(records),
+        "stage_summary": summarize_stage_timings(records),
         "files": files,
     }
     out = Path(out_dir)
@@ -304,6 +322,49 @@ def _counts(records: list[dict]) -> dict:
     return counts
 
 
+def _empty_stage_timings() -> dict:
+    return {stage: 0.0 for stage in STAGE_TIMING_KEYS}
+
+
+def _stage_timings_record(value: Any) -> dict:
+    timings = _empty_stage_timings()
+    if not isinstance(value, dict):
+        return timings
+    for key in STAGE_TIMING_KEYS:
+        try:
+            seconds = float(value.get(key, 0.0) or 0.0)
+        except (TypeError, ValueError):
+            seconds = 0.0
+        timings[key] = round(max(0.0, seconds), 3)
+    return timings
+
+
+def _dominant_stage(timings: Any) -> Optional[dict]:
+    if not isinstance(timings, dict):
+        return None
+    normalized = _stage_timings_record(timings)
+    stage, seconds = max(normalized.items(), key=lambda item: item[1])
+    if seconds <= 0.0:
+        return None
+    return {"name": stage, "seconds": seconds}
+
+
+def summarize_stage_timings(records: list[dict]) -> dict:
+    totals = _empty_stage_timings()
+    item_count = 0
+    for record in records:
+        timings = _stage_timings_record(record.get("stage_timings"))
+        if any(seconds > 0 for seconds in timings.values()):
+            item_count += 1
+        for stage, seconds in timings.items():
+            totals[stage] = round(totals[stage] + seconds, 3)
+    return {
+        "stage_totals": totals,
+        "slowest_stage": _dominant_stage(totals),
+        "items_with_timings": item_count,
+    }
+
+
 def _iso(value: _dt.datetime) -> str:
     value = _as_utc(value)
     return value.isoformat(timespec="seconds")
@@ -323,12 +384,23 @@ def _markdown_summary(payload: dict) -> str:
         f"- Started: {_escape_md(payload.get('started_at', ''))}",
         f"- Completed: {_escape_md(payload.get('completed_at', ''))}",
         f"- Files: {payload.get('count', 0)}",
+    ]
+    stage_summary = payload.get("stage_summary")
+    if isinstance(stage_summary, dict):
+        slowest = stage_summary.get("slowest_stage")
+        if isinstance(slowest, dict):
+            lines.append(
+                f"- Slowest stage: {_escape_md(_stage_label(slowest.get('name')))} "
+                f"({_format_seconds(slowest.get('seconds'))})"
+            )
+    lines.extend([
         "",
         "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Message |",
         "|---|---|---|---|---:|---|---:|---:|---|---|---|",
-    ]
+    ])
     review_notes: List[str] = []
     preflight_notes: List[str] = []
+    stage_notes: List[str] = []
     for record in payload.get("files", []):
         lines.append(
             "| "
@@ -363,6 +435,31 @@ def _markdown_summary(payload: dict) -> str:
                     f"- **{_escape_md(record.get('input_name', '?'))}** "
                     f"({gate.get('ladderStep', '')}): {_escape_md(remediation)}"
                 )
+        stage_note = _format_stage_timings(record.get("stage_timings"))
+        if stage_note:
+            dominant = record.get("dominant_stage")
+            suffix = ""
+            if isinstance(dominant, dict):
+                suffix = (
+                    f"; slowest {_stage_label(dominant.get('name'))} "
+                    f"{_format_seconds(dominant.get('seconds'))}"
+                )
+            stage_notes.append(
+                f"- **{_escape_md(record.get('input_name', '?'))}**: "
+                + _escape_md(stage_note + suffix)
+            )
+    if isinstance(stage_summary, dict):
+        totals = _format_stage_timings(stage_summary.get("stage_totals"))
+        if totals:
+            lines.append("")
+            lines.append("### Stage timing summary")
+            lines.append("")
+            lines.append(_escape_md(totals))
+    if stage_notes:
+        lines.append("")
+        lines.append("### Per-item stage timings")
+        lines.append("")
+        lines.extend(stage_notes)
     if preflight_notes:
         lines.append("")
         lines.append("### Output quality preflight notes")
@@ -392,6 +489,29 @@ def _format_seconds(value: Any) -> str:
     minutes = int(seconds // 60)
     rest = int(seconds % 60)
     return f"{minutes}m {rest}s"
+
+
+def _stage_label(value: Any) -> str:
+    labels = {
+        "decode": "decode",
+        "ocr": "OCR",
+        "mask": "mask",
+        "inpaint": "inpaint",
+        "encode": "encode",
+        "mux": "mux",
+        "quality": "quality",
+    }
+    return labels.get(str(value or ""), str(value or ""))
+
+
+def _format_stage_timings(value: Any) -> str:
+    timings = _stage_timings_record(value)
+    parts = []
+    for stage in STAGE_TIMING_KEYS:
+        seconds = timings.get(stage, 0.0)
+        if seconds > 0:
+            parts.append(f"{_stage_label(stage)} {_format_seconds(seconds)}")
+    return "; ".join(parts)
 
 
 def _quality_gate_record(metrics: dict) -> dict:

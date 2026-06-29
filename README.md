@@ -291,6 +291,9 @@ Pattern batches and GUI batches write `vsr-batch-summary.json` and
 records each input, selected output path, codec/duration/subtitle preflight
 data, source-aware output-quality warning, planned action, final status, and
 elapsed time for skipped, checkpointed, remuxed, processed, or failed files.
+They also break each item down by decode, OCR, mask, inpaint, encode, mux, and
+quality-analysis time, with a run-level slowest-stage summary for diagnosing
+slow hardware, OCR, model, or muxing bottlenecks.
 Before processing, CLI and GUI batches compare source codec/resolution/bitrate
 against the selected output codec and CRF; risky settings are shown as
 preflight warnings, and the report records the safer recommendation plus that
@@ -527,7 +530,7 @@ content, colors are preserved. If you still see a mismatch, attach the
 - File log: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log` (5MB rotating)
 - About -> Support bundle saves a redacted `.zip` with runtime facts,
   dependency versions, settings summary, recent log lines, and batch report
-  evidence. CLI equivalent:
+  evidence, including per-stage timing summaries. CLI equivalent:
   `python -m backend.cli --support-bundle support.zip`
 - About -> Model cache can export/import a portable cache bundle. CLI
   equivalents: `python -m backend.cli --model-cache-export models.zip`

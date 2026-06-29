@@ -1028,6 +1028,7 @@ def main():
                             STATUS_SOFT_REMUXED,
                             message=f"Soft subtitles {soft_action.value}",
                             elapsed_seconds=time.monotonic() - started,
+                            stage_timings={"mux": time.monotonic() - started},
                         )
                     except Exception as exc:
                         logger.error(f"Soft-subtitle remux failed on {src.name}: {exc}")
@@ -1036,6 +1037,7 @@ def main():
                             STATUS_FAILED,
                             message=str(exc),
                             elapsed_seconds=time.monotonic() - started,
+                            stage_timings={"mux": time.monotonic() - started},
                         )
             except KeyboardInterrupt:
                 print("\n[soft-subtitles] Interrupted by user -- partial results kept on disk.")
@@ -1193,6 +1195,7 @@ def main():
                         STATUS_FAILED,
                         message=str(exc),
                         elapsed_seconds=time.monotonic() - started,
+                        stage_timings=getattr(remover, "last_stage_timings", None),
                     )
                 else:
                     quality_report = (
@@ -1212,6 +1215,7 @@ def main():
                         message="Processed" if ok else failure_message,
                         elapsed_seconds=time.monotonic() - started,
                         quality_report=quality_report,
+                        stage_timings=getattr(remover, "last_stage_timings", None),
                     )
         except KeyboardInterrupt:
             print("\n[batch] Interrupted by user -- partial results kept on disk.")

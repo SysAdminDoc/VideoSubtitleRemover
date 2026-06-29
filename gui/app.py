@@ -3866,10 +3866,37 @@ class VideoSubtitleRemoverApp:
             pass
         win.deiconify()
 
+    @staticmethod
+    def _stage_label(name: str) -> str:
+        labels = {
+            "decode": "decode",
+            "ocr": "OCR",
+            "mask": "mask",
+            "inpaint": "inpaint",
+            "encode": "encode",
+            "mux": "mux",
+            "quality": "quality",
+        }
+        return labels.get(str(name or ""), str(name or ""))
+
+    @classmethod
+    def _dominant_stage_text(cls, stage: Optional[dict]) -> str:
+        if not isinstance(stage, dict):
+            return ""
+        name = cls._stage_label(str(stage.get("name") or ""))
+        try:
+            seconds = float(stage.get("seconds") or 0.0)
+        except (TypeError, ValueError):
+            seconds = 0.0
+        if not name or seconds <= 0.0:
+            return ""
+        return f"{name} {format_time(seconds)}"
+
     def _show_batch_summary(self, complete: int, errors: int,
                             cancelled: int, elapsed: str,
                             quality_summary: Optional[dict] = None,
-                            review_count: int = 0):
+                            review_count: int = 0,
+                            stage_summary: Optional[dict] = None):
         """Themed summary modal shown when a batch finishes."""
         total = complete + errors + cancelled
         is_clean = errors == 0 and cancelled == 0 and review_count == 0
@@ -3965,6 +3992,34 @@ class VideoSubtitleRemoverApp:
         if review_count:
             stat(stats, "REVIEW", review_count, Theme.WARNING, Theme.WARNING_BG).pack(
                 side="left", padx=(Theme.S_SM, 0))
+
+        slow_stage = None
+        if isinstance(stage_summary, dict):
+            slow_stage = stage_summary.get("slowest_stage")
+        slow_text = self._dominant_stage_text(slow_stage)
+        if slow_text:
+            stage_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
+                                  highlightbackground=Theme.BORDER_SUBTLE)
+            stage_card.pack(fill="x", pady=(Theme.S_LG, 0))
+            tk.Label(
+                stage_card,
+                text="Slowest stage",
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_CARD,
+                fg=Theme.TEXT_PRIMARY,
+            ).pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_MD, 0))
+            tk.Label(
+                stage_card,
+                text=(
+                    f"{slow_text} dominated this run. Open the report for "
+                    "per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
+                ),
+                font=f(Theme.F_META),
+                bg=Theme.BG_CARD,
+                fg=Theme.TEXT_MUTED,
+                wraplength=420,
+                justify="left",
+            ).pack(anchor="w", padx=Theme.S_LG, pady=(4, Theme.S_MD))
 
         if quality_summary:
             quality_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
@@ -6748,6 +6803,7 @@ class VideoSubtitleRemoverApp:
                     if status == STATUS_HARDCODED_PROCESSED
                     else None
                 ),
+                stage_timings=item.stage_timings,
             )
             finished.append(record)
         return finished
@@ -6784,6 +6840,8 @@ class VideoSubtitleRemoverApp:
                 self._show_preview(item)
         quality_report = record.get("quality_report") or {}
         gate = record.get("quality_gate") or {}
+        stage_text = self._dominant_stage_text(record.get("dominant_stage"))
+        stage_suffix = f"; slowest stage {stage_text}" if stage_text else ""
         candidates = []
         sheet = quality_report.get("sheet")
         if sheet:
@@ -6797,17 +6855,20 @@ class VideoSubtitleRemoverApp:
                 try:
                     os.startfile(str(path))
                     self._update_status(
-                        f"Opened quality review for {record.get('output_name', 'output')}",
+                        f"Opened quality review for {record.get('output_name', 'output')}{stage_suffix}",
                         "warning",
                     )
                     return
                 except Exception:
                     logger.warning("Could not open quality review artifact", exc_info=True)
         if self._open_batch_report_path(getattr(self, "_last_batch_report_paths", [])):
-            self._update_status("Opened batch report for review", "warning")
+            self._update_status(
+                f"Opened batch report for review{stage_suffix}",
+                "warning",
+            )
             return
         self._update_status(
-            f"Focused {record.get('output_name', 'the first review item')}",
+            f"Focused {record.get('output_name', 'the first review item')}{stage_suffix}",
             "warning",
         )
 
@@ -7125,12 +7186,13 @@ class VideoSubtitleRemoverApp:
         item.error = None
         item.quality_report = None
         item.completed_at = datetime.now()
+        elapsed = (item.completed_at - item.started_at).total_seconds()
+        item.stage_timings = {"mux": elapsed}
         item.message = (
             "Embedded subtitles stripped"
             if action == SoftSubtitleAction.STRIP else
             "Embedded subtitles remuxed"
         )
-        elapsed = (item.completed_at - item.started_at).total_seconds()
         self._batch_times.append(elapsed)
         logger.info(
             f"Soft-subtitle {action.value}: {Path(item.file_path).name} "
@@ -7367,6 +7429,9 @@ class VideoSubtitleRemoverApp:
                 raise ValueError(f"Unsupported file type: {Path(item.file_path).suffix}")
 
             if success:
+                item.stage_timings = dict(
+                    getattr(remover, "last_stage_timings", {}) or {}
+                )
                 actual_output_path = getattr(remover, "last_output_path", None)
                 if (
                     actual_output_path
@@ -7394,6 +7459,9 @@ class VideoSubtitleRemoverApp:
                 self._batch_times.append(elapsed)
                 logger.info(f"Completed: {file_name} in {format_time(elapsed)}")
             else:
+                item.stage_timings = dict(
+                    getattr(remover, "last_stage_timings", {}) or {}
+                )
                 failure_message = (
                     getattr(remover, "last_error_message", None)
                     or "Processing failed"
@@ -7407,6 +7475,10 @@ class VideoSubtitleRemoverApp:
             self._update_item_display(item)
 
         except InterruptedError:
+            remover_obj = locals().get("remover")
+            item.stage_timings = dict(
+                getattr(remover_obj, "last_stage_timings", {}) or {}
+            )
             item.status = ProcessingStatus.CANCELLED
             item.message = "Cancelled"
             item.error = None
@@ -7415,6 +7487,10 @@ class VideoSubtitleRemoverApp:
             self._update_item_display(item)
             logger.info(f"Cancelled: {Path(item.file_path).name}")
         except Exception as e:
+            remover_obj = locals().get("remover")
+            item.stage_timings = dict(
+                getattr(remover_obj, "last_stage_timings", {}) or {}
+            )
             item.status = ProcessingStatus.ERROR
             item.error = str(e)
             item.message = f"Error: {str(e)}"
@@ -7633,11 +7709,25 @@ class VideoSubtitleRemoverApp:
         quality_summary = summarize_quality_reports(
             [item.quality_report for item in self.queue if item.status == ProcessingStatus.COMPLETE]
         )
+        stage_summary = {}
+        try:
+            from backend.batch_report import summarize_stage_timings
+            stage_summary = summarize_stage_timings(
+                getattr(self, "_last_batch_report_records", []) or []
+            )
+        except Exception:
+            logger.warning("Could not summarize batch stage timings", exc_info=True)
+        slow_text = self._dominant_stage_text(
+            stage_summary.get("slowest_stage")
+            if isinstance(stage_summary, dict) else None
+        )
         if quality_summary:
             summary += (
                 f" | avg PSNR {quality_summary['psnr']:.2f} dB"
                 f", avg SSIM {quality_summary['ssim']:.4f}"
             )
+        if slow_text:
+            summary += f" | slowest {slow_text}"
         self._update_status(summary, "success" if is_clean else "warning")
         logger.info(summary)
         if report_paths:
@@ -7660,6 +7750,7 @@ class VideoSubtitleRemoverApp:
                 elapsed,
                 quality_summary=quality_summary,
                 review_count=review_count,
+                stage_summary=stage_summary,
             )
 
     def _notify_completion(self, complete: int, errors: int):
