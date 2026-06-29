@@ -7,15 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-### P1 -- Trust and release readiness
-
-- [ ] P1 — Expand accessibility announcements and focus traversal coverage
-  Why: UIA announcements and focusable custom widgets exist, but custom Canvas controls and major dialogs still need broader semantic/state coverage for screen-reader and keyboard users.
-  Evidence: `backend/a11y.py`, `gui/widgets.py`, `gui/app.py`, `tests/test_gui_settings_lock.py`, `tests/test_confirm_dialog.py`
-  Touches: `backend/a11y.py`, `gui/widgets.py`, `gui/app.py`, `tests/test_gui_smoke.py`, `tests/test_gui_settings_lock.py`
-  Acceptance: Major dialogs, queue rows, toggles, sliders, segmented picker, quality review, and cache import/export expose stable focus order, visible focus, state announcements for important changes, and automated smoke coverage for enabled/disabled/focused states.
-  Complexity: M
-
 ### P2 -- Dependency, documentation, and UX hardening
 
 - [ ] P2 — Record per-stage timings in batch reports and support bundles

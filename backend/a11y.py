@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,53 @@ logger = logging.getLogger(__name__)
 # once.
 _PROBED = False
 _PROVIDER = None
+
+
+def set_accessible_metadata(
+    widget: Any,
+    *,
+    role: str,
+    label: str,
+    state: str = "",
+    value: str = "",
+    description: str = "",
+) -> dict:
+    """Attach a testable accessibility description to a custom Tk widget."""
+    metadata = {
+        "role": str(role or "").strip(),
+        "label": str(label or "").strip(),
+        "state": str(state or "").strip(),
+        "value": str(value or "").strip(),
+        "description": str(description or "").strip(),
+    }
+    try:
+        setattr(widget, "_vsr_a11y", metadata)
+    except Exception:
+        pass
+    return metadata
+
+
+def accessible_metadata(widget: Any) -> dict:
+    """Return the metadata set by set_accessible_metadata()."""
+    metadata = getattr(widget, "_vsr_a11y", None)
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def accessible_text(metadata: dict) -> str:
+    """Format metadata into a concise screen-reader announcement."""
+    parts = []
+    for key in ("label", "role", "state", "value", "description"):
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            parts.append(value)
+    return ". ".join(parts)
+
+
+def announce_widget(widget: Any, importance: str = "normal") -> None:
+    """Announce a custom-widget state snapshot when UIA is available."""
+    text = accessible_text(accessible_metadata(widget))
+    if text:
+        announce(text, importance=importance)
 
 
 def _probe_provider() -> Optional[object]:

@@ -1928,6 +1928,7 @@ class VideoSubtitleRemoverApp:
             value=self.mode_var.get(),
             command=self._on_mode_picker_changed,
             bg=Theme.BG_CARD,
+            group_label="Cleanup algorithm",
         )
         self.mode_picker.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
 
@@ -2483,7 +2484,7 @@ class VideoSubtitleRemoverApp:
         value_label.pack()
 
         slider = ModernSlider(row, from_=min_val, to=max_val, value=default,
-                              bg=parent_bg)
+                              bg=parent_bg, accessible_label=label)
         slider.pack(side="left", fill="x", expand=True, padx=(Theme.S_SM, 0))
         self._settings_sliders.append(slider)
 
@@ -3218,6 +3219,17 @@ class VideoSubtitleRemoverApp:
                                      font=f(Theme.F_BODY_SM, "bold"),
                                      bg=Theme.BG_DARK, fg=Theme.TEXT_SECONDARY, anchor="w")
         self.status_label.pack(side="left")
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                self.status_label,
+                role="status",
+                label="Application status",
+                state="neutral",
+                value="Ready to process",
+            )
+        except Exception:
+            pass
 
         self.status_hint = tk.Label(
             footer,
@@ -3347,6 +3359,20 @@ class VideoSubtitleRemoverApp:
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                dialog,
+                role="dialog",
+                label="Save preset",
+                state="modal",
+                description=(
+                    "Name the current cleanup settings and save them "
+                    "to the user preset library."
+                ),
+            )
+        except Exception:
+            pass
 
         outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
         outer.pack()
@@ -3411,10 +3437,20 @@ class VideoSubtitleRemoverApp:
             if not name:
                 error_label.config(text="Give this preset a short name.")
                 name_entry.focus_set()
+                try:
+                    from backend.a11y import announce
+                    announce("Give this preset a short name.", importance="high")
+                except Exception:
+                    pass
                 return
             if name in BUILTIN_PRESETS:
                 error_label.config(text="Built-in preset names are reserved.")
                 name_entry.focus_set()
+                try:
+                    from backend.a11y import announce
+                    announce("Built-in preset names are reserved.", importance="high")
+                except Exception:
+                    pass
                 return
             result["value"] = (name, description)
             dialog.grab_release()
@@ -3505,6 +3541,20 @@ class VideoSubtitleRemoverApp:
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                dialog,
+                role="dialog",
+                label=f"Welcome to {APP_NAME}",
+                state="modal",
+                description=(
+                    "Three first-run cues: import media, inspect the "
+                    "region, and run the batch."
+                ),
+            )
+        except Exception:
+            pass
 
         outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
         outer.pack()
@@ -3707,6 +3757,20 @@ class VideoSubtitleRemoverApp:
 
         title_text = "Batch finished" if is_clean else "Batch finished with issues"
         title_color = Theme.SUCCESS if is_clean else Theme.WARNING
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                dialog,
+                role="dialog",
+                label=title_text,
+                state="modal",
+                value=(
+                    f"{complete} completed, {errors} failed, "
+                    f"{cancelled} stopped, {review_count} review"
+                ),
+            )
+        except Exception:
+            pass
         tk.Label(content, text=title_text, font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=title_color).pack(anchor="w")
         if elapsed:
@@ -3831,41 +3895,72 @@ class VideoSubtitleRemoverApp:
             if self._retry_first_review_with_suggested_settings():
                 _close()
 
+        default_button = None
+
         if review_count > 0:
-            ModernButton(actions_inner, text="Review first", width=122,
-                         command=_review_first_and_close,
-                         style="accent", size="md").pack(side="left")
-            ModernButton(actions_inner, text="Retry suggested", width=140,
-                         command=_retry_suggested_and_close,
-                         style="ghost", size="md").pack(
-                             side="left", padx=(Theme.S_SM, 0))
+            default_button = ModernButton(
+                actions_inner, text="Review first", width=122,
+                command=_review_first_and_close,
+                style="accent", size="md",
+            )
+            default_button.pack(side="left")
+            retry_button = ModernButton(
+                actions_inner, text="Retry suggested", width=140,
+                command=_retry_suggested_and_close,
+                style="ghost", size="md",
+            )
+            retry_button.pack(side="left", padx=(Theme.S_SM, 0))
         if complete > 0:
-            ModernButton(actions_inner, text="Open output", width=132,
-                         command=_open_output_and_close,
-                             style="accent" if review_count == 0 else "ghost",
-                             size="md", icon="^").pack(
-                             side="left",
-                             padx=(Theme.S_SM, 0) if review_count else 0,
-                         )
+            open_button = ModernButton(
+                actions_inner, text="Open output", width=132,
+                command=_open_output_and_close,
+                style="accent" if review_count == 0 else "ghost",
+                size="md", icon="^",
+            )
+            if default_button is None:
+                default_button = open_button
+            open_button.pack(
+                side="left",
+                padx=(Theme.S_SM, 0) if review_count else 0,
+            )
         report_paths = getattr(self, "_last_batch_report_paths", [])
         if report_paths:
             def _open_report_and_close():
                 self._open_batch_report_path(report_paths)
                 _close()
-            ModernButton(actions_inner, text="Open report", width=116,
-                         command=_open_report_and_close,
-                         style="ghost", size="md").pack(side="left", padx=(Theme.S_SM, 0))
+            report_button = ModernButton(
+                actions_inner, text="Open report", width=116,
+                command=_open_report_and_close,
+                style="ghost", size="md",
+            )
+            if default_button is None:
+                default_button = report_button
+            report_button.pack(side="left", padx=(Theme.S_SM, 0))
         if errors > 0:
-            ModernButton(actions_inner, text="Open log", width=104,
-                         command=self._open_log_file,
-                         style="ghost", size="md").pack(side="left", padx=(Theme.S_SM, 0))
+            log_button = ModernButton(
+                actions_inner, text="Open log", width=104,
+                command=self._open_log_file,
+                style="ghost", size="md",
+            )
+            if default_button is None:
+                default_button = log_button
+            log_button.pack(side="left", padx=(Theme.S_SM, 0))
         if errors > 0 or cancelled > 0:
-            ModernButton(actions_inner, text="Retry failed", width=110,
-                         command=_retry_failed_and_close,
-                         style="ghost", size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text="Close", width=92,
-                     command=_close, style="primary", size="md").pack(
-                         side="left", padx=(Theme.S_SM, 0))
+            retry_failed_button = ModernButton(
+                actions_inner, text="Retry failed", width=110,
+                command=_retry_failed_and_close,
+                style="ghost", size="md",
+            )
+            if default_button is None:
+                default_button = retry_failed_button
+            retry_failed_button.pack(side="left", padx=(Theme.S_SM, 0))
+        close_button = ModernButton(
+            actions_inner, text="Close", width=92,
+            command=_close, style="primary", size="md",
+        )
+        close_button.pack(side="left", padx=(Theme.S_SM, 0))
+        if default_button is None:
+            default_button = close_button
 
         dialog.bind("<Escape>", lambda e: _close())
         dialog.bind("<Return>", lambda e: _close())
@@ -3881,6 +3976,10 @@ class VideoSubtitleRemoverApp:
             pass
         dialog.deiconify()
         dialog.grab_set()
+        try:
+            default_button.focus_set()
+        except Exception:
+            pass
 
     @staticmethod
     def _backend_status_tone_color(tone: str) -> str:
@@ -3983,6 +4082,18 @@ class VideoSubtitleRemoverApp:
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
+        try:
+            from backend.a11y import set_accessible_metadata
+            status = (self.backend_status or {}).get("summary", {})
+            set_accessible_metadata(
+                dialog,
+                role="dialog",
+                label=f"About {APP_NAME}",
+                state="modal",
+                description=str(status.get("next_action") or "Backend status and app version."),
+            )
+        except Exception:
+            pass
 
         def _close_about():
             try:
@@ -5678,6 +5789,19 @@ class VideoSubtitleRemoverApp:
         except Exception:
             pass
         self._status_tone = tone
+        try:
+            from backend.a11y import announce, set_accessible_metadata
+            set_accessible_metadata(
+                self.status_label,
+                role="status",
+                label="Application status",
+                state=tone,
+                value=message,
+            )
+            if toast or tone in {"error", "warning", "success"}:
+                announce(message, importance="high" if tone == "error" else "normal")
+        except Exception:
+            pass
         if toast:
             try:
                 Toast.show(self.root, message, tone=tone)
@@ -6052,7 +6176,10 @@ class VideoSubtitleRemoverApp:
             # Segmented algo picker: dim/undim each segment
             try:
                 for seg in self.mode_picker._segments.values():
-                    seg.config(state="disabled" if locked else "normal")
+                    if hasattr(seg, "set_enabled"):
+                        seg.set_enabled(not locked)
+                    else:
+                        seg.config(state="disabled" if locked else "normal")
             except Exception:
                 pass
         except Exception:

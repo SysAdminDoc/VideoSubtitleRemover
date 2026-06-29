@@ -91,6 +91,18 @@ class DropFeedbackTests(unittest.TestCase):
 
         self.assertEqual(received, [["clip.mp4", "notes.txt"]])
 
+    def test_drop_widget_ignores_drop_when_import_disabled(self):
+        received = []
+        frame = object.__new__(DragDropFrame)
+        frame.import_enabled = False
+        frame.tk = SimpleNamespace(splitlist=lambda value: tuple(value))
+        frame.on_drop = lambda files: received.append(files)
+
+        event = SimpleNamespace(data=("clip.mp4",))
+        DragDropFrame._handle_drop(frame, event)
+
+        self.assertEqual(received, [])
+
     def test_import_summary_counts_unsupported_only_selection(self):
         app = object.__new__(VideoSubtitleRemoverApp)
         messages = []

@@ -137,6 +137,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   reports now compare source codec/resolution/bitrate against the selected
   output codec and CRF, warn when settings may soften the result, and persist
   the safer recommendation plus continued-after-warning state.
+- **Premium accessibility and focus polish.** Custom buttons, toggles, sliders,
+  segmented controls, drop targets, queue rows, status updates, notifications,
+  onboarding, preset, About, and batch-summary dialogs now expose stable
+  accessibility metadata, stronger focus/disabled states, screen-reader
+  announcements for important changes, and a better default next action after
+  batch completion.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.

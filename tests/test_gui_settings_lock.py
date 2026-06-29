@@ -90,6 +90,7 @@ class ModernSliderStateTests(unittest.TestCase):
         slider = object.__new__(ModernSlider)
         slider._dragging = True
         slider._focused = True
+        slider.value = 50
         slider.enabled = True
         slider.draws = 0
 
@@ -109,6 +110,9 @@ class ModernSliderStateTests(unittest.TestCase):
         self.assertFalse(slider._dragging)
         self.assertFalse(slider._focused)
         self.assertEqual(slider.canvas.config_calls[-1]["takefocus"], 0)
+        self.assertEqual(slider.accessibility_snapshot()["role"], "slider")
+        self.assertIn("disabled", slider.accessibility_snapshot()["state"])
+        self.assertIn("50", slider.accessibility_snapshot()["value"])
         self.assertEqual(slider.draws, 1)
 
 

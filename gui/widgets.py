@@ -16,6 +16,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from gui.theme import Theme, f, mono
 from gui.config import ProcessingStatus, QueueItem, STATUS_UI, status_ui
+from backend.a11y import (
+    accessible_metadata,
+    announce,
+    announce_widget,
+    set_accessible_metadata,
+)
 
 try:
     from PIL import Image, ImageTk
@@ -25,6 +31,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 _FORCE_QUOTED_CLI_VALUE_FLAGS = {"-i", "-o", "--watermark"}
+
+
+def _state_text(*values: str) -> str:
+    return ", ".join(value for value in values if value)
 
 
 def _build_cli_command(item: QueueItem) -> str:
@@ -316,6 +326,7 @@ class ModernButton(tk.Canvas):
 
         self._apply_style(style)
         self.current_bg = self.bg_color
+        self._sync_a11y()
         self._draw()
 
         self.bind("<Enter>", self._on_enter)
@@ -422,6 +433,17 @@ class ModernButton(tk.Canvas):
                              fill=text_color,
                              font=(Theme.FONT_FAMILY, text_size, "bold"))
 
+    def _sync_a11y(self):
+        state = _state_text(
+            "enabled" if self.enabled else "disabled",
+            "focused" if self.focused else "",
+            "pressed" if self.pressed else "",
+        )
+        set_accessible_metadata(self, role="button", label=self.text, state=state)
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
+
     def _subtle_border(self):
         # For filled CTAs, border should match the fill for a flat look
         if self.style in ("primary", "danger"):
@@ -469,6 +491,7 @@ class ModernButton(tk.Canvas):
             self.hovered = False
             self.pressed = False
             self.current_bg = self.bg_color
+            self._sync_a11y()
             self._draw()
             self.config(cursor="")
 
@@ -477,6 +500,7 @@ class ModernButton(tk.Canvas):
             self.focus_set()
             self.pressed = True
             self.current_bg = self.press_color
+            self._sync_a11y()
             self._draw()
 
     def _on_release(self, event):
@@ -484,18 +508,22 @@ class ModernButton(tk.Canvas):
             inside = 0 <= event.x <= self.width and 0 <= event.y <= self.height
             self.pressed = False
             self.current_bg = self.hover_color if inside else self.bg_color
+            self._sync_a11y()
             self._draw()
             if inside and self.command:
                 self.command()
 
     def _on_focus_in(self, event):
         self.focused = True
+        self._sync_a11y()
         self._draw()
+        announce_widget(self)
 
     def _on_focus_out(self, event):
         self.focused = False
         self.pressed = False
         self.current_bg = self.bg_color
+        self._sync_a11y()
         self._draw()
 
     def _on_keyboard_activate(self, event):
@@ -506,12 +534,16 @@ class ModernButton(tk.Canvas):
         self.enabled = enabled
         self.hovered = False
         self.pressed = False
+        if not enabled:
+            self.focused = False
         self.current_bg = self.bg_color if enabled else Theme.BG_TERTIARY
         self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        self._sync_a11y()
         self._draw()
 
     def set_text(self, text: str):
         self.text = text
+        self._sync_a11y()
         self._draw()
 
     def set_style(self, style: str):
@@ -519,6 +551,7 @@ class ModernButton(tk.Canvas):
         self._apply_style(style)
         self.style = style
         self.current_bg = self.bg_color
+        self._sync_a11y()
         self._draw()
 
 
@@ -644,6 +677,7 @@ class ModernToggle(tk.Canvas):
         super().__init__(parent, width=total_w, height=max(self.BOX + 4, 24),
                          highlightthickness=0, bg=self.parent_bg, takefocus=1)
 
+        self._sync_a11y()
         self._draw()
         self.bind("<Button-1>", self._toggle)
         self.bind("<space>", self._toggle)
@@ -653,7 +687,29 @@ class ModernToggle(tk.Canvas):
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
         if self.variable is not None:
-            self.variable.trace_add("write", lambda *_: self._draw())
+            self.variable.trace_add("write", lambda *_: self._on_variable_changed())
+
+    def _on_variable_changed(self):
+        self._sync_a11y()
+        self._draw()
+
+    def _sync_a11y(self):
+        checked = bool(self.variable.get())
+        state = _state_text(
+            "enabled" if self.enabled else "disabled",
+            "checked" if checked else "not checked",
+            "focused" if self.focused else "",
+        )
+        set_accessible_metadata(
+            self,
+            role="checkbox",
+            label=self.text,
+            state=state,
+            value="on" if checked else "off",
+        )
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
 
     def _draw(self):
         self.delete("all")
@@ -708,7 +764,9 @@ class ModernToggle(tk.Canvas):
             return
         self.focus_set()
         self.variable.set(not self.variable.get())
+        self._sync_a11y()
         self._draw()
+        announce_widget(self)
         if self.command:
             self.command()
 
@@ -725,15 +783,21 @@ class ModernToggle(tk.Canvas):
 
     def _on_focus_in(self, event):
         self.focused = True
+        self._sync_a11y()
         self._draw()
+        announce_widget(self)
 
     def _on_focus_out(self, event):
         self.focused = False
+        self._sync_a11y()
         self._draw()
 
     def set_enabled(self, enabled: bool):
         self.enabled = enabled
+        if not enabled:
+            self.focused = False
         self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        self._sync_a11y()
         self._draw()
 
 
@@ -747,7 +811,8 @@ class ModernSlider(tk.Frame):
     HEIGHT = 28
 
     def __init__(self, parent, from_=0, to=100, value=0,
-                 command=None, bg=None, width=220, **kwargs):
+                 command=None, bg=None, width=220,
+                 accessible_label: str = "Slider", **kwargs):
         self.parent_bg = bg or (parent.cget('bg') if hasattr(parent, 'cget') else Theme.BG_CARD)
         super().__init__(parent, bg=self.parent_bg)
 
@@ -759,6 +824,7 @@ class ModernSlider(tk.Frame):
         self._dragging = False
         self._focused = False
         self.enabled = True
+        self.accessible_label = accessible_label or "Slider"
 
         self.canvas = tk.Canvas(self, width=width, height=self.HEIGHT,
                                 highlightthickness=0, bg=self.parent_bg, takefocus=1)
@@ -773,6 +839,7 @@ class ModernSlider(tk.Frame):
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         self.canvas.bind("<FocusIn>", lambda e: self._set_focused(True))
         self.canvas.bind("<FocusOut>", lambda e: self._set_focused(False))
+        self._sync_a11y()
         self._draw()
 
     def _on_resize(self, event):
@@ -834,7 +901,40 @@ class ModernSlider(tk.Frame):
 
     def _set_focused(self, focused: bool):
         self._focused = focused
+        self._sync_a11y()
         self._draw()
+        if focused:
+            announce_widget(self)
+
+    def _sync_a11y(self):
+        value = getattr(self, "value", getattr(self, "from_", 0))
+        from_value = getattr(self, "from_", 0)
+        to_value = getattr(self, "to", 100)
+        enabled = getattr(self, "enabled", True)
+        focused = getattr(self, "_focused", False)
+        set_accessible_metadata(
+            self,
+            role="slider",
+            label=getattr(self, "accessible_label", "Slider"),
+            state=_state_text(
+                "enabled" if enabled else "disabled",
+                "focused" if focused else "",
+            ),
+            value=f"{int(value)} (range {from_value} to {to_value})",
+        )
+        try:
+            set_accessible_metadata(
+                self.canvas,
+                role="slider",
+                label=getattr(self, "accessible_label", "Slider"),
+                state=accessible_metadata(self).get("state", ""),
+                value=accessible_metadata(self).get("value", ""),
+            )
+        except Exception:
+            pass
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
 
     def _on_press(self, event):
         if not self.enabled:
@@ -871,7 +971,10 @@ class ModernSlider(tk.Frame):
         if v == self.value:
             return
         self.value = v
+        self._sync_a11y()
         self._draw()
+        if self._focused:
+            announce_widget(self)
         if self.command:
             self.command(v)
 
@@ -890,6 +993,7 @@ class ModernSlider(tk.Frame):
             cursor="hand2" if enabled else "",
             takefocus=1 if enabled else 0,
         )
+        self._sync_a11y()
         self._draw()
 
 
@@ -919,6 +1023,13 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
     dialog.configure(bg=Theme.BG_OVERLAY)
     dialog.resizable(False, False)
     dialog.transient(parent)
+    set_accessible_metadata(
+        dialog,
+        role="dialog",
+        label=title,
+        state="modal",
+        description=" ".join(part for part in (message, detail) if part),
+    )
 
     outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
     outer.pack()
@@ -989,6 +1100,10 @@ def show_confirm(parent, title: str, message: str, detail: str = "",
         cancel_btn.focus_set()
     else:
         confirm_btn.focus_set()
+    announce(
+        f"{title}. {message}",
+        importance="high" if tone == "danger" else "normal",
+    )
     dialog.wait_window()
     return result["value"]
 
@@ -1095,6 +1210,13 @@ class Toast:
             self._win = tk.Toplevel(self.root)
             self._win.wm_overrideredirect(True)
             self._win.configure(bg=Theme.BORDER_STRONG)
+            set_accessible_metadata(
+                self._win,
+                role="notification",
+                label="Notification",
+                state=self.tone,
+                value=self.message,
+            )
             self._win.attributes("-topmost", True)
             try:
                 self._win.attributes("-alpha", 0.97)
@@ -1111,8 +1233,15 @@ class Toast:
             content = tk.Frame(card, bg=Theme.BG_RAISED)
             content.pack(side="left", padx=(12, 18), pady=10)
 
-            tk.Label(content, text=self.message, font=f(Theme.F_BODY_SM, "bold"),
-                     bg=Theme.BG_RAISED, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
+            tk.Label(
+                content,
+                text=self.message,
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_RAISED,
+                fg=Theme.TEXT_PRIMARY,
+                justify="left",
+                wraplength=420,
+            ).pack(anchor="w")
 
             self._win.update_idletasks()
             self._position()
@@ -1194,7 +1323,7 @@ class SegmentedPicker(tk.Frame):
 
     def __init__(self, parent, options: List[Tuple[str, str]],
                  value: str = None, command: Callable = None,
-                 bg: str = None, **kwargs):
+                 bg: str = None, group_label: str = "Selection", **kwargs):
         """options: list of (value, label) tuples."""
         self.parent_bg = bg or (parent.cget('bg') if hasattr(parent, 'cget')
                                 else Theme.BG_CARD)
@@ -1202,6 +1331,7 @@ class SegmentedPicker(tk.Frame):
         self.options = options
         self.value = value or (options[0][0] if options else None)
         self.command = command
+        self.group_label = group_label
         self._segments: dict = {}
 
         wrap = tk.Frame(self, bg=Theme.BG_TERTIARY, highlightthickness=1,
@@ -1211,7 +1341,8 @@ class SegmentedPicker(tk.Frame):
         for val, label in options:
             seg = _Segment(wrap, label=label, value=val,
                             on_select=self._select,
-                            selected=(val == self.value))
+                            selected=(val == self.value),
+                            group_label=self.group_label)
             seg.pack(side="left", fill="x", expand=True, padx=1, pady=1)
             self._segments[val] = seg
 
@@ -1238,13 +1369,15 @@ class _Segment(tk.Canvas):
     H = 30
 
     def __init__(self, parent, label: str, value: str, on_select: Callable,
-                 selected: bool = False):
+                 selected: bool = False, group_label: str = "Selection"):
         super().__init__(parent, height=self.H, highlightthickness=0,
                          bg=Theme.BG_TERTIARY, takefocus=1)
         self.label = label
         self.value = value
         self.on_select = on_select
         self.selected = selected
+        self.group_label = group_label
+        self.enabled = True
         self.hovered = False
         self.focused = False
 
@@ -1256,9 +1389,12 @@ class _Segment(tk.Canvas):
         self.bind("<FocusIn>", lambda e: self._set_focused(True))
         self.bind("<FocusOut>", lambda e: self._set_focused(False))
         self.bind("<Configure>", lambda e: self._draw())
+        self._sync_a11y()
         self._draw()
 
     def _on_enter(self, event):
+        if not self.enabled:
+            return
         self.hovered = True
         self.config(cursor="hand2")
         self._draw()
@@ -1269,15 +1405,51 @@ class _Segment(tk.Canvas):
         self._draw()
 
     def _set_focused(self, focused):
+        if focused and not self.enabled:
+            return
         self.focused = focused
+        self._sync_a11y()
         self._draw()
+        if focused:
+            announce_widget(self)
 
     def _click(self, event=None):
+        if not self.enabled:
+            return "break"
         self.focus_set()
         self.on_select(self.value)
+        announce_widget(self)
+        return "break"
 
     def set_selected(self, selected: bool):
         self.selected = selected
+        self._sync_a11y()
+        self._draw()
+
+    def _sync_a11y(self):
+        set_accessible_metadata(
+            self,
+            role="radio button",
+            label=self.label,
+            state=_state_text(
+                "enabled" if self.enabled else "disabled",
+                "selected" if self.selected else "not selected",
+                "focused" if self.focused else "",
+            ),
+            value=str(self.value),
+            description=self.group_label,
+        )
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
+
+    def set_enabled(self, enabled: bool):
+        self.enabled = enabled
+        if not enabled:
+            self.focused = False
+            self.hovered = False
+        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        self._sync_a11y()
         self._draw()
 
     def _draw(self):
@@ -1286,7 +1458,11 @@ class _Segment(tk.Canvas):
         if w <= 1:
             w = self.winfo_width()
         h = self.H
-        if self.selected:
+        if not self.enabled:
+            bg = Theme.BG_TERTIARY
+            fg = Theme.TEXT_DISABLED
+            border = Theme.BORDER_SUBTLE
+        elif self.selected:
             bg = Theme.GREEN_MUTED
             fg = Theme.GREEN_PRIMARY
             border = Theme.GREEN_HOVER
@@ -1321,6 +1497,7 @@ class DragDropFrame(tk.Frame):
         self.hover_bg = Theme.BG_CARD_HOVER
         self.hovered = False
         self.focused = False
+        self.import_enabled = True
         self.configure(height=height)
         self.pack_propagate(False)
         self.grid_propagate(False)
@@ -1395,6 +1572,7 @@ class DragDropFrame(tk.Frame):
             self._sub_text.config(
                 text="Choose files or a folder below. Originals stay untouched."
             )
+        self._sync_a11y()
 
     def _set_bg(self, bg: str, border: str):
         self.config(bg=bg, highlightbackground=border)
@@ -1409,8 +1587,29 @@ class DragDropFrame(tk.Frame):
 
     def set_import_enabled(self, enabled: bool):
         """Enable or disable import buttons during processing."""
+        self.import_enabled = enabled
         self.add_files_btn.set_enabled(enabled)
         self.add_folder_btn.set_enabled(enabled)
+        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        if not enabled:
+            self.focused = False
+        self._sync_a11y()
+
+    def _sync_a11y(self):
+        set_accessible_metadata(
+            self,
+            role="drop target",
+            label="Add files to the queue",
+            state=_state_text(
+                "enabled" if self.import_enabled else "disabled",
+                "focused" if self.focused else "",
+                "drag and drop available" if self._dnd_available else "",
+            ),
+            description=self._sub_text.cget("text"),
+        )
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
 
     def _setup_dnd(self):
         """Setup native drag and drop if available."""
@@ -1423,11 +1622,15 @@ class DragDropFrame(tk.Frame):
             pass
 
     def _handle_drop(self, event):
+        if not getattr(self, "import_enabled", True):
+            return
         files = self.tk.splitlist(event.data)
         if files:
             self.on_drop(list(files))
 
     def _open_file_dialog(self):
+        if not getattr(self, "import_enabled", True):
+            return
         files = filedialog.askopenfilenames(
             title="Choose files to clean",
             filetypes=[
@@ -1441,6 +1644,8 @@ class DragDropFrame(tk.Frame):
             self.on_drop(list(files))
 
     def _open_folder_dialog(self):
+        if not getattr(self, "import_enabled", True):
+            return
         folder = filedialog.askdirectory(title="Choose a folder to clean")
         if folder:
             self.on_drop([folder])
@@ -1464,11 +1669,14 @@ class DragDropFrame(tk.Frame):
     def _on_focus_in(self, event):
         self.focused = True
         self._set_bg(self.hover_bg if self.hovered else self.normal_bg, Theme.BORDER_FOCUS)
+        self._sync_a11y()
+        announce_widget(self)
 
     def _on_focus_out(self, event):
         self.focused = False
         self._set_bg(self.hover_bg if self.hovered else self.normal_bg,
                      Theme.BLUE_PRIMARY if self.hovered else Theme.BORDER)
+        self._sync_a11y()
 
 
 class QueueItemWidget(tk.Frame):
@@ -1500,6 +1708,7 @@ class QueueItemWidget(tk.Frame):
         self._surface_bg = Theme.BG_CARD
         self._pulse_id = None
         self._pulse_phase = 0
+        self._last_a11y_status = None
 
         # Left accent stripe (visible only when selected)
         self.accent_stripe = tk.Frame(self, bg=Theme.BG_CARD, width=3)
@@ -1590,6 +1799,7 @@ class QueueItemWidget(tk.Frame):
         self.bind("<Return>", self._on_card_activate, add="+")
         self.bind("<space>", self._on_card_activate, add="+")
 
+        self._sync_a11y()
         self.update_item(item)
 
     def _on_context_menu(self, event):
@@ -1741,11 +1951,14 @@ class QueueItemWidget(tk.Frame):
                 Theme.BORDER_FOCUS,
                 accent=Theme.BORDER_FOCUS,
             )
+        self._sync_a11y()
+        announce_widget(self)
 
     def _on_focus_out(self, event):
         self.focused = False
         if not self.is_selected:
             self._apply_surface_state(Theme.BG_CARD, Theme.BORDER)
+        self._sync_a11y()
 
     def _apply_surface_state(self, bg: str, border: str, accent: str = None):
         self._surface_bg = bg
@@ -1774,6 +1987,7 @@ class QueueItemWidget(tk.Frame):
             )
         else:
             self._apply_surface_state(Theme.BG_CARD, Theme.BORDER)
+        self._sync_a11y()
 
     def _open_output(self):
         """Open the output file if processing is complete."""
@@ -1813,6 +2027,25 @@ class QueueItemWidget(tk.Frame):
 
     def _get_status_color(self) -> str:
         return status_ui(self.item.status)["color"]
+
+    def _sync_a11y(self):
+        badge = status_ui(self.item.status)
+        pct = int(max(0.0, min(1.0, float(self.item.progress or 0.0))) * 100)
+        set_accessible_metadata(
+            self,
+            role="queue item",
+            label=Path(self.item.file_path).name,
+            state=_state_text(
+                badge["label"],
+                "selected" if self.is_selected else "not selected",
+                "focused" if self.focused else "",
+            ),
+            value=f"{pct}% complete",
+            description=self.item.message or "Ready to process",
+        )
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
 
     def update_item(self, item: QueueItem):
         self.item = item
@@ -1868,6 +2101,7 @@ class QueueItemWidget(tk.Frame):
             self._start_pulse()
         else:
             self._stop_pulse()
+        self._sync_a11y()
 
     # Pulse-state helpers -----------------------------------------------
     _pulse_id = None

@@ -130,6 +130,52 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_custom_widgets_expose_accessibility_snapshots(self):
+        app = self._make_app()
+        try:
+            app.root.update_idletasks()
+
+            slider_meta = app._settings_sliders[0].accessibility_snapshot()
+            self.assertEqual(slider_meta["role"], "slider")
+            self.assertTrue(slider_meta["label"])
+            self.assertIn("range", slider_meta["value"])
+
+            segment = next(iter(app.mode_picker._segments.values()))
+            segment_meta = segment.accessibility_snapshot()
+            self.assertEqual(segment_meta["role"], "radio button")
+            self.assertEqual(segment_meta["description"], "Cleanup algorithm")
+            self.assertIn("selected", segment_meta["state"])
+            segment.set_enabled(False)
+            self.assertIn("disabled", segment.accessibility_snapshot()["state"])
+            segment.set_enabled(True)
+
+            app.drop_area.set_import_enabled(False)
+            drop_meta = app.drop_area.accessibility_snapshot()
+            self.assertEqual(drop_meta["role"], "drop target")
+            self.assertIn("disabled", drop_meta["state"])
+
+            from gui.widgets import QueueItemWidget
+
+            item = self._g.QueueItem(
+                id="a11y-row",
+                file_path=str(Path(self._tmpdir.name) / "clip.mp4"),
+                output_path=str(Path(self._tmpdir.name) / "clip_no_sub.mp4"),
+                config=self._g.ProcessingConfig(),
+                status=self._g.ProcessingStatus.PROCESSING,
+                progress=0.42,
+                message="Cleaning frame 12",
+            )
+            row = QueueItemWidget(app.root, item, on_remove=lambda _id: None)
+            row.update_item(item)
+            row_meta = row.accessibility_snapshot()
+            self.assertEqual(row_meta["role"], "queue item")
+            self.assertIn("Removing", row_meta["state"])
+            self.assertIn("42% complete", row_meta["value"])
+            self.assertIn("Cleaning frame 12", row_meta["description"])
+            row.destroy()
+        finally:
+            self._destroy_app(app)
+
     def test_about_dialog_shows_backend_status_panel(self):
         app = self._make_app(withdraw=False)
         try:

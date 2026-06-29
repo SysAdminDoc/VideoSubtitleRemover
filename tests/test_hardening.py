@@ -3092,6 +3092,25 @@ class A11yScaffoldTests(unittest.TestCase):
         except Exception as exc:
             self.fail(f"announce raised: {exc}")
 
+    def test_accessible_metadata_formats_concise_text(self):
+        from backend import a11y
+
+        widget = SimpleNamespace()
+        metadata = a11y.set_accessible_metadata(
+            widget,
+            role="button",
+            label="Start batch",
+            state="enabled, focused",
+            value="",
+            description="Cleans all queued files",
+        )
+
+        self.assertEqual(a11y.accessible_metadata(widget), metadata)
+        self.assertEqual(
+            a11y.accessible_text(metadata),
+            "Start batch. button. enabled, focused. Cleans all queued files",
+        )
+
 
 class NleSidecarTests(unittest.TestCase):
     """RM-76: EDL and FCPXML writers must produce well-formed sidecars
