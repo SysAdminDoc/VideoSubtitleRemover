@@ -7,15 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-### P2 -- Dependency, documentation, and UX hardening
-
-- [ ] P2 — Extract GUI and processor orchestration controllers
-  Why: `gui/app.py` and the long media state machine remain the highest-risk files for future polish and reliability work.
-  Evidence: `docs/architecture.md`, `gui/app.py`, `backend/processor.py`, recent commits adding many UI/backend surfaces
-  Touches: `gui/app.py`, new focused `gui/*` controller modules, `backend/processor.py`, backend pipeline helper modules, GUI/backend smoke tests
-  Acceptance: Queue processing, preview/quality review, support/cache dialogs, and processor stage orchestration move into focused modules with no behavior change; existing public imports and tests still pass; architecture docs name the new boundaries.
-  Complexity: L
-
 ### P3 -- Research bench
 
 - [ ] P3 — Add a local container/isolated install smoke path

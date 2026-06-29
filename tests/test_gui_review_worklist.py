@@ -156,7 +156,7 @@ class GuiReviewWorklistTests(unittest.TestCase):
         app.queue_lock = threading.Lock()
         app._update_queue_display = mock.Mock()
 
-        with mock.patch("gui.app.save_queue_state") as save_queue:
+        with mock.patch("gui.quality_controller.save_queue_state") as save_queue:
             self.assertTrue(app._retry_review_item_with_suggested_settings(item.id))
 
         self.assertEqual(item.status, ProcessingStatus.IDLE)

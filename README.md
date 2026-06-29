@@ -553,6 +553,15 @@ content, colors are preserved. If you still see a mismatch, attach the
 ```
 VideoSubtitleRemover/
 |-- VideoSubtitleRemover.py   # Main GUI application
+|-- gui/
+|   |-- app.py                # Main Tk shell and shared UI state
+|   |-- processing_controller.py  # Queue worker, pause/stop, reports, notify
+|   |-- preview_controller.py     # Preview, A/B compare, inline region editor
+|   |-- quality_controller.py     # Quality review, retry, report helpers
+|   |-- support_controller.py     # Support bundle, model cache, About panels
+|   |-- widgets.py            # Custom Tk controls
+|   |-- config.py             # GUI config, queue state, presets
+|   `-- theme.py              # Design tokens
 |-- backend/
 |   |-- __init__.py           # Module exports
 |   |-- processor.py          # Legacy import/CLI compatibility shim

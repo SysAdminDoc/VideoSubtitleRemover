@@ -36,7 +36,7 @@ class ProcessingExceptionLoggingTests(unittest.TestCase):
             _assert_exc_info(self, text, phrase)
 
     def test_gui_processing_callbacks_keep_tracebacks(self):
-        text = _read("gui/app.py")
+        text = _read("gui/processing_controller.py")
         for phrase in (
             "Live preview callback failed",
             "Processing error for",
