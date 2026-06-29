@@ -1,5 +1,6 @@
 import io
 import json
+import datetime
 import logging
 import os
 import shutil
@@ -571,7 +572,7 @@ class MediaInputFailureTests(unittest.TestCase):
                 self.last_quality_report = None
                 self.last_output_path = None
 
-            def process_video(self, *_args):
+            def process_video(self, *_args, **_kwargs):
                 return False
 
         item = gui.QueueItem(
@@ -3051,6 +3052,73 @@ class CliBatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["status"], "hardcoded-processed")
         self.assertIn("clip_no_sub.mp4", markdown)
 
+    def test_paused_status_is_reported_distinctly(self):
+        from backend import batch_report as _br
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mp4"
+            out = work / "clip_no_sub.mp4"
+            src.write_bytes(b"video")
+            with self._patch_preflight_probes():
+                record = _br.make_batch_item_record(
+                    str(src),
+                    str(out),
+                    config=processor.ProcessingConfig(),
+                )
+            _br.finish_batch_item(
+                record,
+                _br.STATUS_PAUSED,
+                message="Processing paused at frame 4/10",
+                elapsed_seconds=1.25,
+                stage_timings={"decode": 0.5, "inpaint": 0.75},
+            )
+            json_path, md_path = _br.write_batch_reports(
+                work,
+                [record],
+                kind="hardcoded-cleanup",
+                started_at=datetime.datetime.now(datetime.timezone.utc),
+            )
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            markdown = md_path.read_text(encoding="utf-8")
+
+        self.assertEqual(payload["counts"], {"paused": 1})
+        self.assertEqual(payload["files"][0]["status"], "paused")
+        self.assertIn("paused", markdown)
+
+    def test_pattern_pause_writes_paused_report_and_exit_130(self):
+        from unittest import mock
+        from backend.resume_checkpoint import ProcessingPaused
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mp4"
+            out_dir = work / "out"
+            ckpt = work / "ckpt"
+            src.write_bytes(b"video")
+            out_dir.mkdir()
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(
+                    side_effect=ProcessingPaused("Processing paused at frame 4/10")
+                ),
+                process_image=mock.Mock(return_value=True),
+                last_stage_timings={"decode": 0.25},
+            )
+            with self._patch_preflight_probes():
+                with mock.patch("backend.processor.SubtitleRemover", return_value=fake_remover):
+                    code, stdout, stderr = self._run_cli([
+                        "--pattern", str(work / "*.mp4"),
+                        "--out-dir", str(out_dir),
+                        "--checkpoint-dir", str(ckpt),
+                        "--gpu", "-1",
+                    ])
+            payload = json.loads((out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 130, stderr)
+        self.assertIn("[batch] Paused", stdout)
+        self.assertEqual(payload["files"][0]["status"], "paused")
+
     def test_soft_subtitle_pattern_writes_report(self):
         from unittest import mock
         from backend import cli as _cli
@@ -5000,6 +5068,12 @@ class EndToEndPipelineTests(unittest.TestCase):
         remover._color_metadata = None
         remover._hdr_codec_warning_logged = False
         remover._hdr_software_warning_logged = False
+        remover._active_writer = None
+        remover._active_subprocess = None
+        remover._teardown_requested = False
+        remover.last_resume_warning = None
+        remover.last_pause_checkpoint = None
+        remover.last_pause_checkpoint_path = None
         return remover
 
     def test_pipeline_runs_with_skip_detection(self):
@@ -5103,6 +5177,107 @@ class EndToEndPipelineTests(unittest.TestCase):
                         10,
                         f"{codec} {label} should decode the generated clip",
                     )
+
+    def test_pause_checkpoint_resumes_current_video(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not on PATH")
+
+        class PassthroughInpainter:
+            def inpaint(self, frames, masks):
+                return frames
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = self._write_clip(tmp, n_frames=10, size=(64, 48))
+            output = tmp / "resumed.mp4"
+            ckpt = tmp / "checkpoints"
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    subtitle_area=(8, 36, 56, 44),
+                    preserve_audio=False,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                    sttn_max_load_num=4,
+                    prefetch_decode=False,
+                )
+            )
+            first = self._stub_remover(cfg, PassthroughInpainter())
+            with self.assertRaises(processor.ProcessingPaused):
+                first.process_video(
+                    str(src),
+                    str(output),
+                    checkpoint_dir=ckpt,
+                    checkpoint_key="demo",
+                    pause_check=lambda: True,
+                )
+            pause_path = ckpt / "demo.pause.json"
+            frames_dir = ckpt / "demo.frames"
+            pause_payload = json.loads(pause_path.read_text(encoding="utf-8"))
+            self.assertEqual(pause_payload["status"], "paused")
+            self.assertGreater(pause_payload["next_frame"], 0)
+            self.assertTrue((frames_dir / "frame_000000.png").is_file())
+
+            second = self._stub_remover(cfg, PassthroughInpainter())
+            ok = second.process_video(
+                str(src),
+                str(output),
+                checkpoint_dir=ckpt,
+                checkpoint_key="demo",
+                resume_checkpoint=True,
+                pause_check=lambda: False,
+            )
+            self.assertTrue(ok)
+            self.assertTrue(output.exists())
+            self.assertFalse(pause_path.exists())
+            self.assertFalse(frames_dir.exists())
+
+    def test_stale_pause_checkpoint_returns_warning_and_zero_resume(self):
+        from backend.resume_checkpoint import (
+            config_fingerprint,
+            load_pause_checkpoint,
+            write_pause_checkpoint,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = tmp / "clip.mp4"
+            out = tmp / "out.mp4"
+            src.write_bytes(b"video")
+            ckpt = tmp / "checkpoints"
+            frame_dir = ckpt / "demo.frames"
+            frame_dir.mkdir(parents=True)
+            cfg = processor.ProcessingConfig(device="cpu")
+            good_hash = config_fingerprint(cfg)
+            write_pause_checkpoint(
+                ckpt,
+                "demo",
+                input_path=str(src),
+                output_path=str(out),
+                config_hash="old-settings",
+                frame_dir=frame_dir,
+                next_frame=1,
+                total_frames=10,
+                width=64,
+                height=48,
+                fps=24.0,
+                status="paused",
+            )
+            state = load_pause_checkpoint(
+                ckpt,
+                "demo",
+                input_path=str(src),
+                output_path=str(out),
+                config_hash=good_hash,
+                total_frames=10,
+                width=64,
+                height=48,
+                fps=24.0,
+            )
+            self.assertEqual(state.next_frame, 0)
+            self.assertIn("settings changed", state.warning)
 
     def test_pipeline_timed_regions_do_not_reuse_masks_outside_span(self):
         if shutil.which("ffmpeg") is None:
@@ -5615,6 +5790,27 @@ class QueueAutosaveRoundTripTests(unittest.TestCase):
         self.assertIsNotNone(loaded)
         self.assertEqual(len(loaded), 1)
         self.assertEqual(loaded[0]["file_path"], "a.mp4")
+
+    def test_paused_items_are_saved_for_resume(self):
+        import gui.config as gui_config
+        paused = gui_config.QueueItem(
+            id="paused-1", file_path="a.mp4", output_path="a_out.mp4",
+            config=gui_config.ProcessingConfig(),
+            status=gui_config.ProcessingStatus.PAUSED,
+            progress=0.4,
+            message="Paused at checkpoint",
+            pause_checkpoint_path="checkpoints/demo.pause.json",
+        )
+        gui_config.save_queue_state([paused])
+        loaded = gui_config.load_queue_state()
+        self.assertIsNotNone(loaded)
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["status"], "paused")
+        self.assertEqual(loaded[0]["progress"], 0.4)
+        self.assertEqual(
+            loaded[0]["pause_checkpoint_path"],
+            "checkpoints/demo.pause.json",
+        )
 
 
 class CliNumericRangeTests(unittest.TestCase):

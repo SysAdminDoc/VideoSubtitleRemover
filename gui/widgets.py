@@ -2073,6 +2073,7 @@ class QueueItemWidget(tk.Frame):
         message_color = {
             ProcessingStatus.COMPLETE: Theme.SUCCESS,
             ProcessingStatus.ERROR: Theme.ERROR,
+            ProcessingStatus.PAUSED: Theme.WARNING,
             ProcessingStatus.CANCELLED: Theme.WARNING,
             ProcessingStatus.LOADING: Theme.INFO,
             ProcessingStatus.DETECTING: Theme.INFO,

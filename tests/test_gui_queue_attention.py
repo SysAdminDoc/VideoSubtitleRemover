@@ -32,9 +32,10 @@ class GuiQueueAttentionTests(unittest.TestCase):
         app.root = _Root()
         return app
 
-    def test_attention_count_includes_failed_stopped_and_review_outputs(self):
+    def test_attention_count_includes_failed_paused_stopped_and_review_outputs(self):
         queue = [
             _item(ProcessingStatus.ERROR),
+            _item(ProcessingStatus.PAUSED),
             _item(ProcessingStatus.CANCELLED),
             _item(
                 ProcessingStatus.COMPLETE,
@@ -43,7 +44,7 @@ class GuiQueueAttentionTests(unittest.TestCase):
             _item(ProcessingStatus.COMPLETE, {"tag": "Review"}),
         ]
 
-        self.assertEqual(VideoSubtitleRemoverApp._queue_attention_count(queue), 4)
+        self.assertEqual(VideoSubtitleRemoverApp._queue_attention_count(queue), 5)
 
     def test_attention_count_excludes_normal_complete_and_pending_items(self):
         queue = [

@@ -9,13 +9,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 -- Dependency, documentation, and UX hardening
 
-- [ ] P2 — Add cooperative pause/resume checkpoints for long videos
-  Why: VSR can skip completed files, but competitor issue streams show users expect long-running removals to pause and resume without restarting the current video.
-  Evidence: YaoFANGUK issues #222 and #224, `README.md` crash-resume note, `backend/processor.py`, `gui/config.py` queue state
-  Touches: `backend/processor.py`, `backend/cli.py`, `gui/app.py`, `gui/config.py`, `backend/batch_report.py`, checkpoint tests
-  Acceptance: GUI and CLI can pause a running job at safe frame/batch boundaries, persist enough checkpoint state to resume the current item, report paused status in queue/batch summaries, and handle stale/incompatible checkpoints by falling back to normal processing with a clear warning.
-  Complexity: XL
-
 - [ ] P2 — Extract GUI and processor orchestration controllers
   Why: `gui/app.py` and the long media state machine remain the highest-risk files for future polish and reliability work.
   Evidence: `docs/architecture.md`, `gui/app.py`, `backend/processor.py`, recent commits adding many UI/backend surfaces

@@ -1205,12 +1205,13 @@ class _FrameSequenceWriter:
     the video encode pipeline.
     """
 
-    def __init__(self, out_dir: str, prefix: str = "frame", ext: str = ".png"):
+    def __init__(self, out_dir: str, prefix: str = "frame", ext: str = ".png",
+                 start_index: int = 0):
         self._dir = Path(out_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         self._prefix = prefix
         self._ext = ext
-        self._idx = 0
+        self._idx = max(0, int(start_index))
 
     def write(self, frame) -> None:
         name = f"{self._prefix}_{self._idx:06d}{self._ext}"

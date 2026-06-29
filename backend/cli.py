@@ -17,6 +17,7 @@ import datetime
 import json
 import logging
 import os
+import signal
 import shutil
 import sys
 import time
@@ -36,7 +37,8 @@ def _load_runtime_helpers() -> None:
     global _RUNTIME_HELPERS_LOADED
     global STATUS_CANCELLED, STATUS_CHECKPOINT_DONE, STATUS_FAILED
     global STATUS_HARDCODED_PROCESSED, STATUS_PENDING
-    global STATUS_REVIEW_NEEDED, STATUS_SKIPPED_EXISTING, STATUS_SOFT_REMUXED
+    global STATUS_PAUSED, STATUS_REVIEW_NEEDED, STATUS_SKIPPED_EXISTING
+    global STATUS_SOFT_REMUXED
     global choose_batch_output_path, finish_batch_item
     global make_batch_item_record, write_batch_reports
     global _path_key, _probe_subtitle_streams, _write_text_atomic
@@ -51,6 +53,7 @@ def _load_runtime_helpers() -> None:
         STATUS_FAILED,
         STATUS_HARDCODED_PROCESSED,
         STATUS_PENDING,
+        STATUS_PAUSED,
         STATUS_REVIEW_NEEDED,
         STATUS_SKIPPED_EXISTING,
         STATUS_SOFT_REMUXED,
@@ -301,6 +304,7 @@ def main():
         attach_json_log, normalize_processing_config, _coerce_backend_mode,
         is_known_backend_mode,
     )
+    from backend.resume_checkpoint import ProcessingPaused
     from backend import inpainter_registry
 
     # Built-in modes first, then whatever opt-in backends registered at
@@ -329,9 +333,11 @@ def main():
     parser.add_argument("--list-presets", action="store_true",
                        help="Print every known preset and exit.")
     parser.add_argument("--checkpoint-dir", default=None,
-                       help="Checkpoint dir for crash-resume (default: %%APPDATA%%/.../checkpoints)")
+                       help=("Checkpoint dir for crash-resume and pause/resume "
+                             "(default: %%APPDATA%%/.../checkpoints)"))
     parser.add_argument("--no-resume", action="store_true",
-                       help="Ignore any existing checkpoint and reprocess every file")
+                       help=("Ignore existing checkpoints and reprocess every file; "
+                             "pause checkpoints are still written for this run"))
     parser.add_argument("--mode", "-m", default="sttn",
                        choices=mode_choices,
                        help="Inpainting algorithm.")
@@ -1080,6 +1086,22 @@ def main():
 
     ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else _default_checkpoint_dir()
     ckpt_dir.mkdir(parents=True, exist_ok=True)
+    pause_requested = {"value": False}
+
+    def _request_pause(_signum=None, _frame=None):
+        if not pause_requested["value"]:
+            pause_requested["value"] = True
+            print("\n[pause] Requested. Waiting for the next safe frame checkpoint...")
+
+    previous_sigint = signal.getsignal(signal.SIGINT)
+    try:
+        signal.signal(signal.SIGINT, _request_pause)
+    except (ValueError, OSError):
+        previous_sigint = None
+
+    def _pause_requested() -> bool:
+        return bool(pause_requested["value"])
+
     base_subtitle_area = config.subtitle_area
     base_subtitle_areas = list(config.subtitle_areas) if config.subtitle_areas else None
     base_subtitle_region_spans = (
@@ -1120,7 +1142,14 @@ def main():
                         base_subtitle_area or base_subtitle_areas
                         or base_subtitle_region_spans):
                     print(f"[auto-band] {Path(inp).name}: no dominant band, full-frame")
-            ok = remover.process_video(inp, outp)
+            ok = remover.process_video(
+                inp,
+                outp,
+                checkpoint_dir=ckpt_dir,
+                checkpoint_key=key,
+                resume_checkpoint=not args.no_resume,
+                pause_check=_pause_requested,
+            )
         else:
             ok = remover.process_image(inp, outp)
         if ok:
@@ -1139,6 +1168,7 @@ def main():
         batch_started_at = datetime.datetime.now(datetime.timezone.utc)
         records: list[dict] = []
         interrupted = False
+        paused = False
         reserved_outputs: set = set()
         try:
             for i, inp in enumerate(inputs, 1):
@@ -1187,6 +1217,19 @@ def main():
                 started = time.monotonic()
                 try:
                     ok = _process_one(inp, str(outp))
+                except ProcessingPaused as exc:
+                    print(f"\n[pause] {exc}")
+                    finish_batch_item(
+                        record,
+                        STATUS_PAUSED,
+                        message=str(exc),
+                        elapsed_seconds=time.monotonic() - started,
+                        stage_timings=getattr(remover, "last_stage_timings", None),
+                    )
+                    _cancel_pending_records(records)
+                    paused = True
+                    interrupted = True
+                    break
                 except Exception as exc:
                     logger.error(f"Failed on {src.name}: {exc}")
                     ok = False
@@ -1228,6 +1271,9 @@ def main():
                 kind="hardcoded-cleanup",
                 started_at=batch_started_at,
             )
+        if paused:
+            print("[batch] Paused. Re-run the same command to resume the current item.")
+            sys.exit(130)
         if interrupted:
             sys.exit(130)
         failures = sum(1 for record in records if record.get("status") == STATUS_FAILED)
@@ -1284,6 +1330,10 @@ def main():
                   f"{seg_start:.2f}s - {seg_end:.2f}s -> {Path(seg_out).name}")
             try:
                 ok = _process_one(args.input, seg_out)
+            except ProcessingPaused as exc:
+                print(f"\n[nle] Paused: {exc}")
+                print("[nle] Re-run the same command to resume the current segment.")
+                sys.exit(130)
             except KeyboardInterrupt:
                 print("\n[nle] Interrupted by user.")
                 sys.exit(130)
@@ -1302,6 +1352,10 @@ def main():
     _print_output_quality_preflight(single_preflight)
     try:
         success = _process_one(args.input, args.output)
+    except ProcessingPaused as exc:
+        print(f"\n[file] Paused: {exc}")
+        print("[file] Re-run the same command to resume this file.")
+        sys.exit(130)
     except KeyboardInterrupt:
         print("\n[file] Interrupted by user.")
         sys.exit(130)

@@ -42,6 +42,7 @@ STATUS_HARDCODED_PROCESSED = "hardcoded-processed"
 STATUS_REVIEW_NEEDED = "review-needed"
 STATUS_FAILED = "failed"
 STATUS_CANCELLED = "cancelled"
+STATUS_PAUSED = "paused"
 STAGE_TIMING_KEYS = (
     "decode",
     "ocr",
@@ -198,7 +199,7 @@ def finish_batch_item(record: dict, status: str, *,
         record["quality_gate"] = quality_gate_not_applicable(
             "quality gate applies only to hardcoded cleanup outputs"
         )
-    elif status in {STATUS_FAILED, STATUS_CANCELLED}:
+    elif status in {STATUS_FAILED, STATUS_CANCELLED, STATUS_PAUSED}:
         record["quality_gate"] = quality_gate_not_applicable(
             "quality gate did not run because processing did not complete"
         )

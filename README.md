@@ -37,7 +37,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; core GUI surfaces are wired for gettext catalogs dropped into `locale/<lang>/LC_MESSAGES/vsr.mo`
 - **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
-- **Batch Processing** -- Queue files or drag entire folders; per-item cancellation
+- **Batch Processing** -- Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
 - **Quality Self-Test** -- PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, and an optional side-by-side comparison PNG
 - **CLI + Presets** -- `python -m backend.processor --pattern ... --preset "YouTube (default)"`; six built-in presets + user presets persisted to `%APPDATA%`
@@ -45,7 +45,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Karaoke Grouping** -- Per-syllable boxes fuse into a single line mask so highlighted lyrics do not leak through the gaps
 - **Live Preview During Processing** -- 15 FPS throttled preview piped from the backend worker
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
-- **Crash-Resume Checkpointing** -- SHA-256 input fingerprint per file; re-running a glob skips finished work
+- **Pause/Resume Checkpointing** -- SHA-256 input fingerprint per file; finished files are skipped and paused videos resume from durable checkpoint frames
 - **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
 - **Premium Dark UI** -- Cohesive design system with custom controls, rectangular status tiles, responsive workbench scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
@@ -290,7 +290,8 @@ Pattern batches and GUI batches write `vsr-batch-summary.json` and
 `vsr-batch-summary.md` next to their outputs when they finish. The report
 records each input, selected output path, codec/duration/subtitle preflight
 data, source-aware output-quality warning, planned action, final status, and
-elapsed time for skipped, checkpointed, remuxed, processed, or failed files.
+elapsed time for skipped, checkpointed, paused, remuxed, processed, or failed
+files.
 They also break each item down by decode, OCR, mask, inpaint, encode, mux, and
 quality-analysis time, with a run-level slowest-stage summary for diagnosing
 slow hardware, OCR, model, or muxing bottlenecks.
@@ -306,6 +307,15 @@ remux-only rows are marked `not_applicable`.
 Review-needed queue items expose **Retry with suggested settings**, which
 applies the quality gate's ladder step to that item only and records the
 before/after retry config in the next batch report.
+
+Long video runs can pause at safe frame-batch boundaries. In the GUI, click
+**Pause batch** while processing; the current video writes checkpoint frames
+under `%APPDATA%\VideoSubtitleRemoverPro\checkpoints\` and returns to the queue
+as `Paused`. Starting the batch again resumes from the first missing frame. In
+the CLI, press Ctrl-C once to request the same safe pause; re-run the same
+command to resume. If the input, output path, frame count, frame rate, size, or
+processing settings changed, VSR warns and restarts that file from the
+beginning instead of trusting stale checkpoint frames.
 
 ### Reference Clip Contributions
 
@@ -326,6 +336,8 @@ clip you shot and grant as CC0.
 | `--config` | JSON config overlay | - |
 | `--preset NAME` | Apply a built-in or user preset by name | - |
 | `--list-presets` | List every preset and exit | - |
+| `--checkpoint-dir` | Directory for done markers and pause/resume checkpoint frames | `%APPDATA%` app cache |
+| `--no-resume` | Ignore existing checkpoints and reprocess files; this run still writes new pause checkpoints | Off |
 | `-m`, `--mode` | Algorithm (sttn/lama/propainter/auto) | sttn |
 | `--codec` | Output codec (h264/h265/av1/vvc; VVC requires FFmpeg with `libvvenc`) | h264 |
 | `-g`, `--gpu` | GPU device ID (-1 for CPU) | 0 |
@@ -548,6 +560,7 @@ VideoSubtitleRemover/
 |   |-- tracking.py           # Kalman, pHash, karaoke helpers
 |   |-- io.py                 # Capture, ffprobe, intermediate writers
 |   |-- cli.py                # Command-line entry point
+|   |-- resume_checkpoint.py  # Durable pause/resume checkpoint helpers
 |   |-- inpainters/           # Built-in STTN/LaMa/ProPainter/AUTO paths
 |   |-- presets.py            # Shared preset library (GUI + CLI)
 |   |-- adapter_manifest.py   # Optional model provenance and hash policy

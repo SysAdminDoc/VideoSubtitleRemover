@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Cooperative pause/resume checkpoints.** Long video jobs can now pause at a
+  safe frame-batch boundary, persist processed checkpoint frames, and resume
+  the current video from the first missing frame in both GUI and CLI flows.
+  Batch JSON/Markdown reports now use a distinct `paused` status, and stale or
+  incompatible pause checkpoints warn before falling back to a fresh run.
 - **GUI gettext wiring.** Core onboarding, queue, settings, preview, region,
   status, confirmation, batch-summary, and About/backend-status strings now use
   the documented `tr()` gettext alias; `locale/vsr.pot` was refreshed from the

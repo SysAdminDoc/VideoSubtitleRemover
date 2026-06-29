@@ -85,6 +85,14 @@ from backend.quality import (
     temporal_flicker_score,
 )
 from backend.quality_gate import evaluate_quality_gate
+from backend.resume_checkpoint import (
+    ProcessingPaused,
+    cleanup_pause_checkpoint,
+    config_fingerprint,
+    load_pause_checkpoint,
+    pause_frame_dir,
+    write_pause_checkpoint,
+)
 from backend.safe_image import safe_imread
 from backend.tracking import (
     _KalmanBox,
@@ -333,6 +341,9 @@ class SubtitleRemover:
         self.last_output_path: Optional[str] = None
         self.last_error_message: Optional[str] = None
         self.last_error_reason: Optional[str] = None
+        self.last_resume_warning: Optional[str] = None
+        self.last_pause_checkpoint: Optional[dict] = None
+        self.last_pause_checkpoint_path: Optional[str] = None
         # B-3: union-mask bbox accumulated while processing. The quality
         # report metric (PSNR/SSIM) used to be measured over the whole
         # frame, so the unchanged 80-95% of pixels dominated the score and
@@ -1253,9 +1264,16 @@ class SubtitleRemover:
             for idx, result in enumerate(results)
         ]
 
-    def process_video(self, input_path: str, output_path: str) -> bool:
+    def process_video(self, input_path: str, output_path: str, *,
+                      checkpoint_dir: Optional[str | Path] = None,
+                      checkpoint_key: Optional[str] = None,
+                      resume_checkpoint: bool = True,
+                      pause_check: Optional[Callable[[], bool]] = None) -> bool:
         self._teardown_requested = False
         self.last_output_path = None
+        self.last_resume_warning = None
+        self.last_pause_checkpoint = None
+        self.last_pause_checkpoint_path = None
         self._reset_stage_timings()
         self._srt_entries = []
         self._quality_mask_bbox = None
@@ -1433,6 +1451,52 @@ class SubtitleRemover:
             else:
                 logger.info(f"Video: {width}x{height} @ {fps:.1f}fps, {total_frames} frames")
 
+            checkpoint_root: Optional[Path] = None
+            checkpoint_frame_dir: Optional[Path] = None
+            checkpoint_state_path: Optional[Path] = None
+            checkpoint_config_hash = ""
+            checkpoint_active = False
+            checkpoint_remove_frames_on_success = True
+            resume_frame_count = 0
+            if checkpoint_dir is not None:
+                checkpoint_root = Path(checkpoint_dir)
+                checkpoint_root.mkdir(parents=True, exist_ok=True)
+                checkpoint_key = checkpoint_key or _checkpoint_key(
+                    input_path, output_path)
+                checkpoint_state_path = (
+                    checkpoint_root / f"{checkpoint_key}.pause.json"
+                )
+                checkpoint_config_hash = config_fingerprint(self.config)
+                default_frame_dir = pause_frame_dir(
+                    checkpoint_root, checkpoint_key)
+                checkpoint_frame_dir = default_frame_dir
+                checkpoint_active = True
+                if resume_checkpoint:
+                    state = load_pause_checkpoint(
+                        checkpoint_root,
+                        checkpoint_key,
+                        input_path=input_path,
+                        output_path=output_path,
+                        config_hash=checkpoint_config_hash,
+                        total_frames=frames_to_process,
+                        width=width,
+                        height=height,
+                        fps=fps,
+                    )
+                    checkpoint_state_path = state.path
+                    checkpoint_frame_dir = state.frame_dir
+                    resume_frame_count = min(frames_to_process, state.next_frame)
+                    if state.warning:
+                        self.last_resume_warning = state.warning
+                        logger.warning(state.warning)
+                    if resume_frame_count > 0:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES,
+                                start_frame + resume_frame_count)
+                        logger.info(
+                            f"Resuming {Path(input_path).name} from frame "
+                            f"{resume_frame_count}/{frames_to_process}"
+                        )
+
             # Re-use the deinterlace temp_dir if one was created, else fresh
             if temp_dir is None:
                 temp_dir = self._make_temp_dir()
@@ -1448,7 +1512,22 @@ class SubtitleRemover:
                     frame_out_dir = output_path
                     if not frame_out_dir.endswith(os.sep):
                         frame_out_dir = str(Path(output_path).with_suffix(""))
-                    writer = _FrameSequenceWriter(frame_out_dir)
+                    if checkpoint_active:
+                        checkpoint_frame_dir = Path(frame_out_dir)
+                        checkpoint_remove_frames_on_success = False
+                    writer = _FrameSequenceWriter(
+                        frame_out_dir,
+                        start_index=resume_frame_count,
+                    )
+                    temp_video = None
+                elif checkpoint_active:
+                    if checkpoint_frame_dir is None:
+                        checkpoint_frame_dir = pause_frame_dir(
+                            checkpoint_root, checkpoint_key)  # type: ignore[arg-type]
+                    writer = _FrameSequenceWriter(
+                        str(checkpoint_frame_dir),
+                        start_index=resume_frame_count,
+                    )
                     temp_video = None
                 else:
                     temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
@@ -1466,7 +1545,27 @@ class SubtitleRemover:
                             f"Could not create video writer for: {temp_video}"
                         )
 
-            frame_idx = 0
+            if checkpoint_active and checkpoint_root is not None and checkpoint_key:
+                payload = write_pause_checkpoint(
+                    checkpoint_root,
+                    checkpoint_key,
+                    input_path=input_path,
+                    output_path=output_path,
+                    config_hash=checkpoint_config_hash,
+                    frame_dir=checkpoint_frame_dir or pause_frame_dir(
+                        checkpoint_root, checkpoint_key),
+                    next_frame=resume_frame_count,
+                    total_frames=frames_to_process,
+                    width=width,
+                    height=height,
+                    fps=fps,
+                    status="running",
+                )
+                self.last_pause_checkpoint = payload
+                if checkpoint_state_path is not None:
+                    self.last_pause_checkpoint_path = str(checkpoint_state_path)
+
+            frame_idx = resume_frame_count
             batch_size = self.config.sttn_max_load_num
             frame_skip = self.config.detection_frame_skip
             rife_stride = self._rife_fast_stride()
@@ -1816,6 +1915,34 @@ class SubtitleRemover:
                         for m in masks:
                             mask_writer.write(m)
 
+                if checkpoint_active and checkpoint_root is not None and checkpoint_key:
+                    should_pause = bool(pause_check and pause_check())
+                    payload = write_pause_checkpoint(
+                        checkpoint_root,
+                        checkpoint_key,
+                        input_path=input_path,
+                        output_path=output_path,
+                        config_hash=checkpoint_config_hash,
+                        frame_dir=checkpoint_frame_dir or pause_frame_dir(
+                            checkpoint_root, checkpoint_key),
+                        next_frame=frame_idx,
+                        total_frames=frames_to_process,
+                        width=width,
+                        height=height,
+                        fps=fps,
+                        status="paused" if should_pause else "running",
+                    )
+                    self.last_pause_checkpoint = payload
+                    if checkpoint_state_path is not None:
+                        self.last_pause_checkpoint_path = str(checkpoint_state_path)
+                    if should_pause:
+                        message = (
+                            f"Processing paused at frame "
+                            f"{frame_idx}/{frames_to_process}"
+                        )
+                        logger.info(message)
+                        raise ProcessingPaused(message, checkpoint_state_path)
+
             if frame_idx < frames_to_process:
                 raise _video_decode_error(
                     input_path,
@@ -1843,6 +1970,19 @@ class SubtitleRemover:
                         f"Frame-sequence output written to {frame_out_dir}"
                     )
                     final_output_path = frame_out_dir
+                elif checkpoint_active:
+                    assert checkpoint_frame_dir is not None
+                    processed_video = self._encode_frame_sequence(
+                        checkpoint_frame_dir, fps, output_path)
+                    final_output_path = processed_video
+                    is_frame_sequence_input = Path(input_path).is_dir()
+                    if (
+                        self.config.preserve_audio
+                        and not is_frame_sequence_input
+                        and not Path(processed_video).is_dir()
+                    ):
+                        final_output_path = self._merge_audio(
+                            input_path, processed_video, output_path)
                 else:
                     final_output_path = output_path
                     is_frame_sequence_input = Path(input_path).is_dir()
@@ -1901,9 +2041,23 @@ class SubtitleRemover:
             self.last_output_path = final_output_path
             self.last_error_message = None
             self.last_error_reason = None
+            if checkpoint_active and checkpoint_root is not None and checkpoint_key:
+                remove_frames = (
+                    checkpoint_remove_frames_on_success
+                    and checkpoint_frame_dir is not None
+                    and Path(final_output_path) != checkpoint_frame_dir
+                )
+                cleanup_pause_checkpoint(
+                    checkpoint_root,
+                    checkpoint_key,
+                    remove_frames=remove_frames,
+                )
             self._report_progress(1.0, "Complete!")
             return True
 
+        except ProcessingPaused:
+            logger.info("Video processing paused")
+            raise
         except InterruptedError:
             logger.info("Video processing cancelled")
             raise
@@ -2246,6 +2400,37 @@ class SubtitleRemover:
             f"it to '{out_ext}' would produce a broken file."
         )
         return salvage
+
+    def _encode_frame_sequence(self, frame_dir: Path, fps: float,
+                               output: str) -> str:
+        """Encode checkpoint/output frames into the requested video path."""
+        frame_dir = Path(frame_dir)
+        pattern = frame_dir / "frame_%06d.png"
+        if not (frame_dir / "frame_000000.png").is_file():
+            raise ValueError(f"No checkpoint frames found in {frame_dir}")
+        temp_output = _allocate_temp_output_path(output)
+        try:
+            _ensure_output_parent(output)
+            cmd = [
+                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                '-nostats', '-framerate', f"{float(fps):.6f}",
+                '-i', str(pattern),
+            ]
+            cmd += self._get_encode_args()
+            cmd += ['-an', str(temp_output)]
+            timeout = _ffmpeg_subprocess_timeout(
+                max(1.0, len(list(frame_dir.glob("frame_*.png"))) / max(fps, 1.0))
+            )
+            self._run_checked_ffmpeg(cmd, timeout)
+            _promote_temp_output(temp_output, output)
+            return output
+        except FileNotFoundError:
+            logger.warning(
+                "FFmpeg not found; leaving processed checkpoint frames as output"
+            )
+            return str(frame_dir)
+        finally:
+            _cleanup_temp_output(temp_output)
 
     def _reencode_or_copy(self, source: str, output: str) -> str:
         """Re-encode with preferred encoder, or salvage the intermediate

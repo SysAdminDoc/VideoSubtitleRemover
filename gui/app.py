@@ -69,6 +69,7 @@ from gui.widgets import (
     Toast, SegmentedPicker, DragDropFrame, QueueItemWidget,
     TextWidgetHandler,
 )
+from backend.resume_checkpoint import ProcessingPaused
 from backend.ffmpeg_profiles import (
     FFMPEG_PROFILE_SCHEMA,
     collect_ffmpeg_capability_profiles,
@@ -146,8 +147,10 @@ class VideoSubtitleRemoverApp:
         self.queue_widgets: dict = {}
         self.is_processing = False
         self._stop_requested = False
+        self._pause_requested = False
         self._processing_thread: Optional[threading.Thread] = None
         self.cancel_event = threading.Event()
+        self.pause_event = threading.Event()
         self.queue_lock = threading.Lock()
         self.gpus = []
         self.ai_engines = {"detection": [], "inpainting": []}
@@ -1028,17 +1031,23 @@ class VideoSubtitleRemoverApp:
         batch_busy = self.is_processing or active_thread
 
         if hasattr(self, "start_btn"):
-            can_stop = active_thread and not self._stop_requested
+            can_pause = (
+                active_thread
+                and not self._stop_requested
+                and not self._pause_requested
+            )
             can_start = (not batch_busy) and has_queue
-            if can_stop or can_start:
+            if can_pause or can_start:
                 start_reason = ""
             elif not has_queue:
                 start_reason = tr("Add media to the queue before starting.")
+            elif self._pause_requested:
+                start_reason = tr("Pause is already in progress.")
             elif self._stop_requested:
                 start_reason = tr("Stop is already in progress.")
             else:
                 start_reason = tr("The batch is already running.")
-            self.start_btn.set_enabled(can_stop or can_start, reason=start_reason)
+            self.start_btn.set_enabled(can_pause or can_start, reason=start_reason)
         if hasattr(self, "open_output_btn"):
             self.open_output_btn.set_enabled(
                 has_complete,
@@ -1280,8 +1289,15 @@ class VideoSubtitleRemoverApp:
         has_complete = any(item.status == ProcessingStatus.COMPLETE for item in self.queue)
         has_retry = any(item.status in (ProcessingStatus.ERROR, ProcessingStatus.CANCELLED)
                         for item in self.queue)
+        has_paused = any(item.status == ProcessingStatus.PAUSED for item in self.queue)
 
-        if self._stop_requested:
+        if self._pause_requested:
+            stage = 3
+            title = "Pausing batch"
+            body = ("The current item is saving a checkpoint at the next safe frame boundary. "
+                    "Resume later without restarting that video.")
+            hint = "Pausing safely. Keep the app open until the current checkpoint is written."
+        elif self._stop_requested:
             stage = 3
             title = "Stopping batch"
             body = ("The current item is wrapping up so the app can stop cleanly without risking overlapping work. "
@@ -1291,13 +1307,18 @@ class VideoSubtitleRemoverApp:
             stage = 3
             title = "Batch running"
             body = ("Live preview, ETA, and the activity log stay up to date while the batch works. "
-                    "Stop is safe: completed outputs stay on disk.")
-            hint = "Use Stop batch if you need to pause. Finished outputs are preserved."
+                    "Pause is safe: completed outputs stay on disk and the current video gets a checkpoint.")
+            hint = "Use Pause batch if you need to step away. Resume continues from the checkpoint."
         elif not has_queue:
             stage = 1
             title = "Build your batch"
             body = "Import files or choose a folder to start."
             hint = "Import files or choose a folder to start."
+        elif has_paused:
+            stage = 2
+            title = "Resume paused work"
+            body = "Paused videos keep their checkpoint frames and continue from the first missing frame."
+            hint = "Start batch resumes paused items and continues the queue."
         elif has_retry:
             stage = 3 if has_complete else 2
             title = "Review the outliers"
@@ -3905,12 +3926,13 @@ class VideoSubtitleRemoverApp:
 
     def _show_batch_summary(self, complete: int, errors: int,
                             cancelled: int, elapsed: str,
+                            paused: int = 0,
                             quality_summary: Optional[dict] = None,
                             review_count: int = 0,
                             stage_summary: Optional[dict] = None):
         """Themed summary modal shown when a batch finishes."""
-        total = complete + errors + cancelled
-        is_clean = errors == 0 and cancelled == 0 and review_count == 0
+        total = complete + errors + paused + cancelled
+        is_clean = errors == 0 and paused == 0 and cancelled == 0 and review_count == 0
 
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
@@ -3941,7 +3963,7 @@ class VideoSubtitleRemoverApp:
                 state="modal",
                 value=(
                     f"{complete} completed, {errors} failed, "
-                    f"{cancelled} stopped, {review_count} review"
+                    f"{paused} paused, {cancelled} stopped, {review_count} review"
                 ),
             )
         except Exception:
@@ -3965,6 +3987,11 @@ class VideoSubtitleRemoverApp:
             summary_note = tr(
                 "Some completed outputs need a closer look. Start with "
                 "the quality review item, then retry failed items if needed."
+            )
+        elif paused:
+            summary_note = tr(
+                "The current video is paused at a checkpoint. Start the batch "
+                "again to resume from that frame."
             )
         else:
             summary_note = tr(
@@ -4006,6 +4033,9 @@ class VideoSubtitleRemoverApp:
             side="left")
         stat(stats, tr("FAILED"), errors, Theme.ERROR, Theme.ERROR_BG).pack(
             side="left", padx=(Theme.S_SM, 0))
+        if paused:
+            stat(stats, tr("PAUSED"), paused, Theme.WARNING, Theme.WARNING_BG).pack(
+                side="left", padx=(Theme.S_SM, 0))
         stat(stats, tr("STOPPED"), cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
             side="left", padx=(Theme.S_SM, 0))
         if review_count:
@@ -5528,8 +5558,9 @@ class VideoSubtitleRemoverApp:
                 ProcessingStatus.PROCESSING: 3,
                 ProcessingStatus.MERGING: 4,
                 ProcessingStatus.COMPLETE: 5,
-                ProcessingStatus.CANCELLED: 6,
-                ProcessingStatus.ERROR: 7,
+                ProcessingStatus.PAUSED: 6,
+                ProcessingStatus.CANCELLED: 7,
+                ProcessingStatus.ERROR: 8,
             }.get(it.status, 99),
         }
         with self.queue_lock:
@@ -5864,7 +5895,11 @@ class VideoSubtitleRemoverApp:
 
     @classmethod
     def _queue_attention_count(cls, queue: List[QueueItem]) -> int:
-        attention_states = (ProcessingStatus.ERROR, ProcessingStatus.CANCELLED)
+        attention_states = (
+            ProcessingStatus.ERROR,
+            ProcessingStatus.PAUSED,
+            ProcessingStatus.CANCELLED,
+        )
         return sum(
             1
             for item in queue
@@ -6542,6 +6577,12 @@ class VideoSubtitleRemoverApp:
         active_thread = self._has_active_processing_thread()
         batch_busy = self.is_processing or active_thread
         if batch_busy:
+            if self._pause_requested or self.pause_event.is_set():
+                self._update_status(
+                    "Batch is already pausing. Please wait for the checkpoint to finish.",
+                    "warning",
+                )
+                return
             if self._stop_requested or self.cancel_event.is_set():
                 self._update_status(
                     "Batch is already stopping. Please wait for the current item to wrap up.",
@@ -6549,7 +6590,7 @@ class VideoSubtitleRemoverApp:
                 )
                 return
             if active_thread:
-                self._stop_processing()
+                self._pause_processing()
             else:
                 self._update_status("Finalizing the previous batch...", "info")
             return
@@ -6569,11 +6610,13 @@ class VideoSubtitleRemoverApp:
 
         self.is_processing = True
         self._stop_requested = False
+        self._pause_requested = False
         self.cancel_event.clear()
+        self.pause_event.clear()
         self._set_settings_locked(True)
-        self.start_btn.set_style("danger")
-        self.start_btn.icon = "x"
-        self.start_btn.set_text(tr("Stop batch"))
+        self.start_btn.set_style("secondary")
+        self.start_btn.icon = "pause"
+        self.start_btn.set_text(tr("Pause batch"))
         self._batch_times = []
         # F-9: the ETA probe loads an OCR model and detects 30 frames --
         # far too slow for the Tk main thread. _process_queue runs it on
@@ -6598,6 +6641,24 @@ class VideoSubtitleRemoverApp:
         # Start processing thread
         self._processing_thread = threading.Thread(target=self._process_queue, daemon=True)
         self._processing_thread.start()
+
+    def _pause_processing(self):
+        """Pause the current processing at the next checkpoint boundary."""
+        if self._pause_requested:
+            self._update_status("Batch is already pausing...", "warning")
+            return
+        self._pause_requested = True
+        self.pause_event.set()
+        self.start_btn.set_style("primary")
+        self.start_btn.icon = "pause"
+        self.start_btn.set_text(tr("Pausing..."))
+        self._refresh_action_states()
+        self._update_status(
+            "Pausing at the next safe frame checkpoint. Current progress will resume later.",
+            "warning",
+        )
+        if self._taskbar:
+            self._taskbar.set_state(TaskbarProgress.STATE_PAUSED)
 
     def _stop_processing(self):
         """Stop the current processing."""
@@ -6793,6 +6854,7 @@ class VideoSubtitleRemoverApp:
             STATUS_CANCELLED,
             STATUS_FAILED,
             STATUS_HARDCODED_PROCESSED,
+            STATUS_PAUSED,
             STATUS_SOFT_REMUXED,
             finish_batch_item,
         )
@@ -6819,6 +6881,9 @@ class VideoSubtitleRemoverApp:
             elif item.status == ProcessingStatus.ERROR:
                 status = STATUS_FAILED
                 message = item.error or item.message or "Processing failed"
+            elif item.status == ProcessingStatus.PAUSED:
+                status = STATUS_PAUSED
+                message = item.message or "Paused at checkpoint"
             elif item.status == ProcessingStatus.CANCELLED:
                 status = STATUS_CANCELLED
                 message = item.message or "Cancelled"
@@ -7174,6 +7239,8 @@ class VideoSubtitleRemoverApp:
             except (RuntimeError, tk.TclError):
                 return  # root destroyed during shutdown
             self._process_item(item)
+            if self.pause_event.is_set():
+                break
 
         # Final batch state
         try:
@@ -7244,6 +7311,8 @@ class VideoSubtitleRemoverApp:
             item.error = None
             item.quality_report = None
             item.cancel_requested = False  # F-7 reset on fresh attempt
+            if not hasattr(self, "pause_event"):
+                self.pause_event = threading.Event()
             self._update_item_display(item)
 
             if self._process_soft_subtitle_item(item):
@@ -7254,6 +7323,8 @@ class VideoSubtitleRemoverApp:
             from backend.processor import (
                 SubtitleRemover as BackendRemover,
                 ProcessingConfig as BackendConfig,
+                _checkpoint_key,
+                _default_checkpoint_dir,
             )
 
             backend_mode = self._gui_to_backend_mode(item.config.mode.value)
@@ -7454,11 +7525,24 @@ class VideoSubtitleRemoverApp:
             logger.info(f"Processing: {file_name} with {item.config.mode.value}")
 
             if is_video_file(item.file_path):
-                success = remover.process_video(item.file_path, item.output_path)
+                ckpt_dir = _default_checkpoint_dir()
+                ckpt_key = _checkpoint_key(item.file_path, item.output_path)
+                success = remover.process_video(
+                    item.file_path,
+                    item.output_path,
+                    checkpoint_dir=ckpt_dir,
+                    checkpoint_key=ckpt_key,
+                    resume_checkpoint=True,
+                    pause_check=self.pause_event.is_set,
+                )
             elif is_image_file(item.file_path):
                 success = remover.process_image(item.file_path, item.output_path)
             else:
                 raise ValueError(f"Unsupported file type: {Path(item.file_path).suffix}")
+
+            resume_warning = getattr(remover, "last_resume_warning", None)
+            if resume_warning:
+                self._update_status(str(resume_warning), "warning", toast=True)
 
             if success:
                 item.stage_timings = dict(
@@ -7506,6 +7590,31 @@ class VideoSubtitleRemoverApp:
                 logger.error(f"Failed: {file_name}: {failure_message}")
             self._update_item_display(item)
 
+        except ProcessingPaused as exc:
+            remover_obj = locals().get("remover")
+            item.stage_timings = dict(
+                getattr(remover_obj, "last_stage_timings", {}) or {}
+            )
+            checkpoint_payload = (
+                getattr(remover_obj, "last_pause_checkpoint", None)
+                if remover_obj is not None else None
+            )
+            if isinstance(checkpoint_payload, dict):
+                next_frame = float(checkpoint_payload.get("next_frame") or 0.0)
+                total_frames = float(checkpoint_payload.get("total_frames") or 0.0)
+                if total_frames > 0:
+                    item.progress = max(0.0, min(0.99, next_frame / total_frames))
+            item.pause_checkpoint_path = (
+                getattr(remover_obj, "last_pause_checkpoint_path", "") or ""
+                if remover_obj is not None else ""
+            )
+            item.status = ProcessingStatus.PAUSED
+            item.message = str(exc) or "Paused at checkpoint"
+            item.error = None
+            item.quality_report = None
+            item.completed_at = datetime.now()
+            self._update_item_display(item)
+            logger.info(f"Paused: {Path(item.file_path).name}")
         except InterruptedError:
             remover_obj = locals().get("remover")
             item.stage_timings = dict(
@@ -7683,6 +7792,8 @@ class VideoSubtitleRemoverApp:
                     self._update_status(f"Completed {fname}", "success")
             elif item.status == ProcessingStatus.ERROR:
                 self._update_status(f"{fname} needs attention: {item.message}", "error")
+            elif item.status == ProcessingStatus.PAUSED:
+                self._update_status(f"Paused {fname}: resume from checkpoint", "warning")
             elif item.status == ProcessingStatus.CANCELLED:
                 self._update_status(f"Stopped {fname}", "warning")
             else:
@@ -7698,8 +7809,10 @@ class VideoSubtitleRemoverApp:
         """Handle processing completion."""
         self.is_processing = False
         self._stop_requested = False
+        self._pause_requested = False
         self._processing_thread = None
         self.cancel_event.clear()
+        self.pause_event.clear()
         self._stop_elapsed_timer()
         self._set_settings_locked(False)
         # Clear cached remover so next batch picks up any setting changes
@@ -7729,15 +7842,18 @@ class VideoSubtitleRemoverApp:
 
         complete = sum(1 for item in self.queue if item.status == ProcessingStatus.COMPLETE)
         errors = sum(1 for item in self.queue if item.status == ProcessingStatus.ERROR)
+        paused = sum(1 for item in self.queue if item.status == ProcessingStatus.PAUSED)
         cancelled = sum(1 for item in self.queue if item.status == ProcessingStatus.CANCELLED)
         review_count = len(self._review_needed_records())
 
         summary = f"Batch finished: {complete} completed, {errors} failed"
         if review_count:
             summary += f", {review_count} needs review"
+        if paused:
+            summary += f", {paused} paused"
         if cancelled:
             summary += f", {cancelled} stopped"
-        is_clean = errors == 0 and cancelled == 0 and review_count == 0
+        is_clean = errors == 0 and paused == 0 and cancelled == 0 and review_count == 0
         quality_summary = summarize_quality_reports(
             [item.quality_report for item in self.queue if item.status == ProcessingStatus.COMPLETE]
         )
@@ -7767,9 +7883,9 @@ class VideoSubtitleRemoverApp:
                 "Batch reports: "
                 + ", ".join(str(path) for path in report_paths)
             )
-        self._notify_completion(complete, errors)
+        self._notify_completion(complete, errors, paused=paused)
         # Surface a themed summary modal for meaningful batches
-        total = complete + errors + cancelled
+        total = complete + errors + paused + cancelled
         if total >= 1:
             elapsed = ""
             if self._batch_started_at:
@@ -7780,18 +7896,26 @@ class VideoSubtitleRemoverApp:
                 errors,
                 cancelled,
                 elapsed,
+                paused=paused,
                 quality_summary=quality_summary,
                 review_count=review_count,
                 stage_summary=stage_summary,
             )
 
-    def _notify_completion(self, complete: int, errors: int):
+    def _notify_completion(self, complete: int, errors: int, *,
+                           paused: int = 0):
         """Flash taskbar + play sound when batch processing finishes."""
         # RM-95: screen-reader announcement so NVDA / Narrator users
         # learn the batch finished without polling the activity log.
         try:
             from backend.a11y import announce
-            if errors == 0:
+            if paused:
+                announce(
+                    f"Batch paused. {paused} item remains paused. "
+                    f"{complete} items processed.",
+                    importance="high",
+                )
+            elif errors == 0:
                 announce(f"Batch complete. {complete} items processed.")
             else:
                 announce(
@@ -7839,7 +7963,13 @@ class VideoSubtitleRemoverApp:
 
     def _send_system_notification(self, complete: int, errors: int):
         """Send a Windows toast notification summarising the batch result."""
-        if errors == 0:
+        if paused:
+            title = "Batch Paused"
+            msg = (
+                f"{paused} item{'s' if paused != 1 else ''} paused. "
+                "Start again to resume."
+            )
+        elif errors == 0:
             title = "Batch Complete"
             msg = f"{complete} item{'s' if complete != 1 else ''} processed successfully."
         else:
@@ -7877,7 +8007,7 @@ class VideoSubtitleRemoverApp:
             self.root,
             title="Restore queue?",
             message=label,
-            detail="Idle items from your previous session were saved. Restore them to the queue?",
+            detail="Idle and paused items from your previous session were saved. Restore them to the queue?",
             confirm_label="Restore",
             cancel_label="Discard",
         ):
@@ -7896,6 +8026,11 @@ class VideoSubtitleRemoverApp:
                 item.config = cfg
                 if record.get("output_path"):
                     item.output_path = record["output_path"]
+                if record.get("status") == ProcessingStatus.PAUSED.value:
+                    item.status = ProcessingStatus.PAUSED
+                    item.progress = float(record.get("progress") or 0.0)
+                    item.message = record.get("message") or "Paused"
+                    item.pause_checkpoint_path = record.get("pause_checkpoint_path", "")
                 if isinstance(record.get("retry_config"), dict):
                     item.retry_config = record["retry_config"]
         clear_queue_state()

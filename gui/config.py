@@ -94,6 +94,7 @@ class ProcessingStatus(Enum):
     MERGING = "merging"
     COMPLETE = "complete"
     ERROR = "error"
+    PAUSED = "paused"
     CANCELLED = "cancelled"
 
 
@@ -107,6 +108,7 @@ _STATUS_LABELS = {
     ProcessingStatus.MERGING: "Finishing",
     ProcessingStatus.COMPLETE: "Complete",
     ProcessingStatus.ERROR: "Needs Attention",
+    ProcessingStatus.PAUSED: "Paused",
     ProcessingStatus.CANCELLED: "Stopped",
 }
 
@@ -118,6 +120,7 @@ _STATUS_THEME_KEYS = {
     ProcessingStatus.MERGING: ("WARNING", "WARNING_BG"),
     ProcessingStatus.COMPLETE: ("SUCCESS", "SUCCESS_BG"),
     ProcessingStatus.ERROR: ("ERROR", "ERROR_BG"),
+    ProcessingStatus.PAUSED: ("WARNING", "WARNING_BG"),
     ProcessingStatus.CANCELLED: ("TEXT_MUTED", "BG_TERTIARY"),
 }
 
@@ -644,6 +647,7 @@ class QueueItem:
     error: Optional[str] = None
     quality_report: Optional[dict] = None
     stage_timings: dict = field(default_factory=dict)
+    pause_checkpoint_path: str = ""
     soft_subtitle_streams: List[dict] = field(default_factory=list)
     soft_subtitle_probe_done: bool = False
     soft_subtitle_action: str = "burned_in"
@@ -829,12 +833,16 @@ def save_queue_state(queue_items):
     try:
         records = []
         for item in queue_items:
-            if item.status not in (ProcessingStatus.IDLE,):
+            if item.status not in (ProcessingStatus.IDLE, ProcessingStatus.PAUSED):
                 continue
             records.append({
                 "file_path": item.file_path,
                 "output_path": item.output_path,
                 "config": item.config.to_dict() if item.config else {},
+                "status": item.status.value,
+                "progress": item.progress,
+                "message": item.message,
+                "pause_checkpoint_path": getattr(item, "pause_checkpoint_path", ""),
                 "retry_config": (
                     item.retry_config
                     if isinstance(getattr(item, "retry_config", None), dict)
