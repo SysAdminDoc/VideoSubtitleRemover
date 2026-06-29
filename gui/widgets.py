@@ -323,6 +323,7 @@ class ModernButton(tk.Canvas):
         self.pressed = False
         self.hovered = False
         self.style = style
+        self.disabled_reason = ""
 
         self._apply_style(style)
         self.current_bg = self.bg_color
@@ -439,7 +440,13 @@ class ModernButton(tk.Canvas):
             "focused" if self.focused else "",
             "pressed" if self.pressed else "",
         )
-        set_accessible_metadata(self, role="button", label=self.text, state=state)
+        set_accessible_metadata(
+            self,
+            role="button",
+            label=self.text,
+            state=state,
+            description=self.disabled_reason if not self.enabled else "",
+        )
 
     def accessibility_snapshot(self) -> dict:
         return accessible_metadata(self)
@@ -530,8 +537,9 @@ class ModernButton(tk.Canvas):
         if self.enabled and self.command:
             self.command()
 
-    def set_enabled(self, enabled: bool):
+    def set_enabled(self, enabled: bool, reason: str = ""):
         self.enabled = enabled
+        self.disabled_reason = "" if enabled else reason
         self.hovered = False
         self.pressed = False
         if not enabled:

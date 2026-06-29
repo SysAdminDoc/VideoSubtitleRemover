@@ -135,6 +135,15 @@ class GuiSmokeTests(unittest.TestCase):
         try:
             app.root.update_idletasks()
 
+            self.assertIn(
+                "Select a queue item",
+                app.preview_action_hint.cget("text"),
+            )
+            self.assertIn(
+                "Select a queued item",
+                app.preview_mask_btn.accessibility_snapshot()["description"],
+            )
+
             slider_meta = app._settings_sliders[0].accessibility_snapshot()
             self.assertEqual(slider_meta["role"], "slider")
             self.assertTrue(slider_meta["label"])
@@ -173,6 +182,16 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIn("42% complete", row_meta["value"])
             self.assertIn("Cleaning frame 12", row_meta["description"])
             row.destroy()
+
+            app._set_preview_unavailable(
+                "Preview unavailable",
+                "The file could not be read.",
+                label="No frame available",
+            )
+            self.assertEqual(app.preview_title_label.cget("text"), "Preview unavailable")
+            self.assertEqual(app.preview_meta_label.cget("text"), "The file could not be read.")
+            self.assertEqual(app._preview_label.cget("text"), "No frame available")
+            self.assertEqual(app.preview_status_chip.cget("text"), "Needs attention")
         finally:
             self._destroy_app(app)
 
@@ -270,6 +289,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIs(app._get_selected_queue_item(), item)
             self.assertTrue(app.preview_mask_btn.enabled)
             self.assertTrue(app.preview_inpaint_btn.enabled)
+            self.assertIn("Preview tools are ready", app.preview_action_hint.cget("text"))
         finally:
             self._destroy_app(app)
 

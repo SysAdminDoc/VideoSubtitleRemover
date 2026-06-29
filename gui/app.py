@@ -969,6 +969,35 @@ class VideoSubtitleRemoverApp:
             self._preview_label.config(text="", image="")
             self._preview_photo = None
 
+    def _set_preview_unavailable(
+        self,
+        title: str,
+        body: str,
+        *,
+        label: str = "Preview unavailable",
+        tone: str = "warning",
+    ):
+        """Show a calm, actionable preview failure state."""
+        self._stop_throbber()
+        self._preview_photo = None
+        self.preview_title_label.config(text=title)
+        self.preview_meta_label.config(text=body)
+        self._preview_label.config(text=label, image="")
+
+        tone_map = {
+            "error": ("Needs attention", Theme.ERROR, Theme.ERROR_BG),
+            "warning": ("Needs attention", Theme.WARNING, Theme.WARNING_BG),
+            "info": ("Info", Theme.INFO, Theme.INFO_BG),
+        }
+        chip_text, chip_fg, chip_bg = tone_map.get(
+            tone,
+            ("Waiting", Theme.TEXT_MUTED, Theme.BG_TERTIARY),
+        )
+        try:
+            self.preview_status_chip.config(text=chip_text, fg=chip_fg, bg=chip_bg)
+        except Exception:
+            pass
+
     @staticmethod
     def _hex_to_rgb(hex_str: str):
         hex_str = hex_str.lstrip('#')
@@ -997,16 +1026,44 @@ class VideoSubtitleRemoverApp:
         if hasattr(self, "start_btn"):
             can_stop = active_thread and not self._stop_requested
             can_start = (not batch_busy) and has_queue
-            self.start_btn.set_enabled(can_stop or can_start)
+            if can_stop or can_start:
+                start_reason = ""
+            elif not has_queue:
+                start_reason = "Add media to the queue before starting."
+            elif self._stop_requested:
+                start_reason = "Stop is already in progress."
+            else:
+                start_reason = "The batch is already running."
+            self.start_btn.set_enabled(can_stop or can_start, reason=start_reason)
         if hasattr(self, "open_output_btn"):
-            self.open_output_btn.set_enabled(has_complete)
+            self.open_output_btn.set_enabled(
+                has_complete,
+                reason="No completed outputs are available yet.",
+            )
         if hasattr(self, "retry_btn"):
-            self.retry_btn.set_enabled((not batch_busy) and has_retry)
+            self.retry_btn.set_enabled(
+                (not batch_busy) and has_retry,
+                reason=(
+                    "Wait for the current batch to finish."
+                    if batch_busy else "No failed or stopped items need retry."
+                ),
+            )
         if hasattr(self, "clear_btn"):
-            self.clear_btn.set_enabled((not batch_busy) and has_queue)
+            self.clear_btn.set_enabled(
+                (not batch_busy) and has_queue,
+                reason=(
+                    "Wait for the current batch to finish."
+                    if batch_busy else "The queue is already empty."
+                ),
+            )
         if hasattr(self, "repeat_btn"):
             self.repeat_btn.set_enabled(
-                (not batch_busy) and self._last_completed_config() is not None)
+                (not batch_busy) and self._last_completed_config() is not None,
+                reason=(
+                    "Wait for the current batch to finish."
+                    if batch_busy else "Run a batch first to repeat its settings."
+                ),
+            )
         if hasattr(self, "batch_label") and not batch_busy:
             pending = sum(1 for item in self.queue if item.status == ProcessingStatus.IDLE)
             if pending:
@@ -1091,6 +1148,8 @@ class VideoSubtitleRemoverApp:
         if mode == self._layout_mode:
             if hasattr(self, "preview_meta_label"):
                 self.preview_meta_label.config(wraplength=520 if mode == "stacked" else 360)
+            if hasattr(self, "preview_action_hint"):
+                self.preview_action_hint.config(wraplength=520 if mode == "stacked" else 360)
             if hasattr(self, "header_guidance_body"):
                 self.header_guidance_body.config(wraplength=520 if mode == "stacked" else 680)
             if hasattr(self, "status_hint"):
@@ -1160,6 +1219,8 @@ class VideoSubtitleRemoverApp:
             self.status_hint.pack(side="right")
 
         self.preview_meta_label.config(wraplength=520 if stacked else 360)
+        if hasattr(self, "preview_action_hint"):
+            self.preview_action_hint.config(wraplength=520 if stacked else 360)
         self.header_guidance_body.config(wraplength=520 if stacked else 680)
         self.status_hint.config(wraplength=520 if stacked else 360)
         self._render_header_chips()
@@ -1266,13 +1327,32 @@ class VideoSubtitleRemoverApp:
             return
         selected = self._get_selected_queue_item()
         can_preview = bool(selected and PIL_AVAILABLE)
+        if self.is_processing:
+            unavailable_reason = "Preview tools are locked while a batch is running."
+        elif not selected:
+            unavailable_reason = "Select a queued item to enable preview tools."
+        elif not PIL_AVAILABLE:
+            unavailable_reason = "Install Pillow to enable image preview tools."
+        else:
+            unavailable_reason = ""
+
         if hasattr(self, "preview_region_btn"):
-            self.preview_region_btn.set_enabled(not self.is_processing)
-        self.preview_mask_btn.set_enabled(bool(selected) and not self.is_processing)
-        self.preview_zoom_btn.set_enabled(can_preview)
+            self.preview_region_btn.set_enabled(
+                not self.is_processing,
+                reason="Wait for the active batch to finish before editing regions.",
+            )
+        self.preview_mask_btn.set_enabled(
+            bool(selected) and not self.is_processing,
+            reason=unavailable_reason,
+        )
+        self.preview_zoom_btn.set_enabled(
+            can_preview,
+            reason=unavailable_reason,
+        )
         if hasattr(self, "preview_inpaint_btn"):
             self.preview_inpaint_btn.set_enabled(
-                bool(selected) and not self.is_processing
+                bool(selected) and not self.is_processing,
+                reason=unavailable_reason,
             )
         if hasattr(self, "preview_ab_btn"):
             ab_ready = bool(
@@ -1280,11 +1360,42 @@ class VideoSubtitleRemoverApp:
                 and selected.status == ProcessingStatus.COMPLETE
                 and Path(selected.output_path).exists()
             )
-            self.preview_ab_btn.set_enabled(ab_ready)
+            if ab_ready:
+                ab_reason = ""
+            elif self.is_processing:
+                ab_reason = "Wait for the active batch to finish before comparing output."
+            elif not selected:
+                ab_reason = "Select a completed queue item to compare source and output."
+            elif selected.status != ProcessingStatus.COMPLETE:
+                ab_reason = "Finish processing this item before using A/B compare."
+            else:
+                ab_reason = "The cleaned output file is not available on disk."
+            self.preview_ab_btn.set_enabled(ab_ready, reason=ab_reason)
         editing_region = bool(getattr(self, "_preview_region_editor_state", None))
         self._preview_label.config(
             cursor="crosshair" if editing_region else ("hand2" if can_preview else "")
         )
+
+        if hasattr(self, "preview_action_hint"):
+            if self.is_processing:
+                hint = "Preview tools are locked while the batch is running."
+                hint_fg = Theme.WARNING
+            elif not selected:
+                hint = "Select a queue item to enable mask review, test cleanup, and zoom."
+                hint_fg = Theme.TEXT_MUTED
+            elif not PIL_AVAILABLE:
+                hint = "Install Pillow to enable previews and visual inspection tools."
+                hint_fg = Theme.WARNING
+            elif (
+                selected.status == ProcessingStatus.COMPLETE
+                and Path(selected.output_path).exists()
+            ):
+                hint = "Preview tools are ready. Use A/B compare to inspect the cleaned output."
+                hint_fg = Theme.SUCCESS
+            else:
+                hint = "Preview tools are ready. Review the mask or test cleanup before starting."
+                hint_fg = Theme.TEXT_SECONDARY
+            self.preview_action_hint.config(text=hint, fg=hint_fg)
 
         if selected:
             badge = status_ui(selected.status)
@@ -1579,11 +1690,14 @@ class VideoSubtitleRemoverApp:
                 else:
                     frame = None
                 if frame is None:
-                    self.root.after(0, lambda: (
-                        self._stop_throbber(),
-                        self.preview_title_label.config(text="Preview unavailable"),
-                        self.preview_meta_label.config(text="The selected file could not be read."),
-                    ))
+                    self.root.after(
+                        0,
+                        lambda: self._set_preview_unavailable(
+                            "Test cleanup unavailable",
+                            "The selected file could not be read. Verify the file path and add it again.",
+                            label="No frame available",
+                        ),
+                    )
                     return
 
                 # Build a backend config snapshot from the item.
@@ -1635,12 +1749,16 @@ class VideoSubtitleRemoverApp:
                 self.root.after(0, lambda: self._apply_inpaint_preview(
                     pil, meta, request_id, item.id))
             except Exception as exc:
-                logger.warning(f"Inpaint preview failed: {exc}")
-                self.root.after(0, lambda: (
-                    self._stop_throbber(),
-                    self.preview_title_label.config(text="Inpaint preview failed"),
-                    self.preview_meta_label.config(text=str(exc)),
-                ))
+                logger.warning("Inpaint preview failed", exc_info=True)
+                self.root.after(
+                    0,
+                    lambda: self._set_preview_unavailable(
+                        "Test cleanup failed",
+                        "The cleanup preview could not be rendered. Check the activity log, then try Review mask or Set region.",
+                        label="Cleanup preview failed",
+                        tone="error",
+                    ),
+                )
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -2748,6 +2866,22 @@ class VideoSubtitleRemoverApp:
         self.preview_ab_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_ab_btn,
                 "Open a frame slider that wipes between source and cleaned output.")
+
+        self.preview_action_hint = tk.Label(
+            self._preview_frame,
+            text="Select a queue item to enable preview tools.",
+            font=f(Theme.F_META),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_MUTED,
+            wraplength=360,
+            justify="left",
+            anchor="w",
+        )
+        self.preview_action_hint.pack(
+            fill="x",
+            padx=Theme.S_LG,
+            pady=(Theme.S_XS, 0),
+        )
 
         self._preview_label = tk.Label(self._preview_frame, bg=Theme.BG_CARD,
                                        text="", font=f(Theme.F_META),
@@ -4278,7 +4412,10 @@ class VideoSubtitleRemoverApp:
             )
             return True
         if not PIL_AVAILABLE:
-            self._update_status("Pillow required for preview region editing", "warning")
+            self._update_status(
+                "Install Pillow to enable preview region editing",
+                "warning",
+            )
             return False
 
         try:
@@ -4346,7 +4483,10 @@ class VideoSubtitleRemoverApp:
             return True
         except Exception as exc:
             logger.warning("Inline region editor failed", exc_info=True)
-            self._update_status(f"Region editor unavailable: {exc}", "warning")
+            self._update_status(
+                "Inline region editor unavailable. Opening the full selector is still available.",
+                "warning",
+            )
             return True
 
     def _clear_preview_region_editor(self):
@@ -4531,7 +4671,10 @@ class VideoSubtitleRemoverApp:
         if not source_path:
             return
         if not PIL_AVAILABLE:
-            self._update_status("Pillow required for region selector")
+            self._update_status(
+                "Install Pillow to enable the visual region selector",
+                "warning",
+            )
             return
 
         import cv2 as _cv2
@@ -4541,6 +4684,10 @@ class VideoSubtitleRemoverApp:
         if is_video and not cap.isOpened():
             logger.error("Could not open video for region selection")
             cap.release()
+            self._update_status(
+                "The selected video could not be opened for region selection",
+                "warning",
+            )
             return
         try:
             if is_video:
@@ -4555,11 +4702,19 @@ class VideoSubtitleRemoverApp:
                     # release here or the capture leaks.
                     logger.error("Could not read video frame for region selection")
                     cap.release()
+                    self._update_status(
+                        "The selected video did not provide a readable frame",
+                        "warning",
+                    )
                     return
             else:
                 frame = safe_imread(source_path)
                 if frame is None:
                     logger.error("Could not read image for region selection")
+                    self._update_status(
+                        "The selected image could not be read for region selection",
+                        "warning",
+                    )
                     return
                 frame_count, fps = 1, 30.0
 
@@ -5837,9 +5992,11 @@ class VideoSubtitleRemoverApp:
             self._stop_throbber()
         self._set_selected_queue_item(item.id)
         if not PIL_AVAILABLE:
-            self.preview_title_label.config(text="Preview unavailable")
-            self.preview_meta_label.config(text="Install Pillow to enable image previews.")
-            self._preview_label.config(text="Install Pillow for previews", image="")
+            self._set_preview_unavailable(
+                "Preview unavailable",
+                "Install Pillow to enable image previews.",
+                label="Preview tools need Pillow",
+            )
             return
 
         try:
@@ -5900,13 +6057,11 @@ class VideoSubtitleRemoverApp:
                         def _no_frame():
                             if preview_request_id != self._preview_request_id:
                                 return
-                            self._stop_throbber()
-                            self.preview_title_label.config(
-                                text="Preview unavailable")
-                            self.preview_meta_label.config(
-                                text="The selected file could not be read.")
-                            self._preview_label.config(
-                                text="Could not read file", image="")
+                            self._set_preview_unavailable(
+                                "Preview unavailable",
+                                "The selected file could not be read. Verify the file path and add it again.",
+                                label="No frame available",
+                            )
                         self.root.after(0, _no_frame)
                         return
 
@@ -5922,25 +6077,28 @@ class VideoSubtitleRemoverApp:
                             item_output, item_quality, item_soft,
                             preview_request_id, max_w, max_h,
                             _cv2, to_pil, load_first_frame_raw)
-                except Exception as exc:
+                except Exception:
+                    logger.warning("Preview render failed", exc_info=True)
                     def _err():
                         if preview_request_id != self._preview_request_id:
                             return
-                        self._stop_throbber()
-                        self.preview_title_label.config(
-                            text="Preview unavailable")
-                        self.preview_meta_label.config(
-                            text="An unexpected preview error occurred.")
-                        self._preview_label.config(
-                            text=f"Preview error: {exc}", image="")
+                        self._set_preview_unavailable(
+                            "Preview unavailable",
+                            "The preview failed before a frame could be rendered. Check the activity log, then try Set region.",
+                            label="Preview failed",
+                            tone="error",
+                        )
                     self.root.after(0, _err)
 
             threading.Thread(target=_preview_bg, daemon=True).start()
-        except Exception as e:
-            self.preview_title_label.config(text="Preview unavailable")
-            self.preview_meta_label.config(
-                text="An unexpected preview error occurred.")
-            self._preview_label.config(text=f"Preview error: {e}", image="")
+        except Exception:
+            logger.warning("Preview setup failed", exc_info=True)
+            self._set_preview_unavailable(
+                "Preview unavailable",
+                "The preview could not be prepared. Check the activity log, then try adding the file again.",
+                label="Preview failed",
+                tone="error",
+            )
 
     def _preview_bg_mask(self, raw_frame, lang, threshold, sub_areas,
                           timed_regions_configured,
@@ -5991,15 +6149,18 @@ class VideoSubtitleRemoverApp:
                     image=self._preview_photo,
                     text=f"{engine}: {n} detected" if n else "No text detected")
             self.root.after(0, _update_mask)
-        except Exception as exc:
+        except Exception:
+            logger.warning("Detection preview failed", exc_info=True)
             def _show_mask_error():
                 if (preview_request_id != self._preview_request_id
                         or self._selected_queue_item_id != item_id):
                     return
-                self._stop_throbber()
-                self.preview_title_label.config(text="Detection preview failed")
-                self.preview_meta_label.config(text="The detection preview could not be generated.")
-                self._preview_label.config(text=f"Detection error: {exc}", image="")
+                self._set_preview_unavailable(
+                    "Detection preview failed",
+                    "The mask preview could not be generated. Check the activity log, then draw a manual region if needed.",
+                    label="Mask preview failed",
+                    tone="error",
+                )
             self.root.after(0, _show_mask_error)
 
     def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,

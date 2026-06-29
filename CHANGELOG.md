@@ -143,6 +143,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   accessibility metadata, stronger focus/disabled states, screen-reader
   announcements for important changes, and a better default next action after
   batch completion.
+- **Preview-state clarity.** Disabled preview and batch actions now carry
+  actionable reasons, the preview card explains what to do next, and preview,
+  test-cleanup, and region-selector failures show calm recovery copy while
+  technical details stay in the activity log.
 - **Backend status panel.** The Help dialog and support bundle now show OCR
   backends, inpaint backends, ONNX/OpenCV provider state, required model-file
   presence, hash status, and the next setup action.
