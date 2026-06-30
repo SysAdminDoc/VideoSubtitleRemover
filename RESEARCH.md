@@ -1,98 +1,90 @@
 # Research - Video Subtitle Remover Pro
 
 ## Executive Summary
-Video Subtitle Remover Pro is a Windows-first local desktop and CLI tool for removing burned-in subtitles, text watermarks, and logo-like overlays from videos and images. Verified: the project is already strong in offline/privacy-preserving processing, OCR/inpaint fallback breadth, FFmpeg capability reporting, release evidence, quality gates, support bundles, timed regions, and deterministic reference clips. The highest-value direction is still trust and recovery: ship current artifacts, harden the frozen-build path, make setup repair unattended, preload/report CUDA runtime state before ONNX sessions, turn corpus intake into enforceable data, and continue splitting the largest GUI/backend orchestration surfaces.
-
-Top opportunities in priority order:
-- Verified: publish current `v3.17.3` release artifacts; public GitHub releases still show `v3.17.1` as latest while local `APP_VERSION`, README, and CHANGELOG are at `3.17.3`.
-- Verified: add PyInstaller multiprocessing/frozen-build guards; `VideoSubtitleRemover.py` does not call `multiprocessing.freeze_support()` before imports, `build_exe.bat` passes no runtime hook, and `VideoSubtitleRemoverPro.spec` has `runtime_hooks=[]`.
-- Verified: make setup repair non-interactive; `setup.py` prompts on an existing `venv`, while launchers can leave users with a broken environment and no automated repair path.
-- Verified: preload and record ONNX Runtime CUDA DLL state before CUDA provider sessions; dependency status detects `preload_dlls`, but `backend/inpainters_onnx.py` creates sessions without invoking it.
-- Verified: detect conflicting OpenCV wheel installs and imported `cv2` ownership before runtime drift.
-- Verified: add edge-case issue intake plus manifest license validation for real redistributable clips.
-- Verified: add source-aware output quality preflight warnings before long runs.
-- Verified: record per-stage timings in batch reports and support bundles.
-- Verified: extend accessibility and gettext coverage through the main GUI.
-- Verified: extract focused controllers from `gui/app.py` and the long media state machine.
+Video Subtitle Remover Pro is a Windows-first local desktop and CLI tool for removing burned-in subtitles, text watermarks, and logo-like overlays without uploading media. Verified: the project is now strongest in offline processing, OCR/inpaint fallback breadth, quality gates, support bundles, pause/resume checkpoints, local model policy, release evidence, and deterministic synthetic reference clips. The highest-value direction is to turn its advanced claims into portable proof: add frozen-app FFmpeg smoke evidence, per-output reproducibility sidecars, real redistributable reference clips, GUI screenshot regression checks, dependency/security drift reporting, pseudo-locale/RTL render tests, stronger NLE interchange, adapter conformance dry-runs, and optional brush-level mask correction.
 
 ## Product Map
-- Core workflows: queue files/folders, choose cleanup preset/mode/device/language, set automatic or timed manual masks, preview masks/inpainted frames, run batch cleanup, review quality gates, export SRT/mask/NLE/cache/support artifacts.
+- Core workflows: import files/folders, choose mode/device/language/preset, set automatic or timed mask regions, preview masks/inpainted frames, run or pause a batch, review quality gates, export SRT/mask/NLE/cache/support artifacts.
 - User personas: Windows video editors, archivists/restoration users, privacy-sensitive local users, batch operators, and CLI users who need reproducible diagnostics.
-- Platforms and distribution: Python 3.10-3.13, Tkinter GUI, CLI, Windows launchers, local PyInstaller/NSIS build scripts, winget-ready metadata, optional CUDA/DirectML/OpenVINO/ONNX/Paddle/RapidOCR paths.
+- Platforms and distribution: Python 3.10-3.13, Tkinter GUI, CLI, Windows launchers, PyInstaller/NSIS build scripts, winget-ready metadata, optional CUDA/DirectML/OpenVINO/ONNX/Paddle/RapidOCR paths.
 - Key integrations and data flows: FFmpeg/FFprobe ingest/encode/profiles, OpenCV/Pillow media I/O, RapidOCR/PaddleOCR/EasyOCR/Surya/OpenCV detection, TBE/LaMa/registered inpainting, JSON settings/presets/checkpoints/reports, redacted support bundles, release SBOM/advisories.
 
 ## Competitive Landscape
-- YaoFANGUK/video-subtitle-remover: ships large Windows/macOS packages and has active demand around GPU packaging, install clarity, pause/progress saving, dynamic watermark quality, bitrate/blur, and system requirements. Learn from its package matrix and issue signals; avoid unresolved startup/install ambiguity.
-- VideOCR and RapidVideOCR: specialize in hard-subtitle extraction to SRT, language breadth, crop/time controls, and isolated install paths. Learn from explicit extraction/review controls; avoid making cloud OCR the default.
-- Subtitle Edit: mature subtitle correction/OCR workflow with broad format literacy and review UX. Learn from review/edit affordances for extracted text; avoid turning VSR into a general subtitle editor before cleanup/recovery gaps are closed.
-- IOPaint: strong local inpainting/model visibility and optional backend management. Learn from clear model state and batch image cleanup; avoid general image-editing drift.
-- ProPainter, VACE, SAM2, and related research projects: strong temporal/mask quality but heavy weights, license, and adapter-trust constraints matter. Keep these as opt-in, hash/path-gated research adapters.
-- PaddleOCR and RapidOCR: active OCR stacks with PP-OCRv6, OpenVINO, and packaging churn. Keep dependency caps, provider reporting, model-file evidence, and fallback messaging explicit.
-- Media.io/AniEraser-style commercial tools: sell one-click removal, manual brush workflows, browser/mobile access, and quality claims. Learn confidence-building previews and quality language; avoid upload-first workflows.
+- YaoFANGUK/video-subtitle-remover: does local hard-subtitle/text-watermark removal with large prebuilt packages and broad community demand. Learn from its simple packaged entry points and issue volume; avoid opaque backend/package failures.
+- VideOCR and RapidVideOCR: focus on hard-subtitle extraction to SRT with language, crop, and time controls. Learn from explicit review/extraction workflows; avoid making cloud OCR the default.
+- Subtitle Edit: mature subtitle review/editing with broad format literacy and a polished correction loop. Learn from review affordances and format confidence; avoid becoming a general subtitle editor before cleanup proof improves.
+- IOPaint: strong local inpainting UX, model visibility, and manual correction affordances. Learn from model-state clarity and brush workflows; avoid drifting into full image-editor complexity.
+- ProPainter, STTN, E2FGVI, CoTracker, SAM2, SEDiT, and CLEAR: show that temporal propagation, tracking, and mask-free subtitle erasure are the quality frontier. Keep integrations gated by license, weight provenance, hash policy, and local benchmarks.
+- PaddleOCR, RapidOCR, ONNX Runtime, OpenVINO, and DirectML: active dependency churn creates capability and packaging wins, but also release-risk. Keep local provider reporting, pinned exceptions, and fallback messaging explicit.
+- Media.io/AniEraser, HitPaw, and Kapwing-style commercial tools: sell one-click cleanup, manual brush correction, preview confidence, and browser/mobile convenience. Learn preview/proof language and targeted correction UX; avoid upload-first workflows that conflict with the privacy model.
 
 ## Security, Privacy, and Reliability
-- Verified: GitHub latest release is `v3.17.1`, but local docs/config are `3.17.3`; this weakens installer trust after prior public issues about false-positive trust, missing RapidOCR packaged data, and broken GUI basics.
-- Verified: `VideoSubtitleRemover.py` lacks an early `multiprocessing.freeze_support()` call, `build_exe.bat` has no `--runtime-hook`, and `VideoSubtitleRemoverPro.spec` has `runtime_hooks=[]`; PyInstaller documents recursive spawn loops for frozen apps that use multiprocessing through dependencies.
-- Verified: PyInstaller also warns that frozen Windows apps can taint child-process DLL search paths; VSR shells out to FFmpeg/FFprobe extensively, so release smoke should cover sanitized external-process launches, not only GUI construction.
-- Verified: `setup.py` still asks `Recreate? (y/N)` when `venv` exists; this can block launcher-driven setup or leave a stale environment unrepaired.
-- Verified: `backend/dependency_caps.py` detects whether `onnxruntime.preload_dlls` exists, but ONNX session creation in `backend/inpainters_onnx.py` and `backend/inpainters/lama.py` does not preload CUDA/cuDNN DLLs before `CUDAExecutionProvider`.
-- Verified: OpenCV/libpng mitigation and safe PNG routing exist; remaining OpenCV risk is install drift between `opencv-python`, `opencv-contrib-python`, and headless variants.
-- Verified: `docs/edge_case_corpus.md` requires CC0/public-domain real clips, settings, screenshots, and license declarations, but `.github/ISSUE_TEMPLATE/` only has bug and feature forms.
-- Verified: quality gates produce review/retry suggestions, but no preflight warns when selected codec/quality is likely below the source before a long run.
+- Verified: `backend/release_verification.py` records package evidence, but the strongest frozen-app risk left is an actual packaged EXE invoking external `ffmpeg`/`ffprobe`; PyInstaller documents child-process DLL search-path hazards and VSR shells out extensively through `backend/io.py`, `backend/remux.py`, and `backend/processor.py`.
+- Verified: `backend/batch_report.py` creates batch-level JSON/Markdown summaries, but outputs do not yet carry their own reproducibility sidecar tying source fingerprint, config, engine/provider, model hashes, stage timings, quality gate, checkpoint state, and command provenance to the file.
+- Verified: `tests/clips/manifest.json` contains deterministic MIT fixtures, while `tests/test_mask_free_benchmark.py` and `tests/test_static_logo_benchmark.py` still prove benchmark schemas with placeholder bytes; real-world quality claims need public-domain/CC clips with source metadata and baselines.
+- Verified: `tests/test_gui_smoke.py` exercises Tk widgets headlessly, but there is no committed visual regression gate for empty queue, queued item, preview-unavailable, quality-review, or backend-status states.
+- Verified: `backend/i18n.py`, `locale/vsr.pot`, and `rtl_layout` exist; tests cover pass-through catalog behavior, but no pseudo-locale or RTL rendered smoke proves translated text still fits.
+- Verified: `backend/nle_sidecar.py` explicitly emits a one-event EDL/FCPXML stub and does not round-trip transitions, audio tracks, dimensions, or multiple processed ranges.
+- Verified: `backend/adapter_manifest.py` and many opt-in adapter tests fail closed, but adapter conformance is spread across tests/support/release evidence instead of one dry-run matrix that operators can inspect.
+- Likely: current offline/local posture is a competitive advantage against commercial upload-first tools; recommendations preserve that default.
 
 ## Architecture Assessment
-- `gui/app.py` is about 7,556 lines and owns onboarding, queue, preview, settings, dialogs, cache import/export, support bundle, quality review, region selector, and processing orchestration; controller extraction remains the safest risk reducer.
-- `backend/processor.py`, `backend/cli.py`, and `backend/io.py` still hold long-running media orchestration and subprocess edges; stage timing and external-process smoke evidence would make failures diagnosable.
-- `VideoSubtitleRemoverPro.spec` is stale relative to `build_exe.bat`: it omits optional imports/data collection, release evidence arguments, and runtime hooks, so contributors can build a weaker package by using the spec directly.
-- `backend/a11y.py` provides UIA announcements and `gui/widgets.py` has focusable custom controls, but major dialogs and Canvas widgets need broader state/focus tests.
-- `backend/i18n.py` and `locale/vsr.pot` exist, but most GUI strings are not wrapped and there is no catalog smoke proving a translated main screen.
-- Test gaps: frozen-build multiprocessing/runtime-hook evidence, ONNX CUDA preload behavior, non-interactive setup repair, OpenCV wheel-conflict diagnosis, real-clip intake schema, stage-timing aggregation, output-quality preflight decisions, i18n extraction, and accessibility/focus traversal.
-- Coverage note: security, accessibility, i18n/l10n, observability, testing, docs, distribution/packaging, plugin/adapter ecosystem, mobile, offline resilience, multi-user service, migration paths, and upgrade strategy were either promoted to ROADMAP or rejected below.
+- `gui/app.py` remains a large shell/shared-state surface even after controller extraction; visual regression and pseudo-locale tests are safer next steps than a framework rewrite.
+- `backend/processor.py`, `backend/cli.py`, and `backend/io.py` still concentrate long-running media orchestration, subprocess edges, and final artifact writes; per-output sidecars and frozen external-process smoke target these boundaries directly.
+- `backend/batch_report.py` is the right source of truth for planned/final status, quality preflight, stage timings, and quality-gate fields; sidecar work should reuse it rather than inventing parallel provenance.
+- `backend/reference_corpus.py`, `backend/static_logo_benchmark.py`, and `backend/mask_free_benchmark.py` already enforce hash/license schema gates; the missing work is ingesting real redistributable clips and baseline outputs.
+- `backend/adapter_manifest.py`, `backend/remote_model_policy.py`, and `backend/release_verification.py` form a good trust boundary for optional models; a single adapter conformance command would make regressions visible without importing untrusted code.
+- Coverage audit: security, accessibility, i18n/l10n, observability, testing, docs, distribution/packaging, plugin/adapter ecosystem, offline resilience, migration paths, and upgrade strategy are represented in the roadmap additions. Mobile and multi-user service work are rejected because they weaken the local Windows batch-tool focus.
 
 ## Rejected Ideas
 - Cloud upload/API cleanup from Media.io/AniEraser-style tools: conflicts with the local privacy model and current offline architecture.
-- Default bundled ProPainter, DiffuEraser, CLEAR, SEDiT, CoCoCo, SAM 3, ROSE, or MiniMax-Remover paths: blocked by non-commercial terms, missing weights/code, unverified assets, or unavailable releases.
-- Google Lens/cloud hybrid OCR from VideOCR-style workflows: useful for extraction accuracy but contradicts local/offline defaults.
-- Full GUI framework rewrite: the Tk app is large but working; controller extraction has lower regression risk.
-- General plugin marketplace: the registry/adapter boundary already exists; marketplace work should wait until release and adapter trust are quieter.
-- Mobile app or hosted multi-user service: current leverage is Windows desktop reliability, artifact trust, and local batch recovery.
+- Default bundled ProPainter, DiffuEraser, CLEAR, SEDiT, SAM2/SAM3-family, or other heavy research models: license, weight, hardware, or provenance constraints make them adapter/benchmark candidates only.
+- Google Lens/cloud hybrid OCR from VideOCR-style workflows: useful for extraction accuracy, but it would make local/offline behavior conditional on external services.
+- Full GUI framework rewrite: Tk is large but working; targeted screenshot, state, and controller tests reduce regression risk faster.
+- General plugin marketplace: adapter manifests already provide a trust boundary; marketplace UX should wait until dry-run conformance and release proof are stronger.
+- Mobile app or hosted multi-user service: commercial competitors cover convenience there, but this project's edge is local Windows processing, artifact trust, and batch recovery.
 - GitHub Actions/Dependabot-style automation: project rules keep builds, tests, dependency updates, and releases local.
 
 ## Sources
-### Project and Issues
+### Project
 - https://github.com/SysAdminDoc/VideoSubtitleRemover
-- https://api.github.com/repos/SysAdminDoc/VideoSubtitleRemover/releases?per_page=5
-- https://api.github.com/repos/SysAdminDoc/VideoSubtitleRemover/issues?state=all&per_page=20
 
 ### OSS and Adjacent Tools
 - https://github.com/YaoFANGUK/video-subtitle-remover
-- https://api.github.com/repos/YaoFANGUK/video-subtitle-remover/releases?per_page=5
-- https://github.com/YaoFANGUK/video-subtitle-remover/issues/200
-- https://github.com/YaoFANGUK/video-subtitle-remover/issues/228
-- https://github.com/YaoFANGUK/video-subtitle-remover/issues/231
-- https://github.com/timminator/VideOCR
-- https://github.com/SWHL/RapidVideOCR
-- https://github.com/SubtitleEdit/subtitleedit
 - https://github.com/Sanster/IOPaint
+- https://github.com/SWHL/RapidVideOCR
+- https://github.com/timminator/VideOCR
+- https://github.com/SubtitleEdit/subtitleedit
 - https://github.com/sczhou/ProPainter
+- https://github.com/MCG-NKU/E2FGVI
+- https://github.com/facebookresearch/co-tracker
 - https://github.com/facebookresearch/sam2
-- https://github.com/ali-vilab/VACE
+- https://github.com/advimman/lama
 
-### Dependencies, Platform, and Security
+### Commercial Tools
+- https://anieraser.media.io/remove-subtitles-from-video.html
+- https://www.hitpaw.com/remove-watermark.html
+- https://www.kapwing.com/tools/remove-subtitles-from-video
+
+### Research
+- https://arxiv.org/abs/2605.14894
+- https://arxiv.org/abs/2603.21901
+- https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal
+- https://arxiv.org/abs/2501.10018
+- https://arxiv.org/abs/2007.10247
+
+### Dependencies, Platform, Security, and Fixtures
 - https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html
-- https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html
-- https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0
-- https://github.com/RapidAI/RapidOCR/releases/tag/v3.9.0
+- https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html
+- https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html
+- https://ffmpeg.org/ffmpeg-filters.html
+- https://github.com/PaddlePaddle/PaddleOCR/releases
+- https://github.com/RapidAI/RapidOCR/releases
+- https://github.com/microsoft/onnxruntime/releases
 - https://github.com/opencv/opencv-python/issues/1186
 - https://nvd.nist.gov/vuln/detail/CVE-2026-22801
-- https://nvd.nist.gov/vuln/detail/CVE-2025-32434
-- https://pillow.readthedocs.io/en/stable/releasenotes/12.2.0.html
-
-### Commercial and Research
-- https://anieraser.media.io/remove-subtitles-from-video.html
-- https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal
-- https://arxiv.org/abs/2605.14894
-- https://arxiv.org/abs/2503.05639
+- https://www.nasa.gov/nasa-brand-center/images-and-media/
+- https://www.loc.gov/free-to-use/
 
 ## Open Questions
-None that block prioritization. Real-clip selection still needs license validation during implementation.
+None that block prioritization. Real-clip ingestion still requires per-clip license proof during implementation.
