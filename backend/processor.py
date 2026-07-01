@@ -582,6 +582,41 @@ class SubtitleRemover:
 
         return mask
 
+    def _apply_manual_mask_corrections(
+        self, mask: np.ndarray, frame_seconds: float,
+    ) -> np.ndarray:
+        corrections = getattr(self.config, "manual_mask_corrections", None)
+        if not corrections:
+            return mask
+        h, w = mask.shape[:2]
+        for correction in corrections:
+            if not isinstance(correction, dict):
+                continue
+            start = float(correction.get("start", 0.0))
+            end = float(correction.get("end", 0.0))
+            if frame_seconds < start:
+                continue
+            if end > 0.0 and frame_seconds >= end:
+                continue
+            polygons = correction.get("polygons")
+            if not isinstance(polygons, (list, tuple)):
+                continue
+            for poly_coords in polygons:
+                if not isinstance(poly_coords, (list, tuple)) or len(poly_coords) < 6:
+                    continue
+                try:
+                    pts = np.array(
+                        [(int(poly_coords[i]), int(poly_coords[i + 1]))
+                         for i in range(0, len(poly_coords) - 1, 2)],
+                        dtype=np.int32,
+                    )
+                    pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
+                    pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
+                    cv2.fillPoly(mask, [pts], 255)
+                except (TypeError, ValueError, IndexError):
+                    continue
+        return mask
+
     def _refine_masks_with_matanyone(self,
                                      frames: List[np.ndarray],
                                      masks: List[np.ndarray]) -> List[np.ndarray]:
@@ -1066,6 +1101,7 @@ class SubtitleRemover:
             with self._time_stage("mask"):
                 mask = self._create_mask(image.shape, boxes, frame=image,
                                          confidences=confidences)
+                mask = self._apply_manual_mask_corrections(mask, 0.0)
                 [mask] = self._refine_masks_with_matanyone([image], [mask])
             with self._time_stage("inpaint"):
                 [result] = self.inpainter.inpaint([image], [mask])
@@ -1718,6 +1754,9 @@ class SubtitleRemover:
                         else:
                             with self._time_stage("mask"):
                                 fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                        frame_s = (start_frame + frame_idx) / fps if fps > 0 else 0.0
+                        fixed_mask = self._apply_manual_mask_corrections(
+                            fixed_mask, frame_s)
                         frames.append(frame)
                         masks.append(fixed_mask)
                         source_frames.append(source_frame)
@@ -1850,14 +1889,14 @@ class SubtitleRemover:
                     with self._time_stage("mask"):
                         mask = self._create_mask(frame.shape, boxes, frame=frame,
                                                  confidences=det_confs)
-                        # Colour-tuned expansion -- grow the mask to match the
-                        # dominant text colour inside each detected box.
                         if self.config.colour_tune_enable and boxes:
                             mask = _expand_mask_by_color(
                                 frame, mask, boxes,
                                 tolerance=self.config.colour_tune_tolerance,
                                 padding=4,
                             )
+                        frame_s = (start_frame + frame_idx) / fps if fps > 0 else 0.0
+                        mask = self._apply_manual_mask_corrections(mask, frame_s)
                     last_mask = mask
                     if self.config.phash_skip_enable:
                         # Reuse the hash computed above for the skip-check if

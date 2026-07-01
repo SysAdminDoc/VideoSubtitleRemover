@@ -3274,7 +3274,7 @@ class PseudoLocaleRtlSmokeTests(unittest.TestCase):
             "Settings",
             "Preview unavailable",
         ]
-        rtl_mark = "‏"
+        rtl_mark = chr(0x200f)
         previous = i18n._active_translation
         try:
             class _RtlTranslations:
@@ -5906,6 +5906,74 @@ class TempCleanupOnExceptionTests(unittest.TestCase):
             self.assertTrue(os.path.exists(temp))
             _cleanup_temp_output(temp)
             self.assertFalse(os.path.exists(temp))
+
+
+class ManualMaskCorrectionTests(unittest.TestCase):
+    def test_coerce_mask_correction_validates_polygon(self):
+        from backend.config import _coerce_mask_correction
+        valid = {"polygons": [[10, 20, 30, 40, 50, 60]], "start": 0.0, "end": 5.0}
+        result = _coerce_mask_correction(valid)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result["polygons"]), 1)
+        self.assertEqual(result["start"], 0.0)
+        self.assertEqual(result["end"], 5.0)
+
+    def test_coerce_rejects_too_few_points(self):
+        from backend.config import _coerce_mask_correction
+        short = {"polygons": [[10, 20, 30, 40]], "start": 0.0, "end": 0.0}
+        result = _coerce_mask_correction(short)
+        self.assertIsNone(result)
+
+    def test_manual_corrections_apply_to_mask(self):
+        from backend.config import ProcessingConfig
+        from backend.processor import SubtitleRemover
+
+        config = ProcessingConfig(
+            manual_mask_corrections=[
+                {"polygons": [[5, 5, 25, 5, 25, 25, 5, 25]], "start": 0.0, "end": 0.0}
+            ],
+        )
+        remover = SubtitleRemover.__new__(SubtitleRemover)
+        remover.config = config
+        mask = np.zeros((32, 32), dtype=np.uint8)
+        result = remover._apply_manual_mask_corrections(mask, 0.5)
+        self.assertGreater(result.sum(), 0)
+
+    def test_manual_corrections_respect_time_range(self):
+        from backend.config import ProcessingConfig
+        from backend.processor import SubtitleRemover
+
+        config = ProcessingConfig(
+            manual_mask_corrections=[
+                {"polygons": [[5, 5, 25, 5, 25, 25, 5, 25]], "start": 2.0, "end": 5.0}
+            ],
+        )
+        remover = SubtitleRemover.__new__(SubtitleRemover)
+        remover.config = config
+        mask = np.zeros((32, 32), dtype=np.uint8)
+        before = remover._apply_manual_mask_corrections(mask.copy(), 1.0)
+        during = remover._apply_manual_mask_corrections(mask.copy(), 3.0)
+        after = remover._apply_manual_mask_corrections(mask.copy(), 6.0)
+        self.assertEqual(before.sum(), 0)
+        self.assertGreater(during.sum(), 0)
+        self.assertEqual(after.sum(), 0)
+
+    def test_config_round_trip_with_corrections(self):
+        from gui.config import ProcessingConfig as GuiConfig
+        config = GuiConfig(
+            manual_mask_corrections=[
+                {"polygons": [[10, 20, 30, 40, 50, 60]], "start": 0.0, "end": 10.0},
+            ],
+        )
+        serialized = config.to_dict()
+        self.assertIsNotNone(serialized.get("manual_mask_corrections"))
+        restored = GuiConfig.from_dict(serialized)
+        self.assertIsNotNone(restored.manual_mask_corrections)
+        self.assertEqual(len(restored.manual_mask_corrections), 1)
+        self.assertEqual(
+            restored.manual_mask_corrections[0]["polygons"],
+            [[10, 20, 30, 40, 50, 60]],
+        )
 
 
 class AdapterConformanceMatrixTests(unittest.TestCase):

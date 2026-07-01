@@ -183,6 +183,11 @@ class ProcessingConfig:
     # {"rect": (x1,y1,x2,y2), "start": seconds, "end": seconds}; end=0 means
     # open-ended. When present, active rects are selected per video frame.
     subtitle_region_spans: Optional[List[dict]] = None
+    # Freehand/polygon mask corrections tied to a time range. Each entry is
+    # {"polygons": [[x1,y1,x2,y2,...], ...], "start": seconds, "end": seconds};
+    # end=0 means open-ended. Polygons are filled into the mask alongside
+    # automatic detections. Coordinates are in source-frame pixel space.
+    manual_mask_corrections: Optional[List[dict]] = None
 
     # Optional debug artifacts
     export_mask_video: bool = False   # write a B/W mp4 of the per-frame masks
@@ -439,6 +444,41 @@ def _coerce_region_span_list(value) -> Optional[List[dict]]:
     return spans or None
 
 
+def _coerce_mask_correction(value) -> Optional[dict]:
+    if not isinstance(value, dict):
+        return None
+    polygons = value.get("polygons")
+    if not isinstance(polygons, (list, tuple)) or not polygons:
+        return None
+    coerced_polys = []
+    for poly in polygons:
+        if not isinstance(poly, (list, tuple)) or len(poly) < 6:
+            continue
+        try:
+            coerced_polys.append([int(round(float(c))) for c in poly])
+        except (TypeError, ValueError):
+            continue
+    if not coerced_polys:
+        return None
+    try:
+        start = max(0.0, float(value.get("start", 0.0)))
+        end = max(0.0, float(value.get("end", 0.0)))
+    except (TypeError, ValueError):
+        start, end = 0.0, 0.0
+    return {"polygons": coerced_polys, "start": start, "end": end}
+
+
+def _coerce_mask_correction_list(value) -> Optional[List[dict]]:
+    if not isinstance(value, (list, tuple)):
+        return None
+    corrections = []
+    for item in value:
+        c = _coerce_mask_correction(item)
+        if c:
+            corrections.append(c)
+    return corrections or None
+
+
 _MODE_ALIASES = {
     "sttn": InpaintMode.STTN,
     "lama": InpaintMode.LAMA,
@@ -508,6 +548,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.subtitle_areas = _coerce_rect_list(config.subtitle_areas)
     config.subtitle_region_spans = _coerce_region_span_list(
         getattr(config, "subtitle_region_spans", None))
+    config.manual_mask_corrections = _coerce_mask_correction_list(
+        getattr(config, "manual_mask_corrections", None))
     config.detection_threshold = _coerce_float(config.detection_threshold, 0.5, 0.1, 1.0)
     config.detection_lang = _coerce_text(config.detection_lang, "en", 24).lower()
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)

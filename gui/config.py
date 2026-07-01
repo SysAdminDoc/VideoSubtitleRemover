@@ -358,6 +358,7 @@ class ProcessingConfig:
 
     subtitle_areas: Optional[List[Tuple[int, int, int, int]]] = None
     subtitle_region_spans: Optional[List[dict]] = None
+    manual_mask_corrections: Optional[List[dict]] = None
     auto_band: bool = False
     export_srt: bool = False
     export_mask_video: bool = False
@@ -435,6 +436,10 @@ class ProcessingConfig:
                         for span in spans
                     ] or None
                 )
+            elif field_def.name == "manual_mask_corrections":
+                from backend.config import _coerce_mask_correction_list
+                corrections = _coerce_mask_correction_list(value) or []
+                payload[field_def.name] = corrections or None
             else:
                 payload[field_def.name] = value
         payload["vsr_settings_format"] = VSR_SETTINGS_FORMAT
@@ -623,6 +628,9 @@ class ProcessingConfig:
             elif name == "subtitle_region_spans":
                 kwargs[name] = _coerce_region_span_list(
                     raw, label=name, warn_invalid=raw is not None)
+            elif name == "manual_mask_corrections":
+                from backend.config import _coerce_mask_correction_list
+                kwargs[name] = _coerce_mask_correction_list(raw)
             else:
                 kwargs[name] = raw
         return cls(**kwargs).normalized()
@@ -929,6 +937,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "colour_tune_enable",
     "colour_tune_tolerance",
     "subtitle_region_spans",
+    "manual_mask_corrections",
     "remove_subtitles",
     "remove_chyrons",
     "chyron_min_hits",
