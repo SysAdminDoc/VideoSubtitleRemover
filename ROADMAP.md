@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P1 — Write per-output reproducibility sidecars
-  Why: Batch summaries are useful but not portable with individual outputs; each cleaned file needs its own proof of source fingerprint, config, engine, provider, model hashes, timings, quality gate, checkpoint state, and command provenance.
-  Evidence: `backend/batch_report.py`, `backend/processor.py`, `backend/cli.py`, `gui/quality_controller.py`, Subtitle Edit review workflow.
-  Touches: `backend/batch_report.py`, `backend/processor.py`, `backend/cli.py`, `gui/processing_controller.py`, `gui/quality_controller.py`, `backend/support_bundle.py`, tests.
-  Acceptance: every hardcoded cleanup, soft-subtitle remux, skipped-existing, and checkpoint-completed output writes `<output>.vsr.json`; batch reports link the sidecar; support bundles include redacted sidecar summaries; CLI and GUI tests prove schema stability.
-  Complexity: M
-
 - [ ] P1 — Replace placeholder benchmark media with real redistributable reference clips
   Why: Deterministic fixtures cover regressions, but public quality claims need real clips for static logos, moving subtitles, low-quality encodes, and mask-free benchmarks.
   Evidence: `tests/clips/manifest.json`, `backend/reference_corpus.py`, `tests/test_mask_free_benchmark.py`, `tests/test_static_logo_benchmark.py`, NASA and Library of Congress public-domain media policies.

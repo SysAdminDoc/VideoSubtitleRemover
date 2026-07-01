@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Per-output reproducibility sidecars.** Every hardcoded cleanup,
+  soft-subtitle remux, skipped-existing, and checkpoint-completed output
+  now writes a `<output>.vsr.json` sidecar recording source SHA-256
+  fingerprint, processing config snapshot, detection engine, stage
+  timings, quality report/gate, checkpoint state, and app version.
 - **FFmpeg/FFprobe subprocess smoke evidence.** Release verification now
   exercises ffmpeg and ffprobe with a tiny synthetic fixture (generate,
   probe, transcode) and records command, path, env, and return code
