@@ -24,7 +24,10 @@ import uuid
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence
 
-from backend.adapter_manifest import release_manifest_status
+from backend.adapter_manifest import (
+    collect_adapter_conformance_matrix,
+    release_manifest_status,
+)
 from backend.dependency_caps import (
     collect_dependency_drift_report,
     collect_opencv_wheel_status,
@@ -675,6 +678,7 @@ def build_release_evidence(
             "dependencyDrift": collect_dependency_drift_report(
                 package_versions=package_versions,
             ),
+            "adapterConformance": collect_adapter_conformance_matrix(env=env),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {
             "ran": False,

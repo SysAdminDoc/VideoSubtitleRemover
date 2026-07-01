@@ -430,6 +430,101 @@ def verify_adapter_path(
     )
 
 
+CONFORMANCE_MATRIX_SCHEMA = "vsr.adapter_conformance.v1"
+
+
+def collect_adapter_conformance_matrix(
+    env: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Build an operator-readable dry-run matrix for every adapter.
+
+    Lists env vars, license, source, expected weight paths, hash policy,
+    import-before-trust status, and availability without loading any
+    untrusted model code.
+    """
+    source = os.environ if env is None else env
+    override = unsafe_override_enabled(source)
+    adapters = []
+    for name in sorted(ADAPTER_MANIFEST):
+        entry = ADAPTER_MANIFEST[name]
+        configured_var = None
+        configured_path = None
+        for env_var in entry.env_vars:
+            value = str(source.get(env_var, "")).strip()
+            if value:
+                configured_var = env_var
+                configured_path = value
+                break
+        path_exists = False
+        if configured_path:
+            p = Path(configured_path)
+            path_exists = p.is_file() or (entry.allow_directories and p.is_dir())
+        has_pinned_hash = bool(entry.sha256)
+        adapters.append({
+            "name": name,
+            "envVars": list(entry.env_vars),
+            "configuredVar": configured_var,
+            "configured": configured_path is not None,
+            "pathExists": path_exists,
+            "license": entry.license,
+            "sourceUrl": entry.source_url,
+            "preferredFormat": entry.preferred_format,
+            "expectedFiles": list(entry.expected_filenames),
+            "hasPinnedHash": has_pinned_hash,
+            "pinnedFileCount": len(entry.sha256),
+            "remoteCodeRequired": entry.remote_code_required,
+            "allowDirectories": entry.allow_directories,
+            "availability": (
+                "ready" if configured_path and path_exists
+                else "configured-missing" if configured_path
+                else "not-configured"
+            ),
+        })
+    return {
+        "schema": CONFORMANCE_MATRIX_SCHEMA,
+        "unsafeOverride": override,
+        "adapterCount": len(adapters),
+        "adapters": adapters,
+        "summary": {
+            "ready": sum(1 for a in adapters if a["availability"] == "ready"),
+            "configuredMissing": sum(
+                1 for a in adapters if a["availability"] == "configured-missing"
+            ),
+            "notConfigured": sum(
+                1 for a in adapters if a["availability"] == "not-configured"
+            ),
+        },
+    }
+
+
+def format_adapter_conformance_matrix(matrix: dict) -> str:
+    """Format the conformance matrix as a human-readable table."""
+    lines = ["Adapter Conformance Matrix", "=" * 70]
+    lines.append(
+        f"{'Adapter':<20} {'Available':<18} {'Hash':<8} "
+        f"{'License':<30} {'Remote Code':<12}"
+    )
+    lines.append("-" * 88)
+    for a in matrix.get("adapters", []):
+        lines.append(
+            f"{a['name']:<20} {a['availability']:<18} "
+            f"{'yes' if a['hasPinnedHash'] else 'no':<8} "
+            f"{a['license'][:29]:<30} "
+            f"{'yes' if a['remoteCodeRequired'] else 'no':<12}"
+        )
+    summary = matrix.get("summary", {})
+    lines.append("-" * 88)
+    lines.append(
+        f"Total: {matrix.get('adapterCount', 0)}  "
+        f"Ready: {summary.get('ready', 0)}  "
+        f"Configured-missing: {summary.get('configuredMissing', 0)}  "
+        f"Not configured: {summary.get('notConfigured', 0)}"
+    )
+    if matrix.get("unsafeOverride"):
+        lines.append(f"WARNING: {UNSAFE_OVERRIDE_ENV} is set")
+    return "\n".join(lines) + "\n"
+
+
 def log_adapter_verification(result: AdapterVerification) -> None:
     if result.allowed and result.hash_status == "verified":
         logger.info("Adapter %s verified by SHA-256", result.adapter.name)

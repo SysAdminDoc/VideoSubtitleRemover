@@ -5908,6 +5908,53 @@ class TempCleanupOnExceptionTests(unittest.TestCase):
             self.assertFalse(os.path.exists(temp))
 
 
+class AdapterConformanceMatrixTests(unittest.TestCase):
+    def test_conformance_matrix_schema_and_structure(self):
+        from backend.adapter_manifest import (
+            collect_adapter_conformance_matrix,
+            CONFORMANCE_MATRIX_SCHEMA,
+        )
+        matrix = collect_adapter_conformance_matrix(env={})
+        self.assertEqual(matrix["schema"], CONFORMANCE_MATRIX_SCHEMA)
+        self.assertGreater(matrix["adapterCount"], 0)
+        self.assertFalse(matrix["unsafeOverride"])
+        self.assertEqual(
+            matrix["summary"]["notConfigured"],
+            matrix["adapterCount"],
+        )
+        adapter = matrix["adapters"][0]
+        self.assertIn("name", adapter)
+        self.assertIn("envVars", adapter)
+        self.assertIn("license", adapter)
+        self.assertIn("availability", adapter)
+        self.assertIn("hasPinnedHash", adapter)
+        self.assertEqual(adapter["availability"], "not-configured")
+
+    def test_conformance_matrix_detects_configured_adapter(self):
+        from backend.adapter_manifest import collect_adapter_conformance_matrix
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_model = os.path.join(tmpdir, "lama_fp32.onnx")
+            Path(fake_model).write_bytes(b"fake")
+            matrix = collect_adapter_conformance_matrix(
+                env={"VSR_LAMA_ONNX": fake_model},
+            )
+        lama = next(a for a in matrix["adapters"] if a["name"] == "lama-onnx")
+        self.assertTrue(lama["configured"])
+        self.assertTrue(lama["pathExists"])
+        self.assertEqual(lama["availability"], "ready")
+
+    def test_conformance_format_is_human_readable(self):
+        from backend.adapter_manifest import (
+            collect_adapter_conformance_matrix,
+            format_adapter_conformance_matrix,
+        )
+        matrix = collect_adapter_conformance_matrix(env={})
+        text = format_adapter_conformance_matrix(matrix)
+        self.assertIn("Adapter Conformance Matrix", text)
+        self.assertIn("lama-onnx", text)
+        self.assertIn("Total:", text)
+
+
 class OutputSidecarTests(unittest.TestCase):
     def test_build_output_sidecar_schema_and_fields(self):
         from backend.batch_report import build_output_sidecar, SIDECAR_SCHEMA
