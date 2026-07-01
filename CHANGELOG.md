@@ -6,6 +6,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Multi-segment NLE sidecars.** EDL and FCPXML exports now represent
+  every processed time span when multiple timed regions are configured,
+  and preserve source dimensions in format metadata.
 - **Pseudo-locale and RTL rendered smoke tests.** Expanded-string and
   RTL-mark translation tests verify the i18n layer renders status
   labels and sentinel strings without clipping or loss.

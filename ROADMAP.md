@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P2 — Enrich NLE sidecars for multi-segment editorial handoff
-  Why: Current EDL/FCPXML exports are intentionally one-event stubs; editor handoff improves if timed regions, source timecode, audio state, dimensions, and multiple cleaned ranges survive.
-  Evidence: `backend/nle_sidecar.py`, `backend/processor.py`, `tests/test_nle_sidecar.py`, Subtitle Edit format breadth.
-  Touches: `backend/nle_sidecar.py`, `backend/processor.py`, `backend/cli.py`, `gui/config.py`, `gui/widgets.py`, `tests/test_nle_sidecar.py`.
-  Acceptance: EDL and FCPXML exports represent every processed time span, preserve source dimensions/timecode where available, include cleaned/source clip metadata, parse back through existing import helpers, and pass round-trip tests.
-  Complexity: M
-
 - [ ] P2 — Add optional adapter conformance dry-run matrix
   Why: Model adapters are intentionally gated, but trust evidence is spread across manifests, support bundles, and individual tests instead of one operator-readable matrix.
   Evidence: `backend/adapter_manifest.py`, `backend/remote_model_policy.py`, `backend/release_verification.py`, `tests/test_vace_adapter.py`, `tests/test_videopainter_adapter.py`, `tests/test_void_adapter.py`, SEDiT/CLEAR research churn.
