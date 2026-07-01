@@ -601,6 +601,108 @@ def enforce_ocr_dependency_caps() -> None:
         raise RuntimeError(f"OCR dependency version cap check failed:\n- {joined}")
 
 
+DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
+
+TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
+    ("numpy", "1.21.0", ""),
+    ("opencv-python", "4.12.0", ""),
+    ("Pillow", "12.2.0", ""),
+    ("rapidocr", "2.0.0", "4.0.0"),
+    ("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
+    ("paddleocr", "3.0.0", "4.0.0"),
+    ("easyocr", "1.7.0", ""),
+    ("onnxruntime", "", ""),
+    ("onnxruntime-gpu", "1.21.0", ""),
+    ("onnxruntime-directml", "1.18.0", ""),
+    ("openvino", "2025.0.0", ""),
+    ("simple-lama-inpainting", "0.1.0", ""),
+    ("torch", "2.10.0", ""),
+    ("torchvision", "0.25.0", ""),
+    ("pyinstaller", "", ""),
+)
+
+BLOCKED_EXCEPTIONS: Tuple[Tuple[str, str], ...] = (
+    ("opencv-python", "libpng < 1.6.54 bundled; CVE-2026-22801 allowed until fixed wheel"),
+)
+
+
+def collect_dependency_drift_report(
+    package_versions: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Build a local drift report for core and optional stacks."""
+    items = []
+    for package, minimum, maximum in TRACKED_PACKAGES:
+        installed = _installed_package_version(
+            _normalise_package_name(package), package_versions,
+        )
+        status = "not-installed"
+        if installed:
+            if minimum and not _version_gte(installed, minimum):
+                status = "below-minimum"
+            elif maximum and _version_gte(installed, maximum):
+                status = "above-maximum"
+            else:
+                status = "ok"
+        items.append({
+            "package": package,
+            "installed": installed or "",
+            "minimum": minimum,
+            "maximum": maximum,
+            "status": status,
+        })
+
+    exceptions = []
+    for pkg, reason in BLOCKED_EXCEPTIONS:
+        exceptions.append({"package": pkg, "reason": reason})
+
+    return {
+        "schema": DRIFT_REPORT_SCHEMA,
+        "packages": items,
+        "blockedExceptions": exceptions,
+        "summary": {
+            "tracked": len(items),
+            "installed": sum(1 for i in items if i["installed"]),
+            "ok": sum(1 for i in items if i["status"] == "ok"),
+            "belowMinimum": sum(1 for i in items if i["status"] == "below-minimum"),
+            "aboveMaximum": sum(1 for i in items if i["status"] == "above-maximum"),
+            "notInstalled": sum(1 for i in items if i["status"] == "not-installed"),
+        },
+    }
+
+
+def format_drift_report(report: dict) -> str:
+    """Format a drift report as a human-readable table."""
+    lines = ["Dependency Drift Report", "=" * 60]
+    lines.append(
+        f"{'Package':<30} {'Installed':<14} {'Min':<10} {'Max':<10} {'Status':<15}"
+    )
+    lines.append("-" * 79)
+    for item in report.get("packages", []):
+        lines.append(
+            f"{item['package']:<30} "
+            f"{item['installed'] or '-':<14} "
+            f"{item['minimum'] or '-':<10} "
+            f"{item['maximum'] or '-':<10} "
+            f"{item['status']:<15}"
+        )
+    summary = report.get("summary", {})
+    lines.append("-" * 79)
+    lines.append(
+        f"Tracked: {summary.get('tracked', 0)}  "
+        f"Installed: {summary.get('installed', 0)}  "
+        f"OK: {summary.get('ok', 0)}  "
+        f"Below min: {summary.get('belowMinimum', 0)}  "
+        f"Above max: {summary.get('aboveMaximum', 0)}"
+    )
+    blocked = report.get("blockedExceptions", [])
+    if blocked:
+        lines.append("")
+        lines.append("Blocked exceptions:")
+        for exc in blocked:
+            lines.append(f"  {exc['package']}: {exc['reason']}")
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     try:
         enforce_ocr_dependency_caps()
@@ -608,6 +710,9 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 1
     print("OCR dependency version caps OK")
+    print()
+    report = collect_dependency_drift_report()
+    print(format_drift_report(report))
     return 0
 
 

@@ -26,6 +26,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 from backend.adapter_manifest import release_manifest_status
 from backend.dependency_caps import (
+    collect_dependency_drift_report,
     collect_opencv_wheel_status,
     collect_onnxruntime_provider_status,
     collect_rapidocr_engine_status,
@@ -671,6 +672,9 @@ def build_release_evidence(
             ),
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
             "ffmpegSubprocessSmoke": _ffmpeg_subprocess_smoke(),
+            "dependencyDrift": collect_dependency_drift_report(
+                package_versions=package_versions,
+            ),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {
             "ran": False,

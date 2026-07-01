@@ -201,5 +201,62 @@ class DependencyCapTests(unittest.TestCase):
         self.assertEqual(commands[1], 'python -m pip install "opencv-python>=4.12.0"')
 
 
+class DriftReportTests(unittest.TestCase):
+    def test_drift_report_schema_and_summary(self):
+        versions = {
+            "numpy": "1.26.4",
+            "opencv-python": "4.12.0",
+            "pillow": "12.2.0",
+            "rapidocr": "3.9.0",
+        }
+        report = dependency_caps.collect_dependency_drift_report(
+            package_versions=versions,
+        )
+        self.assertEqual(report["schema"], dependency_caps.DRIFT_REPORT_SCHEMA)
+        self.assertGreater(report["summary"]["tracked"], 0)
+        self.assertEqual(report["summary"]["ok"], 4)
+        self.assertGreater(report["summary"]["notInstalled"], 0)
+
+    def test_drift_report_detects_below_minimum(self):
+        versions = {"numpy": "1.20.0"}
+        report = dependency_caps.collect_dependency_drift_report(
+            package_versions=versions,
+        )
+        numpy_item = next(
+            i for i in report["packages"] if i["package"] == "numpy"
+        )
+        self.assertEqual(numpy_item["status"], "below-minimum")
+
+    def test_drift_report_detects_above_maximum(self):
+        versions = {"rapidocr": "5.0.0"}
+        report = dependency_caps.collect_dependency_drift_report(
+            package_versions=versions,
+        )
+        item = next(
+            i for i in report["packages"] if i["package"] == "rapidocr"
+        )
+        self.assertEqual(item["status"], "above-maximum")
+
+    def test_drift_report_format_is_human_readable(self):
+        versions = {"numpy": "1.26.4", "pillow": "12.2.0"}
+        report = dependency_caps.collect_dependency_drift_report(
+            package_versions=versions,
+        )
+        text = dependency_caps.format_drift_report(report)
+        self.assertIn("numpy", text)
+        self.assertIn("1.26.4", text)
+        self.assertIn("Tracked:", text)
+
+    def test_drift_report_includes_blocked_exceptions(self):
+        report = dependency_caps.collect_dependency_drift_report(
+            package_versions={},
+        )
+        self.assertGreater(len(report["blockedExceptions"]), 0)
+        self.assertEqual(
+            report["blockedExceptions"][0]["package"],
+            "opencv-python",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
