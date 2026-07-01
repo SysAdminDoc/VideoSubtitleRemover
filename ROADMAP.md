@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P1 — Replace placeholder benchmark media with real redistributable reference clips
-  Why: Deterministic fixtures cover regressions, but public quality claims need real clips for static logos, moving subtitles, low-quality encodes, and mask-free benchmarks.
-  Evidence: `tests/clips/manifest.json`, `backend/reference_corpus.py`, `tests/test_mask_free_benchmark.py`, `tests/test_static_logo_benchmark.py`, NASA and Library of Congress public-domain media policies.
-  Touches: `tests/clips/manifest.json`, `tests/clips/`, `backend/reference_corpus.py`, `backend/mask_free_benchmark.py`, `backend/static_logo_benchmark.py`, `tests/test_reference_clips.py`.
-  Acceptance: at least three real redistributable clips are committed with source URL, license URL, retrieval date, redistribution confirmation, SHA-256, baseline output-frame hash, metric floors, and reference-corpus test coverage.
-  Complexity: L
-
 - [ ] P1 — Add GUI visual regression coverage for critical states
   Why: The Tk smoke tests verify construction and widget metadata, but they do not catch clipped text, broken hierarchy, blank previews, or visual regressions in states users rely on.
   Evidence: `tests/test_gui_smoke.py`, `gui/app.py`, `gui/widgets.py`, commercial remover preview/review workflows.
