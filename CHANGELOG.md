@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **FFmpeg/FFprobe subprocess smoke evidence.** Release verification now
+  exercises ffmpeg and ffprobe with a tiny synthetic fixture (generate,
+  probe, transcode) and records command, path, env, and return code
+  evidence in `release-verification.json`. A failing smoke produces a
+  validation error that blocks strict builds.
 - **Local isolated smoke path.** `tools/local_smoke.py` now runs
   `python -m backend.processor --self-test` plus a generated-image CLI cleanup,
   and `Dockerfile` / `.dockerignore` provide a local CPU-only container recipe

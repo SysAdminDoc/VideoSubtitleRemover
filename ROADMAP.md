@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P1 — Add frozen-app FFmpeg/FFprobe subprocess smoke evidence
-  Why: PyInstaller warns about child-process DLL search-path hazards, and VSR relies on external FFmpeg/FFprobe for ingest, remux, encode, and metadata.
-  Evidence: `backend/release_verification.py`, `backend/io.py`, `backend/remux.py`, PyInstaller common-issues docs.
-  Touches: `backend/release_verification.py`, `build_exe.bat`, `tests/test_release_workflow.py`, `tests/clips/manifest.json`.
-  Acceptance: release verification runs the packaged EXE against a tiny fixture through real `ffprobe` and `ffmpeg`, records command/path/env evidence in `release-verification.json`, and fails when the packaged app cannot safely launch external tools.
-  Complexity: M
-
 - [ ] P1 — Write per-output reproducibility sidecars
   Why: Batch summaries are useful but not portable with individual outputs; each cleaned file needs its own proof of source fingerprint, config, engine, provider, model hashes, timings, quality gate, checkpoint state, and command provenance.
   Evidence: `backend/batch_report.py`, `backend/processor.py`, `backend/cli.py`, `gui/quality_controller.py`, Subtitle Edit review workflow.
