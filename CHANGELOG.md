@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Frame-level manual mask correction.** Polygon-based manual mask
+  corrections can now be tied to time ranges and merged with automatic
+  detection masks during processing, with config persistence and
+  CLI-compatible JSON overlay support.
 - **Adapter conformance dry-run matrix.** A dry-run matrix now lists
   every adapter with env vars, license, source, hash policy,
   remote-code status, and availability without loading model code.
