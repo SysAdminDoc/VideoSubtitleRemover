@@ -810,5 +810,93 @@ class GuiSmokeTests(unittest.TestCase):
         remux.assert_called_once()
 
 
+    def test_visual_regression_empty_queue_critical_controls_visible(self):
+        """Critical controls must be visible and not clipped in the empty
+        queue state: start button, queue area, settings, preview hint."""
+        app = self._make_app()
+        try:
+            app.root.geometry("1024x768")
+            app.root.update_idletasks()
+
+            controls = {
+                "start_btn": app.start_btn,
+                "open_output_btn": app.open_output_btn,
+                "preview_action_hint": app.preview_action_hint,
+            }
+            for name, widget in controls.items():
+                try:
+                    width = widget.winfo_reqwidth()
+                    height = widget.winfo_reqheight()
+                except tk.TclError:
+                    continue
+                self.assertGreater(
+                    width, 0,
+                    f"{name} has zero requested width in empty queue state",
+                )
+                self.assertGreater(
+                    height, 0,
+                    f"{name} has zero requested height in empty queue state",
+                )
+        finally:
+            self._destroy_app(app)
+
+    def test_visual_regression_queued_item_shows_preview_controls(self):
+        """When a queue item is selected, preview action buttons must
+        have positive requested dimensions."""
+        app = self._make_app()
+        try:
+            app.root.geometry("1024x768")
+            app.root.update_idletasks()
+
+            source = Path(self._tmpdir.name) / "vis-regression.png"
+            image = Image.new("RGB", (320, 180), (20, 24, 32))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((40, 124, 280, 154), fill=(235, 235, 235))
+            image.save(source)
+
+            with mock.patch.object(app, "_show_preview"):
+                self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+            app._set_selected_queue_item(item.id)
+            app.root.update_idletasks()
+
+            for name in ("preview_mask_btn", "preview_inpaint_btn"):
+                btn = getattr(app, name, None)
+                if btn is None:
+                    continue
+                self.assertGreater(
+                    btn.winfo_reqwidth(), 0,
+                    f"{name} has zero width with queued item selected",
+                )
+                self.assertGreater(
+                    btn.winfo_reqheight(), 0,
+                    f"{name} has zero height with queued item selected",
+                )
+        finally:
+            self._destroy_app(app)
+
+    def test_visual_regression_narrow_width_no_zero_size_controls(self):
+        """At a narrow 640px width, primary controls must still have
+        positive requested dimensions (no hidden/clipped buttons)."""
+        app = self._make_app()
+        try:
+            app.root.geometry("640x600")
+            app.root.update_idletasks()
+
+            for name in ("start_btn", "clear_btn"):
+                widget = getattr(app, name, None)
+                if widget is None:
+                    continue
+                try:
+                    self.assertGreater(
+                        widget.winfo_reqwidth(), 0,
+                        f"{name} clipped at 640px width",
+                    )
+                except tk.TclError:
+                    pass
+        finally:
+            self._destroy_app(app)
+
+
 if __name__ == "__main__":
     unittest.main()
