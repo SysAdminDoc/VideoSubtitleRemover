@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P2 — Add a local upstream dependency and security drift report
-  Why: PaddleOCR, RapidOCR, ONNX Runtime, OpenCV, PyInstaller, and related packages move quickly, while this repo intentionally avoids Dependabot/GitHub Actions.
-  Evidence: `requirements.txt`, `backend/dependency_caps.py`, `backend/release_verification.py`, PaddleOCR/RapidOCR/ONNX Runtime releases, OpenCV libpng CVE issue.
-  Touches: `backend/dependency_caps.py`, `backend/security_checks.py`, `backend/release_verification.py`, `tests/test_hardening.py`, README usage notes.
-  Acceptance: a local command reports installed, pinned/minimum, latest-known, blocked exceptions, and security-advisory status for core and optional stacks without auto-updating dependencies; release verification embeds the report.
-  Complexity: M
-
 - [ ] P2 — Add pseudo-locale and RTL rendered smoke tests
   Why: Gettext and RTL scaffolds exist, but no rendered smoke proves translated or expanded strings fit the main GUI.
   Evidence: `backend/i18n.py`, `locale/vsr.pot`, `gui/config.py`, `gui/app.py`, `tests/test_hardening.py`, Subtitle Edit localization precedent.

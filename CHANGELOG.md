@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Local dependency drift report.** A drift report now lists every
+  tracked core and optional package with installed version, pinned
+  minimum/maximum, status, and blocked exceptions. Release verification
+  embeds the report; the `dependency_caps` CLI prints it.
 - **GUI visual regression coverage.** Widget geometry assertions now
   cover empty queue, queued item selected, and narrow-width states,
   failing on zero-sized or clipped primary controls.
