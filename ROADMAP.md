@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P2 — Add optional adapter conformance dry-run matrix
-  Why: Model adapters are intentionally gated, but trust evidence is spread across manifests, support bundles, and individual tests instead of one operator-readable matrix.
-  Evidence: `backend/adapter_manifest.py`, `backend/remote_model_policy.py`, `backend/release_verification.py`, `tests/test_vace_adapter.py`, `tests/test_videopainter_adapter.py`, `tests/test_void_adapter.py`, SEDiT/CLEAR research churn.
-  Touches: `backend/adapter_manifest.py`, `backend/inpainter_registry.py`, `backend/model_downloads.py`, `backend/release_verification.py`, `backend/support_bundle.py`, tests.
-  Acceptance: a local dry-run command lists every production and benchmark adapter with env vars, license/source, expected weight paths, hash policy, import-before-trust status, and availability result without loading untrusted model code; support bundles and release evidence include the matrix.
-  Complexity: M
-
 - [ ] P3 — Add frame-level manual mask correction for hard clips
   Why: Rectangular/timed regions and OCR masks miss curved, animated, or partial overlays; commercial tools and IOPaint show that brush-level correction is table-stakes for stubborn cases.
   Evidence: `gui/preview_controller.py`, `gui/app.py`, `backend/processor.py`, IOPaint manual inpainting UX, Media.io/HitPaw remover workflows.
