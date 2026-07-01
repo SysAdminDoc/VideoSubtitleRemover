@@ -4,6 +4,45 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [3.17.3]
 
+### Fixed
+
+- **Mask cache corruption.** Manual mask corrections mutated cached
+  fixed-region masks in-place, causing mask bleed across frames.
+- **Notification crash.** `_send_system_notification` referenced an
+  undefined `paused` variable, silently crashing every batch
+  completion toast notification.
+- **Preview threshold divergence.** Mask preview read a ghost
+  attribute instead of the persisted detection threshold, always
+  using 50% until the slider was manually moved.
+- **Region editor off-by-one.** Dragging to the extreme edge returned
+  coordinates one pixel past the image boundary.
+- **NLE single-span regression.** A single timed subtitle region was
+  excluded from the multi-segment NLE export path.
+- **FCPXML file URI encoding.** Paths with spaces or special
+  characters now percent-encode per RFC 8089.
+- **JSON config overlay injection.** `--config` overlay now whitelists
+  dataclass field names, preventing `__dict__`/`__class__` injection.
+- **NaN/inf in mask correction coercion.** Explicit `math.isfinite()`
+  checks prevent NaN time ranges from bypassing frame-range gating.
+- **NLE sidecar non-atomic writes.** EDL/FCPXML writes now use atomic
+  temp-file-then-rename to prevent partial files on crash.
+- **Cached remover race condition.** Read into a local variable before
+  comparing to prevent TOCTOU with the main thread's stop handler.
+- **Sidecar SHA-256 performance.** Skip hash for inputs over 512 MB to
+  avoid blocking the UI for 10+ seconds after processing.
+- **Sidecar config completeness.** `manual_mask_corrections` was
+  missing from the reproducibility sidecar config snapshot.
+- **Hardcoded hex colors.** All hardcoded colors in widgets, app, and
+  preview controller replaced with Theme tokens for high-contrast
+  theme compatibility.
+- **FCPXML XXE mitigation.** Parser now prefers `defusedxml` when
+  installed to prevent XML external entity attacks on user-supplied
+  FCPXML files.
+- **Inconsistent queue item ID format.** `_repeat_item_with_settings`
+  now uses `uuid.uuid4().hex` matching `_add_to_queue`.
+- **Untranslated language probe message.** Wrapped with `tr()` for
+  i18n compatibility.
+
 ### Added
 
 - **Frame-level manual mask correction.** Polygon-based manual mask
