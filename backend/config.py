@@ -460,12 +460,17 @@ def _coerce_mask_correction(value) -> Optional[dict]:
             continue
     if not coerced_polys:
         return None
+    import math
     try:
-        start = max(0.0, float(value.get("start", 0.0)))
-        end = max(0.0, float(value.get("end", 0.0)))
+        start = float(value.get("start", 0.0))
+        end = float(value.get("end", 0.0))
     except (TypeError, ValueError):
         start, end = 0.0, 0.0
-    return {"polygons": coerced_polys, "start": start, "end": end}
+    if not math.isfinite(start):
+        start = 0.0
+    if not math.isfinite(end):
+        end = 0.0
+    return {"polygons": coerced_polys, "start": max(0.0, start), "end": max(0.0, end)}
 
 
 def _coerce_mask_correction_list(value) -> Optional[List[dict]]:

@@ -21,12 +21,32 @@ from __future__ import annotations
 
 import datetime as _dt
 import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
+from urllib.parse import quote as _uri_quote
 from xml.sax.saxutils import quoteattr
 
 logger = logging.getLogger(__name__)
+
+
+def _write_atomic(path: str, text: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(
+        prefix=f".{target.name}.", suffix=".tmp", dir=str(target.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, str(target))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _edl_comment_text(value: str) -> str:
@@ -83,7 +103,7 @@ def write_edl(path: str, source: str, cleaned: str,
         payload.append(f"* CLEANED BY:     Video Subtitle Remover Pro")
         payload.append("")
     text = "\n".join(payload) + "\n"
-    Path(path).write_text(text, encoding="utf-8")
+    _write_atomic(path, text)
     return path
 
 
@@ -100,7 +120,8 @@ def write_fcpxml(path: str, source: str, cleaned: str,
     """
     all_segments = segments if segments else [(start_s, end_s)]
     src_name = Path(source).stem
-    cleaned_uri = "file://" + str(Path(cleaned).resolve()).replace("\\", "/")
+    resolved = str(Path(cleaned).resolve()).replace("\\", "/")
+    cleaned_uri = "file:///" + _uri_quote(resolved.lstrip("/"), safe="/:")
     rate = max(1, int(round(fps if fps > 0 else 24.0)))
     fmt_width = width if width > 0 else 1920
     fmt_height = height if height > 0 else 1080
@@ -144,7 +165,7 @@ def write_fcpxml(path: str, source: str, cleaned: str,
         "  </library>\n"
         "</fcpxml>\n"
     )
-    Path(path).write_text(payload, encoding="utf-8")
+    _write_atomic(path, payload)
     return path
 
 
@@ -198,8 +219,12 @@ def parse_fcpxml(path: str) -> List[Tuple[float, float]]:
     each asset-clip's offset+duration. Uses the stdlib xml parser so no
     extra dependency is needed. Returns an empty list on parse failure."""
     try:
-        import xml.etree.ElementTree as ET
-        tree = ET.parse(path)
+        try:
+            from defusedxml.ElementTree import parse as _safe_parse
+            tree = _safe_parse(path)
+        except ImportError:
+            import xml.etree.ElementTree as ET
+            tree = ET.parse(path)
     except Exception as exc:
         logger.warning(f"Cannot parse FCPXML: {exc}")
         return []

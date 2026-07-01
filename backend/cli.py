@@ -868,6 +868,8 @@ def main():
     if args.config:
         try:
             overlay = _load_json_config(args.config)
+            from dataclasses import fields as _dc_fields
+            _allowed = {f.name for f in _dc_fields(config)}
             for k, v in overlay.items():
                 if k == "mode":
                     if is_known_backend_mode(v):
@@ -875,7 +877,7 @@ def main():
                     else:
                         logger.warning(f"Ignoring unknown mode in config: {v}")
                     continue
-                if hasattr(config, k):
+                if k in _allowed:
                     setattr(config, k, v)
                 else:
                     logger.warning(f"Ignoring unknown config field: {k}")

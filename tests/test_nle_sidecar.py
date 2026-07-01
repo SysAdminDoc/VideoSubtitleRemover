@@ -53,7 +53,8 @@ class NleSidecarEncodingTests(unittest.TestCase):
         asset = root.find("./resources/asset")
         self.assertIsNotNone(asset)
         self.assertEqual(asset.attrib["name"], "rough cut & review's clip")
-        self.assertIn("clean & final.mp4", asset.attrib["src"])
+        self.assertIn("clean%20%26%20final.mp4", asset.attrib["src"])
+        self.assertTrue(asset.attrib["src"].startswith("file:///"))
 
     def test_edl_clip_comments_are_single_line(self):
         with tempfile.TemporaryDirectory() as tmpdir:

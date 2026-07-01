@@ -580,8 +580,9 @@ class ProcessingControllerMixin:
             # The constructor normalises the config; on hot-swap we re-run
             # normalisation explicitly so a NaN/inf/out-of-range value from a
             # bad per-item override cannot reach the pipeline.
-            if self._cached_remover is not None and self._cached_remover_key == cache_key:
-                remover = self._cached_remover
+            cached = self._cached_remover
+            if cached is not None and self._cached_remover_key == cache_key:
+                remover = cached
                 from backend.processor import normalize_processing_config as _normalize_backend_config
                 remover.config = _normalize_backend_config(backend_config)
             else:

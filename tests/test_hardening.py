@@ -5976,6 +5976,45 @@ class ManualMaskCorrectionTests(unittest.TestCase):
         )
 
 
+    def test_mask_corrections_do_not_corrupt_cached_mask(self):
+        from backend.config import ProcessingConfig
+        from backend.processor import SubtitleRemover
+
+        config = ProcessingConfig(
+            manual_mask_corrections=[
+                {"polygons": [[5, 5, 25, 5, 25, 25, 5, 25]], "start": 0.0, "end": 0.0}
+            ],
+        )
+        remover = SubtitleRemover.__new__(SubtitleRemover)
+        remover.config = config
+        original = np.zeros((32, 32), dtype=np.uint8)
+        copy1 = remover._apply_manual_mask_corrections(original.copy(), 0.5)
+        self.assertGreater(copy1.sum(), 0)
+        self.assertEqual(original.sum(), 0)
+
+    def test_coerce_nan_start_end_falls_back_to_zero(self):
+        from backend.config import _coerce_mask_correction
+        result = _coerce_mask_correction({
+            "polygons": [[10, 20, 30, 40, 50, 60]],
+            "start": float("nan"),
+            "end": float("inf"),
+        })
+        self.assertIsNotNone(result)
+        self.assertEqual(result["start"], 0.0)
+        self.assertEqual(result["end"], 0.0)
+
+    def test_sidecar_config_snapshot_includes_mask_corrections(self):
+        from backend.batch_report import _config_snapshot
+        from backend.config import ProcessingConfig
+        config = ProcessingConfig(
+            manual_mask_corrections=[
+                {"polygons": [[1, 2, 3, 4, 5, 6]], "start": 0.0, "end": 5.0},
+            ],
+        )
+        snap = _config_snapshot(config)
+        self.assertIn("manual_mask_corrections", snap)
+
+
 class AdapterConformanceMatrixTests(unittest.TestCase):
     def test_conformance_matrix_schema_and_structure(self):
         from backend.adapter_manifest import (
