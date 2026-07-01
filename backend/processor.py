@@ -1755,10 +1755,10 @@ class SubtitleRemover:
                             with self._time_stage("mask"):
                                 fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                         frame_s = (start_frame + frame_idx) / fps if fps > 0 else 0.0
-                        fixed_mask = self._apply_manual_mask_corrections(
-                            fixed_mask, frame_s)
+                        corrected = self._apply_manual_mask_corrections(
+                            fixed_mask.copy(), frame_s)
                         frames.append(frame)
-                        masks.append(fixed_mask)
+                        masks.append(corrected)
                         source_frames.append(source_frame)
                         frame_idx += 1
                         continue
@@ -2184,7 +2184,7 @@ class SubtitleRemover:
             end_s = max(start_s + 1.0 / fps, end_frame / fps)
             spans = getattr(self.config, "subtitle_region_spans", None)
             segments = None
-            if spans and isinstance(spans, list) and len(spans) > 1:
+            if spans and isinstance(spans, list) and len(spans) >= 1:
                 segments = []
                 for span in spans:
                     if not isinstance(span, dict):

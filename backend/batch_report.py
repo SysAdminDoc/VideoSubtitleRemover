@@ -572,7 +572,16 @@ _sidecar_logger = logging.getLogger(__name__ + ".sidecar")
 SIDECAR_SCHEMA = "vsr.output_sidecar.v1"
 
 
+_SIDECAR_HASH_SIZE_LIMIT = 512 * 1024 * 1024
+
+
 def _sha256_file(path: Path) -> str:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return ""
+    if size > _SIDECAR_HASH_SIZE_LIMIT:
+        return ""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
@@ -586,6 +595,7 @@ def _config_snapshot(config: Any) -> dict:
         "mode", "device", "sttn_skip_detection", "sttn_neighbor_stride",
         "sttn_reference_length", "sttn_max_load_num", "lama_super_fast",
         "subtitle_area", "subtitle_areas", "subtitle_region_spans",
+        "manual_mask_corrections",
         "detection_threshold", "detection_lang", "detection_frame_skip",
         "detection_vertical", "whisper_fallback", "mask_dilate_px",
         "mask_feather_px", "tbe_enable", "tbe_min_coverage",

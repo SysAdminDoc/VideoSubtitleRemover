@@ -345,7 +345,7 @@ class ModernButton(tk.Canvas):
             self.bg_color = Theme.BLUE_PRIMARY
             self.hover_color = Theme.BLUE_HOVER
             self.press_color = Theme.BLUE_PRESS
-            self.fg_color = "#071226"
+            self.fg_color = Theme.INK_ON_BLUE
             self.border_color = Theme.BLUE_HOVER
         elif style == "accent":
             self.bg_color = Theme.BLUE_MUTED
@@ -366,11 +366,11 @@ class ModernButton(tk.Canvas):
             self.fg_color = Theme.TEXT_SECONDARY
             self.border_color = Theme.BORDER_SUBTLE
         elif style == "danger":
-            self.bg_color = Theme.ERROR
-            self.hover_color = "#ef4444"
-            self.press_color = "#dc2626"
-            self.fg_color = "#ffffff"
-            self.border_color = "#ef4444"
+            self.bg_color = Theme.DANGER
+            self.hover_color = Theme.DANGER_HOVER
+            self.press_color = Theme.DANGER_PRESS
+            self.fg_color = Theme.INK_ON_DANGER
+            self.border_color = Theme.DANGER_HOVER
         elif style == "success":
             self.bg_color = Theme.GREEN_MUTED
             self.hover_color = Theme.SUCCESS_BG
@@ -748,7 +748,7 @@ class ModernToggle(tk.Canvas):
 
         # Checkmark
         if checked:
-            stroke = "#04120b" if self.enabled else Theme.TEXT_DISABLED
+            stroke = Theme.INK_ON_GREEN if self.enabled else Theme.TEXT_DISABLED
             self.create_line(x0 + 4, y0 + 9, x0 + 8, y0 + 13,
                              fill=stroke, width=2, capstyle="round")
             self.create_line(x0 + 8, y0 + 13, x0 + 14, y0 + 5,

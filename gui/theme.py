@@ -34,6 +34,16 @@ class Theme:
     TEXT_MUTED = "#8391ad"
     TEXT_DISABLED = "#4c5877"
 
+    # Ink: dark foreground for bright-filled controls
+    INK_ON_GREEN = "#04120b"
+    INK_ON_BLUE = "#071226"
+    INK_ON_DANGER = "#ffffff"
+
+    # Danger / destructive action
+    DANGER = "#f87171"
+    DANGER_HOVER = "#ef4444"
+    DANGER_PRESS = "#dc2626"
+
     # Status
     SUCCESS = "#34d399"
     SUCCESS_BG = "#0e2e22"
@@ -125,6 +135,12 @@ def apply_high_contrast_theme():
     Theme.BORDER_STRONG = "#ffffff"
     Theme.BORDER_SUBTLE = "#aaaaaa"
     Theme.BORDER_FOCUS = "#ffff00"
+    Theme.INK_ON_GREEN = "#000000"
+    Theme.INK_ON_BLUE = "#000000"
+    Theme.INK_ON_DANGER = "#ffffff"
+    Theme.DANGER = "#ff5555"
+    Theme.DANGER_HOVER = "#ff3333"
+    Theme.DANGER_PRESS = "#cc0000"
     Theme.PROGRESS_BG = "#1a1a1a"
     Theme.PROGRESS_FILL = "#00d4ff"
 

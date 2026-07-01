@@ -1062,9 +1062,10 @@ class ProcessingControllerMixin:
             pass
         # System toast notification (visible even when minimised)
         if self.config.notify_on_completion:
-            self._send_system_notification(complete, errors)
+            self._send_system_notification(complete, errors, paused=paused)
 
-    def _send_system_notification(self, complete: int, errors: int):
+    def _send_system_notification(self, complete: int, errors: int,
+                                  *, paused: int = 0):
         """Send a Windows toast notification summarising the batch result."""
         if paused:
             title = "Batch Paused"

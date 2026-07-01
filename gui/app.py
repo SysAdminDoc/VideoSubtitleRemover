@@ -1126,13 +1126,13 @@ class VideoSubtitleRemoverApp(
                 frame_bg = Theme.SUCCESS_BG
                 frame_border = Theme.GREEN_HOVER
                 badge_bg = Theme.GREEN_PRIMARY
-                badge_fg = "#04120b"
+                badge_fg = Theme.INK_ON_GREEN
                 text_fg = Theme.SUCCESS
             elif idx == stage:
                 frame_bg = Theme.BLUE_MUTED
                 frame_border = Theme.BLUE_PRIMARY
                 badge_bg = Theme.BLUE_PRIMARY
-                badge_fg = "#071226"
+                badge_fg = Theme.INK_ON_BLUE
                 text_fg = Theme.TEXT_PRIMARY
             else:
                 frame_bg = Theme.BG_CARD
@@ -4045,7 +4045,7 @@ class VideoSubtitleRemoverApp(
         # Build a fresh output path (unique vs the original).
         desired = self._suggest_output_path(template.file_path)
         new_item = QueueItem(
-            id=str(uuid.uuid4()),
+            id=uuid.uuid4().hex,
             file_path=template.file_path,
             output_path=str(desired),
             config=snapshot,

@@ -338,7 +338,7 @@ class PreviewControllerMixin:
         def _on_result(result):
             if result is None:
                 self._update_status(
-                    "Could not detect language from this frame", "warning")
+                    tr("Could not detect language from this frame"), "warning")
                 return
             lang, conf, script = result
             for label, (code, _name) in zip(
@@ -855,7 +855,7 @@ class PreviewControllerMixin:
         py = min(max(0, int(y) - offset_y), disp_h)
         img_x = int(round(px * orig_w / max(1, disp_w)))
         img_y = int(round(py * orig_h / max(1, disp_h)))
-        return min(orig_w, max(0, img_x)), min(orig_h, max(0, img_y))
+        return min(orig_w - 1, max(0, img_x)), min(orig_h - 1, max(0, img_y))
 
     @staticmethod
     def _normalized_region_rect(start, end):
@@ -1028,7 +1028,7 @@ class PreviewControllerMixin:
             self._preview_label.config(image="", text="")
             self._preview_photo = None
             lang = self.lang_var.get()
-            threshold = getattr(self.config, '_detection_threshold_pct', 50) / 100.0
+            threshold = getattr(self.config, 'detection_threshold', 0.5)
             timed_spans = getattr(self.config, "subtitle_region_spans", None) or []
             timed_regions_configured = bool(timed_spans)
             sub_areas = self._active_timed_region_rects(timed_spans, 0.0)
@@ -1176,12 +1176,13 @@ class PreviewControllerMixin:
             output_img.thumbnail((half_w, max_h), Image.LANCZOS)
             total_w = input_img.width + output_img.width + 4
             total_h = max(input_img.height, output_img.height)
-            composite = Image.new("RGB", (total_w, total_h), (15, 23, 42))
+            composite = Image.new("RGB", (total_w, total_h),
+                                   self._hex_to_rgb(Theme.BG_DARK))
             composite.paste(input_img, (0, 0))
             composite.paste(output_img, (input_img.width + 4, 0))
             draw = ImageDraw.Draw(composite)
             draw.line([(input_img.width + 1, 0), (input_img.width + 1, total_h)],
-                      fill="#22c55e", width=2)
+                      fill=self._hex_to_rgb(Theme.GREEN_PRIMARY), width=2)
             draw.rectangle((10, 10, 82, 28), fill=self._hex_to_rgb(Theme.BG_TERTIARY))
             draw.text((18, 14), "Source", fill=self._hex_to_rgb(Theme.TEXT_SECONDARY))
             draw.rectangle((input_img.width + 16, 10, input_img.width + 96, 28),
