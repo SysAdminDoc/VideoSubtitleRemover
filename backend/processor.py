@@ -2011,7 +2011,8 @@ class SubtitleRemover:
 
                 # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
                 self._write_nle_sidecar(input_path, final_output_path,
-                                         start_frame, end_frame, fps)
+                                         start_frame, end_frame, fps,
+                                         width=width, height=height)
 
             # Quality report: PSNR/SSIM across a sample of unmasked regions
             if self.config.quality_report:
@@ -2124,7 +2125,8 @@ class SubtitleRemover:
 
     def _write_nle_sidecar(self, input_path: str, output_path: str,
                              start_frame: int, end_frame: int,
-                             fps: float) -> None:
+                             fps: float, width: int = 0,
+                             height: int = 0) -> None:
         """RM-76: emit an EDL or FCPXML sidecar next to the output so an
         NLE operator can hand-conform the cleaned clip into a Premiere
         / DaVinci timeline at the same timecode."""
@@ -2141,16 +2143,33 @@ class SubtitleRemover:
                 fps = 30.0
             start_s = max(0.0, start_frame / fps)
             end_s = max(start_s + 1.0 / fps, end_frame / fps)
+            spans = getattr(self.config, "subtitle_region_spans", None)
+            segments = None
+            if spans and isinstance(spans, list) and len(spans) > 1:
+                segments = []
+                for span in spans:
+                    if not isinstance(span, dict):
+                        continue
+                    s = max(0.0, float(span.get("start", 0.0)))
+                    e = float(span.get("end", 0.0))
+                    if e <= 0:
+                        e = end_s
+                    if e > s:
+                        segments.append((s, e))
+                if not segments:
+                    segments = None
             base = str(Path(output_path).with_suffix(""))
             if mode == "edl":
                 path = nle_sidecar.write_edl(
                     base + ".edl", input_path, output_path,
                     fps, start_s, end_s,
+                    segments=segments, width=width, height=height,
                 )
             else:
                 path = nle_sidecar.write_fcpxml(
                     base + ".fcpxml", input_path, output_path,
                     fps, start_s, end_s,
+                    segments=segments, width=width, height=height,
                 )
             logger.info(f"NLE {mode.upper()} sidecar written: {path}")
         except Exception as exc:

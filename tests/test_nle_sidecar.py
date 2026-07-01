@@ -118,5 +118,63 @@ class NleIngestTests(unittest.TestCase):
             nle_sidecar._smpte_to_seconds("00:01:30:12", 24.0), 90.5)
 
 
+class MultiSegmentNleTests(unittest.TestCase):
+    def test_edl_multi_segment_round_trip(self):
+        segments = [(5.0, 10.0), (20.0, 30.0), (45.0, 55.0)]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            edl_path = str(Path(tmpdir) / "multi.edl")
+            nle_sidecar.write_edl(
+                edl_path, source="src.mp4", cleaned="clean.mp4",
+                fps=24.0, start_s=5.0, end_s=55.0,
+                segments=segments, width=1920, height=1080,
+            )
+            parsed = nle_sidecar.parse_edl(edl_path, fps=24.0)
+            text = Path(edl_path).read_text(encoding="utf-8")
+        self.assertEqual(len(parsed), 3)
+        self.assertAlmostEqual(parsed[0][0], 5.0, places=1)
+        self.assertAlmostEqual(parsed[1][0], 20.0, places=1)
+        self.assertAlmostEqual(parsed[2][1], 55.0, places=1)
+        self.assertIn("1920x1080", text)
+
+    def test_fcpxml_multi_segment_round_trip(self):
+        segments = [(0.0, 5.0), (10.0, 20.0)]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            xml_path = str(Path(tmpdir) / "multi.fcpxml")
+            nle_sidecar.write_fcpxml(
+                xml_path, source="src.mp4", cleaned="clean.mp4",
+                fps=30.0, start_s=0.0, end_s=20.0,
+                segments=segments, width=3840, height=2160,
+            )
+            parsed = nle_sidecar.parse_fcpxml(xml_path)
+            root = ElementTree.parse(xml_path).getroot()
+        self.assertEqual(len(parsed), 2)
+        fmt = root.find("./resources/format")
+        self.assertEqual(fmt.attrib["width"], "3840")
+        self.assertEqual(fmt.attrib["height"], "2160")
+
+    def test_edl_single_segment_backward_compatible(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            edl_path = str(Path(tmpdir) / "single.edl")
+            nle_sidecar.write_edl(
+                edl_path, source="src.mp4", cleaned="clean.mp4",
+                fps=24.0, start_s=10.0, end_s=30.0,
+            )
+            parsed = nle_sidecar.parse_edl(edl_path, fps=24.0)
+        self.assertEqual(len(parsed), 1)
+        self.assertAlmostEqual(parsed[0][0], 10.0, places=1)
+
+    def test_fcpxml_dimensions_default_when_not_provided(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            xml_path = str(Path(tmpdir) / "default.fcpxml")
+            nle_sidecar.write_fcpxml(
+                xml_path, source="src.mp4", cleaned="clean.mp4",
+                fps=24.0, start_s=0.0, end_s=5.0,
+            )
+            root = ElementTree.parse(xml_path).getroot()
+        fmt = root.find("./resources/format")
+        self.assertEqual(fmt.attrib["width"], "1920")
+        self.assertEqual(fmt.attrib["height"], "1080")
+
+
 if __name__ == "__main__":
     unittest.main()
