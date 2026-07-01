@@ -9,7 +9,9 @@ free of GUI imports so they can be tested and reused by both surfaces.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
+import logging
 import shutil
 from pathlib import Path
 from typing import Any, List, Optional
@@ -563,3 +565,163 @@ def _format_quality_preflight(value: Any) -> str:
     if messages:
         return _escape_md("warning")
     return _escape_md(status)
+
+
+_sidecar_logger = logging.getLogger(__name__ + ".sidecar")
+
+SIDECAR_SCHEMA = "vsr.output_sidecar.v1"
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _config_snapshot(config: Any) -> dict:
+    """Serialize processing config to a reproducibility-safe dict."""
+    fields = (
+        "mode", "device", "sttn_skip_detection", "sttn_neighbor_stride",
+        "sttn_reference_length", "sttn_max_load_num", "lama_super_fast",
+        "subtitle_area", "subtitle_areas", "subtitle_region_spans",
+        "detection_threshold", "detection_lang", "detection_frame_skip",
+        "detection_vertical", "whisper_fallback", "mask_dilate_px",
+        "mask_feather_px", "tbe_enable", "tbe_min_coverage",
+        "tbe_use_median", "tbe_flow_warp", "tbe_scene_cut_split",
+        "kalman_tracking", "phash_skip_enable", "phash_skip_distance",
+        "colour_tune_enable", "time_start", "time_end",
+        "preserve_audio", "output_quality", "output_codec",
+        "use_hw_encode", "decode_hw_accel", "output_frames",
+        "adaptive_batch", "quality_report", "nle_sidecar",
+        "keyframe_detection", "deinterlace", "deinterlace_auto",
+        "preserve_color_metadata", "loudnorm_target",
+        "multi_audio_passthrough", "prefetch_decode",
+    )
+    snapshot = {}
+    for name in fields:
+        value = _config_value(config, name, None)
+        if value is None:
+            continue
+        if hasattr(value, "value"):
+            value = value.value
+        if isinstance(value, (list, tuple)):
+            value = [list(v) if isinstance(v, tuple) else v for v in value]
+        snapshot[name] = value
+    return snapshot
+
+
+def _detection_engine_status() -> str:
+    """Return the name of the active OCR detection engine."""
+    try:
+        import importlib.util
+        for name in ("rapidocr", "rapidocr_onnxruntime", "paddleocr",
+                     "easyocr", "surya"):
+            if importlib.util.find_spec(name) is not None:
+                return name
+    except Exception:
+        pass
+    return "opencv-fallback"
+
+
+def build_output_sidecar(
+    *,
+    input_path: str,
+    output_path: str,
+    config: Any,
+    status: str,
+    elapsed_seconds: Optional[float] = None,
+    stage_timings: Optional[dict] = None,
+    quality_report: Optional[dict] = None,
+    quality_gate: Optional[dict] = None,
+    checkpoint_resumed: bool = False,
+    app_version: str = "",
+) -> dict:
+    """Build a per-output reproducibility sidecar payload."""
+    input_file = Path(input_path)
+    output_file = Path(output_path)
+    now = _dt.datetime.now(_dt.timezone.utc)
+
+    source_fingerprint = ""
+    source_bytes = 0
+    if input_file.is_file():
+        try:
+            source_bytes = int(input_file.stat().st_size)
+            source_fingerprint = _sha256_file(input_file)
+        except OSError:
+            pass
+
+    output_bytes = 0
+    if output_file.is_file():
+        try:
+            output_bytes = int(output_file.stat().st_size)
+        except OSError:
+            pass
+
+    payload = {
+        "schema": SIDECAR_SCHEMA,
+        "generatedAt": now.isoformat(timespec="seconds"),
+        "appVersion": app_version,
+        "source": {
+            "name": input_file.name,
+            "bytes": source_bytes,
+            "sha256": source_fingerprint,
+        },
+        "output": {
+            "name": output_file.name,
+            "bytes": output_bytes,
+        },
+        "config": _config_snapshot(config),
+        "engine": _detection_engine_status(),
+        "status": status,
+        "checkpointResumed": checkpoint_resumed,
+    }
+    if elapsed_seconds is not None:
+        payload["elapsedSeconds"] = round(max(0.0, float(elapsed_seconds)), 3)
+    if stage_timings is not None:
+        payload["stageTimings"] = _stage_timings_record(stage_timings)
+    if quality_report is not None:
+        payload["qualityReport"] = _quality_report_record(quality_report)
+    if quality_gate is not None:
+        payload["qualityGate"] = quality_gate
+    return payload
+
+
+def write_output_sidecar(
+    *,
+    input_path: str,
+    output_path: str,
+    config: Any,
+    status: str,
+    elapsed_seconds: Optional[float] = None,
+    stage_timings: Optional[dict] = None,
+    quality_report: Optional[dict] = None,
+    quality_gate: Optional[dict] = None,
+    checkpoint_resumed: bool = False,
+    app_version: str = "",
+) -> Optional[Path]:
+    """Write a <output>.vsr.json sidecar next to the output file."""
+    try:
+        payload = build_output_sidecar(
+            input_path=input_path,
+            output_path=output_path,
+            config=config,
+            status=status,
+            elapsed_seconds=elapsed_seconds,
+            stage_timings=stage_timings,
+            quality_report=quality_report,
+            quality_gate=quality_gate,
+            checkpoint_resumed=checkpoint_resumed,
+            app_version=app_version,
+        )
+        sidecar_path = Path(output_path + ".vsr.json")
+        _write_text_atomic(
+            sidecar_path,
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        )
+        _sidecar_logger.debug("Wrote sidecar: %s", sidecar_path)
+        return sidecar_path
+    except Exception as exc:
+        _sidecar_logger.warning("Sidecar write failed: %s", exc, exc_info=True)
+        return None

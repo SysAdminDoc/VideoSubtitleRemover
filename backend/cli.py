@@ -28,6 +28,7 @@ _RUNTIME_HELPERS_LOADED = False
 _path_key = None
 _probe_subtitle_streams = None
 _write_text_atomic = None
+write_output_sidecar = None
 SoftSubtitleAction = None
 remux_soft_subtitles = None
 
@@ -40,7 +41,7 @@ def _load_runtime_helpers() -> None:
     global STATUS_PAUSED, STATUS_REVIEW_NEEDED, STATUS_SKIPPED_EXISTING
     global STATUS_SOFT_REMUXED
     global choose_batch_output_path, finish_batch_item
-    global make_batch_item_record, write_batch_reports
+    global make_batch_item_record, write_batch_reports, write_output_sidecar
     global _path_key, _probe_subtitle_streams, _write_text_atomic
     global SoftSubtitleAction, remux_soft_subtitles
 
@@ -61,6 +62,7 @@ def _load_runtime_helpers() -> None:
         finish_batch_item,
         make_batch_item_record,
         write_batch_reports,
+        write_output_sidecar,
     )
     from backend.io import (
         _path_key as _io_path_key,
@@ -87,6 +89,14 @@ def _load_runtime_helpers() -> None:
 def _ensure_runtime_helpers() -> None:
     if not _RUNTIME_HELPERS_LOADED:
         _load_runtime_helpers()
+
+
+def _app_version() -> str:
+    try:
+        from gui.config import APP_VERSION
+        return APP_VERSION
+    except Exception:
+        return ""
 
 
 def _default_checkpoint_dir() -> Path:
@@ -1029,12 +1039,20 @@ def main():
                     started = time.monotonic()
                     try:
                         _run_soft_subtitle_only(inp, str(outp), soft_action)
+                        elapsed = time.monotonic() - started
                         finish_batch_item(
                             record,
                             STATUS_SOFT_REMUXED,
                             message=f"Soft subtitles {soft_action.value}",
-                            elapsed_seconds=time.monotonic() - started,
-                            stage_timings={"mux": time.monotonic() - started},
+                            elapsed_seconds=elapsed,
+                            stage_timings={"mux": elapsed},
+                        )
+                        write_output_sidecar(
+                            input_path=inp, output_path=str(outp),
+                            config=config, status="soft-subtitle-remuxed",
+                            elapsed_seconds=elapsed,
+                            stage_timings={"mux": elapsed},
+                            app_version=_app_version(),
                         )
                     except Exception as exc:
                         logger.error(f"Soft-subtitle remux failed on {src.name}: {exc}")
@@ -1205,6 +1223,11 @@ def main():
                         STATUS_SKIPPED_EXISTING,
                         message="Output already exists",
                     )
+                    write_output_sidecar(
+                        input_path=inp, output_path=str(outp),
+                        config=config, status="skipped-existing",
+                        app_version=_app_version(),
+                    )
                     continue
                 if record["planned_result"] == STATUS_CHECKPOINT_DONE:
                     print(f"[skip] {src.name} (checkpoint)")
@@ -1212,6 +1235,12 @@ def main():
                         record,
                         STATUS_CHECKPOINT_DONE,
                         message="Checkpoint already complete",
+                    )
+                    write_output_sidecar(
+                        input_path=inp, output_path=str(outp),
+                        config=config, status="checkpoint-done",
+                        checkpoint_resumed=True,
+                        app_version=_app_version(),
                     )
                     continue
                 started = time.monotonic()

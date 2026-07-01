@@ -5847,5 +5847,94 @@ class TempCleanupOnExceptionTests(unittest.TestCase):
             self.assertFalse(os.path.exists(temp))
 
 
+class OutputSidecarTests(unittest.TestCase):
+    def test_build_output_sidecar_schema_and_fields(self):
+        from backend.batch_report import build_output_sidecar, SIDECAR_SCHEMA
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inp = os.path.join(tmpdir, "input.mp4")
+            out = os.path.join(tmpdir, "output.mp4")
+            Path(inp).write_bytes(b"fake video content")
+            Path(out).write_bytes(b"fake output content")
+
+            config = ProcessingConfig(detection_lang="en", output_quality=20)
+            sidecar = build_output_sidecar(
+                input_path=inp,
+                output_path=out,
+                config=config,
+                status="processed",
+                elapsed_seconds=12.345,
+                stage_timings={"decode": 1.0, "ocr": 2.5, "inpaint": 5.0, "encode": 3.0},
+                quality_report={"psnr": 25.0, "ssim": 0.95, "samples": 10, "tag": "Good"},
+                quality_gate={"status": "passed"},
+                checkpoint_resumed=False,
+                app_version="3.17.3",
+            )
+
+        self.assertEqual(sidecar["schema"], SIDECAR_SCHEMA)
+        self.assertEqual(sidecar["appVersion"], "3.17.3")
+        self.assertEqual(sidecar["status"], "processed")
+        self.assertFalse(sidecar["checkpointResumed"])
+        self.assertAlmostEqual(sidecar["elapsedSeconds"], 12.345, places=2)
+        self.assertEqual(sidecar["source"]["name"], "input.mp4")
+        self.assertGreater(sidecar["source"]["bytes"], 0)
+        self.assertEqual(len(sidecar["source"]["sha256"]), 64)
+        self.assertEqual(sidecar["output"]["name"], "output.mp4")
+        self.assertEqual(sidecar["config"]["detection_lang"], "en")
+        self.assertEqual(sidecar["config"]["output_quality"], 20)
+        self.assertIn("engine", sidecar)
+        self.assertEqual(sidecar["stageTimings"]["ocr"], 2.5)
+        self.assertEqual(sidecar["qualityReport"]["psnr"], 25.0)
+        self.assertEqual(sidecar["qualityGate"]["status"], "passed")
+
+    def test_write_output_sidecar_creates_file(self):
+        from backend.batch_report import write_output_sidecar, SIDECAR_SCHEMA
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inp = os.path.join(tmpdir, "input.mp4")
+            out = os.path.join(tmpdir, "output.mp4")
+            Path(inp).write_bytes(b"source")
+            Path(out).write_bytes(b"output")
+
+            config = ProcessingConfig()
+            result = write_output_sidecar(
+                input_path=inp,
+                output_path=out,
+                config=config,
+                status="processed",
+                app_version="3.17.3",
+            )
+
+            self.assertIsNotNone(result)
+            self.assertTrue(result.exists())
+            self.assertEqual(result.name, "output.mp4.vsr.json")
+            payload = json.loads(result.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema"], SIDECAR_SCHEMA)
+
+    def test_sidecar_omits_optional_fields_when_not_provided(self):
+        from backend.batch_report import build_output_sidecar
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inp = os.path.join(tmpdir, "input.mp4")
+            out = os.path.join(tmpdir, "output.mp4")
+            Path(inp).write_bytes(b"source")
+            Path(out).write_bytes(b"output")
+
+            sidecar = build_output_sidecar(
+                input_path=inp,
+                output_path=out,
+                config=ProcessingConfig(),
+                status="skipped-existing",
+            )
+
+        self.assertNotIn("elapsedSeconds", sidecar)
+        self.assertNotIn("stageTimings", sidecar)
+        self.assertNotIn("qualityReport", sidecar)
+        self.assertNotIn("qualityGate", sidecar)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1056,6 +1056,7 @@ class SubtitleRemover:
                 with self._time_stage("encode"):
                     _copy_file_atomic(input_path, output_path)
                 self.last_output_path = output_path
+                self._write_reproducibility_sidecar(input_path, output_path)
                 self.last_error_message = None
                 self.last_error_reason = None
                 self._report_progress(1.0, "Complete (no text found)")
@@ -1088,6 +1089,7 @@ class SubtitleRemover:
             finally:
                 _cleanup_temp_output(temp_output)
             self.last_output_path = output_path
+            self._write_reproducibility_sidecar(input_path, output_path)
             self.last_error_message = None
             self.last_error_reason = None
             self._report_progress(1.0, "Complete!")
@@ -2039,6 +2041,10 @@ class SubtitleRemover:
                     logger.warning(f"Quality report failed: {exc}", exc_info=True)
 
             self.last_output_path = final_output_path
+            self._write_reproducibility_sidecar(
+                input_path, final_output_path,
+                checkpoint_resumed=resume_frame_count > 0,
+            )
             self.last_error_message = None
             self.last_error_reason = None
             if checkpoint_active and checkpoint_root is not None and checkpoint_key:
@@ -2149,6 +2155,37 @@ class SubtitleRemover:
             logger.info(f"NLE {mode.upper()} sidecar written: {path}")
         except Exception as exc:
             logger.warning(f"NLE sidecar write failed: {exc}", exc_info=True)
+
+    def _write_reproducibility_sidecar(
+        self,
+        input_path: str,
+        output_path: str,
+        *,
+        checkpoint_resumed: bool = False,
+    ) -> None:
+        try:
+            from backend.batch_report import write_output_sidecar
+            from gui.config import APP_VERSION
+        except Exception:
+            return
+        try:
+            quality_report = self.last_quality_report
+            quality_gate = None
+            if isinstance(quality_report, dict):
+                quality_gate = quality_report.get("quality_gate")
+            write_output_sidecar(
+                input_path=input_path,
+                output_path=output_path,
+                config=self.config,
+                status="processed",
+                stage_timings=self.last_stage_timings,
+                quality_report=quality_report,
+                quality_gate=quality_gate,
+                checkpoint_resumed=checkpoint_resumed,
+                app_version=APP_VERSION,
+            )
+        except Exception as exc:
+            logger.debug("Reproducibility sidecar write failed: %s", exc)
 
     def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
         """RM-78 / RM-80: run optional post-restore passes against the
