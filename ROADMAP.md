@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P1 — Add GUI visual regression coverage for critical states
-  Why: The Tk smoke tests verify construction and widget metadata, but they do not catch clipped text, broken hierarchy, blank previews, or visual regressions in states users rely on.
-  Evidence: `tests/test_gui_smoke.py`, `gui/app.py`, `gui/widgets.py`, commercial remover preview/review workflows.
-  Touches: `tests/test_gui_smoke.py`, `gui/app.py`, `gui/widgets.py`, `gui/preview_controller.py`, `tools/` if a screenshot helper is added.
-  Acceptance: deterministic screenshots or pixel assertions cover empty queue, queued item selected, preview unavailable, quality review needed, and backend-status/about states at desktop and narrow widths; the test fails on blank/overlapping/clipped primary controls.
-  Complexity: M
-
 - [ ] P2 — Add a local upstream dependency and security drift report
   Why: PaddleOCR, RapidOCR, ONNX Runtime, OpenCV, PyInstaller, and related packages move quickly, while this repo intentionally avoids Dependabot/GitHub Actions.
   Evidence: `requirements.txt`, `backend/dependency_caps.py`, `backend/release_verification.py`, PaddleOCR/RapidOCR/ONNX Runtime releases, OpenCV libpng CVE issue.

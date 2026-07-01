@@ -6,6 +6,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **GUI visual regression coverage.** Widget geometry assertions now
+  cover empty queue, queued item selected, and narrow-width states,
+  failing on zero-sized or clipped primary controls.
 - **Per-output reproducibility sidecars.** Every hardcoded cleanup,
   soft-subtitle remux, skipped-existing, and checkpoint-completed output
   now writes a `<output>.vsr.json` sidecar recording source SHA-256
