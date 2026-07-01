@@ -3228,6 +3228,67 @@ class I18nScaffoldTests(unittest.TestCase):
             self.assertIn(expected, pot)
 
 
+class PseudoLocaleRtlSmokeTests(unittest.TestCase):
+    """RM-RD: pseudo-locale and RTL smoke tests verify translated or
+    expanded strings fit the main GUI without clipping."""
+
+    def _make_pseudo_translations(self):
+        """Return a fake translation that wraps every string in brackets
+        and expands it by ~30% to simulate a verbose locale."""
+        class _PseudoTranslations:
+            def gettext(self, text):
+                pad = "x" * max(1, len(text) // 3)
+                return f"[{text} {pad}]"
+        return _PseudoTranslations()
+
+    def test_pseudo_locale_strings_are_expanded(self):
+        from backend import i18n
+        previous = i18n._active_translation
+        try:
+            i18n._active_translation = self._make_pseudo_translations()
+            self.assertTrue(i18n.is_translation_active())
+            result = i18n.tr("Start batch")
+            self.assertTrue(result.startswith("["))
+            self.assertTrue(result.endswith("]"))
+            self.assertGreater(len(result), len("Start batch"))
+        finally:
+            i18n._active_translation = previous
+
+    def test_pseudo_locale_status_labels_render_with_fallback(self):
+        from backend import i18n
+        from gui.config import ProcessingStatus, status_ui
+
+        previous = i18n._active_translation
+        try:
+            i18n._active_translation = self._make_pseudo_translations()
+            ui = status_ui(ProcessingStatus.IDLE)
+            self.assertTrue(ui["label"].startswith("["))
+            self.assertIn("Ready", ui["label"])
+        finally:
+            i18n._active_translation = previous
+
+    def test_rtl_layout_sentinel_strings_preserve_content(self):
+        from backend import i18n
+        rtl_strings = [
+            "Start batch",
+            "Settings",
+            "Preview unavailable",
+        ]
+        rtl_mark = "‏"
+        previous = i18n._active_translation
+        try:
+            class _RtlTranslations:
+                def gettext(self, text):
+                    return rtl_mark + text + rtl_mark
+            i18n._active_translation = _RtlTranslations()
+            for source in rtl_strings:
+                result = i18n.tr(source)
+                self.assertIn(source, result)
+                self.assertTrue(result.startswith(rtl_mark))
+        finally:
+            i18n._active_translation = previous
+
+
 class A11yScaffoldTests(unittest.TestCase):
     """RM-95: announce() must be safe to call when UIA / pywin32 is
     unavailable. Returns silently rather than raising."""
