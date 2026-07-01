@@ -400,6 +400,127 @@ def _ffmpeg_encoder_status() -> dict:
     return payload
 
 
+def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
+    """Exercise ffprobe and ffmpeg with a tiny synthetic fixture.
+
+    Records command, path, env, return code, and output so release
+    evidence proves the packaged app can safely launch external tools.
+    """
+    schema = "vsr.ffmpeg_subprocess_smoke.v1"
+    ffmpeg_path = shutil.which("ffmpeg") or ""
+    ffprobe_path = shutil.which("ffprobe") or ""
+    payload = {
+        "schema": schema,
+        "ran": False,
+        "passed": False,
+        "ffmpegPath": ffmpeg_path,
+        "ffprobePath": ffprobe_path,
+        "ffmpegAvailable": bool(ffmpeg_path),
+        "ffprobeAvailable": bool(ffprobe_path),
+        "generate": {"ran": False, "passed": False, "error": ""},
+        "probe": {"ran": False, "passed": False, "error": "", "codec": "", "width": None, "height": None, "frames": None},
+        "transcode": {"ran": False, "passed": False, "error": ""},
+        "env": {
+            "PATH": os.environ.get("PATH", "")[:2000],
+            "frozen": bool(getattr(sys, "frozen", False)),
+        },
+        "error": "",
+    }
+    if not ffmpeg_path or not ffprobe_path:
+        payload["error"] = "ffmpeg or ffprobe not on PATH"
+        return payload
+
+    tmpdir = None
+    try:
+        tmpdir = tempfile.mkdtemp(prefix="vsr-ffsmoke-")
+        fixture = os.path.join(tmpdir, "smoke_fixture.avi")
+        transcoded = os.path.join(tmpdir, "smoke_out.mkv")
+
+        gen_cmd = [
+            ffmpeg_path, "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=32x32:r=2:d=0.5",
+            "-c:v", "rawvideo", "-pix_fmt", "bgr24",
+            fixture,
+        ]
+        gen_proc = subprocess.run(
+            gen_cmd, capture_output=True, text=True, timeout=timeout,
+            check=False,
+        )
+        payload["generate"]["ran"] = True
+        payload["generate"]["command"] = gen_cmd
+        if gen_proc.returncode != 0:
+            payload["generate"]["error"] = (gen_proc.stderr or "")[-1000:]
+            payload["error"] = "ffmpeg fixture generation failed"
+            payload["ran"] = True
+            return payload
+        payload["generate"]["passed"] = True
+
+        probe_cmd = [
+            ffprobe_path, "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name,width,height,nb_frames",
+            "-of", "json", fixture,
+        ]
+        probe_proc = subprocess.run(
+            probe_cmd, capture_output=True, text=True, timeout=timeout,
+            check=False,
+        )
+        payload["probe"]["ran"] = True
+        payload["probe"]["command"] = probe_cmd
+        if probe_proc.returncode != 0:
+            payload["probe"]["error"] = (probe_proc.stderr or "")[-1000:]
+            payload["error"] = "ffprobe failed on generated fixture"
+            payload["ran"] = True
+            return payload
+        try:
+            probe_data = json.loads(probe_proc.stdout or "{}")
+            streams = probe_data.get("streams") or []
+            stream = streams[0] if streams else {}
+            payload["probe"]["codec"] = str(stream.get("codec_name") or "")
+            payload["probe"]["width"] = stream.get("width")
+            payload["probe"]["height"] = stream.get("height")
+            nb = stream.get("nb_frames")
+            payload["probe"]["frames"] = int(nb) if nb and str(nb).isdigit() else None
+        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            payload["probe"]["error"] = str(exc)
+            payload["error"] = "ffprobe returned invalid JSON"
+            payload["ran"] = True
+            return payload
+        payload["probe"]["passed"] = True
+
+        tc_cmd = [
+            ffmpeg_path, "-y", "-hide_banner", "-loglevel", "error",
+            "-i", fixture,
+            "-c:v", "ffv1", "-g", "1",
+            transcoded,
+        ]
+        tc_proc = subprocess.run(
+            tc_cmd, capture_output=True, text=True, timeout=timeout,
+            check=False,
+        )
+        payload["transcode"]["ran"] = True
+        payload["transcode"]["command"] = tc_cmd
+        if tc_proc.returncode != 0:
+            payload["transcode"]["error"] = (tc_proc.stderr or "")[-1000:]
+            payload["error"] = "ffmpeg transcode failed"
+            payload["ran"] = True
+            return payload
+        payload["transcode"]["passed"] = os.path.isfile(transcoded)
+        if not payload["transcode"]["passed"]:
+            payload["error"] = "transcode output file missing"
+            payload["ran"] = True
+            return payload
+
+        payload["ran"] = True
+        payload["passed"] = True
+    except Exception as exc:
+        payload["error"] = str(exc)
+        payload["ran"] = True
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+    return payload
+
+
 def _run_smoke(dist_dir: Path, timeout: float = 45.0) -> dict:
     exe = dist_dir / "VideoSubtitleRemoverPro.exe"
     payload = {
@@ -549,6 +670,7 @@ def build_release_evidence(
                 }
             ),
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
+            "ffmpegSubprocessSmoke": _ffmpeg_subprocess_smoke(),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {
             "ran": False,
@@ -587,6 +709,10 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     if (isinstance(reference, Mapping)
             and reference.get("ran") and not reference.get("passed")):
         yield "Reference corpus regression failed"
+    ffsmoke = evidence.get("releaseTools", {}).get("ffmpegSubprocessSmoke", {})
+    if (isinstance(ffsmoke, Mapping)
+            and ffsmoke.get("ran") and not ffsmoke.get("passed")):
+        yield f"FFmpeg subprocess smoke failed: {ffsmoke.get('error', 'unknown')}"
     runtime_hooks = evidence.get("releaseTools", {}).get("pyinstallerRuntimeHooks", [])
     if isinstance(runtime_hooks, list):
         hook_names = {

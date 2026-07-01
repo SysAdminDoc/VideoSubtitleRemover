@@ -122,6 +122,23 @@ class ReleaseVerificationTests(unittest.TestCase):
                 return_value={"ran": True, "passed": True, "returncode": 0},
             ),
             mock.patch(
+                "backend.release_verification._ffmpeg_subprocess_smoke",
+                return_value={
+                    "schema": "vsr.ffmpeg_subprocess_smoke.v1",
+                    "ran": True,
+                    "passed": True,
+                    "ffmpegPath": "/usr/bin/ffmpeg",
+                    "ffprobePath": "/usr/bin/ffprobe",
+                    "ffmpegAvailable": True,
+                    "ffprobeAvailable": True,
+                    "generate": {"ran": True, "passed": True, "error": ""},
+                    "probe": {"ran": True, "passed": True, "error": "", "codec": "rawvideo", "width": 32, "height": 32, "frames": 1},
+                    "transcode": {"ran": True, "passed": True, "error": ""},
+                    "env": {"PATH": "/usr/bin", "frozen": False},
+                    "error": "",
+                },
+            ),
+            mock.patch(
                 "backend.release_verification.opencv_libpng_status",
                 return_value={
                     "vulnerable": False,
@@ -209,6 +226,11 @@ class ReleaseVerificationTests(unittest.TestCase):
             "OpenVINO CPU",
         )
         self.assertFalse(evidence["releaseTools"]["referenceCorpus"]["ran"])
+        self.assertEqual(
+            evidence["releaseTools"]["ffmpegSubprocessSmoke"]["schema"],
+            "vsr.ffmpeg_subprocess_smoke.v1",
+        )
+        self.assertTrue(evidence["releaseTools"]["ffmpegSubprocessSmoke"]["passed"])
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
         self.assertEqual(hidden_payload["runtimeHooks"], ["assets/runtime_hook_mp.py"])
@@ -371,6 +393,55 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(advisories["summary"]["blocking"], 0)
         ids = {item["id"] for item in advisories["advisories"]}
         self.assertIn("ORT-CUDA-LEGACY-PACKAGE", ids)
+
+    def test_ffmpeg_subprocess_smoke_passes_with_real_tools(self):
+        smoke = release_verification._ffmpeg_subprocess_smoke(timeout=30.0)
+        if not smoke["ffmpegAvailable"] or not smoke["ffprobeAvailable"]:
+            self.skipTest("ffmpeg/ffprobe not installed")
+        self.assertTrue(smoke["ran"])
+        self.assertTrue(smoke["passed"])
+        self.assertTrue(smoke["generate"]["passed"])
+        self.assertTrue(smoke["probe"]["passed"])
+        self.assertEqual(smoke["probe"]["width"], 32)
+        self.assertEqual(smoke["probe"]["height"], 32)
+        self.assertTrue(smoke["transcode"]["passed"])
+
+    def test_ffmpeg_subprocess_smoke_fails_without_ffmpeg(self):
+        with mock.patch("backend.release_verification.shutil.which", return_value=None):
+            smoke = release_verification._ffmpeg_subprocess_smoke()
+        self.assertFalse(smoke["ran"])
+        self.assertFalse(smoke["passed"])
+        self.assertIn("not on PATH", smoke["error"])
+
+    def test_release_evidence_reports_ffmpeg_smoke_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp) / "dist"
+            dist_dir.mkdir()
+            self._copy_release_inputs(dist_dir)
+
+            failed_smoke = {
+                "schema": "vsr.ffmpeg_subprocess_smoke.v1",
+                "ran": True,
+                "passed": False,
+                "error": "ffprobe failed on generated fixture",
+            }
+            patches = self._patched_environment()
+            with ExitStack() as stack:
+                for patch in patches:
+                    stack.enter_context(patch)
+                stack.enter_context(mock.patch(
+                    "backend.release_verification._ffmpeg_subprocess_smoke",
+                    return_value=failed_smoke,
+                ))
+                evidence, _, _, _ = release_verification.build_release_evidence(
+                    dist_dir=dist_dir,
+                    runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
+                )
+
+        self.assertIn(
+            "FFmpeg subprocess smoke failed: ffprobe failed on generated fixture",
+            evidence["errors"],
+        )
 
     def test_opencv_libpng_exception_is_removed_when_runtime_is_fixed(self):
         deps = [{"name": "opencv-python", "version": "4.13.0.92"}]
