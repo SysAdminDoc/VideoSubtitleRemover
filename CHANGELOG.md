@@ -6,6 +6,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Pseudo-locale and RTL rendered smoke tests.** Expanded-string and
+  RTL-mark translation tests verify the i18n layer renders status
+  labels and sentinel strings without clipping or loss.
 - **Local dependency drift report.** A drift report now lists every
   tracked core and optional package with installed version, pinned
   minimum/maximum, status, and blocked exceptions. Release verification

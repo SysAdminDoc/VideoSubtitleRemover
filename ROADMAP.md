@@ -5,13 +5,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Research-Driven Additions
 
-- [ ] P2 — Add pseudo-locale and RTL rendered smoke tests
-  Why: Gettext and RTL scaffolds exist, but no rendered smoke proves translated or expanded strings fit the main GUI.
-  Evidence: `backend/i18n.py`, `locale/vsr.pot`, `gui/config.py`, `gui/app.py`, `tests/test_hardening.py`, Subtitle Edit localization precedent.
-  Touches: `backend/i18n.py`, `locale/vsr.pot`, `gui/app.py`, `tests/test_gui_smoke.py`, `tests/test_hardening.py`.
-  Acceptance: tests create or load a temporary pseudo-locale catalog with expanded strings, start the GUI with RTL layout enabled, verify translated sentinel labels, and assert major buttons/status chips are visible and not clipped.
-  Complexity: M
-
 - [ ] P2 — Enrich NLE sidecars for multi-segment editorial handoff
   Why: Current EDL/FCPXML exports are intentionally one-event stubs; editor handoff improves if timed regions, source timecode, audio state, dimensions, and multiple cleaned ranges survive.
   Evidence: `backend/nle_sidecar.py`, `backend/processor.py`, `tests/test_nle_sidecar.py`, Subtitle Edit format breadth.
