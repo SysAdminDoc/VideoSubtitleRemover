@@ -17,7 +17,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && python -m pip install --no-cache-dir \
         "numpy>=1.26" \
         "opencv-python-headless>=4.12.0" \
-        "Pillow>=12.2.0" \
+        "Pillow>=12.3.0" \
         "onnxruntime>=1.21.0"
 
 COPY . .

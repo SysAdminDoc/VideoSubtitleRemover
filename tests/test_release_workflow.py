@@ -22,7 +22,7 @@ class ReleaseVerificationTests(unittest.TestCase):
         patches = [
             mock.patch(
                 "backend.release_verification.collect_dependency_versions",
-                return_value=[{"name": "Pillow", "version": "12.2.0"}],
+                return_value=[{"name": "Pillow", "version": "12.3.0"}],
             ),
             mock.patch(
                 "backend.release_verification.release_manifest_status",
@@ -483,15 +483,32 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertNotIn("CVE-2025-59042", ids)
 
     def test_nsis_advisory_flags_old_toolchain(self):
-        advisory = release_verification.nsis_security_advisory("3.09")
+        advisory = release_verification.nsis_security_advisory("3.11")
         self.assertIsNotNone(advisory)
         self.assertTrue(advisory["blocking"])
-        self.assertEqual(advisory["fixedIn"], "3.11")
-        self.assertIsNone(release_verification.nsis_security_advisory("3.11"))
+        self.assertEqual(advisory["fixedIn"], "3.12")
+        self.assertEqual(advisory["id"], "NSIS-2026-LOW-IL-TEMP")
+        self.assertIsNone(release_verification.nsis_security_advisory("3.12"))
         self.assertIsNone(release_verification.nsis_security_advisory(""))
 
-    def test_strict_release_fails_on_vulnerable_ffmpeg(self):
+    def test_pillow_below_security_floor_blocks(self):
         deps = [{"name": "Pillow", "version": "12.2.0"}]
+        with mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={"vulnerable": False},
+        ), mock.patch(
+            "backend.release_verification.nsis_security_advisory",
+            return_value=None,
+        ):
+            advisories = release_verification.collect_release_advisories(deps)
+        ids = {item["id"]: item for item in advisories["advisories"]}
+        self.assertTrue(ids["PILLOW-12.3-SECURITY-FLOOR"]["blocking"])
+        self.assertEqual(
+            ids["PILLOW-12.3-SECURITY-FLOOR"]["fixedIn"], "12.3.0"
+        )
+
+    def test_strict_release_fails_on_vulnerable_ffmpeg(self):
+        deps = [{"name": "Pillow", "version": "12.3.0"}]
         with mock.patch(
             "backend.release_verification.probe_ffmpeg_security",
             return_value={

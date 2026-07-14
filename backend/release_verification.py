@@ -29,6 +29,7 @@ from backend.adapter_manifest import (
     release_manifest_status,
 )
 from backend.dependency_caps import (
+    PILLOW_MINIMUM_VERSION,
     collect_dependency_drift_report,
     collect_opencv_wheel_status,
     collect_onnxruntime_provider_status,
@@ -54,6 +55,7 @@ HIDDEN_IMPORT_RE = re.compile(r"--hidden-import(?:=|\s+)([^\s]+)")
 RUNTIME_HOOK_RE = re.compile(r"--runtime-hook(?:=|\s+)([^\s]+)")
 STRICT_BLOCKING_SEVERITIES = {"high", "critical"}
 REQUIRED_RUNTIME_HOOK = "assets/runtime_hook_mp.py"
+NSIS_MINIMUM_VERSION = "3.12"
 
 
 def _read_config_constant(name: str, default: str) -> str:
@@ -295,17 +297,23 @@ def collect_release_advisories(
         ))
 
     pillow_version = _dependency_version(dependencies, "pillow", "pil")
-    if (pillow_version and _version_gte(pillow_version, "11.2.0")
-            and _version_lt(pillow_version, "11.3.0")):
+    if pillow_version and _version_lt(pillow_version, PILLOW_MINIMUM_VERSION):
         findings.append(_advisory(
-            advisory_id="CVE-2025-48379",
+            advisory_id="PILLOW-12.3-SECURITY-FLOOR",
             package="Pillow",
             installed_version=pillow_version,
-            affected=">=11.2.0,<11.3.0",
-            fixed_in="11.3.0",
+            affected=f"<{PILLOW_MINIMUM_VERSION}",
+            fixed_in=PILLOW_MINIMUM_VERSION,
             severity="high",
-            source="https://nvd.nist.gov/vuln/detail/CVE-2025-48379",
-            mitigation="Upgrade Pillow before producing a strict release.",
+            source=(
+                "https://pillow.readthedocs.io/en/stable/"
+                "releasenotes/12.3.0.html"
+            ),
+            mitigation=(
+                f"Upgrade Pillow to >= {PILLOW_MINIMUM_VERSION} before "
+                "producing a strict release; 12.3.0 contains multiple "
+                "input-decoder, memory-safety, and decompression-bomb fixes."
+            ),
         ))
 
     libpng = opencv_libpng_status()
@@ -380,7 +388,7 @@ def collect_release_advisories(
 
 
 def probe_makensis_version() -> str:
-    """Return the makensis version string (e.g. '3.11'), '' if unavailable."""
+    """Return the makensis version string (e.g. '3.12'), '' if unavailable."""
     path = shutil.which("makensis")
     if not path:
         return ""
@@ -395,29 +403,30 @@ def probe_makensis_version() -> str:
 
 
 def nsis_security_advisory(version: Optional[str] = None) -> Optional[dict]:
-    """Blocking advisory when the NSIS toolchain predates the 3.11 LPE fix.
+    """Block installer builds that predate the NSIS 3.12 SYSTEM LPE fix.
 
     Returns None when makensis is absent (not every build machine installs it)
-    or when the version is 3.11+. CVE-2025-43715 is a temp-plugin-dir race that
-    yields SYSTEM during install.
+    or when the version is current. NSIS 3.12 stopped elevated installers from
+    using the Low IL temp directory, preventing a possible SYSTEM escalation.
     """
     if version is None:
         version = probe_makensis_version()
     if not version:
         return None
-    if not _version_lt(version, "3.11"):
+    if not _version_lt(version, NSIS_MINIMUM_VERSION):
         return None
     return _advisory(
-        advisory_id="CVE-2025-43715",
+        advisory_id="NSIS-2026-LOW-IL-TEMP",
         package="nsis (makensis)",
         installed_version=version,
-        affected="<3.11",
-        fixed_in="3.11",
+        affected=f"<{NSIS_MINIMUM_VERSION}",
+        fixed_in=NSIS_MINIMUM_VERSION,
         severity="high",
-        source="https://github.com/advisories/GHSA-g9m2-7jc6-pmvf",
+        source="https://nsis.sourceforge.io/Docs/AppendixF.html#v3.12",
         mitigation=(
-            "Build the installer with NSIS >= 3.11; earlier releases allow a "
-            "temp plugin-dir race to run code as SYSTEM during install."
+            f"Build the installer with NSIS >= {NSIS_MINIMUM_VERSION}; older "
+            "releases can use a Low IL temp directory while elevated, enabling "
+            "a possible privilege escalation for SYSTEM installers."
         ),
     )
 

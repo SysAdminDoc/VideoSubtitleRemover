@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Pillow and NSIS security floors.** Source, Docker, dependency diagnostics,
+  and strict release evidence now require Pillow 12.3.0, which includes the
+  2026-07-01 decoder, memory-safety, and decompression-bomb fixes. Installer
+  compilation and release evidence require NSIS 3.12 so elevated installers do
+  not use the Low IL temporary directory.
 - **FFmpeg filtergraph injection in subtitle re-burn.** `burn_subtitles` now
   escapes single quotes in the subtitle path for the filtergraph value context
   and validates the ASS `force_style` override against a strict allowlist,

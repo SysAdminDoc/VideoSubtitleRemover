@@ -119,9 +119,10 @@ CVE-2026-30999. The self-test, support bundle, and strict release validation
 flag a known-vulnerable runtime as blocking.
 
 **Build toolchain floors:** the local build requires **PyInstaller >= 6.10.0**
-(CVE-2025-59042 writable-CWD LPE) and the installer requires **NSIS >= 3.11**
-(CVE-2025-43715 temp-plugin-dir SYSTEM LPE); `installer/vsr.nsi` fails to
-compile on an older NSIS, and strict release validation flags both.
+(CVE-2025-59042 writable-CWD LPE) and the installer requires **NSIS >= 3.12**
+(elevated Low IL temp-directory privilege-escalation hardening);
+`installer/vsr.nsi` fails to compile on an older NSIS, and strict release
+validation flags both.
 
 Run `python -m backend.processor --self-test` to confirm the installed build's
 `basic`, `advanced_quality`, `speech_fallback`, and `modern_codec` profiles.

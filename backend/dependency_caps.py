@@ -633,11 +633,12 @@ def enforce_ocr_dependency_caps() -> None:
 
 
 DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
+PILLOW_MINIMUM_VERSION = "12.3.0"
 
 TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("numpy", "1.21.0", ""),
     ("opencv-python", "4.12.0", ""),
-    ("Pillow", "12.2.0", ""),
+    ("Pillow", PILLOW_MINIMUM_VERSION, ""),
     ("rapidocr", "2.0.0", "4.0.0"),
     ("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
     ("paddleocr", "3.0.0", "4.0.0"),

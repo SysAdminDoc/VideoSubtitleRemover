@@ -23,6 +23,12 @@ class DependencyCapTests(unittest.TestCase):
 
         self.assertIn("rapidocr-onnxruntime>=1.4.0,<2.0.0", requirements)
         self.assertIn("opencv-python>=4.12.0", requirements)
+        self.assertIn(
+            f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", requirements
+        )
+        self.assertIn(
+            f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", setup
+        )
         self.assertNotIn("opencv-python>=4.12.0,<", requirements)
         self.assertNotIn("numpy>=1.21.0,<", requirements)
 
@@ -234,7 +240,7 @@ class DriftReportTests(unittest.TestCase):
         versions = {
             "numpy": "1.26.4",
             "opencv-python": "4.12.0",
-            "pillow": "12.2.0",
+            "pillow": "12.3.0",
             "rapidocr": "3.9.0",
         }
         report = dependency_caps.collect_dependency_drift_report(
@@ -246,7 +252,7 @@ class DriftReportTests(unittest.TestCase):
         self.assertGreater(report["summary"]["notInstalled"], 0)
 
     def test_drift_report_detects_below_minimum(self):
-        versions = {"numpy": "1.20.0"}
+        versions = {"numpy": "1.20.0", "pillow": "12.2.0"}
         report = dependency_caps.collect_dependency_drift_report(
             package_versions=versions,
         )
@@ -254,6 +260,11 @@ class DriftReportTests(unittest.TestCase):
             i for i in report["packages"] if i["package"] == "numpy"
         )
         self.assertEqual(numpy_item["status"], "below-minimum")
+        pillow_item = next(
+            i for i in report["packages"] if i["package"] == "Pillow"
+        )
+        self.assertEqual(pillow_item["minimum"], "12.3.0")
+        self.assertEqual(pillow_item["status"], "below-minimum")
 
     def test_drift_report_detects_above_maximum(self):
         versions = {"rapidocr": "5.0.0"}
@@ -266,7 +277,7 @@ class DriftReportTests(unittest.TestCase):
         self.assertEqual(item["status"], "above-maximum")
 
     def test_drift_report_format_is_human_readable(self):
-        versions = {"numpy": "1.26.4", "pillow": "12.2.0"}
+        versions = {"numpy": "1.26.4", "pillow": "12.3.0"}
         report = dependency_caps.collect_dependency_drift_report(
             package_versions=versions,
         )
