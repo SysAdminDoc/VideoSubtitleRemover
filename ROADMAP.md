@@ -47,3 +47,21 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Touches: `gui/preview_controller.py`, `gui/config.py`, `backend/config.py`, `backend/processor.py`, `backend/tracking.py`, `backend/batch_report.py`, `tests/test_reference_clips.py`
   Acceptance: Users can choose a clean reference frame per timed region, preview translation/homography alignment and per-frame color matching, apply only inside the final mask, fall back when alignment confidence is low, and reproduce the result from persisted config/sidecar evidence.
   Complexity: L
+
+## Audit Findings (2026-07-14 deep audit)
+
+- [ ] P2 — Confine VapourSynth `.vpy` execution to an allowlisted script directory
+  Why: `try_open_vpy` runs `exec()` on any `.vpy` reached by extension when `VSR_VAPOURSYNTH=1`; a batch/folder sweep could pull in an untrusted script and execute arbitrary code.
+  Where: `backend/vapoursynth_bridge.py` (exec of script), `backend/io.py` (`_open_capture` dispatch by extension).
+
+- [ ] P2 — Require a pinned commit SHA for CoTracker `torch.hub.load(trust_repo=True)`
+  Why: `trust_repo=True` executes the remote repo's `hubconf.py`; if the resolved revision is a mutable branch/tag rather than a pinned SHA, a moved/compromised upstream can run code (gated behind `VSR_COTRACKER`).
+  Where: `backend/segmentation.py` lines ~679-690; `resolve_remote_model_source` revision handling.
+
+- [ ] P3 — Stabilize GUI tests under a full-suite run
+  Why: A couple of Tk tests pass in isolation but fail with "Tcl wasn't installed properly" when the whole suite creates many Tk roots in one process; this is test-harness resource exhaustion, not a product bug, but it makes the suite flaky.
+  Where: `tests/test_gui_smoke.py`, `tests/test_hardening.py` (GUI test roots); needs per-test Tk teardown or subprocess isolation.
+
+- [ ] P3 — First-run-friendly copy for advanced-setting tooltips
+  Why: Several advanced toggles surface backend jargon without explaining the tradeoff (e.g. "Kalman box tracking", "Flow-warped temporal exposure (motion-heavy)", "remuxing"); a copy pass would help first-time users choose settings with confidence.
+  Where: `gui/app.py` advanced-settings tooltips; `gui/processing_controller.py` status strings.
