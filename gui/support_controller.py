@@ -181,47 +181,91 @@ class SupportControllerMixin:
         except Exception:
             self._update_status(tr("The settings folder could not be opened"), "warning")
 
+    def _run_support_task(self, busy_message: str, error_message: str,
+                          work, describe_result) -> None:
+        """Run heavy diagnostics I/O off the Tk main thread with feedback.
+
+        ``work()`` runs on a worker thread and returns a result;
+        ``describe_result(result) -> (text, tone)`` and all status updates run
+        back on the main loop. Bundling/zipping model caches or logs can take
+        seconds and hundreds of MB, which must not freeze the event loop.
+        """
+        self._update_status(tr(busy_message), "info")
+
+        def _worker():
+            try:
+                result = work()
+            except Exception as exc:  # noqa: BLE001 - surfaced to the user
+                logger.warning("%s: %s", error_message, exc, exc_info=True)
+                self.root.after(
+                    0, lambda: self._update_status(tr(error_message), "error"))
+                return
+
+            def _done():
+                try:
+                    text, tone = describe_result(result)
+                    self._update_status(text, tone)
+                except Exception:  # noqa: BLE001
+                    self._update_status(tr(error_message), "error")
+
+            try:
+                self.root.after(0, _done)
+            except RuntimeError:
+                pass
+
+        threading.Thread(
+            target=_worker, name="vsr-support-task", daemon=True
+        ).start()
+
     def _save_support_bundle(self):
         """Save a redacted diagnostics zip for bug reports."""
-        try:
-            initial = (
-                "vsr-support-"
-                + datetime.now().strftime("%Y%m%d-%H%M%S")
-                + ".zip"
-            )
-            path = filedialog.asksaveasfilename(
-                parent=self.root,
-                title=tr("Save support bundle"),
-                defaultextension=".zip",
-                filetypes=[(tr("Support bundle"), "*.zip"), (tr("All files"), "*.*")],
-                initialfile=initial,
-            )
-            if not path:
-                return
+        initial = (
+            "vsr-support-"
+            + datetime.now().strftime("%Y%m%d-%H%M%S")
+            + ".zip"
+        )
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title=tr("Save support bundle"),
+            defaultextension=".zip",
+            filetypes=[(tr("Support bundle"), "*.zip"), (tr("All files"), "*.*")],
+            initialfile=initial,
+        )
+        if not path:
+            return
+        extra_facts = {
+            "ffmpeg_ready": self.ffmpeg_ready,
+            "detection_engines": self.ai_engines.get("detection", []),
+            "inpainting_engines": self.ai_engines.get("inpainting", []),
+            "gpu_count": len(self.gpus),
+            "gpus": self.gpus,
+            "queue_count": len(self.queue),
+        }
+        report_paths = list(getattr(self, "_last_batch_report_paths", []))
+
+        def _work():
             from backend.support_bundle import create_support_bundle
-            bundle = create_support_bundle(
+            return create_support_bundle(
                 path,
                 settings_path=SETTINGS_FILE,
                 log_path=LOG_FILE,
-                batch_report_paths=getattr(self, "_last_batch_report_paths", []),
+                batch_report_paths=report_paths,
                 app_version=APP_VERSION,
-                extra_facts={
-                    "ffmpeg_ready": self.ffmpeg_ready,
-                    "detection_engines": self.ai_engines.get("detection", []),
-                    "inpainting_engines": self.ai_engines.get("inpainting", []),
-                    "gpu_count": len(self.gpus),
-                    "gpus": self.gpus,
-                    "queue_count": len(self.queue),
-                },
+                extra_facts=extra_facts,
             )
-            self._update_status(
+
+        def _describe(bundle):
+            return (
                 tr("Saved redacted support bundle to {name}").format(
                     name=Path(bundle).name),
                 "success",
             )
-        except Exception as exc:
-            logger.warning("Support bundle save failed: %s", exc, exc_info=True)
-            self._update_status(tr("Support bundle could not be saved"), "error")
+
+        self._run_support_task(
+            "Building support bundle...",
+            "Support bundle could not be saved",
+            _work, _describe,
+        )
 
     @staticmethod
     def _model_cache_missing_summary(status: dict) -> str:
@@ -235,47 +279,54 @@ class SupportControllerMixin:
 
     def _export_model_cache_bundle(self):
         """Export verified model-cache files to a portable zip."""
-        try:
-            initial = (
-                "vsr-model-cache-"
-                + datetime.now().strftime("%Y%m%d-%H%M%S")
-                + ".zip"
-            )
-            path = filedialog.asksaveasfilename(
-                parent=self.root,
-                title=tr("Export model cache"),
-                defaultextension=".zip",
-                filetypes=[(tr("Model cache bundle"), "*.zip"), (tr("All files"), "*.*")],
-                initialfile=initial,
-            )
-            if not path:
-                return
+        initial = (
+            "vsr-model-cache-"
+            + datetime.now().strftime("%Y%m%d-%H%M%S")
+            + ".zip"
+        )
+        path = filedialog.asksaveasfilename(
+            parent=self.root,
+            title=tr("Export model cache"),
+            defaultextension=".zip",
+            filetypes=[(tr("Model cache bundle"), "*.zip"), (tr("All files"), "*.*")],
+            initialfile=initial,
+        )
+        if not path:
+            return
+
+        def _work():
             from backend.cache_inventory import export_model_cache_bundle
-            result = export_model_cache_bundle(path)
+            return export_model_cache_bundle(path)
+
+        def _describe(result):
             missing = self._model_cache_missing_summary(
                 result.get("status_after_export", {})
             )
             skipped = len(result.get("skipped", []) or [])
             suffix = f"; skipped {skipped} unsafe or invalid file(s)" if skipped else ""
-            self._update_status(
+            return (
                 f"Exported {len(result.get('files', []))} model-cache file(s) "
                 f"to {Path(result['output']).name}{suffix}{missing}",
                 "warning" if skipped else "success",
             )
-        except Exception as exc:
-            logger.warning("Model cache export failed: %s", exc, exc_info=True)
-            self._update_status("Model cache could not be exported", "error")
+
+        self._run_support_task(
+            "Exporting model cache...",
+            "Model cache could not be exported",
+            _work, _describe,
+        )
 
     def _import_model_cache_bundle(self):
         """Import a portable model-cache zip into the app model cache."""
-        try:
-            path = filedialog.askopenfilename(
-                parent=self.root,
-                title="Import model cache",
-                filetypes=[("Model cache bundle", "*.zip"), ("All files", "*.*")],
-            )
-            if not path:
-                return
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title=tr("Import model cache"),
+            filetypes=[(tr("Model cache bundle"), "*.zip"), (tr("All files"), "*.*")],
+        )
+        if not path:
+            return
+
+        def _work():
             from backend.cache_inventory import import_model_cache_bundle
             result = import_model_cache_bundle(path)
             try:
@@ -283,6 +334,9 @@ class SupportControllerMixin:
             except Exception:
                 logger.warning("Backend status refresh after cache import failed",
                                exc_info=True)
+            return result
+
+        def _describe(result):
             missing = self._model_cache_missing_summary(
                 result.get("status_after_import", {})
             )
@@ -291,14 +345,17 @@ class SupportControllerMixin:
                 f"; rejected {rejected} unsafe or invalid file(s)"
                 if rejected else ""
             )
-            self._update_status(
+            return (
                 f"Imported {len(result.get('imported', []))} model-cache file(s)"
                 f"{suffix}{missing}",
                 "warning" if rejected else "success",
             )
-        except Exception as exc:
-            logger.warning("Model cache import failed: %s", exc, exc_info=True)
-            self._update_status("Model cache could not be imported", "error")
+
+        self._run_support_task(
+            "Importing model cache...",
+            "Model cache could not be imported",
+            _work, _describe,
+        )
 
     def _open_model_cache_menu(self, anchor):
         """Open model-cache actions from the About dialog."""

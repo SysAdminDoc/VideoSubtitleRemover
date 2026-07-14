@@ -20,6 +20,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **UI froze during support-bundle and model-cache operations.** Saving a
+  support bundle and exporting/importing a model cache zipped potentially
+  hundreds of MB synchronously on the Tk main loop, freezing the window with
+  no feedback. These now run on a background thread with a "Working..." status
+  and marshal the result back to the UI. The Import-model-cache dialog title
+  and filetypes are also now localized like the rest.
 - **High-contrast theme leaks in preview overlays.** The A/B compare seam line
   and detection-box overlays were drawn with fixed green/red; they now derive
   from the theme focus/danger tokens so they brighten correctly in the
