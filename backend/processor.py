@@ -196,6 +196,15 @@ def attach_json_log(path: str) -> Optional[JsonLineLogHandler]:
             return existing
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
+        # Bound the JSON log: roll to a single `.1` backup once it passes 10 MB
+        # so an always-on structured log cannot grow without limit.
+        try:
+            log_path = Path(path)
+            if log_path.is_file() and log_path.stat().st_size > 10 * 1024 * 1024:
+                backup = log_path.with_suffix(log_path.suffix + ".1")
+                os.replace(log_path, backup)
+        except OSError:
+            pass
         stream = open(path, "a", encoding="utf-8")
     except OSError as exc:
         logger.warning(f"Could not open JSON log {path}: {exc}")
@@ -1636,6 +1645,16 @@ class SubtitleRemover:
                             f"{resume_frame_count}/{frames_to_process}"
                         )
 
+            # Fail fast on a drive that clearly cannot hold the encode, before
+            # any temp file is created (only the frames still to write count).
+            self._check_encode_disk_space(
+                output_path,
+                width=width,
+                height=height,
+                frames=max(0, frames_to_process - resume_frame_count),
+                high_bit=bool(high_bit_depth_surface),
+            )
+
             # Re-use the deinterlace temp_dir if one was created, else fresh
             if temp_dir is None:
                 temp_dir = self._make_temp_dir()
@@ -2609,6 +2628,48 @@ class SubtitleRemover:
         except Exception:
             logger.warning("HDR encode argument generation failed", exc_info=True)
             return []
+
+    def _check_encode_disk_space(self, output_path: str, *, width: int,
+                                 height: int, frames: int,
+                                 high_bit: bool) -> None:
+        """Fail fast when the output drive clearly cannot hold the encode.
+
+        The lossless FFV1 intermediate is the dominant consumer. We estimate a
+        conservative fraction of the raw frame volume plus headroom and, when
+        free space is critically short, raise a clear error *before* any temp
+        file is created rather than crashing with a mid-encode OSError. A
+        merely-tight margin is logged as a warning, not aborted, to avoid
+        false positives on highly compressible footage.
+        """
+        if frames <= 0 or width <= 0 or height <= 0:
+            return
+        bytes_per_pixel = 6 if high_bit else 3
+        raw = int(width) * int(height) * bytes_per_pixel * int(frames)
+        # FFV1 on real footage lands well under raw; ~0.45x is a safe planning
+        # figure, plus the final lossy output (small relative to the FFV1 temp).
+        estimate = int(raw * 0.45) + int(raw * 0.05)
+        slack = 256 * 1024 * 1024
+        target = Path(output_path).parent
+        try:
+            free = shutil.disk_usage(target if target.exists() else Path("."))
+            free_bytes = int(free.free)
+        except OSError:
+            return  # cannot probe; do not block processing
+        hard_floor = max(slack, int(estimate * 0.25))
+        if free_bytes < hard_floor:
+            raise ValueError(
+                f"Insufficient disk space to process to '{output_path}': "
+                f"about {estimate // (1024*1024)} MB of working space is "
+                f"needed but only {free_bytes // (1024*1024)} MB is free. "
+                "Free up space or choose an output on a larger drive."
+            )
+        if free_bytes < estimate + slack:
+            logger.warning(
+                "Low disk space for '%s': ~%d MB estimated, %d MB free. "
+                "Processing will continue but may fail if the estimate is high.",
+                output_path, estimate // (1024 * 1024),
+                free_bytes // (1024 * 1024),
+            )
 
     def _promote_video_output(
         self,

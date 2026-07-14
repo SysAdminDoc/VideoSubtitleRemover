@@ -6151,6 +6151,59 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class DiskSpaceAndLogRotationTests(unittest.TestCase):
+    """P2: pre-encode free-space preflight and bounded JSON log."""
+
+    def _remover(self):
+        from backend.processor import SubtitleRemover
+        return SubtitleRemover.__new__(SubtitleRemover)
+
+    def test_aborts_when_free_space_critically_low(self):
+        import collections
+        remover = self._remover()
+        du = collections.namedtuple("du", "total used free")(0, 0, 1024 * 1024)
+        with unittest.mock.patch("backend.processor.shutil.disk_usage",
+                                 return_value=du):
+            with self.assertRaises(ValueError) as ctx:
+                remover._check_encode_disk_space(
+                    "out.mp4", width=1920, height=1080,
+                    frames=100000, high_bit=False)
+        self.assertIn("disk space", str(ctx.exception).lower())
+
+    def test_passes_when_space_is_ample(self):
+        import collections
+        remover = self._remover()
+        du = collections.namedtuple("du", "total used free")(
+            0, 0, 500 * 1024 ** 3)  # 500 GB free
+        with unittest.mock.patch("backend.processor.shutil.disk_usage",
+                                 return_value=du):
+            remover._check_encode_disk_space(
+                "out.mp4", width=640, height=480, frames=300, high_bit=False)
+
+    def test_zero_frames_is_noop(self):
+        remover = self._remover()
+        # must not raise or probe when there is nothing to encode
+        remover._check_encode_disk_space(
+            "out.mp4", width=640, height=480, frames=0, high_bit=False)
+
+    def test_json_log_rolls_over_when_large(self):
+        from backend import processor
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "vsr.jsonl"
+            log.write_bytes(b"x" * (10 * 1024 * 1024 + 10))
+            handler = processor.attach_json_log(str(log))
+            try:
+                self.assertTrue((Path(tmp) / "vsr.jsonl.1").exists())
+                self.assertLess(log.stat().st_size, 1024)
+            finally:
+                if handler is not None:
+                    logging.getLogger().removeHandler(handler)
+                    try:
+                        handler.close()
+                    except Exception:
+                        pass
+
+
 class EncodeStageCheckpointTests(unittest.TestCase):
     """P1: encode/mux-phase resume marker."""
 

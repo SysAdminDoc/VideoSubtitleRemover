@@ -86,6 +86,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Reliability
 
+- **Pre-encode disk-space preflight + bounded JSON log.** Processing now
+  estimates the working space the lossless FFV1 intermediate needs and fails
+  fast with a clear message before creating any temp file when the output
+  drive is critically short (logging a warning on a merely-tight margin),
+  instead of crashing with a mid-encode `OSError`. The opt-in JSON-lines log
+  rolls to a single `.1` backup once it passes 10 MB so it cannot grow without
+  bound. (The main `vsr_pro.log` already rotates at 5 MB.)
+
 - **Encode/mux-phase resume marker.** When every frame has been inpainted and
   written to the checkpoint frame dir, the pause checkpoint now records an
   explicit `stage="encoding"` / `inpaint_complete` marker before the encode and

@@ -11,13 +11,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 — Later
 
-- [ ] P2 — Preflight free disk space before encode and rotate the log file
-  Why: Free space is recorded but never gated, so a mid-encode disk-full dies with a raw OSError and can leave a half-written temp file; `vsr_pro.log` has no rotation and grows unbounded in long sessions.
-  Evidence: `backend/batch_report.py:268`, `backend/cli.py:288` (records only); no `RotatingFileHandler` in the tree.
-  Touches: `backend/processor.py`, `backend/io.py`, `backend/cli.py`, `gui/app.py`, `tests/test_hardening.py`
-  Acceptance: before encode, an estimated-output-size vs free-space check warns/aborts cleanly (removing any temp file) instead of crashing, and the log handler rotates by size with a bounded backup count; both are covered by tests.
-  Complexity: S
-
 - [ ] P2 — Automatic bounded retry for transient batch-item failures
   Why: A single flaky failure (temporary GPU glitch, FFmpeg hiccup) marks a batch item FAILED with no retry, so long unattended batches finish with avoidable gaps.
   Evidence: `backend/batch_report.py:168-204` (FAILED-then-review, no retry); RESEARCH.md Reliability.
