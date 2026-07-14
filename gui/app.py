@@ -63,7 +63,17 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.safe_image import safe_imread
+from backend.a11y import set_accessible_metadata
 from backend.i18n import available_catalogs, bind_locale, tr
+from backend.region_editing import (
+    RegionEditHistory,
+    format_polygon_vertices,
+    frame_to_seconds,
+    parse_polygon_vertices,
+    rect_from_xywh,
+    seconds_to_frame,
+    transform_region_shape,
+)
 from backend.region_keyframes import (
     normalize_region_keyframe_tracks,
     region_shapes_at,
@@ -3466,7 +3476,8 @@ class VideoSubtitleRemoverApp(
             screen_w = self.root.winfo_screenwidth()
             screen_h = self.root.winfo_screenheight()
             max_w = min(900, int(screen_w * 0.8))
-            max_h = min(540, int(screen_h * 0.7))
+            height_ratio = 0.55 if screen_h >= 600 else 0.7
+            max_h = min(540, int(screen_h * height_ratio))
             scale = min(max_w / orig_w, max_h / orig_h, 1.0)
             disp_w, disp_h = int(orig_w * scale), int(orig_h * scale)
 
@@ -3495,9 +3506,26 @@ class VideoSubtitleRemoverApp(
             win.configure(bg=Theme.BG_OVERLAY)
             win.resizable(False, False)
 
-            canvas = tk.Canvas(win, width=disp_w, height=disp_h, highlightthickness=0,
-                               bg=Theme.BG_DARK, cursor="cross")
+            canvas = tk.Canvas(
+                win,
+                width=disp_w,
+                height=disp_h,
+                highlightthickness=2,
+                highlightbackground=Theme.BORDER_SUBTLE,
+                highlightcolor=Theme.BLUE_PRIMARY,
+                bg=Theme.BG_DARK,
+                cursor="cross",
+                takefocus=True,
+            )
             canvas.pack()
+            set_accessible_metadata(
+                canvas,
+                role="region editor canvas",
+                label=tr("Subtitle region preview"),
+                description=tr(
+                    "Draw with the pointer, or use arrow keys to edit the selected region."
+                ),
+            )
             canvas_image_id = canvas.create_image(0, 0, anchor="nw")
             canvas._photo = None
 
@@ -3584,6 +3612,7 @@ class VideoSubtitleRemoverApp(
             # Drawing handlers.
             def on_press(event):
                 if shape_mode_var.get() == tr("Polygon"):
+                    _record_history()
                     px = min(orig_w, max(0, int(event.x / scale)))
                     py = min(orig_h, max(0, int(event.y / scale)))
                     polygon_points.append((px, py))
@@ -3614,7 +3643,9 @@ class VideoSubtitleRemoverApp(
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(orig_w, x2), min(orig_h, y2)
                 if (x2 - x1) > 10 and (y2 - y1) > 5:
+                    _record_history()
                     rects.append((x1, y1, x2, y2))
+                    _refresh_region_editor(f"rect:{len(rects) - 1}")
                 if drag_id[0] is not None:
                     canvas.delete(drag_id[0])
                     drag_id[0] = None
@@ -3649,12 +3680,14 @@ class VideoSubtitleRemoverApp(
                     self._update_status(
                         "A polygon needs at least three vertices", "warning")
                     return False
+                _record_history()
                 coords = []
                 for px, py in polygon_points:
                     coords.extend((px, py))
                 polygon_shapes.append(coords)
                 polygon_points.clear()
                 _draw_saved_rects()
+                _refresh_region_editor(f"polygon:{len(polygon_shapes) - 1}")
                 return True
 
             finish_polygon_btn = ModernButton(
@@ -3699,6 +3732,8 @@ class VideoSubtitleRemoverApp(
             time_row = None
             start_var = tk.StringVar()
             end_var = tk.StringVar()
+            start_frame_var = tk.StringVar()
+            end_frame_var = tk.StringVar()
             span_summary_var = tk.StringVar()
             if is_video:
                 existing_starts = {round(float(s.get("start", 0.0)), 3)
@@ -3733,6 +3768,26 @@ class VideoSubtitleRemoverApp(
                     relief="flat",
                 )
                 end_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+                tk.Label(time_row, text=tr("Start frame"),
+                         font=f(Theme.F_META),
+                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
+                start_frame_entry = tk.Entry(
+                    time_row, width=7, textvariable=start_frame_var,
+                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                    insertbackground=Theme.TEXT_PRIMARY,
+                    relief="flat",
+                )
+                start_frame_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+                tk.Label(time_row, text=tr("End frame"),
+                         font=f(Theme.F_META),
+                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
+                end_frame_entry = tk.Entry(
+                    time_row, width=7, textvariable=end_frame_var,
+                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                    insertbackground=Theme.TEXT_PRIMARY,
+                    relief="flat",
+                )
+                end_frame_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
                 span_summary_var.set(
                     (
                         f"{len(keyframe_tracks)} motion track"
@@ -3751,12 +3806,495 @@ class VideoSubtitleRemoverApp(
                 span_label.pack(side="right")
                 win._vsr_start_entry = start_entry
                 win._vsr_end_entry = end_entry
+                win._vsr_start_frame_entry = start_frame_entry
+                win._vsr_end_frame_entry = end_frame_entry
+
+                for entry, label, description in (
+                    (start_entry, tr("Region start time in seconds"),
+                     tr("Enter a nonnegative decimal time.")),
+                    (end_entry, tr("Region end time in seconds"),
+                     tr("Leave blank for the end of the video.")),
+                    (start_frame_entry, tr("Region start frame"),
+                     tr("Enter a nonnegative frame number.")),
+                    (end_frame_entry, tr("Region end frame"),
+                     tr("Leave blank for the end of the video.")),
+                ):
+                    set_accessible_metadata(
+                        entry, role="numeric input", label=label,
+                        description=description)
+
+            precise_frame = tk.Frame(
+                win,
+                bg=Theme.BG_SECONDARY,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER_SUBTLE,
+            )
+            precise_frame.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
+            precise_top = tk.Frame(precise_frame, bg=Theme.BG_SECONDARY)
+            precise_top.pack(fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
+            precise_bottom = tk.Frame(precise_frame, bg=Theme.BG_SECONDARY)
+            precise_bottom.pack(fill="x", padx=Theme.S_SM, pady=(2, Theme.S_XS))
+
+            selected_region_var = tk.StringVar()
+            region_picker = ttk.Combobox(
+                precise_top,
+                width=21,
+                state="readonly",
+                textvariable=selected_region_var,
+                style="Dark.TCombobox",
+            )
+            tk.Label(
+                precise_top, text=tr("Selected"), font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(side="left")
+            region_picker.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+            set_accessible_metadata(
+                region_picker,
+                role="combo box",
+                label=tr("Selected manual region"),
+                description=tr("Choose a rectangle, polygon, timed region, or keyframe to edit."),
+            )
+
+            geometry_vars = {
+                "x": tk.StringVar(),
+                "y": tk.StringVar(),
+                "width": tk.StringVar(),
+                "height": tk.StringVar(),
+                "vertices": tk.StringVar(),
+            }
+            geometry_entries = {}
+            for key, label, width in (
+                ("x", tr("X"), 6),
+                ("y", tr("Y"), 6),
+                ("width", tr("Width"), 7),
+                ("height", tr("Height"), 7),
+            ):
+                tk.Label(
+                    precise_top, text=label, font=f(Theme.F_META),
+                    bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                ).pack(side="left")
+                entry = tk.Entry(
+                    precise_top, width=width, textvariable=geometry_vars[key],
+                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                    disabledbackground=Theme.BG_DARK,
+                    disabledforeground=Theme.TEXT_DISABLED,
+                    insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+                )
+                entry.pack(side="left", padx=(Theme.S_XS, Theme.S_SM))
+                geometry_entries[key] = entry
+                set_accessible_metadata(
+                    entry,
+                    role="numeric input",
+                    label=tr("Region {field} in pixels").format(field=label),
+                    description=tr("Enter a whole number within the source-frame bounds."),
+                )
+
+            tk.Label(
+                precise_bottom, text=tr("Vertices"), font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(side="left")
+            vertices_entry = tk.Entry(
+                precise_bottom, width=46,
+                textvariable=geometry_vars["vertices"],
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                disabledbackground=Theme.BG_DARK,
+                disabledforeground=Theme.TEXT_DISABLED,
+                insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+            )
+            vertices_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD), fill="x", expand=True)
+            geometry_entries["vertices"] = vertices_entry
+            set_accessible_metadata(
+                vertices_entry,
+                role="coordinate input",
+                label=tr("Polygon vertex coordinates"),
+                description=tr("Use x,y pairs separated by semicolons; at least three vertices are required."),
+            )
+
+            selected_region_key = [None]
+            history = RegionEditHistory()
+            history_buttons = {"undo": None, "redo": None}
+            time_input_source = {"start": "seconds", "end": "seconds"}
+
+            def _editable_region_records():
+                records = []
+                for index, rect in enumerate(rects):
+                    records.append({
+                        "key": f"rect:{index}",
+                        "label": tr("Rectangle {index}").format(index=index + 1),
+                        "source": "rect", "index": index,
+                        "shape": {"rect": list(rect)}, "timing": "none",
+                    })
+                for index, span in enumerate(region_spans):
+                    records.append({
+                        "key": f"span:{index}",
+                        "label": tr("Timed region {index}").format(index=index + 1),
+                        "source": "span", "index": index,
+                        "shape": {"rect": list(span["rect"])},
+                        "timing": "range",
+                        "start": float(span.get("start", 0.0)),
+                        "end": float(span.get("end", 0.0)),
+                    })
+                for index, polygon in enumerate(polygon_shapes):
+                    records.append({
+                        "key": f"polygon:{index}",
+                        "label": tr("Polygon {index}").format(index=index + 1),
+                        "source": "polygon", "index": index,
+                        "shape": {"polygon": list(polygon)}, "timing": "none",
+                    })
+                for index, keyframe in enumerate(pending_keyframes):
+                    kind = "rect" if "rect" in keyframe else "polygon"
+                    records.append({
+                        "key": f"pending:{index}",
+                        "label": tr("Pending keyframe {index}").format(index=index + 1),
+                        "source": "pending", "index": index,
+                        "shape": {kind: list(keyframe[kind])}, "timing": "point",
+                        "start": float(keyframe.get("time", 0.0)), "end": 0.0,
+                    })
+                for track_index, track in enumerate(keyframe_tracks):
+                    for frame_index, keyframe in enumerate(track.get("keyframes", [])):
+                        kind = "rect" if "rect" in keyframe else "polygon"
+                        records.append({
+                            "key": f"track:{track_index}:{frame_index}",
+                            "label": tr("Motion {track}, keyframe {frame}").format(
+                                track=track_index + 1, frame=frame_index + 1),
+                            "source": "track", "track": track_index,
+                            "index": frame_index,
+                            "shape": {kind: list(keyframe[kind])}, "timing": "point",
+                            "start": float(keyframe.get("time", 0.0)), "end": 0.0,
+                        })
+                return records
+
+            def _editor_snapshot():
+                return {
+                    "rects": list(rects),
+                    "region_spans": list(region_spans),
+                    "keyframe_tracks": list(keyframe_tracks),
+                    "pending_keyframes": list(pending_keyframes),
+                    "polygon_shapes": list(polygon_shapes),
+                    "polygon_points": list(polygon_points),
+                    "start": start_var.get(),
+                    "end": end_var.get(),
+                    "start_frame": start_frame_var.get(),
+                    "end_frame": end_frame_var.get(),
+                    "selected": selected_region_key[0],
+                }
+
+            def _record_history():
+                history.record(_editor_snapshot())
+                _update_history_buttons()
+
+            def _restore_editor_snapshot(snapshot):
+                rects[:] = [tuple(rect) for rect in snapshot["rects"]]
+                region_spans[:] = snapshot["region_spans"]
+                keyframe_tracks[:] = snapshot["keyframe_tracks"]
+                pending_keyframes[:] = snapshot["pending_keyframes"]
+                polygon_shapes[:] = [list(shape) for shape in snapshot["polygon_shapes"]]
+                polygon_points[:] = [tuple(point) for point in snapshot["polygon_points"]]
+                start_var.set(snapshot["start"])
+                end_var.set(snapshot["end"])
+                start_frame_var.set(snapshot["start_frame"])
+                end_frame_var.set(snapshot["end_frame"])
+                selected_region_key[0] = snapshot.get("selected")
+                _draw_saved_rects()
+                _refresh_region_editor(selected_region_key[0])
+                _update_history_buttons()
+
+            def _update_history_buttons():
+                undo_button = history_buttons.get("undo")
+                redo_button = history_buttons.get("redo")
+                if undo_button is not None:
+                    undo_button.set_enabled(
+                        history.can_undo, tr("No region edit to undo"))
+                if redo_button is not None:
+                    redo_button.set_enabled(
+                        history.can_redo, tr("No region edit to redo"))
+
+            def _set_time_fields(start=None, end=None):
+                if not is_video:
+                    return
+                if start is None:
+                    start_var.set("")
+                    start_frame_var.set("")
+                else:
+                    start_var.set(f"{float(start):g}")
+                    start_frame_var.set(str(seconds_to_frame(start, fps)))
+                if not end:
+                    end_var.set("")
+                    end_frame_var.set("")
+                else:
+                    end_var.set(f"{float(end):g}")
+                    end_frame_var.set(str(seconds_to_frame(end, fps)))
+                time_input_source.update(start="seconds", end="seconds")
+
+            def _record_by_key(key):
+                return next(
+                    (record for record in _editable_region_records()
+                     if record["key"] == key),
+                    None,
+                )
+
+            def _load_selected_region():
+                records = _editable_region_records()
+                selected_label = selected_region_var.get()
+                record = next(
+                    (item for item in records if item["label"] == selected_label),
+                    None,
+                )
+                if record is None:
+                    record = _record_by_key(selected_region_key[0])
+                if record is None:
+                    selected_region_key[0] = None
+                    for variable in geometry_vars.values():
+                        variable.set("")
+                    for entry in geometry_entries.values():
+                        entry.configure(state="disabled")
+                    return
+                selected_region_key[0] = record["key"]
+                shape = record["shape"]
+                if "rect" in shape:
+                    x1, y1, x2, y2 = shape["rect"]
+                    geometry_vars["x"].set(str(x1))
+                    geometry_vars["y"].set(str(y1))
+                    geometry_vars["width"].set(str(x2 - x1))
+                    geometry_vars["height"].set(str(y2 - y1))
+                    geometry_vars["vertices"].set("")
+                    for key in ("x", "y", "width", "height"):
+                        geometry_entries[key].configure(state="normal")
+                    geometry_entries["vertices"].configure(state="disabled")
+                else:
+                    for key in ("x", "y", "width", "height"):
+                        geometry_vars[key].set("")
+                        geometry_entries[key].configure(state="disabled")
+                    geometry_vars["vertices"].set(
+                        format_polygon_vertices(shape["polygon"]))
+                    geometry_entries["vertices"].configure(state="normal")
+                if record["timing"] == "none":
+                    _set_time_fields()
+                else:
+                    _set_time_fields(record.get("start"), record.get("end"))
+
+            def _refresh_region_editor(prefer_key=None):
+                records = _editable_region_records()
+                values = [record["label"] for record in records]
+                region_picker.configure(values=values)
+                key = prefer_key or selected_region_key[0]
+                selected = next(
+                    (record for record in records if record["key"] == key),
+                    records[-1] if records else None,
+                )
+                if selected is None:
+                    selected_region_var.set("")
+                    selected_region_key[0] = None
+                else:
+                    selected_region_key[0] = selected["key"]
+                    selected_region_var.set(selected["label"])
+                _load_selected_region()
+
+            def _set_record_shape(record, shape):
+                source = record["source"]
+                index = record["index"]
+                kind = "rect" if "rect" in shape else "polygon"
+                values = list(shape[kind])
+                if source == "rect":
+                    rects[index] = tuple(values)
+                elif source == "span":
+                    region_spans[index]["rect"] = tuple(values)
+                elif source == "polygon":
+                    polygon_shapes[index] = values
+                elif source == "pending":
+                    pending_keyframes[index].pop("rect", None)
+                    pending_keyframes[index].pop("polygon", None)
+                    pending_keyframes[index][kind] = values
+                elif source == "track":
+                    keyframe = keyframe_tracks[record["track"]]["keyframes"][index]
+                    keyframe.pop("rect", None)
+                    keyframe.pop("polygon", None)
+                    keyframe[kind] = values
+
+            def _seconds_from_fields(which):
+                seconds_var = start_var if which == "start" else end_var
+                frame_var = start_frame_var if which == "start" else end_frame_var
+                seconds_raw = seconds_var.get().strip()
+                frame_raw = frame_var.get().strip()
+                use_frame = (
+                    time_input_source[which] == "frame"
+                    or (not seconds_raw and bool(frame_raw))
+                )
+                raw = frame_raw if use_frame else seconds_raw
+                if not raw:
+                    return None
+                if use_frame:
+                    value = frame_to_seconds(raw, fps)
+                    seconds_var.set(f"{value:g}")
+                else:
+                    try:
+                        value = float(raw)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(tr("Time must be a number")) from exc
+                    if not math.isfinite(value) or value < 0:
+                        raise ValueError(tr("Time must be zero or greater"))
+                    frame_var.set(str(seconds_to_frame(value, fps)))
+                return value
+
+            def _sync_time_field(which, source):
+                if not is_video:
+                    return
+                time_input_source[which] = source
+                try:
+                    _seconds_from_fields(which)
+                except (TypeError, ValueError):
+                    return
+
+            def _apply_numeric_region_edit():
+                record = _record_by_key(selected_region_key[0])
+                if record is None:
+                    self._update_status(tr("Select or draw a region before editing it"), "warning")
+                    return False
+                try:
+                    if "rect" in record["shape"]:
+                        rect = rect_from_xywh(
+                            geometry_vars["x"].get(), geometry_vars["y"].get(),
+                            geometry_vars["width"].get(), geometry_vars["height"].get(),
+                            orig_w, orig_h,
+                        )
+                        shape = {"rect": list(rect)}
+                    else:
+                        shape = {"polygon": parse_polygon_vertices(
+                            geometry_vars["vertices"].get(), orig_w, orig_h)}
+                    start_s = _seconds_from_fields("start") if is_video else None
+                    end_s = _seconds_from_fields("end") if is_video else None
+                    if end_s is not None and (start_s is None or end_s <= start_s):
+                        raise ValueError(tr("Region end must be after its start"))
+                    if record["timing"] == "point" and end_s is not None:
+                        raise ValueError(tr("A motion keyframe uses one frame, not an end frame"))
+                    if record["timing"] == "point" and start_s is not None:
+                        if record["source"] == "pending":
+                            peers = pending_keyframes
+                        else:
+                            peers = keyframe_tracks[record["track"]]["keyframes"]
+                        if any(
+                            peer_index != record["index"]
+                            and abs(float(peer.get("time", 0.0)) - start_s) <= 1e-9
+                            for peer_index, peer in enumerate(peers)
+                        ):
+                            raise ValueError(tr("Motion keyframes must use distinct frames"))
+                    if "polygon" in shape and record["timing"] == "none" and (
+                        start_s is not None or end_s is not None
+                    ):
+                        raise ValueError(tr("Use motion keyframes to time polygon regions"))
+                except (TypeError, ValueError) as exc:
+                    self._update_status(str(exc), "warning")
+                    return False
+
+                _record_history()
+                _set_record_shape(record, shape)
+                if record["timing"] == "range":
+                    region_spans[record["index"]]["start"] = start_s or 0.0
+                    region_spans[record["index"]]["end"] = end_s or 0.0
+                elif record["timing"] == "point" and start_s is not None:
+                    if record["source"] == "pending":
+                        pending_keyframes[record["index"]]["time"] = start_s
+                    else:
+                        track = keyframe_tracks[record["track"]]
+                        track["keyframes"][record["index"]]["time"] = start_s
+                        times = [float(item["time"]) for item in track["keyframes"]]
+                        track["start"], track["end"] = min(times), max(times)
+                _draw_saved_rects()
+                _refresh_region_editor(record["key"])
+                _update_history_buttons()
+                self._update_status(tr("Applied precise region edit"), "success")
+                return True
+
+            def _transform_selected_region(event):
+                if isinstance(event.widget, (tk.Entry, ttk.Combobox, tk.Scale)):
+                    return None
+                direction = str(event.keysym)
+                if direction not in {"Left", "Right", "Up", "Down"}:
+                    return None
+                record = _record_by_key(selected_region_key[0])
+                if record is None:
+                    return "break"
+                step = 10 if int(getattr(event, "state", 0)) & 0x0001 else 1
+                resize = bool(int(getattr(event, "state", 0)) & 0x0004)
+                dx = dy = dw = dh = 0
+                if resize:
+                    dw = -step if direction == "Left" else step if direction == "Right" else 0
+                    dh = -step if direction == "Up" else step if direction == "Down" else 0
+                else:
+                    dx = -step if direction == "Left" else step if direction == "Right" else 0
+                    dy = -step if direction == "Up" else step if direction == "Down" else 0
+                shape = transform_region_shape(
+                    record["shape"], frame_width=orig_w, frame_height=orig_h,
+                    dx=dx, dy=dy, dw=dw, dh=dh,
+                )
+                if shape == record["shape"]:
+                    return "break"
+                _record_history()
+                _set_record_shape(record, shape)
+                _draw_saved_rects()
+                _refresh_region_editor(record["key"])
+                _update_history_buttons()
+                return "break"
+
+            def _undo_region_edit(event=None):
+                if event is not None and isinstance(event.widget, tk.Entry):
+                    return None
+                snapshot = history.undo(_editor_snapshot())
+                if snapshot is None:
+                    return "break"
+                _restore_editor_snapshot(snapshot)
+                self._update_status(tr("Undid region edit"), "info")
+                return "break"
+
+            def _redo_region_edit(event=None):
+                if event is not None and isinstance(event.widget, tk.Entry):
+                    return None
+                snapshot = history.redo(_editor_snapshot())
+                if snapshot is None:
+                    return "break"
+                _restore_editor_snapshot(snapshot)
+                self._update_status(tr("Redid region edit"), "info")
+                return "break"
+
+            apply_edit_button = ModernButton(
+                precise_bottom, text=tr("Apply"), command=_apply_numeric_region_edit,
+                style="secondary", size="sm", width=72)
+            apply_edit_button.pack(side="right")
+            redo_edit_button = ModernButton(
+                precise_bottom, text=tr("Redo"), command=_redo_region_edit,
+                style="ghost", size="sm", width=68)
+            redo_edit_button.pack(side="right", padx=(0, Theme.S_XS))
+            undo_edit_button = ModernButton(
+                precise_bottom, text=tr("Undo"), command=_undo_region_edit,
+                style="ghost", size="sm", width=68)
+            undo_edit_button.pack(side="right", padx=(0, Theme.S_XS))
+            history_buttons.update(undo=undo_edit_button, redo=redo_edit_button)
+
+            region_picker.bind("<<ComboboxSelected>>", lambda _event: _load_selected_region())
+            if is_video:
+                start_entry.bind("<KeyRelease>", lambda _event: time_input_source.update(start="seconds"))
+                end_entry.bind("<KeyRelease>", lambda _event: time_input_source.update(end="seconds"))
+                start_frame_entry.bind("<KeyRelease>", lambda _event: time_input_source.update(start="frame"))
+                end_frame_entry.bind("<KeyRelease>", lambda _event: time_input_source.update(end="frame"))
+                start_entry.bind("<FocusOut>", lambda _event: _sync_time_field("start", "seconds"), add="+")
+                end_entry.bind("<FocusOut>", lambda _event: _sync_time_field("end", "seconds"), add="+")
+                start_frame_entry.bind("<FocusOut>", lambda _event: _sync_time_field("start", "frame"), add="+")
+                end_frame_entry.bind("<FocusOut>", lambda _event: _sync_time_field("end", "frame"), add="+")
+
+            win._vsr_region_picker = region_picker
+            win._vsr_geometry_entries = geometry_entries
+            win._vsr_apply_region_edit = _apply_numeric_region_edit
+            win._vsr_undo_region_edit = _undo_region_edit
+            win._vsr_redo_region_edit = _redo_region_edit
+            win._vsr_region_key_handler = _transform_selected_region
 
             # Action row: Add another, Clear all, Save.
             actions = tk.Frame(win, bg=Theme.BG_OVERLAY)
             actions.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_MD))
 
             def _clear_all():
+                _record_history()
                 rects.clear()
                 region_spans.clear()
                 keyframe_tracks.clear()
@@ -3765,6 +4303,7 @@ class VideoSubtitleRemoverApp(
                 polygon_points.clear()
                 span_summary_var.set(tr("Optional") if is_video else "")
                 _draw_saved_rects()
+                _refresh_region_editor()
 
             def _add_region_keyframe() -> bool:
                 if not is_video:
@@ -3792,6 +4331,7 @@ class VideoSubtitleRemoverApp(
                         )
                         return False
                 seconds = current_frame_index[0] / max(fps, 1.0)
+                _record_history()
                 keyframe = {"time": seconds, **shape}
                 pending_keyframes[:] = [
                     item for item in pending_keyframes
@@ -3806,6 +4346,7 @@ class VideoSubtitleRemoverApp(
                     f"{'s' if len(pending_keyframes) != 1 else ''}"
                 )
                 _draw_saved_rects()
+                _refresh_region_editor(f"pending:{len(pending_keyframes) - 1}")
                 self._update_status(
                     f"Added motion keyframe at {seconds:.3f} seconds", "success")
                 return True
@@ -3826,6 +4367,7 @@ class VideoSubtitleRemoverApp(
                     self._update_status(
                         "The motion keyframes could not be normalized", "warning")
                     return False
+                _record_history()
                 keyframe_tracks.append(track[0])
                 pending_keyframes.clear()
                 span_summary_var.set(
@@ -3833,17 +4375,28 @@ class VideoSubtitleRemoverApp(
                     f"{'s' if len(keyframe_tracks) != 1 else ''}"
                 )
                 _draw_saved_rects()
+                _refresh_region_editor(f"track:{len(keyframe_tracks) - 1}:0")
                 self._update_status("Saved interpolated motion track", "success")
                 return True
 
             def _parse_time_inputs():
                 start_raw = start_var.get().strip() if is_video else ""
                 end_raw = end_var.get().strip() if is_video else ""
-                has_time = bool(start_raw or end_raw)
-                start_s = self._safe_float(start_raw, 0.0)
-                end_s = self._safe_float(end_raw, 0.0)
-                start_s = max(0.0, start_s)
-                end_s = max(0.0, end_s)
+                has_time = bool(
+                    start_raw or end_raw
+                    or start_frame_var.get().strip()
+                    or end_frame_var.get().strip()
+                )
+                try:
+                    start_s = (_seconds_from_fields("start")
+                               if start_raw or start_frame_var.get().strip() else None)
+                    end_s = (_seconds_from_fields("end")
+                             if end_raw or end_frame_var.get().strip() else None)
+                except (TypeError, ValueError) as exc:
+                    self._update_status(str(exc), "warning")
+                    return None
+                start_s = start_s or 0.0
+                end_s = end_s or 0.0
                 if end_s and end_s <= start_s:
                     self._update_status(
                         "Timed region end must be after start", "warning")
@@ -3873,6 +4426,7 @@ class VideoSubtitleRemoverApp(
                             "warning",
                         )
                     return True if close_on_empty else False
+                _record_history()
                 for rect in rects:
                     region_spans.append({
                         "rect": tuple(rect),
@@ -3887,6 +4441,8 @@ class VideoSubtitleRemoverApp(
                     f"{'s' if len(region_spans) != 1 else ''}"
                 )
                 _draw_saved_rects()
+                _refresh_region_editor(
+                    f"span:{len(region_spans) - 1}" if region_spans else None)
                 return True
 
             def _save_and_close():
@@ -3959,13 +4515,21 @@ class VideoSubtitleRemoverApp(
             hint_frame = tk.Frame(win, bg=Theme.BG_OVERLAY)
             hint_frame.pack(fill="x", pady=(0, Theme.S_MD))
             tk.Label(hint_frame,
-                     text=tr("Drag to add a region. Drag again for multi-region."),
+                     text=tr("Drag to add; choose a region for exact coordinates and timing."),
                      font=f(Theme.F_BODY_SM, "bold"),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
             tk.Label(hint_frame,
-                     text=tr("For motion, scrub, draw one shape, add a keyframe, then repeat and save motion."),
+                     text=tr("Arrow keys nudge; Shift moves 10 px; Ctrl+arrows resize; Ctrl+Z/Y undo or redo."),
                      font=f(Theme.F_META),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
+
+            for sequence in ("<Left>", "<Right>", "<Up>", "<Down>"):
+                canvas.bind(sequence, _transform_selected_region, add="+")
+            win.bind("<Control-z>", _undo_region_edit, add="+")
+            win.bind("<Control-y>", _redo_region_edit, add="+")
+            win.bind("<Control-Shift-Z>", _redo_region_edit, add="+")
+            _refresh_region_editor()
+            _update_history_buttons()
 
             # The cap must outlive this function so slider scrubs work
             # while the (non-blocking) modal stays open. Release it when

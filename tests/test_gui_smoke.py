@@ -645,6 +645,73 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_region_selector_numeric_keyboard_undo_and_accessibility(self):
+        app = self._make_app(withdraw=False)
+        try:
+            from backend.a11y import accessible_metadata
+            from gui.widgets import ModernButton
+
+            source = Path(self._tmpdir.name) / "selector-precise.png"
+            Image.new("RGB", (320, 180), (20, 24, 32)).save(source)
+            app.config.subtitle_area = (40, 120, 280, 152)
+            app.config.subtitle_areas = [(40, 120, 280, 152)]
+            with mock.patch.object(app, "_show_preview"):
+                self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+
+            app._open_region_selector_modal()
+            app.root.update()
+            selector = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "Choose subtitle region"
+            )
+            canvas = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, tk.Canvas)
+                and str(widget.cget("cursor")) == "cross"
+            )
+            entries = selector._vsr_geometry_entries
+            self.assertEqual(
+                accessible_metadata(selector._vsr_region_picker)["label"],
+                "Selected manual region",
+            )
+            self.assertEqual(
+                accessible_metadata(entries["width"])["role"],
+                "numeric input",
+            )
+
+            for key, value in (
+                ("x", "42"), ("y", "118"),
+                ("width", "236"), ("height", "34"),
+            ):
+                entries[key].delete(0, "end")
+                entries[key].insert(0, value)
+            self.assertTrue(selector._vsr_apply_region_edit())
+
+            selector._vsr_region_key_handler(SimpleNamespace(
+                widget=canvas, keysym="Right", state=0))
+            selector._vsr_region_key_handler(SimpleNamespace(
+                widget=canvas, keysym="Down", state=0x0004))
+            selector._vsr_undo_region_edit()
+            selector._vsr_redo_region_edit()
+
+            save_button = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Save"
+            )
+            save_button.command()
+            app.root.update()
+
+            expected = (43, 118, 279, 153)
+            self.assertEqual(app.config.subtitle_area, expected)
+            self.assertEqual(app.config.subtitle_areas, [expected])
+            self.assertEqual(item.config.subtitle_area, expected)
+            self.assertEqual(item.config.subtitle_areas, [expected])
+        finally:
+            self._destroy_app(app)
+
     def test_region_selector_saves_timed_video_regions(self):
         app = self._make_app(withdraw=False)
         try:
@@ -691,8 +758,12 @@ class GuiSmokeTests(unittest.TestCase):
                 and str(widget.cget("cursor")) == "cross"
             )
             self._drag_canvas(canvas, (40, 120), (280, 152))
-            selector._vsr_start_entry.insert(0, "0.5")
-            selector._vsr_end_entry.insert(0, "1.4")
+            selector._vsr_start_frame_entry.insert(0, "5")
+            selector._vsr_start_frame_entry.event_generate(
+                "<KeyRelease>", keysym="5", when="now")
+            selector._vsr_end_frame_entry.insert(0, "14")
+            selector._vsr_end_frame_entry.event_generate(
+                "<KeyRelease>", keysym="4", when="now")
             app.root.update()
 
             save_button = next(

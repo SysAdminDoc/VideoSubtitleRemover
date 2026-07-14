@@ -8,15 +8,19 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: gui/app.py:2159
+#: gui/app.py:2169
 msgid "0 cleans every frame. Values above 1 clean fewer frames and recreate the gaps when Practical-RIFE is installed."
 msgstr ""
 
-#: gui/app.py:2053
+#: gui/app.py:2063
 msgid "0 uses the full clip"
 msgstr ""
 
-#: gui/app.py:2613
+#: gui/app.py:4170
+msgid "A motion keyframe uses one frame, not an end frame"
+msgstr ""
+
+#: gui/app.py:2623
 msgid "A/B compare"
 msgstr ""
 
@@ -32,7 +36,7 @@ msgstr ""
 msgid "Activity log cleared"
 msgstr ""
 
-#: gui/app.py:1831
+#: gui/app.py:1841
 msgid "Adaptive edge padding"
 msgstr ""
 
@@ -40,7 +44,7 @@ msgstr ""
 msgid "Add a file to the queue first"
 msgstr ""
 
-#: gui/app.py:2736
+#: gui/app.py:2746
 msgid "Add every supported media file from a folder."
 msgstr ""
 
@@ -48,43 +52,43 @@ msgstr ""
 msgid "Add files to the queue"
 msgstr ""
 
-#: gui/app.py:2862
+#: gui/app.py:2872
 msgid "Add files, review a sample frame, then start."
 msgstr ""
 
-#: gui/app.py:1465
+#: gui/app.py:1475
 msgid "Add files, review one sample, then run the batch."
 msgstr ""
 
-#: gui/app.py:3944
+#: gui/app.py:4500
 msgid "Add keyframe"
 msgstr ""
 
-#: gui/app.py:1029
+#: gui/app.py:1039
 msgid "Add media to the queue before starting."
 msgstr ""
 
-#: gui/app.py:1836
+#: gui/app.py:1846
 msgid "Add more padding around uncertain text detections while keeping confident detections tight. Helps catch faint edges."
 msgstr ""
 
-#: gui/app.py:3941
+#: gui/app.py:4497
 msgid "Add timed"
 msgstr ""
 
-#: gui/app.py:2710
+#: gui/app.py:2720
 msgid "Add videos or images to build a cleanup batch. Originals are never modified."
 msgstr ""
 
-#: gui/app.py:1956
+#: gui/app.py:1966
 msgid "Adjust how many frames are processed together to fit available GPU memory. Recommended for 4K video."
 msgstr ""
 
-#: gui/app.py:1646
+#: gui/app.py:1656
 msgid "Algorithm"
 msgstr ""
 
-#: gui/app.py:1861
+#: gui/app.py:1871
 msgid "Align nearby frames before rebuilding hidden background pixels. Slower, but cleaner on pans and zooms."
 msgstr ""
 
@@ -100,35 +104,47 @@ msgstr ""
 msgid "All files"
 msgstr ""
 
-#: gui/app.py:2272
+#: gui/app.py:2282
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr ""
 
-#: gui/app.py:2853 gui/app.py:4930
+#: gui/app.py:2863 gui/app.py:5494
 msgid "Application status"
 msgstr ""
 
-#: gui/app.py:837 gui/app.py:849
+#: gui/app.py:4206
+msgid "Applied precise region edit"
+msgstr ""
+
+#: gui/app.py:4261
+msgid "Apply"
+msgstr ""
+
+#: gui/app.py:4522
+msgid "Arrow keys nudge; Shift moves 10 px; Ctrl+arrows resize; Ctrl+Z/Y undo or redo."
+msgstr ""
+
+#: gui/app.py:847 gui/app.py:859
 msgid "Audio"
 msgstr ""
 
-#: gui/app.py:917
+#: gui/app.py:927
 msgid "Auto-create an output folder beside each source"
 msgstr ""
 
-#: gui/app.py:1848
+#: gui/app.py:1858
 msgid "Auto-detect subtitle band on load"
 msgstr ""
 
-#: gui/app.py:1708
+#: gui/app.py:1718
 msgid "Auto-detect the subtitle language from a sample frame."
 msgstr ""
 
-#: gui/app.py:1967
+#: gui/app.py:1977
 msgid "Automatic detection only. Carry recent text masks forward for a few frames so a single missed detection does not leave a flash."
 msgstr ""
 
-#: gui/app.py:959
+#: gui/app.py:969
 msgid "Automatic subtitle detection"
 msgstr ""
 
@@ -140,7 +156,7 @@ msgstr ""
 msgid "Backend status and app version."
 msgstr ""
 
-#: gui/app.py:187
+#: gui/app.py:197
 msgid "Backend status is still being probed."
 msgstr ""
 
@@ -152,11 +168,11 @@ msgstr ""
 msgid "Batch finished with issues"
 msgstr ""
 
-#: gui/app.py:1520
+#: gui/app.py:1530
 msgid "Build your batch"
 msgstr ""
 
-#: gui/app.py:3045 gui/app.py:3076 gui/app.py:3080
+#: gui/app.py:3055 gui/app.py:3086 gui/app.py:3090
 msgid "Built-in preset names are reserved."
 msgstr ""
 
@@ -164,7 +180,7 @@ msgstr ""
 msgid "COMPLETED"
 msgstr ""
 
-#: gui/app.py:840
+#: gui/app.py:850
 msgid "CPU mode"
 msgstr ""
 
@@ -172,7 +188,7 @@ msgstr ""
 msgid "CPU only"
 msgstr ""
 
-#: gui/app.py:3088 gui/app.py:3955 gui/app.py:4575
+#: gui/app.py:3098 gui/app.py:4511 gui/app.py:5139
 msgid "Cancel"
 msgstr ""
 
@@ -180,27 +196,27 @@ msgstr ""
 msgid "Cancel this item"
 msgstr ""
 
-#: gui/app.py:1963
+#: gui/app.py:1973
 msgid "Carry masks across missed detections"
 msgstr ""
 
-#: gui/app.py:4452
+#: gui/app.py:5016
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr ""
 
-#: gui/app.py:2277
+#: gui/app.py:2287
 msgid "Check for updates on startup"
 msgstr ""
 
-#: gui/app.py:2012
+#: gui/app.py:2022
 msgid "Check output quality after processing"
 msgstr ""
 
-#: gui/app.py:2006
+#: gui/app.py:2016
 msgid "Check text on major scene frames and reuse masks between them. Faster on long videos, less precise on motion."
 msgstr ""
 
-#: gui/app.py:1743 gui/app.py:809
+#: gui/app.py:1753 gui/app.py:819
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr ""
 
@@ -208,7 +224,11 @@ msgstr ""
 msgid "Choose a folder to clean"
 msgstr ""
 
-#: gui/app.py:2719 gui/widgets.py:1680
+#: gui/app.py:3856
+msgid "Choose a rectangle, polygon, timed region, or keyframe to edit."
+msgstr ""
+
+#: gui/app.py:2729 gui/widgets.py:1680
 msgid "Choose files"
 msgstr ""
 
@@ -220,39 +240,39 @@ msgstr ""
 msgid "Choose files to clean"
 msgstr ""
 
-#: gui/app.py:1575 gui/app.py:2315 gui/app.py:2729 gui/widgets.py:1685
+#: gui/app.py:1585 gui/app.py:2325 gui/app.py:2739 gui/widgets.py:1685
 msgid "Choose folder"
 msgstr ""
 
-#: gui/app.py:2726
+#: gui/app.py:2736
 msgid "Choose one or more videos or images to add to the queue."
 msgstr ""
 
-#: gui/app.py:1992
+#: gui/app.py:2002
 msgid "Clean up interlaced video automatically"
 msgstr ""
 
-#: gui/app.py:1656
+#: gui/app.py:1666
 msgid "Cleanup algorithm"
 msgstr ""
 
-#: gui/app.py:2490 gui/support_controller.py:78
+#: gui/app.py:2500 gui/support_controller.py:78
 msgid "Clear"
 msgstr ""
 
-#: gui/app.py:3938
+#: gui/app.py:4494
 msgid "Clear all"
 msgstr ""
 
-#: gui/app.py:2770
+#: gui/app.py:2780
 msgid "Clear filter"
 msgstr ""
 
-#: gui/app.py:2681
+#: gui/app.py:2691
 msgid "Clear queue"
 msgstr ""
 
-#: gui/app.py:2760
+#: gui/app.py:2770
 msgid "Clear the filter or search for part of a filename."
 msgstr ""
 
@@ -260,7 +280,7 @@ msgstr ""
 msgid "Click Import or drag files onto the queue"
 msgstr ""
 
-#: gui/app.py:2542
+#: gui/app.py:2552
 msgid "Click a queue item, then use Set region or Review mask."
 msgstr ""
 
@@ -268,7 +288,7 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: gui/app.py:1895
+#: gui/app.py:1905
 msgid "Colour-tuned mask expansion"
 msgstr ""
 
@@ -280,7 +300,7 @@ msgstr ""
 msgid "Compute"
 msgstr ""
 
-#: gui/app.py:1669
+#: gui/app.py:1679
 msgid "Compute device"
 msgstr ""
 
@@ -296,7 +316,7 @@ msgstr ""
 msgid "Could not detect language from this frame"
 msgstr ""
 
-#: gui/app.py:915
+#: gui/app.py:925
 msgid "Custom location"
 msgstr ""
 
@@ -304,15 +324,15 @@ msgstr ""
 msgid "DETECTING"
 msgstr ""
 
-#: gui/app.py:919
+#: gui/app.py:929
 msgid "Default workflow"
 msgstr ""
 
-#: gui/app.py:1703
+#: gui/app.py:1713
 msgid "Detect"
 msgstr ""
 
-#: gui/app.py:1996
+#: gui/app.py:2006
 msgid "Detect and remove comb-like lines from older interlaced video before cleanup."
 msgstr ""
 
@@ -320,7 +340,7 @@ msgstr ""
 msgid "Detecting"
 msgstr ""
 
-#: gui/app.py:1673
+#: gui/app.py:1683
 msgid "Detecting hardware..."
 msgstr ""
 
@@ -328,11 +348,11 @@ msgstr ""
 msgid "Detecting language..."
 msgstr ""
 
-#: gui/app.py:835 gui/app.py:836 gui/app.py:837
+#: gui/app.py:845 gui/app.py:846 gui/app.py:847
 msgid "Detecting..."
 msgstr ""
 
-#: gui/app.py:836 gui/app.py:848 gui/support_controller.py:379
+#: gui/app.py:846 gui/app.py:858 gui/support_controller.py:379
 msgid "Detection"
 msgstr ""
 
@@ -340,7 +360,7 @@ msgstr ""
 msgid "Detection engines"
 msgstr ""
 
-#: gui/app.py:835 gui/app.py:847
+#: gui/app.py:845 gui/app.py:857
 msgid "Device"
 msgstr ""
 
@@ -348,7 +368,7 @@ msgstr ""
 msgid "Disk cache"
 msgstr ""
 
-#: gui/app.py:2650
+#: gui/app.py:2660
 msgid "Double-click to view at full size. Use Set region above to draw the subtitle band."
 msgstr ""
 
@@ -356,7 +376,7 @@ msgstr ""
 msgid "Drag a larger subtitle region before releasing."
 msgstr ""
 
-#: gui/app.py:3642
+#: gui/app.py:3673
 msgid "Drag a rectangle, or choose Polygon and click vertices."
 msgstr ""
 
@@ -368,43 +388,63 @@ msgstr ""
 msgid "Drag over the subtitle text. Release to save and refresh the mask."
 msgstr ""
 
-#: gui/app.py:3962
-msgid "Drag to add a region. Drag again for multi-region."
+#: gui/app.py:4518
+msgid "Drag to add; choose a region for exact coordinates and timing."
 msgstr ""
 
 #: gui/preview_controller.py:813
 msgid "Draw subtitle region for {name}"
 msgstr ""
 
-#: gui/app.py:2573
+#: gui/app.py:2583
 msgid "Draw the subtitle region directly on the preview frame."
 msgstr ""
 
-#: gui/app.py:2107
+#: gui/app.py:3525
+msgid "Draw with the pointer, or use arrow keys to edit the selected region."
+msgstr ""
+
+#: gui/app.py:2117
 msgid "EBU R128 loudness target"
 msgstr ""
 
-#: gui/app.py:2040
+#: gui/app.py:2050
 msgid "End (s)"
 msgstr ""
 
-#: gui/app.py:3726
+#: gui/app.py:3781
+msgid "End frame"
+msgstr ""
+
+#: gui/app.py:3761
 msgid "End sec"
 msgstr ""
 
-#: gui/app.py:2231
+#: gui/app.py:2241
 msgid "English"
 msgstr ""
 
-#: gui/app.py:1632
+#: gui/app.py:3814
+msgid "Enter a nonnegative decimal time."
+msgstr ""
+
+#: gui/app.py:3818
+msgid "Enter a nonnegative frame number."
+msgstr ""
+
+#: gui/app.py:3890
+msgid "Enter a whole number within the source-frame bounds."
+msgstr ""
+
+#: gui/app.py:1642
 msgid "Export"
 msgstr ""
 
-#: gui/app.py:1983
+#: gui/app.py:1993
 msgid "Export debug mask video (.mask.mp4)"
 msgstr ""
 
-#: gui/app.py:1974
+#: gui/app.py:1984
 msgid "Export detected text as .srt sidecar"
 msgstr ""
 
@@ -432,7 +472,7 @@ msgstr ""
 msgid "FFmpeg codecs"
 msgstr ""
 
-#: gui/app.py:816
+#: gui/app.py:826
 msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
 msgstr ""
 
@@ -440,7 +480,7 @@ msgstr ""
 msgid "FFmpeg quality"
 msgstr ""
 
-#: gui/app.py:844
+#: gui/app.py:854
 msgid "FFmpeg ready"
 msgstr ""
 
@@ -460,35 +500,35 @@ msgstr ""
 msgid "Fast strip embedded subtitles"
 msgstr ""
 
-#: gui/app.py:2002
+#: gui/app.py:2012
 msgid "Faster keyframe-only detection"
 msgstr ""
 
-#: gui/app.py:4364
+#: gui/app.py:4928
 msgid "File size (largest first)"
 msgstr ""
 
-#: gui/app.py:4366
+#: gui/app.py:4930
 msgid "File size (smallest first)"
 msgstr ""
 
-#: gui/app.py:4359
+#: gui/app.py:4923
 msgid "Filename (A -> Z)"
 msgstr ""
 
-#: gui/app.py:4361
+#: gui/app.py:4925
 msgid "Filename (Z -> A)"
 msgstr ""
 
-#: gui/app.py:2471
+#: gui/app.py:2481
 msgid "Filter"
 msgstr ""
 
-#: gui/app.py:3661
+#: gui/app.py:3694
 msgid "Finish polygon"
 msgstr ""
 
-#: gui/app.py:1040
+#: gui/app.py:1050
 msgid "Finish processing an item to open its output folder."
 msgstr ""
 
@@ -496,27 +536,23 @@ msgstr ""
 msgid "Finish processing this item before using A/B compare."
 msgstr ""
 
-#: gui/app.py:1952
+#: gui/app.py:1962
 msgid "Fit frame batches to GPU memory"
 msgstr ""
 
-#: gui/app.py:957
+#: gui/app.py:967
 msgid "Fixed mask region"
 msgstr ""
 
-#: gui/app.py:949
+#: gui/app.py:959
 msgid "Fixed mask regions"
 msgstr ""
 
-#: gui/app.py:3966
-msgid "For motion, scrub, draw one shape, add a keyframe, then repeat and save motion."
-msgstr ""
-
-#: gui/app.py:3669
+#: gui/app.py:3702
 msgid "Frame"
 msgstr ""
 
-#: gui/app.py:2145
+#: gui/app.py:2155
 msgid "Frame interpolation stride"
 msgstr ""
 
@@ -524,31 +560,31 @@ msgstr ""
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr ""
 
-#: gui/app.py:2587
+#: gui/app.py:2597
 msgid "Full size"
 msgstr ""
 
-#: gui/app.py:3067 gui/app.py:3071
+#: gui/app.py:3077 gui/app.py:3081
 msgid "Give this preset a short name."
 msgstr ""
 
-#: gui/app.py:3269
+#: gui/app.py:3279
 msgid "Got it"
 msgstr ""
 
-#: gui/app.py:1899
+#: gui/app.py:1909
 msgid "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering."
 msgstr ""
 
-#: gui/app.py:1946
+#: gui/app.py:1956
 msgid "H.264 plays almost everywhere. H.265 and AV1 make smaller files but take longer; VVC needs a compatible FFmpeg build."
 msgstr ""
 
-#: gui/app.py:1926
+#: gui/app.py:1936
 msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
 msgstr ""
 
-#: gui/app.py:2131
+#: gui/app.py:2141
 msgid "Hardware-decode hint"
 msgstr ""
 
@@ -556,7 +592,11 @@ msgstr ""
 msgid "Hash status"
 msgstr ""
 
-#: gui/app.py:1477
+#: gui/app.py:3871
+msgid "Height"
+msgstr ""
+
+#: gui/app.py:1487
 msgid "Help"
 msgstr ""
 
@@ -564,15 +604,15 @@ msgstr ""
 msgid "Hide activity"
 msgstr ""
 
-#: gui/app.py:2380
+#: gui/app.py:2390
 msgid "Hide detailed controls"
 msgstr ""
 
-#: gui/app.py:2268
+#: gui/app.py:2278
 msgid "High-contrast theme (restart required)"
 msgstr ""
 
-#: gui/app.py:2875
+#: gui/app.py:2885
 msgid "Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."
 msgstr ""
 
@@ -580,11 +620,11 @@ msgstr ""
 msgid "Image Files"
 msgstr ""
 
-#: gui/app.py:1495 gui/app.py:1639
+#: gui/app.py:1505 gui/app.py:1649
 msgid "Import"
 msgstr ""
 
-#: gui/app.py:1528
+#: gui/app.py:1538
 msgid "Import files or choose a folder to start."
 msgstr ""
 
@@ -596,7 +636,7 @@ msgstr ""
 msgid "Import model cache..."
 msgstr ""
 
-#: gui/app.py:1909
+#: gui/app.py:1919
 msgid "Improve detection for top-to-bottom Japanese or Chinese text. Saved masks stay aligned to the source."
 msgstr ""
 
@@ -616,7 +656,7 @@ msgstr ""
 msgid "Input"
 msgstr ""
 
-#: gui/app.py:1495
+#: gui/app.py:1505
 msgid "Inspect"
 msgstr ""
 
@@ -628,39 +668,39 @@ msgstr ""
 msgid "Install Pillow to enable previews and visual inspection tools."
 msgstr ""
 
-#: gui/app.py:2224
+#: gui/app.py:2234
 msgid "Interface language (restart required)"
 msgstr ""
 
-#: gui/app.py:2198
+#: gui/app.py:2208
 msgid "Interface text size (restart required)"
 msgstr ""
 
-#: gui/app.py:934
+#: gui/app.py:944
 msgid "Interpolated keyframe masks"
 msgstr ""
 
-#: gui/app.py:2085
+#: gui/app.py:2095
 msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
 msgstr ""
 
-#: gui/app.py:1871
+#: gui/app.py:1881
 msgid "Keep background recovery from mixing frames across scene changes. Recommended for edited video."
 msgstr ""
 
-#: gui/app.py:1867
+#: gui/app.py:1877
 msgid "Keep scene changes separate"
 msgstr ""
 
-#: gui/app.py:2120
+#: gui/app.py:2130
 msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
 msgstr ""
 
-#: gui/app.py:1729
+#: gui/app.py:1739
 msgid "LaMa fast mode - favor speed over fill detail"
 msgstr ""
 
-#: gui/app.py:1733
+#: gui/app.py:1743
 msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
 msgstr ""
 
@@ -668,7 +708,11 @@ msgstr ""
 msgid "Languages"
 msgstr ""
 
-#: gui/app.py:2310
+#: gui/app.py:3816 gui/app.py:3820
+msgid "Leave blank for the end of the video."
+msgstr ""
+
+#: gui/app.py:2320
 msgid "Leave empty for the system temporary directory. The selected folder is write-tested before a batch starts."
 msgstr ""
 
@@ -676,7 +720,7 @@ msgstr ""
 msgid "Live preview: {file_name}"
 msgstr ""
 
-#: gui/app.py:1643
+#: gui/app.py:1653
 msgid "Load a preset JSON file into the user library."
 msgstr ""
 
@@ -684,11 +728,11 @@ msgstr ""
 msgid "Log file"
 msgstr ""
 
-#: gui/app.py:953
+#: gui/app.py:963
 msgid "Manual region: ({x1}, {y1}) to ({x2}, {y2})"
 msgstr ""
 
-#: gui/app.py:946
+#: gui/app.py:956
 msgid "Manual regions: {count} fixed rectangles"
 msgstr ""
 
@@ -700,7 +744,7 @@ msgstr ""
 msgid "Missing"
 msgstr ""
 
-#: gui/app.py:4479
+#: gui/app.py:5043
 msgid "Mode"
 msgstr ""
 
@@ -716,19 +760,27 @@ msgstr ""
 msgid "Model files"
 msgstr ""
 
-#: gui/app.py:1857
+#: gui/app.py:4181
+msgid "Motion keyframes must use distinct frames"
+msgstr ""
+
+#: gui/app.py:3959
+msgid "Motion {track}, keyframe {frame}"
+msgstr ""
+
+#: gui/app.py:1867
 msgid "Motion-aligned background recovery"
 msgstr ""
 
-#: gui/app.py:929
+#: gui/app.py:939
 msgid "Moving manual regions: {count} track{suffix}"
 msgstr ""
 
-#: gui/app.py:2103
+#: gui/app.py:2113
 msgid "Mux every audio stream from the source. Off keeps only the first track."
 msgstr ""
 
-#: gui/app.py:2999
+#: gui/app.py:3009
 msgid "Name the current cleanup settings and save them to the user preset library."
 msgstr ""
 
@@ -736,7 +788,7 @@ msgstr ""
 msgid "Needs attention"
 msgstr ""
 
-#: gui/app.py:2874
+#: gui/app.py:2884
 msgid "Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."
 msgstr ""
 
@@ -744,7 +796,7 @@ msgstr ""
 msgid "Next action"
 msgstr ""
 
-#: gui/app.py:844
+#: gui/app.py:854
 msgid "No FFmpeg"
 msgstr ""
 
@@ -752,27 +804,35 @@ msgstr ""
 msgid "No action needed."
 msgstr ""
 
-#: gui/app.py:2706
+#: gui/app.py:2716
 msgid "No media queued"
 msgstr ""
 
-#: gui/app.py:2752
+#: gui/app.py:2762
 msgid "No queued items match this search"
+msgstr ""
+
+#: gui/app.py:4011
+msgid "No region edit to redo"
+msgstr ""
+
+#: gui/app.py:4008
+msgid "No region edit to undo"
 msgstr ""
 
 #: gui/support_controller.py:525 gui/support_controller.py:526
 msgid "None"
 msgstr ""
 
-#: gui/app.py:1047
+#: gui/app.py:1057
 msgid "Nothing to retry - every item is done."
 msgstr ""
 
-#: gui/app.py:1561
+#: gui/app.py:1571
 msgid "OUTPUT LOCATION"
 msgstr ""
 
-#: gui/app.py:2621
+#: gui/app.py:2631
 msgid "Open a frame slider that wipes between source and cleaned output."
 msgstr ""
 
@@ -784,7 +844,7 @@ msgstr ""
 msgid "Open log file"
 msgstr ""
 
-#: gui/app.py:2666 gui/quality_controller.py:289
+#: gui/app.py:2676 gui/quality_controller.py:289
 msgid "Open output"
 msgstr ""
 
@@ -800,11 +860,11 @@ msgstr ""
 msgid "Open result"
 msgstr ""
 
-#: gui/app.py:2595
+#: gui/app.py:2605
 msgid "Open the selected source frame in a larger viewer."
 msgstr ""
 
-#: gui/app.py:843
+#: gui/app.py:853
 msgid "OpenCV fallback"
 msgstr ""
 
@@ -816,15 +876,15 @@ msgstr ""
 msgid "Opened the settings folder"
 msgstr ""
 
-#: gui/app.py:3743 gui/app.py:3766
+#: gui/app.py:3798 gui/app.py:4304
 msgid "Optional"
 msgstr ""
 
-#: gui/app.py:1936 gui/app.py:4540
+#: gui/app.py:1946 gui/app.py:5104
 msgid "Output codec"
 msgstr ""
 
-#: gui/app.py:1075
+#: gui/app.py:1085
 msgid "Outputs are ready for review"
 msgstr ""
 
@@ -836,7 +896,7 @@ msgstr ""
 msgid "Override settings for this file..."
 msgstr ""
 
-#: gui/app.py:4440
+#: gui/app.py:5004
 msgid "Override settings: {name}"
 msgstr ""
 
@@ -844,7 +904,7 @@ msgstr ""
 msgid "PAUSED"
 msgstr ""
 
-#: gui/app.py:2099
+#: gui/app.py:2109
 msgid "Pass through every audio stream (Bluray/DVD multi-track)"
 msgstr ""
 
@@ -852,7 +912,7 @@ msgstr ""
 msgid "Pause batch"
 msgstr ""
 
-#: gui/app.py:1031
+#: gui/app.py:1041
 msgid "Pause is already in progress."
 msgstr ""
 
@@ -860,19 +920,31 @@ msgstr ""
 msgid "Pausing..."
 msgstr ""
 
-#: gui/app.py:4450 gui/app.py:4468
+#: gui/app.py:3949
+msgid "Pending keyframe {index}"
+msgstr ""
+
+#: gui/app.py:5014 gui/app.py:5032
 msgid "Per-file overrides"
 msgstr ""
 
-#: gui/app.py:3586 gui/app.py:3602 gui/app.py:3608 gui/app.py:3637
+#: gui/app.py:3614 gui/app.py:3631 gui/app.py:3637 gui/app.py:3668
 msgid "Polygon"
 msgstr ""
 
-#: gui/app.py:1737
+#: gui/app.py:3910
+msgid "Polygon vertex coordinates"
+msgstr ""
+
+#: gui/app.py:3941
+msgid "Polygon {index}"
+msgstr ""
+
+#: gui/app.py:1747
 msgid "Preserve the source audio track"
 msgstr ""
 
-#: gui/app.py:1612
+#: gui/app.py:1622
 msgid "Preset"
 msgstr ""
 
@@ -880,7 +952,7 @@ msgstr ""
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr ""
 
-#: gui/app.py:2536
+#: gui/app.py:2546
 msgid "Preview a sample frame"
 msgstr ""
 
@@ -912,11 +984,11 @@ msgstr ""
 msgid "Providers"
 msgstr ""
 
-#: gui/app.py:2177
+#: gui/app.py:2187
 msgid "Quality report sheet (side-by-side PNG comparison)"
 msgstr ""
 
-#: gui/app.py:2398
+#: gui/app.py:2408
 msgid "Queue"
 msgstr ""
 
@@ -924,28 +996,64 @@ msgstr ""
 msgid "REVIEW"
 msgstr ""
 
-#: gui/app.py:2165
+#: gui/app.py:2175
 msgid "Read frames ahead in the background"
 msgstr ""
 
-#: gui/app.py:2169
+#: gui/app.py:2179
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr ""
 
-#: gui/app.py:1084 gui/app.py:2441 gui/support_controller.py:538
+#: gui/app.py:1094 gui/app.py:2451 gui/support_controller.py:538
 msgid "Ready"
 msgstr ""
 
-#: gui/app.py:2844 gui/app.py:2855 gui/widgets.py:1910 gui/widgets.py:2226 gui/widgets.py:2241
+#: gui/app.py:2854 gui/app.py:2865 gui/widgets.py:1910 gui/widgets.py:2226 gui/widgets.py:2241
 msgid "Ready to process"
 msgstr ""
 
-#: gui/app.py:960
+#: gui/app.py:970
 msgid "Recommended default"
 msgstr ""
 
-#: gui/app.py:3507 gui/app.py:3637
+#: gui/app.py:3535 gui/app.py:3668
 msgid "Rectangle"
+msgstr ""
+
+#: gui/app.py:3924
+msgid "Rectangle {index}"
+msgstr ""
+
+#: gui/app.py:4257
+msgid "Redid region edit"
+msgstr ""
+
+#: gui/app.py:4265
+msgid "Redo"
+msgstr ""
+
+#: gui/app.py:3819
+msgid "Region end frame"
+msgstr ""
+
+#: gui/app.py:4168
+msgid "Region end must be after its start"
+msgstr ""
+
+#: gui/app.py:3815
+msgid "Region end time in seconds"
+msgstr ""
+
+#: gui/app.py:3817
+msgid "Region start frame"
+msgstr ""
+
+#: gui/app.py:3813
+msgid "Region start time in seconds"
+msgstr ""
+
+#: gui/app.py:3889
+msgid "Region {field} in pixels"
 msgstr ""
 
 #: gui/preview_controller.py:948
@@ -956,7 +1064,7 @@ msgstr ""
 msgid "Remove"
 msgstr ""
 
-#: gui/app.py:2065
+#: gui/app.py:2075
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr ""
 
@@ -964,15 +1072,15 @@ msgstr ""
 msgid "Remove from queue"
 msgstr ""
 
-#: gui/app.py:2075
+#: gui/app.py:2085
 msgid "Remove persistent text (logos, tickers, lower-thirds)"
 msgstr ""
 
-#: gui/app.py:2069
+#: gui/app.py:2079
 msgid "Remove short-lived dialogue text. Persistent logos and lower-thirds are controlled separately below."
 msgstr ""
 
-#: gui/app.py:2079
+#: gui/app.py:2089
 msgid "Remove text that stays in one place for about three seconds or longer, such as lower-thirds."
 msgstr ""
 
@@ -980,7 +1088,7 @@ msgstr ""
 msgid "Rename output..."
 msgstr ""
 
-#: gui/app.py:2676
+#: gui/app.py:2686
 msgid "Repeat last"
 msgstr ""
 
@@ -988,11 +1096,11 @@ msgstr ""
 msgid "Repeat with these settings"
 msgstr ""
 
-#: gui/app.py:1580 gui/app.py:1782
+#: gui/app.py:1590 gui/app.py:1792
 msgid "Reset"
 msgstr ""
 
-#: gui/app.py:2671 gui/quality_controller.py:324
+#: gui/app.py:2681 gui/quality_controller.py:324
 msgid "Retry failed"
 msgstr ""
 
@@ -1004,11 +1112,11 @@ msgstr ""
 msgid "Retry with suggested settings"
 msgstr ""
 
-#: gui/app.py:1721
+#: gui/app.py:1731
 msgid "Reuse a fixed subtitle region (skip per-frame scanning)"
 msgstr ""
 
-#: gui/app.py:1886
+#: gui/app.py:1896
 msgid "Reuse masks on unchanged frames"
 msgstr ""
 
@@ -1016,7 +1124,7 @@ msgstr ""
 msgid "Reveal output folder"
 msgstr ""
 
-#: gui/app.py:4371
+#: gui/app.py:4935
 msgid "Reverse current order"
 msgstr ""
 
@@ -1024,11 +1132,11 @@ msgstr ""
 msgid "Review first"
 msgstr ""
 
-#: gui/app.py:2576
+#: gui/app.py:2586
 msgid "Review mask"
 msgstr ""
 
-#: gui/app.py:2401
+#: gui/app.py:2411
 msgid "Review queued files before starting."
 msgstr ""
 
@@ -1036,15 +1144,15 @@ msgstr ""
 msgid "Review subtitle mask"
 msgstr ""
 
-#: gui/app.py:2872
+#: gui/app.py:2882
 msgid "Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."
 msgstr ""
 
-#: gui/app.py:1495
+#: gui/app.py:1505
 msgid "Run"
 msgstr ""
 
-#: gui/app.py:1063
+#: gui/app.py:1073
 msgid "Run a batch first to repeat its settings."
 msgstr ""
 
@@ -1052,11 +1160,11 @@ msgstr ""
 msgid "Run burned-in cleanup instead"
 msgstr ""
 
-#: gui/app.py:2609
+#: gui/app.py:2619
 msgid "Run detect + inpaint on the first frame of the selected item."
 msgstr ""
 
-#: gui/app.py:2584
+#: gui/app.py:2594
 msgid "Run detection on the selected item and show the first-frame mask."
 msgstr ""
 
@@ -1068,11 +1176,11 @@ msgstr ""
 msgid "STOPPED"
 msgstr ""
 
-#: gui/app.py:1761
+#: gui/app.py:1771
 msgid "SUBTITLE REGION"
 msgstr ""
 
-#: gui/app.py:2016
+#: gui/app.py:2026
 msgid "Sample the finished video for visual damage, remaining text, and flicker, then flag results that need review."
 msgstr ""
 
@@ -1080,23 +1188,23 @@ msgstr ""
 msgid "Sampled quality check"
 msgstr ""
 
-#: gui/app.py:3952 gui/app.py:4577
+#: gui/app.py:4508 gui/app.py:5141
 msgid "Save"
 msgstr ""
 
-#: gui/app.py:2181
+#: gui/app.py:2191
 msgid "Save a side-by-side source/output image for sampled frames. Also enables the numeric quality report."
 msgstr ""
 
-#: gui/app.py:1626
+#: gui/app.py:1636
 msgid "Save as..."
 msgstr ""
 
-#: gui/app.py:3948
+#: gui/app.py:4504
 msgid "Save motion"
 msgstr ""
 
-#: gui/app.py:2987 gui/app.py:2996 gui/app.py:3090
+#: gui/app.py:2997 gui/app.py:3006 gui/app.py:3100
 msgid "Save preset"
 msgstr ""
 
@@ -1104,7 +1212,7 @@ msgstr ""
 msgid "Save support bundle"
 msgstr ""
 
-#: gui/app.py:3014
+#: gui/app.py:3024
 msgid "Save the current setup as a preset"
 msgstr ""
 
@@ -1112,19 +1220,19 @@ msgstr ""
 msgid "Saved redacted support bundle to {name}"
 msgstr ""
 
-#: gui/app.py:2217
+#: gui/app.py:2227
 msgid "Scales interface text and dependent controls on the next launch."
 msgstr ""
 
-#: gui/app.py:1852
+#: gui/app.py:1862
 msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
 msgstr ""
 
-#: gui/app.py:3323
+#: gui/app.py:3333
 msgid "Select Output Directory"
 msgstr ""
 
-#: gui/app.py:3341
+#: gui/app.py:3351
 msgid "Select Processing Work Directory"
 msgstr ""
 
@@ -1136,7 +1244,7 @@ msgstr ""
 msgid "Select a queue item to enable mask review, test cleanup, and zoom."
 msgstr ""
 
-#: gui/app.py:2625
+#: gui/app.py:2635
 msgid "Select a queue item to enable preview tools."
 msgstr ""
 
@@ -1144,11 +1252,23 @@ msgstr ""
 msgid "Select a queued item to enable preview tools."
 msgstr ""
 
-#: gui/app.py:4512
+#: gui/app.py:4152
+msgid "Select or draw a region before editing it"
+msgstr ""
+
+#: gui/app.py:3848
+msgid "Selected"
+msgstr ""
+
+#: gui/app.py:3855
+msgid "Selected manual region"
+msgstr ""
+
+#: gui/app.py:5076
 msgid "Sensitivity"
 msgstr ""
 
-#: gui/app.py:1777 gui/app.py:2565
+#: gui/app.py:1787 gui/app.py:2575
 msgid "Set region"
 msgstr ""
 
@@ -1160,7 +1280,7 @@ msgstr ""
 msgid "Settings folder"
 msgstr ""
 
-#: gui/app.py:3630
+#: gui/app.py:3661
 msgid "Shape"
 msgstr ""
 
@@ -1168,15 +1288,15 @@ msgstr ""
 msgid "Show activity"
 msgstr ""
 
-#: gui/app.py:1792 gui/app.py:2384
+#: gui/app.py:1802 gui/app.py:2394
 msgid "Show detailed controls"
 msgstr ""
 
-#: gui/app.py:1890
+#: gui/app.py:1900
 msgid "Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."
 msgstr ""
 
-#: gui/app.py:1725
+#: gui/app.py:1735
 msgid "Skip repeated detection when you have already set a precise subtitle region."
 msgstr ""
 
@@ -1184,11 +1304,11 @@ msgstr ""
 msgid "Slowest stage"
 msgstr ""
 
-#: gui/app.py:1877
+#: gui/app.py:1887
 msgid "Smooth detection between frames"
 msgstr ""
 
-#: gui/app.py:1881
+#: gui/app.py:1891
 msgid "Smooths per-frame OCR jitter and fills single-frame misses. Recommended."
 msgstr ""
 
@@ -1196,31 +1316,35 @@ msgstr ""
 msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
 msgstr ""
 
-#: gui/app.py:1080
+#: gui/app.py:1090
 msgid "Some items need attention"
 msgstr ""
 
-#: gui/app.py:2430
+#: gui/app.py:2440
 msgid "Sort"
 msgstr ""
 
-#: gui/app.py:2027
+#: gui/app.py:2037
 msgid "Start (s)"
 msgstr ""
 
-#: gui/app.py:2661 gui/processing_controller.py:966
+#: gui/app.py:2671 gui/processing_controller.py:966
 msgid "Start batch"
 msgstr ""
 
-#: gui/app.py:3716
+#: gui/app.py:3771
+msgid "Start frame"
+msgstr ""
+
+#: gui/app.py:3751
 msgid "Start sec"
 msgstr ""
 
-#: gui/app.py:4369
+#: gui/app.py:4933
 msgid "Status (pending first)"
 msgstr ""
 
-#: gui/app.py:1033
+#: gui/app.py:1043
 msgid "Stop is already in progress."
 msgstr ""
 
@@ -1228,39 +1352,43 @@ msgstr ""
 msgid "Stopping..."
 msgstr ""
 
-#: gui/app.py:2089
+#: gui/app.py:2099
 msgid "Stops karaoke captions leaking original text through the gaps between syllables."
 msgstr ""
 
-#: gui/app.py:2187
+#: gui/app.py:2197
 msgid "Structured JSON log"
 msgstr ""
 
-#: gui/app.py:1683 gui/app.py:4493
+#: gui/app.py:1693 gui/app.py:5057
 msgid "Subtitle language"
+msgstr ""
+
+#: gui/app.py:3524
+msgid "Subtitle region preview"
 msgstr ""
 
 #: gui/support_controller.py:215 gui/support_controller.py:566
 msgid "Support bundle"
 msgstr ""
 
-#: gui/app.py:2885
+#: gui/app.py:2895
 msgid "Switched to the {profile} profile"
 msgstr ""
 
-#: gui/app.py:2230
+#: gui/app.py:2240
 msgid "System"
 msgstr ""
 
-#: gui/app.py:2873
+#: gui/app.py:2883
 msgid "Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."
 msgstr ""
 
-#: gui/app.py:2601
+#: gui/app.py:2611
 msgid "Test cleanup"
 msgstr ""
 
-#: gui/app.py:1035
+#: gui/app.py:1045
 msgid "The batch is already running."
 msgstr ""
 
@@ -1280,7 +1408,7 @@ msgstr ""
 msgid "The log file is not available yet"
 msgstr ""
 
-#: gui/app.py:1055
+#: gui/app.py:1065
 msgid "The queue is empty - add media to get started."
 msgstr ""
 
@@ -1288,71 +1416,103 @@ msgstr ""
 msgid "The settings folder could not be opened"
 msgstr ""
 
-#: gui/app.py:4472
+#: gui/app.py:5036
 msgid "These apply to this queued item only and survive a global settings change."
 msgstr ""
 
-#: gui/app.py:3186
+#: gui/app.py:3196
 msgid "Three first-run cues: import media, inspect the region, and run the batch."
 msgstr ""
 
-#: gui/app.py:3212
+#: gui/app.py:3222
 msgid "Three things that make batch cleanup painless."
 msgstr ""
 
-#: gui/app.py:942
+#: gui/app.py:4134
+msgid "Time must be a number"
+msgstr ""
+
+#: gui/app.py:4136
+msgid "Time must be zero or greater"
+msgstr ""
+
+#: gui/app.py:952
 msgid "Time-ranged mask regions"
 msgstr ""
 
-#: gui/app.py:938
+#: gui/app.py:948
 msgid "Timed manual regions: {count} rectangle{suffix}"
+msgstr ""
+
+#: gui/app.py:3931
+msgid "Timed region {index}"
 msgstr ""
 
 #: gui/quality_controller.py:106
 msgid "Total time {elapsed} - {count} item{suffix} processed"
 msgstr ""
 
-#: gui/app.py:2140
+#: gui/app.py:2150
 msgid "Try hardware video decoding for faster input. The app falls back to software decoding if needed."
+msgstr ""
+
+#: gui/app.py:4247
+msgid "Undid region edit"
+msgstr ""
+
+#: gui/app.py:4269
+msgid "Undo"
 msgstr ""
 
 #: gui/support_controller.py:379 gui/support_controller.py:380 gui/support_controller.py:381 gui/support_controller.py:382 gui/support_controller.py:383 gui/support_controller.py:384
 msgid "Unknown"
 msgstr ""
 
-#: gui/app.py:3018
+#: gui/app.py:3028
 msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
 msgstr ""
 
-#: gui/app.py:2324
+#: gui/app.py:4185
+msgid "Use motion keyframes to time polygon regions"
+msgstr ""
+
+#: gui/app.py:2334
 msgid "Use system"
 msgstr ""
 
-#: gui/app.py:1930
+#: gui/app.py:1940
 msgid "Use the GPU's media encoder when available. The app retries with CPU encoding if it fails."
 msgstr ""
 
-#: gui/app.py:3043 gui/app.py:3065
+#: gui/app.py:3911
+msgid "Use x,y pairs separated by semicolons; at least three vertices are required."
+msgstr ""
+
+#: gui/app.py:3053 gui/app.py:3075
 msgid "User preset"
 msgstr ""
 
-#: gui/app.py:2259
+#: gui/app.py:2269
 msgid "Uses the system language or a compiled catalog on the next launch."
 msgstr ""
 
-#: gui/app.py:1457 gui/support_controller.py:503
+#: gui/app.py:1467 gui/support_controller.py:503
 msgid "Version {version}"
 msgstr ""
 
-#: gui/app.py:1905
+#: gui/app.py:1915
 msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
+msgstr ""
+
+#: gui/app.py:3894
+msgid "Vertices"
 msgstr ""
 
 #: gui/widgets.py:1785
 msgid "Video Files"
 msgstr ""
 
-#: gui/app.py:1449
+#: gui/app.py:1459
 msgid "Video Subtitle Remover"
 msgstr ""
 
@@ -1368,40 +1528,52 @@ msgstr ""
 msgid "Wait for the active batch to finish before editing regions."
 msgstr ""
 
-#: gui/app.py:1046 gui/app.py:1054 gui/app.py:1062
+#: gui/app.py:1056 gui/app.py:1064 gui/app.py:1072
 msgid "Wait for the current batch to finish."
 msgstr ""
 
-#: gui/app.py:2552 gui/preview_controller.py:182 gui/preview_controller.py:274
+#: gui/app.py:2562 gui/preview_controller.py:182 gui/preview_controller.py:274
 msgid "Waiting"
 msgstr ""
 
-#: gui/app.py:3204
+#: gui/app.py:3214
 msgid "Welcome"
 msgstr ""
 
-#: gui/app.py:3183
+#: gui/app.py:3193
 msgid "Welcome to {app_name}"
 msgstr ""
 
-#: gui/app.py:2281
+#: gui/app.py:2291
 msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
 msgstr ""
 
-#: gui/app.py:2191
+#: gui/app.py:3870
+msgid "Width"
+msgstr ""
+
+#: gui/app.py:2201
 msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
 msgstr ""
 
-#: gui/app.py:1636
+#: gui/app.py:1646
 msgid "Write the current preset to a shareable JSON file."
 msgstr ""
 
-#: gui/app.py:1987
+#: gui/app.py:1997
 msgid "Writes a black-and-white mp4 of the per-frame detection mask alongside the output."
 msgstr ""
 
-#: gui/app.py:1978
+#: gui/app.py:1988
 msgid "Writes an .srt file next to the output using OCR text and timings."
+msgstr ""
+
+#: gui/app.py:3868
+msgid "X"
+msgstr ""
+
+#: gui/app.py:3869
+msgid "Y"
 msgstr ""
 
 #: gui/widgets.py:1751
@@ -1444,11 +1616,11 @@ msgstr ""
 msgid "{count} error{suffix}"
 msgstr ""
 
-#: gui/app.py:2426
+#: gui/app.py:2436
 msgid "{count} items"
 msgstr ""
 
-#: gui/app.py:1070
+#: gui/app.py:1080
 msgid "{count} queued and ready to process"
 msgstr ""
 

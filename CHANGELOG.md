@@ -44,6 +44,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Precise keyboard-accessible region editing.** The full manual-region
+  selector exposes exact x/y/width/height or polygon vertices, synchronized
+  second/frame timing, bounded arrow-key nudge and Ctrl+arrow resize, and
+  shared undo/redo across pointer, numeric, timing, polygon, and keyframe
+  operations. Accessible labels and the unchanged persistence path keep
+  keyboard edits equivalent to pointer-created masks.
 - **Complete gettext catalog lifecycle and locale selector.** A deterministic
   extractor/merger validates UTF-8, placeholders, and plural forms, compiles
   MO files, reports coverage, and maintains a 100%-covered pseudo-locale.

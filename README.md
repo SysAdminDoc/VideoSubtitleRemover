@@ -31,7 +31,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-Engine Detection** -- RapidOCR PP-OCRv6 through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR > threshold fallback (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
-- **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame, optionally with start/end seconds for moving subtitle layouts
+- **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
@@ -211,7 +211,7 @@ processes a generated tiny image through the CLI with a fixed mask.
 2. **Add files** -- Click to browse, right-click for folders, or drag & drop
 3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
 4. **Set language** if subtitles are non-English
-5. **Optionally set region** — select a queued item and drag on the preview for a fixed subtitle band, or use the settings card's Set Region action for multi-region and timed ranges
+5. **Optionally set region** — select a queued item and drag on the preview for a fixed subtitle band, or use the settings card's Set Region action for multi-region and timed ranges. The full selector supports exact rectangle or polygon coordinates, second/frame timing, arrow-key nudging, Ctrl+arrow resizing, and Ctrl+Z/Ctrl+Y history.
 6. **Start Processing** and monitor progress
 7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame. Right-click the queue card, or press **Menu / Shift+F10** while it is focused, for all per-item actions.
 
