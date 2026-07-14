@@ -361,6 +361,8 @@ class VideoSubtitleRemoverApp(
             self.config.tbe_scene_cut_split = self.scene_split_var.get()
         if hasattr(self, 'adaptive_batch_var'):
             self.config.adaptive_batch = self.adaptive_batch_var.get()
+        if hasattr(self, 'temporal_mask_union_var'):
+            self.config.temporal_mask_union = self.temporal_mask_union_var.get()
         if hasattr(self, 'export_srt_var'):
             self.config.export_srt = self.export_srt_var.get()
         if hasattr(self, 'export_mask_var'):
@@ -1776,6 +1778,19 @@ class VideoSubtitleRemoverApp(
         adaptive_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(adaptive_toggle, tr("Scale the TBE window to fit free VRAM. Prevents OOM on 4K, unlocks headroom on 24 GB cards."))
 
+        self.temporal_mask_union_var = tk.BooleanVar(
+            value=self.config.temporal_mask_union)
+        temporal_mask_toggle = ModernToggle(
+            quality_frame,
+            text=tr("Temporal mask stabilization (retain missed text)"),
+            variable=self.temporal_mask_union_var,
+        )
+        temporal_mask_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(temporal_mask_toggle, tr(
+            "Automatic detection only. OR each frame's mask with a short "
+            "trailing window (reset at scene cuts) so single-frame OCR misses "
+            "and moving overlays keep the pixels their neighbours saw."))
+
         self.export_srt_var = tk.BooleanVar(value=self.config.export_srt)
         srt_toggle = ModernToggle(
             quality_frame,
@@ -2595,6 +2610,7 @@ class VideoSubtitleRemoverApp(
             ("phash_var", "phash_skip_enable"),
             ("colour_tune_var", "colour_tune_enable"),
             ("adaptive_batch_var", "adaptive_batch"),
+            ("temporal_mask_union_var", "temporal_mask_union"),
             ("export_srt_var", "export_srt"),
             ("export_mask_var", "export_mask_video"),
         ):

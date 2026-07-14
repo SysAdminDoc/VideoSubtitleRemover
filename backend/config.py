@@ -202,6 +202,14 @@ class ProcessingConfig:
     # falling back to CPU inpainting for that frame. Safe default: on.
     gpu_oom_recovery: bool = True
 
+    # Scene-cut-safe temporal mask stabilization -- OR each frame's mask with a
+    # short trailing window (within the same scene) so a single-frame OCR miss
+    # or a moving/dissolving overlay keeps the pixels its neighbours saw. Only
+    # applied in automatic full-frame detection; resets at scene cuts and never
+    # touches user-fixed timed regions. Opt-in.
+    temporal_mask_union: bool = False
+    temporal_mask_window: int = 3
+
     # v3.12 AUTO mode routing
     # Fraction of masked pixels that must be exposed in >=1 batch frame
     # to send the batch through TBE. Below threshold, route to LaMa.
@@ -634,6 +642,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.export_srt = _coerce_bool(config.export_srt, False)
     config.adaptive_batch = _coerce_bool(config.adaptive_batch, True)
     config.gpu_oom_recovery = _coerce_bool(config.gpu_oom_recovery, True)
+    config.temporal_mask_union = _coerce_bool(config.temporal_mask_union, False)
+    config.temporal_mask_window = _coerce_int(config.temporal_mask_window, 3, 1, 15)
     config.auto_exposure_threshold = _coerce_float(config.auto_exposure_threshold, 0.55, 0.0, 1.0)
     config.deinterlace = _coerce_bool(config.deinterlace, False)
     config.deinterlace_auto = _coerce_bool(config.deinterlace_auto, True)

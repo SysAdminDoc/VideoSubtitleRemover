@@ -31,13 +31,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P1 — Next
 
-- [ ] P1 — Add scene-cut-safe temporal mask stabilization
-  Why: Per-frame OCR misses and abrupt motion leave residue; short-window mask union is a research-backed way to retain observed target pixels without adopting a new diffusion model.
-  Evidence: `backend/processor.py:1716-1923`; https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/6; https://arxiv.org/abs/2603.09283
-  Touches: `backend/processor.py`, `backend/config.py`, `gui/config.py`, `gui/app.py`, `backend/reference_corpus.py`, `tests/test_hardening.py`
-  Acceptance: An opt-in/configurable rolling mask union runs after propagation/refinement, resets at scene cuts and inactive timed spans, reduces missed-mask pixels on moving/shadow/dissolve fixtures, and never expands a mask into adjacent scenes or outside configured regions.
-  Complexity: M
-
 - [ ] P1 — Implement UI Automation providers for custom controls
   Why: In-process metadata and notifications do not let Narrator/NVDA enumerate or operate Canvas-based buttons, toggles, sliders, and queue rows.
   Evidence: `backend/a11y.py:1-19`, `gui/widgets.py`; https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview

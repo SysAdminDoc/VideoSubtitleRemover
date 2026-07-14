@@ -38,6 +38,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Quality
 
+- **Scene-cut-safe temporal mask stabilization.** New opt-in `temporal_mask_union`
+  ORs each frame's mask with a short trailing window (default 3, configurable
+  1-15) so a single-frame OCR miss or a moving/dissolving overlay keeps the
+  pixels its neighbours saw. It runs only in automatic full-frame detection,
+  resets at every scene cut (never bleeds a mask into an adjacent scene), and
+  never touches user-fixed timed/fixed regions. Exposed via `--temporal-mask-union`
+  / `--temporal-mask-window`, a GUI toggle, settings, and presets. New
+  `backend.inpainters.stabilize_masks_rolling_union`.
+
 - **Mask-boundary seam (discontinuity) quality check.** The quality report now
   scores the visible seam at the inpaint mask boundary -- the excess gradient
   the fill introduces along the mask contour versus the original frame,

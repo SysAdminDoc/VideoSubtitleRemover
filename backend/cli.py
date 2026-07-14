@@ -455,6 +455,13 @@ def main():
                        help="Disable Temporal Background Exposure (STTN/ProPainter use cv2)")
     parser.add_argument("--no-adaptive-batch", action="store_true",
                        help="Disable VRAM-probe-driven batch sizing")
+    parser.add_argument("--temporal-mask-union", action="store_true",
+                       help="Scene-cut-safe temporal mask stabilization: OR each "
+                            "frame's mask with a short trailing window (auto "
+                            "detection only) to retain pixels missed on single "
+                            "frames or moving overlays; resets at scene cuts")
+    parser.add_argument("--temporal-mask-window", type=int, default=3,
+                       help="Trailing window size for --temporal-mask-union (1-15)")
     parser.add_argument("--export-srt", action="store_true",
                        help="Write an .srt sidecar with detected text")
     parser.add_argument("--export-mask", action="store_true",
@@ -854,6 +861,8 @@ def main():
         matanyone_refine=args.matanyone_refine,
         cotracker_propagate=args.cotracker_propagate,
         adaptive_batch=not args.no_adaptive_batch,
+        temporal_mask_union=args.temporal_mask_union,
+        temporal_mask_window=args.temporal_mask_window,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,
         kalman_tracking=not args.no_kalman,

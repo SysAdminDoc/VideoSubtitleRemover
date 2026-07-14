@@ -6151,6 +6151,48 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class TemporalMaskStabilizationTests(unittest.TestCase):
+    """P1: scene-cut-safe rolling mask union."""
+
+    def _mask(self, on):
+        m = np.zeros((16, 32), np.uint8)
+        if on:
+            m[4:12, 8:24] = 255
+        return m
+
+    def test_single_frame_miss_is_recovered_within_scene(self):
+        from backend.inpainters import stabilize_masks_rolling_union
+        masks = [self._mask(True), self._mask(False), self._mask(True)]
+        out = stabilize_masks_rolling_union(masks, scene_starts=[0], window=3)
+        # frame 1 missed detection but neighbours saw text -> recovered
+        self.assertGreater(int(out[1].max()), 0)
+
+    def test_union_never_crosses_scene_cut(self):
+        from backend.inpainters import stabilize_masks_rolling_union
+        # scene A has text; scene B (starts at idx 2) is clean
+        masks = [self._mask(True), self._mask(True),
+                 self._mask(False), self._mask(False)]
+        out = stabilize_masks_rolling_union(masks, scene_starts=[0, 2], window=4)
+        self.assertEqual(int(out[2].max()), 0)
+        self.assertEqual(int(out[3].max()), 0)
+
+    def test_window_one_is_noop(self):
+        from backend.inpainters import stabilize_masks_rolling_union
+        masks = [self._mask(True), self._mask(False)]
+        out = stabilize_masks_rolling_union(masks, [0], window=1)
+        self.assertEqual(int(out[1].max()), 0)
+
+    def test_config_defaults_off_and_round_trip(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        cfg = ProcessingConfig()
+        self.assertFalse(cfg.temporal_mask_union)
+        cfg.temporal_mask_union = True
+        cfg.temporal_mask_window = 99
+        normalize_processing_config(cfg)
+        self.assertTrue(cfg.temporal_mask_union)
+        self.assertLessEqual(cfg.temporal_mask_window, 15)
+
+
 class SeamQualityTests(unittest.TestCase):
     """P1: mask-boundary seam (discontinuity) quality check."""
 

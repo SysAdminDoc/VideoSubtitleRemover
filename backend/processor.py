@@ -120,6 +120,7 @@ from backend.inpainters import (
     _expand_mask_by_color,
     _detect_scene_cuts,
     _detect_scene_cuts_pyscenedetect,
+    stabilize_masks_rolling_union,
     _farneback_winsize,
     _warp_to_reference,
     _warp_mask_to_reference,
@@ -2009,6 +2010,19 @@ class SubtitleRemover:
                 with self._time_stage("mask"):
                     masks = self._propagate_masks_with_cotracker(frames, masks)
                     masks = self._refine_masks_with_matanyone(frames, masks)
+                    # Scene-cut-safe temporal mask stabilization. Only in
+                    # automatic full-frame detection -- user-fixed timed/fixed
+                    # regions are already stable and must not be widened.
+                    if (self.config.temporal_mask_union
+                            and not timed_region_spans
+                            and not self.config.sttn_skip_detection
+                            and len(masks) > 1):
+                        scene_starts = _detect_scene_cuts(frames)
+                        masks = stabilize_masks_rolling_union(
+                            masks, scene_starts,
+                            self.config.temporal_mask_window)
+                        if masks:
+                            last_mask = masks[-1]
                     # B-3: accumulate the union-mask bbox for the quality report
                     # ROI after optional mask refiners have finalized the mask.
                     if self.config.quality_report:

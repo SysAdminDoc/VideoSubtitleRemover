@@ -363,6 +363,8 @@ class ProcessingConfig:
     export_srt: bool = False
     export_mask_video: bool = False
     adaptive_batch: bool = True
+    temporal_mask_union: bool = False
+    temporal_mask_window: int = 3
 
     auto_exposure_threshold: float = 0.55
     deinterlace: bool = False
@@ -519,6 +521,9 @@ class ProcessingConfig:
         self.export_srt = _coerce_bool(self.export_srt, False)
         self.export_mask_video = _coerce_bool(self.export_mask_video, False)
         self.adaptive_batch = _coerce_bool(self.adaptive_batch, True)
+        self.temporal_mask_union = _coerce_bool(self.temporal_mask_union, False)
+        self.temporal_mask_window = _coerce_int(
+            self.temporal_mask_window, 3, 1, 15)
         self.auto_exposure_threshold = _coerce_float(
             self.auto_exposure_threshold, 0.55, 0.0, 1.0)
         self.deinterlace = _coerce_bool(self.deinterlace, False)
@@ -925,6 +930,8 @@ SAFE_PRESET_FIELDS = frozenset({
     "edge_ring_px",
     "auto_band",
     "adaptive_batch",
+    "temporal_mask_union",
+    "temporal_mask_window",
     "auto_exposure_threshold",
     "deinterlace",
     "deinterlace_auto",

@@ -222,6 +222,39 @@ def _detect_scene_cuts(frames: List[np.ndarray],
     return cuts
 
 
+def stabilize_masks_rolling_union(
+    masks: List[np.ndarray],
+    scene_starts: Optional[List[int]] = None,
+    window: int = 3,
+) -> List[np.ndarray]:
+    """Retain recently observed target pixels via a scene-bounded mask union.
+
+    For each frame, OR together the masks in a short trailing window that never
+    crosses a scene boundary, so a single-frame OCR miss or a moving/dissolving
+    overlay keeps the pixels its neighbours saw. Resetting at every scene start
+    guarantees a mask is never carried into an adjacent scene. Pure function --
+    the caller decides when it is safe to apply (e.g. only in automatic
+    full-frame detection, never with user-fixed timed regions).
+    """
+    if not masks or window <= 1:
+        return masks
+    import bisect
+    n = len(masks)
+    starts = sorted({int(s) for s in (scene_starts or [0]) if 0 <= int(s) < n})
+    if not starts or starts[0] != 0:
+        starts = [0] + starts
+    out: List[np.ndarray] = []
+    for i in range(n):
+        scene_start = starts[bisect.bisect_right(starts, i) - 1]
+        lo = max(scene_start, i - window + 1)
+        acc = masks[i].copy()
+        for j in range(lo, i):
+            if masks[j] is not None and masks[j].shape == acc.shape:
+                acc = cv2.bitwise_or(acc, masks[j])
+        out.append(acc)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Farneback warp helpers + TBE primitive
 # ---------------------------------------------------------------------------

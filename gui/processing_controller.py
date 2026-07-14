@@ -522,6 +522,8 @@ class ProcessingControllerMixin:
                 export_srt=getattr(item.config, 'export_srt', False),
                 export_mask_video=getattr(item.config, 'export_mask_video', False),
                 adaptive_batch=getattr(item.config, 'adaptive_batch', True),
+                temporal_mask_union=getattr(item.config, 'temporal_mask_union', False),
+                temporal_mask_window=getattr(item.config, 'temporal_mask_window', 3),
                 auto_exposure_threshold=getattr(item.config, 'auto_exposure_threshold', 0.55),
                 deinterlace=getattr(item.config, 'deinterlace', False),
                 deinterlace_auto=getattr(item.config, 'deinterlace_auto', True),
