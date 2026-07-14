@@ -31,13 +31,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P1 — Next
 
-- [ ] P1 — Implement UI Automation providers for custom controls
-  Why: In-process metadata and notifications do not let Narrator/NVDA enumerate or operate Canvas-based buttons, toggles, sliders, and queue rows.
-  Evidence: `backend/a11y.py:1-19`, `gui/widgets.py`; https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
-  Touches: `backend/a11y.py`, `gui/widgets.py`, `gui/app.py`, `setup.py`, `build_exe.bat`, `tests/test_hardening.py`
-  Acceptance: Windows UIA clients can discover stable name/role/state/value, keyboard focus, and Invoke/Toggle/RangeValue/Selection behavior for every primary custom control; state changes raise UIA events, frozen builds retain the provider, and an automated external-tree smoke plus Narrator checklist passes.
-  Complexity: XL
-
 ### P2 — Later
 
 - [ ] P2 — Pin build-toolchain versions carrying LPE fixes (PyInstaller, NSIS)
