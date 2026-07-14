@@ -33,6 +33,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **VMAF could fail on Windows or compare different time windows.** The
+  libvmaf pass now writes its JSON log from a private working directory using
+  a filter-safe relative filename, applies identical seek/duration options to
+  both inputs, and normalizes both PTS clocks and time bases before comparison.
 - **Pre/post-processing could violate the selected media contract.** One
   probed output contract now governs deinterlace, encode/mux, restoration,
   film-grain, subtitle-restyle, and watermark passes. Outputs are validated

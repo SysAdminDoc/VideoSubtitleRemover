@@ -1944,9 +1944,15 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         from unittest import mock
         from backend import quality as _q
 
-        def fake_run(cmd, check, capture_output, timeout):
+        seen = {}
+
+        def fake_run(cmd, check, capture_output, timeout, cwd=None):
             filt = cmd[cmd.index("-lavfi") + 1]
-            log_path = Path(_q._unescape_filter_value(filt.split("log_path=", 1)[1]))
+            seen["command"] = list(cmd)
+            seen["cwd"] = cwd
+            log_name = _q._unescape_filter_value(
+                filt.split("log_path=", 1)[1])
+            log_path = Path(cwd) / log_name
             log_path.write_text(
                 json.dumps({"pooled_metrics": {"vmaf": {"mean": 91.25}}}),
                 encoding="utf-8",
@@ -1962,11 +1968,64 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
                 with mock.patch.object(_q.subprocess, "run", side_effect=fake_run):
                     self.assertEqual(
                         _q.compute_vmaf(
-                            str(ref), str(dist), duration_seconds=1.0,
+                            str(ref), str(dist), start_seconds=2.5,
+                            duration_seconds=1.0,
                             roi=(2, 3, 12, 23),
                         ),
                         91.25,
                     )
+        command = seen["command"]
+        self.assertIsNotNone(seen["cwd"])
+        inputs = [
+            index for index, value in enumerate(command) if value == "-i"
+        ]
+        self.assertEqual(len(inputs), 2)
+        for index in inputs:
+            self.assertEqual(command[index - 4:index], [
+                "-ss", "2.500", "-t", "1.000",
+            ])
+        filt = command[command.index("-lavfi") + 1]
+        self.assertIn("[0:v]settb=AVTB,setpts=PTS-STARTPTS", filt)
+        self.assertIn("[1:v]settb=AVTB,setpts=PTS-STARTPTS", filt)
+        self.assertIn("log_path=vmaf.json", filt)
+
+    def test_compute_vmaf_real_windows_motion_windows(self):
+        from backend import quality as _q
+
+        if not _q.ffmpeg_libvmaf_available():
+            self.skipTest("ffmpeg libvmaf filter unavailable")
+        with tempfile.TemporaryDirectory(prefix="vsr vmaf windows ") as tmpdir:
+            root = Path(tmpdir)
+            reference = root / "reference motion.mkv"
+            distorted = root / "distorted motion.mkv"
+            subprocess.run([
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i",
+                "testsrc2=size=96x64:rate=12:duration=4",
+                "-c:v", "ffv1", str(reference),
+            ], check=True, timeout=30)
+            subprocess.run([
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(reference),
+                "-vf",
+                "drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:"
+                "enable='gte(t,2)'",
+                "-c:v", "ffv1", str(distorted),
+            ], check=True, timeout=30)
+
+            early = _q.compute_vmaf(
+                str(reference), str(distorted),
+                start_seconds=0.25, duration_seconds=1.0,
+            )
+            late = _q.compute_vmaf(
+                str(reference), str(distorted),
+                start_seconds=2.5, duration_seconds=1.0,
+            )
+
+        self.assertIsNotNone(early)
+        self.assertIsNotNone(late)
+        self.assertGreater(early, 95.0)
+        self.assertGreater(early - late, 20.0)
 
     def test_quality_report_includes_vmaf_when_available(self):
         from unittest import mock

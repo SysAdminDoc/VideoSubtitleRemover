@@ -492,8 +492,8 @@ def _unescape_filter_value(value: str) -> str:
 
 def _vmaf_filter(log_path: str,
                  roi: Optional[Tuple[int, int, int, int]] = None) -> str:
-    ref = "[0:v]setpts=PTS-STARTPTS"
-    dist = "[1:v]setpts=PTS-STARTPTS"
+    ref = "[0:v]settb=AVTB,setpts=PTS-STARTPTS"
+    dist = "[1:v]settb=AVTB,setpts=PTS-STARTPTS"
     if roi is not None:
         x1, y1, x2, y2 = roi
         width = max(1, int(x2) - int(x1))
@@ -550,21 +550,28 @@ def compute_vmaf(
     with tempfile.TemporaryDirectory(prefix="vsr_vmaf_") as tmpdir:
         log_path = Path(tmpdir) / "vmaf.json"
         cmd = [ffmpeg, "-y", "-hide_banner", "-loglevel", "error", "-nostats"]
-        if start > 0:
-            cmd += ["-ss", f"{start:.3f}"]
-        if duration is not None:
-            cmd += ["-t", f"{duration:.3f}"]
-        cmd += ["-i", reference_path]
-        if duration is not None:
-            cmd += ["-t", f"{duration:.3f}"]
+        for path in (reference_path, distorted_path):
+            if start > 0:
+                cmd += ["-ss", f"{start:.3f}"]
+            if duration is not None:
+                cmd += ["-t", f"{duration:.3f}"]
+            cmd += ["-i", path]
         cmd += [
-            "-i", distorted_path,
-            "-lavfi", _vmaf_filter(str(log_path), roi),
+            # Run from the private temp directory and give libvmaf a plain
+            # relative filename. This avoids FFmpeg's Windows filter parser
+            # interpreting a drive-letter colon/backslash as filter syntax.
+            "-lavfi", _vmaf_filter(log_path.name, roi),
             "-f", "null", "-",
         ]
         timeout = 600.0 if duration is None else max(600.0, duration * 20.0)
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                timeout=timeout,
+                cwd=tmpdir,
+            )
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr or b""
             if isinstance(stderr, bytes):
