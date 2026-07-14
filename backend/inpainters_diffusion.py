@@ -52,6 +52,7 @@ from backend.inpainters import (
     _temporal_background_expose,
 )
 from backend.safe_image import safe_imread
+from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
 
@@ -828,7 +829,7 @@ def _run_videopainter_command(command: List[str],
         if paths.get("id_adapter_dir") is not None:
             cmd.extend(["--id-adapter-dir", str(paths["id_adapter_dir"])])
         try:
-            result = subprocess.run(
+            result = run_process(
                 cmd,
                 capture_output=True,
                 text=True,
@@ -1142,7 +1143,7 @@ def _run_floed_command(command: List[str],
             "--config", str(config_path),
         ]
         try:
-            result = subprocess.run(
+            result = run_process(
                 cmd,
                 capture_output=True,
                 text=True,

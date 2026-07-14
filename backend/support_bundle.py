@@ -29,6 +29,7 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.security_checks import opencv_libpng_status
+from backend.subprocess_policy import run_process
 
 
 SUPPORT_BUNDLE_SCHEMA = "vsr.support_bundle.v1"
@@ -219,7 +220,7 @@ def _tool_version(executable: str) -> dict:
     if shutil.which(executable) is None:
         return {"available": False, "version": None}
     try:
-        result = subprocess.run(
+        result = run_process(
             [executable, "-version"],
             capture_output=True,
             text=True,

@@ -50,8 +50,8 @@ class OptionalImportProbeTests(unittest.TestCase):
             return_value=object(),
         ):
             with unittest.mock.patch.object(
-                import_safety.subprocess,
-                "run",
+                import_safety,
+                "run_process",
                 return_value=completed,
             ):
                 self.assertFalse(
@@ -1939,7 +1939,7 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
             stderr="",
         )
         with mock.patch.object(_q.shutil, "which", return_value="ffmpeg"):
-            with mock.patch.object(_q.subprocess, "run", return_value=completed):
+            with mock.patch.object(_q, "run_process", return_value=completed):
                 self.assertTrue(_q.ffmpeg_libvmaf_available())
 
     def test_compute_vmaf_parses_mocked_log(self):
@@ -1967,7 +1967,7 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
             ref.write_bytes(b"ref")
             dist.write_bytes(b"dist")
             with mock.patch.object(_q, "ffmpeg_libvmaf_available", return_value=True):
-                with mock.patch.object(_q.subprocess, "run", side_effect=fake_run):
+                with mock.patch.object(_q, "run_process", side_effect=fake_run):
                     self.assertEqual(
                         _q.compute_vmaf(
                             str(ref), str(dist), start_seconds=2.5,
@@ -2493,7 +2493,7 @@ class SubtitleStreamProbeTests(unittest.TestCase):
             stdout=json.dumps(payload),
             stderr="",
         )
-        with mock.patch("backend.io.subprocess.run", return_value=completed) as run:
+        with mock.patch("backend.io.run_process", return_value=completed) as run:
             streams = processor._probe_subtitle_streams("movie.mkv")
 
         cmd = run.call_args.args[0]
@@ -2516,13 +2516,13 @@ class SubtitleStreamProbeTests(unittest.TestCase):
         from unittest import mock
 
         with mock.patch(
-            "backend.io.subprocess.run",
+            "backend.io.run_process",
             side_effect=FileNotFoundError,
         ):
             self.assertEqual(processor._probe_subtitle_streams("missing.mkv"), [])
 
         completed = SimpleNamespace(returncode=0, stdout="{bad", stderr="")
-        with mock.patch("backend.io.subprocess.run", return_value=completed):
+        with mock.patch("backend.io.run_process", return_value=completed):
             self.assertEqual(processor._probe_subtitle_streams("bad.mkv"), [])
 
 
@@ -3639,7 +3639,7 @@ class HdrPipelineTests(unittest.TestCase):
         with unittest.mock.patch(
             "backend.hdr.shutil.which", return_value="ffprobe"
         ), unittest.mock.patch(
-            "backend.hdr.subprocess.run", return_value=completed
+            "backend.hdr.run_process", return_value=completed
         ):
             meta = hdr.probe_color_metadata("hdr.mkv")
 
@@ -3800,7 +3800,7 @@ class PostRestoreTests(unittest.TestCase):
         with unittest.mock.patch(
             "backend.post_restore.shutil.which", return_value="ffmpeg"
         ), unittest.mock.patch(
-            "backend.post_restore.subprocess.run", return_value=completed
+            "backend.post_restore.run_process", return_value=completed
         ) as run:
             produced = post_restore.add_film_grain(
                 "source.mkv",
@@ -4743,7 +4743,7 @@ class WhisperFallbackTests(unittest.TestCase):
             stderr="",
         )
         with mock.patch.object(_wf.shutil, "which", return_value="ffmpeg"):
-            with mock.patch.object(_wf.subprocess, "run", return_value=completed):
+            with mock.patch.object(_wf, "run_process", return_value=completed):
                 self.assertTrue(_wf.ffmpeg_whisper_available())
 
     def test_ffmpeg_whisper_filter_escapes_windows_paths(self):
@@ -4814,7 +4814,7 @@ class WhisperFallbackTests(unittest.TestCase):
             model = Path(tmpdir) / "ggml-base.en.bin"
             model.write_bytes(b"fake")
             with mock.patch.object(_wf, "ffmpeg_whisper_available", return_value=True):
-                with mock.patch.object(_wf.subprocess, "run", side_effect=fake_run):
+                with mock.patch.object(_wf, "run_process", side_effect=fake_run):
                     self.assertEqual(
                         _wf.run_ffmpeg_whisper_segments(
                             str(media), str(model), language="en"
@@ -5902,7 +5902,7 @@ class EndToEndPipelineTests(unittest.TestCase):
         capture.set(processor.cv2.CAP_PROP_POS_FRAMES, 2)
         fake_process = SimpleNamespace(poll=lambda: None)
         with unittest.mock.patch(
-            "backend.io.subprocess.Popen", return_value=fake_process
+            "backend.io.popen_process", return_value=fake_process
         ) as popen:
             self.assertTrue(capture._ensure_proc())
         command = popen.call_args.args[0]

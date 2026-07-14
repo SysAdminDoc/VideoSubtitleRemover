@@ -14,6 +14,7 @@ from backend.onnxruntime_cuda import (
     collect_onnxruntime_cuda_preload_status,
     preload_status_from_mapping,
 )
+from backend.subprocess_policy import run_process
 
 
 @dataclass(frozen=True)
@@ -155,7 +156,7 @@ def _opencv_import_probe(timeout: float = 8.0) -> tuple[Optional[str], Optional[
         "    print(json.dumps({'version': None, 'file': None, 'dnn': False, 'error': str(exc)}))\n"
     )
     try:
-        proc = subprocess.run(
+        proc = run_process(
             [sys.executable, "-c", script],
             capture_output=True,
             text=True,

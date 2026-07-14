@@ -266,7 +266,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             stderr="",
         )
         with mock.patch(
-            "backend.release_verification.subprocess.run", return_value=completed,
+            "backend.release_verification.run_process", return_value=completed,
         ) as run:
             result = release_verification._audit_frozen_dependencies(sbom)
 
@@ -382,7 +382,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             self._copy_release_inputs(dist_dir)
             completed = mock.Mock(returncode=0, stdout="ok", stderr="")
             with mock.patch(
-                "backend.release_verification.subprocess.run",
+                "backend.release_verification.run_process",
                 return_value=completed,
             ) as run, mock.patch(
                 "backend.release_verification.shutil.which",
@@ -412,7 +412,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             installed.write_bytes(b"MZinstalled")
             completed = mock.Mock(returncode=0, stdout="ok", stderr="")
             with mock.patch(
-                "backend.release_verification.subprocess.run",
+                "backend.release_verification.run_process",
                 return_value=completed,
             ) as run:
                 status = release_verification._installer_status(installer)
@@ -866,7 +866,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertNotIn("torch-directml", self.bat)
 
     def test_nsis_floor_and_running_app_guard_use_bundled_capabilities(self):
-        self.assertIn("0x03012000", self.nsi)
+        self.assertIn("0x030C0000", self.nsi)
         self.assertIn("OpenMutexW", self.nsi)
         self.assertNotIn("FindProcDLL::FindProc", self.nsi)
         self.assertIn("VSR_SMOKE_BUILD", self.nsi)

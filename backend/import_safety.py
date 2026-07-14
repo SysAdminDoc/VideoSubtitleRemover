@@ -13,6 +13,8 @@ import subprocess
 import sys
 from typing import Dict, Optional
 
+from backend.subprocess_policy import run_process
+
 _LOGGER = logging.getLogger(__name__)
 _IMPORT_PROBE_CACHE: Dict[str, bool] = {}
 _FATAL_IMPORT_MARKERS = (
@@ -68,7 +70,7 @@ def module_can_import(
         return True
     try:
         script = "import importlib; importlib.import_module(%r)" % module_name
-        result = subprocess.run(
+        result = run_process(
             [sys.executable, "-c", script],
             capture_output=True,
             text=True,

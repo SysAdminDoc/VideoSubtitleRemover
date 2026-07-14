@@ -19,6 +19,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from backend.subprocess_policy import run_process
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +74,7 @@ def maybe_compile_engine(onnx_path: str, precision: str = "fp16") -> Optional[Pa
     elif precision == "int8":
         cmd += ["--int8"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        result = run_process(cmd, capture_output=True, text=True, timeout=3600)
         if result.returncode == 0 and cached.is_file():
             logger.info(f"TensorRT engine compiled: {cached}")
             return cached

@@ -21,6 +21,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from backend.subprocess_policy import run_process
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +63,7 @@ def ensure_proxy(source_path: str, target_height: int = 480,
         "-an", str(cache),
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        result = run_process(cmd, capture_output=True, text=True, timeout=1800)
         if result.returncode == 0 and cache.is_file():
             logger.info(f"Proxy cached at {cache}")
             return str(cache)

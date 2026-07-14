@@ -20,6 +20,8 @@ from typing import List, Optional, Sequence, Tuple
 import cv2
 import numpy as np
 
+from backend.subprocess_policy import run_process
+
 logger = logging.getLogger(__name__)
 
 
@@ -453,7 +455,7 @@ def ffmpeg_libvmaf_available(ffmpeg: str = "ffmpeg") -> bool:
     if shutil.which(ffmpeg) is None:
         return False
     try:
-        result = subprocess.run(
+        result = run_process(
             [ffmpeg, "-hide_banner", "-filters"],
             capture_output=True,
             text=True,
@@ -565,7 +567,7 @@ def compute_vmaf(
         ]
         timeout = 600.0 if duration is None else max(600.0, duration * 20.0)
         try:
-            subprocess.run(
+            run_process(
                 cmd,
                 check=True,
                 capture_output=True,

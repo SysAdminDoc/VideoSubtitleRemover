@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 import unittest
 
@@ -39,6 +40,38 @@ def _doc_files():
 
 
 class SourceHygieneTests(unittest.TestCase):
+    def test_backend_launches_only_through_subprocess_policy(self):
+        policy = ROOT / "backend" / "subprocess_policy.py"
+        offenders = []
+        for path in sorted((ROOT / "backend").rglob("*.py")):
+            if path == policy or _is_excluded(path):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                    owner = node.func.value
+                    if (
+                        isinstance(owner, ast.Name)
+                        and owner.id == "subprocess"
+                        and node.func.attr in {"run", "Popen"}
+                    ):
+                        offenders.append(
+                            f"{path.relative_to(ROOT)}:{node.lineno}"
+                        )
+                if isinstance(node, ast.ImportFrom) and node.module == "subprocess":
+                    for alias in node.names:
+                        if alias.name in {"run", "Popen"}:
+                            offenders.append(
+                                f"{path.relative_to(ROOT)}:{node.lineno}"
+                            )
+
+        self.assertEqual(
+            offenders,
+            [],
+            "Raw backend child-process launch outside subprocess_policy: "
+            + ", ".join(offenders),
+        )
+
     def test_python_and_batch_sources_are_ascii_only(self):
         offenders = []
         for path in _source_files():

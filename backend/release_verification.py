@@ -46,6 +46,7 @@ from backend.ffmpeg_profiles import (
 from backend.onnx_model_info import rapidocr_release_provenance
 from backend.remote_model_policy import release_remote_model_status
 from backend.security_checks import opencv_libpng_status
+from backend.subprocess_policy import run_process
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -601,7 +602,7 @@ def probe_makensis_version() -> str:
     if not path:
         return ""
     try:
-        proc = subprocess.run(
+        proc = run_process(
             [path, "-VERSION"], capture_output=True, text=True,
             timeout=10, check=False,
         )
@@ -702,7 +703,7 @@ def _tool_version(command: Sequence[str], timeout: float = 10.0) -> dict:
     if not path:
         return payload
     try:
-        proc = subprocess.run(
+        proc = run_process(
             list(command),
             capture_output=True,
             text=True,
@@ -728,7 +729,7 @@ def _ffmpeg_encoder_status() -> dict:
     if not ffmpeg:
         return payload
     try:
-        proc = subprocess.run(
+        proc = run_process(
             [ffmpeg, "-hide_banner", "-encoders"],
             capture_output=True,
             text=True,
@@ -785,7 +786,7 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
             "-c:v", "rawvideo", "-pix_fmt", "bgr24",
             fixture,
         ]
-        gen_proc = subprocess.run(
+        gen_proc = run_process(
             gen_cmd, capture_output=True, text=True, timeout=timeout,
             check=False,
         )
@@ -803,7 +804,7 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
             "-show_entries", "stream=codec_name,width,height,nb_frames",
             "-of", "json", fixture,
         ]
-        probe_proc = subprocess.run(
+        probe_proc = run_process(
             probe_cmd, capture_output=True, text=True, timeout=timeout,
             check=False,
         )
@@ -836,7 +837,7 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
             "-c:v", "ffv1", "-g", "1",
             transcoded,
         ]
-        tc_proc = subprocess.run(
+        tc_proc = run_process(
             tc_cmd, capture_output=True, text=True, timeout=timeout,
             check=False,
         )
@@ -960,7 +961,7 @@ def _run_smoke(dist_dir: Path, timeout: float = 45.0) -> dict:
                     payload["entryPoints"].append(result)
                     continue
                 try:
-                    proc = subprocess.run(
+                    proc = run_process(
                         command,
                         cwd=smoke_dist,
                         env=smoke_env,
@@ -1030,7 +1031,7 @@ def _run_installer_smoke(
     env["VSR_LAUNCHER_WAIT"] = "1"
     env["VSR_LAUNCHER_SMOKE"] = "1"
     try:
-        proc = subprocess.run(
+        proc = run_process(
             [str(path), "--smoke-test"],
             cwd=path.parent,
             env=env,
@@ -1103,7 +1104,7 @@ def _audit_frozen_dependencies(sbom: Mapping[str, object], timeout: float = 300.
                 "--format",
                 "json",
             ]
-            proc = subprocess.run(
+            proc = run_process(
                 command,
                 capture_output=True,
                 text=True,

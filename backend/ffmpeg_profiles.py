@@ -13,6 +13,8 @@ import shutil
 import subprocess
 from typing import Any, Mapping, Optional, Sequence
 
+from backend.subprocess_policy import run_process
+
 
 FFMPEG_PROFILE_SCHEMA = "vsr.ffmpeg_profiles.v1"
 
@@ -157,7 +159,7 @@ def probe_ffmpeg_security(*, timeout: float = 10.0) -> dict:
 
 def _run_ffmpeg_text(command: Sequence[str], timeout: float) -> tuple[str, str]:
     try:
-        proc = subprocess.run(
+        proc = run_process(
             list(command),
             capture_output=True,
             text=True,

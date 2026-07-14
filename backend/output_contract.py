@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from backend.hdr import ColorMetadata, hdr_encode_args, probe_color_metadata
+from backend.subprocess_policy import run_process
 
 _CODEC_NAMES = {
     "h264": "h264",
@@ -32,7 +33,7 @@ def _probe_source_audio(path: str) -> bool:
     if Path(path).is_dir() or shutil.which("ffprobe") is None:
         return False
     try:
-        result = subprocess.run(
+        result = run_process(
             [
                 "ffprobe", "-v", "error", "-select_streams", "a",
                 "-show_entries", "stream=index", "-of", "json", path,
@@ -110,7 +111,7 @@ class OutputContract:
         if shutil.which("ffprobe") is None:
             return True, []
         try:
-            result = subprocess.run(
+            result = run_process(
                 [
                     "ffprobe", "-v", "error", "-show_entries",
                     "format=format_name:stream=codec_type,codec_name,pix_fmt",

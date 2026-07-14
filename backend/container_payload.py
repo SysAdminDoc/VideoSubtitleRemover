@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Mapping
 
+from backend.subprocess_policy import run_process
+
 
 _MATROSKA = {".mkv", ".mka"}
 _MP4 = {".mp4", ".mov", ".m4v"}
@@ -78,7 +80,7 @@ def probe_container_manifest(path: str | Path, timeout: float = 30.0) -> dict:
         payload["error"] = "ffprobe is unavailable"
         return payload
     try:
-        result = subprocess.run(
+        result = run_process(
             [
                 "ffprobe", "-v", "error", "-show_streams", "-show_chapters",
                 "-show_format", "-of", "json", str(path),

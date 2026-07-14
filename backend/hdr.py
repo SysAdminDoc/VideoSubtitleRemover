@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import List, Optional, Tuple
 
+from backend.subprocess_policy import run_process
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,7 +83,7 @@ def probe_color_metadata(path: str) -> Optional[ColorMetadata]:
             "-read_intervals", "%+#1", "-show_streams", "-show_frames",
             "-of", "json", path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = run_process(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode != 0 or not result.stdout.strip():
             return None
         payload = json.loads(result.stdout)

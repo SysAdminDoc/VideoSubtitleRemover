@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from backend.subprocess_policy import run_process
+
 
 SCHEMA = "vsr.output_quality_preflight.v1"
 STATUS_OK = "ok"
@@ -140,7 +142,7 @@ def _probe_source_video_quality(path: str, timeout: float = 10.0) -> dict:
             "error": "ffprobe not found",
         }
     try:
-        proc = subprocess.run(
+        proc = run_process(
             [
                 "ffprobe", "-v", "error",
                 "-select_streams", "v:0",

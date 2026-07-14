@@ -26,6 +26,8 @@ from typing import Optional, Sequence
 import cv2
 import numpy as np
 
+from backend.subprocess_policy import run_process
+
 logger = logging.getLogger(__name__)
 
 # ASS force_style is a comma-separated list of Name=Value pairs. Legitimate
@@ -63,7 +65,7 @@ def realesrgan_upscale(input_path: str, output_path: str,
                 "-s", str(scale),
                 "-n", model_name,
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+            result = run_process(cmd, capture_output=True, text=True, timeout=3600)
             if result.returncode == 0 and Path(output_path).is_file():
                 logger.info(f"Real-ESRGAN upscaled to {output_path}")
                 return output_path
@@ -112,7 +114,7 @@ def seedvr2_restore(input_path: str, output_path: str,
         try:
             import shlex
             cmd = shlex.split(cmd_env) + ["-i", input_path, "-o", output_path]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=14400)
+            result = run_process(cmd, capture_output=True, text=True, timeout=14400)
             if result.returncode == 0 and Path(output_path).is_file():
                 logger.info(f"SeedVR2 restoration complete via {cmd_env}")
                 return output_path
@@ -163,7 +165,7 @@ def swinir_restore(input_path: str, output_path: str,
         cmd = [binary, "-i", input_path, "-o", output_path, "-s", str(scale)]
         if "swinir" in binary and task:
             cmd += ["-t", task]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
+        result = run_process(cmd, capture_output=True, text=True, timeout=7200)
         if result.returncode == 0 and Path(output_path).is_file():
             logger.info(f"SwinIR restoration complete ({binary})")
             return output_path
@@ -227,7 +229,7 @@ def burn_watermark(
     cmd += ["-c:a", "copy"] if preserve_audio else ["-an"]
     cmd += [output_path]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
+        run_process(cmd, check=True, capture_output=True, timeout=7200)
         if Path(output_path).is_file():
             logger.info(f"Watermark burned at {position}: {output_path}")
             return output_path
@@ -293,7 +295,7 @@ def burn_subtitles(
     cmd += ["-c:a", "copy"] if preserve_audio else ["-an"]
     cmd += [output_path]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
+        run_process(cmd, check=True, capture_output=True, timeout=7200)
         if Path(output_path).is_file():
             logger.info(f"Subtitles re-burned: {output_path}")
             return output_path
@@ -344,7 +346,7 @@ def add_film_grain(
     cmd += ["-c:a", "copy"] if preserve_audio else ["-an"]
     cmd += [output_path]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
+        run_process(cmd, check=True, capture_output=True, timeout=7200)
         return output_path
     except subprocess.CalledProcessError as exc:
         logger.warning(

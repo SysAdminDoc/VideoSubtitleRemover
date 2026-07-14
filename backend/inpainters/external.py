@@ -35,6 +35,7 @@ import numpy as np
 
 from backend.inpainters._common import BaseInpainter, _cv2_inpaint, _feather_blend
 from backend.safe_image import safe_imread
+from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +211,7 @@ class ExternalInpainter(BaseInpainter):
         ])
 
         try:
-            result = subprocess.run(
+            result = run_process(
                 cmd_parts,
                 capture_output=True,
                 text=True,

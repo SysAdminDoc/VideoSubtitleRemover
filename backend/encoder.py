@@ -9,8 +9,9 @@ exposes the binary feature-detection.
 from __future__ import annotations
 
 import logging
-import subprocess
 from typing import Optional
+
+from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def _detect_hw_encoder(codec: str = "h264") -> Optional[str]:
         "vvc":  ("vvc_nvenc",  "vvc_qsv",  "vvc_amf"),
     }.get(codec, ("h264_nvenc", "h264_qsv", "h264_amf"))
     try:
-        result = subprocess.run(
+        result = run_process(
             ['ffmpeg', '-hide_banner', '-encoders'],
             capture_output=True, text=True, timeout=10
         )

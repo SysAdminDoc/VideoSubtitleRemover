@@ -94,7 +94,7 @@ class ContainerPayloadPlanTests(unittest.TestCase):
         }
         completed = mock.Mock(returncode=0, stdout=json.dumps(payload), stderr="")
         with mock.patch("backend.container_payload.shutil.which", return_value="ffprobe"), mock.patch(
-            "backend.container_payload.subprocess.run", return_value=completed
+            "backend.container_payload.run_process", return_value=completed
         ):
             manifest = container_payload.probe_container_manifest("rotated.mp4")
         self.assertTrue(manifest["available"])

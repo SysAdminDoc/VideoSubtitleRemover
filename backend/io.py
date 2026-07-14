@@ -39,6 +39,11 @@ import cv2
 import numpy as np
 
 from backend.safe_image import safe_imread
+from backend.subprocess_policy import (
+    popen_process,
+    run_process,
+    terminate_process,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +192,7 @@ def _probe_video_stream_status(path: str) -> dict:
             "-show_entries", "stream=codec_name,width,height",
             "-of", "json", path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = run_process(cmd, capture_output=True, text=True, timeout=20)
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return {
             "available": True,
@@ -336,30 +341,7 @@ def _video_decode_error(path: str, decoded_frames: int, expected_frames: int) ->
 
 def _terminate_subprocess(proc: subprocess.Popen, timeout: float = 2.0) -> None:
     """Terminate a subprocess, escalating to kill when it ignores shutdown."""
-    try:
-        poll = getattr(proc, "poll", None)
-        if callable(poll) and poll() is not None:
-            return
-    except Exception:
-        pass
-    try:
-        proc.terminate()
-    except Exception:
-        pass
-    try:
-        proc.wait(timeout=timeout)
-        return
-    except subprocess.TimeoutExpired:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-        try:
-            proc.wait(timeout=timeout)
-        except Exception:
-            pass
-    except Exception:
-        pass
+    terminate_process(proc, timeout=timeout)
 
 
 def _run_subprocess_checked(
@@ -374,36 +356,14 @@ def _run_subprocess_checked(
     The Popen handle is exposed while active so GUI shutdown can terminate
     long ffmpeg jobs instead of waiting for the timeout budget.
     """
-    proc = subprocess.Popen(
+    run_process(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
+        timeout=timeout,
+        check=True,
+        on_process=on_process,
+        cancel_check=cancel_check,
     )
-    if on_process is not None:
-        on_process(proc)
-    try:
-        try:
-            stdout, stderr = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired as exc:
-            _terminate_subprocess(proc, timeout=10.0)
-            raise subprocess.TimeoutExpired(
-                cmd=cmd,
-                timeout=timeout,
-                output=getattr(exc, "output", None),
-                stderr=getattr(exc, "stderr", None),
-            )
-        if cancel_check is not None and cancel_check():
-            raise InterruptedError("subprocess cancelled")
-        if proc.returncode != 0:
-            raise subprocess.CalledProcessError(
-                proc.returncode,
-                cmd,
-                output=stdout,
-                stderr=stderr,
-            )
-    finally:
-        if on_process is not None:
-            on_process(None)
 
 
 # ---------------------------------------------------------------------------
@@ -429,7 +389,7 @@ def _probe_codec_for_log(path: str) -> Optional[str]:
             '-show_entries', 'stream=codec_name,width,height,r_frame_rate',
             '-of', 'csv=p=0', path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        result = run_process(cmd, capture_output=True, text=True, timeout=15)
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip().splitlines()[0]
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -445,7 +405,7 @@ def _probe_audio_stream_count(path: str) -> int:
             '-show_entries', 'stream=index',
             '-of', 'csv=p=0', path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = run_process(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode == 0:
             lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
             return max(1, len(lines))
@@ -464,7 +424,7 @@ def _probe_subtitle_streams(path: str) -> List[SubtitleStreamInfo]:
             'stream_disposition=default,forced',
             '-of', 'json', path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = run_process(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode != 0:
             if result.stderr:
                 logger.debug(
@@ -520,7 +480,7 @@ def _probe_duration_seconds(path: str) -> float:
             'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
             '-of', 'default=noprint_wrappers=1:nokey=1', path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = run_process(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode == 0:
             return max(0.0, float(result.stdout.strip()))
     except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
@@ -569,7 +529,7 @@ def _probe_video_frame_timing(
         "-of", "json", str(path),
     ]
     try:
-        result = subprocess.run(
+        result = run_process(
             cmd,
             capture_output=True,
             text=True,
@@ -690,7 +650,7 @@ def _probe_frame_count(path: str) -> int:
             '-show_entries', 'stream=nb_frames',
             '-of', 'default=noprint_wrappers=1:nokey=1', path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        result = run_process(cmd, capture_output=True, text=True, timeout=20)
         if result.returncode == 0:
             text = (result.stdout or "").strip()
             if text and text.lower() != "n/a":
@@ -838,7 +798,7 @@ def _probe_keyframe_indices(video_path: str) -> Optional[set]:
             '-show_entries', 'frame=key_frame',
             '-of', 'csv=print_section=0', video_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = run_process(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             if result.stderr:
                 logger.debug(f"ffprobe keyframe scan stderr: {result.stderr.strip()[:400]}")
@@ -873,7 +833,7 @@ def _probe_is_interlaced(video_path: str) -> bool:
             'ffmpeg', '-hide_banner', '-nostats', '-i', video_path,
             '-vf', 'idet', '-frames:v', '200', '-an', '-f', 'null', '-',
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = run_process(cmd, capture_output=True, text=True, timeout=60)
         stderr = result.stderr
         import re as _re
         m = _re.search(r'Multi frame detection:.*TFF:\s*(\d+).*BFF:\s*(\d+).*Progressive:\s*(\d+)',
@@ -1213,10 +1173,10 @@ class _FfmpegBgr48Capture:
             "-pix_fmt", self.pixel_format,
             "-",
         ]
-        self._proc = subprocess.Popen(
+        self._proc = popen_process(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
         return True
 
@@ -1545,7 +1505,7 @@ class _LosslessIntermediateWriter:
                 "-pix_fmt", self._pixel_format,
                 self._path,
             ]
-            self._proc = subprocess.Popen(
+            self._proc = popen_process(
                 cmd, stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             )

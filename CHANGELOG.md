@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Hidden, bounded external-process policy.** Every production backend child
+  now launches without a shell, suppresses Windows console windows, closes
+  unused stdin, drains captured output into bounded buffers, and shares
+  timeout/cancellation escalation and deterministic cleanup. Source-hygiene
+  tests reject new raw backend `subprocess.run` or `subprocess.Popen` calls.
 - **Remote-code adapter trust boundaries.** VapourSynth `.vpy` input now
   requires an explicit reviewed script root and rejects paths (including
   symlinks) that resolve outside it. CoTracker3 and Florence-2 remote code now

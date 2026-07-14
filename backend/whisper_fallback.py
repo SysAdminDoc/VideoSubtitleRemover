@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from backend.import_safety import module_can_import as _safe_module_can_import
+from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def ffmpeg_whisper_available(ffmpeg: str = "ffmpeg") -> bool:
     if shutil.which(ffmpeg) is None:
         return False
     try:
-        result = subprocess.run(
+        result = run_process(
             [ffmpeg, "-hide_banner", "-filters"],
             capture_output=True,
             text=True,
@@ -224,7 +225,7 @@ def run_ffmpeg_whisper_segments(
             "-f", "null", "-",
         ]
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout)
+            run_process(cmd, check=True, capture_output=True, timeout=timeout)
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"")
             if isinstance(stderr, bytes):
@@ -298,7 +299,7 @@ def extract_audio_to_temp(video_path: str, temp_dir: str) -> Optional[str]:
         "-acodec", "pcm_s16le", dst,
     ]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+        run_process(cmd, check=True, capture_output=True, timeout=600)
     except subprocess.CalledProcessError as exc:
         logger.info(f"Audio extraction failed (no stream?): {exc}")
         return None
