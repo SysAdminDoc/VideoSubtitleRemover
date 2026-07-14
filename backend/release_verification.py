@@ -35,7 +35,12 @@ from backend.dependency_caps import (
     collect_rapidocr_engine_status,
     onnxruntime_release_advisories,
 )
-from backend.ffmpeg_profiles import collect_ffmpeg_capability_profiles
+from backend.ffmpeg_profiles import (
+    FFMPEG_SECURITY_SOURCE,
+    classify_ffmpeg_security,
+    collect_ffmpeg_capability_profiles,
+    probe_ffmpeg_security,
+)
 from backend.onnx_model_info import rapidocr_release_provenance
 from backend.remote_model_policy import release_remote_model_status
 from backend.security_checks import opencv_libpng_status
@@ -331,6 +336,10 @@ def collect_release_advisories(
     )
     findings.extend(onnxruntime_release_advisories(ort_status))
 
+    ffmpeg_advisory = ffmpeg_security_advisory()
+    if ffmpeg_advisory is not None:
+        findings.append(ffmpeg_advisory)
+
     blocking = [item for item in findings if item.get("blocking")]
     return {
         "schema": "vsr.release_advisories.v1",
@@ -348,6 +357,39 @@ def collect_release_advisories(
             "allowed": sum(1 for item in findings if item.get("allowed")),
         },
     }
+
+
+def ffmpeg_security_advisory(
+    status: Optional[Mapping[str, object]] = None,
+) -> Optional[dict]:
+    """Return a blocking advisory when the FFmpeg runtime is known-vulnerable.
+
+    Accepts a pre-computed classification (from ``classify_ffmpeg_security`` or
+    ``probe_ffmpeg_security``) for testability; probes the local runtime when
+    not supplied. Returns ``None`` when FFmpeg is safe, unavailable, or an
+    unclassifiable snapshot build.
+    """
+    if status is None:
+        status = probe_ffmpeg_security()
+    if not status.get("vulnerable"):
+        return None
+    version = str(status.get("version") or "unknown")
+    fixed_in = str(status.get("fixed_in") or "8.1.2")
+    advisories = status.get("advisories") or []
+    advisory_id = advisories[0] if advisories else "CVE-2026-8461"
+    return _advisory(
+        advisory_id=str(advisory_id),
+        package="ffmpeg (external runtime)",
+        installed_version=version,
+        affected="8.1.0-8.1.1, 8.0.0-8.0.2",
+        fixed_in=fixed_in,
+        severity="high",
+        source=FFMPEG_SECURITY_SOURCE,
+        mitigation=(
+            "VSR decodes untrusted media through FFmpeg; upgrade the external "
+            f"FFmpeg/FFprobe binaries to {fixed_in} or newer before shipping."
+        ),
+    )
 
 
 def _tool_version(command: Sequence[str], timeout: float = 10.0) -> dict:

@@ -43,13 +43,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: Import preflights duplicate targets, member count, declared and actual sizes, compression ratio, total expansion, and free-space headroom; it stages and hashes every member before commit, rolls back on any failure, and has adversarial ZIP-bomb/truncation/duplicate/partial-write tests.
   Complexity: M
 
-- [ ] P0 — Gate known-vulnerable FFmpeg release floors
-  Why: VSR processes untrusted media through an external runtime, and the inspected FFmpeg 8.1.1 predates the 8.1.2 backports for CVE-2026-8461 and CVE-2026-30999.
-  Evidence: `backend/ffmpeg_profiles.py:84-91`, `backend/release_verification.py:658`; https://ffmpeg.org/security.html
-  Touches: `backend/ffmpeg_profiles.py`, `backend/release_verification.py`, `backend/support_bundle.py`, `tests/test_release_workflow.py`, `README.md`
-  Acceptance: Self-test/support/release evidence parse the external version, mark 8.1.0-8.1.1 and 8.0.0-8.0.2 blocking, accept 8.1.2+/8.0.3+, explain upgrades, and strict release validation fails on known-vulnerable versions.
-  Complexity: S
-
 ### P1 — Next
 
 - [ ] P1 — Add scene-cut-safe temporal mask stabilization

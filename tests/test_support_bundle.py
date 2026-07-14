@@ -260,6 +260,27 @@ class FfmpegProfileTests(unittest.TestCase):
         )
         self.assertIn("ffmpeg", entries[0]["reason"])
 
+    def test_self_test_flags_vulnerable_ffmpeg_runtime(self):
+        from backend import support_bundle
+
+        with mock.patch.object(
+            support_bundle,
+            "probe_ffmpeg_security",
+            return_value={
+                "available": True,
+                "version": "8.1.1",
+                "vulnerable": True,
+                "fixed_in": "8.1.2",
+                "reason": "FFmpeg 8.1.1 predates 8.1.2 security backports",
+            },
+        ):
+            results = support_bundle.run_self_test()
+
+        security = {entry["name"]: entry for entry in results.get("security", [])}
+        self.assertIn("FFmpeg runtime CVE floor", security)
+        self.assertFalse(security["FFmpeg runtime CVE floor"]["available"])
+        self.assertIn("8.1.2", security["FFmpeg runtime CVE floor"]["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

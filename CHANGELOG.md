@@ -2,6 +2,20 @@
 
 All notable changes to VideoSubtitleRemover will be documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- **FFmpeg runtime CVE floor.** VSR decodes untrusted media through FFmpeg, so
+  the self-test, support bundle, and strict release validation now parse the
+  external FFmpeg version and treat builds `8.1.0-8.1.1` and `8.0.0-8.0.2` as
+  blocking -- they predate the 8.1.2 / 8.0.3 backports for CVE-2026-8461
+  (MagicYUV heap out-of-bounds write, RCE) and CVE-2026-30999. `8.1.2+` /
+  `8.0.3+` pass; git/`N-` snapshot builds are reported as unclassifiable rather
+  than assumed safe. New `backend.ffmpeg_profiles.classify_ffmpeg_security`
+  and `probe_ffmpeg_security`; strict release evidence fails closed on a
+  known-vulnerable runtime. README documents the `>=8.1.2 / >=8.0.3` floor.
+
 ## [3.17.3]
 
 ### Fixed

@@ -25,6 +25,7 @@ from backend.dependency_caps import (
 from backend.ffmpeg_profiles import (
     collect_ffmpeg_capability_profiles,
     ffmpeg_profile_entries,
+    probe_ffmpeg_security,
 )
 from backend.model_downloads import installed_backend_status
 from backend.security_checks import opencv_libpng_status
@@ -197,6 +198,7 @@ def _support_payload(*, app_version: str,
         "model_cache": model_cache_status(),
         "security": {
             "opencv_libpng": opencv_libpng_status(),
+            "ffmpeg_runtime": probe_ffmpeg_security(),
         },
         "caches": _cache_summary(),
         "facts": _redact_json(dict(extra_facts)),
@@ -350,7 +352,7 @@ def run_self_test() -> dict:
     Returns a dict of category -> list of {name, available, reason} entries.
     """
     results = {"ocr": [], "inpaint": [], "gpu": [], "codec": [],
-               "dependency": [],
+               "dependency": [], "security": [],
                "ffmpeg_profiles": []}
 
     def _probe(category, name, fn):
@@ -472,6 +474,32 @@ def run_self_test() -> dict:
         if isinstance(imported, Mapping) else False,
         "reason": reason,
     })
+    try:
+        ffmpeg_security = probe_ffmpeg_security()
+        if not ffmpeg_security.get("available"):
+            available = False
+            reason = "ffmpeg not on PATH"
+        elif ffmpeg_security.get("vulnerable"):
+            available = False
+            reason = ffmpeg_security.get("reason") or "vulnerable FFmpeg runtime"
+        else:
+            available = True
+            reason = (
+                f"ffmpeg {ffmpeg_security.get('version') or 'unknown'} "
+                "(no known-vulnerable release floor matched)"
+            )
+        results["security"].append({
+            "name": "FFmpeg runtime CVE floor",
+            "available": available,
+            "reason": reason,
+        })
+    except Exception as exc:
+        results["security"].append({
+            "name": "FFmpeg runtime CVE floor",
+            "available": False,
+            "reason": str(exc)[:200],
+        })
+
     try:
         results["ffmpeg_profiles"] = ffmpeg_profile_entries(
             collect_ffmpeg_capability_profiles()

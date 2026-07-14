@@ -50,6 +50,20 @@ class ReleaseVerificationTests(unittest.TestCase):
                 return_value={"available": True, "hasLibvvenc": True},
             ),
             mock.patch(
+                "backend.release_verification.probe_ffmpeg_security",
+                return_value={
+                    "raw": "ffmpeg version 8.1.2",
+                    "version": "8.1.2",
+                    "parsed": True,
+                    "vulnerable": False,
+                    "fixed_in": "",
+                    "advisories": [],
+                    "reason": "no known-vulnerable release floor matched",
+                    "available": True,
+                    "path": "ffmpeg",
+                },
+            ),
+            mock.patch(
                 "backend.release_verification.collect_ffmpeg_capability_profiles",
                 return_value={
                     "schema": "vsr.ffmpeg_profiles.v1",
@@ -387,12 +401,75 @@ class ReleaseVerificationTests(unittest.TestCase):
                     }
                 ],
             },
+        ), mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={"vulnerable": False},
         ):
             advisories = release_verification.collect_release_advisories(deps)
 
         self.assertEqual(advisories["summary"]["blocking"], 0)
         ids = {item["id"] for item in advisories["advisories"]}
         self.assertIn("ORT-CUDA-LEGACY-PACKAGE", ids)
+
+    def test_ffmpeg_version_classifier_flags_vulnerable_lines(self):
+        from backend import ffmpeg_profiles
+
+        for banner in (
+            "ffmpeg version 8.1.1-full_build-www.gyan.dev",
+            "ffmpeg version 8.1.0",
+            "ffmpeg version 8.0.2",
+            "ffmpeg version n8.0.0",
+        ):
+            status = ffmpeg_profiles.classify_ffmpeg_security(banner)
+            self.assertTrue(status["vulnerable"], banner)
+            self.assertIn(status["fixed_in"], ("8.1.2", "8.0.3"))
+            self.assertIn("CVE-2026-8461", status["advisories"])
+
+        for banner in (
+            "ffmpeg version 8.1.2-full_build",
+            "ffmpeg version 8.0.3",
+            "ffmpeg version 8.2.0",
+            "ffmpeg version 9.0",
+        ):
+            status = ffmpeg_profiles.classify_ffmpeg_security(banner)
+            self.assertFalse(status["vulnerable"], banner)
+
+        snapshot = ffmpeg_profiles.classify_ffmpeg_security(
+            "ffmpeg version N-119876-g1a2b3c"
+        )
+        self.assertFalse(snapshot["parsed"])
+        self.assertFalse(snapshot["vulnerable"])
+
+    def test_ffmpeg_security_advisory_blocks_vulnerable_runtime(self):
+        advisory = release_verification.ffmpeg_security_advisory({
+            "vulnerable": True,
+            "version": "8.1.1",
+            "fixed_in": "8.1.2",
+            "advisories": ["CVE-2026-8461", "CVE-2026-30999"],
+        })
+        self.assertIsNotNone(advisory)
+        self.assertTrue(advisory["blocking"])
+        self.assertEqual(advisory["severity"], "high")
+        self.assertEqual(advisory["fixedIn"], "8.1.2")
+        self.assertIsNone(
+            release_verification.ffmpeg_security_advisory({"vulnerable": False})
+        )
+
+    def test_strict_release_fails_on_vulnerable_ffmpeg(self):
+        deps = [{"name": "Pillow", "version": "12.2.0"}]
+        with mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={
+                "vulnerable": True,
+                "version": "8.1.1",
+                "fixed_in": "8.1.2",
+                "advisories": ["CVE-2026-8461"],
+            },
+        ):
+            advisories = release_verification.collect_release_advisories(deps)
+        self.assertGreaterEqual(advisories["summary"]["blocking"], 1)
+        ids = {item["id"] for item in advisories["advisories"]}
+        self.assertIn("CVE-2026-8461", ids)
 
     def test_ffmpeg_subprocess_smoke_passes_with_real_tools(self):
         smoke = release_verification._ffmpeg_subprocess_smoke(timeout=30.0)
@@ -446,6 +523,9 @@ class ReleaseVerificationTests(unittest.TestCase):
     def test_opencv_libpng_exception_is_removed_when_runtime_is_fixed(self):
         deps = [{"name": "opencv-python", "version": "4.13.0.92"}]
         with mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={"vulnerable": False},
+        ), mock.patch(
             "backend.release_verification.opencv_libpng_status",
             return_value={
                 "vulnerable": True,
@@ -455,6 +535,9 @@ class ReleaseVerificationTests(unittest.TestCase):
         ):
             vulnerable = release_verification.collect_release_advisories(deps)
         with mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={"vulnerable": False},
+        ), mock.patch(
             "backend.release_verification.opencv_libpng_status",
             return_value={
                 "vulnerable": False,

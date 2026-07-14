@@ -112,6 +112,12 @@ python VideoSubtitleRemover.py
 winget install ffmpeg
 ```
 
+Use **FFmpeg 8.1.2 / 8.0.3 or newer.** VSR decodes untrusted media through
+FFmpeg, and builds `8.1.0-8.1.1` and `8.0.0-8.0.2` predate the security
+backports for CVE-2026-8461 (MagicYUV heap out-of-bounds write, RCE) and
+CVE-2026-30999. The self-test, support bundle, and strict release validation
+flag a known-vulnerable runtime as blocking.
+
 Run `python -m backend.processor --self-test` to confirm the installed build's
 `basic`, `advanced_quality`, `speech_fallback`, and `modern_codec` profiles.
 Those profiles report missing filters such as `loudnorm`, `libvmaf`, or

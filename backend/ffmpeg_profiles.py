@@ -57,6 +57,77 @@ _PROFILE_DEFS: dict[str, dict[str, Any]] = {
 }
 
 
+# Known-vulnerable FFmpeg release floors. Media is untrusted input, so a
+# build below these fixed versions is a security blocker rather than a
+# feature gap. CVE-2026-8461 (MagicYUV heap out-of-bounds write, RCE) and
+# CVE-2026-30999 are fixed in 8.1.2 for the 8.1 line and 8.0.3 for the 8.0
+# line. Source: https://ffmpeg.org/security.html
+FFMPEG_SECURITY_ADVISORY_IDS = ("CVE-2026-8461", "CVE-2026-30999")
+FFMPEG_SECURITY_SOURCE = "https://ffmpeg.org/security.html"
+# Map of (major, minor) line -> (exclusive-below fixed patch, fixed version).
+_FFMPEG_VULNERABLE_LINES: dict[tuple[int, int], tuple[int, str]] = {
+    (8, 1): (2, "8.1.2"),
+    (8, 0): (3, "8.0.3"),
+}
+
+_FFMPEG_VERSION_RE = re.compile(r"version\s+n?(\d+)\.(\d+)(?:\.(\d+))?")
+
+
+def parse_ffmpeg_version(text: object) -> tuple[int, ...]:
+    """Extract a numeric (major, minor, patch) tuple from a version banner.
+
+    Returns an empty tuple for git/``N-`` snapshot builds or unrecognized
+    text, which callers treat as "cannot classify" rather than "safe".
+    """
+    match = _FFMPEG_VERSION_RE.search(str(text or ""))
+    if not match:
+        return ()
+    parts = [int(group) for group in match.groups() if group is not None]
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts[:3])
+
+
+def classify_ffmpeg_security(version_text: object) -> dict:
+    """Classify an FFmpeg version banner against known-vulnerable floors."""
+    parsed = parse_ffmpeg_version(version_text)
+    payload = {
+        "raw": str(version_text or ""),
+        "version": ".".join(str(part) for part in parsed) if parsed else "",
+        "parsed": bool(parsed),
+        "vulnerable": False,
+        "fixed_in": "",
+        "advisories": [],
+        "reason": "",
+    }
+    if not parsed:
+        payload["reason"] = "ffmpeg version not recognized (snapshot or missing)"
+        return payload
+    major, minor, patch = parsed
+    line = _FFMPEG_VULNERABLE_LINES.get((major, minor))
+    if line is not None and patch < line[0]:
+        payload["vulnerable"] = True
+        payload["fixed_in"] = line[1]
+        payload["advisories"] = list(FFMPEG_SECURITY_ADVISORY_IDS)
+        payload["reason"] = (
+            f"FFmpeg {payload['version']} predates {line[1]} security "
+            f"backports ({', '.join(FFMPEG_SECURITY_ADVISORY_IDS)}); "
+            f"upgrade to {line[1]} or newer"
+        )
+    else:
+        payload["reason"] = "no known-vulnerable release floor matched"
+    return payload
+
+
+def probe_ffmpeg_security(*, timeout: float = 10.0) -> dict:
+    """Run ``ffmpeg -version`` and classify the result. Best-effort."""
+    status = _tool_status("ffmpeg", timeout=timeout)
+    classified = classify_ffmpeg_security(status.get("version"))
+    classified["available"] = bool(status.get("available"))
+    classified["path"] = status.get("path", "")
+    return classified
+
+
 def _run_ffmpeg_text(command: Sequence[str], timeout: float) -> tuple[str, str]:
     try:
         proc = subprocess.run(
