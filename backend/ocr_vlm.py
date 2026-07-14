@@ -311,6 +311,16 @@ def _llama_cpp_server_reachable(server_url: str, timeout: float = 0.75) -> bool:
     if _env_truthy(os.environ, "VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE"):
         return True
     models_url = _llama_cpp_models_url(server_url)
+    # Only probe HTTP(S) endpoints. urlopen would otherwise honour file://,
+    # ftp:// and other schemes, turning a misconfigured server URL into a
+    # local-file / SSRF read.
+    from urllib.parse import urlparse
+    if urlparse(models_url).scheme not in ("http", "https"):
+        logger.info(
+            "PaddleOCR-VL server URL scheme is not http(s); refusing to probe %s",
+            models_url,
+        )
+        return False
     try:
         req = urlrequest.Request(models_url, method="GET")
         with urlrequest.urlopen(req, timeout=timeout) as response:

@@ -223,7 +223,19 @@ def parse_fcpxml(path: str) -> List[Tuple[float, float]]:
             from defusedxml.ElementTree import parse as _safe_parse
             tree = _safe_parse(path)
         except ImportError:
+            # defusedxml is not installed; the stdlib parser does not fetch
+            # external entities but a DTD/entity declaration in an untrusted
+            # FCPXML is still an XXE / entity-expansion vector. Refuse rather
+            # than silently parse it with the unhardened parser.
             import xml.etree.ElementTree as ET
+            with open(path, "rb") as handle:
+                head = handle.read(8192).lower()
+            if b"<!doctype" in head or b"<!entity" in head:
+                logger.warning(
+                    "Refusing FCPXML with a DTD/entity declaration; install "
+                    "defusedxml to parse documents that require one."
+                )
+                return []
             tree = ET.parse(path)
     except Exception as exc:
         logger.warning(f"Cannot parse FCPXML: {exc}")

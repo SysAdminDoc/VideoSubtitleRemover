@@ -118,6 +118,30 @@ class NleIngestTests(unittest.TestCase):
         self.assertAlmostEqual(
             nle_sidecar._smpte_to_seconds("00:01:30:12", 24.0), 90.5)
 
+    def test_fcpxml_with_dtd_is_refused_without_defusedxml(self):
+        # An FCPXML carrying a DTD/entity declaration is an XXE / entity-bomb
+        # vector; when defusedxml is unavailable the parser must refuse it.
+        import builtins
+        from unittest import mock
+        xxe = (
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE fcpxml [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>\n'
+            '<fcpxml><library>&xxe;</library></fcpxml>\n'
+        )
+        real_import = builtins.__import__
+
+        def no_defusedxml(name, *args, **kwargs):
+            if name.startswith("defusedxml"):
+                raise ImportError("defusedxml not installed")
+            return real_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = str(Path(tmpdir) / "evil.fcpxml")
+            Path(path).write_text(xxe, encoding="utf-8")
+            with mock.patch.object(builtins, "__import__", side_effect=no_defusedxml):
+                segments = nle_sidecar.parse_fcpxml(path)
+        self.assertEqual(segments, [])
+
 
 class MultiSegmentNleTests(unittest.TestCase):
     def test_edl_multi_segment_round_trip(self):

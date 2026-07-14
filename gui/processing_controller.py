@@ -683,7 +683,14 @@ class ProcessingControllerMixin:
 
             resume_warning = getattr(remover, "last_resume_warning", None)
             if resume_warning:
-                self._update_status(str(resume_warning), "warning", toast=True)
+                # _process_item runs on the worker thread; Tk widget/toast
+                # updates must be marshalled to the main loop.
+                self.root.after(
+                    0,
+                    lambda msg=str(resume_warning): self._update_status(
+                        msg, "warning", toast=True
+                    ),
+                )
 
             if success:
                 item.stage_timings = dict(

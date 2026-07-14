@@ -4,8 +4,26 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **FFmpeg filtergraph injection in subtitle re-burn.** `burn_subtitles` now
+  escapes single quotes in the subtitle path for the filtergraph value context
+  and validates the ASS `force_style` override against a strict allowlist,
+  dropping (with a warning) any override containing filtergraph metacharacters
+  so it cannot break out of `force_style='...'` and inject arbitrary filters.
+- **FCPXML XXE hardening.** When `defusedxml` is not installed, `parse_fcpxml`
+  now refuses documents containing a `<!DOCTYPE>`/`<!ENTITY>` declaration
+  instead of silently falling back to the unhardened stdlib parser.
+- **PaddleOCR-VL server probe scheme guard.** The llama.cpp server reachability
+  probe now only opens `http(s)` URLs, so a misconfigured server URL cannot be
+  coerced into a `file://` local read.
+
 ### Fixed
 
+- **Cross-thread Tk call on resume warning.** The batch worker surfaced a
+  resume-checkpoint warning by calling the status/toast update directly from
+  the processing thread; it is now marshalled to the Tk main loop like every
+  other worker-to-UI update, preventing a rare crash or widget-tree corruption.
 - **FFV1 intermediate writer stderr deadlock.** `_LosslessIntermediateWriter`
   now drains the ffmpeg `stderr` pipe on a background thread, so a noisy ffmpeg
   (enough warnings to fill the ~64 KB pipe buffer) can no longer deadlock the

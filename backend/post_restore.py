@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -26,6 +27,20 @@ import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# ASS force_style is a comma-separated list of Name=Value pairs. Legitimate
+# values use letters, digits, '&H..' colour literals, '.', '-', '+', '#',
+# spaces, '=' and ','. Anything else (notably single quotes, backslashes,
+# ':', ';', '[', ']') could break out of the quoted filtergraph value, so a
+# style string containing such characters is rejected rather than escaped.
+_FORCE_STYLE_ALLOWED = re.compile(r"^[A-Za-z0-9 ,=&#.+\-]*$")
+
+
+def _sanitize_force_style(style: str) -> str:
+    """Return the style string if it is a safe ASS force_style value, else ''."""
+    if not style:
+        return ""
+    return style if _FORCE_STYLE_ALLOWED.match(style) else ""
 
 
 def realesrgan_upscale(input_path: str, output_path: str,
@@ -240,10 +255,26 @@ def burn_subtitles(
     if not Path(subtitle_path).is_file():
         logger.warning(f"Subtitle file not found: {subtitle_path}")
         return None
-    sub_escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\\\:")
+    # Escape the path for ffmpeg's filtergraph single-quoted value context.
+    # Backslashes become forward slashes (valid on Windows for the subtitles
+    # filter), ':' is escaped, and a literal single quote is emitted via the
+    # close-escape-reopen sequence so a quote in the filename cannot break out
+    # of the filter and inject additional filtergraph clauses.
+    sub_escaped = (
+        str(subtitle_path)
+        .replace("\\", "/")
+        .replace(":", "\\\\:")
+        .replace("'", "'\\\\''")
+    )
     vf = f"subtitles='{sub_escaped}'"
-    if style_override:
-        vf += f":force_style='{style_override}'"
+    safe_style = _sanitize_force_style(style_override)
+    if style_override and not safe_style:
+        logger.warning(
+            "Ignoring subtitle style override: it contains characters that are "
+            "not valid in an ASS force_style string."
+        )
+    if safe_style:
+        vf += f":force_style='{safe_style}'"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
         "-i", input_path,
