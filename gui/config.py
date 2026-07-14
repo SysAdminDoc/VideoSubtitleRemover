@@ -365,6 +365,8 @@ class ProcessingConfig:
     adaptive_batch: bool = True
     temporal_mask_union: bool = False
     temporal_mask_window: int = 3
+    batch_max_retries: int = 0
+    batch_retry_backoff_seconds: float = 5.0
 
     auto_exposure_threshold: float = 0.55
     deinterlace: bool = False
@@ -524,6 +526,9 @@ class ProcessingConfig:
         self.temporal_mask_union = _coerce_bool(self.temporal_mask_union, False)
         self.temporal_mask_window = _coerce_int(
             self.temporal_mask_window, 3, 1, 15)
+        self.batch_max_retries = _coerce_int(self.batch_max_retries, 0, 0, 10)
+        self.batch_retry_backoff_seconds = _coerce_float(
+            self.batch_retry_backoff_seconds, 5.0, 0.0, 600.0)
         self.auto_exposure_threshold = _coerce_float(
             self.auto_exposure_threshold, 0.55, 0.0, 1.0)
         self.deinterlace = _coerce_bool(self.deinterlace, False)
@@ -932,6 +937,8 @@ SAFE_PRESET_FIELDS = frozenset({
     "adaptive_batch",
     "temporal_mask_union",
     "temporal_mask_window",
+    "batch_max_retries",
+    "batch_retry_backoff_seconds",
     "auto_exposure_threshold",
     "deinterlace",
     "deinterlace_auto",

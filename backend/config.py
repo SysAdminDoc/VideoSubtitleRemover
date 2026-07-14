@@ -202,6 +202,12 @@ class ProcessingConfig:
     # falling back to CPU inpainting for that frame. Safe default: on.
     gpu_oom_recovery: bool = True
 
+    # Automatic bounded retry for transient batch-item failures (GPU glitch,
+    # ffmpeg hiccup, timeout). 0 = current behavior (no retry). Retries use an
+    # exponential-ish backoff and only re-attempt retriable errors.
+    batch_max_retries: int = 0
+    batch_retry_backoff_seconds: float = 5.0
+
     # Scene-cut-safe temporal mask stabilization -- OR each frame's mask with a
     # short trailing window (within the same scene) so a single-frame OCR miss
     # or a moving/dissolving overlay keeps the pixels its neighbours saw. Only
@@ -644,6 +650,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.gpu_oom_recovery = _coerce_bool(config.gpu_oom_recovery, True)
     config.temporal_mask_union = _coerce_bool(config.temporal_mask_union, False)
     config.temporal_mask_window = _coerce_int(config.temporal_mask_window, 3, 1, 15)
+    config.batch_max_retries = _coerce_int(config.batch_max_retries, 0, 0, 10)
+    config.batch_retry_backoff_seconds = _coerce_float(
+        config.batch_retry_backoff_seconds, 5.0, 0.0, 600.0)
     config.auto_exposure_threshold = _coerce_float(config.auto_exposure_threshold, 0.55, 0.0, 1.0)
     config.deinterlace = _coerce_bool(config.deinterlace, False)
     config.deinterlace_auto = _coerce_bool(config.deinterlace_auto, True)

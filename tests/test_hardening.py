@@ -6151,6 +6151,31 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class BatchRetryTests(unittest.TestCase):
+    """P2: automatic bounded retry for transient batch failures."""
+
+    def test_retriable_classification(self):
+        from backend.batch_report import is_retriable_error
+        import subprocess as sp
+        self.assertTrue(is_retriable_error(RuntimeError("CUDA out of memory")))
+        self.assertTrue(is_retriable_error(sp.TimeoutExpired("ffmpeg", 10)))
+        self.assertTrue(is_retriable_error(BrokenPipeError()))
+        self.assertTrue(is_retriable_error(MemoryError()))
+        # permanent
+        self.assertFalse(is_retriable_error(FileNotFoundError("missing.mp4")))
+        self.assertFalse(is_retriable_error(ValueError("insufficient disk space")))
+        self.assertFalse(is_retriable_error(ValueError("unsupported codec")))
+        self.assertFalse(is_retriable_error(RuntimeError("invalid config")))
+
+    def test_config_default_off_and_clamped(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        cfg = ProcessingConfig()
+        self.assertEqual(cfg.batch_max_retries, 0)
+        cfg.batch_max_retries = 99
+        normalize_processing_config(cfg)
+        self.assertLessEqual(cfg.batch_max_retries, 10)
+
+
 class DryRunCliTests(unittest.TestCase):
     """P2: full-pipeline --dry-run and machine-readable --json output."""
 

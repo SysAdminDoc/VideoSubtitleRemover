@@ -94,6 +94,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Reliability
 
+- **Automatic bounded retry for transient batch failures.** New opt-in
+  `--max-retries N` (config `batch_max_retries`, default 0) re-attempts a
+  batch item that fails with a *transient* error -- GPU OOM/glitch, ffmpeg
+  hiccup, timeout, broken pipe -- up to N times with escalating backoff,
+  recording the attempt count on the batch record. Permanent failures
+  (missing file, unsupported format, disk-full, integrity) are never retried.
+  `backend.batch_report.is_retriable_error` classifies the error.
+
 - **Pre-encode disk-space preflight + bounded JSON log.** Processing now
   estimates the working space the lossless FFV1 intermediate needs and fails
   fast with a clear message before creating any temp file when the output

@@ -11,13 +11,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 — Later
 
-- [ ] P2 — Automatic bounded retry for transient batch-item failures
-  Why: A single flaky failure (temporary GPU glitch, FFmpeg hiccup) marks a batch item FAILED with no retry, so long unattended batches finish with avoidable gaps.
-  Evidence: `backend/batch_report.py:168-204` (FAILED-then-review, no retry); RESEARCH.md Reliability.
-  Touches: `gui/processing_controller.py`, `backend/cli.py`, `backend/config.py`, `backend/batch_report.py`, `tests/test_hardening.py`
-  Acceptance: an opt-in max-retry setting re-attempts a failed item up to N times with backoff, records each attempt in the batch report, distinguishes retriable from permanent errors, and defaults preserve current behavior.
-  Complexity: M
-
 - [ ] P2 — Benchmark PP-OCRv6 on the reference corpus before any default swap
   Why: PP-OCRv6 (reachable through the existing RapidOCR/ONNX path) claims detection/speed gains, but the default must not change without validation on this repo's subtitle fixtures.
   Evidence: `backend/reference_corpus.py`, `backend/static_logo_benchmark.py`; https://github.com/RapidAI/RapidOCR/issues/686; https://github.com/PaddlePaddle/PaddleOCR/releases

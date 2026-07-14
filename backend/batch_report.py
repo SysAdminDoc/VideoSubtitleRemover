@@ -13,8 +13,54 @@ import hashlib
 import json
 import logging
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, List, Optional
+
+
+# Error classes/markers that are worth an automatic retry (transient hardware
+# or subprocess hiccups) versus permanent failures that a retry cannot fix.
+_RETRIABLE_MARKERS = (
+    "out of memory",
+    "cublas",
+    "cudnn",
+    "broken pipe",
+    "timed out",
+    "timeout",
+    "temporarily",
+    "device or resource busy",
+    "connection reset",
+)
+_PERMANENT_MARKERS = (
+    "no such file",
+    "not found",
+    "permission denied",
+    "unsupported",
+    "invalid",
+    "insufficient disk space",
+    "no decodable video",
+    "codec",
+)
+
+
+def is_retriable_error(exc: BaseException) -> bool:
+    """True when a failed batch item is worth re-attempting.
+
+    Transient GPU/subprocess/timeout failures are retriable; missing files,
+    permissions, unsupported formats, disk-full, and integrity failures are
+    not (a retry would just fail the same way).
+    """
+    if isinstance(exc, (FileNotFoundError, PermissionError, IsADirectoryError,
+                        NotADirectoryError, KeyboardInterrupt)):
+        return False
+    text = f"{type(exc).__name__}: {exc}".lower()
+    if any(marker in text for marker in _PERMANENT_MARKERS):
+        return False
+    if isinstance(exc, (subprocess.CalledProcessError,
+                        subprocess.TimeoutExpired, BrokenPipeError,
+                        TimeoutError, ConnectionError, MemoryError)):
+        return True
+    return any(marker in text for marker in _RETRIABLE_MARKERS)
 
 from backend.io import (
     _choose_available_output_path,
