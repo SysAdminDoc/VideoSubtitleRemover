@@ -54,6 +54,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Diagnostics
 
+- **OCR detection benchmark (`--ocr-benchmark`).** Scores the active detector
+  (RapidOCR ships PP-OCRv6) on deterministic synthetic ground-truth subtitle
+  fixtures -- detection recall + per-frame latency -- and prints JSON evidence
+  with a `meets_floors` verdict (recall >= 0.8) that gates any default-detector
+  swap. Latency is reported as device-dependent evidence, not a hard gate.
+  Needs no redistributable media. New `backend.ocr_benchmark`.
+
 - **Full-pipeline `--dry-run` and machine-readable `--json`.** `--dry-run`
   validates a run without encoding: it probes each input (frames/fps), runs
   detection on a few sampled frames to report where text is found, checks the

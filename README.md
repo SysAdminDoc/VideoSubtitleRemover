@@ -129,6 +129,12 @@ Those profiles report missing filters such as `loudnorm`, `libvmaf`, or
 `whisper`, missing encoders such as `libvvenc`, and OpenCV wheel ownership
 before a long batch starts.
 
+Run `python -m backend.cli --ocr-benchmark` to score the active OCR detector
+(RapidOCR ships PP-OCRv6) on synthetic ground-truth subtitle fixtures --
+detection recall plus per-frame latency -- and print JSON evidence. Any change
+to the default detector should be gated on the `meets_floors` verdict (recall
+>= 0.8); latency is reported as device-dependent evidence, not a hard gate.
+
 Run `python -m backend.cli --inference-smoke` to prove the OCR and inpaint
 backends actually execute: it pushes a generated text image and masked frame
 through the detector and inpainter, printing the real engine / execution

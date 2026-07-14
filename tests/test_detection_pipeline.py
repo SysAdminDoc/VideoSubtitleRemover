@@ -532,5 +532,55 @@ class ScriptClassificationTests(unittest.TestCase):
                 detection._classify_script(chr(0x4F60) + chr(0x597D) + "Hi"), "cjk")
 
 
+class OcrBenchmarkHarnessTests(unittest.TestCase):
+    """P2: OCR detection benchmark harness (fixtures + scoring)."""
+
+    def test_perfect_detector_meets_recall_floor(self):
+        from backend import ocr_benchmark
+
+        # Build a true oracle: map each fixture image to its ground-truth box.
+        gt_by_shape = {}
+        for image, box in ocr_benchmark.iter_fixtures():
+            gt_by_shape[image.tobytes()] = box
+
+        class OracleDetector:
+            _engine_name = "oracle"
+
+            def detect(self, image, threshold):
+                return [gt_by_shape[image.tobytes()]]
+
+        result = ocr_benchmark.run_ocr_detection_benchmark(OracleDetector())
+        self.assertEqual(result["schema"], ocr_benchmark.OCR_BENCHMARK_SCHEMA)
+        self.assertEqual(result["engine"], "oracle")
+        self.assertEqual(result["recall"], 1.0)
+        self.assertTrue(result["meets_floors"])
+
+    def test_blind_detector_fails_recall_floor(self):
+        from backend import ocr_benchmark
+
+        class BlindDetector:
+            _engine_name = "blind"
+
+            def detect(self, image, threshold):
+                return []
+
+        result = ocr_benchmark.run_ocr_detection_benchmark(BlindDetector())
+        self.assertEqual(result["recall"], 0.0)
+        self.assertFalse(result["meets_floors"])
+
+    def test_detector_exception_is_recorded_not_raised(self):
+        from backend import ocr_benchmark
+
+        class BrokenDetector:
+            _engine_name = "broken"
+
+            def detect(self, image, threshold):
+                raise RuntimeError("model not loaded")
+
+        result = ocr_benchmark.run_ocr_detection_benchmark(BrokenDetector())
+        self.assertFalse(result["meets_floors"])
+        self.assertTrue(all("error" in r for r in result["results"]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,13 +11,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 — Later
 
-- [ ] P2 — Benchmark PP-OCRv6 on the reference corpus before any default swap
-  Why: PP-OCRv6 (reachable through the existing RapidOCR/ONNX path) claims detection/speed gains, but the default must not change without validation on this repo's subtitle fixtures.
-  Evidence: `backend/reference_corpus.py`, `backend/static_logo_benchmark.py`; https://github.com/RapidAI/RapidOCR/issues/686; https://github.com/PaddlePaddle/PaddleOCR/releases
-  Touches: `backend/detection.py`, `backend/reference_corpus.py`, `backend/static_logo_benchmark.py`, `tests/test_detection_pipeline.py`, `README.md`
-  Acceptance: a benchmark run scores PP-OCRv6 det/rec against the current default on the reference corpus (accuracy + wall-clock), records results as evidence, and the default detector changes only if v6 meets documented accuracy/speed floors on those fixtures.
-  Complexity: M
-
 - [ ] P2 — Add interpolated keyframes for moving manual regions
   Why: Timed regions are static rectangles, while moving watermarks require users to over-mask the whole path or depend on optional tracking models.
   Evidence: `backend/config.py:185-190`, `gui/app.py:3028-3431`; https://github.com/YaoFANGUK/video-subtitle-remover/issues/236; https://github.com/timminator/VideOCR/issues/140

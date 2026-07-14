@@ -675,6 +675,12 @@ def main():
                             "the OCR and inpaint backends to prove they actually "
                             "execute (records provider/timing), then exit. No model "
                             "downloads. Uses --gpu to pick the device.")
+    parser.add_argument("--ocr-benchmark", action="store_true",
+                       help="Benchmark the active OCR detector on synthetic "
+                            "ground-truth subtitle fixtures (recall + latency) "
+                            "and print JSON evidence, then exit. Use --gpu to "
+                            "pick the device. Gate any default-detector swap on "
+                            "the meets_floors verdict.")
     parser.add_argument("--dry-run", action="store_true",
                        help="Validate the run without encoding: probe each input, "
                             "run detection on a few sampled frames, check the "
@@ -793,6 +799,13 @@ def main():
                 mark = "OK" if entry["available"] else "  "
                 print(f"  [{mark}] {entry['name']}: {entry['reason']}")
         sys.exit(0)
+
+    if getattr(args, "ocr_benchmark", False):
+        from backend.ocr_benchmark import run_default_detector_benchmark
+        device = f"cuda:{args.gpu}" if getattr(args, "gpu", 0) >= 0 else "cpu"
+        result = run_default_detector_benchmark(device=device)
+        print(json.dumps(result, indent=2))
+        sys.exit(0 if result["meets_floors"] else 1)
 
     if args.inference_smoke:
         from backend.support_bundle import run_inference_smoke
