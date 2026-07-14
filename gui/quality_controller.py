@@ -416,6 +416,9 @@ class QualityReviewControllerMixin:
             output_contract = getattr(item, "output_contract_report", None)
             if isinstance(output_contract, dict) and output_contract:
                 record["output_contract"] = dict(output_contract)
+            selective_rerun = getattr(item, "selective_rerun", None)
+            if isinstance(selective_rerun, dict) and selective_rerun:
+                record["selective_mask_rerun"] = dict(selective_rerun)
             elapsed = None
             if item.started_at and item.completed_at:
                 elapsed = (item.completed_at - item.started_at).total_seconds()
@@ -481,12 +484,21 @@ class QualityReviewControllerMixin:
         if item is not None:
             self._set_selected_queue_item(item.id)
             self._scroll_queue_to_item(item.id)
-            if item.status == ProcessingStatus.COMPLETE:
-                self._show_preview(item)
         quality_report = record.get("quality_report") or {}
         gate = record.get("quality_gate") or {}
         stage_text = self._dominant_stage_text(record.get("dominant_stage"))
         stage_suffix = f"; slowest stage {stage_text}" if stage_text else ""
+        mask_spans = quality_report.get("mask_review_spans") or []
+        if item is not None and mask_spans:
+            if self._open_mask_correction_editor(item, initial_span=mask_spans[0]):
+                self._update_status(
+                    f"Opened frame-level mask review for "
+                    f"{record.get('output_name', 'output')}{stage_suffix}",
+                    "warning",
+                )
+                return
+        if item is not None and item.status == ProcessingStatus.COMPLETE:
+            self._show_preview(item)
         candidates = []
         sheet = quality_report.get("sheet")
         if sheet:

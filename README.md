@@ -33,6 +33,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
+- **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
@@ -403,6 +404,13 @@ remux-only rows are marked `not_applicable`.
 Review-needed queue items expose **Retry with suggested settings**, which
 applies the quality gate's ladder step to that item only and records the
 before/after retry config in the next batch report.
+When the gate identifies residual text, adjacent-frame flicker, or a
+low-confidence detection, **Correct mask** opens the flagged frame span in an
+internal editor. Paint missing mask pixels or subtract over-masked pixels,
+optionally propagate the stroke through the bounded span, and use undo/redo
+before preparing the retry. VSR persists the ordered corrections with exact
+frame bounds and, when the prior cleaned output is still available, reprocesses
+only those ranges while copying the previously cleaned frames everywhere else.
 
 Long video runs can pause at safe frame-batch boundaries. In the GUI, click
 **Pause batch** while processing; the current video writes checkpoint frames

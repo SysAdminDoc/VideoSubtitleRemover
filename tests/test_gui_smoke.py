@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import json
+import shutil
 import sys
 import tempfile
 import threading
@@ -709,6 +710,85 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app.config.subtitle_areas, [expected])
             self.assertEqual(item.config.subtitle_area, expected)
             self.assertEqual(item.config.subtitle_areas, [expected])
+        finally:
+            self._destroy_app(app)
+
+    def test_quality_mask_correction_paints_undoes_and_prepares_selective_rerun(self):
+        app = self._make_app(withdraw=False)
+        try:
+            import cv2
+            import numpy as np
+            from backend.a11y import accessible_metadata
+
+            source = Path(self._tmpdir.name) / "correction-source.avi"
+            writer = cv2.VideoWriter(
+                str(source), cv2.VideoWriter_fourcc(*"MJPG"), 10.0, (320, 180))
+            if not writer.isOpened():
+                self.skipTest("OpenCV video writer unavailable")
+            try:
+                for value in (20, 30, 40, 50):
+                    writer.write(np.full((180, 320, 3), value, np.uint8))
+            finally:
+                writer.release()
+
+            with mock.patch.object(app, "_start_soft_subtitle_probe"):
+                with mock.patch.object(app, "_show_preview"):
+                    self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+            output = Path(self._tmpdir.name) / "correction-output.avi"
+            shutil.copy2(source, output)
+            item.output_path = str(output)
+            item.status = self._g.ProcessingStatus.COMPLETE
+            item.quality_report = {
+                "tag": "Review",
+                "mask_review_spans": [{
+                    "kind": "residual",
+                    "start_frame": 1,
+                    "end_frame": 3,
+                    "suggested_mode": "add",
+                    "reason": "residual text score high",
+                }],
+            }
+
+            def immediate_thread(*_args, **kwargs):
+                return SimpleNamespace(start=kwargs["target"])
+
+            with mock.patch(
+                "gui.mask_correction_controller.threading.Thread",
+                side_effect=immediate_thread,
+            ):
+                with mock.patch("backend.processor.SubtitleDetector") as detector_type:
+                    detector_type.return_value.detect.return_value = []
+                    detector_type.return_value._engine_name = "test detector"
+                    self.assertTrue(app._open_mask_correction_editor(item))
+            app.root.update()
+
+            editor = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "Correct subtitle mask"
+            )
+            canvas = editor._vsr_correction_canvas
+            self.assertEqual(
+                accessible_metadata(canvas)["role"], "mask painting canvas")
+            press, drag, release = editor._vsr_paint_handlers
+            press(SimpleNamespace(x=70, y=100))
+            drag(SimpleNamespace(x=120, y=100))
+            release(SimpleNamespace(x=120, y=100))
+            self.assertEqual(len(editor._vsr_correction_state["corrections"]), 1)
+            editor._vsr_undo_correction()
+            self.assertEqual(editor._vsr_correction_state["corrections"], [])
+            editor._vsr_redo_correction()
+            self.assertEqual(len(editor._vsr_correction_state["corrections"]), 1)
+
+            self.assertTrue(editor._vsr_prepare_selective_rerun())
+            self.assertEqual(item.status, self._g.ProcessingStatus.IDLE)
+            self.assertEqual(item.correction_retry["ranges"], [[1, 2]])
+            correction = item.config.manual_mask_corrections[0]
+            self.assertEqual(correction["mode"], "add")
+            self.assertEqual(correction["start_frame"], 1)
+            self.assertEqual(correction["end_frame"], 2)
+            self.assertFalse(editor.winfo_exists())
         finally:
             self._destroy_app(app)
 

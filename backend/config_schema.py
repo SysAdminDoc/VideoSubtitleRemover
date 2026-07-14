@@ -14,8 +14,8 @@ from enum import Enum
 from typing import Any, Iterable, Mapping
 
 
-CONFIG_SCHEMA_VERSION = 3
-GUI_SETTINGS_FORMAT = 9
+CONFIG_SCHEMA_VERSION = 4
+GUI_SETTINGS_FORMAT = 10
 CONFIG_SCHEMA_VERSION_KEY = "config_schema_version"
 GUI_SETTINGS_VERSION_KEY = "vsr_settings_format"
 
@@ -98,6 +98,8 @@ def migrate_gui_settings(data: Any) -> dict[str, Any]:
     # moving-region keyframes while preserving legacy timed rectangles.
     # Format 8 adds a persisted UI text scale with a 100 percent default.
     # Format 9 adds the persisted System/English/catalog locale preference.
+    # Format 10 adds ordered add/subtract mask-correction semantics while
+    # legacy correction entries continue to mean additive polygons.
     result[GUI_SETTINGS_VERSION_KEY] = GUI_SETTINGS_FORMAT
     result[CONFIG_SCHEMA_VERSION_KEY] = CONFIG_SCHEMA_VERSION
     return result

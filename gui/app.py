@@ -80,6 +80,7 @@ from backend.region_keyframes import (
     shape_bounds,
 )
 from gui.preview_controller import PreviewControllerMixin
+from gui.mask_correction_controller import MaskCorrectionControllerMixin
 from gui.processing_controller import ProcessingControllerMixin
 from gui.quality_controller import QualityReviewControllerMixin
 from gui.support_controller import SupportControllerMixin
@@ -88,6 +89,7 @@ logger = logging.getLogger(__name__)
 
 
 class VideoSubtitleRemoverApp(
+    MaskCorrectionControllerMixin,
     PreviewControllerMixin,
     SupportControllerMixin,
     QualityReviewControllerMixin,
@@ -2629,6 +2631,22 @@ class VideoSubtitleRemoverApp(
         self.preview_ab_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_ab_btn,
                 tr("Open a frame slider that wipes between source and cleaned output."))
+
+        correction_actions = tk.Frame(self._preview_frame, bg=Theme.BG_CARD)
+        correction_actions.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        self.preview_correction_btn = ModernButton(
+            correction_actions,
+            text=tr("Correct mask"),
+            width=112,
+            command=self._open_selected_mask_correction,
+            style="ghost",
+            size="sm",
+        )
+        self.preview_correction_btn.pack(side="left")
+        Tooltip(
+            self.preview_correction_btn,
+            tr("Paint frame-local add/subtract corrections and prepare a selective rerun."),
+        )
 
         self.preview_action_hint = tk.Label(
             self._preview_frame,
@@ -5922,6 +5940,16 @@ class VideoSubtitleRemoverApp(
                     dict(record.get("output_contract_report"))
                     if isinstance(
                         record.get("output_contract_report"), dict)
+                    else {}
+                ),
+                correction_retry=(
+                    dict(record.get("correction_retry"))
+                    if isinstance(record.get("correction_retry"), dict)
+                    else None
+                ),
+                selective_rerun=(
+                    dict(record.get("selective_rerun"))
+                    if isinstance(record.get("selective_rerun"), dict)
                     else {}
                 ),
             )

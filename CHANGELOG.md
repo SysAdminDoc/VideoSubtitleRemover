@@ -44,6 +44,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Quality-directed per-frame mask correction.** Residual-text, temporal-
+  flicker, and low-confidence quality signals now produce an exact frame review
+  queue. The internal editor paints ordered add/subtract corrections with
+  undo/redo and bounded propagation, persists them in the versioned config and
+  queue sidecars, and selectively reruns only affected ranges while reusing the
+  prior cleaned output elsewhere.
 - **Precise keyboard-accessible region editing.** The full manual-region
   selector exposes exact x/y/width/height or polygon vertices, synchronized
   second/frame timing, bounded arrow-key nudge and Ctrl+arrow resize, and

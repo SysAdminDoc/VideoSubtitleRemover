@@ -25,6 +25,7 @@ from backend.config_schema import (
     serialize_dataclass_config,
 )
 from backend.region_keyframes import normalize_region_keyframe_tracks
+from backend.mask_corrections import normalize_mask_correction_list
 from gui.theme import Theme, normalize_text_scale_percent
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
 QUEUE_STATE_FILE = LOG_DIR / "queue_state.json"
 MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
-QUEUE_STATE_SCHEMA = 2
+QUEUE_STATE_SCHEMA = 3
 _queue_state_io_lock = threading.RLock()
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
@@ -89,6 +90,8 @@ _queue_state_io_lock = threading.RLock()
 # Format 5 -> 6: work_directory becomes an end-to-end backend storage policy.
 # Format 6 -> 7: added interpolated moving-region keyframe tracks.
 # Format 7 -> 8: added persisted 100-200 percent interface text scaling.
+# Format 8 -> 9: added persisted System/English/catalog locale preference.
+# Format 9 -> 10: added ordered add/subtract mask-correction semantics.
 VSR_SETTINGS_FORMAT = GUI_SETTINGS_FORMAT
 
 # -- Enums ------------------------------------------------------------------
@@ -461,6 +464,8 @@ class ProcessingConfig:
             self.subtitle_region_spans)
         self.subtitle_region_keyframes = normalize_region_keyframe_tracks(
             self.subtitle_region_keyframes)
+        self.manual_mask_corrections = normalize_mask_correction_list(
+            self.manual_mask_corrections)
         self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
         self.detection_vertical = _coerce_bool(self.detection_vertical, False)
@@ -693,6 +698,8 @@ class QueueItem:
     mask_export: dict = field(default_factory=dict)
     timing_report: dict = field(default_factory=dict)
     output_contract_report: dict = field(default_factory=dict)
+    correction_retry: Optional[dict] = None
+    selective_rerun: dict = field(default_factory=dict)
 
 
 # -- Helpers ----------------------------------------------------------------
@@ -907,6 +914,14 @@ def save_queue_state(queue_items):
                         getattr(item, "timing_report", {}) or {}),
                     "output_contract_report": dict(
                         getattr(item, "output_contract_report", {}) or {}),
+                    "correction_retry": (
+                        dict(item.correction_retry)
+                        if isinstance(
+                            getattr(item, "correction_retry", None), dict)
+                        else None
+                    ),
+                    "selective_rerun": dict(
+                        getattr(item, "selective_rerun", {}) or {}),
                 })
             if not records:
                 if QUEUE_STATE_FILE.exists():
@@ -950,7 +965,7 @@ def load_queue_state():
                 _quarantine_queue_state("unreadable JSON object")
                 return None
             schema = data.get("schema")
-            if schema not in (1, QUEUE_STATE_SCHEMA):
+            if schema not in (1, 2, QUEUE_STATE_SCHEMA):
                 _quarantine_queue_state(f"unsupported schema {schema!r}")
                 return None
             items = data.get("items")
@@ -977,6 +992,11 @@ def load_queue_state():
                     or not isinstance(record.get("timing_report", {}), dict)
                     or not isinstance(
                         record.get("output_contract_report", {}), dict)
+                    or not isinstance(record.get("selective_rerun", {}), dict)
+                    or (
+                        record.get("correction_retry") is not None
+                        and not isinstance(record.get("correction_retry"), dict)
+                    )
                 ):
                     _quarantine_queue_state("item evidence fields are malformed")
                     return None

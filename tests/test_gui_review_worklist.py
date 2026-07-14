@@ -75,6 +75,35 @@ class GuiReviewWorklistTests(unittest.TestCase):
 
         self.assertIs(app._queue_item_for_report_record(record), item)
 
+    def test_review_spans_open_internal_mask_correction_queue(self):
+        item = QueueItem(
+            id="review-item",
+            file_path="clip.mp4",
+            output_path="clip_no_sub.mp4",
+            config=ProcessingConfig(),
+            status=ProcessingStatus.COMPLETE,
+        )
+        span = {
+            "kind": "residual",
+            "start_frame": 12,
+            "end_frame": 14,
+        }
+        record = {
+            "status": "review-needed",
+            "output_name": "clip_no_sub.mp4",
+            "quality_report": {"mask_review_spans": [span]},
+            "quality_gate": {"status": "review"},
+        }
+        app = self._app_stub(item, record)
+        app._open_mask_correction_editor = mock.Mock(return_value=True)
+
+        with mock.patch("gui.quality_controller.os.startfile", create=True) as startfile:
+            app._open_first_review_item()
+
+        app._open_mask_correction_editor.assert_called_once_with(
+            item, initial_span=span)
+        startfile.assert_not_called()
+
     def test_output_quality_preflight_warning_updates_status(self):
         app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
         app._status_messages = []

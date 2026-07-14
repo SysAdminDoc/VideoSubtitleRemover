@@ -18,6 +18,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
 
+from backend.mask_corrections import (
+    normalize_mask_correction,
+    normalize_mask_correction_list,
+)
 from backend.region_keyframes import normalize_region_keyframe_tracks
 
 logger = logging.getLogger(__name__)
@@ -470,43 +474,11 @@ def _coerce_region_span_list(value) -> Optional[List[dict]]:
 
 
 def _coerce_mask_correction(value) -> Optional[dict]:
-    if not isinstance(value, dict):
-        return None
-    polygons = value.get("polygons")
-    if not isinstance(polygons, (list, tuple)) or not polygons:
-        return None
-    coerced_polys = []
-    for poly in polygons:
-        if not isinstance(poly, (list, tuple)) or len(poly) < 6:
-            continue
-        try:
-            coerced_polys.append([int(round(float(c))) for c in poly])
-        except (TypeError, ValueError):
-            continue
-    if not coerced_polys:
-        return None
-    import math
-    try:
-        start = float(value.get("start", 0.0))
-        end = float(value.get("end", 0.0))
-    except (TypeError, ValueError):
-        start, end = 0.0, 0.0
-    if not math.isfinite(start):
-        start = 0.0
-    if not math.isfinite(end):
-        end = 0.0
-    return {"polygons": coerced_polys, "start": max(0.0, start), "end": max(0.0, end)}
+    return normalize_mask_correction(value)
 
 
 def _coerce_mask_correction_list(value) -> Optional[List[dict]]:
-    if not isinstance(value, (list, tuple)):
-        return None
-    corrections = []
-    for item in value:
-        c = _coerce_mask_correction(item)
-        if c:
-            corrections.append(c)
-    return corrections or None
+    return normalize_mask_correction_list(value)
 
 
 _MODE_ALIASES = {

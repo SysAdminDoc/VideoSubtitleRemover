@@ -93,7 +93,19 @@ from backend.quality import (
     temporal_flicker_score,
     mask_boundary_seam_score,
 )
-from backend.quality_gate import evaluate_quality_gate
+from backend.quality_gate import (
+    RESIDUAL_TEXT_SCORE_CEILING,
+    TEMPORAL_FLICKER_CEILING,
+    evaluate_quality_gate,
+)
+from backend.mask_corrections import (
+    SELECTIVE_RERUN_SCHEMA,
+    apply_mask_corrections,
+    frame_is_in_ranges,
+    make_review_span,
+    merge_frame_ranges,
+    merge_review_spans,
+)
 from backend.resume_checkpoint import (
     ProcessingPaused,
     cleanup_pause_checkpoint,
@@ -645,39 +657,17 @@ class SubtitleRemover:
         return mask
 
     def _apply_manual_mask_corrections(
-        self, mask: np.ndarray, frame_seconds: float,
+        self,
+        mask: np.ndarray,
+        frame_seconds: float,
+        frame_index: Optional[int] = None,
     ) -> np.ndarray:
-        corrections = getattr(self.config, "manual_mask_corrections", None)
-        if not corrections:
-            return mask
-        h, w = mask.shape[:2]
-        for correction in corrections:
-            if not isinstance(correction, dict):
-                continue
-            start = float(correction.get("start", 0.0))
-            end = float(correction.get("end", 0.0))
-            if frame_seconds < start:
-                continue
-            if end > 0.0 and frame_seconds >= end:
-                continue
-            polygons = correction.get("polygons")
-            if not isinstance(polygons, (list, tuple)):
-                continue
-            for poly_coords in polygons:
-                if not isinstance(poly_coords, (list, tuple)) or len(poly_coords) < 6:
-                    continue
-                try:
-                    pts = np.array(
-                        [(int(poly_coords[i]), int(poly_coords[i + 1]))
-                         for i in range(0, len(poly_coords) - 1, 2)],
-                        dtype=np.int32,
-                    )
-                    pts[:, 0] = np.clip(pts[:, 0], 0, w - 1)
-                    pts[:, 1] = np.clip(pts[:, 1], 0, h - 1)
-                    cv2.fillPoly(mask, [pts], 255)
-                except (TypeError, ValueError, IndexError):
-                    continue
-        return mask
+        return apply_mask_corrections(
+            mask,
+            getattr(self.config, "manual_mask_corrections", None),
+            frame_seconds,
+            frame_index,
+        )
 
     def _refine_masks_with_matanyone(self,
                                      frames: List[np.ndarray],
@@ -871,6 +861,8 @@ class SubtitleRemover:
             roi_ssims: List[float] = []
             temporal_samples: List[Tuple[int, np.ndarray]] = []
             residual_scores: List[float] = []
+            review_spans = list(
+                getattr(self, "_mask_review_signals", None) or [])
             # B-3: ROI-cropped metric uses the accumulated union-mask
             # bbox. Falls back to the whole-frame metric when the ROI is
             # too small (< 32px on either axis) for SSIM to be stable.
@@ -909,6 +901,19 @@ class SubtitleRemover:
                             residual = residual_text_score(b_roi)
                             if residual is not None:
                                 residual_scores.append(residual)
+                                if residual > RESIDUAL_TEXT_SCORE_CEILING:
+                                    review_spans.append(make_review_span(
+                                        "residual",
+                                        start_frame + idx,
+                                        start_frame + idx + 1,
+                                        fps=fps,
+                                        score=residual,
+                                        threshold=RESIDUAL_TEXT_SCORE_CEILING,
+                                        reason=(
+                                            "Residual text score exceeded "
+                                            "the review threshold"
+                                        ),
+                                    ))
                 if idx not in metric_index_set:
                     continue
                 p = cv2.PSNR(a, b)
@@ -937,6 +942,26 @@ class SubtitleRemover:
             roi_mean_ssim = float(np.mean(roi_ssims)) if roi_ssims else None
             roi_mean_psnr = float(np.mean(roi_psnrs)) if roi_psnrs else None
             flicker_score = temporal_flicker_score(temporal_samples)
+            for left, right in zip(temporal_samples, temporal_samples[1:]):
+                if right[0] != left[0] + 1:
+                    continue
+                pair_score = temporal_flicker_score([left, right])
+                if (
+                    pair_score is not None
+                    and pair_score > TEMPORAL_FLICKER_CEILING
+                ):
+                    review_spans.append(make_review_span(
+                        "flicker",
+                        start_frame + left[0],
+                        start_frame + right[0] + 1,
+                        fps=fps,
+                        score=pair_score,
+                        threshold=TEMPORAL_FLICKER_CEILING,
+                        reason=(
+                            "Adjacent cleaned frames exceeded "
+                            "the flicker threshold"
+                        ),
+                    ))
             residual_mean_score = (
                 float(np.mean(residual_scores)) if residual_scores else None
             )
@@ -1016,6 +1041,9 @@ class SubtitleRemover:
                 'tag': tag,
                 'sheet': sheet_path,
             }
+            metrics["mask_review_spans"] = merge_review_spans(review_spans)
+            if metrics["mask_review_spans"]:
+                metrics["tag"] = "Review"
             metrics["quality_gate"] = evaluate_quality_gate(metrics)
             return metrics
         finally:
@@ -1262,7 +1290,7 @@ class SubtitleRemover:
                 mask = self._create_mask(image.shape, boxes, frame=image,
                                          confidences=confidences)
                 mask = self._apply_polygon_region_shapes(mask, fixed_shapes)
-                mask = self._apply_manual_mask_corrections(mask, 0.0)
+                mask = self._apply_manual_mask_corrections(mask, 0.0, 0)
                 [mask] = self._refine_masks_with_matanyone([image], [mask])
             with self._time_stage("inpaint"):
                 [result] = self.inpainter.inpaint([image], [mask])
@@ -1531,7 +1559,11 @@ class SubtitleRemover:
                       checkpoint_dir: Optional[str | Path] = None,
                       checkpoint_key: Optional[str] = None,
                       resume_checkpoint: bool = True,
-                      pause_check: Optional[Callable[[], bool]] = None) -> bool:
+                      pause_check: Optional[Callable[[], bool]] = None,
+                      selective_rerun_from: Optional[str] = None,
+                      selective_rerun_ranges: Optional[
+                          List[Tuple[int, int]]
+                      ] = None) -> bool:
         self._teardown_requested = False
         self.last_output_path = None
         self.last_resume_warning = None
@@ -1541,8 +1573,12 @@ class SubtitleRemover:
         self._srt_entries = []
         self._quality_mask_bbox = None
         self._seam_scores = []
+        self._mask_review_signals = []
+        self.last_selective_rerun = None
         temp_dir = None
         cap = None
+        selective_cap = None
+        selective_ranges = merge_frame_ranges(selective_rerun_ranges or [])
         reader = None
         writer = None
         mask_writer = None
@@ -1747,6 +1783,56 @@ class SubtitleRemover:
                 else end_frame / fps
             )
 
+            if selective_rerun_from:
+                selective_path = Path(selective_rerun_from)
+                if not selective_path.is_file():
+                    raise ValueError(
+                        "Selective mask rerun requires the previous cleaned output"
+                    )
+                selective_ranges = merge_frame_ranges(
+                    (
+                        max(start_frame, range_start),
+                        min(end_frame, range_end),
+                    )
+                    for range_start, range_end in selective_ranges
+                )
+                if not selective_ranges:
+                    raise ValueError(
+                        "Selective mask rerun has no valid affected frame range"
+                    )
+                selective_cap = _open_capture(str(selective_path), "off")
+                if not selective_cap.isOpened():
+                    raise ValueError(
+                        "Could not open the previous cleaned output for selective rerun"
+                    )
+                prior_width = int(selective_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                prior_height = int(selective_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                prior_frames = int(selective_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                if (prior_width, prior_height) != (width, height):
+                    raise ValueError(
+                        "Previous cleaned output dimensions do not match the source"
+                    )
+                if prior_frames < end_frame:
+                    raise ValueError(
+                        "Previous cleaned output is missing frames required for selective rerun"
+                    )
+                prior_stat = selective_path.stat()
+                rerun_frame_count = sum(end - start for start, end in selective_ranges)
+                self.last_selective_rerun = {
+                    "schema": SELECTIVE_RERUN_SCHEMA,
+                    "source_output": selective_path.name,
+                    "source_output_bytes": int(prior_stat.st_size),
+                    "source_output_mtime_ns": int(prior_stat.st_mtime_ns),
+                    "ranges": [list(frame_range) for frame_range in selective_ranges],
+                    "rerun_frames": rerun_frame_count,
+                    "reused_frames": max(0, frames_to_process - rerun_frame_count),
+                }
+                logger.info(
+                    "Selective mask rerun: %d affected frame(s), %d reused frame(s)",
+                    rerun_frame_count,
+                    max(0, frames_to_process - rerun_frame_count),
+                )
+
             if start_frame > 0 or end_frame < total_frames:
                 logger.info(f"Video: {width}x{height} @ {fps:.1f}fps, "
                            f"frames {start_frame}-{end_frame} of {total_frames}")
@@ -1803,6 +1889,12 @@ class SubtitleRemover:
                             f"Resuming {Path(input_path).name} from frame "
                             f"{resume_frame_count}/{frames_to_process}"
                         )
+
+            if selective_cap is not None:
+                selective_cap.set(
+                    cv2.CAP_PROP_POS_FRAMES,
+                    start_frame + resume_frame_count,
+                )
 
             # Fail fast on a drive that clearly cannot hold the encode, before
             # any temp file is created (only the frames still to write count).
@@ -2062,6 +2154,7 @@ class SubtitleRemover:
                 frames = []
                 masks = []
                 source_frames = []
+                passthrough_flags = []
 
                 for _ in range(batch_size):
                     if start_frame + frame_idx >= end_frame:
@@ -2084,6 +2177,31 @@ class SubtitleRemover:
                         if frame_timing is not None
                         else absolute_idx / max(fps, 1.0)
                     )
+                    if selective_cap is not None:
+                        prior_ok, prior_raw = selective_cap.read()
+                        if not prior_ok or prior_raw is None:
+                            raise ValueError(
+                                "Previous cleaned output ended during selective rerun"
+                            )
+                        if not frame_is_in_ranges(absolute_idx, selective_ranges):
+                            prior_frame = self._processing_frame(prior_raw)
+                            frames.append(prior_frame)
+                            masks.append(np.zeros(prior_frame.shape[:2], dtype=np.uint8))
+                            source_frames.append(None)
+                            passthrough_flags.append(True)
+                            frame_idx += 1
+                            continue
+                        if any(
+                            absolute_idx == range_start
+                            for range_start, _range_end in selective_ranges
+                        ):
+                            last_mask = None
+                            last_hash = None
+                            if tracker is not None:
+                                tracker = SubtitleTracker(
+                                    self.config.kalman_iou_threshold,
+                                    self.config.kalman_max_age,
+                                )
                     fixed_shapes = (
                         self._fixed_region_shapes(frame_seconds)
                         if timed_region_spans else static_fixed_shapes
@@ -2121,10 +2239,11 @@ class SubtitleRemover:
                                 fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
                         frame_s = frame_seconds
                         corrected = self._apply_manual_mask_corrections(
-                            fixed_mask.copy(), frame_s)
+                            fixed_mask.copy(), frame_s, absolute_idx)
                         frames.append(frame)
                         masks.append(corrected)
                         source_frames.append(source_frame)
+                        passthrough_flags.append(False)
                         frame_idx += 1
                         continue
 
@@ -2152,6 +2271,7 @@ class SubtitleRemover:
                         frames.append(frame)
                         masks.append(last_mask)
                         source_frames.append(source_frame)
+                        passthrough_flags.append(False)
                         frame_idx += 1
                         continue
                     elif (not timed_region_spans
@@ -2162,6 +2282,7 @@ class SubtitleRemover:
                         frames.append(frame)
                         masks.append(last_mask)
                         source_frames.append(source_frame)
+                        passthrough_flags.append(False)
                         frame_idx += 1
                         continue
                     else:
@@ -2183,7 +2304,11 @@ class SubtitleRemover:
                             else:
                                 det_frame = frame
                             det_confs = None
-                            if self.config.confidence_weighted_dilation:
+                            collect_confidence = bool(
+                                self.config.confidence_weighted_dilation
+                                or self.config.quality_report
+                            )
+                            if collect_confidence:
                                 det_results = self.detector.detect_with_confidence(
                                     det_frame, self.config.detection_threshold)
                                 detected_boxes = [
@@ -2191,6 +2316,32 @@ class SubtitleRemover:
                                     for x1, y1, x2, y2, _ in det_results
                                 ]
                                 det_confs = [c for _, _, _, _, c in det_results]
+                                if self.config.quality_report and det_confs:
+                                    review_floor = min(
+                                        0.9,
+                                        max(
+                                            0.6,
+                                            self.config.detection_threshold + 0.15,
+                                        ),
+                                    )
+                                    low_confidence = min(det_confs)
+                                    if low_confidence < review_floor:
+                                        self._mask_review_signals.append(
+                                            make_review_span(
+                                                "low-confidence",
+                                                absolute_idx,
+                                                absolute_idx + 1,
+                                                fps=fps,
+                                                score=low_confidence,
+                                                threshold=review_floor,
+                                                reason=(
+                                                    "OCR confidence was below "
+                                                    "the review floor"
+                                                ),
+                                            )
+                                        )
+                                if not self.config.confidence_weighted_dilation:
+                                    det_confs = None
                             else:
                                 detected_boxes = self.detector.detect(
                                     det_frame, self.config.detection_threshold)
@@ -2263,7 +2414,8 @@ class SubtitleRemover:
                                 padding=4,
                             )
                         frame_s = frame_seconds
-                        mask = self._apply_manual_mask_corrections(mask, frame_s)
+                        mask = self._apply_manual_mask_corrections(
+                            mask, frame_s, absolute_idx)
                     last_mask = mask
                     if self.config.phash_skip_enable:
                         # Reuse the hash computed above for the skip-check if
@@ -2272,40 +2424,65 @@ class SubtitleRemover:
                     frames.append(frame)
                     masks.append(mask)
                     source_frames.append(source_frame)
+                    passthrough_flags.append(False)
                     frame_idx += 1
 
                 if not frames:
                     break
 
                 with self._time_stage("mask"):
-                    masks = self._propagate_masks_with_cotracker(frames, masks)
-                    masks = self._refine_masks_with_matanyone(frames, masks)
-                    # Scene-cut-safe temporal mask stabilization. Only in
-                    # automatic full-frame detection -- user-fixed timed/fixed
-                    # regions are already stable and must not be widened.
-                    if (self.config.temporal_mask_union
-                            and not timed_region_spans
-                            and not self.config.sttn_skip_detection
-                            and len(masks) > 1):
-                        scene_starts = _detect_scene_cuts(frames)
-                        masks = stabilize_masks_rolling_union(
-                            masks, scene_starts,
-                            self.config.temporal_mask_window)
-                        if masks:
-                            last_mask = masks[-1]
+                    active_segments = []
+                    segment_start = None
+                    for index, passthrough in enumerate(passthrough_flags + [True]):
+                        if not passthrough and segment_start is None:
+                            segment_start = index
+                        elif passthrough and segment_start is not None:
+                            active_segments.append((segment_start, index))
+                            segment_start = None
+                    for segment_start, segment_end in active_segments:
+                        segment_frames = frames[segment_start:segment_end]
+                        segment_masks = masks[segment_start:segment_end]
+                        segment_masks = self._propagate_masks_with_cotracker(
+                            segment_frames, segment_masks)
+                        segment_masks = self._refine_masks_with_matanyone(
+                            segment_frames, segment_masks)
+                        # Scene-cut-safe temporal mask stabilization. Only in
+                        # automatic full-frame detection -- user-fixed regions
+                        # are already stable and must not be widened.
+                        if (self.config.temporal_mask_union
+                                and not timed_region_spans
+                                and not self.config.sttn_skip_detection
+                                and len(segment_masks) > 1):
+                            scene_starts = _detect_scene_cuts(segment_frames)
+                            segment_masks = stabilize_masks_rolling_union(
+                                segment_masks, scene_starts,
+                                self.config.temporal_mask_window)
+                        masks[segment_start:segment_end] = segment_masks
                     # B-3: accumulate the union-mask bbox for the quality report
                     # ROI after optional mask refiners have finalized the mask.
                     if self.config.quality_report:
-                        for m in masks:
-                            self._accumulate_quality_bbox(m)
-                if masks:
-                    last_mask = masks[-1]
+                        for index, mask in enumerate(masks):
+                            if not passthrough_flags[index]:
+                                self._accumulate_quality_bbox(mask)
+                active_masks = [
+                    mask for index, mask in enumerate(masks)
+                    if not passthrough_flags[index]
+                ]
+                if active_masks:
+                    last_mask = active_masks[-1]
 
                 progress = min(0.9, frame_idx / max(1, frames_to_process) * 0.8 + 0.1)
                 self._report_progress(progress, f"Processing frame {frame_idx}/{frames_to_process}...")
 
                 with self._time_stage("inpaint"):
-                    results = self._inpaint_batch_resilient(frames, masks)
+                    results = [frame.copy() for frame in frames]
+                    for segment_start, segment_end in active_segments:
+                        results[segment_start:segment_end] = (
+                            self._inpaint_batch_resilient(
+                                frames[segment_start:segment_end],
+                                masks[segment_start:segment_end],
+                            )
+                        )
                 if self.config.quality_report and results:
                     self._accumulate_seam_scores(frames, results, masks)
                 stride = max(1, self.live_preview_stride)
@@ -2378,6 +2555,9 @@ class SubtitleRemover:
             reader.release()
             reader = None
             cap = None
+            if selective_cap is not None:
+                selective_cap.release()
+                selective_cap = None
             with self._time_stage("encode"):
                 writer.release()
             writer = None
@@ -2624,6 +2804,12 @@ class SubtitleRemover:
                     cap.release()
                 except Exception:
                     logger.warning("Input capture release failed", exc_info=True)
+            if selective_cap is not None:
+                try:
+                    selective_cap.release()
+                except Exception:
+                    logger.warning(
+                        "Selective-rerun capture release failed", exc_info=True)
             _cleanup_temp_output(temp_mask_path)
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
@@ -2726,6 +2912,7 @@ class SubtitleRemover:
                 quality_report=quality_report,
                 quality_gate=quality_gate,
                 output_contract=self.last_output_contract,
+                selective_rerun=getattr(self, "last_selective_rerun", None),
                 checkpoint_resumed=checkpoint_resumed,
                 app_version=APP_VERSION,
             )

@@ -435,6 +435,7 @@ class ProcessingControllerMixin:
             item.mask_export = {}
             item.timing_report = {}
             item.output_contract_report = {}
+            item.selective_rerun = {}
             item.cancel_requested = False  # F-7 reset on fresh attempt
             if not hasattr(self, "pause_event"):
                 self.pause_event = threading.Event()
@@ -589,6 +590,14 @@ class ProcessingControllerMixin:
             retry_backoff = max(0.0, float(getattr(
                 item.config, 'batch_retry_backoff_seconds', 5.0)))
             attempt = 0
+            correction_retry = (
+                item.correction_retry
+                if isinstance(getattr(item, "correction_retry", None), dict)
+                else {}
+            )
+            selective_rerun_from = str(
+                correction_retry.get("source_output") or "") or None
+            selective_rerun_ranges = correction_retry.get("ranges") or None
             while True:
                 raised_error = False
                 try:
@@ -604,6 +613,8 @@ class ProcessingControllerMixin:
                             checkpoint_key=ckpt_key,
                             resume_checkpoint=True,
                             pause_check=self.pause_event.is_set,
+                            selective_rerun_from=selective_rerun_from,
+                            selective_rerun_ranges=selective_rerun_ranges,
                         )
                     elif is_image_file(item.file_path):
                         success = remover.process_image(
@@ -631,6 +642,10 @@ class ProcessingControllerMixin:
                         remover, "last_output_contract", None)
                     if isinstance(output_contract, dict):
                         item.output_contract_report = dict(output_contract)
+                    selective_evidence = getattr(
+                        remover, "last_selective_rerun", None)
+                    if isinstance(selective_evidence, dict):
+                        item.selective_rerun = dict(selective_evidence)
                     if success:
                         break
                     failure_message = (
@@ -724,6 +739,7 @@ class ProcessingControllerMixin:
                 item.progress = 1.0
                 item.error = None
                 item.quality_report = getattr(remover, "last_quality_report", None)
+                item.correction_retry = None
                 item.message = "Complete!"
                 quality_note = format_quality_report(item.quality_report, compact=True)
                 if quality_note:

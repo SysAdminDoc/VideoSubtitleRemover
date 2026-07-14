@@ -210,6 +210,11 @@ class PreviewControllerMixin:
             bool(selected) and not self.is_processing,
             reason=unavailable_reason,
         )
+        if hasattr(self, "preview_correction_btn"):
+            self.preview_correction_btn.set_enabled(
+                bool(selected) and not self.is_processing and PIL_AVAILABLE,
+                reason=unavailable_reason,
+            )
         self.preview_zoom_btn.set_enabled(
             can_preview,
             reason=unavailable_reason,

@@ -605,6 +605,7 @@ def _quality_report_record(metrics: dict) -> dict:
         "lpips",
         "dists",
         "sheet",
+        "mask_review_spans",
     )
     return {key: metrics.get(key) for key in keys if key in metrics}
 
@@ -683,6 +684,7 @@ def build_output_sidecar(
     quality_report: Optional[dict] = None,
     quality_gate: Optional[dict] = None,
     output_contract: Optional[dict] = None,
+    selective_rerun: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> dict:
@@ -736,6 +738,8 @@ def build_output_sidecar(
         payload["qualityGate"] = quality_gate
     if output_contract is not None:
         payload["outputContract"] = dict(output_contract)
+    if selective_rerun is not None:
+        payload["selectiveMaskRerun"] = dict(selective_rerun)
     return payload
 
 
@@ -750,6 +754,7 @@ def write_output_sidecar(
     quality_report: Optional[dict] = None,
     quality_gate: Optional[dict] = None,
     output_contract: Optional[dict] = None,
+    selective_rerun: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> Optional[Path]:
@@ -765,6 +770,7 @@ def write_output_sidecar(
             quality_report=quality_report,
             quality_gate=quality_gate,
             output_contract=output_contract,
+            selective_rerun=selective_rerun,
             checkpoint_resumed=checkpoint_resumed,
             app_version=app_version,
         )
