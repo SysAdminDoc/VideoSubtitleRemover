@@ -7,7 +7,7 @@
 ![Version](https://img.shields.io/badge/version-3.17.3-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
-![Python](https://img.shields.io/badge/python-3.10--3.13%20CUDA-blue)
+![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
 
 **Professional AI-powered tool for removing hard-coded subtitles from videos and images**
 
@@ -61,7 +61,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 | RAM | 8 GB | 16+ GB |
 | GPU | Any (CPU mode) | NVIDIA RTX 2060+ (RTX 50-series supported via CUDA 12.8) |
 | VRAM | - | 6+ GB |
-| Python | 3.10 | 3.12 or 3.13 for CUDA |
+| Python | 3.11 | 3.12 or 3.13 for CUDA |
 
 ## Installation
 
@@ -71,7 +71,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 2. **Double-click** `Run_VSR_Pro.bat` — first run automatically:
    - Creates a virtual environment
    - Detects your GPU and installs appropriate packages
-   - Installs PaddleOCR, EasyOCR, and LaMa inpainting
+   - Installs the reviewed RapidOCR/ONNX runtime for the detected hardware
    - Launches the application
    - On later launches, verifies core packages and repairs a broken `venv`
      without stdin prompts
@@ -94,18 +94,33 @@ cd VideoSubtitleRemover
 python -m venv venv
 .\venv\Scripts\activate
 
-# Install PyTorch (choose one -- Python 3.12/3.13 recommended for CUDA):
+# Choose a reviewed profile: cpu, nvidia, or directml.
+$profile = "cpu"
+
+# Install PyTorch (Python 3.12/3.13 recommended for CUDA):
 # NVIDIA RTX 20/30/40/50-series:
-pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
+pip install torch>=2.10.0 torchvision>=0.25.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cu128
 # CPU:
-pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
+pip install torch>=2.10.0 torchvision>=0.25.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cpu
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -r requirements.txt --constraint "dependency_profiles/$profile.txt"
 
 # Run
 python VideoSubtitleRemover.py
 ```
+
+`python setup.py --profile auto` selects the reviewed CPU, NVIDIA, or DirectML
+profile from detected hardware; pass a profile name explicitly for repeatable
+CI or repair installs. Maintainers update `dependency_profiles.json`, run
+`python -m backend.dependency_profiles update`, review the emitted diffs, and
+then run `python -m backend.dependency_profiles check`. Generated constraint
+and manifest SHA-256 values are included in release evidence. PaddleOCR,
+EasyOCR, and legacy `simple-lama-inpainting` remain isolated opt-ins because
+their OpenCV wheel ownership or NumPy caps conflict with the primary runtime.
+Python 3.11 is the minimum supported interpreter because the security-reviewed
+ONNX Runtime CPU/CUDA floor and pinned DirectML release do not provide Python
+3.10 wheels.
 
 ### FFmpeg (Required for audio)
 
@@ -212,9 +227,9 @@ The app automatically selects the best available engine:
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
 | 1 | **RapidOCR** (ONNX/OpenVINO PP-OCR) | `pip install "rapidocr>=2.0.0,<4.0.0"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | ONNX Runtime by default; OpenVINO auto-preferred on CPU/Intel when installed |
-| 2 | PaddleOCR (3.x, PP-OCRv6 default in 3.7) | `pip install "paddleocr>=3.0.0,<4.0.0"` | 106 | High accuracy reference implementation; PP-OCRv5/v6 result payloads are supported |
+| 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.6.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | High accuracy reference implementation; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
-| 4 | EasyOCR | `pip install easyocr` | 80+ | Legacy fallback |
+| 4 | EasyOCR | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Legacy fallback; installs its own OpenCV wheel |
 | 5 | OpenCV fallback | Built-in | Any | Threshold-based |
 
 Experimental VLM OCR tiers stay default-off. `VSR_VLM_OCR=florence2`,
@@ -317,7 +332,8 @@ is installed, and duplicates the nearer cleaned keyframe across scene cuts or
 missing RIFE adapters.
 The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
-crash the GUI process during import. Prefer `VSR_LAMA_ONNX` or
+crash the GUI process during import. Its NumPy <2 cap also conflicts with the
+primary OpenCV runtime, so use a separate legacy environment. Prefer `VSR_LAMA_ONNX` or
 `VSR_OPENCV_LAMA` for automatic LaMa acceleration.
 
 ## CLI Usage
@@ -626,7 +642,7 @@ content, colors are preserved. If you still see a mismatch, attach the
 <details>
 <summary><b>Application won't start</b></summary>
 
-- Ensure Python 3.10+ is installed; use Python 3.12 or 3.13 for NVIDIA CUDA
+- Ensure Python 3.11+ is installed; use Python 3.12 or 3.13 for NVIDIA CUDA
 - Re-run a launcher to auto-repair a missing or broken `venv`, or run
   `python setup.py --repair` from the repo root for the same unattended repair
 - Try `Run_VSR_Pro_Debug.bat` to keep the console open during startup, or

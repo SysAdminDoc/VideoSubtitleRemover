@@ -32,6 +32,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Checking reviewed dependency profiles...
+"%PYTHON%" -m backend.dependency_profiles check
+if errorlevel 1 (
+    echo Dependency profile files are stale. Regenerate and review them first.
+    exit /b 1
+)
+
 echo.
 echo Running the complete test suite...
 "%PYTHON%" -m unittest discover -s tests -q

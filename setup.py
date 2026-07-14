@@ -15,6 +15,12 @@ import shutil
 import stat
 from pathlib import Path
 
+from backend.dependency_profiles import (
+    SUPPORTED_PROFILES,
+    ensure_profile_current,
+    select_profile,
+)
+
 # Enable ANSI escape codes on Windows 10+
 os.system('')
 REQUIREMENTS_FILE = Path("requirements.txt")
@@ -22,8 +28,38 @@ PYTHON_CUDA_WHEEL_MAX = (3, 13)
 PY314_CPU_OVERRIDE_ENV = "VSR_ALLOW_PY314_CPU"
 VENV_CREATE_TIMEOUT_SECONDS = 600
 PIP_INSTALL_TIMEOUT_SECONDS = 1800
+MINIMUM_PYTHON = (3, 11)
 DIRECTML_PACKAGE_VERSION = "1.24.4"
 DIRECTML_PACKAGE_SPEC = f"onnxruntime-directml=={DIRECTML_PACKAGE_VERSION}"
+
+
+def _dependency_profile_name(gpu_info=None):
+    info = dict(gpu_info or {})
+    return str(info.get("dependency_profile") or select_profile(info))
+
+
+def _profile_constraint_args(gpu_info=None):
+    name = _dependency_profile_name(gpu_info)
+    return ["--constraint", str(ensure_profile_current(name))]
+
+
+def _apply_profile_override(gpu_info, requested):
+    """Apply an explicit deterministic install profile to detected hardware."""
+    info = gpu_info
+    if requested == "auto":
+        info["dependency_profile"] = select_profile(info)
+        return info
+    detected_intel = bool(info.get("intel"))
+    detected_amd = bool(info.get("amd"))
+    detected_nvidia = bool(info.get("nvidia"))
+    info["nvidia"] = requested == "nvidia"
+    info["amd"] = requested == "directml" and (detected_amd or not detected_intel)
+    info["intel"] = requested == "directml" and detected_intel
+    info["blackwell"] = bool(
+        requested == "nvidia" and detected_nvidia and info.get("blackwell"))
+    info["cuda_disabled_by_python"] = False
+    info["dependency_profile"] = requested
+    return info
 
 
 def _windows_cuda_wheels_unavailable(version=None, system_name=None):
@@ -83,6 +119,7 @@ def _preflight_directml_distribution(pip):
         "--only-binary=:all:",
         "--no-deps",
         DIRECTML_PACKAGE_SPEC,
+        *_profile_constraint_args({"amd": True, "dependency_profile": "directml"}),
     ]
     try:
         result = subprocess.run(
@@ -167,8 +204,8 @@ def check_python():
     print(f"{Colors.BLUE}[1/6]{Colors.END} Checking Python version...")
     
     version = sys.version_info
-    if version.major < 3 or (version.major == 3 and version.minor < 10):
-        print(f"{Colors.RED}ERROR: Python 3.10+ required. Found: {version.major}.{version.minor}{Colors.END}")
+    if (version.major, version.minor) < MINIMUM_PYTHON:
+        print(f"{Colors.RED}ERROR: Python 3.11+ required. Found: {version.major}.{version.minor}{Colors.END}")
         return False
     
     print(f"  [OK] Python {version.major}.{version.minor}.{version.micro}")
@@ -316,6 +353,7 @@ def install_pytorch(gpu_info):
     print(f"\n{Colors.BLUE}[4/6]{Colors.END} Installing PyTorch...")
     
     pip = get_pip_command()
+    profile_args = _profile_constraint_args(gpu_info)
     
     try:
         # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434
@@ -323,6 +361,7 @@ def install_pytorch(gpu_info):
         if gpu_info["nvidia"] and _windows_cuda_wheels_unavailable():
             version = sys.version_info
             gpu_info["cuda_disabled_by_python"] = True
+            gpu_info["dependency_profile"] = "cpu"
             print(
                 f"{Colors.RED}  ERROR: Python {version.major}.{version.minor} cannot "
                 f"install Windows CUDA PyTorch wheels yet.{Colors.END}"
@@ -338,6 +377,7 @@ def install_pytorch(gpu_info):
             _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
+                *_profile_constraint_args(gpu_info),
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")
         elif gpu_info["nvidia"] and gpu_info["blackwell"]:
@@ -347,6 +387,7 @@ def install_pytorch(gpu_info):
             _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
+                *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cu128'
             ], "installing CUDA 12.8 PyTorch")
         elif gpu_info["nvidia"]:
@@ -354,6 +395,7 @@ def install_pytorch(gpu_info):
             _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
+                *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cu128'
             ], "installing CUDA 12.8 PyTorch")
         elif gpu_info["amd"] or gpu_info["intel"]:
@@ -362,6 +404,7 @@ def install_pytorch(gpu_info):
             _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
+                *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")
         else:
@@ -369,6 +412,7 @@ def install_pytorch(gpu_info):
             _run_pip_install([
                 pip, 'install',
                 'torch>=2.10.0', 'torchvision>=0.25.0',
+                *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")
         
@@ -386,6 +430,7 @@ def install_paddlepaddle(gpu_info):
     print(f"\n{Colors.BLUE}[5/6]{Colors.END} Installing PaddlePaddle...")
     
     pip = get_pip_command()
+    profile_args = _profile_constraint_args(gpu_info)
     
     try:
         if gpu_info["nvidia"] and gpu_info["blackwell"]:
@@ -396,18 +441,21 @@ def install_paddlepaddle(gpu_info):
             print(f"  Installing PaddlePaddle GPU (CUDA 12.6) version...")
             _run_pip_install([
                 pip, 'install', 'paddlepaddle-gpu==3.0.0',
+                *profile_args,
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cu126/'
             ], "installing CUDA 12.6 PaddlePaddle")
         elif gpu_info["nvidia"]:
             print(f"  Installing PaddlePaddle GPU version...")
             _run_pip_install([
                 pip, 'install', 'paddlepaddle-gpu==3.0.0',
+                *profile_args,
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cu118/'
             ], "installing CUDA PaddlePaddle")
         else:
             print(f"  Installing PaddlePaddle CPU version...")
             _run_pip_install([
                 pip, 'install', 'paddlepaddle==3.0.0',
+                *profile_args,
                 '-i', 'https://www.paddlepaddle.org.cn/packages/stable/cpu/'
             ], "installing CPU PaddlePaddle")
         
@@ -426,6 +474,7 @@ def install_dependencies(gpu_info=None):
     print(f"\n{Colors.BLUE}[6/6]{Colors.END} Installing other dependencies...")
     
     pip = get_pip_command()
+    profile_args = _profile_constraint_args(gpu_info)
 
     directml_requested = bool(
         gpu_info and (gpu_info.get("amd") or gpu_info.get("intel"))
@@ -445,7 +494,7 @@ def install_dependencies(gpu_info=None):
             print(f"  Installing dependencies from {REQUIREMENTS_FILE}...")
             try:
                 _run_pip_install(
-                    [pip, 'install', '-r', str(REQUIREMENTS_FILE)],
+                    [pip, 'install', '-r', str(REQUIREMENTS_FILE), *profile_args],
                     "installing requirements.txt",
                 )
                 print(f"  [OK] Requirements installed")
@@ -459,27 +508,19 @@ def install_dependencies(gpu_info=None):
                 'opencv-python>=4.12.0',
                 'Pillow>=12.3.0',
                 'rapidocr>=2.0.0,<4.0.0',
-                'easyocr>=1.7.0',
-                'simple-lama-inpainting>=0.1.0',
             ]
 
             for package in core_packages:
                 print(f"  Installing {package}...")
-                _run_pip_install([pip, 'install', package], f"installing {package}")
-
-            try:
                 _run_pip_install(
-                    [pip, 'install', 'paddleocr>=3.0.0,<4.0.0'],
-                    "installing PaddleOCR",
+                    [pip, 'install', package, *profile_args],
+                    f"installing {package}",
                 )
-                print(f"  [OK] PaddleOCR installed")
-            except subprocess.CalledProcessError:
-                print(f"  Note: PaddleOCR skipped (RapidOCR / EasyOCR will be used instead)")
 
         if directml_requested:
             print("  Installing ONNX Runtime DirectML provider...")
             _run_pip_install(
-                [pip, 'install', DIRECTML_PACKAGE_SPEC],
+                [pip, 'install', DIRECTML_PACKAGE_SPEC, *profile_args],
                 "installing ONNX Runtime DirectML",
             )
             print(f"  [OK] ONNX Runtime DirectML installed")
@@ -487,7 +528,7 @@ def install_dependencies(gpu_info=None):
                 print("  Installing OpenVINO runtime for RapidOCR...")
                 try:
                     _run_pip_install(
-                        [pip, 'install', 'openvino>=2025.0.0'],
+                        [pip, 'install', 'openvino>=2025.0.0', *profile_args],
                         "installing OpenVINO runtime",
                     )
                     print(f"  [OK] OpenVINO runtime installed")
@@ -499,13 +540,20 @@ def install_dependencies(gpu_info=None):
             print("  Stable PyPI onnxruntime-gpu is the CUDA 12.x path; CUDA 13 uses ONNX Runtime nightly/custom wheels.")
             try:
                 _run_pip_install(
-                    [pip, 'install', 'onnxruntime-gpu>=1.25.0'],
+                    [pip, 'install', 'onnxruntime-gpu>=1.25.0', *profile_args],
                     "installing ONNX Runtime CUDA",
                 )
                 print(f"  [OK] ONNX Runtime CUDA provider installed")
             except subprocess.CalledProcessError as exc:
                 print(f"{Colors.YELLOW}  WARNING: ONNX Runtime CUDA install failed: {exc}{Colors.END}")
                 print("  LaMa ONNX will use CPU/DirectML if available; PyTorch/Paddle paths are unchanged.")
+        else:
+            print("  Installing ONNX Runtime CPU provider...")
+            _run_pip_install(
+                [pip, 'install', 'onnxruntime>=1.25.0', *profile_args],
+                "installing ONNX Runtime CPU",
+            )
+            print("  [OK] ONNX Runtime CPU provider installed")
 
         print(f"  [OK] All dependencies installed")
         return True
@@ -728,6 +776,12 @@ def parse_setup_args(argv=None):
         action="store_true",
         help="Recreate the repo-local venv after safety checks, without prompting.",
     )
+    parser.add_argument(
+        "--profile",
+        choices=("auto", *SUPPORTED_PROFILES),
+        default="auto",
+        help="Use a reviewed CPU, NVIDIA, or DirectML dependency profile.",
+    )
     return parser.parse_args(argv)
 
 
@@ -745,7 +799,14 @@ def main(argv=None):
         sys.exit(1)
     
     # Step 2: Detect GPU
-    gpu_info = detect_gpu()
+    gpu_info = _apply_profile_override(detect_gpu(), args.profile)
+    profile_name = _dependency_profile_name(gpu_info)
+    try:
+        ensure_profile_current(profile_name)
+    except RuntimeError as exc:
+        print(f"{Colors.RED}ERROR: {exc}{Colors.END}")
+        sys.exit(1)
+    print(f"  Dependency profile: {profile_name}")
     
     # Step 3: Create virtual environment
     if not create_virtual_env(repair=args.repair):
@@ -755,11 +816,9 @@ def main(argv=None):
     if not install_pytorch(gpu_info):
         sys.exit(1)
     
-    # Step 5: Install PaddlePaddle
-    if not install_paddlepaddle(gpu_info):
-        sys.exit(1)
-    
-    # Step 6: Install other dependencies
+    # Step 5: Install the default RapidOCR/ONNX dependency set. PaddleOCR and
+    # its PaddlePaddle runtime remain isolated opt-ins because they install a
+    # competing OpenCV wheel into the environment.
     if not install_dependencies(gpu_info):
         sys.exit(1)
     

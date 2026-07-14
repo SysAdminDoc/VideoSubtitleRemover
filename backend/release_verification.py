@@ -36,6 +36,7 @@ from backend.dependency_caps import (
     collect_rapidocr_engine_status,
     onnxruntime_release_advisories,
 )
+from backend.dependency_profiles import collect_dependency_profile_status
 from backend.ffmpeg_profiles import (
     FFMPEG_RELEASE_SOURCE,
     FFMPEG_SECURITY_SOURCE,
@@ -1188,6 +1189,10 @@ def build_release_evidence(
         for dep in dependencies
         if dep.get("name")
     }
+    dependency_profile = collect_dependency_profile_status(
+        env=env,
+        package_versions=package_versions,
+    )
     sbom = build_cyclonedx_sbom(
         dependencies,
         dist_dir=dist,
@@ -1288,6 +1293,7 @@ def build_release_evidence(
             "dependencyDrift": collect_dependency_drift_report(
                 package_versions=package_versions,
             ),
+            "dependencyProfile": dependency_profile,
             "adapterConformance": collect_adapter_conformance_matrix(env=env),
             "dependencyAudit": dependency_audit,
         },
@@ -1436,6 +1442,12 @@ def write_release_evidence(
             strict_errors.append(
                 "Frozen-runtime dependency audit found vulnerabilities or skipped packages"
             )
+        dependency_profile = evidence.get("releaseTools", {}).get(
+            "dependencyProfile", {})
+        if (not isinstance(dependency_profile, Mapping)
+                or not dependency_profile.get("valid")):
+            strict_errors.append(
+                "Reviewed dependency profile evidence is missing or stale")
         installer = evidence.get("installer", {})
         if (not isinstance(installer, Mapping)
                 or not installer.get("validPortableExecutable")):

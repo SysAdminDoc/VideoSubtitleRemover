@@ -1,0 +1,26 @@
+# Generated file. Edit dependency_profiles.json, then run:
+#   python -m backend.dependency_profiles update
+# Profile: directml
+# Provider: DmlExecutionProvider
+# Reviewed: 2026-07-14
+# Manifest-SHA256: f784ecca00d2b25f6516b05d953cde1fae908abb77eb27a7c818a287770bc0d0
+#
+# Universal artifacts reviewed with a stable SHA-256:
+#   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
+#   paddleocr==3.6.0 sha256=76a03d260a2b5f7f3f1af017fbdc0cae3ccb2a538d40ba898a3a791711c34c33
+#   rapidocr==3.9.1 sha256=600885e4e94e0b427abad394fccb0ec1d3c9118a215ca435bf7680aeae0e292b
+
+# Exact reviewed direct-dependency constraints.
+numpy==2.2.6
+opencv-python==4.13.0.92
+opencv-python-headless==4.13.0.92
+Pillow==12.3.0
+rapidocr==3.9.1
+paddleocr==3.6.0
+easyocr==1.7.2
+simple-lama-inpainting==0.1.2
+onnxruntime-directml==1.24.4
+torch==2.10.0
+torchvision==0.25.0
+paddlepaddle==3.0.0
+openvino==2026.2.1

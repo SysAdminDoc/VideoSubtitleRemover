@@ -57,6 +57,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Reviewed dependency profiles.** CPU, NVIDIA, and DirectML setup now uses
+  generated exact constraints with manifest/profile hashes, a diffable update
+  command, Docker parity, and strict release-evidence capture. RapidOCR is the
+  deterministic default; PaddleOCR, EasyOCR, and legacy simple-lama are
+  isolated opt-ins because their OpenCV ownership or NumPy caps conflict with
+  the primary runtime. The supported Python floor is now 3.11 because the
+  reviewed ONNX Runtime CPU/CUDA and DirectML releases do not publish Python
+  3.10 wheels.
 - **Local release builds are fail-closed and artifact-derived.**
   `build_exe.bat` now runs the full suite, a frozen-runtime dependency audit,
   the reference corpus, PyInstaller/launcher smoke, production NSIS compile,

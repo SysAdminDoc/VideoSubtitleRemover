@@ -1,0 +1,73 @@
+{
+  "schema": "vsr.dependency_profiles.v1",
+  "reviewedAt": "2026-07-14",
+  "python": ">=3.11,<3.15",
+  "commonConstraints": [
+    "numpy==2.2.6",
+    "opencv-python==4.13.0.92",
+    "opencv-python-headless==4.13.0.92",
+    "Pillow==12.3.0",
+    "rapidocr==3.9.1",
+    "paddleocr==3.6.0",
+    "easyocr==1.7.2",
+    "simple-lama-inpainting==0.1.2"
+  ],
+  "profiles": {
+    "cpu": {
+      "constraints": [
+        "onnxruntime==1.27.0",
+        "torch==2.10.0",
+        "torchvision==0.25.0",
+        "paddlepaddle==3.0.0"
+      ],
+      "provider": "CPUExecutionProvider",
+      "indexes": [
+        "https://pypi.org/simple",
+        "https://download.pytorch.org/whl/cpu",
+        "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+      ]
+    },
+    "nvidia": {
+      "constraints": [
+        "onnxruntime-gpu==1.27.0",
+        "torch==2.10.0",
+        "torchvision==0.25.0",
+        "paddlepaddle-gpu==3.0.0"
+      ],
+      "provider": "CUDAExecutionProvider",
+      "indexes": [
+        "https://pypi.org/simple",
+        "https://download.pytorch.org/whl/cu128",
+        "https://www.paddlepaddle.org.cn/packages/stable/cu118/",
+        "https://www.paddlepaddle.org.cn/packages/stable/cu126/"
+      ]
+    },
+    "directml": {
+      "constraints": [
+        "onnxruntime-directml==1.24.4",
+        "torch==2.10.0",
+        "torchvision==0.25.0",
+        "paddlepaddle==3.0.0",
+        "openvino==2026.2.1"
+      ],
+      "provider": "DmlExecutionProvider",
+      "indexes": [
+        "https://pypi.org/simple",
+        "https://download.pytorch.org/whl/cpu",
+        "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+      ]
+    }
+  },
+  "reviewedArtifactHashes": {
+    "rapidocr==3.9.1": "600885e4e94e0b427abad394fccb0ec1d3c9118a215ca435bf7680aeae0e292b",
+    "paddleocr==3.6.0": "76a03d260a2b5f7f3f1af017fbdc0cae3ccb2a538d40ba898a3a791711c34c33",
+    "easyocr==1.7.2": "5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c"
+  },
+  "intentionalExceptions": [
+    "Python 3.10 is no longer a supported setup target because the security-reviewed ONNX Runtime 1.25+ CPU/CUDA line and the pinned DirectML 1.24.4 line do not publish CPython 3.10 wheels; Python 3.11 is the minimum reproducible runtime.",
+    "PaddleOCR, EasyOCR, and simple-lama remain reviewed opt-ins rather than default setup packages because their OpenCV wheel ownership or NumPy caps conflict with the primary OpenCV 4.13 and NumPy 2 runtime.",
+    "Native wheel hashes are not embedded in pip constraints because the supported Python, Windows, Linux, CPU, CUDA, and DirectML matrix produces different artifacts; exact versions, profile hashes, the frozen SBOM, and pip-audit evidence remain mandatory.",
+    "PyTorch and PaddlePaddle use vendor indexes whose platform-specific wheels are resolved during setup; release evidence records the reviewed index list and resolved artifact versions.",
+    "The Docker image installs the CPU profile's core smoke subset rather than optional OCR and PyTorch backends; it is a local pipeline smoke image, not the frozen Windows distribution."
+  ]
+}

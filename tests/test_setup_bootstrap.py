@@ -28,6 +28,14 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
             self.setup_mod._windows_cuda_wheels_unavailable(version, "Windows")
         )
 
+    def test_python_310_is_rejected_by_security_reviewed_profile_floor(self):
+        version = SimpleNamespace(major=3, minor=10, micro=14)
+        with mock.patch.object(self.setup_mod.sys, "version_info", version):
+            with mock.patch("builtins.print") as printed:
+                self.assertFalse(self.setup_mod.check_python())
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("Python 3.11+ required", output)
+
     def test_windows_python_313_keeps_cuda_path_available(self):
         version = SimpleNamespace(major=3, minor=13)
         self.assertFalse(

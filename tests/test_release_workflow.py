@@ -344,6 +344,11 @@ class ReleaseVerificationTests(unittest.TestCase):
             "vsr.ffmpeg_subprocess_smoke.v1",
         )
         self.assertTrue(evidence["releaseTools"]["ffmpegSubprocessSmoke"]["passed"])
+        self.assertTrue(evidence["releaseTools"]["dependencyProfile"]["valid"])
+        self.assertEqual(
+            len(evidence["releaseTools"]["dependencyProfile"]["constraintSha256"]),
+            64,
+        )
         self.assertTrue(evidence["rapidocrModels"]["packaging_compatible"])
         self.assertEqual(hidden_payload["schema"], "vsr.release_hidden_imports.v1")
         self.assertEqual(hidden_payload["runtimeHooks"], ["assets/runtime_hook_mp.py"])

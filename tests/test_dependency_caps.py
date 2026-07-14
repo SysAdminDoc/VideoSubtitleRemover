@@ -10,18 +10,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DependencyCapTests(unittest.TestCase):
-    def test_requirements_and_setup_use_ocr_major_caps(self):
+    def test_requirements_setup_and_profiles_use_ocr_caps(self):
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         setup = (ROOT / "setup.py").read_text(encoding="utf-8")
+        profiles = (ROOT / "dependency_profiles.json").read_text(encoding="utf-8")
 
-        for expected in (
-            "rapidocr>=2.0.0,<4.0.0",
-            "paddleocr>=3.0.0,<4.0.0",
-        ):
-            self.assertIn(expected, requirements)
-            self.assertIn(expected, setup)
+        self.assertIn("rapidocr>=2.0.0,<4.0.0", requirements)
+        self.assertIn("rapidocr>=2.0.0,<4.0.0", setup)
+        self.assertIn("paddleocr>=3.0.0,<4.0.0", requirements)
+        self.assertIn("paddleocr==3.6.0", profiles)
 
-        self.assertIn("rapidocr-onnxruntime>=1.4.0,<2.0.0", requirements)
+        self.assertNotIn("rapidocr-onnxruntime", requirements)
         self.assertIn("opencv-python>=4.12.0", requirements)
         self.assertIn(
             f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", requirements

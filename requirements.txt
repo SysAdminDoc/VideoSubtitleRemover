@@ -1,5 +1,9 @@
 # Video Subtitle Remover Pro - Dependencies
 # ==========================================
+# Install through setup.py, or constrain a manual install with one of the
+# generated dependency_profiles/{cpu,nvidia,directml}.txt files. Edit
+# dependency_profiles.json and run `python -m backend.dependency_profiles
+# update` when intentionally changing reviewed versions.
 
 # Core
 # opencv-python >= 4.12.0 patches CVE-2025-53644 (uninitialised pointer in
@@ -26,8 +30,8 @@ Pillow>=12.3.0
 # 2.9.1 and earlier. simple-lama-inpainting loads weights via torch.load,
 # so this is a runtime concern, not just a transitive-dependency one.
 
-# Python compatibility: torch 2.7+ supports Python 3.9-3.13 for Windows
-# CUDA wheels. Python 3.14 currently resolves CPU-only torch on Windows;
+# Python compatibility: VSR requires Python 3.11+. PyTorch publishes Windows
+# CUDA wheels through Python 3.13. Python 3.14 currently resolves CPU-only torch;
 # setup.py blocks that NVIDIA path unless VSR_ALLOW_PY314_CPU=1 is set.
 
 # ONNX Runtime >= 1.25.0 is required for CPU/CUDA. Older builds predate parser
@@ -68,18 +72,24 @@ Pillow>=12.3.0
 # RapidOCR runs PP-OCR via ONNX Runtime by default, can use OpenVINO when
 # openvino is installed on CPU/Intel systems, and stays free of the upstream
 # paddlepaddle memory-leak issues.
-rapidocr>=2.0.0,<4.0.0; python_version>="3.10"
-rapidocr-onnxruntime>=1.4.0,<2.0.0; python_version<"3.10"
-paddleocr>=3.0.0,<4.0.0
+rapidocr>=2.0.0,<4.0.0
+# Optional fallback engines are intentionally not part of the default resolver:
+# PaddleOCR installs opencv-contrib-python and EasyOCR installs
+# opencv-python-headless, both of which compete with the GUI runtime's single
+# opencv-python cv2 owner. Their reviewed versions remain in the generated
+# dependency profiles for explicit, isolated installs.
+# paddleocr>=3.0.0,<4.0.0
 # surya-ocr>=0.9.0  # Optional: fast layout-aware detection (GPL -- see license)
-easyocr>=1.7.0
+# easyocr>=1.7.0
 
 # Real AI Inpainting (LAMA mode)
 # simple-lama-inpainting is now an optional fallback dependency. The
 # preferred backends (ONNX Runtime or OpenCV 5 DNN) avoid the torch.load
 # CVE surface entirely. Install simple-lama-inpainting only if neither
-# onnxruntime nor opencv-python >= 5.0 is available.
-simple-lama-inpainting>=0.1.0
+# onnxruntime nor opencv-python >= 5.0 is available. Its NumPy <2 requirement
+# is incompatible with the reviewed OpenCV 4.13 / NumPy 2 runtime, so install
+# it only in an isolated legacy environment.
+# simple-lama-inpainting>=0.1.0
 
 # GUI Enhancement (optional)
 # tkinterdnd2>=0.3.0  # For native drag-drop support
