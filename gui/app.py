@@ -312,6 +312,7 @@ class VideoSubtitleRemoverApp(
         except Exception:
             pass
         save_settings(self.config)
+        save_queue_state(self.queue)
         self._finish_close_when_safe(time.monotonic() + 2.0)
 
     def _finish_close_when_safe(self, deadline: float):
@@ -321,6 +322,7 @@ class VideoSubtitleRemoverApp(
             self._join_processing_thread(0.05)
         if not self._has_active_processing_thread() or time.monotonic() >= deadline:
             self._join_processing_thread(0.2)
+            save_queue_state(self.queue)
             try:
                 self.root.destroy()
             except Exception:
@@ -455,6 +457,8 @@ class VideoSubtitleRemoverApp(
         output_updates = self._refresh_idle_output_paths()
         if output_updates:
             self._update_queue_display()
+        if updated or output_updates:
+            save_queue_state(self.queue)
         return updated
 
     def _apply_region_settings_to_idle_items(self) -> int:
@@ -3594,6 +3598,7 @@ class VideoSubtitleRemoverApp(
                     "Use Set region to draw the subtitle band, or Review mask to confirm what the detector finds automatically."
                 )
             )
+        save_queue_state(self.queue)
 
     def _start_soft_subtitle_probe(self, item: QueueItem) -> None:
         """Probe embedded subtitle streams off the Tk thread."""
@@ -3649,6 +3654,7 @@ class VideoSubtitleRemoverApp(
             ))
         if item.id in self.queue_widgets:
             self.queue_widgets[item.id].update_item(item)
+        save_queue_state(self.queue)
         self._update_status(f"{Path(item.file_path).name}: {labels[action]}", "info")
 
     def _refresh_idle_output_paths(self) -> int:
@@ -3664,6 +3670,8 @@ class VideoSubtitleRemoverApp(
             if self._normalized_path_key(item.output_path) != self._normalized_path_key(new_path):
                 item.output_path = str(new_path)
                 refreshed += 1
+        if refreshed:
+            save_queue_state(self.queue)
         return refreshed
 
     def _announce_import_summary(self, stats: dict):
@@ -3871,6 +3879,7 @@ class VideoSubtitleRemoverApp(
                 pass
         self.queue_widgets.clear()
         self._update_queue_display()
+        save_queue_state(self.queue)
         self._update_status("Queue sorted")
 
     @staticmethod
@@ -4009,6 +4018,7 @@ class VideoSubtitleRemoverApp(
             item.config.normalized()
             if item.id in self.queue_widgets:
                 self.queue_widgets[item.id].update_item(item)
+            save_queue_state(self.queue)
             self._update_status(
                 f"Overrides saved for {Path(item.file_path).name}",
                 "success",
@@ -4086,6 +4096,7 @@ class VideoSubtitleRemoverApp(
             self.queue.append(new_item)
         self._update_queue_display()
         self._refresh_action_states()
+        save_queue_state(self.queue)
         self._update_status(
             f"Re-queued {Path(template.file_path).name} with the same settings",
             "info", toast=True,
@@ -4126,6 +4137,7 @@ class VideoSubtitleRemoverApp(
         item.output_path_locked = True
         if item.id in self.queue_widgets:
             self.queue_widgets[item.id].update_item(item)
+        save_queue_state(self.queue)
         if self._normalized_path_key(new_path) != self._normalized_path_key(resolved_path):
             self._update_status(
                 f"Output renamed to {resolved_path.name} to avoid an overwrite",
@@ -4420,6 +4432,7 @@ class VideoSubtitleRemoverApp(
             for item in self.queue:
                 if item.message == "Ready to retry" and item.id in self.queue_widgets:
                     self.queue_widgets[item.id].update_item(item)
+            save_queue_state(self.queue)
             self._update_status(f"Reset {count} item{'s' if count != 1 else ''} for retry", "success")
         else:
             self._update_status("There are no failed items to retry", "warning")
@@ -4465,6 +4478,7 @@ class VideoSubtitleRemoverApp(
                 added += 1
         if added:
             self._update_queue_display()
+            save_queue_state(self.queue)
             self._update_status(
                 f"Queued {added} file{'s' if added != 1 else ''} "
                 f"with the last job's settings",
@@ -4672,27 +4686,98 @@ class VideoSubtitleRemoverApp(
         ):
             clear_queue_state()
             return
+        restored: List[QueueItem] = []
+        seen_ids = {item.id for item in self.queue}
+        seen_paths = {
+            self._normalized_path_key(item.file_path) for item in self.queue
+        }
+        resumable_statuses = {
+            ProcessingStatus.IDLE,
+            ProcessingStatus.PAUSED,
+            ProcessingStatus.ERROR,
+            ProcessingStatus.CANCELLED,
+        }
         for record in valid:
+            path_key = self._normalized_path_key(record["file_path"])
+            if path_key in seen_paths:
+                continue
             cfg = ProcessingConfig.from_dict(record.get("config", {}))
-            self._add_to_queue(record["file_path"])
-            with self.queue_lock:
-                item = next(
-                    (i for i in reversed(self.queue)
-                     if i.file_path == record["file_path"]),
-                    None,
+            try:
+                status = ProcessingStatus(
+                    record.get("status", ProcessingStatus.IDLE.value))
+            except ValueError:
+                status = ProcessingStatus.IDLE
+            if status not in resumable_statuses:
+                status = (
+                    ProcessingStatus.PAUSED
+                    if record.get("pause_checkpoint_path")
+                    else ProcessingStatus.IDLE
                 )
-            if item is not None:
-                item.config = cfg
-                if record.get("output_path"):
-                    item.output_path = record["output_path"]
-                if record.get("status") == ProcessingStatus.PAUSED.value:
-                    item.status = ProcessingStatus.PAUSED
-                    item.progress = float(record.get("progress") or 0.0)
-                    item.message = record.get("message") or "Paused"
-                    item.pause_checkpoint_path = record.get("pause_checkpoint_path", "")
-                if isinstance(record.get("retry_config"), dict):
-                    item.retry_config = record["retry_config"]
-        clear_queue_state()
+            item_id = str(record.get("id") or uuid.uuid4().hex)
+            if item_id in seen_ids:
+                item_id = uuid.uuid4().hex
+            item = QueueItem(
+                id=item_id,
+                file_path=record["file_path"],
+                output_path=record["output_path"],
+                output_path_locked=bool(
+                    record.get("output_path_locked", True)),
+                config=cfg,
+                status=status,
+                progress=max(0.0, min(1.0, float(
+                    record.get("progress") or 0.0))),
+                message=str(record.get("message") or "Ready to process"),
+                error=(
+                    str(record.get("error"))
+                    if record.get("error") is not None else None
+                ),
+                stage_timings=(
+                    dict(record.get("stage_timings"))
+                    if isinstance(record.get("stage_timings"), dict)
+                    else {}
+                ),
+                pause_checkpoint_path=str(
+                    record.get("pause_checkpoint_path") or ""),
+                soft_subtitle_streams=list(
+                    record.get("soft_subtitle_streams") or []),
+                soft_subtitle_probe_done=bool(
+                    record.get("soft_subtitle_probe_done", False)),
+                soft_subtitle_action=str(
+                    record.get("soft_subtitle_action") or "burned_in"),
+                retry_config=(
+                    record.get("retry_config")
+                    if isinstance(record.get("retry_config"), dict)
+                    else None
+                ),
+                retry_attempts=max(0, int(
+                    record.get("retry_attempts") or 0)),
+                retry_errors=list(record.get("retry_errors") or []),
+                mask_export=(
+                    dict(record.get("mask_export"))
+                    if isinstance(record.get("mask_export"), dict)
+                    else {}
+                ),
+            )
+            if item.soft_subtitle_action not in {
+                "strip", "keep_all", "burned_in"
+            }:
+                item.soft_subtitle_action = "burned_in"
+            restored.append(item)
+            seen_ids.add(item.id)
+            seen_paths.add(path_key)
+
+        with self.queue_lock:
+            self.queue.extend(restored)
+        self._update_queue_display()
+        for item in restored:
+            if (
+                is_video_file(item.file_path)
+                and not item.soft_subtitle_probe_done
+            ):
+                self._start_soft_subtitle_probe(item)
+        # Replace the consumed snapshot with the reconstructed queue. Keeping
+        # this atomic snapshot makes a second crash/restore cycle lossless.
+        save_queue_state(self.queue)
         self._update_status(f"Restored {n} item{'s' if n != 1 else ''} from last session")
 
     def _queue_argv_files(self):
@@ -4789,4 +4874,3 @@ class VideoSubtitleRemoverApp(
 # =============================================================================
 # ENTRY POINT
 # =============================================================================
-

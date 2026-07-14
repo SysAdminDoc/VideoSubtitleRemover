@@ -33,6 +33,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Queue recovery could lose behavior and disappear after one restore.** Queue
+  state schema 2 now atomically preserves order, locked output paths, complete
+  config snapshots, embedded-subtitle choices, pause/retry evidence, and all
+  incomplete states. Normal close and every queue mutation refresh the
+  snapshot; corrupt files are quarantined; a successful restore writes a new
+  snapshot so repeated crash/restart cycles remain recoverable.
 - **Batch retries skipped normal processor failures.** CLI and GUI batch jobs
   now classify the processor's usual `False` failure result, apply bounded and
   pause/cancel-aware backoff, and retain retry attempts/errors in batch reports.

@@ -8,6 +8,7 @@ import math
 import os
 import sys
 import tempfile
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -61,6 +62,8 @@ LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
 QUEUE_STATE_FILE = LOG_DIR / "queue_state.json"
 MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
+QUEUE_STATE_SCHEMA = 2
+_queue_state_io_lock = threading.RLock()
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
 # semantics change. _migrate_settings() must learn the upgrade path so
@@ -730,6 +733,8 @@ def _write_json_atomic(path: Path, payload: dict):
         temp_path = Path(temp_name)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(temp_path, path)
     finally:
         if temp_path and temp_path.exists():
@@ -850,56 +855,162 @@ def save_settings(config: ProcessingConfig):
 
 
 def save_queue_state(queue_items):
-    """Persist idle/pending queue items atomically."""
+    """Persist every incomplete queue item in display order atomically.
+
+    In-flight states are serialized as resumable states: a job with a pause
+    checkpoint becomes paused, otherwise it becomes idle.  This prevents a
+    process crash or normal close from restoring an item into a state the
+    scheduler will skip forever.
+    """
     try:
-        records = []
-        for item in queue_items:
-            if item.status not in (ProcessingStatus.IDLE, ProcessingStatus.PAUSED):
-                continue
-            records.append({
-                "file_path": item.file_path,
-                "output_path": item.output_path,
-                "config": item.config.to_dict() if item.config else {},
-                "status": item.status.value,
-                "progress": item.progress,
-                "message": item.message,
-                "pause_checkpoint_path": getattr(item, "pause_checkpoint_path", ""),
-                "retry_config": (
-                    item.retry_config
-                    if isinstance(getattr(item, "retry_config", None), dict)
-                    else None
-                ),
+        with _queue_state_io_lock:
+            records = []
+            for item in list(queue_items):
+                if item.status == ProcessingStatus.COMPLETE:
+                    continue
+                status = item.status
+                message = item.message
+                if status in (
+                    ProcessingStatus.LOADING,
+                    ProcessingStatus.DETECTING,
+                    ProcessingStatus.PROCESSING,
+                    ProcessingStatus.MERGING,
+                ):
+                    if getattr(item, "pause_checkpoint_path", ""):
+                        status = ProcessingStatus.PAUSED
+                        message = "Recovered from an interrupted session"
+                    else:
+                        status = ProcessingStatus.IDLE
+                        message = "Ready to resume after an interrupted session"
+                records.append({
+                    "id": str(item.id),
+                    "file_path": item.file_path,
+                    "output_path": item.output_path,
+                    "output_path_locked": bool(item.output_path_locked),
+                    "config": item.config.to_dict() if item.config else {},
+                    "status": status.value,
+                    "progress": item.progress,
+                    "message": message,
+                    "error": (
+                        str(item.error) if item.error is not None else None),
+                    "stage_timings": dict(
+                        getattr(item, "stage_timings", {}) or {}),
+                    "pause_checkpoint_path": getattr(
+                        item, "pause_checkpoint_path", ""),
+                    "soft_subtitle_streams": list(
+                        getattr(item, "soft_subtitle_streams", []) or []),
+                    "soft_subtitle_probe_done": bool(
+                        getattr(item, "soft_subtitle_probe_done", False)),
+                    "soft_subtitle_action": str(
+                        getattr(item, "soft_subtitle_action", "burned_in")),
+                    "retry_config": (
+                        item.retry_config
+                        if isinstance(
+                            getattr(item, "retry_config", None), dict)
+                        else None
+                    ),
+                    "retry_attempts": int(
+                        getattr(item, "retry_attempts", 0) or 0),
+                    "retry_errors": list(
+                        getattr(item, "retry_errors", []) or []),
+                    "mask_export": dict(
+                        getattr(item, "mask_export", {}) or {}),
+                })
+            if not records:
+                if QUEUE_STATE_FILE.exists():
+                    QUEUE_STATE_FILE.unlink()
+                return
+            _write_json_atomic(QUEUE_STATE_FILE, {
+                "schema": QUEUE_STATE_SCHEMA,
+                "items": records,
             })
-        _write_json_atomic(QUEUE_STATE_FILE, {
-            "schema": 1,
-            "items": records,
-        })
     except Exception as exc:
         logger.debug(f"Queue state save failed: {exc}")
 
 
-def load_queue_state():
-    """Load saved queue state. Returns a list of dicts or None."""
+def _quarantine_queue_state(reason: str) -> Optional[Path]:
+    """Move unreadable queue state aside so startup cannot loop on it."""
     try:
         if not QUEUE_STATE_FILE.exists():
             return None
-        data = _read_json_object(QUEUE_STATE_FILE, "queue_state")
-        if data is None or data.get("schema") != 1:
-            return None
-        items = data.get("items")
-        if not isinstance(items, list) or not items:
-            return None
-        return items
-    except Exception as exc:
-        logger.debug(f"Queue state load failed: {exc}")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        quarantine = QUEUE_STATE_FILE.with_name(
+            f"{QUEUE_STATE_FILE.stem}.corrupt-{stamp}-{uuid.uuid4().hex[:8]}"
+            f"{QUEUE_STATE_FILE.suffix}"
+        )
+        os.replace(QUEUE_STATE_FILE, quarantine)
+        logger.warning(
+            "Quarantined invalid queue state at %s: %s", quarantine, reason)
+        return quarantine
+    except OSError as exc:
+        logger.warning("Could not quarantine invalid queue state: %s", exc)
         return None
+
+
+def load_queue_state():
+    """Load saved queue state. Returns a list of dicts or None."""
+    with _queue_state_io_lock:
+        try:
+            if not QUEUE_STATE_FILE.exists():
+                return None
+            data = _read_json_object(QUEUE_STATE_FILE, "queue_state")
+            if data is None:
+                _quarantine_queue_state("unreadable JSON object")
+                return None
+            schema = data.get("schema")
+            if schema not in (1, QUEUE_STATE_SCHEMA):
+                _quarantine_queue_state(f"unsupported schema {schema!r}")
+                return None
+            items = data.get("items")
+            if not isinstance(items, list):
+                _quarantine_queue_state("items is not a list")
+                return None
+            if len(items) > 500:
+                _quarantine_queue_state("item count exceeds 500")
+                return None
+            for record in items:
+                if (
+                    not isinstance(record, dict)
+                    or not isinstance(record.get("file_path"), str)
+                    or not isinstance(record.get("output_path"), str)
+                    or not isinstance(record.get("config", {}), dict)
+                ):
+                    _quarantine_queue_state("item record is malformed")
+                    return None
+                if (
+                    not isinstance(record.get("soft_subtitle_streams", []), list)
+                    or not isinstance(record.get("retry_errors", []), list)
+                    or not isinstance(record.get("stage_timings", {}), dict)
+                    or not isinstance(record.get("mask_export", {}), dict)
+                ):
+                    _quarantine_queue_state("item evidence fields are malformed")
+                    return None
+                try:
+                    float(record.get("progress") or 0.0)
+                    int(record.get("retry_attempts") or 0)
+                except (TypeError, ValueError):
+                    _quarantine_queue_state("item numeric fields are malformed")
+                    return None
+            if not items:
+                return None
+            if schema == 1:
+                # Schema 1 persisted an exact output path but not whether it
+                # was user-locked. Lock it during migration so later settings
+                # refreshes cannot silently rewrite a restored destination.
+                items = [dict(record, output_path_locked=True) for record in items]
+            return items
+        except Exception as exc:
+            logger.debug(f"Queue state load failed: {exc}")
+            _quarantine_queue_state(str(exc))
+            return None
 
 
 def clear_queue_state():
     """Remove the saved queue state file."""
     try:
-        if QUEUE_STATE_FILE.exists():
-            QUEUE_STATE_FILE.unlink()
+        with _queue_state_io_lock:
+            if QUEUE_STATE_FILE.exists():
+                QUEUE_STATE_FILE.unlink()
     except Exception:
         pass
 

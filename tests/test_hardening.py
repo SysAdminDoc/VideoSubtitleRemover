@@ -5951,21 +5951,36 @@ class QueueAutosaveRoundTripTests(unittest.TestCase):
             id="rt-1",
             file_path="video.mp4",
             output_path="cleaned.mp4",
+            output_path_locked=True,
             config=gui_config.ProcessingConfig(
                 detection_lang="ja",
                 output_quality=18,
             ),
+            soft_subtitle_streams=[{"index": 2, "codec": "ass"}],
+            soft_subtitle_probe_done=True,
+            soft_subtitle_action="strip",
+            retry_config={"source": "quality_gate"},
         )
         gui_config.save_queue_state([item])
         loaded = gui_config.load_queue_state()
         self.assertIsNotNone(loaded)
         self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["id"], "rt-1")
         self.assertEqual(loaded[0]["file_path"], "video.mp4")
+        self.assertTrue(loaded[0]["output_path_locked"])
         self.assertEqual(loaded[0]["config"]["detection_lang"], "ja")
+        self.assertEqual(loaded[0]["soft_subtitle_action"], "strip")
+        self.assertTrue(loaded[0]["soft_subtitle_probe_done"])
+        self.assertEqual(loaded[0]["soft_subtitle_streams"][0]["codec"], "ass")
+        self.assertEqual(loaded[0]["retry_config"]["source"], "quality_gate")
+        self.assertEqual(
+            json.loads(gui_config.QUEUE_STATE_FILE.read_text(encoding="utf-8"))["schema"],
+            gui_config.QUEUE_STATE_SCHEMA,
+        )
         gui_config.clear_queue_state()
         self.assertIsNone(gui_config.load_queue_state())
 
-    def test_non_idle_items_are_not_saved(self):
+    def test_completed_items_are_not_saved(self):
         import gui.config as gui_config
         idle = gui_config.QueueItem(
             id="idle-1", file_path="a.mp4", output_path="a_out.mp4",
@@ -5981,6 +5996,19 @@ class QueueAutosaveRoundTripTests(unittest.TestCase):
         self.assertIsNotNone(loaded)
         self.assertEqual(len(loaded), 1)
         self.assertEqual(loaded[0]["file_path"], "a.mp4")
+
+    def test_inflight_item_is_saved_as_resumable(self):
+        import gui.config as gui_config
+        running = gui_config.QueueItem(
+            id="running-1", file_path="a.mp4", output_path="a_out.mp4",
+            config=gui_config.ProcessingConfig(),
+            status=gui_config.ProcessingStatus.PROCESSING,
+            progress=0.25,
+        )
+        gui_config.save_queue_state([running])
+        loaded = gui_config.load_queue_state()
+        self.assertEqual(loaded[0]["status"], "idle")
+        self.assertIn("interrupted session", loaded[0]["message"])
 
     def test_paused_items_are_saved_for_resume(self):
         import gui.config as gui_config
@@ -6002,6 +6030,82 @@ class QueueAutosaveRoundTripTests(unittest.TestCase):
             loaded[0]["pause_checkpoint_path"],
             "checkpoints/demo.pause.json",
         )
+
+    def test_corrupt_state_is_quarantined(self):
+        import gui.config as gui_config
+        gui_config.QUEUE_STATE_FILE.write_text("{broken", encoding="utf-8")
+
+        self.assertIsNone(gui_config.load_queue_state())
+        self.assertFalse(gui_config.QUEUE_STATE_FILE.exists())
+        quarantined = list(
+            Path(self._tmp.name).glob("queue.corrupt-*.json"))
+        self.assertEqual(len(quarantined), 1)
+
+    def test_two_restore_cycles_preserve_order_outputs_and_behavior(self):
+        import gui.config as gui_config
+
+        work = Path(self._tmp.name)
+        first_source = work / "first.mp4"
+        second_source = work / "second.mp4"
+        first_source.write_bytes(b"first")
+        second_source.write_bytes(b"second")
+        first = gui_config.QueueItem(
+            id="first-id",
+            file_path=str(first_source),
+            output_path=str(work / "custom-first.mkv"),
+            output_path_locked=True,
+            config=gui_config.ProcessingConfig(output_codec="h265"),
+            soft_subtitle_streams=[{"index": 4, "codec": "ass"}],
+            soft_subtitle_probe_done=True,
+            soft_subtitle_action="strip",
+        )
+        second = gui_config.QueueItem(
+            id="second-id",
+            file_path=str(second_source),
+            output_path=str(work / "custom-second.mp4"),
+            output_path_locked=True,
+            config=gui_config.ProcessingConfig(detection_lang="ja"),
+            status=gui_config.ProcessingStatus.PAUSED,
+            progress=0.4,
+            message="Paused at checkpoint",
+            pause_checkpoint_path=str(work / "second.pause.json"),
+            soft_subtitle_probe_done=True,
+        )
+        gui_config.save_queue_state([first, second])
+
+        def make_app():
+            app = gui.VideoSubtitleRemoverApp.__new__(
+                gui.VideoSubtitleRemoverApp)
+            app.queue = []
+            app.queue_lock = threading.Lock()
+            app.queue_widgets = {}
+            app.root = unittest.mock.Mock()
+            app._selected_queue_item_id = None
+            app._update_queue_display = unittest.mock.Mock()
+            app._update_status = unittest.mock.Mock()
+            app._start_soft_subtitle_probe = unittest.mock.Mock()
+            return app
+
+        with unittest.mock.patch("gui.app.show_confirm", return_value=True):
+            first_app = make_app()
+            first_app._maybe_restore_queue()
+            self.assertTrue(gui_config.QUEUE_STATE_FILE.exists())
+            second_app = make_app()
+            second_app._maybe_restore_queue()
+
+        self.assertEqual(
+            [item.id for item in second_app.queue],
+            ["first-id", "second-id"],
+        )
+        self.assertEqual(
+            [item.output_path for item in second_app.queue],
+            [str(work / "custom-first.mkv"), str(work / "custom-second.mp4")],
+        )
+        self.assertTrue(all(item.output_path_locked for item in second_app.queue))
+        self.assertEqual(second_app.queue[0].soft_subtitle_action, "strip")
+        self.assertEqual(second_app.queue[0].config.output_codec, "h265")
+        self.assertEqual(second_app.queue[1].status, gui_config.ProcessingStatus.PAUSED)
+        self.assertEqual(second_app.queue[1].config.detection_lang, "ja")
 
 
 class CliNumericRangeTests(unittest.TestCase):

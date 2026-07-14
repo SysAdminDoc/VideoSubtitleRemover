@@ -381,6 +381,7 @@ class ProcessingControllerMixin:
                 break
 
         # Final batch state
+        save_queue_state(self.queue)
         try:
             self.root.after(0, self._update_batch_progress, total, total)
             self.root.after(0, self._on_processing_complete)
@@ -881,6 +882,8 @@ class ProcessingControllerMixin:
         finally:
             if self._active_remover is locals().get("remover"):
                 self._active_remover = None
+            if hasattr(self, "queue"):
+                save_queue_state(self.queue)
 
     def _ensure_taskbar(self):
         """Lazily create the Windows taskbar progress client once the window
