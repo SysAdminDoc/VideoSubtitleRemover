@@ -63,7 +63,7 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.safe_image import safe_imread
-from backend.i18n import bind_locale, system_locale_tag, tr
+from backend.i18n import available_catalogs, bind_locale, tr
 from backend.region_keyframes import (
     normalize_region_keyframe_tracks,
     region_shapes_at,
@@ -92,7 +92,7 @@ class VideoSubtitleRemoverApp(
         # in a process after a high-contrast instance.
         self.config = load_settings()
         self._settings_load_notice = consume_settings_load_notice()
-        bind_locale(system_locale_tag())
+        bind_locale(getattr(self.config, "ui_locale", "system"))
         self._text_scale_percent = set_text_scale_percent(
             getattr(self.config, "text_scale_percent", 100))
         self._text_scale_factor = text_scale_factor()
@@ -438,6 +438,9 @@ class VideoSubtitleRemoverApp(
                 100,
                 200,
             )
+        if hasattr(self, 'locale_var'):
+            self.config.ui_locale = self._locale_display_to_tag.get(
+                self.locale_var.get(), "system")
         if hasattr(self, 'update_check_var'):
             self.config.update_check = self.update_check_var.get()
         if hasattr(self, 'json_log_var'):
@@ -2212,6 +2215,48 @@ class VideoSubtitleRemoverApp(
         Tooltip(
             text_scale_combo,
             tr("Scales interface text and dependent controls on the next launch."),
+        )
+
+        locale_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        locale_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
+        tk.Label(
+            locale_row,
+            text=tr("Interface language (restart required)"),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        self._locale_display_to_tag = {
+            tr("System"): "system",
+            tr("English"): "en",
+        }
+        for locale_tag in available_catalogs():
+            self._locale_display_to_tag.setdefault(locale_tag, locale_tag)
+        saved_locale = getattr(self.config, "ui_locale", "system")
+        locale_display = next(
+            (
+                display
+                for display, locale_tag in self._locale_display_to_tag.items()
+                if locale_tag.lower() == str(saved_locale).lower()
+            ),
+            str(saved_locale),
+        )
+        if locale_display not in self._locale_display_to_tag:
+            self._locale_display_to_tag[locale_display] = str(saved_locale)
+        self.locale_var = tk.StringVar(value=locale_display)
+        self.locale_combo = ttk.Combobox(
+            locale_row,
+            textvariable=self.locale_var,
+            values=tuple(self._locale_display_to_tag),
+            width=14,
+            state="readonly",
+            style="Dark.TCombobox",
+            font=f(Theme.F_BODY_SM),
+        )
+        self.locale_combo.pack(side="right")
+        Tooltip(
+            self.locale_combo,
+            tr("Uses the system language or a compiled catalog on the next launch."),
         )
 
         # RM-96: high-contrast theme toggle. Takes effect on next launch

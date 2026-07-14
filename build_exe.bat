@@ -53,6 +53,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Checking gettext catalogs...
+"%PYTHON%" scripts\i18n_catalogs.py check
+if errorlevel 1 (
+    echo Gettext catalogs drifted or failed validation; release build stopped.
+    exit /b 1
+)
+
 echo.
 echo Running the complete test suite...
 "%PYTHON%" -m unittest discover -s tests -q
@@ -187,6 +194,7 @@ if not exist "!SMOKE_INSTALL_DIR!\VideoSubtitleRemoverPro.exe" (
 
 echo.
 echo Generating local release evidence...
+set "VSR_SMOKE_LOCALE=qps-Ploc"
 "%PYTHON%" -m backend.release_verification ^
     --dist-dir "!DIST_DIR!" ^
     --analysis-path "!ANALYSIS_PATH!" ^
@@ -199,8 +207,10 @@ echo Generating local release evidence...
     --run-reference-corpus ^
     --run-dependency-audit ^
     --quality strict
+set "RELEASE_EXIT=!ERRORLEVEL!"
+set "VSR_SMOKE_LOCALE="
 
-if errorlevel 1 (
+if not "!RELEASE_EXIT!"=="0" (
     echo.
     echo Release evidence generation failed.
     exit /b 1

@@ -168,6 +168,7 @@ device.
 python -m pip install ruff==0.15.20
 python -m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache
 python scripts/generate_cli_reference.py
+python scripts/i18n_catalogs.py check
 python -m unittest discover -s tests -v
 python -m backend.reference_corpus --json
 python tools/local_smoke.py
@@ -765,6 +766,20 @@ At 150% and 200%, the minimum 980x720 window switches to a compact, vertically
 scrollable layout so actions stay keyboard reachable without horizontal
 scrolling. The setting is under **Detailed controls** and applies to both the
 default and high-contrast themes after restart.
+
+The same panel offers a restart-applied interface language selector with
+System, English, and every compiled catalog discovered under `locale/` or the
+per-user `%APPDATA%\VideoSubtitleRemoverPro\locale\` directory. Translation
+contributors can refresh the POT template, merge PO files, build the bundled
+pseudo-locale, validate placeholders/plurals/UTF-8, compile MO files, and print
+coverage in one deterministic command:
+
+```powershell
+python scripts/i18n_catalogs.py update
+```
+
+Use `python scripts/i18n_catalogs.py check` in review or CI; it fails when the
+template, PO keys, pseudo-locale, or compiled catalogs drift.
 
 ## Troubleshooting
 

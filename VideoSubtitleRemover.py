@@ -14,6 +14,7 @@ multiprocessing.freeze_support()
 
 import logging
 import logging.handlers
+import os
 import sys
 import traceback
 # Kept for the back-compat surface: callers and tests reach
@@ -161,6 +162,18 @@ def _run_smoke_test() -> int:
             if not title.startswith(APP_NAME):
                 logger.error("Smoke test: unexpected window title %r", title)
                 return 1
+            smoke_locale = os.environ.get("VSR_SMOKE_LOCALE", "").strip()
+            if smoke_locale:
+                from backend.i18n import bind_locale as _bind_locale, tr as _tr
+
+                bound = _bind_locale(smoke_locale)
+                translated = _tr("Start batch")
+                if bound == "en" or translated == "Start batch":
+                    logger.error(
+                        "Smoke test: locale %r was not loaded from the frozen payload",
+                        smoke_locale,
+                    )
+                    return 1
             logger.info("Smoke test passed: GUI constructed and torn down.")
             return 0
         except Exception:

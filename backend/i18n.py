@@ -1,7 +1,6 @@
-"""GUI localisation scaffold.
+"""Gettext runtime for source, frozen, and per-user locale catalogs.
 
-RM-97: ship the infrastructure for a translatable GUI before any
-actual translations land. The scaffold provides:
+The runtime provides:
 
 - A `_()` helper that returns the input string unchanged when no
   catalog is bound, and the translated string otherwise.
@@ -11,8 +10,7 @@ actual translations land. The scaffold provides:
 - A `bind_locale(lang)` entry point the GUI calls at startup. The
   lookup walks `locale/<lang>/LC_MESSAGES/vsr.mo` and falls back to
   English when the catalog is missing.
-- A `messages.pot`-style template at `locale/vsr.pot` that is refreshed
-  from the GUI call sites using the same `_`/`tr` keywords.
+- A deterministic catalog lifecycle through `scripts/i18n_catalogs.py`.
 
 The module imports cleanly when `gettext` is missing because gettext
 is stdlib; the only way it disappears is on broken-up CPython builds
@@ -45,11 +43,24 @@ def _candidate_locale_dirs() -> list:
     install dir; system locations last."""
     candidates = []
     here = Path(__file__).resolve().parent.parent
-    candidates.append(here / "locale")
+    bundle_root = Path(getattr(sys, "_MEIPASS", here))
+    candidates.append(bundle_root / "locale")
+    if bundle_root != here:
+        candidates.append(here / "locale")
     appdata = os.environ.get("APPDATA")
     if appdata:
         candidates.append(Path(appdata) / "VideoSubtitleRemoverPro" / "locale")
-    return [c for c in candidates if c.exists()]
+    unique = []
+    seen = set()
+    for candidate in candidates:
+        try:
+            key = str(candidate.resolve()).lower()
+        except OSError:
+            key = str(candidate).lower()
+        if key not in seen and candidate.exists():
+            unique.append(candidate)
+            seen.add(key)
+    return unique
 
 
 _active_translation: Optional[gettext.NullTranslations] = None
@@ -215,6 +226,17 @@ def gettext_passthrough(text: str) -> str:
 def tr(text: str) -> str:
     """Documented GUI alias for gettext extraction (`xgettext -ktr`)."""
     return _(text)
+
+
+def ntr(singular: str, plural: str, count: int) -> str:
+    """Translate a plural pair through the active catalog."""
+    if _active_translation is None:
+        return singular if count == 1 else plural
+    return _active_translation.ngettext(singular, plural, count)
+
+
+def current_locale() -> str:
+    return _active_locale
 
 
 def is_translation_active() -> bool:

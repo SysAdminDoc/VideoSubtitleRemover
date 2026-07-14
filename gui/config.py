@@ -16,7 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from backend.i18n import tr
+from backend.i18n import normalise_locale_tag, tr
 from backend.config_schema import (
     CONFIG_SCHEMA_VERSION,
     GUI_SETTINGS_FORMAT,
@@ -432,6 +432,7 @@ class ProcessingConfig:
     onboarding_seen: bool = False
     high_contrast: bool = False
     text_scale_percent: int = 100
+    ui_locale: str = "system"
     rtl_layout: bool = False
     update_check: bool = False
     json_log_enabled: bool = False
@@ -611,6 +612,13 @@ class ProcessingConfig:
         self.high_contrast = _coerce_bool(self.high_contrast, False)
         self.text_scale_percent = normalize_text_scale_percent(
             self.text_scale_percent)
+        locale_choice = _coerce_text(self.ui_locale, "system", 32)
+        if locale_choice.lower() == "system":
+            self.ui_locale = "system"
+        elif locale_choice.lower() in {"en", "english"}:
+            self.ui_locale = "en"
+        else:
+            self.ui_locale = normalise_locale_tag(locale_choice) or "system"
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         self.update_check = _coerce_bool(self.update_check, False)
         self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)

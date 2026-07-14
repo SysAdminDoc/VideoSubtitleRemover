@@ -1,0 +1,1461 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: VideoSubtitleRemoverPro\n"
+"Report-Msgid-Bugs-To: https://github.com/SysAdminDoc/VideoSubtitleRemover/issues\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: qps-Ploc\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: gui/app.py:2159
+msgid "0 cleans every frame. Values above 1 clean fewer frames and recreate the gaps when Practical-RIFE is installed."
+msgstr "[!! 0 çŀéåńš éṽéŕý ƒŕåḿé. Ṽåŀûéš åƀöṽé 1 çŀéåń ƒéŵéŕ ƒŕåḿéš åńð ŕéçŕéåţé ţħé ĝåƥš ŵħéń Ƥŕåçţîçåŀ-ŔÎƑÉ îš îńšţåŀŀéð. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2053
+msgid "0 uses the full clip"
+msgstr "[!! 0 ûšéš ţħé ƒûŀŀ çŀîƥ ! !!]"
+
+#: gui/app.py:2613
+msgid "A/B compare"
+msgstr "[!! Å/Ɓ çöḿƥåŕé ! !!]"
+
+#: gui/support_controller.py:49
+msgid "ACTIVITY"
+msgstr "[!! ÅÇŢÎṼÎŢÝ ! !!]"
+
+#: gui/support_controller.py:461 gui/support_controller.py:471
+msgid "About {app_name}"
+msgstr "[!! Åƀöûţ {app_name} ! !!]"
+
+#: gui/support_controller.py:148
+msgid "Activity log cleared"
+msgstr "[!! Åçţîṽîţý ŀöĝ çŀéåŕéð ! !!]"
+
+#: gui/app.py:1831
+msgid "Adaptive edge padding"
+msgstr "[!! Åðåƥţîṽé éðĝé ƥåððîńĝ ! !!]"
+
+#: gui/preview_controller.py:296
+msgid "Add a file to the queue first"
+msgstr "[!! Åðð å ƒîŀé ţö ţħé ɋûéûé ƒîŕšţ ! ! !!]"
+
+#: gui/app.py:2736
+msgid "Add every supported media file from a folder."
+msgstr "[!! Åðð éṽéŕý šûƥƥöŕţéð ḿéðîå ƒîŀé ƒŕöḿ å ƒöŀðéŕ. ! ! ! !!]"
+
+#: gui/widgets.py:1664 gui/widgets.py:1749
+msgid "Add files to the queue"
+msgstr "[!! Åðð ƒîŀéš ţö ţħé ɋûéûé ! !!]"
+
+#: gui/app.py:2862
+msgid "Add files, review a sample frame, then start."
+msgstr "[!! Åðð ƒîŀéš, ŕéṽîéŵ å šåḿƥŀé ƒŕåḿé, ţħéń šţåŕţ. ! ! ! !!]"
+
+#: gui/app.py:1465
+msgid "Add files, review one sample, then run the batch."
+msgstr "[!! Åðð ƒîŀéš, ŕéṽîéŵ öńé šåḿƥŀé, ţħéń ŕûń ţħé ƀåţçħ. ! ! ! ! !!]"
+
+#: gui/app.py:3944
+msgid "Add keyframe"
+msgstr "[!! Åðð ķéýƒŕåḿé ! !!]"
+
+#: gui/app.py:1029
+msgid "Add media to the queue before starting."
+msgstr "[!! Åðð ḿéðîå ţö ţħé ɋûéûé ƀéƒöŕé šţåŕţîńĝ. ! ! ! !!]"
+
+#: gui/app.py:1836
+msgid "Add more padding around uncertain text detections while keeping confident detections tight. Helps catch faint edges."
+msgstr "[!! Åðð ḿöŕé ƥåððîńĝ åŕöûńð ûńçéŕţåîń ţéẋţ ðéţéçţîöńš ŵħîŀé ķééƥîńĝ çöńƒîðéńţ ðéţéçţîöńš ţîĝħţ. Ħéŀƥš çåţçħ ƒåîńţ éðĝéš. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:3941
+msgid "Add timed"
+msgstr "[!! Åðð ţîḿéð ! !!]"
+
+#: gui/app.py:2710
+msgid "Add videos or images to build a cleanup batch. Originals are never modified."
+msgstr "[!! Åðð ṽîðéöš öŕ îḿåĝéš ţö ƀûîŀð å çŀéåńûƥ ƀåţçħ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1956
+msgid "Adjust how many frames are processed together to fit available GPU memory. Recommended for 4K video."
+msgstr "[!! Åðĵûšţ ħöŵ ḿåńý ƒŕåḿéš åŕé ƥŕöçéššéð ţöĝéţħéŕ ţö ƒîţ åṽåîŀåƀŀé ĜƤÛ ḿéḿöŕý. Ŕéçöḿḿéńðéð ƒöŕ 4Ķ ṽîðéö. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1646
+msgid "Algorithm"
+msgstr "[!! Åŀĝöŕîţħḿ ! !!]"
+
+#: gui/app.py:1861
+msgid "Align nearby frames before rebuilding hidden background pixels. Slower, but cleaner on pans and zooms."
+msgstr "[!! Åŀîĝń ńéåŕƀý ƒŕåḿéš ƀéƒöŕé ŕéƀûîŀðîńĝ ħîððéń ƀåçķĝŕöûńð ƥîẋéŀš. Šŀöŵéŕ, ƀûţ çŀéåńéŕ öń ƥåńš åńð žööḿš. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/widgets.py:1787
+msgid "All Files"
+msgstr "[!! Åŀŀ Ƒîŀéš ! !!]"
+
+#: gui/widgets.py:1784
+msgid "All Supported"
+msgstr "[!! Åŀŀ Šûƥƥöŕţéð ! !!]"
+
+#: gui/support_controller.py:215 gui/support_controller.py:275 gui/support_controller.py:308
+msgid "All files"
+msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
+
+#: gui/app.py:2272
+msgid "Alternative palette tuned for low-vision users. Persists across sessions."
+msgstr "[!! Åŀţéŕńåţîṽé ƥåŀéţţé ţûńéð ƒöŕ ŀöŵ-ṽîšîöń ûšéŕš. Ƥéŕšîšţš åçŕöšš šéššîöńš. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2853 gui/app.py:4930
+msgid "Application status"
+msgstr "[!! Åƥƥŀîçåţîöń šţåţûš ! !!]"
+
+#: gui/app.py:837 gui/app.py:849
+msgid "Audio"
+msgstr "[!! Åûðîö ! !!]"
+
+#: gui/app.py:917
+msgid "Auto-create an output folder beside each source"
+msgstr "[!! Åûţö-çŕéåţé åń öûţƥûţ ƒöŀðéŕ ƀéšîðé éåçħ šöûŕçé ! ! ! !!]"
+
+#: gui/app.py:1848
+msgid "Auto-detect subtitle band on load"
+msgstr "[!! Åûţö-ðéţéçţ šûƀţîţŀé ƀåńð öń ŀöåð ! ! !!]"
+
+#: gui/app.py:1708
+msgid "Auto-detect the subtitle language from a sample frame."
+msgstr "[!! Åûţö-ðéţéçţ ţħé šûƀţîţŀé ŀåńĝûåĝé ƒŕöḿ å šåḿƥŀé ƒŕåḿé. ! ! ! ! !!]"
+
+#: gui/app.py:1967
+msgid "Automatic detection only. Carry recent text masks forward for a few frames so a single missed detection does not leave a flash."
+msgstr "[!! Åûţöḿåţîç ðéţéçţîöń öńŀý. Çåŕŕý ŕéçéńţ ţéẋţ ḿåšķš ƒöŕŵåŕð ƒöŕ å ƒéŵ ƒŕåḿéš šö å šîńĝŀé ḿîššéð ðéţéçţîöń ðöéš ńöţ ŀéåṽé å ƒŀåšħ. ! ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:959
+msgid "Automatic subtitle detection"
+msgstr "[!! Åûţöḿåţîç šûƀţîţŀé ðéţéçţîöń ! ! !!]"
+
+#: gui/support_controller.py:412
+msgid "BACKEND STATUS"
+msgstr "[!! ƁÅÇĶÉŃÐ ŠŢÅŢÛŠ ! !!]"
+
+#: gui/support_controller.py:473
+msgid "Backend status and app version."
+msgstr "[!! Ɓåçķéńð šţåţûš åńð åƥƥ ṽéŕšîöń. ! ! !!]"
+
+#: gui/app.py:187
+msgid "Backend status is still being probed."
+msgstr "[!! Ɓåçķéńð šţåţûš îš šţîŀŀ ƀéîńĝ ƥŕöƀéð. ! ! ! !!]"
+
+#: gui/quality_controller.py:71 gui/quality_controller.py:85
+msgid "Batch finished"
+msgstr "[!! Ɓåţçħ ƒîńîšħéð ! !!]"
+
+#: gui/quality_controller.py:86
+msgid "Batch finished with issues"
+msgstr "[!! Ɓåţçħ ƒîńîšħéð ŵîţħ îššûéš ! ! !!]"
+
+#: gui/app.py:1520
+msgid "Build your batch"
+msgstr "[!! Ɓûîŀð ýöûŕ ƀåţçħ ! !!]"
+
+#: gui/app.py:3045 gui/app.py:3076 gui/app.py:3080
+msgid "Built-in preset names are reserved."
+msgstr "[!! Ɓûîŀţ-îń ƥŕéšéţ ńåḿéš åŕé ŕéšéŕṽéð. ! ! !!]"
+
+#: gui/quality_controller.py:164
+msgid "COMPLETED"
+msgstr "[!! ÇÖḾƤĿÉŢÉÐ ! !!]"
+
+#: gui/app.py:840
+msgid "CPU mode"
+msgstr "[!! ÇƤÛ ḿöðé ! !!]"
+
+#: gui/support_controller.py:531
+msgid "CPU only"
+msgstr "[!! ÇƤÛ öńŀý ! !!]"
+
+#: gui/app.py:3088 gui/app.py:3955 gui/app.py:4575
+msgid "Cancel"
+msgstr "[!! Çåńçéŀ ! !!]"
+
+#: gui/widgets.py:2023
+msgid "Cancel this item"
+msgstr "[!! Çåńçéŀ ţħîš îţéḿ ! !!]"
+
+#: gui/app.py:1963
+msgid "Carry masks across missed detections"
+msgstr "[!! Çåŕŕý ḿåšķš åçŕöšš ḿîššéð ðéţéçţîöńš ! ! ! !!]"
+
+#: gui/app.py:4452
+msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
+msgstr "[!! Çħåńĝé çŀéåńûƥ šéţţîńĝš ƒöŕ ţħîš ɋûéûé îţéḿ öńŀý. Ƥŕéšš Çöńţŕöŀ+Éńţéŕ ţö šåṽé öŕ Éšçåƥé ţö çåńçéŀ. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2277
+msgid "Check for updates on startup"
+msgstr "[!! Çħéçķ ƒöŕ ûƥðåţéš öń šţåŕţûƥ ! ! !!]"
+
+#: gui/app.py:2012
+msgid "Check output quality after processing"
+msgstr "[!! Çħéçķ öûţƥûţ ɋûåŀîţý åƒţéŕ ƥŕöçéššîńĝ ! ! ! !!]"
+
+#: gui/app.py:2006
+msgid "Check text on major scene frames and reuse masks between them. Faster on long videos, less precise on motion."
+msgstr "[!! Çħéçķ ţéẋţ öń ḿåĵöŕ šçéńé ƒŕåḿéš åńð ŕéûšé ḿåšķš ƀéţŵééń ţħéḿ. Ƒåšţéŕ öń ŀöńĝ ṽîðéöš, ŀéšš ƥŕéçîšé öń ḿöţîöń. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1743 gui/app.py:809
+msgid "Checking FFmpeg availability for audio preservation..."
+msgstr "[!! Çħéçķîńĝ ƑƑḿƥéĝ åṽåîŀåƀîŀîţý ƒöŕ åûðîö ƥŕéšéŕṽåţîöń... ! ! ! ! !!]"
+
+#: gui/widgets.py:1796
+msgid "Choose a folder to clean"
+msgstr "[!! Çħööšé å ƒöŀðéŕ ţö çŀéåń ! ! !!]"
+
+#: gui/app.py:2719 gui/widgets.py:1680
+msgid "Choose files"
+msgstr "[!! Çħööšé ƒîŀéš ! !!]"
+
+#: gui/widgets.py:1720
+msgid "Choose files or a folder below. Originals are never modified."
+msgstr "[!! Çħööšé ƒîŀéš öŕ å ƒöŀðéŕ ƀéŀöŵ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! !!]"
+
+#: gui/widgets.py:1782
+msgid "Choose files to clean"
+msgstr "[!! Çħööšé ƒîŀéš ţö çŀéåń ! !!]"
+
+#: gui/app.py:1575 gui/app.py:2315 gui/app.py:2729 gui/widgets.py:1685
+msgid "Choose folder"
+msgstr "[!! Çħööšé ƒöŀðéŕ ! !!]"
+
+#: gui/app.py:2726
+msgid "Choose one or more videos or images to add to the queue."
+msgstr "[!! Çħööšé öńé öŕ ḿöŕé ṽîðéöš öŕ îḿåĝéš ţö åðð ţö ţħé ɋûéûé. ! ! ! ! !!]"
+
+#: gui/app.py:1992
+msgid "Clean up interlaced video automatically"
+msgstr "[!! Çŀéåń ûƥ îńţéŕŀåçéð ṽîðéö åûţöḿåţîçåŀŀý ! ! ! !!]"
+
+#: gui/app.py:1656
+msgid "Cleanup algorithm"
+msgstr "[!! Çŀéåńûƥ åŀĝöŕîţħḿ ! !!]"
+
+#: gui/app.py:2490 gui/support_controller.py:78
+msgid "Clear"
+msgstr "[!! Çŀéåŕ ! !!]"
+
+#: gui/app.py:3938
+msgid "Clear all"
+msgstr "[!! Çŀéåŕ åŀŀ ! !!]"
+
+#: gui/app.py:2770
+msgid "Clear filter"
+msgstr "[!! Çŀéåŕ ƒîŀţéŕ ! !!]"
+
+#: gui/app.py:2681
+msgid "Clear queue"
+msgstr "[!! Çŀéåŕ ɋûéûé ! !!]"
+
+#: gui/app.py:2760
+msgid "Clear the filter or search for part of a filename."
+msgstr "[!! Çŀéåŕ ţħé ƒîŀţéŕ öŕ šéåŕçħ ƒöŕ ƥåŕţ öƒ å ƒîŀéńåḿé. ! ! ! ! !!]"
+
+#: gui/support_controller.py:540
+msgid "Click Import or drag files onto the queue"
+msgstr "[!! Çŀîçķ Îḿƥöŕţ öŕ ðŕåĝ ƒîŀéš öńţö ţħé ɋûéûé ! ! ! !!]"
+
+#: gui/app.py:2542
+msgid "Click a queue item, then use Set region or Review mask."
+msgstr "[!! Çŀîçķ å ɋûéûé îţéḿ, ţħéń ûšé Šéţ ŕéĝîöń öŕ Ŕéṽîéŵ ḿåšķ. ! ! ! ! !!]"
+
+#: gui/preview_controller.py:718 gui/quality_controller.py:332 gui/support_controller.py:572
+msgid "Close"
+msgstr "[!! Çŀöšé ! !!]"
+
+#: gui/app.py:1895
+msgid "Colour-tuned mask expansion"
+msgstr "[!! Çöŀöûŕ-ţûńéð ḿåšķ éẋƥåńšîöń ! ! !!]"
+
+#: gui/quality_controller.py:129
+msgid "Completed outputs are ready. Review the outliers or open the log for details."
+msgstr "[!! Çöḿƥŀéţéð öûţƥûţš åŕé ŕéåðý. Ŕéṽîéŵ ţħé öûţŀîéŕš öŕ öƥéń ţħé ŀöĝ ƒöŕ ðéţåîŀš. ! ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:536
+msgid "Compute"
+msgstr "[!! Çöḿƥûţé ! !!]"
+
+#: gui/app.py:1669
+msgid "Compute device"
+msgstr "[!! Çöḿƥûţé ðéṽîçé ! !!]"
+
+#: gui/widgets.py:2010
+msgid "Copy CLI command"
+msgstr "[!! Çöƥý ÇĿÎ çöḿḿåńð ! !!]"
+
+#: gui/widgets.py:2008
+msgid "Copy source path"
+msgstr "[!! Çöƥý šöûŕçé ƥåţħ ! !!]"
+
+#: gui/preview_controller.py:331
+msgid "Could not detect language from this frame"
+msgstr "[!! Çöûŀð ńöţ ðéţéçţ ŀåńĝûåĝé ƒŕöḿ ţħîš ƒŕåḿé ! ! ! !!]"
+
+#: gui/app.py:915
+msgid "Custom location"
+msgstr "[!! Çûšţöḿ ŀöçåţîöń ! !!]"
+
+#: gui/preview_controller.py:86
+msgid "DETECTING"
+msgstr "[!! ÐÉŢÉÇŢÎŃĜ ! !!]"
+
+#: gui/app.py:919
+msgid "Default workflow"
+msgstr "[!! Ðéƒåûŀţ ŵöŕķƒŀöŵ ! !!]"
+
+#: gui/app.py:1703
+msgid "Detect"
+msgstr "[!! Ðéţéçţ ! !!]"
+
+#: gui/app.py:1996
+msgid "Detect and remove comb-like lines from older interlaced video before cleanup."
+msgstr "[!! Ðéţéçţ åńð ŕéḿöṽé çöḿƀ-ŀîķé ŀîńéš ƒŕöḿ öŀðéŕ îńţéŕŀåçéð ṽîðéö ƀéƒöŕé çŀéåńûƥ. ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:60
+msgid "Detecting"
+msgstr "[!! Ðéţéçţîńĝ ! !!]"
+
+#: gui/app.py:1673
+msgid "Detecting hardware..."
+msgstr "[!! Ðéţéçţîńĝ ħåŕðŵåŕé... ! !!]"
+
+#: gui/preview_controller.py:298
+msgid "Detecting language..."
+msgstr "[!! Ðéţéçţîńĝ ŀåńĝûåĝé... ! !!]"
+
+#: gui/app.py:835 gui/app.py:836 gui/app.py:837
+msgid "Detecting..."
+msgstr "[!! Ðéţéçţîńĝ... ! !!]"
+
+#: gui/app.py:836 gui/app.py:848 gui/support_controller.py:379
+msgid "Detection"
+msgstr "[!! Ðéţéçţîöń ! !!]"
+
+#: gui/support_controller.py:534
+msgid "Detection engines"
+msgstr "[!! Ðéţéçţîöń éńĝîńéš ! !!]"
+
+#: gui/app.py:835 gui/app.py:847
+msgid "Device"
+msgstr "[!! Ðéṽîçé ! !!]"
+
+#: gui/support_controller.py:546 gui/support_controller.py:548
+msgid "Disk cache"
+msgstr "[!! Ðîšķ çåçħé ! !!]"
+
+#: gui/app.py:2650
+msgid "Double-click to view at full size. Use Set region above to draw the subtitle band."
+msgstr "[!! Ðöûƀŀé-çŀîçķ ţö ṽîéŵ åţ ƒûŀŀ šîžé. Ûšé Šéţ ŕéĝîöń åƀöṽé ţö ðŕåŵ ţħé šûƀţîţŀé ƀåńð. ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:967
+msgid "Drag a larger subtitle region before releasing."
+msgstr "[!! Ðŕåĝ å ŀåŕĝéŕ šûƀţîţŀé ŕéĝîöń ƀéƒöŕé ŕéŀéåšîńĝ. ! ! ! !!]"
+
+#: gui/app.py:3642
+msgid "Drag a rectangle, or choose Polygon and click vertices."
+msgstr "[!! Ðŕåĝ å ŕéçţåńĝŀé, öŕ çħööšé Ƥöŀýĝöń åńð çŀîçķ ṽéŕţîçéš. ! ! ! ! !!]"
+
+#: gui/widgets.py:1671
+msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
+msgstr "[!! Ðŕåĝ ƒîŀéš ħéŕé, çħööšé ƒîŀéš, öŕ çħööšé å ƒöŀðéŕ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:817
+msgid "Drag over the subtitle text. Release to save and refresh the mask."
+msgstr "[!! Ðŕåĝ öṽéŕ ţħé šûƀţîţŀé ţéẋţ. Ŕéŀéåšé ţö šåṽé åńð ŕéƒŕéšħ ţħé ḿåšķ. ! ! ! ! ! !!]"
+
+#: gui/app.py:3962
+msgid "Drag to add a region. Drag again for multi-region."
+msgstr "[!! Ðŕåĝ ţö åðð å ŕéĝîöń. Ðŕåĝ åĝåîń ƒöŕ ḿûŀţî-ŕéĝîöń. ! ! ! ! !!]"
+
+#: gui/preview_controller.py:813
+msgid "Draw subtitle region for {name}"
+msgstr "[!! Ðŕåŵ šûƀţîţŀé ŕéĝîöń ƒöŕ {name} ! ! !!]"
+
+#: gui/app.py:2573
+msgid "Draw the subtitle region directly on the preview frame."
+msgstr "[!! Ðŕåŵ ţħé šûƀţîţŀé ŕéĝîöń ðîŕéçţŀý öń ţħé ƥŕéṽîéŵ ƒŕåḿé. ! ! ! ! !!]"
+
+#: gui/app.py:2107
+msgid "EBU R128 loudness target"
+msgstr "[!! ÉƁÛ Ŕ128 ŀöûðńéšš ţåŕĝéţ ! ! !!]"
+
+#: gui/app.py:2040
+msgid "End (s)"
+msgstr "[!! Éńð (š) ! !!]"
+
+#: gui/app.py:3726
+msgid "End sec"
+msgstr "[!! Éńð šéç ! !!]"
+
+#: gui/app.py:2231
+msgid "English"
+msgstr "[!! Éńĝŀîšħ ! !!]"
+
+#: gui/app.py:1632
+msgid "Export"
+msgstr "[!! Éẋƥöŕţ ! !!]"
+
+#: gui/app.py:1983
+msgid "Export debug mask video (.mask.mp4)"
+msgstr "[!! Éẋƥöŕţ ðéƀûĝ ḿåšķ ṽîðéö (.ḿåšķ.ḿƥ4) ! ! !!]"
+
+#: gui/app.py:1974
+msgid "Export detected text as .srt sidecar"
+msgstr "[!! Éẋƥöŕţ ðéţéçţéð ţéẋţ åš .šŕţ šîðéçåŕ ! ! ! !!]"
+
+#: gui/support_controller.py:273
+msgid "Export model cache"
+msgstr "[!! Éẋƥöŕţ ḿöðéŀ çåçħé ! !!]"
+
+#: gui/support_controller.py:348
+msgid "Export model cache..."
+msgstr "[!! Éẋƥöŕţ ḿöðéŀ çåçħé... ! !!]"
+
+#: gui/quality_controller.py:166
+msgid "FAILED"
+msgstr "[!! ƑÅÎĿÉÐ ! !!]"
+
+#: gui/support_controller.py:538
+msgid "FFmpeg"
+msgstr "[!! ƑƑḿƥéĝ ! !!]"
+
+#: gui/support_controller.py:394
+msgid "FFmpeg basic"
+msgstr "[!! ƑƑḿƥéĝ ƀåšîç ! !!]"
+
+#: gui/support_controller.py:397
+msgid "FFmpeg codecs"
+msgstr "[!! ƑƑḿƥéĝ çöðéçš ! !!]"
+
+#: gui/app.py:816
+msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
+msgstr "[!! ƑƑḿƥéĝ îš ńöţ åṽåîŀåƀŀé, šö öûţƥûţš ŵîŀŀ ƀé šåṽéð ŵîţħöûţ öŕîĝîńåŀ åûðîö ûńţîŀ îţ îš îńšţåŀŀéð. ! ! ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:395
+msgid "FFmpeg quality"
+msgstr "[!! ƑƑḿƥéĝ ɋûåŀîţý ! !!]"
+
+#: gui/app.py:844
+msgid "FFmpeg ready"
+msgstr "[!! ƑƑḿƥéĝ ŕéåðý ! !!]"
+
+#: gui/support_controller.py:396
+msgid "FFmpeg speech"
+msgstr "[!! ƑƑḿƥéĝ šƥééçħ ! !!]"
+
+#: gui/support_controller.py:401
+msgid "FFmpeg {name}"
+msgstr "[!! ƑƑḿƥéĝ {name} ! !!]"
+
+#: gui/widgets.py:2040
+msgid "Fast remux and keep embedded subtitles"
+msgstr "[!! Ƒåšţ ŕéḿûẋ åńð ķééƥ éḿƀéððéð šûƀţîţŀéš ! ! ! !!]"
+
+#: gui/widgets.py:2036
+msgid "Fast strip embedded subtitles"
+msgstr "[!! Ƒåšţ šţŕîƥ éḿƀéððéð šûƀţîţŀéš ! ! !!]"
+
+#: gui/app.py:2002
+msgid "Faster keyframe-only detection"
+msgstr "[!! Ƒåšţéŕ ķéýƒŕåḿé-öńŀý ðéţéçţîöń ! ! !!]"
+
+#: gui/app.py:4364
+msgid "File size (largest first)"
+msgstr "[!! Ƒîŀé šîžé (ŀåŕĝéšţ ƒîŕšţ) ! ! !!]"
+
+#: gui/app.py:4366
+msgid "File size (smallest first)"
+msgstr "[!! Ƒîŀé šîžé (šḿåŀŀéšţ ƒîŕšţ) ! ! !!]"
+
+#: gui/app.py:4359
+msgid "Filename (A -> Z)"
+msgstr "[!! Ƒîŀéńåḿé (Å -> Ž) ! !!]"
+
+#: gui/app.py:4361
+msgid "Filename (Z -> A)"
+msgstr "[!! Ƒîŀéńåḿé (Ž -> Å) ! !!]"
+
+#: gui/app.py:2471
+msgid "Filter"
+msgstr "[!! Ƒîŀţéŕ ! !!]"
+
+#: gui/app.py:3661
+msgid "Finish polygon"
+msgstr "[!! Ƒîńîšħ ƥöŀýĝöń ! !!]"
+
+#: gui/app.py:1040
+msgid "Finish processing an item to open its output folder."
+msgstr "[!! Ƒîńîšħ ƥŕöçéššîńĝ åń îţéḿ ţö öƥéń îţš öûţƥûţ ƒöŀðéŕ. ! ! ! ! !!]"
+
+#: gui/preview_controller.py:235
+msgid "Finish processing this item before using A/B compare."
+msgstr "[!! Ƒîńîšħ ƥŕöçéššîńĝ ţħîš îţéḿ ƀéƒöŕé ûšîńĝ Å/Ɓ çöḿƥåŕé. ! ! ! ! !!]"
+
+#: gui/app.py:1952
+msgid "Fit frame batches to GPU memory"
+msgstr "[!! Ƒîţ ƒŕåḿé ƀåţçħéš ţö ĜƤÛ ḿéḿöŕý ! ! !!]"
+
+#: gui/app.py:957
+msgid "Fixed mask region"
+msgstr "[!! Ƒîẋéð ḿåšķ ŕéĝîöń ! !!]"
+
+#: gui/app.py:949
+msgid "Fixed mask regions"
+msgstr "[!! Ƒîẋéð ḿåšķ ŕéĝîöńš ! !!]"
+
+#: gui/app.py:3966
+msgid "For motion, scrub, draw one shape, add a keyframe, then repeat and save motion."
+msgstr "[!! Ƒöŕ ḿöţîöń, šçŕûƀ, ðŕåŵ öńé šħåƥé, åðð å ķéýƒŕåḿé, ţħéń ŕéƥéåţ åńð šåṽé ḿöţîöń. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:3669
+msgid "Frame"
+msgstr "[!! Ƒŕåḿé ! !!]"
+
+#: gui/app.py:2145
+msgid "Frame interpolation stride"
+msgstr "[!! Ƒŕåḿé îńţéŕƥöŀåţîöń šţŕîðé ! ! !!]"
+
+#: gui/preview_controller.py:120
+msgid "Frame {current}/{total} ({percent}%)"
+msgstr "[!! Ƒŕåḿé {current}/{total} ({percent}%) ! ! ! !!]"
+
+#: gui/app.py:2587
+msgid "Full size"
+msgstr "[!! Ƒûŀŀ šîžé ! !!]"
+
+#: gui/app.py:3067 gui/app.py:3071
+msgid "Give this preset a short name."
+msgstr "[!! Ĝîṽé ţħîš ƥŕéšéţ å šħöŕţ ńåḿé. ! ! !!]"
+
+#: gui/app.py:3269
+msgid "Got it"
+msgstr "[!! Ĝöţ îţ ! !!]"
+
+#: gui/app.py:1899
+msgid "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering."
+msgstr "[!! Ĝŕöŵ ţħé ḿåšķ ţö çöṽéŕ šéŕîƒš / ðŕöƥ šħåðöŵš ţħåţ ḿåţçħ ţħé šûƀţîţŀé çöŀöûŕ. Çåţçħéš ðéçöŕåţîṽé ŀéţţéŕîńĝ. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1946
+msgid "H.264 plays almost everywhere. H.265 and AV1 make smaller files but take longer; VVC needs a compatible FFmpeg build."
+msgstr "[!! Ħ.264 ƥŀåýš åŀḿöšţ éṽéŕýŵħéŕé. Ħ.265 åńð ÅṼ1 ḿåķé šḿåŀŀéŕ ƒîŀéš ƀûţ ţåķé ŀöńĝéŕ; ṼṼÇ ńééðš å çöḿƥåţîƀŀé ƑƑḿƥéĝ ƀûîŀð. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1926
+msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
+msgstr "[!! Ħåŕðŵåŕé éńçöðîńĝ (ŃṼÉŃÇ / ɊŠṼ / ÅḾƑ) ŵîţħ šöƒţŵåŕé ƒåŀŀƀåçķ ! ! ! ! ! !!]"
+
+#: gui/app.py:2131
+msgid "Hardware-decode hint"
+msgstr "[!! Ħåŕðŵåŕé-ðéçöðé ħîńţ ! !!]"
+
+#: gui/support_controller.py:384
+msgid "Hash status"
+msgstr "[!! Ħåšħ šţåţûš ! !!]"
+
+#: gui/app.py:1477
+msgid "Help"
+msgstr "[!! Ħéŀƥ ! !!]"
+
+#: gui/support_controller.py:114 gui/support_controller.py:66
+msgid "Hide activity"
+msgstr "[!! Ħîðé åçţîṽîţý ! !!]"
+
+#: gui/app.py:2380
+msgid "Hide detailed controls"
+msgstr "[!! Ħîðé ðéţåîŀéð çöńţŕöŀš ! !!]"
+
+#: gui/app.py:2268
+msgid "High-contrast theme (restart required)"
+msgstr "[!! Ħîĝħ-çöńţŕåšţ ţħéḿé (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! !!]"
+
+#: gui/app.py:2875
+msgid "Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."
+msgstr "[!! Ħýƀŕîð ţéḿƥöŕåŀ + ĿåḾå ŕéƒîńéḿéńţ. Ɓéšţ ƒöŕ ḿöţîöń-ħéåṽý ƒööţåĝé öŕ ţħîçķ ţéẋţ. Ħîĝħéŕ ṼŔÅḾ åńð šŀöŵéŕ ţħåń ŠŢŢŃ. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/widgets.py:1786
+msgid "Image Files"
+msgstr "[!! Îḿåĝé Ƒîŀéš ! !!]"
+
+#: gui/app.py:1495 gui/app.py:1639
+msgid "Import"
+msgstr "[!! Îḿƥöŕţ ! !!]"
+
+#: gui/app.py:1528
+msgid "Import files or choose a folder to start."
+msgstr "[!! Îḿƥöŕţ ƒîŀéš öŕ çħööšé å ƒöŀðéŕ ţö šţåŕţ. ! ! ! !!]"
+
+#: gui/support_controller.py:307
+msgid "Import model cache"
+msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé ! !!]"
+
+#: gui/support_controller.py:352
+msgid "Import model cache..."
+msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé... ! !!]"
+
+#: gui/app.py:1909
+msgid "Improve detection for top-to-bottom Japanese or Chinese text. Saved masks stay aligned to the source."
+msgstr "[!! Îḿƥŕöṽé ðéţéçţîöń ƒöŕ ţöƥ-ţö-ƀöţţöḿ Ĵåƥåńéšé öŕ Çħîńéšé ţéẋţ. Šåṽéð ḿåšķš šţåý åŀîĝńéð ţö ţħé šöûŕçé. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:178
+msgid "Info"
+msgstr "[!! Îńƒö ! !!]"
+
+#: gui/support_controller.py:380
+msgid "Inpainting"
+msgstr "[!! Îńƥåîńţîńĝ ! !!]"
+
+#: gui/support_controller.py:535
+msgid "Inpainting engines"
+msgstr "[!! Îńƥåîńţîńĝ éńĝîńéš ! !!]"
+
+#: gui/support_controller.py:540
+msgid "Input"
+msgstr "[!! Îńƥûţ ! !!]"
+
+#: gui/app.py:1495
+msgid "Inspect"
+msgstr "[!! Îńšƥéçţ ! !!]"
+
+#: gui/preview_controller.py:200
+msgid "Install Pillow to enable image preview tools."
+msgstr "[!! Îńšţåŀŀ Ƥîŀŀöŵ ţö éńåƀŀé îḿåĝé ƥŕéṽîéŵ ţööŀš. ! ! ! !!]"
+
+#: gui/preview_controller.py:252
+msgid "Install Pillow to enable previews and visual inspection tools."
+msgstr "[!! Îńšţåŀŀ Ƥîŀŀöŵ ţö éńåƀŀé ƥŕéṽîéŵš åńð ṽîšûåŀ îńšƥéçţîöń ţööŀš. ! ! ! ! ! !!]"
+
+#: gui/app.py:2224
+msgid "Interface language (restart required)"
+msgstr "[!! Îńţéŕƒåçé ŀåńĝûåĝé (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! !!]"
+
+#: gui/app.py:2198
+msgid "Interface text size (restart required)"
+msgstr "[!! Îńţéŕƒåçé ţéẋţ šîžé (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! !!]"
+
+#: gui/app.py:934
+msgid "Interpolated keyframe masks"
+msgstr "[!! Îńţéŕƥöŀåţéð ķéýƒŕåḿé ḿåšķš ! ! !!]"
+
+#: gui/app.py:2085
+msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
+msgstr "[!! Ķåŕåöķé ĝŕöûƥîńĝ: ƒûšé ƥéŕ-šýŀŀåƀŀé ƀöẋéš öń ţħé šåḿé ŀîńé ! ! ! ! !!]"
+
+#: gui/app.py:1871
+msgid "Keep background recovery from mixing frames across scene changes. Recommended for edited video."
+msgstr "[!! Ķééƥ ƀåçķĝŕöûńð ŕéçöṽéŕý ƒŕöḿ ḿîẋîńĝ ƒŕåḿéš åçŕöšš šçéńé çħåńĝéš. Ŕéçöḿḿéńðéð ƒöŕ éðîţéð ṽîðéö. ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1867
+msgid "Keep scene changes separate"
+msgstr "[!! Ķééƥ šçéńé çħåńĝéš šéƥåŕåţé ! ! !!]"
+
+#: gui/app.py:2120
+msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
+msgstr "[!! ĿÛƑŠ. 0 = öƒƒ. ÝöûŢûƀé -14, Åƥƥŀé -16, ƀŕöåðçåšţ -23. ! ! ! ! !!]"
+
+#: gui/app.py:1729
+msgid "LaMa fast mode - favor speed over fill detail"
+msgstr "[!! ĿåḾå ƒåšţ ḿöðé - ƒåṽöŕ šƥééð öṽéŕ ƒîŀŀ ðéţåîŀ ! ! ! !!]"
+
+#: gui/app.py:1733
+msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
+msgstr "[!! ĿåḾå ƒåšţ ḿöðé îš ûšéƒûŀ ƒöŕ ɋûîçķ ƥåššéš åńð ŀöŵéŕ-ŕéšöŀûţîöń ðŕåƒţš. ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:382
+msgid "Languages"
+msgstr "[!! Ŀåńĝûåĝéš ! !!]"
+
+#: gui/app.py:2310
+msgid "Leave empty for the system temporary directory. The selected folder is write-tested before a batch starts."
+msgstr "[!! Ŀéåṽé éḿƥţý ƒöŕ ţħé šýšţéḿ ţéḿƥöŕåŕý ðîŕéçţöŕý. Ţħé šéŀéçţéð ƒöŀðéŕ îš ŵŕîţé-ţéšţéð ƀéƒöŕé å ƀåţçħ šţåŕţš. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:118
+msgid "Live preview: {file_name}"
+msgstr "[!! Ŀîṽé ƥŕéṽîéŵ: {file_name} ! ! !!]"
+
+#: gui/app.py:1643
+msgid "Load a preset JSON file into the user library."
+msgstr "[!! Ŀöåð å ƥŕéšéţ ĴŠÖŃ ƒîŀé îńţö ţħé ûšéŕ ŀîƀŕåŕý. ! ! ! !!]"
+
+#: gui/support_controller.py:542
+msgid "Log file"
+msgstr "[!! Ŀöĝ ƒîŀé ! !!]"
+
+#: gui/app.py:953
+msgid "Manual region: ({x1}, {y1}) to ({x2}, {y2})"
+msgstr "[!! Ḿåńûåŀ ŕéĝîöń: ({x1}, {y1}) ţö ({x2}, {y2}) ! ! ! !!]"
+
+#: gui/app.py:946
+msgid "Manual regions: {count} fixed rectangles"
+msgstr "[!! Ḿåńûåŀ ŕéĝîöńš: {count} ƒîẋéð ŕéçţåńĝŀéš ! ! ! !!]"
+
+#: gui/quality_controller.py:222
+msgid "Measured {items} completed item{item_suffix} across {samples} sampled frame{sample_suffix}. Higher is generally better."
+msgstr "[!! Ḿéåšûŕéð {items} çöḿƥŀéţéð îţéḿ{item_suffix} åçŕöšš {samples} šåḿƥŀéð ƒŕåḿé{sample_suffix}. Ħîĝħéŕ îš ĝéńéŕåŀŀý ƀéţţéŕ. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:538
+msgid "Missing"
+msgstr "[!! Ḿîššîńĝ ! !!]"
+
+#: gui/app.py:4479
+msgid "Mode"
+msgstr "[!! Ḿöðé ! !!]"
+
+#: gui/support_controller.py:560
+msgid "Model cache"
+msgstr "[!! Ḿöðéŀ çåçħé ! !!]"
+
+#: gui/support_controller.py:275 gui/support_controller.py:308
+msgid "Model cache bundle"
+msgstr "[!! Ḿöðéŀ çåçħé ƀûńðŀé ! !!]"
+
+#: gui/support_controller.py:383
+msgid "Model files"
+msgstr "[!! Ḿöðéŀ ƒîŀéš ! !!]"
+
+#: gui/app.py:1857
+msgid "Motion-aligned background recovery"
+msgstr "[!! Ḿöţîöń-åŀîĝńéð ƀåçķĝŕöûńð ŕéçöṽéŕý ! ! !!]"
+
+#: gui/app.py:929
+msgid "Moving manual regions: {count} track{suffix}"
+msgstr "[!! Ḿöṽîńĝ ḿåńûåŀ ŕéĝîöńš: {count} ţŕåçķ{suffix} ! ! ! !!]"
+
+#: gui/app.py:2103
+msgid "Mux every audio stream from the source. Off keeps only the first track."
+msgstr "[!! Ḿûẋ éṽéŕý åûðîö šţŕéåḿ ƒŕöḿ ţħé šöûŕçé. Öƒƒ ķééƥš öńŀý ţħé ƒîŕšţ ţŕåçķ. ! ! ! ! ! !!]"
+
+#: gui/app.py:2999
+msgid "Name the current cleanup settings and save them to the user preset library."
+msgstr "[!! Ńåḿé ţħé çûŕŕéńţ çŀéåńûƥ šéţţîńĝš åńð šåṽé ţħéḿ ţö ţħé ûšéŕ ƥŕéšéţ ŀîƀŕåŕý. ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:176 gui/preview_controller.py:177
+msgid "Needs attention"
+msgstr "[!! Ńééðš åţţéńţîöń ! !!]"
+
+#: gui/app.py:2874
+msgid "Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."
+msgstr "[!! Ńéûŕåŀ šîńĝŀé-ƒŕåḿé ƒîŀŀ. Ħîĝħéšţ-ɋûåŀîţý šƥåţîåŀ îńƥåîńţ ƒöŕ šţîŀŀš, åńîḿåţîöń, åńð çŀéåń ƀåçķĝŕöûńðš. Šŀöŵéŕ ƥéŕ ƒŕåḿé. ! ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:385 gui/support_controller.py:443
+msgid "Next action"
+msgstr "[!! Ńéẋţ åçţîöń ! !!]"
+
+#: gui/app.py:844
+msgid "No FFmpeg"
+msgstr "[!! Ńö ƑƑḿƥéĝ ! !!]"
+
+#: gui/support_controller.py:385
+msgid "No action needed."
+msgstr "[!! Ńö åçţîöń ńééðéð. ! !!]"
+
+#: gui/app.py:2706
+msgid "No media queued"
+msgstr "[!! Ńö ḿéðîå ɋûéûéð ! !!]"
+
+#: gui/app.py:2752
+msgid "No queued items match this search"
+msgstr "[!! Ńö ɋûéûéð îţéḿš ḿåţçħ ţħîš šéåŕçħ ! ! !!]"
+
+#: gui/support_controller.py:525 gui/support_controller.py:526
+msgid "None"
+msgstr "[!! Ńöńé ! !!]"
+
+#: gui/app.py:1047
+msgid "Nothing to retry - every item is done."
+msgstr "[!! Ńöţħîńĝ ţö ŕéţŕý - éṽéŕý îţéḿ îš ðöńé. ! ! ! !!]"
+
+#: gui/app.py:1561
+msgid "OUTPUT LOCATION"
+msgstr "[!! ÖÛŢƤÛŢ ĿÖÇÅŢÎÖŃ ! !!]"
+
+#: gui/app.py:2621
+msgid "Open a frame slider that wipes between source and cleaned output."
+msgstr "[!! Öƥéń å ƒŕåḿé šŀîðéŕ ţħåţ ŵîƥéš ƀéţŵééń šöûŕçé åńð çŀéåńéð öûţƥûţ. ! ! ! ! ! !!]"
+
+#: gui/quality_controller.py:315 gui/support_controller.py:558
+msgid "Open log"
+msgstr "[!! Öƥéń ŀöĝ ! !!]"
+
+#: gui/support_controller.py:72
+msgid "Open log file"
+msgstr "[!! Öƥéń ŀöĝ ƒîŀé ! !!]"
+
+#: gui/app.py:2666 gui/quality_controller.py:289
+msgid "Open output"
+msgstr "[!! Öƥéń öûţƥûţ ! !!]"
+
+#: gui/widgets.py:1988
+msgid "Open quality sheet"
+msgstr "[!! Öƥéń ɋûåŀîţý šħééţ ! !!]"
+
+#: gui/quality_controller.py:306
+msgid "Open report"
+msgstr "[!! Öƥéń ŕéƥöŕţ ! !!]"
+
+#: gui/widgets.py:1928 gui/widgets.py:1985
+msgid "Open result"
+msgstr "[!! Öƥéń ŕéšûŀţ ! !!]"
+
+#: gui/app.py:2595
+msgid "Open the selected source frame in a larger viewer."
+msgstr "[!! Öƥéń ţħé šéŀéçţéð šöûŕçé ƒŕåḿé îń å ŀåŕĝéŕ ṽîéŵéŕ. ! ! ! ! !!]"
+
+#: gui/app.py:843
+msgid "OpenCV fallback"
+msgstr "[!! ÖƥéńÇṼ ƒåŀŀƀåçķ ! !!]"
+
+#: gui/support_controller.py:157
+msgid "Opened the log file"
+msgstr "[!! Öƥéńéð ţħé ŀöĝ ƒîŀé ! !!]"
+
+#: gui/support_controller.py:164
+msgid "Opened the settings folder"
+msgstr "[!! Öƥéńéð ţħé šéţţîńĝš ƒöŀðéŕ ! ! !!]"
+
+#: gui/app.py:3743 gui/app.py:3766
+msgid "Optional"
+msgstr "[!! Öƥţîöńåŀ ! !!]"
+
+#: gui/app.py:1936 gui/app.py:4540
+msgid "Output codec"
+msgstr "[!! Öûţƥûţ çöðéç ! !!]"
+
+#: gui/app.py:1075
+msgid "Outputs are ready for review"
+msgstr "[!! Öûţƥûţš åŕé ŕéåðý ƒöŕ ŕéṽîéŵ ! ! !!]"
+
+#: gui/quality_controller.py:117
+msgid "Outputs are ready to review."
+msgstr "[!! Öûţƥûţš åŕé ŕéåðý ţö ŕéṽîéŵ. ! ! !!]"
+
+#: gui/widgets.py:2029
+msgid "Override settings for this file..."
+msgstr "[!! Öṽéŕŕîðé šéţţîńĝš ƒöŕ ţħîš ƒîŀé... ! ! !!]"
+
+#: gui/app.py:4440
+msgid "Override settings: {name}"
+msgstr "[!! Öṽéŕŕîðé šéţţîńĝš: {name} ! ! !!]"
+
+#: gui/quality_controller.py:169
+msgid "PAUSED"
+msgstr "[!! ƤÅÛŠÉÐ ! !!]"
+
+#: gui/app.py:2099
+msgid "Pass through every audio stream (Bluray/DVD multi-track)"
+msgstr "[!! Ƥåšš ţħŕöûĝħ éṽéŕý åûðîö šţŕéåḿ (Ɓŀûŕåý/ÐṼÐ ḿûŀţî-ţŕåçķ) ! ! ! ! !!]"
+
+#: gui/processing_controller.py:85
+msgid "Pause batch"
+msgstr "[!! Ƥåûšé ƀåţçħ ! !!]"
+
+#: gui/app.py:1031
+msgid "Pause is already in progress."
+msgstr "[!! Ƥåûšé îš åŀŕéåðý îń ƥŕöĝŕéšš. ! ! !!]"
+
+#: gui/processing_controller.py:120
+msgid "Pausing..."
+msgstr "[!! Ƥåûšîńĝ... ! !!]"
+
+#: gui/app.py:4450 gui/app.py:4468
+msgid "Per-file overrides"
+msgstr "[!! Ƥéŕ-ƒîŀé öṽéŕŕîðéš ! !!]"
+
+#: gui/app.py:3586 gui/app.py:3602 gui/app.py:3608 gui/app.py:3637
+msgid "Polygon"
+msgstr "[!! Ƥöŀýĝöń ! !!]"
+
+#: gui/app.py:1737
+msgid "Preserve the source audio track"
+msgstr "[!! Ƥŕéšéŕṽé ţħé šöûŕçé åûðîö ţŕåçķ ! ! !!]"
+
+#: gui/app.py:1612
+msgid "Preset"
+msgstr "[!! Ƥŕéšéţ ! !!]"
+
+#: gui/widgets.py:2227
+msgid "Press Shift+F10 or the Menu key for item actions."
+msgstr "[!! Ƥŕéšš Šħîƒţ+Ƒ10 öŕ ţħé Ḿéńû ķéý ƒöŕ îţéḿ åçţîöńš. ! ! ! ! !!]"
+
+#: gui/app.py:2536
+msgid "Preview a sample frame"
+msgstr "[!! Ƥŕéṽîéŵ å šåḿƥŀé ƒŕåḿé ! !!]"
+
+#: gui/widgets.py:1980
+msgid "Preview source frame"
+msgstr "[!! Ƥŕéṽîéŵ šöûŕçé ƒŕåḿé ! !!]"
+
+#: gui/preview_controller.py:196
+msgid "Preview tools are locked while a batch is running."
+msgstr "[!! Ƥŕéṽîéŵ ţööŀš åŕé ŀöçķéð ŵħîŀé å ƀåţçħ îš ŕûńńîńĝ. ! ! ! ! !!]"
+
+#: gui/preview_controller.py:246
+msgid "Preview tools are locked while the batch is running."
+msgstr "[!! Ƥŕéṽîéŵ ţööŀš åŕé ŀöçķéð ŵħîŀé ţħé ƀåţçħ îš ŕûńńîńĝ. ! ! ! ! !!]"
+
+#: gui/preview_controller.py:261
+msgid "Preview tools are ready. Review the mask or test cleanup before starting."
+msgstr "[!! Ƥŕéṽîéŵ ţööŀš åŕé ŕéåðý. Ŕéṽîéŵ ţħé ḿåšķ öŕ ţéšţ çŀéåńûƥ ƀéƒöŕé šţåŕţîńĝ. ! ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:258
+msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
+msgstr "[!! Ƥŕéṽîéŵ ţööŀš åŕé ŕéåðý. Ûšé Å/Ɓ çöḿƥåŕé ţö îńšƥéçţ ţħé çŀéåńéð öûţƥûţ. ! ! ! ! ! !!]"
+
+#: gui/processing_controller.py:798
+msgid "Processing failed"
+msgstr "[!! Ƥŕöçéššîńĝ ƒåîŀéð ! !!]"
+
+#: gui/support_controller.py:381
+msgid "Providers"
+msgstr "[!! Ƥŕöṽîðéŕš ! !!]"
+
+#: gui/app.py:2177
+msgid "Quality report sheet (side-by-side PNG comparison)"
+msgstr "[!! Ɋûåŀîţý ŕéƥöŕţ šħééţ (šîðé-ƀý-šîðé ƤŃĜ çöḿƥåŕîšöń) ! ! ! ! !!]"
+
+#: gui/app.py:2398
+msgid "Queue"
+msgstr "[!! Ɋûéûé ! !!]"
+
+#: gui/quality_controller.py:174
+msgid "REVIEW"
+msgstr "[!! ŔÉṼÎÉŴ ! !!]"
+
+#: gui/app.py:2165
+msgid "Read frames ahead in the background"
+msgstr "[!! Ŕéåð ƒŕåḿéš åħéåð îń ţħé ƀåçķĝŕöûńð ! ! !!]"
+
+#: gui/app.py:2169
+msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
+msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕöûńð šö çŀéåńûƥ šƥéńðš ŀéšš ţîḿé ŵåîţîńĝ öń ţħé šöûŕçé ƒîŀé. ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1084 gui/app.py:2441 gui/support_controller.py:538
+msgid "Ready"
+msgstr "[!! Ŕéåðý ! !!]"
+
+#: gui/app.py:2844 gui/app.py:2855 gui/widgets.py:1910 gui/widgets.py:2226 gui/widgets.py:2241
+msgid "Ready to process"
+msgstr "[!! Ŕéåðý ţö ƥŕöçéšš ! !!]"
+
+#: gui/app.py:960
+msgid "Recommended default"
+msgstr "[!! Ŕéçöḿḿéńðéð ðéƒåûŀţ ! !!]"
+
+#: gui/app.py:3507 gui/app.py:3637
+msgid "Rectangle"
+msgstr "[!! Ŕéçţåńĝŀé ! !!]"
+
+#: gui/preview_controller.py:948
+msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
+msgstr "[!! Ŕéŀéåšé ţö šåṽé ŕéĝîöń ({x1}, {y1}) ţö ({x2}, {y2}). ! ! ! ! !!]"
+
+#: gui/widgets.py:1923
+msgid "Remove"
+msgstr "[!! Ŕéḿöṽé ! !!]"
+
+#: gui/app.py:2065
+msgid "Remove dialogue subtitles (short-lived OCR tracks)"
+msgstr "[!! Ŕéḿöṽé ðîåŀöĝûé šûƀţîţŀéš (šħöŕţ-ŀîṽéð ÖÇŔ ţŕåçķš) ! ! ! ! !!]"
+
+#: gui/widgets.py:2048
+msgid "Remove from queue"
+msgstr "[!! Ŕéḿöṽé ƒŕöḿ ɋûéûé ! !!]"
+
+#: gui/app.py:2075
+msgid "Remove persistent text (logos, tickers, lower-thirds)"
+msgstr "[!! Ŕéḿöṽé ƥéŕšîšţéńţ ţéẋţ (ŀöĝöš, ţîçķéŕš, ŀöŵéŕ-ţħîŕðš) ! ! ! ! !!]"
+
+#: gui/app.py:2069
+msgid "Remove short-lived dialogue text. Persistent logos and lower-thirds are controlled separately below."
+msgstr "[!! Ŕéḿöṽé šħöŕţ-ŀîṽéð ðîåŀöĝûé ţéẋţ. Ƥéŕšîšţéńţ ŀöĝöš åńð ŀöŵéŕ-ţħîŕðš åŕé çöńţŕöŀŀéð šéƥåŕåţéŀý ƀéŀöŵ. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2079
+msgid "Remove text that stays in one place for about three seconds or longer, such as lower-thirds."
+msgstr "[!! Ŕéḿöṽé ţéẋţ ţħåţ šţåýš îń öńé ƥŀåçé ƒöŕ åƀöûţ ţħŕéé šéçöńðš öŕ ŀöńĝéŕ, šûçħ åš ŀöŵéŕ-ţħîŕðš. ! ! ! ! ! ! ! !!]"
+
+#: gui/widgets.py:2005
+msgid "Rename output..."
+msgstr "[!! Ŕéńåḿé öûţƥûţ... ! !!]"
+
+#: gui/app.py:2676
+msgid "Repeat last"
+msgstr "[!! Ŕéƥéåţ ŀåšţ ! !!]"
+
+#: gui/widgets.py:2017
+msgid "Repeat with these settings"
+msgstr "[!! Ŕéƥéåţ ŵîţħ ţħéšé šéţţîńĝš ! ! !!]"
+
+#: gui/app.py:1580 gui/app.py:1782
+msgid "Reset"
+msgstr "[!! Ŕéšéţ ! !!]"
+
+#: gui/app.py:2671 gui/quality_controller.py:324
+msgid "Retry failed"
+msgstr "[!! Ŕéţŕý ƒåîŀéð ! !!]"
+
+#: gui/quality_controller.py:282
+msgid "Retry suggested"
+msgstr "[!! Ŕéţŕý šûĝĝéšţéð ! !!]"
+
+#: gui/widgets.py:1991
+msgid "Retry with suggested settings"
+msgstr "[!! Ŕéţŕý ŵîţħ šûĝĝéšţéð šéţţîńĝš ! ! !!]"
+
+#: gui/app.py:1721
+msgid "Reuse a fixed subtitle region (skip per-frame scanning)"
+msgstr "[!! Ŕéûšé å ƒîẋéð šûƀţîţŀé ŕéĝîöń (šķîƥ ƥéŕ-ƒŕåḿé šçåńńîńĝ) ! ! ! ! !!]"
+
+#: gui/app.py:1886
+msgid "Reuse masks on unchanged frames"
+msgstr "[!! Ŕéûšé ḿåšķš öń ûńçħåńĝéð ƒŕåḿéš ! ! !!]"
+
+#: gui/widgets.py:1999
+msgid "Reveal output folder"
+msgstr "[!! Ŕéṽéåŀ öûţƥûţ ƒöŀðéŕ ! !!]"
+
+#: gui/app.py:4371
+msgid "Reverse current order"
+msgstr "[!! Ŕéṽéŕšé çûŕŕéńţ öŕðéŕ ! !!]"
+
+#: gui/quality_controller.py:276
+msgid "Review first"
+msgstr "[!! Ŕéṽîéŵ ƒîŕšţ ! !!]"
+
+#: gui/app.py:2576
+msgid "Review mask"
+msgstr "[!! Ŕéṽîéŵ ḿåšķ ! !!]"
+
+#: gui/app.py:2401
+msgid "Review queued files before starting."
+msgstr "[!! Ŕéṽîéŵ ɋûéûéð ƒîŀéš ƀéƒöŕé šţåŕţîńĝ. ! ! ! !!]"
+
+#: gui/widgets.py:1982
+msgid "Review subtitle mask"
+msgstr "[!! Ŕéṽîéŵ šûƀţîţŀé ḿåšķ ! !!]"
+
+#: gui/app.py:2872
+msgid "Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."
+msgstr "[!! Ŕöûţéš éåçħ ƀåţçħ ţö ŢƁÉ öŕ ĿåḾå ƀåšéð öń ţéḿƥöŕåŀ éẋƥöšûŕé. Ƒåšţéšţ öń éåšý ƒööţåĝé, åûţöḿåţîçåŀŀý ƒåŀŀš ƀåçķ ţö ńéûŕåŀ ƒîŀŀ öń ħåŕð ƒŕåḿéš. ! ! ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1495
+msgid "Run"
+msgstr "[!! Ŕûń ! !!]"
+
+#: gui/app.py:1063
+msgid "Run a batch first to repeat its settings."
+msgstr "[!! Ŕûń å ƀåţçħ ƒîŕšţ ţö ŕéƥéåţ îţš šéţţîńĝš. ! ! ! !!]"
+
+#: gui/widgets.py:2044
+msgid "Run burned-in cleanup instead"
+msgstr "[!! Ŕûń ƀûŕńéð-îń çŀéåńûƥ îńšţéåð ! ! !!]"
+
+#: gui/app.py:2609
+msgid "Run detect + inpaint on the first frame of the selected item."
+msgstr "[!! Ŕûń ðéţéçţ + îńƥåîńţ öń ţħé ƒîŕšţ ƒŕåḿé öƒ ţħé šéŀéçţéð îţéḿ. ! ! ! ! ! !!]"
+
+#: gui/app.py:2584
+msgid "Run detection on the selected item and show the first-frame mask."
+msgstr "[!! Ŕûń ðéţéçţîöń öń ţħé šéŀéçţéð îţéḿ åńð šħöŵ ţħé ƒîŕšţ-ƒŕåḿé ḿåšķ. ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:51
+msgid "Runtime log"
+msgstr "[!! Ŕûńţîḿé ŀöĝ ! !!]"
+
+#: gui/quality_controller.py:171
+msgid "STOPPED"
+msgstr "[!! ŠŢÖƤƤÉÐ ! !!]"
+
+#: gui/app.py:1761
+msgid "SUBTITLE REGION"
+msgstr "[!! ŠÛƁŢÎŢĿÉ ŔÉĜÎÖŃ ! !!]"
+
+#: gui/app.py:2016
+msgid "Sample the finished video for visual damage, remaining text, and flicker, then flag results that need review."
+msgstr "[!! Šåḿƥŀé ţħé ƒîńîšħéð ṽîðéö ƒöŕ ṽîšûåŀ ðåḿåĝé, ŕéḿåîńîńĝ ţéẋţ, åńð ƒŀîçķéŕ, ţħéń ƒŀåĝ ŕéšûŀţš ţħåţ ńééð ŕéṽîéŵ. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/quality_controller.py:212
+msgid "Sampled quality check"
+msgstr "[!! Šåḿƥŀéð ɋûåŀîţý çħéçķ ! !!]"
+
+#: gui/app.py:3952 gui/app.py:4577
+msgid "Save"
+msgstr "[!! Šåṽé ! !!]"
+
+#: gui/app.py:2181
+msgid "Save a side-by-side source/output image for sampled frames. Also enables the numeric quality report."
+msgstr "[!! Šåṽé å šîðé-ƀý-šîðé šöûŕçé/öûţƥûţ îḿåĝé ƒöŕ šåḿƥŀéð ƒŕåḿéš. Åŀšö éńåƀŀéš ţħé ńûḿéŕîç ɋûåŀîţý ŕéƥöŕţ. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1626
+msgid "Save as..."
+msgstr "[!! Šåṽé åš... ! !!]"
+
+#: gui/app.py:3948
+msgid "Save motion"
+msgstr "[!! Šåṽé ḿöţîöń ! !!]"
+
+#: gui/app.py:2987 gui/app.py:2996 gui/app.py:3090
+msgid "Save preset"
+msgstr "[!! Šåṽé ƥŕéšéţ ! !!]"
+
+#: gui/support_controller.py:213
+msgid "Save support bundle"
+msgstr "[!! Šåṽé šûƥƥöŕţ ƀûńðŀé ! !!]"
+
+#: gui/app.py:3014
+msgid "Save the current setup as a preset"
+msgstr "[!! Šåṽé ţħé çûŕŕéńţ šéţûƥ åš å ƥŕéšéţ ! ! !!]"
+
+#: gui/support_controller.py:243
+msgid "Saved redacted support bundle to {name}"
+msgstr "[!! Šåṽéð ŕéðåçţéð šûƥƥöŕţ ƀûńðŀé ţö {name} ! ! ! !!]"
+
+#: gui/app.py:2217
+msgid "Scales interface text and dependent controls on the next launch."
+msgstr "[!! Šçåŀéš îńţéŕƒåçé ţéẋţ åńð ðéƥéńðéńţ çöńţŕöŀš öń ţħé ńéẋţ ŀåûńçħ. ! ! ! ! ! !!]"
+
+#: gui/app.py:1852
+msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
+msgstr "[!! Šçåń ţħé ƒîŕšţ 30 ƒŕåḿéš åńð ƥîń ţħé ðöḿîńåńţ šûƀţîţŀé ƀåńð ƀéƒöŕé ƥŕöçéššîńĝ. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:3323
+msgid "Select Output Directory"
+msgstr "[!! Šéŀéçţ Öûţƥûţ Ðîŕéçţöŕý ! !!]"
+
+#: gui/app.py:3341
+msgid "Select Processing Work Directory"
+msgstr "[!! Šéŀéçţ Ƥŕöçéššîńĝ Ŵöŕķ Ðîŕéçţöŕý ! ! !!]"
+
+#: gui/preview_controller.py:233
+msgid "Select a completed queue item to compare source and output."
+msgstr "[!! Šéŀéçţ å çöḿƥŀéţéð ɋûéûé îţéḿ ţö çöḿƥåŕé šöûŕçé åńð öûţƥûţ. ! ! ! ! !!]"
+
+#: gui/preview_controller.py:249
+msgid "Select a queue item to enable mask review, test cleanup, and zoom."
+msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö éńåƀŀé ḿåšķ ŕéṽîéŵ, ţéšţ çŀéåńûƥ, åńð žööḿ. ! ! ! ! ! !!]"
+
+#: gui/app.py:2625
+msgid "Select a queue item to enable preview tools."
+msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö éńåƀŀé ƥŕéṽîéŵ ţööŀš. ! ! ! !!]"
+
+#: gui/preview_controller.py:198
+msgid "Select a queued item to enable preview tools."
+msgstr "[!! Šéŀéçţ å ɋûéûéð îţéḿ ţö éńåƀŀé ƥŕéṽîéŵ ţööŀš. ! ! ! !!]"
+
+#: gui/app.py:4512
+msgid "Sensitivity"
+msgstr "[!! Šéńšîţîṽîţý ! !!]"
+
+#: gui/app.py:1777 gui/app.py:2565
+msgid "Set region"
+msgstr "[!! Šéţ ŕéĝîöń ! !!]"
+
+#: gui/support_controller.py:541
+msgid "Settings"
+msgstr "[!! Šéţţîńĝš ! !!]"
+
+#: gui/support_controller.py:569
+msgid "Settings folder"
+msgstr "[!! Šéţţîńĝš ƒöŀðéŕ ! !!]"
+
+#: gui/app.py:3630
+msgid "Shape"
+msgstr "[!! Šħåƥé ! !!]"
+
+#: gui/support_controller.py:117
+msgid "Show activity"
+msgstr "[!! Šħöŵ åçţîṽîţý ! !!]"
+
+#: gui/app.py:1792 gui/app.py:2384
+msgid "Show detailed controls"
+msgstr "[!! Šħöŵ ðéţåîŀéð çöńţŕöŀš ! !!]"
+
+#: gui/app.py:1890
+msgid "Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."
+msgstr "[!! Šķîƥ ÖÇŔ öń ƒŕåḿéš ńéåŕŀý îðéńţîçåŀ ţö ţħé ŀåšţ ðéţéçţéð öńé. Šƥééðš ûƥ ŀöńĝ šţåţîç šħöţš. ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1725
+msgid "Skip repeated detection when you have already set a precise subtitle region."
+msgstr "[!! Šķîƥ ŕéƥéåţéð ðéţéçţîöń ŵħéń ýöû ħåṽé åŀŕéåðý šéţ å ƥŕéçîšé šûƀţîţŀé ŕéĝîöń. ! ! ! ! ! ! !!]"
+
+#: gui/quality_controller.py:187
+msgid "Slowest stage"
+msgstr "[!! Šŀöŵéšţ šţåĝé ! !!]"
+
+#: gui/app.py:1877
+msgid "Smooth detection between frames"
+msgstr "[!! Šḿööţħ ðéţéçţîöń ƀéţŵééń ƒŕåḿéš ! ! !!]"
+
+#: gui/app.py:1881
+msgid "Smooths per-frame OCR jitter and fills single-frame misses. Recommended."
+msgstr "[!! Šḿööţħš ƥéŕ-ƒŕåḿé ÖÇŔ ĵîţţéŕ åńð ƒîŀŀš šîńĝŀé-ƒŕåḿé ḿîššéš. Ŕéçöḿḿéńðéð. ! ! ! ! ! ! !!]"
+
+#: gui/quality_controller.py:119
+msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
+msgstr "[!! Šöḿé çöḿƥŀéţéð öûţƥûţš ńééð å çŀöšéŕ ŀööķ. Šţåŕţ ŵîţħ ţħé ɋûåŀîţý ŕéṽîéŵ îţéḿ, ţħéń ŕéţŕý ƒåîŀéð îţéḿš îƒ ńééðéð. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1080
+msgid "Some items need attention"
+msgstr "[!! Šöḿé îţéḿš ńééð åţţéńţîöń ! ! !!]"
+
+#: gui/app.py:2430
+msgid "Sort"
+msgstr "[!! Šöŕţ ! !!]"
+
+#: gui/app.py:2027
+msgid "Start (s)"
+msgstr "[!! Šţåŕţ (š) ! !!]"
+
+#: gui/app.py:2661 gui/processing_controller.py:966
+msgid "Start batch"
+msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
+
+#: gui/app.py:3716
+msgid "Start sec"
+msgstr "[!! Šţåŕţ šéç ! !!]"
+
+#: gui/app.py:4369
+msgid "Status (pending first)"
+msgstr "[!! Šţåţûš (ƥéńðîńĝ ƒîŕšţ) ! !!]"
+
+#: gui/app.py:1033
+msgid "Stop is already in progress."
+msgstr "[!! Šţöƥ îš åŀŕéåðý îń ƥŕöĝŕéšš. ! ! !!]"
+
+#: gui/processing_controller.py:145
+msgid "Stopping..."
+msgstr "[!! Šţöƥƥîńĝ... ! !!]"
+
+#: gui/app.py:2089
+msgid "Stops karaoke captions leaking original text through the gaps between syllables."
+msgstr "[!! Šţöƥš ķåŕåöķé çåƥţîöńš ŀéåķîńĝ öŕîĝîńåŀ ţéẋţ ţħŕöûĝħ ţħé ĝåƥš ƀéţŵééń šýŀŀåƀŀéš. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2187
+msgid "Structured JSON log"
+msgstr "[!! Šţŕûçţûŕéð ĴŠÖŃ ŀöĝ ! !!]"
+
+#: gui/app.py:1683 gui/app.py:4493
+msgid "Subtitle language"
+msgstr "[!! Šûƀţîţŀé ŀåńĝûåĝé ! !!]"
+
+#: gui/support_controller.py:215 gui/support_controller.py:566
+msgid "Support bundle"
+msgstr "[!! Šûƥƥöŕţ ƀûńðŀé ! !!]"
+
+#: gui/app.py:2885
+msgid "Switched to the {profile} profile"
+msgstr "[!! Šŵîţçħéð ţö ţħé {profile} ƥŕöƒîŀé ! ! !!]"
+
+#: gui/app.py:2230
+msgid "System"
+msgstr "[!! Šýšţéḿ ! !!]"
+
+#: gui/app.py:2873
+msgid "Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."
+msgstr "[!! Ţéḿƥöŕåŀ ƀåçķĝŕöûńð éẋƥöšûŕé. Ŕéçöńšţŕûçţš ţħé ŕéåŀ ƀåçķĝŕöûńð ƒŕöḿ ńéîĝħƀöûŕîńĝ ƒŕåḿéš ŵħéŕé ţħé šûƀţîţŀé îš åƀšéńţ. Ƒåšţéšţ, ûšûåŀŀý ţħé ƀéšţ çħöîçé ƒöŕ ŀîṽé åçţîöń. ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2601
+msgid "Test cleanup"
+msgstr "[!! Ţéšţ çŀéåńûƥ ! !!]"
+
+#: gui/app.py:1035
+msgid "The batch is already running."
+msgstr "[!! Ţħé ƀåţçħ îš åŀŕéåðý ŕûńńîńĝ. ! ! !!]"
+
+#: gui/preview_controller.py:237
+msgid "The cleaned output file is not available on disk."
+msgstr "[!! Ţħé çŀéåńéð öûţƥûţ ƒîŀé îš ńöţ åṽåîŀåƀŀé öń ðîšķ. ! ! ! ! !!]"
+
+#: gui/quality_controller.py:124
+msgid "The current video is paused at a checkpoint. Start the batch again to resume from that frame."
+msgstr "[!! Ţħé çûŕŕéńţ ṽîðéö îš ƥåûšéð åţ å çħéçķƥöîńţ. Šţåŕţ ţħé ƀåţçħ åĝåîń ţö ŕéšûḿé ƒŕöḿ ţħåţ ƒŕåḿé. ! ! ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:159
+msgid "The log file could not be opened"
+msgstr "[!! Ţħé ŀöĝ ƒîŀé çöûŀð ńöţ ƀé öƥéńéð ! ! !!]"
+
+#: gui/support_controller.py:153
+msgid "The log file is not available yet"
+msgstr "[!! Ţħé ŀöĝ ƒîŀé îš ńöţ åṽåîŀåƀŀé ýéţ ! ! !!]"
+
+#: gui/app.py:1055
+msgid "The queue is empty - add media to get started."
+msgstr "[!! Ţħé ɋûéûé îš éḿƥţý - åðð ḿéðîå ţö ĝéţ šţåŕţéð. ! ! ! !!]"
+
+#: gui/support_controller.py:166
+msgid "The settings folder could not be opened"
+msgstr "[!! Ţħé šéţţîńĝš ƒöŀðéŕ çöûŀð ńöţ ƀé öƥéńéð ! ! ! !!]"
+
+#: gui/app.py:4472
+msgid "These apply to this queued item only and survive a global settings change."
+msgstr "[!! Ţħéšé åƥƥŀý ţö ţħîš ɋûéûéð îţéḿ öńŀý åńð šûŕṽîṽé å ĝŀöƀåŀ šéţţîńĝš çħåńĝé. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:3186
+msgid "Three first-run cues: import media, inspect the region, and run the batch."
+msgstr "[!! Ţħŕéé ƒîŕšţ-ŕûń çûéš: îḿƥöŕţ ḿéðîå, îńšƥéçţ ţħé ŕéĝîöń, åńð ŕûń ţħé ƀåţçħ. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:3212
+msgid "Three things that make batch cleanup painless."
+msgstr "[!! Ţħŕéé ţħîńĝš ţħåţ ḿåķé ƀåţçħ çŀéåńûƥ ƥåîńŀéšš. ! ! ! !!]"
+
+#: gui/app.py:942
+msgid "Time-ranged mask regions"
+msgstr "[!! Ţîḿé-ŕåńĝéð ḿåšķ ŕéĝîöńš ! ! !!]"
+
+#: gui/app.py:938
+msgid "Timed manual regions: {count} rectangle{suffix}"
+msgstr "[!! Ţîḿéð ḿåńûåŀ ŕéĝîöńš: {count} ŕéçţåńĝŀé{suffix} ! ! ! !!]"
+
+#: gui/quality_controller.py:106
+msgid "Total time {elapsed} - {count} item{suffix} processed"
+msgstr "[!! Ţöţåŀ ţîḿé {elapsed} - {count} îţéḿ{suffix} ƥŕöçéššéð ! ! ! ! !!]"
+
+#: gui/app.py:2140
+msgid "Try hardware video decoding for faster input. The app falls back to software decoding if needed."
+msgstr "[!! Ţŕý ħåŕðŵåŕé ṽîðéö ðéçöðîńĝ ƒöŕ ƒåšţéŕ îńƥûţ. Ţħé åƥƥ ƒåŀŀš ƀåçķ ţö šöƒţŵåŕé ðéçöðîńĝ îƒ ńééðéð. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/support_controller.py:379 gui/support_controller.py:380 gui/support_controller.py:381 gui/support_controller.py:382 gui/support_controller.py:383 gui/support_controller.py:384
+msgid "Unknown"
+msgstr "[!! Ûńķńöŵń ! !!]"
+
+#: gui/app.py:3018
+msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
+msgstr "[!! Ûšé å šħöŕţ ńåḿé ýöû ŵîŀŀ ŕéçöĝńîžé ŀåţéŕ. Šåṽîńĝ ţö åń éẋîšţîńĝ ûšéŕ ƥŕéšéţ ńåḿé ŵîŀŀ ûƥðåţé îţ. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2324
+msgid "Use system"
+msgstr "[!! Ûšé šýšţéḿ ! !!]"
+
+#: gui/app.py:1930
+msgid "Use the GPU's media encoder when available. The app retries with CPU encoding if it fails."
+msgstr "[!! Ûšé ţħé ĜƤÛ'š ḿéðîå éńçöðéŕ ŵħéń åṽåîŀåƀŀé. Ţħé åƥƥ ŕéţŕîéš ŵîţħ ÇƤÛ éńçöðîńĝ îƒ îţ ƒåîŀš. ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:3043 gui/app.py:3065
+msgid "User preset"
+msgstr "[!! Ûšéŕ ƥŕéšéţ ! !!]"
+
+#: gui/app.py:2259
+msgid "Uses the system language or a compiled catalog on the next launch."
+msgstr "[!! Ûšéš ţħé šýšţéḿ ŀåńĝûåĝé öŕ å çöḿƥîŀéð çåţåŀöĝ öń ţħé ńéẋţ ŀåûńçħ. ! ! ! ! ! !!]"
+
+#: gui/app.py:1457 gui/support_controller.py:503
+msgid "Version {version}"
+msgstr "[!! Ṽéŕšîöń {version} ! !!]"
+
+#: gui/app.py:1905
+msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
+msgstr "[!! Ṽéŕţîçåŀ ţéẋţ ḿöðé (Ĵåƥåńéšé ţåţéĝåķî / çŀåššîçåŀ Çħîńéšé) ! ! ! ! !!]"
+
+#: gui/widgets.py:1785
+msgid "Video Files"
+msgstr "[!! Ṽîðéö Ƒîŀéš ! !!]"
+
+#: gui/app.py:1449
+msgid "Video Subtitle Remover"
+msgstr "[!! Ṽîðéö Šûƀţîţŀé Ŕéḿöṽéŕ ! !!]"
+
+#: gui/widgets.py:1691
+msgid "Videos and images supported"
+msgstr "[!! Ṽîðéöš åńð îḿåĝéš šûƥƥöŕţéð ! ! !!]"
+
+#: gui/preview_controller.py:231
+msgid "Wait for the active batch to finish before comparing output."
+msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé çöḿƥåŕîńĝ öûţƥûţ. ! ! ! ! ! !!]"
+
+#: gui/preview_controller.py:207
+msgid "Wait for the active batch to finish before editing regions."
+msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé éðîţîńĝ ŕéĝîöńš. ! ! ! ! !!]"
+
+#: gui/app.py:1046 gui/app.py:1054 gui/app.py:1062
+msgid "Wait for the current batch to finish."
+msgstr "[!! Ŵåîţ ƒöŕ ţħé çûŕŕéńţ ƀåţçħ ţö ƒîńîšħ. ! ! ! !!]"
+
+#: gui/app.py:2552 gui/preview_controller.py:182 gui/preview_controller.py:274
+msgid "Waiting"
+msgstr "[!! Ŵåîţîńĝ ! !!]"
+
+#: gui/app.py:3204
+msgid "Welcome"
+msgstr "[!! Ŵéŀçöḿé ! !!]"
+
+#: gui/app.py:3183
+msgid "Welcome to {app_name}"
+msgstr "[!! Ŵéŀçöḿé ţö {app_name} ! !!]"
+
+#: gui/app.py:2281
+msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
+msgstr "[!! Ŵħéń éńåƀŀéð, çħéçķš ĜîţĦûƀ Ŕéŀéåšéš ƒöŕ å ńéŵéŕ ṽéŕšîöń öń ŀåûńçħ. Öƒƒ ƀý ðéƒåûŀţ; ńö ţéŀéḿéţŕý. ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:2191
+msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
+msgstr "[!! Ŵŕîţé å šţŕûçţûŕéð ĴŠÖŃ-ŀîńéš ŀöĝ åŀöńĝšîðé ţħé ţéẋţ ŀöĝ. Ûšéƒûŀ ƒöŕ ŀöńĝ ƀåţçħ ŕûńš åńð šçŕîƥţéð ƥöšţ-ƥŕöçéššîńĝ. ! ! ! ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1636
+msgid "Write the current preset to a shareable JSON file."
+msgstr "[!! Ŵŕîţé ţħé çûŕŕéńţ ƥŕéšéţ ţö å šħåŕéåƀŀé ĴŠÖŃ ƒîŀé. ! ! ! ! !!]"
+
+#: gui/app.py:1987
+msgid "Writes a black-and-white mp4 of the per-frame detection mask alongside the output."
+msgstr "[!! Ŵŕîţéš å ƀŀåçķ-åńð-ŵħîţé ḿƥ4 öƒ ţħé ƥéŕ-ƒŕåḿé ðéţéçţîöń ḿåšķ åŀöńĝšîðé ţħé öûţƥûţ. ! ! ! ! ! ! !!]"
+
+#: gui/app.py:1978
+msgid "Writes an .srt file next to the output using OCR text and timings."
+msgstr "[!! Ŵŕîţéš åń .šŕţ ƒîŀé ńéẋţ ţö ţħé öûţƥûţ ûšîńĝ ÖÇŔ ţéẋţ åńð ţîḿîńĝš. ! ! ! ! ! !!]"
+
+#: gui/widgets.py:1751
+msgid "disabled"
+msgstr "[!! ðîšåƀŀéð ! !!]"
+
+#: gui/widgets.py:1753
+msgid "drag and drop available"
+msgstr "[!! ðŕåĝ åńð ðŕöƥ åṽåîŀåƀŀé ! !!]"
+
+#: gui/widgets.py:1751
+msgid "enabled"
+msgstr "[!! éńåƀŀéð ! !!]"
+
+#: gui/widgets.py:1752 gui/widgets.py:2222
+msgid "focused"
+msgstr "[!! ƒöçûšéð ! !!]"
+
+#: gui/widgets.py:2221
+msgid "not selected"
+msgstr "[!! ńöţ šéŀéçţéð ! !!]"
+
+#: gui/support_controller.py:402
+msgid "ready"
+msgstr "[!! ŕéåðý ! !!]"
+
+#: gui/widgets.py:2221
+msgid "selected"
+msgstr "[!! šéŀéçţéð ! !!]"
+
+#: gui/support_controller.py:548
+msgid "unavailable"
+msgstr "[!! ûńåṽåîŀåƀŀé ! !!]"
+
+#: gui/support_controller.py:529
+msgid "{count} GPU{suffix}"
+msgstr "[!! {count} ĜƤÛ{suffix} ! !!]"
+
+#: gui/support_controller.py:132
+msgid "{count} error{suffix}"
+msgstr "[!! {count} éŕŕöŕ{suffix} ! !!]"
+
+#: gui/app.py:2426
+msgid "{count} items"
+msgstr "[!! {count} îţéḿš ! !!]"
+
+#: gui/app.py:1070
+msgid "{count} queued and ready to process"
+msgstr "[!! {count} ɋûéûéð åńð ŕéåðý ţö ƥŕöçéšš ! ! !!]"
+
+#: gui/support_controller.py:124
+msgid "{count} warning{suffix}"
+msgstr "[!! {count} ŵåŕńîńĝ{suffix} ! !!]"
+
+#: gui/quality_controller.py:194
+msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
+msgstr "[!! {stage} ðöḿîńåţéð ţħîš ŕûń. Öƥéń ţħé ŕéƥöŕţ ƒöŕ ƥéŕ-îţéḿ ðéçöðé, ÖÇŔ, ḿåšķ, îńƥåîńţ, éńçöðé, ḿûẋ, åńð ɋûåŀîţý ţîḿîńĝš. ! ! ! ! ! ! ! ! ! !!]"

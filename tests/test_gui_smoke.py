@@ -130,6 +130,24 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_locale_selector_lists_system_english_and_discovered_catalogs(self):
+        app = self._make_app()
+        try:
+            tags = set(app._locale_display_to_tag.values())
+            self.assertIn("system", tags)
+            self.assertIn("en", tags)
+            self.assertIn("qps-Ploc", tags)
+            display = next(
+                label
+                for label, tag in app._locale_display_to_tag.items()
+                if tag == "qps-Ploc"
+            )
+            app.locale_var.set(display)
+            app._sync_config_from_ui()
+            self.assertEqual(app.config.ui_locale, "qps-Ploc")
+        finally:
+            self._destroy_app(app)
+
     def test_high_contrast_palette_is_applied_before_root_creation(self):
         from gui import app as app_module
         from gui.theme import Theme, apply_default_theme

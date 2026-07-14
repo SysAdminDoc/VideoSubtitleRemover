@@ -44,6 +44,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Complete gettext catalog lifecycle and locale selector.** A deterministic
+  extractor/merger validates UTF-8, placeholders, and plural forms, compiles
+  MO files, reports coverage, and maintains a 100%-covered pseudo-locale.
+  Detailed controls now persist System, English, or a discovered catalog;
+  source, frozen, and installer smoke paths share the same fallback-aware
+  catalog lookup.
 - **Generated CLI and config reference.** Every live CLI action now carries a
   category, default, range/choice, visibility, and deprecation record used by
   grouped `--help` output and the README generator. The same deterministic

@@ -1,1616 +1,1461 @@
 # Video Subtitle Remover Pro gettext template
-# Copyright (C) 2026 SysAdminDoc
-# This file is distributed under the same license as Video Subtitle Remover Pro.
+# This file is distributed under the same license as the project.
 msgid ""
 msgstr ""
-"Project-Id-Version: VideoSubtitleRemoverPro 3.17.3\n"
+"Project-Id-Version: VideoSubtitleRemoverPro\n"
 "Report-Msgid-Bugs-To: https://github.com/SysAdminDoc/VideoSubtitleRemover/issues\n"
-"POT-Creation-Date: 2026-06-29 00:00+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: gui/widgets.py:1532
-msgid "Add files to the queue"
+#: gui/app.py:2159
+msgid "0 cleans every frame. Values above 1 clean fewer frames and recreate the gaps when Practical-RIFE is installed."
 msgstr ""
 
-#: gui/widgets.py:1539
-msgid "Drag files here, choose files, or choose a folder. Originals stay untouched."
-msgstr ""
-
-#: gui/widgets.py:1548
-msgid "Choose files"
-msgstr ""
-
-#: gui/widgets.py:1553
-msgid "Choose folder"
-msgstr ""
-
-#: gui/widgets.py:1559
-msgid "Videos and images supported"
-msgstr ""
-
-#: gui/widgets.py:1617
-msgid "Add files to the queue"
-msgstr ""
-
-#: gui/widgets.py:1650
-msgid "Choose files to clean"
-msgstr ""
-
-#: gui/widgets.py:1664
-msgid "Choose a folder to clean"
-msgstr ""
-
-#: gui/widgets.py:1791
-msgid "Remove"
-msgstr ""
-
-#: gui/widgets.py:1796
-msgid "Open result"
-msgstr ""
-
-#: gui/widgets.py:1830
-msgid "Preview source frame"
-msgstr ""
-
-#: gui/widgets.py:1832
-msgid "Review subtitle mask"
-msgstr ""
-
-#: gui/widgets.py:1835
-msgid "Open result"
-msgstr ""
-
-#: gui/widgets.py:1838
-msgid "Open quality sheet"
-msgstr ""
-
-#: gui/widgets.py:1841
-msgid "Retry with suggested settings"
-msgstr ""
-
-#: gui/widgets.py:1849
-msgid "Reveal output folder"
-msgstr ""
-
-#: gui/widgets.py:1855
-msgid "Rename output..."
-msgstr ""
-
-#: gui/widgets.py:1858
-msgid "Copy source path"
-msgstr ""
-
-#: gui/widgets.py:1860
-msgid "Copy CLI command"
-msgstr ""
-
-#: gui/widgets.py:1898
-msgid "Remove from queue"
-msgstr ""
-
-#: gui/widgets.py:2072
-msgid "Ready to process"
-msgstr ""
-
-#: gui/widgets.py:1588
-msgid "Choose files or a folder below. Originals stay untouched."
-msgstr ""
-
-#: gui/widgets.py:1778
-msgid "Ready to process"
-msgstr ""
-
-#: gui/widgets.py:1867
-msgid "Repeat with these settings"
-msgstr ""
-
-#: gui/widgets.py:1873
-msgid "Cancel this item"
-msgstr ""
-
-#: gui/widgets.py:1879
-msgid "Override settings for this file..."
-msgstr ""
-
-#: gui/widgets.py:1886
-msgid "Fast strip embedded subtitles"
-msgstr ""
-
-#: gui/widgets.py:1890
-msgid "Fast remux and keep embedded subtitles"
-msgstr ""
-
-#: gui/widgets.py:1894
-msgid "Run burned-in cleanup instead"
-msgstr ""
-
-#: gui/widgets.py:2059
-msgid "Ready to process"
-msgstr ""
-
-#: gui/widgets.py:1619
-msgid "enabled"
-msgstr ""
-
-#: gui/widgets.py:1619
-msgid "disabled"
-msgstr ""
-
-#: gui/widgets.py:1620
-msgid "focused"
-msgstr ""
-
-#: gui/widgets.py:1621
-msgid "drag and drop available"
-msgstr ""
-
-#: gui/widgets.py:1652
-msgid "All Supported"
-msgstr ""
-
-#: gui/widgets.py:1653
-msgid "Video Files"
-msgstr ""
-
-#: gui/widgets.py:1654
-msgid "Image Files"
-msgstr ""
-
-#: gui/widgets.py:1655
-msgid "All Files"
-msgstr ""
-
-#: gui/widgets.py:2055
-msgid "selected"
-msgstr ""
-
-#: gui/widgets.py:2055
-msgid "not selected"
-msgstr ""
-
-#: gui/widgets.py:2056
-msgid "focused"
-msgstr ""
-
-#: gui/app.py:1356
-msgid "Preview tools are locked while a batch is running."
-msgstr ""
-
-#: gui/app.py:1458
-msgid "Detecting language..."
-msgstr ""
-
-#: gui/app.py:2054
-msgid "Write the current preset to a shareable JSON file."
-msgstr ""
-
-#: gui/app.py:2061
-msgid "Load a preset JSON file into the user library."
-msgstr ""
-
-#: gui/app.py:2126
-msgid "Auto-detect the subtitle language from a sample frame."
-msgstr ""
-
-#: gui/app.py:2143
-msgid "Skip repeated detection when you have already set a precise subtitle region."
-msgstr ""
-
-#: gui/app.py:2151
-msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
-msgstr ""
-
-#: gui/app.py:2254
-msgid "Scale mask dilation inversely with OCR confidence: low-confidence boxes get more padding, high-confidence boxes stay tight."
-msgstr ""
-
-#: gui/app.py:2270
-msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
-msgstr ""
-
-#: gui/app.py:2279
-msgid "Farneback optical flow aligns frames before TBE aggregation. Slower but cleaner on pans and zooms."
-msgstr ""
-
-#: gui/app.py:2288
-msgid "Prevents background aggregation across hard cuts. Turn off if your footage is uncut."
-msgstr ""
-
-#: gui/app.py:2297
-msgid "Smooths per-frame OCR jitter and fills single-frame misses. Recommended."
-msgstr ""
-
-#: gui/app.py:2306
-msgid "Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."
-msgstr ""
-
-#: gui/app.py:2315
-msgid "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering."
-msgstr ""
-
-#: gui/app.py:2325
-msgid "Rotates each frame 90 CCW before OCR so columnar CJK reads as a line. Boxes rotate back to the source frame."
-msgstr ""
-
-#: gui/app.py:2345
-msgid "If hardware encoding fails the app retries automatically with libx264."
-msgstr ""
-
-#: gui/app.py:2360
-msgid "h264 is universal; h265 and av1 cut bitrate ~50% on 4K; vvc (H.266) needs FFmpeg with libvvenc. Uses NVENC/QSV/AMF when available."
-msgstr ""
-
-#: gui/app.py:2369
-msgid "Scale the TBE window to fit free VRAM. Prevents OOM on 4K, unlocks headroom on 24 GB cards."
-msgstr ""
-
-#: gui/app.py:2378
-msgid "Writes an .srt file next to the output using OCR text and timings."
-msgstr ""
-
-#: gui/app.py:2387
-msgid "Writes a black-and-white mp4 of the per-frame detection mask alongside the output."
-msgstr ""
-
-#: gui/app.py:2396
-msgid "ffprobe-checks the input for combing; runs ffmpeg yadif if detected."
-msgstr ""
-
-#: gui/app.py:2405
-msgid "Large speedup for long videos. Falls back to pHash skip if ffprobe is missing."
-msgstr ""
-
-#: gui/app.py:2414
-msgid "Samples 10 random frames, compares input vs output; logged and shown in the batch summary."
-msgstr ""
-
-#: gui/app.py:2466
-msgid "Tracks the chyron classifier marks as dialogue subtitles."
-msgstr ""
-
-#: gui/app.py:2475
-msgid "Kalman tracks lasting longer than ~3s are treated as chyrons."
-msgstr ""
-
-#: gui/app.py:2484
-msgid "Stops karaoke captions leaking original text through the gaps between syllables."
-msgstr ""
-
-#: gui/app.py:2498
-msgid "Mux every audio stream from the source. Off keeps only the first track."
-msgstr ""
-
-#: gui/app.py:2535
-msgid "Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames."
-msgstr ""
-
-#: gui/app.py:2553
-msgid "0 disables. Values above 1 inpaint keyframes and synthesize skipped frames with Practical-RIFE when installed."
-msgstr ""
-
-#: gui/app.py:2562
-msgid "Decouples cv2.VideoCapture.read() from the detect+inpaint critical path. On by default."
-msgstr ""
-
-#: gui/app.py:2573
-msgid "Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report."
-msgstr ""
-
-#: gui/app.py:2582
-msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
-msgstr ""
-
-#: gui/app.py:2594
-msgid "Alternative palette tuned for low-vision users. Persists across sessions."
-msgstr ""
-
-#: gui/app.py:2603
-msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
-msgstr ""
-
-#: gui/app.py:2845
-msgid "Draw the subtitle region directly on the preview frame."
-msgstr ""
-
-#: gui/app.py:2856
-msgid "Run detection on the selected item and show the first-frame mask."
-msgstr ""
-
-#: gui/app.py:2867
-msgid "Open the selected source frame in a larger viewer."
-msgstr ""
-
-#: gui/app.py:2881
-msgid "Run detect + inpaint on the first frame of the selected item."
-msgstr ""
-
-#: gui/app.py:2893
-msgid "Open a frame slider that wipes between source and cleaned output."
-msgstr ""
-
-#: gui/app.py:2922
-msgid "Double-click to view at full size. Use Set region above to draw the subtitle band."
-msgstr ""
-
-#: gui/app.py:2998
-msgid "Choose one or more videos or images to add to the queue."
-msgstr ""
-
-#: gui/app.py:3008
-msgid "Add every supported media file from a folder."
-msgstr ""
-
-#: gui/app.py:3207
-msgid "Activity log cleared"
-msgstr ""
-
-#: gui/app.py:3410
-msgid "Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."
-msgstr ""
-
-#: gui/app.py:3411
-msgid "Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."
-msgstr ""
-
-#: gui/app.py:3412
-msgid "Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."
-msgstr ""
-
-#: gui/app.py:3413
-msgid "Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."
-msgstr ""
-
-#: gui/app.py:3524
-msgid "Save preset"
-msgstr ""
-
-#: gui/app.py:3580
-msgid "User preset"
-msgstr ""
-
-#: gui/app.py:3939
-msgid "Batch finished"
-msgstr ""
-
-#: gui/app.py:3953
-msgid "Batch finished"
-msgstr ""
-
-#: gui/app.py:3954
-msgid "Batch finished with issues"
-msgstr ""
-
-#: gui/app.py:3985
-msgid "Outputs are ready to review."
-msgstr ""
-
-#: gui/app.py:4256
-msgid "FFmpeg basic"
-msgstr ""
-
-#: gui/app.py:4257
-msgid "FFmpeg quality"
-msgstr ""
-
-#: gui/app.py:4258
-msgid "FFmpeg speech"
-msgstr ""
-
-#: gui/app.py:4259
-msgid "FFmpeg codecs"
-msgstr ""
-
-#: gui/app.py:4387
-msgid "None"
-msgstr ""
-
-#: gui/app.py:4388
-msgid "None"
-msgstr ""
-
-#: gui/app.py:4393
-msgid "CPU only"
-msgstr ""
-
-#: gui/app.py:4396
-msgid "Detection engines"
-msgstr ""
-
-#: gui/app.py:4397
-msgid "Inpainting engines"
-msgstr ""
-
-#: gui/app.py:4398
-msgid "Compute"
-msgstr ""
-
-#: gui/app.py:4400
-msgid "FFmpeg"
-msgstr ""
-
-#: gui/app.py:4402
-msgid "Input"
-msgstr ""
-
-#: gui/app.py:4402
-msgid "Click Import or drag files onto the queue"
-msgstr ""
-
-#: gui/app.py:4403
-msgid "Settings"
-msgstr ""
-
-#: gui/app.py:4404
-msgid "Log file"
-msgstr ""
-
-#: gui/app.py:6619
-msgid "Pause batch"
-msgstr ""
-
-#: gui/app.py:6654
-msgid "Pausing..."
-msgstr ""
-
-#: gui/app.py:6679
-msgid "Stopping..."
-msgstr ""
-
-#: gui/app.py:7831
-msgid "Start batch"
-msgstr ""
-
-#: gui/app.py:166
-msgid "Backend status is still being probed."
-msgstr ""
-
-#: gui/app.py:729
-msgid "CPU mode"
-msgstr ""
-
-#: gui/app.py:732
-msgid "OpenCV fallback"
-msgstr ""
-
-#: gui/app.py:733
-msgid "FFmpeg ready"
-msgstr ""
-
-#: gui/app.py:733
-msgid "No FFmpeg"
-msgstr ""
-
-#: gui/app.py:907
-msgid "DETECTING"
-msgstr ""
-
-#: gui/app.py:995
-msgid "Needs attention"
-msgstr ""
-
-#: gui/app.py:996
-msgid "Needs attention"
-msgstr ""
-
-#: gui/app.py:997
-msgid "Info"
-msgstr ""
-
-#: gui/app.py:1001
-msgid "Waiting"
-msgstr ""
-
-#: gui/app.py:1358
-msgid "Select a queued item to enable preview tools."
-msgstr ""
-
-#: gui/app.py:1406
-msgid "Preview tools are locked while the batch is running."
-msgstr ""
-
-#: gui/app.py:1456
-msgid "Add a file to the queue first"
-msgstr ""
-
-#: gui/app.py:1895
-msgid "Help"
-msgstr ""
-
-#: gui/app.py:1913
-msgid "Import"
-msgstr ""
-
-#: gui/app.py:1913
-msgid "Inspect"
-msgstr ""
-
-#: gui/app.py:1913
-msgid "Run"
-msgstr ""
-
-#: gui/app.py:1938
-msgid "Build your batch"
-msgstr ""
-
-#: gui/app.py:1946
-msgid "Import files or choose a folder to start."
-msgstr ""
-
-#: gui/app.py:1993
-msgid "Choose folder"
-msgstr ""
-
-#: gui/app.py:1998
-msgid "Reset"
-msgstr ""
-
-#: gui/app.py:2044
-msgid "Save as..."
-msgstr ""
-
-#: gui/app.py:2050
-msgid "Export"
-msgstr ""
-
-#: gui/app.py:2057
-msgid "Import"
-msgstr ""
-
-#: gui/app.py:2074
-msgid "Cleanup algorithm"
-msgstr ""
-
-#: gui/app.py:2121
-msgid "Detect"
-msgstr ""
-
-#: gui/app.py:2139
-msgid "Reuse a fixed subtitle region (skip per-frame scanning)"
-msgstr ""
-
-#: gui/app.py:2147
-msgid "LaMa fast mode - favor speed over fill detail"
-msgstr ""
-
-#: gui/app.py:2155
-msgid "Preserve the source audio track"
-msgstr ""
-
-#: gui/app.py:2161
-msgid "Checking FFmpeg availability for audio preservation..."
-msgstr ""
-
-#: gui/app.py:2195
-msgid "Set region"
-msgstr ""
-
-#: gui/app.py:2200
-msgid "Reset"
-msgstr ""
-
-#: gui/app.py:2210
-msgid "Show detailed controls"
-msgstr ""
-
-#: gui/app.py:2249
-msgid "Confidence-weighted dilation"
-msgstr ""
-
-#: gui/app.py:2266
-msgid "Auto-detect subtitle band on load"
-msgstr ""
-
-#: gui/app.py:2275
-msgid "Flow-warped temporal exposure (motion-heavy)"
-msgstr ""
-
-#: gui/app.py:2284
-msgid "Split TBE batches at scene cuts"
-msgstr ""
-
-#: gui/app.py:2293
-msgid "Kalman box tracking (flicker reduction)"
-msgstr ""
-
-#: gui/app.py:2302
-msgid "Adaptive mask reuse (perceptual hash)"
-msgstr ""
-
-#: gui/app.py:2311
-msgid "Colour-tuned mask expansion"
-msgstr ""
-
-#: gui/app.py:2321
-msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
-msgstr ""
-
-#: gui/app.py:2341
-msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
-msgstr ""
-
-#: gui/app.py:2365
-msgid "Adaptive batch sizing (probe free VRAM on init)"
-msgstr ""
-
-#: gui/app.py:2374
-msgid "Export detected text as .srt sidecar"
-msgstr ""
-
-#: gui/app.py:2383
-msgid "Export debug mask video (.mask.mp4)"
-msgstr ""
-
-#: gui/app.py:2392
-msgid "Auto-deinterlace interlaced sources (yadif)"
-msgstr ""
-
-#: gui/app.py:2401
-msgid "Keyframe-driven detection (OCR only at I-frames)"
-msgstr ""
-
-#: gui/app.py:2410
-msgid "Compute PSNR / SSIM quality report after run"
-msgstr ""
-
-#: gui/app.py:2462
-msgid "Remove dialogue subtitles (short-lived OCR tracks)"
-msgstr ""
-
-#: gui/app.py:2471
-msgid "Remove persistent text (logos, tickers, lower-thirds)"
-msgstr ""
-
-#: gui/app.py:2480
-msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
-msgstr ""
-
-#: gui/app.py:2494
-msgid "Pass through every audio stream (Bluray/DVD multi-track)"
-msgstr ""
-
-#: gui/app.py:2558
-msgid "Worker-thread frame prefetch (overlap decode and inpaint)"
-msgstr ""
-
-#: gui/app.py:2569
-msgid "Quality report sheet (side-by-side PNG comparison)"
-msgstr ""
-
-#: gui/app.py:2578
-msgid "Structured JSON log"
-msgstr ""
-
-#: gui/app.py:2590
-msgid "High-contrast theme (restart required)"
-msgstr ""
-
-#: gui/app.py:2599
-msgid "Check for updates on startup"
-msgstr ""
-
-#: gui/app.py:2652
-msgid "Hide detailed controls"
-msgstr ""
-
-#: gui/app.py:2656
-msgid "Show detailed controls"
-msgstr ""
-
-#: gui/app.py:2702
-msgid "Sort"
-msgstr ""
-
-#: gui/app.py:2713
-msgid "Ready"
-msgstr ""
-
-#: gui/app.py:2762
-msgid "Clear"
-msgstr ""
-
-#: gui/app.py:2808
-msgid "Preview a sample frame"
-msgstr ""
-
-#: gui/app.py:2814
-msgid "Click a queue item, then use Set region or Review mask."
-msgstr ""
-
-#: gui/app.py:2824
-msgid "Waiting"
-msgstr ""
-
-#: gui/app.py:2837
-msgid "Set region"
-msgstr ""
-
-#: gui/app.py:2848
-msgid "Review mask"
-msgstr ""
-
-#: gui/app.py:2859
-msgid "Full size"
-msgstr ""
-
-#: gui/app.py:2873
-msgid "Test cleanup"
-msgstr ""
-
-#: gui/app.py:2885
-msgid "A/B compare"
-msgstr ""
-
-#: gui/app.py:2897
-msgid "Select a queue item to enable preview tools."
-msgstr ""
-
-#: gui/app.py:2933
-msgid "Start batch"
-msgstr ""
-
-#: gui/app.py:2938
-msgid "Open output"
-msgstr ""
-
-#: gui/app.py:2943
-msgid "Retry failed"
-msgstr ""
-
-#: gui/app.py:2948
-msgid "Repeat last"
-msgstr ""
-
-#: gui/app.py:2953
-msgid "Clear queue"
-msgstr ""
-
-#: gui/app.py:2991
-msgid "Choose files"
-msgstr ""
-
-#: gui/app.py:3001
-msgid "Choose folder"
-msgstr ""
-
-#: gui/app.py:3024
-msgid "No queued items match this search"
-msgstr ""
-
-#: gui/app.py:3032
-msgid "Clear the filter or search for part of a filename."
-msgstr ""
-
-#: gui/app.py:3127
-msgid "Hide activity"
-msgstr ""
-
-#: gui/app.py:3133
-msgid "Open log file"
-msgstr ""
-
-#: gui/app.py:3138
-msgid "Clear"
-msgstr ""
-
-#: gui/app.py:3173
-msgid "Hide activity"
-msgstr ""
-
-#: gui/app.py:3176
-msgid "Show activity"
-msgstr ""
-
-#: gui/app.py:3212
-msgid "The log file is not available yet"
-msgstr ""
-
-#: gui/app.py:3216
-msgid "Opened the log file"
-msgstr ""
-
-#: gui/app.py:3223
-msgid "Opened the settings folder"
-msgstr ""
-
-#: gui/app.py:3350
-msgid "Export model cache..."
-msgstr ""
-
-#: gui/app.py:3354
-msgid "Import model cache..."
-msgstr ""
-
-#: gui/app.py:3382
-msgid "Ready to process"
-msgstr ""
-
-#: gui/app.py:3400
-msgid "Add files, review a sample frame, then start."
-msgstr ""
-
-#: gui/app.py:3582
-msgid "Built-in preset names are reserved."
-msgstr ""
-
-#: gui/app.py:3602
-msgid "User preset"
-msgstr ""
-
-#: gui/app.py:3987
-msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
-msgstr ""
-
-#: gui/app.py:4200
-msgid "Close"
-msgstr ""
-
-#: gui/app.py:4241
-msgid "Detection"
-msgstr ""
-
-#: gui/app.py:4242
-msgid "Inpainting"
-msgstr ""
-
-#: gui/app.py:4243
-msgid "Providers"
-msgstr ""
-
-#: gui/app.py:4244
-msgid "Languages"
-msgstr ""
-
-#: gui/app.py:4245
-msgid "Model files"
-msgstr ""
-
-#: gui/app.py:4246
-msgid "Hash status"
-msgstr ""
-
-#: gui/app.py:4247
-msgid "Next action"
-msgstr ""
-
-#: gui/app.py:4400
-msgid "Ready"
-msgstr ""
-
-#: gui/app.py:4400
-msgid "Missing"
-msgstr ""
-
-#: gui/app.py:4408
-msgid "Disk cache"
-msgstr ""
-
-#: gui/app.py:4422
-msgid "Model cache"
-msgstr ""
-
-#: gui/app.py:4484
-msgid "Select Output Directory"
-msgstr ""
-
-#: gui/app.py:5524
-msgid "Filename (A -> Z)"
-msgstr ""
-
-#: gui/app.py:5526
-msgid "Filename (Z -> A)"
-msgstr ""
-
-#: gui/app.py:5529
-msgid "File size (largest first)"
-msgstr ""
-
-#: gui/app.py:5531
-msgid "File size (smallest first)"
-msgstr ""
-
-#: gui/app.py:5534
-msgid "Status (pending first)"
-msgstr ""
-
-#: gui/app.py:5536
-msgid "Reverse current order"
-msgstr ""
-
-#: gui/app.py:698
-msgid "Checking FFmpeg availability for audio preservation..."
-msgstr ""
-
-#: gui/app.py:724
-msgid "Device"
-msgstr ""
-
-#: gui/app.py:724
-msgid "Detecting..."
-msgstr ""
-
-#: gui/app.py:725
-msgid "Detection"
-msgstr ""
-
-#: gui/app.py:725
-msgid "Detecting..."
-msgstr ""
-
-#: gui/app.py:726
-msgid "Audio"
-msgstr ""
-
-#: gui/app.py:726
-msgid "Detecting..."
-msgstr ""
-
-#: gui/app.py:736
-msgid "Device"
-msgstr ""
-
-#: gui/app.py:737
-msgid "Detection"
-msgstr ""
-
-#: gui/app.py:738
-msgid "Audio"
-msgstr ""
-
-#: gui/app.py:804
-msgid "Custom location"
-msgstr ""
-
-#: gui/app.py:806
-msgid "Auto-create an output folder beside each source"
-msgstr ""
-
-#: gui/app.py:808
-msgid "Default workflow"
-msgstr ""
-
-#: gui/app.py:820
-msgid "Time-ranged mask regions"
-msgstr ""
-
-#: gui/app.py:1043
-msgid "Add media to the queue before starting."
-msgstr ""
-
-#: gui/app.py:1054
-msgid "No completed outputs are available yet."
-msgstr ""
-
-#: gui/app.py:1360
-msgid "Install Pillow to enable image preview tools."
-msgstr ""
-
-#: gui/app.py:1367
-msgid "Wait for the active batch to finish before editing regions."
-msgstr ""
-
-#: gui/app.py:1391
-msgid "Wait for the active batch to finish before comparing output."
-msgstr ""
-
-#: gui/app.py:1409
-msgid "Select a queue item to enable mask review, test cleanup, and zoom."
-msgstr ""
-
-#: gui/app.py:1434
-msgid "Waiting"
-msgstr ""
-
-#: gui/app.py:2091
-msgid "Detecting hardware..."
-msgstr ""
-
-#: gui/app.py:3218
-msgid "The log file could not be opened"
-msgstr ""
-
-#: gui/app.py:3225
-msgid "The settings folder could not be opened"
-msgstr ""
-
-#: gui/app.py:3237
-msgid "Save support bundle"
-msgstr ""
-
-#: gui/app.py:3267
-msgid "Support bundle could not be saved"
-msgstr ""
-
-#: gui/app.py:3289
-msgid "Export model cache"
-msgstr ""
-
-#: gui/app.py:3391
-msgid "Application status"
-msgstr ""
-
-#: gui/app.py:3393
-msgid "Ready to process"
-msgstr ""
-
-#: gui/app.py:3423
-msgid "Switched to the {profile} profile"
-msgstr ""
-
-#: gui/app.py:3533
-msgid "Save preset"
-msgstr ""
-
-#: gui/app.py:3536
-msgid "Name the current cleanup settings and save them to the user preset library."
-msgstr ""
-
-#: gui/app.py:3718
-msgid "Three first-run cues: import media, inspect the region, and run the batch."
-msgstr ""
-
-#: gui/app.py:3992
-msgid "The current video is paused at a checkpoint. Start the batch again to resume from that frame."
-msgstr ""
-
-#: gui/app.py:3997
-msgid "Completed outputs are ready. Review the outliers or open the log for details."
-msgstr ""
-
-#: gui/app.py:4032
-msgid "COMPLETED"
-msgstr ""
-
-#: gui/app.py:4034
-msgid "FAILED"
-msgstr ""
-
-#: gui/app.py:4039
-msgid "STOPPED"
-msgstr ""
-
-#: gui/app.py:4144
-msgid "Review first"
-msgstr ""
-
-#: gui/app.py:4150
-msgid "Retry suggested"
-msgstr ""
-
-#: gui/app.py:4157
-msgid "Open output"
-msgstr ""
-
-#: gui/app.py:4174
-msgid "Open report"
-msgstr ""
-
-#: gui/app.py:4183
-msgid "Open log"
-msgstr ""
-
-#: gui/app.py:4192
-msgid "Retry failed"
-msgstr ""
-
-#: gui/app.py:4241
-msgid "Unknown"
-msgstr ""
-
-#: gui/app.py:4242
-msgid "Unknown"
-msgstr ""
-
-#: gui/app.py:4243
-msgid "Unknown"
-msgstr ""
-
-#: gui/app.py:4244
-msgid "Unknown"
-msgstr ""
-
-#: gui/app.py:4245
-msgid "Unknown"
-msgstr ""
-
-#: gui/app.py:4246
-msgid "Unknown"
-msgstr ""
-
-#: gui/app.py:4247
-msgid "No action needed."
-msgstr ""
-
-#: gui/app.py:4305
-msgid "Next action"
-msgstr ""
-
-#: gui/app.py:4323
-msgid "About {app_name}"
-msgstr ""
-
-#: gui/app.py:4391
-msgid "{count} GPU{suffix}"
-msgstr ""
-
-#: gui/app.py:4410
-msgid "Disk cache"
-msgstr ""
-
-#: gui/app.py:4410
-msgid "unavailable"
-msgstr ""
-
-#: gui/app.py:4592
-msgid "Drag over the subtitle text. Release to save and refresh the mask."
-msgstr ""
-
-#: gui/app.py:4742
-msgid "Drag a larger subtitle region before releasing."
-msgstr ""
-
-#: gui/app.py:5603
-msgid "Override settings: {name}"
-msgstr ""
-
-#: gui/app.py:6074
-msgid "Application status"
-msgstr ""
-
-#: gui/app.py:705
-msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
-msgstr ""
-
-#: gui/app.py:827
-msgid "Fixed mask regions"
-msgstr ""
-
-#: gui/app.py:883
-msgid "Detecting"
-msgstr ""
-
-#: gui/app.py:1045
-msgid "Pause is already in progress."
-msgstr ""
-
-#: gui/app.py:1060
-msgid "Wait for the current batch to finish."
-msgstr ""
-
-#: gui/app.py:1061
-msgid "No failed or stopped items need retry."
-msgstr ""
-
-#: gui/app.py:1068
-msgid "Wait for the current batch to finish."
-msgstr ""
-
-#: gui/app.py:1069
-msgid "The queue is already empty."
-msgstr ""
-
-#: gui/app.py:1076
-msgid "Wait for the current batch to finish."
-msgstr ""
-
-#: gui/app.py:1077
-msgid "Run a batch first to repeat its settings."
-msgstr ""
-
-#: gui/app.py:1393
-msgid "Select a completed queue item to compare source and output."
-msgstr ""
-
-#: gui/app.py:1412
-msgid "Install Pillow to enable previews and visual inspection tools."
-msgstr ""
-
-#: gui/app.py:1876
-msgid "Video Subtitle Remover"
-msgstr ""
-
-#: gui/app.py:1884
-msgid "Add files, review one sample, then run the batch."
-msgstr ""
-
-#: gui/app.py:1979
-msgid "OUTPUT LOCATION"
-msgstr ""
-
-#: gui/app.py:2030
-msgid "Preset"
-msgstr ""
-
-#: gui/app.py:2064
-msgid "Algorithm"
-msgstr ""
-
-#: gui/app.py:2087
-msgid "Compute device"
-msgstr ""
-
-#: gui/app.py:2101
-msgid "Subtitle language"
-msgstr ""
-
-#: gui/app.py:2179
-msgid "SUBTITLE REGION"
-msgstr ""
-
-#: gui/app.py:2350
-msgid "Output codec"
-msgstr ""
-
-#: gui/app.py:2424
-msgid "Start (s)"
-msgstr ""
-
-#: gui/app.py:2437
-msgid "End (s)"
-msgstr ""
-
-#: gui/app.py:2450
+#: gui/app.py:2053
 msgid "0 uses the full clip"
 msgstr ""
 
-#: gui/app.py:2502
-msgid "EBU R128 loudness target"
+#: gui/app.py:2613
+msgid "A/B compare"
 msgstr ""
 
-#: gui/app.py:2515
-msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
-msgstr ""
-
-#: gui/app.py:2526
-msgid "Hardware-decode hint"
-msgstr ""
-
-#: gui/app.py:2539
-msgid "RIFE fast stride"
-msgstr ""
-
-#: gui/app.py:2670
-msgid "Queue"
-msgstr ""
-
-#: gui/app.py:2673
-msgid "Review queued files before starting."
-msgstr ""
-
-#: gui/app.py:2698
-msgid "{count} items"
-msgstr ""
-
-#: gui/app.py:2743
-msgid "Filter"
-msgstr ""
-
-#: gui/app.py:2978
-msgid "No media queued"
-msgstr ""
-
-#: gui/app.py:2982
-msgid "Add videos or images to build a cleanup batch. Originals stay untouched."
-msgstr ""
-
-#: gui/app.py:3042
-msgid "Clear filter"
-msgstr ""
-
-#: gui/app.py:3110
+#: gui/support_controller.py:49
 msgid "ACTIVITY"
 msgstr ""
 
-#: gui/app.py:3112
-msgid "Runtime log"
-msgstr ""
-
-#: gui/app.py:3261
-msgid "Saved redacted support bundle to {name}"
-msgstr ""
-
-#: gui/app.py:3551
-msgid "Save the current setup as a preset"
-msgstr ""
-
-#: gui/app.py:3555
-msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
-msgstr ""
-
-#: gui/app.py:3604
-msgid "Give this preset a short name."
-msgstr ""
-
-#: gui/app.py:3608
-msgid "Give this preset a short name."
-msgstr ""
-
-#: gui/app.py:3613
-msgid "Built-in preset names are reserved."
-msgstr ""
-
-#: gui/app.py:3617
-msgid "Built-in preset names are reserved."
-msgstr ""
-
-#: gui/app.py:3625
-msgid "Cancel"
-msgstr ""
-
-#: gui/app.py:3627
-msgid "Save preset"
-msgstr ""
-
-#: gui/app.py:3736
-msgid "Welcome"
-msgstr ""
-
-#: gui/app.py:3744
-msgid "Three things that make batch cleanup painless."
-msgstr ""
-
-#: gui/app.py:3801
-msgid "Got it"
-msgstr ""
-
-#: gui/app.py:3877
-msgid "Close"
-msgstr ""
-
-#: gui/app.py:4037
-msgid "PAUSED"
-msgstr ""
-
-#: gui/app.py:4042
-msgid "REVIEW"
-msgstr ""
-
-#: gui/app.py:4264
-msgid "ready"
-msgstr ""
-
-#: gui/app.py:4274
-msgid "BACKEND STATUS"
-msgstr ""
-
-#: gui/app.py:4420
-msgid "Open log"
-msgstr ""
-
-#: gui/app.py:4428
-msgid "Support bundle"
-msgstr ""
-
-#: gui/app.py:4431
-msgid "Settings folder"
-msgstr ""
-
-#: gui/app.py:4434
-msgid "Close"
-msgstr ""
-
-#: gui/app.py:4723
-msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
-msgstr ""
-
-#: gui/app.py:5018
-msgid "Optional"
-msgstr ""
-
-#: gui/app.py:5036
-msgid "Optional"
-msgstr ""
-
-#: gui/app.py:5617
-msgid "Per-file overrides"
-msgstr ""
-
-#: gui/app.py:5621
-msgid "These apply to this queued item only and survive a global settings change."
-msgstr ""
-
-#: gui/app.py:5628
-msgid "Mode"
-msgstr ""
-
-#: gui/app.py:5642
-msgid "Subtitle language"
-msgstr ""
-
-#: gui/app.py:5662
-msgid "Sensitivity"
-msgstr ""
-
-#: gui/app.py:5690
-msgid "Output codec"
-msgstr ""
-
-#: gui/app.py:5724
-msgid "Cancel"
-msgstr ""
-
-#: gui/app.py:5726
-msgid "Save"
-msgstr ""
-
-#: gui/app.py:816
-msgid "Timed manual regions: {count} rectangle{suffix}"
-msgstr ""
-
-#: gui/app.py:835
-msgid "Fixed mask region"
-msgstr ""
-
-#: gui/app.py:837
-msgid "Automatic subtitle detection"
-msgstr ""
-
-#: gui/app.py:838
-msgid "Recommended default"
-msgstr ""
-
-#: gui/app.py:1047
-msgid "Stop is already in progress."
-msgstr ""
-
-#: gui/app.py:1049
-msgid "The batch is already running."
-msgstr ""
-
-#: gui/app.py:1089
-msgid "Outputs are ready for review"
-msgstr ""
-
-#: gui/app.py:1395
-msgid "Finish processing this item before using A/B compare."
-msgstr ""
-
-#: gui/app.py:1397
-msgid "The cleaned output file is not available on disk."
-msgstr ""
-
-#: gui/app.py:1418
-msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
-msgstr ""
-
-#: gui/app.py:1421
-msgid "Preview tools are ready. Review the mask or test cleanup before starting."
-msgstr ""
-
-#: gui/app.py:3239
-msgid "Support bundle"
-msgstr ""
-
-#: gui/app.py:3239
-msgid "All files"
-msgstr ""
-
-#: gui/app.py:3291
-msgid "Model cache bundle"
-msgstr ""
-
-#: gui/app.py:3291
-msgid "All files"
-msgstr ""
-
-#: gui/app.py:3715
-msgid "Welcome to {app_name}"
-msgstr ""
-
-#: gui/app.py:4055
-msgid "Slowest stage"
-msgstr ""
-
-#: gui/app.py:4080
-msgid "Sampled quality check"
-msgstr ""
-
-#: gui/app.py:4333
+#: gui/support_controller.py:461 gui/support_controller.py:471
 msgid "About {app_name}"
 msgstr ""
 
-#: gui/app.py:4335
-msgid "Backend status and app version."
+#: gui/support_controller.py:148
+msgid "Activity log cleared"
 msgstr ""
 
-#: gui/app.py:4588
-msgid "Draw subtitle region for {name}"
+#: gui/app.py:1831
+msgid "Adaptive edge padding"
 msgstr ""
 
-#: gui/app.py:5118
-msgid "Clear all"
+#: gui/preview_controller.py:296
+msgid "Add a file to the queue first"
 msgstr ""
 
-#: gui/app.py:5124
-msgid "Save"
+#: gui/app.py:2736
+msgid "Add every supported media file from a folder."
 msgstr ""
 
-#: gui/app.py:5127
-msgid "Cancel"
+#: gui/widgets.py:1664 gui/widgets.py:1749
+msgid "Add files to the queue"
 msgstr ""
 
-#: gui/app.py:5134
-msgid "Drag to add a region. Drag again for multi-region."
+#: gui/app.py:2862
+msgid "Add files, review a sample frame, then start."
 msgstr ""
 
-#: gui/app.py:5138
-msgid "Scrub to a visible frame; enter seconds and use Add timed for moving subtitles."
+#: gui/app.py:1465
+msgid "Add files, review one sample, then run the batch."
 msgstr ""
 
-#: gui/app.py:824
-msgid "Manual regions: {count} fixed rectangles"
+#: gui/app.py:3944
+msgid "Add keyframe"
 msgstr ""
 
-#: gui/app.py:937
-msgid "Live preview: {file_name}"
+#: gui/app.py:1029
+msgid "Add media to the queue before starting."
 msgstr ""
 
-#: gui/app.py:939
-msgid "Frame {current}/{total} ({percent}%)"
+#: gui/app.py:1836
+msgid "Add more padding around uncertain text detections while keeping confident detections tight. Helps catch faint edges."
 msgstr ""
 
-#: gui/app.py:1084
-msgid "{count} queued and ready to process"
-msgstr ""
-
-#: gui/app.py:1094
-msgid "Some items need attention"
-msgstr ""
-
-#: gui/app.py:1098
-msgid "Ready"
-msgstr ""
-
-#: gui/app.py:1879
-msgid "Version {version}"
-msgstr ""
-
-#: gui/app.py:3183
-msgid "{count} warning{suffix}"
-msgstr ""
-
-#: gui/app.py:3191
-msgid "{count} error{suffix}"
-msgstr ""
-
-#: gui/app.py:4263
-msgid "FFmpeg {name}"
-msgstr ""
-
-#: gui/app.py:4365
-msgid "Version {version}"
-msgstr ""
-
-#: gui/app.py:4950
-msgid "Frame"
-msgstr ""
-
-#: gui/app.py:4995
-msgid "Start sec"
-msgstr ""
-
-#: gui/app.py:5005
-msgid "End sec"
-msgstr ""
-
-#: gui/app.py:5121
+#: gui/app.py:3941
 msgid "Add timed"
 msgstr ""
 
-#: gui/app.py:831
+#: gui/app.py:2710
+msgid "Add videos or images to build a cleanup batch. Originals are never modified."
+msgstr ""
+
+#: gui/app.py:1956
+msgid "Adjust how many frames are processed together to fit available GPU memory. Recommended for 4K video."
+msgstr ""
+
+#: gui/app.py:1646
+msgid "Algorithm"
+msgstr ""
+
+#: gui/app.py:1861
+msgid "Align nearby frames before rebuilding hidden background pixels. Slower, but cleaner on pans and zooms."
+msgstr ""
+
+#: gui/widgets.py:1787
+msgid "All Files"
+msgstr ""
+
+#: gui/widgets.py:1784
+msgid "All Supported"
+msgstr ""
+
+#: gui/support_controller.py:215 gui/support_controller.py:275 gui/support_controller.py:308
+msgid "All files"
+msgstr ""
+
+#: gui/app.py:2272
+msgid "Alternative palette tuned for low-vision users. Persists across sessions."
+msgstr ""
+
+#: gui/app.py:2853 gui/app.py:4930
+msgid "Application status"
+msgstr ""
+
+#: gui/app.py:837 gui/app.py:849
+msgid "Audio"
+msgstr ""
+
+#: gui/app.py:917
+msgid "Auto-create an output folder beside each source"
+msgstr ""
+
+#: gui/app.py:1848
+msgid "Auto-detect subtitle band on load"
+msgstr ""
+
+#: gui/app.py:1708
+msgid "Auto-detect the subtitle language from a sample frame."
+msgstr ""
+
+#: gui/app.py:1967
+msgid "Automatic detection only. Carry recent text masks forward for a few frames so a single missed detection does not leave a flash."
+msgstr ""
+
+#: gui/app.py:959
+msgid "Automatic subtitle detection"
+msgstr ""
+
+#: gui/support_controller.py:412
+msgid "BACKEND STATUS"
+msgstr ""
+
+#: gui/support_controller.py:473
+msgid "Backend status and app version."
+msgstr ""
+
+#: gui/app.py:187
+msgid "Backend status is still being probed."
+msgstr ""
+
+#: gui/quality_controller.py:71 gui/quality_controller.py:85
+msgid "Batch finished"
+msgstr ""
+
+#: gui/quality_controller.py:86
+msgid "Batch finished with issues"
+msgstr ""
+
+#: gui/app.py:1520
+msgid "Build your batch"
+msgstr ""
+
+#: gui/app.py:3045 gui/app.py:3076 gui/app.py:3080
+msgid "Built-in preset names are reserved."
+msgstr ""
+
+#: gui/quality_controller.py:164
+msgid "COMPLETED"
+msgstr ""
+
+#: gui/app.py:840
+msgid "CPU mode"
+msgstr ""
+
+#: gui/support_controller.py:531
+msgid "CPU only"
+msgstr ""
+
+#: gui/app.py:3088 gui/app.py:3955 gui/app.py:4575
+msgid "Cancel"
+msgstr ""
+
+#: gui/widgets.py:2023
+msgid "Cancel this item"
+msgstr ""
+
+#: gui/app.py:1963
+msgid "Carry masks across missed detections"
+msgstr ""
+
+#: gui/app.py:4452
+msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
+msgstr ""
+
+#: gui/app.py:2277
+msgid "Check for updates on startup"
+msgstr ""
+
+#: gui/app.py:2012
+msgid "Check output quality after processing"
+msgstr ""
+
+#: gui/app.py:2006
+msgid "Check text on major scene frames and reuse masks between them. Faster on long videos, less precise on motion."
+msgstr ""
+
+#: gui/app.py:1743 gui/app.py:809
+msgid "Checking FFmpeg availability for audio preservation..."
+msgstr ""
+
+#: gui/widgets.py:1796
+msgid "Choose a folder to clean"
+msgstr ""
+
+#: gui/app.py:2719 gui/widgets.py:1680
+msgid "Choose files"
+msgstr ""
+
+#: gui/widgets.py:1720
+msgid "Choose files or a folder below. Originals are never modified."
+msgstr ""
+
+#: gui/widgets.py:1782
+msgid "Choose files to clean"
+msgstr ""
+
+#: gui/app.py:1575 gui/app.py:2315 gui/app.py:2729 gui/widgets.py:1685
+msgid "Choose folder"
+msgstr ""
+
+#: gui/app.py:2726
+msgid "Choose one or more videos or images to add to the queue."
+msgstr ""
+
+#: gui/app.py:1992
+msgid "Clean up interlaced video automatically"
+msgstr ""
+
+#: gui/app.py:1656
+msgid "Cleanup algorithm"
+msgstr ""
+
+#: gui/app.py:2490 gui/support_controller.py:78
+msgid "Clear"
+msgstr ""
+
+#: gui/app.py:3938
+msgid "Clear all"
+msgstr ""
+
+#: gui/app.py:2770
+msgid "Clear filter"
+msgstr ""
+
+#: gui/app.py:2681
+msgid "Clear queue"
+msgstr ""
+
+#: gui/app.py:2760
+msgid "Clear the filter or search for part of a filename."
+msgstr ""
+
+#: gui/support_controller.py:540
+msgid "Click Import or drag files onto the queue"
+msgstr ""
+
+#: gui/app.py:2542
+msgid "Click a queue item, then use Set region or Review mask."
+msgstr ""
+
+#: gui/preview_controller.py:718 gui/quality_controller.py:332 gui/support_controller.py:572
+msgid "Close"
+msgstr ""
+
+#: gui/app.py:1895
+msgid "Colour-tuned mask expansion"
+msgstr ""
+
+#: gui/quality_controller.py:129
+msgid "Completed outputs are ready. Review the outliers or open the log for details."
+msgstr ""
+
+#: gui/support_controller.py:536
+msgid "Compute"
+msgstr ""
+
+#: gui/app.py:1669
+msgid "Compute device"
+msgstr ""
+
+#: gui/widgets.py:2010
+msgid "Copy CLI command"
+msgstr ""
+
+#: gui/widgets.py:2008
+msgid "Copy source path"
+msgstr ""
+
+#: gui/preview_controller.py:331
+msgid "Could not detect language from this frame"
+msgstr ""
+
+#: gui/app.py:915
+msgid "Custom location"
+msgstr ""
+
+#: gui/preview_controller.py:86
+msgid "DETECTING"
+msgstr ""
+
+#: gui/app.py:919
+msgid "Default workflow"
+msgstr ""
+
+#: gui/app.py:1703
+msgid "Detect"
+msgstr ""
+
+#: gui/app.py:1996
+msgid "Detect and remove comb-like lines from older interlaced video before cleanup."
+msgstr ""
+
+#: gui/preview_controller.py:60
+msgid "Detecting"
+msgstr ""
+
+#: gui/app.py:1673
+msgid "Detecting hardware..."
+msgstr ""
+
+#: gui/preview_controller.py:298
+msgid "Detecting language..."
+msgstr ""
+
+#: gui/app.py:835 gui/app.py:836 gui/app.py:837
+msgid "Detecting..."
+msgstr ""
+
+#: gui/app.py:836 gui/app.py:848 gui/support_controller.py:379
+msgid "Detection"
+msgstr ""
+
+#: gui/support_controller.py:534
+msgid "Detection engines"
+msgstr ""
+
+#: gui/app.py:835 gui/app.py:847
+msgid "Device"
+msgstr ""
+
+#: gui/support_controller.py:546 gui/support_controller.py:548
+msgid "Disk cache"
+msgstr ""
+
+#: gui/app.py:2650
+msgid "Double-click to view at full size. Use Set region above to draw the subtitle band."
+msgstr ""
+
+#: gui/preview_controller.py:967
+msgid "Drag a larger subtitle region before releasing."
+msgstr ""
+
+#: gui/app.py:3642
+msgid "Drag a rectangle, or choose Polygon and click vertices."
+msgstr ""
+
+#: gui/widgets.py:1671
+msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
+msgstr ""
+
+#: gui/preview_controller.py:817
+msgid "Drag over the subtitle text. Release to save and refresh the mask."
+msgstr ""
+
+#: gui/app.py:3962
+msgid "Drag to add a region. Drag again for multi-region."
+msgstr ""
+
+#: gui/preview_controller.py:813
+msgid "Draw subtitle region for {name}"
+msgstr ""
+
+#: gui/app.py:2573
+msgid "Draw the subtitle region directly on the preview frame."
+msgstr ""
+
+#: gui/app.py:2107
+msgid "EBU R128 loudness target"
+msgstr ""
+
+#: gui/app.py:2040
+msgid "End (s)"
+msgstr ""
+
+#: gui/app.py:3726
+msgid "End sec"
+msgstr ""
+
+#: gui/app.py:2231
+msgid "English"
+msgstr ""
+
+#: gui/app.py:1632
+msgid "Export"
+msgstr ""
+
+#: gui/app.py:1983
+msgid "Export debug mask video (.mask.mp4)"
+msgstr ""
+
+#: gui/app.py:1974
+msgid "Export detected text as .srt sidecar"
+msgstr ""
+
+#: gui/support_controller.py:273
+msgid "Export model cache"
+msgstr ""
+
+#: gui/support_controller.py:348
+msgid "Export model cache..."
+msgstr ""
+
+#: gui/quality_controller.py:166
+msgid "FAILED"
+msgstr ""
+
+#: gui/support_controller.py:538
+msgid "FFmpeg"
+msgstr ""
+
+#: gui/support_controller.py:394
+msgid "FFmpeg basic"
+msgstr ""
+
+#: gui/support_controller.py:397
+msgid "FFmpeg codecs"
+msgstr ""
+
+#: gui/app.py:816
+msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
+msgstr ""
+
+#: gui/support_controller.py:395
+msgid "FFmpeg quality"
+msgstr ""
+
+#: gui/app.py:844
+msgid "FFmpeg ready"
+msgstr ""
+
+#: gui/support_controller.py:396
+msgid "FFmpeg speech"
+msgstr ""
+
+#: gui/support_controller.py:401
+msgid "FFmpeg {name}"
+msgstr ""
+
+#: gui/widgets.py:2040
+msgid "Fast remux and keep embedded subtitles"
+msgstr ""
+
+#: gui/widgets.py:2036
+msgid "Fast strip embedded subtitles"
+msgstr ""
+
+#: gui/app.py:2002
+msgid "Faster keyframe-only detection"
+msgstr ""
+
+#: gui/app.py:4364
+msgid "File size (largest first)"
+msgstr ""
+
+#: gui/app.py:4366
+msgid "File size (smallest first)"
+msgstr ""
+
+#: gui/app.py:4359
+msgid "Filename (A -> Z)"
+msgstr ""
+
+#: gui/app.py:4361
+msgid "Filename (Z -> A)"
+msgstr ""
+
+#: gui/app.py:2471
+msgid "Filter"
+msgstr ""
+
+#: gui/app.py:3661
+msgid "Finish polygon"
+msgstr ""
+
+#: gui/app.py:1040
+msgid "Finish processing an item to open its output folder."
+msgstr ""
+
+#: gui/preview_controller.py:235
+msgid "Finish processing this item before using A/B compare."
+msgstr ""
+
+#: gui/app.py:1952
+msgid "Fit frame batches to GPU memory"
+msgstr ""
+
+#: gui/app.py:957
+msgid "Fixed mask region"
+msgstr ""
+
+#: gui/app.py:949
+msgid "Fixed mask regions"
+msgstr ""
+
+#: gui/app.py:3966
+msgid "For motion, scrub, draw one shape, add a keyframe, then repeat and save motion."
+msgstr ""
+
+#: gui/app.py:3669
+msgid "Frame"
+msgstr ""
+
+#: gui/app.py:2145
+msgid "Frame interpolation stride"
+msgstr ""
+
+#: gui/preview_controller.py:120
+msgid "Frame {current}/{total} ({percent}%)"
+msgstr ""
+
+#: gui/app.py:2587
+msgid "Full size"
+msgstr ""
+
+#: gui/app.py:3067 gui/app.py:3071
+msgid "Give this preset a short name."
+msgstr ""
+
+#: gui/app.py:3269
+msgid "Got it"
+msgstr ""
+
+#: gui/app.py:1899
+msgid "Grow the mask to cover serifs / drop shadows that match the subtitle colour. Catches decorative lettering."
+msgstr ""
+
+#: gui/app.py:1946
+msgid "H.264 plays almost everywhere. H.265 and AV1 make smaller files but take longer; VVC needs a compatible FFmpeg build."
+msgstr ""
+
+#: gui/app.py:1926
+msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
+msgstr ""
+
+#: gui/app.py:2131
+msgid "Hardware-decode hint"
+msgstr ""
+
+#: gui/support_controller.py:384
+msgid "Hash status"
+msgstr ""
+
+#: gui/app.py:1477
+msgid "Help"
+msgstr ""
+
+#: gui/support_controller.py:114 gui/support_controller.py:66
+msgid "Hide activity"
+msgstr ""
+
+#: gui/app.py:2380
+msgid "Hide detailed controls"
+msgstr ""
+
+#: gui/app.py:2268
+msgid "High-contrast theme (restart required)"
+msgstr ""
+
+#: gui/app.py:2875
+msgid "Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."
+msgstr ""
+
+#: gui/widgets.py:1786
+msgid "Image Files"
+msgstr ""
+
+#: gui/app.py:1495 gui/app.py:1639
+msgid "Import"
+msgstr ""
+
+#: gui/app.py:1528
+msgid "Import files or choose a folder to start."
+msgstr ""
+
+#: gui/support_controller.py:307
+msgid "Import model cache"
+msgstr ""
+
+#: gui/support_controller.py:352
+msgid "Import model cache..."
+msgstr ""
+
+#: gui/app.py:1909
+msgid "Improve detection for top-to-bottom Japanese or Chinese text. Saved masks stay aligned to the source."
+msgstr ""
+
+#: gui/preview_controller.py:178
+msgid "Info"
+msgstr ""
+
+#: gui/support_controller.py:380
+msgid "Inpainting"
+msgstr ""
+
+#: gui/support_controller.py:535
+msgid "Inpainting engines"
+msgstr ""
+
+#: gui/support_controller.py:540
+msgid "Input"
+msgstr ""
+
+#: gui/app.py:1495
+msgid "Inspect"
+msgstr ""
+
+#: gui/preview_controller.py:200
+msgid "Install Pillow to enable image preview tools."
+msgstr ""
+
+#: gui/preview_controller.py:252
+msgid "Install Pillow to enable previews and visual inspection tools."
+msgstr ""
+
+#: gui/app.py:2224
+msgid "Interface language (restart required)"
+msgstr ""
+
+#: gui/app.py:2198
+msgid "Interface text size (restart required)"
+msgstr ""
+
+#: gui/app.py:934
+msgid "Interpolated keyframe masks"
+msgstr ""
+
+#: gui/app.py:2085
+msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
+msgstr ""
+
+#: gui/app.py:1871
+msgid "Keep background recovery from mixing frames across scene changes. Recommended for edited video."
+msgstr ""
+
+#: gui/app.py:1867
+msgid "Keep scene changes separate"
+msgstr ""
+
+#: gui/app.py:2120
+msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
+msgstr ""
+
+#: gui/app.py:1729
+msgid "LaMa fast mode - favor speed over fill detail"
+msgstr ""
+
+#: gui/app.py:1733
+msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
+msgstr ""
+
+#: gui/support_controller.py:382
+msgid "Languages"
+msgstr ""
+
+#: gui/app.py:2310
+msgid "Leave empty for the system temporary directory. The selected folder is write-tested before a batch starts."
+msgstr ""
+
+#: gui/preview_controller.py:118
+msgid "Live preview: {file_name}"
+msgstr ""
+
+#: gui/app.py:1643
+msgid "Load a preset JSON file into the user library."
+msgstr ""
+
+#: gui/support_controller.py:542
+msgid "Log file"
+msgstr ""
+
+#: gui/app.py:953
 msgid "Manual region: ({x1}, {y1}) to ({x2}, {y2})"
 msgstr ""
 
-#: gui/app.py:3974
-msgid "Total time {elapsed} - {count} item{suffix} processed"
+#: gui/app.py:946
+msgid "Manual regions: {count} fixed rectangles"
 msgstr ""
 
-#: gui/app.py:4062
-msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
-msgstr ""
-
-#: gui/app.py:4090
+#: gui/quality_controller.py:222
 msgid "Measured {items} completed item{item_suffix} across {samples} sampled frame{sample_suffix}. Higher is generally better."
 msgstr ""
 
+#: gui/support_controller.py:538
+msgid "Missing"
+msgstr ""
+
+#: gui/app.py:4479
+msgid "Mode"
+msgstr ""
+
+#: gui/support_controller.py:560
+msgid "Model cache"
+msgstr ""
+
+#: gui/support_controller.py:275 gui/support_controller.py:308
+msgid "Model cache bundle"
+msgstr ""
+
+#: gui/support_controller.py:383
+msgid "Model files"
+msgstr ""
+
+#: gui/app.py:1857
+msgid "Motion-aligned background recovery"
+msgstr ""
+
+#: gui/app.py:929
+msgid "Moving manual regions: {count} track{suffix}"
+msgstr ""
+
+#: gui/app.py:2103
+msgid "Mux every audio stream from the source. Off keeps only the first track."
+msgstr ""
+
+#: gui/app.py:2999
+msgid "Name the current cleanup settings and save them to the user preset library."
+msgstr ""
+
+#: gui/preview_controller.py:176 gui/preview_controller.py:177
+msgid "Needs attention"
+msgstr ""
+
+#: gui/app.py:2874
+msgid "Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."
+msgstr ""
+
+#: gui/support_controller.py:385 gui/support_controller.py:443
+msgid "Next action"
+msgstr ""
+
+#: gui/app.py:844
+msgid "No FFmpeg"
+msgstr ""
+
+#: gui/support_controller.py:385
+msgid "No action needed."
+msgstr ""
+
+#: gui/app.py:2706
+msgid "No media queued"
+msgstr ""
+
+#: gui/app.py:2752
+msgid "No queued items match this search"
+msgstr ""
+
+#: gui/support_controller.py:525 gui/support_controller.py:526
+msgid "None"
+msgstr ""
+
+#: gui/app.py:1047
+msgid "Nothing to retry - every item is done."
+msgstr ""
+
+#: gui/app.py:1561
+msgid "OUTPUT LOCATION"
+msgstr ""
+
+#: gui/app.py:2621
+msgid "Open a frame slider that wipes between source and cleaned output."
+msgstr ""
+
+#: gui/quality_controller.py:315 gui/support_controller.py:558
+msgid "Open log"
+msgstr ""
+
+#: gui/support_controller.py:72
+msgid "Open log file"
+msgstr ""
+
+#: gui/app.py:2666 gui/quality_controller.py:289
+msgid "Open output"
+msgstr ""
+
+#: gui/widgets.py:1988
+msgid "Open quality sheet"
+msgstr ""
+
+#: gui/quality_controller.py:306
+msgid "Open report"
+msgstr ""
+
+#: gui/widgets.py:1928 gui/widgets.py:1985
+msgid "Open result"
+msgstr ""
+
+#: gui/app.py:2595
+msgid "Open the selected source frame in a larger viewer."
+msgstr ""
+
+#: gui/app.py:843
+msgid "OpenCV fallback"
+msgstr ""
+
+#: gui/support_controller.py:157
+msgid "Opened the log file"
+msgstr ""
+
+#: gui/support_controller.py:164
+msgid "Opened the settings folder"
+msgstr ""
+
+#: gui/app.py:3743 gui/app.py:3766
+msgid "Optional"
+msgstr ""
+
+#: gui/app.py:1936 gui/app.py:4540
+msgid "Output codec"
+msgstr ""
+
+#: gui/app.py:1075
+msgid "Outputs are ready for review"
+msgstr ""
+
+#: gui/quality_controller.py:117
+msgid "Outputs are ready to review."
+msgstr ""
+
+#: gui/widgets.py:2029
+msgid "Override settings for this file..."
+msgstr ""
+
+#: gui/app.py:4440
+msgid "Override settings: {name}"
+msgstr ""
+
+#: gui/quality_controller.py:169
+msgid "PAUSED"
+msgstr ""
+
+#: gui/app.py:2099
+msgid "Pass through every audio stream (Bluray/DVD multi-track)"
+msgstr ""
+
+#: gui/processing_controller.py:85
+msgid "Pause batch"
+msgstr ""
+
+#: gui/app.py:1031
+msgid "Pause is already in progress."
+msgstr ""
+
+#: gui/processing_controller.py:120
+msgid "Pausing..."
+msgstr ""
+
+#: gui/app.py:4450 gui/app.py:4468
+msgid "Per-file overrides"
+msgstr ""
+
+#: gui/app.py:3586 gui/app.py:3602 gui/app.py:3608 gui/app.py:3637
+msgid "Polygon"
+msgstr ""
+
+#: gui/app.py:1737
+msgid "Preserve the source audio track"
+msgstr ""
+
+#: gui/app.py:1612
+msgid "Preset"
+msgstr ""
+
+#: gui/widgets.py:2227
+msgid "Press Shift+F10 or the Menu key for item actions."
+msgstr ""
+
+#: gui/app.py:2536
+msgid "Preview a sample frame"
+msgstr ""
+
+#: gui/widgets.py:1980
+msgid "Preview source frame"
+msgstr ""
+
+#: gui/preview_controller.py:196
+msgid "Preview tools are locked while a batch is running."
+msgstr ""
+
+#: gui/preview_controller.py:246
+msgid "Preview tools are locked while the batch is running."
+msgstr ""
+
+#: gui/preview_controller.py:261
+msgid "Preview tools are ready. Review the mask or test cleanup before starting."
+msgstr ""
+
+#: gui/preview_controller.py:258
+msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
+msgstr ""
+
+#: gui/processing_controller.py:798
+msgid "Processing failed"
+msgstr ""
+
+#: gui/support_controller.py:381
+msgid "Providers"
+msgstr ""
+
+#: gui/app.py:2177
+msgid "Quality report sheet (side-by-side PNG comparison)"
+msgstr ""
+
+#: gui/app.py:2398
+msgid "Queue"
+msgstr ""
+
+#: gui/quality_controller.py:174
+msgid "REVIEW"
+msgstr ""
+
+#: gui/app.py:2165
+msgid "Read frames ahead in the background"
+msgstr ""
+
+#: gui/app.py:2169
+msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
+msgstr ""
+
+#: gui/app.py:1084 gui/app.py:2441 gui/support_controller.py:538
+msgid "Ready"
+msgstr ""
+
+#: gui/app.py:2844 gui/app.py:2855 gui/widgets.py:1910 gui/widgets.py:2226 gui/widgets.py:2241
+msgid "Ready to process"
+msgstr ""
+
+#: gui/app.py:960
+msgid "Recommended default"
+msgstr ""
+
+#: gui/app.py:3507 gui/app.py:3637
+msgid "Rectangle"
+msgstr ""
+
+#: gui/preview_controller.py:948
+msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
+msgstr ""
+
+#: gui/widgets.py:1923
+msgid "Remove"
+msgstr ""
+
+#: gui/app.py:2065
+msgid "Remove dialogue subtitles (short-lived OCR tracks)"
+msgstr ""
+
+#: gui/widgets.py:2048
+msgid "Remove from queue"
+msgstr ""
+
+#: gui/app.py:2075
+msgid "Remove persistent text (logos, tickers, lower-thirds)"
+msgstr ""
+
+#: gui/app.py:2069
+msgid "Remove short-lived dialogue text. Persistent logos and lower-thirds are controlled separately below."
+msgstr ""
+
+#: gui/app.py:2079
+msgid "Remove text that stays in one place for about three seconds or longer, such as lower-thirds."
+msgstr ""
+
+#: gui/widgets.py:2005
+msgid "Rename output..."
+msgstr ""
+
+#: gui/app.py:2676
+msgid "Repeat last"
+msgstr ""
+
+#: gui/widgets.py:2017
+msgid "Repeat with these settings"
+msgstr ""
+
+#: gui/app.py:1580 gui/app.py:1782
+msgid "Reset"
+msgstr ""
+
+#: gui/app.py:2671 gui/quality_controller.py:324
+msgid "Retry failed"
+msgstr ""
+
+#: gui/quality_controller.py:282
+msgid "Retry suggested"
+msgstr ""
+
+#: gui/widgets.py:1991
+msgid "Retry with suggested settings"
+msgstr ""
+
+#: gui/app.py:1721
+msgid "Reuse a fixed subtitle region (skip per-frame scanning)"
+msgstr ""
+
+#: gui/app.py:1886
+msgid "Reuse masks on unchanged frames"
+msgstr ""
+
+#: gui/widgets.py:1999
+msgid "Reveal output folder"
+msgstr ""
+
+#: gui/app.py:4371
+msgid "Reverse current order"
+msgstr ""
+
+#: gui/quality_controller.py:276
+msgid "Review first"
+msgstr ""
+
+#: gui/app.py:2576
+msgid "Review mask"
+msgstr ""
+
+#: gui/app.py:2401
+msgid "Review queued files before starting."
+msgstr ""
+
+#: gui/widgets.py:1982
+msgid "Review subtitle mask"
+msgstr ""
+
+#: gui/app.py:2872
+msgid "Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."
+msgstr ""
+
+#: gui/app.py:1495
+msgid "Run"
+msgstr ""
+
+#: gui/app.py:1063
+msgid "Run a batch first to repeat its settings."
+msgstr ""
+
+#: gui/widgets.py:2044
+msgid "Run burned-in cleanup instead"
+msgstr ""
+
+#: gui/app.py:2609
+msgid "Run detect + inpaint on the first frame of the selected item."
+msgstr ""
+
+#: gui/app.py:2584
+msgid "Run detection on the selected item and show the first-frame mask."
+msgstr ""
+
+#: gui/support_controller.py:51
+msgid "Runtime log"
+msgstr ""
+
+#: gui/quality_controller.py:171
+msgid "STOPPED"
+msgstr ""
+
+#: gui/app.py:1761
+msgid "SUBTITLE REGION"
+msgstr ""
+
+#: gui/app.py:2016
+msgid "Sample the finished video for visual damage, remaining text, and flicker, then flag results that need review."
+msgstr ""
+
+#: gui/quality_controller.py:212
+msgid "Sampled quality check"
+msgstr ""
+
+#: gui/app.py:3952 gui/app.py:4577
+msgid "Save"
+msgstr ""
+
+#: gui/app.py:2181
+msgid "Save a side-by-side source/output image for sampled frames. Also enables the numeric quality report."
+msgstr ""
+
+#: gui/app.py:1626
+msgid "Save as..."
+msgstr ""
+
+#: gui/app.py:3948
+msgid "Save motion"
+msgstr ""
+
+#: gui/app.py:2987 gui/app.py:2996 gui/app.py:3090
+msgid "Save preset"
+msgstr ""
+
+#: gui/support_controller.py:213
+msgid "Save support bundle"
+msgstr ""
+
+#: gui/app.py:3014
+msgid "Save the current setup as a preset"
+msgstr ""
+
+#: gui/support_controller.py:243
+msgid "Saved redacted support bundle to {name}"
+msgstr ""
+
+#: gui/app.py:2217
+msgid "Scales interface text and dependent controls on the next launch."
+msgstr ""
+
+#: gui/app.py:1852
+msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
+msgstr ""
+
+#: gui/app.py:3323
+msgid "Select Output Directory"
+msgstr ""
+
+#: gui/app.py:3341
+msgid "Select Processing Work Directory"
+msgstr ""
+
+#: gui/preview_controller.py:233
+msgid "Select a completed queue item to compare source and output."
+msgstr ""
+
+#: gui/preview_controller.py:249
+msgid "Select a queue item to enable mask review, test cleanup, and zoom."
+msgstr ""
+
+#: gui/app.py:2625
+msgid "Select a queue item to enable preview tools."
+msgstr ""
+
+#: gui/preview_controller.py:198
+msgid "Select a queued item to enable preview tools."
+msgstr ""
+
+#: gui/app.py:4512
+msgid "Sensitivity"
+msgstr ""
+
+#: gui/app.py:1777 gui/app.py:2565
+msgid "Set region"
+msgstr ""
+
+#: gui/support_controller.py:541
+msgid "Settings"
+msgstr ""
+
+#: gui/support_controller.py:569
+msgid "Settings folder"
+msgstr ""
+
+#: gui/app.py:3630
+msgid "Shape"
+msgstr ""
+
+#: gui/support_controller.py:117
+msgid "Show activity"
+msgstr ""
+
+#: gui/app.py:1792 gui/app.py:2384
+msgid "Show detailed controls"
+msgstr ""
+
+#: gui/app.py:1890
+msgid "Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."
+msgstr ""
+
+#: gui/app.py:1725
+msgid "Skip repeated detection when you have already set a precise subtitle region."
+msgstr ""
+
+#: gui/quality_controller.py:187
+msgid "Slowest stage"
+msgstr ""
+
+#: gui/app.py:1877
+msgid "Smooth detection between frames"
+msgstr ""
+
+#: gui/app.py:1881
+msgid "Smooths per-frame OCR jitter and fills single-frame misses. Recommended."
+msgstr ""
+
+#: gui/quality_controller.py:119
+msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
+msgstr ""
+
+#: gui/app.py:1080
+msgid "Some items need attention"
+msgstr ""
+
+#: gui/app.py:2430
+msgid "Sort"
+msgstr ""
+
+#: gui/app.py:2027
+msgid "Start (s)"
+msgstr ""
+
+#: gui/app.py:2661 gui/processing_controller.py:966
+msgid "Start batch"
+msgstr ""
+
+#: gui/app.py:3716
+msgid "Start sec"
+msgstr ""
+
+#: gui/app.py:4369
+msgid "Status (pending first)"
+msgstr ""
+
+#: gui/app.py:1033
+msgid "Stop is already in progress."
+msgstr ""
+
+#: gui/processing_controller.py:145
+msgid "Stopping..."
+msgstr ""
+
+#: gui/app.py:2089
+msgid "Stops karaoke captions leaking original text through the gaps between syllables."
+msgstr ""
+
+#: gui/app.py:2187
+msgid "Structured JSON log"
+msgstr ""
+
+#: gui/app.py:1683 gui/app.py:4493
+msgid "Subtitle language"
+msgstr ""
+
+#: gui/support_controller.py:215 gui/support_controller.py:566
+msgid "Support bundle"
+msgstr ""
+
+#: gui/app.py:2885
+msgid "Switched to the {profile} profile"
+msgstr ""
+
+#: gui/app.py:2230
+msgid "System"
+msgstr ""
+
+#: gui/app.py:2873
+msgid "Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."
+msgstr ""
+
+#: gui/app.py:2601
+msgid "Test cleanup"
+msgstr ""
+
+#: gui/app.py:1035
+msgid "The batch is already running."
+msgstr ""
+
+#: gui/preview_controller.py:237
+msgid "The cleaned output file is not available on disk."
+msgstr ""
+
+#: gui/quality_controller.py:124
+msgid "The current video is paused at a checkpoint. Start the batch again to resume from that frame."
+msgstr ""
+
+#: gui/support_controller.py:159
+msgid "The log file could not be opened"
+msgstr ""
+
+#: gui/support_controller.py:153
+msgid "The log file is not available yet"
+msgstr ""
+
+#: gui/app.py:1055
+msgid "The queue is empty - add media to get started."
+msgstr ""
+
+#: gui/support_controller.py:166
+msgid "The settings folder could not be opened"
+msgstr ""
+
+#: gui/app.py:4472
+msgid "These apply to this queued item only and survive a global settings change."
+msgstr ""
+
+#: gui/app.py:3186
+msgid "Three first-run cues: import media, inspect the region, and run the batch."
+msgstr ""
+
+#: gui/app.py:3212
+msgid "Three things that make batch cleanup painless."
+msgstr ""
+
+#: gui/app.py:942
+msgid "Time-ranged mask regions"
+msgstr ""
+
+#: gui/app.py:938
+msgid "Timed manual regions: {count} rectangle{suffix}"
+msgstr ""
+
+#: gui/quality_controller.py:106
+msgid "Total time {elapsed} - {count} item{suffix} processed"
+msgstr ""
+
+#: gui/app.py:2140
+msgid "Try hardware video decoding for faster input. The app falls back to software decoding if needed."
+msgstr ""
+
+#: gui/support_controller.py:379 gui/support_controller.py:380 gui/support_controller.py:381 gui/support_controller.py:382 gui/support_controller.py:383 gui/support_controller.py:384
+msgid "Unknown"
+msgstr ""
+
+#: gui/app.py:3018
+msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
+msgstr ""
+
+#: gui/app.py:2324
+msgid "Use system"
+msgstr ""
+
+#: gui/app.py:1930
+msgid "Use the GPU's media encoder when available. The app retries with CPU encoding if it fails."
+msgstr ""
+
+#: gui/app.py:3043 gui/app.py:3065
+msgid "User preset"
+msgstr ""
+
+#: gui/app.py:2259
+msgid "Uses the system language or a compiled catalog on the next launch."
+msgstr ""
+
+#: gui/app.py:1457 gui/support_controller.py:503
+msgid "Version {version}"
+msgstr ""
+
+#: gui/app.py:1905
+msgid "Vertical text mode (Japanese tategaki / classical Chinese)"
+msgstr ""
+
+#: gui/widgets.py:1785
+msgid "Video Files"
+msgstr ""
+
+#: gui/app.py:1449
+msgid "Video Subtitle Remover"
+msgstr ""
+
+#: gui/widgets.py:1691
+msgid "Videos and images supported"
+msgstr ""
+
+#: gui/preview_controller.py:231
+msgid "Wait for the active batch to finish before comparing output."
+msgstr ""
+
+#: gui/preview_controller.py:207
+msgid "Wait for the active batch to finish before editing regions."
+msgstr ""
+
+#: gui/app.py:1046 gui/app.py:1054 gui/app.py:1062
+msgid "Wait for the current batch to finish."
+msgstr ""
+
+#: gui/app.py:2552 gui/preview_controller.py:182 gui/preview_controller.py:274
+msgid "Waiting"
+msgstr ""
+
+#: gui/app.py:3204
+msgid "Welcome"
+msgstr ""
+
+#: gui/app.py:3183
+msgid "Welcome to {app_name}"
+msgstr ""
+
+#: gui/app.py:2281
+msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
+msgstr ""
+
+#: gui/app.py:2191
+msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
+msgstr ""
+
+#: gui/app.py:1636
+msgid "Write the current preset to a shareable JSON file."
+msgstr ""
+
+#: gui/app.py:1987
+msgid "Writes a black-and-white mp4 of the per-frame detection mask alongside the output."
+msgstr ""
+
+#: gui/app.py:1978
+msgid "Writes an .srt file next to the output using OCR text and timings."
+msgstr ""
+
+#: gui/widgets.py:1751
+msgid "disabled"
+msgstr ""
+
+#: gui/widgets.py:1753
+msgid "drag and drop available"
+msgstr ""
+
+#: gui/widgets.py:1751
+msgid "enabled"
+msgstr ""
+
+#: gui/widgets.py:1752 gui/widgets.py:2222
+msgid "focused"
+msgstr ""
+
+#: gui/widgets.py:2221
+msgid "not selected"
+msgstr ""
+
+#: gui/support_controller.py:402
+msgid "ready"
+msgstr ""
+
+#: gui/widgets.py:2221
+msgid "selected"
+msgstr ""
+
+#: gui/support_controller.py:548
+msgid "unavailable"
+msgstr ""
+
+#: gui/support_controller.py:529
+msgid "{count} GPU{suffix}"
+msgstr ""
+
+#: gui/support_controller.py:132
+msgid "{count} error{suffix}"
+msgstr ""
+
+#: gui/app.py:2426
+msgid "{count} items"
+msgstr ""
+
+#: gui/app.py:1070
+msgid "{count} queued and ready to process"
+msgstr ""
+
+#: gui/support_controller.py:124
+msgid "{count} warning{suffix}"
+msgstr ""
+
+#: gui/quality_controller.py:194
+msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
+msgstr ""
