@@ -51,6 +51,7 @@ from backend.security_checks import opencv_libpng_status
 ROOT = Path(__file__).resolve().parents[1]
 DOCUMENTS = ("README.md", "LICENSE", "CHANGELOG.md")
 LAUNCHERS = ("Run_VSR_Pro.bat", "Run_VSR_Pro_Debug.bat", "Run_VSR_Pro.ps1")
+FROZEN_LAUNCHER_SOURCE_DIR = ROOT / "assets" / "frozen"
 VERSIONED_DOCS = ("README.md", "CHANGELOG.md")
 HIDDEN_IMPORT_RE = re.compile(r"--hidden-import(?:=|\s+)([^\s]+)")
 RUNTIME_HOOK_RE = re.compile(r"--runtime-hook(?:=|\s+)([^\s]+)")
@@ -657,37 +658,125 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
     return payload
 
 
+def _frozen_launcher_status(dist_dir: Path, name: str) -> dict:
+    status = _dist_file_status(dist_dir, name)
+    status.update({
+        "nativeExecutable": False,
+        "forbiddenReferences": [],
+    })
+    path = dist_dir / name
+    if not path.is_file():
+        return status
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").lower()
+    except OSError as exc:
+        status["readError"] = str(exc)
+        return status
+    forbidden = [
+        token for token in ("setup.py", "videosubtitleremover.py", "venv\\")
+        if token in text
+    ]
+    status["forbiddenReferences"] = forbidden
+    status["nativeExecutable"] = (
+        "videosubtitleremoverpro.exe" in text and not forbidden
+    )
+    return status
+
+
+def _smoke_entry_command(path: Path) -> list[str]:
+    if path.suffix.lower() == ".bat":
+        comspec = os.environ.get("COMSPEC") or shutil.which("cmd.exe") or "cmd.exe"
+        return [comspec, "/d", "/c", str(path), "--smoke-test"]
+    if path.suffix.lower() == ".ps1":
+        powershell = shutil.which("pwsh") or shutil.which("powershell") or "powershell.exe"
+        return [
+            powershell,
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(path),
+            "--smoke-test",
+        ]
+    return [str(path), "--smoke-test"]
+
+
+def _link_or_copy(source: str, destination: str) -> str:
+    try:
+        os.link(source, destination)
+        return destination
+    except OSError:
+        return shutil.copy2(source, destination)
+
+
 def _run_smoke(dist_dir: Path, timeout: float = 45.0) -> dict:
-    exe = dist_dir / "VideoSubtitleRemoverPro.exe"
+    source_exe = dist_dir / "VideoSubtitleRemoverPro.exe"
     payload = {
-        "command": [str(exe), "--smoke-test"],
-        "exe": str(exe),
-        "available": exe.is_file(),
+        "schema": "vsr.frozen_entrypoint_smoke.v1",
+        "exe": str(source_exe),
+        "available": source_exe.is_file(),
         "ran": False,
         "passed": False,
-        "returncode": None,
-        "stdout": "",
-        "stderr": "",
+        "temporaryCopy": "",
+        "entryPoints": [],
         "error": "",
     }
-    if not exe.is_file():
+    if not source_exe.is_file():
         payload["error"] = "frozen executable not found"
         return payload
     try:
-        proc = subprocess.run(
-            [str(exe), "--smoke-test"],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-        payload.update({
-            "ran": True,
-            "passed": proc.returncode == 0,
-            "returncode": proc.returncode,
-            "stdout": (proc.stdout or "")[-4000:],
-            "stderr": (proc.stderr or "")[-4000:],
-        })
+        with tempfile.TemporaryDirectory(prefix="vsr-frozen-smoke-") as tmp:
+            smoke_dist = Path(tmp) / "Video Subtitle Remover Pro"
+            shutil.copytree(dist_dir, smoke_dist, copy_function=_link_or_copy)
+            payload["temporaryCopy"] = str(smoke_dist)
+            smoke_env = os.environ.copy()
+            smoke_env["VSR_LAUNCHER_WAIT"] = "1"
+            smoke_env["VSR_LAUNCHER_SMOKE"] = "1"
+            for name in ("VideoSubtitleRemoverPro.exe", *LAUNCHERS):
+                path = smoke_dist / name
+                command = _smoke_entry_command(path)
+                result = {
+                    "name": name,
+                    "path": str(path),
+                    "command": command,
+                    "available": path.is_file(),
+                    "ran": False,
+                    "passed": False,
+                    "returncode": None,
+                    "stdout": "",
+                    "stderr": "",
+                    "error": "",
+                }
+                if not path.is_file():
+                    result["error"] = "entry point not found"
+                    payload["entryPoints"].append(result)
+                    continue
+                try:
+                    proc = subprocess.run(
+                        command,
+                        cwd=smoke_dist,
+                        env=smoke_env,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        check=False,
+                    )
+                    result.update({
+                        "ran": True,
+                        "passed": proc.returncode == 0,
+                        "returncode": proc.returncode,
+                        "stdout": (proc.stdout or "")[-4000:],
+                        "stderr": (proc.stderr or "")[-4000:],
+                    })
+                except Exception as exc:  # pragma: no cover - frozen runtime
+                    result["error"] = str(exc)
+                payload["entryPoints"].append(result)
+            payload["ran"] = any(item["ran"] for item in payload["entryPoints"])
+            payload["passed"] = bool(payload["entryPoints"]) and all(
+                item["passed"] for item in payload["entryPoints"]
+            )
     except Exception as exc:  # pragma: no cover - depends on frozen build
         payload["error"] = str(exc)
     return payload
@@ -756,7 +845,7 @@ def build_release_evidence(
         "collectData": list(collected),
     }
     documents = [_dist_file_status(dist, name) for name in DOCUMENTS]
-    launchers = [_dist_file_status(dist, name) for name in LAUNCHERS]
+    launchers = [_frozen_launcher_status(dist, name) for name in LAUNCHERS]
     version_docs = [_doc_version_status(ROOT / name) for name in VERSIONED_DOCS]
     evidence = {
         "schema": "vsr.release_verification.v1",
@@ -837,8 +926,14 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
         if isinstance(item, Mapping) and not item.get("bundled"):
             yield f"Required bundled document missing: {item.get('name')}"
     for item in evidence.get("launchers", []):
-        if isinstance(item, Mapping) and not item.get("bundled"):
+        if not isinstance(item, Mapping):
+            continue
+        if not item.get("bundled"):
             yield f"Required bundled launcher missing: {item.get('name')}"
+        elif not item.get("nativeExecutable"):
+            refs = ", ".join(str(ref) for ref in item.get("forbiddenReferences", []))
+            detail = f" (source references: {refs})" if refs else ""
+            yield f"Bundled launcher is not frozen-native: {item.get('name')}{detail}"
     for item in evidence.get("versionChecks", {}).get("documents", []):
         if isinstance(item, Mapping) and not item.get("containsAppVersion"):
             yield f"APP_VERSION {APP_VERSION} missing from {item.get('name')}"

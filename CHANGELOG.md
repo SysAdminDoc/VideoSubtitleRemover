@@ -52,6 +52,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Frozen distributions no longer bundle source-only launchers.** Release
+  builds now copy dedicated launchers that invoke `VideoSubtitleRemoverPro.exe`
+  without Python, `setup.py`, or a repository-local virtual environment.
+  Release verification rejects bootstrap references and smoke-tests the EXE,
+  both batch launchers, and the PowerShell launcher from a temporary path with
+  spaces.
 - **VMAF could fail on Windows or compare different time windows.** The
   libvmaf pass now writes its JSON log from a private working directory using
   a filter-safe relative filename, applies identical seek/duration options to

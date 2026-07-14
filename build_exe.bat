@@ -85,8 +85,19 @@ if errorlevel 1 (
 
 set "DIST_DIR=dist\VideoSubtitleRemoverPro"
 if exist "!DIST_DIR!" (
-    for %%F in (README.md LICENSE CHANGELOG.md Run_VSR_Pro.bat Run_VSR_Pro_Debug.bat Run_VSR_Pro.ps1) do (
+    for %%F in (README.md LICENSE CHANGELOG.md) do (
         if exist "%%F" copy /Y "%%F" "!DIST_DIR!\%%F" >nul
+    )
+    for %%F in (Run_VSR_Pro.bat Run_VSR_Pro_Debug.bat Run_VSR_Pro.ps1) do (
+        if not exist "assets\frozen\%%F" (
+            echo ERROR: Frozen launcher asset missing: assets\frozen\%%F
+            exit /b 1
+        )
+        copy /Y "assets\frozen\%%F" "!DIST_DIR!\%%F" >nul
+        if errorlevel 1 (
+            echo ERROR: Failed to bundle frozen launcher: %%F
+            exit /b 1
+        )
     )
 )
 

@@ -13,10 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReleaseVerificationTests(unittest.TestCase):
     def _copy_release_inputs(self, dist_dir: Path):
-        for name in release_verification.DOCUMENTS + release_verification.LAUNCHERS:
+        for name in release_verification.DOCUMENTS:
             source = ROOT / name
             if source.exists():
                 (dist_dir / name).write_bytes(source.read_bytes())
+        for name in release_verification.LAUNCHERS:
+            source = release_verification.FROZEN_LAUNCHER_SOURCE_DIR / name
+            (dist_dir / name).write_bytes(source.read_bytes())
 
     def _patched_environment(self):
         patches = [
@@ -203,6 +206,7 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(evidence["runtimeHooks"], ["assets/runtime_hook_mp.py"])
         self.assertTrue(all(item["bundled"] for item in evidence["documents"]))
         self.assertTrue(all(item["bundled"] for item in evidence["launchers"]))
+        self.assertTrue(all(item["nativeExecutable"] for item in evidence["launchers"]))
         self.assertTrue(evidence["smokeLaunch"]["passed"])
         self.assertEqual(evidence["sbom"]["componentCount"], 1)
         self.assertEqual(evidence["advisories"]["file"], "release-advisories.json")
@@ -252,6 +256,56 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(sbom["components"][0]["name"], "Pillow")
         self.assertEqual(advisories["schema"], "vsr.release_advisories.v1")
         self.assertEqual(advisories["summary"]["blocking"], 0)
+
+    def test_source_bootstrap_launcher_is_rejected_from_frozen_dist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp)
+            self._copy_release_inputs(dist_dir)
+            (dist_dir / "Run_VSR_Pro.bat").write_text(
+                "python setup.py --repair\nvenv\\Scripts\\python.exe VideoSubtitleRemover.py\n",
+                encoding="utf-8",
+            )
+            with ExitStack() as stack:
+                for patch in self._patched_environment():
+                    stack.enter_context(patch)
+                evidence, _, _, _ = release_verification.build_release_evidence(
+                    dist_dir=dist_dir,
+                    runtime_hooks="--runtime-hook assets\\runtime_hook_mp.py",
+                )
+
+        self.assertIn(
+            "Bundled launcher is not frozen-native: Run_VSR_Pro.bat "
+            "(source references: setup.py, videosubtitleremover.py, venv\\)",
+            evidence["errors"],
+        )
+
+    def test_frozen_smoke_runs_every_entry_point_from_path_with_spaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_dir = Path(tmp) / "dist"
+            dist_dir.mkdir()
+            (dist_dir / "VideoSubtitleRemoverPro.exe").write_bytes(b"MZ")
+            self._copy_release_inputs(dist_dir)
+            completed = mock.Mock(returncode=0, stdout="ok", stderr="")
+            with mock.patch(
+                "backend.release_verification.subprocess.run",
+                return_value=completed,
+            ) as run, mock.patch(
+                "backend.release_verification.shutil.which",
+                side_effect=lambda name: "pwsh.exe" if name == "pwsh" else None,
+            ):
+                smoke = release_verification._run_smoke(dist_dir)
+
+        self.assertTrue(smoke["ran"])
+        self.assertTrue(smoke["passed"])
+        self.assertEqual(
+            [item["name"] for item in smoke["entryPoints"]],
+            ["VideoSubtitleRemoverPro.exe", *release_verification.LAUNCHERS],
+        )
+        self.assertEqual(run.call_count, 4)
+        for call in run.call_args_list:
+            self.assertIn("Video Subtitle Remover Pro", str(call.kwargs["cwd"]))
+            self.assertEqual(call.kwargs["env"]["VSR_LAUNCHER_WAIT"], "1")
+            self.assertEqual(call.kwargs["env"]["VSR_LAUNCHER_SMOKE"], "1")
 
     def test_write_release_evidence_writes_json_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -655,6 +709,21 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("Run_VSR_Pro.bat", self.bat)
         self.assertIn("Run_VSR_Pro_Debug.bat", self.bat)
         self.assertIn("Run_VSR_Pro.ps1", self.bat)
+        self.assertIn('"assets\\frozen\\%%F"', self.bat)
+        self.assertNotIn(
+            "README.md LICENSE CHANGELOG.md Run_VSR_Pro.bat",
+            self.bat,
+        )
+
+    def test_frozen_launcher_assets_do_not_bootstrap_source(self):
+        forbidden = ("setup.py", "videosubtitleremover.py", "venv\\")
+        for name in release_verification.LAUNCHERS:
+            text = (
+                release_verification.FROZEN_LAUNCHER_SOURCE_DIR / name
+            ).read_text(encoding="utf-8").lower()
+            self.assertIn("videosubtitleremoverpro.exe", text)
+            for token in forbidden:
+                self.assertNotIn(token, text)
 
     def test_pytorch_lama_hidden_import_is_explicit_opt_in(self):
         default_line = next(
