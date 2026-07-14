@@ -1,0 +1,10 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"VideoSubtitleRemover.py" = ["E402"]
+"backend/processor.py" = ["E402"]

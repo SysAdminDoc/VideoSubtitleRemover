@@ -23,9 +23,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Sequence
 
-import cv2
-import numpy as np
 
+from backend.import_safety import module_can_import
 from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
@@ -75,9 +74,11 @@ def realesrgan_upscale(input_path: str, output_path: str,
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
             logger.warning(f"realesrgan-ncnn-vulkan failed: {exc}")
-    try:
-        from realesrgan import RealESRGANer  # type: ignore
-    except ImportError:
+    if not module_can_import(
+        "realesrgan",
+        logger=logger,
+        failure_context="Real-ESRGAN Python fallback unavailable",
+    ):
         logger.info(
             "Neither realesrgan-ncnn-vulkan binary nor the realesrgan "
             "python package was found; skipping upscale stage."

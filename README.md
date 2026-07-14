@@ -165,13 +165,16 @@ device.
 ### Validation
 
 ```powershell
+python -m pip install ruff==0.15.20
+python -m ruff check backend gui VideoSubtitleRemover.py --no-cache
 python -m unittest discover -s tests -v
 python -m backend.reference_corpus --json
 python tools/local_smoke.py
 ```
 
-`build_exe.bat` is the fail-closed local release command. It runs the complete
-unit suite, builds the PyInstaller folder, compiles the production NSIS
+`build_exe.bat` is the fail-closed local release command. It runs the Ruff
+source-hygiene gate and complete unit suite, builds the PyInstaller folder,
+compiles the production NSIS
 installer plus a non-elevated extraction harness, smoke-tests every frozen
 entry point and the extracted installer payload, runs the reference corpus,
 audits the exact frozen Python components with `pip-audit`, and applies strict

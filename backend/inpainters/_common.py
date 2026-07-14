@@ -107,8 +107,10 @@ def _expand_mask_by_color(frame: np.ndarray, mask: np.ndarray,
     out = mask.copy()
     h, w = mask.shape[:2]
     for (x1, y1, x2, y2) in boxes:
-        x1 = max(0, x1 - padding); y1 = max(0, y1 - padding)
-        x2 = min(w, x2 + padding); y2 = min(h, y2 + padding)
+        x1 = max(0, x1 - padding)
+        y1 = max(0, y1 - padding)
+        x2 = min(w, x2 + padding)
+        y2 = min(h, y2 + padding)
         if x2 <= x1 or y2 <= y1:
             continue
         roi = lab[y1:y2, x1:x2].reshape(-1, 3).astype(np.int16)

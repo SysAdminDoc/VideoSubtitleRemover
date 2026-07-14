@@ -24,8 +24,12 @@ from datetime import datetime  # noqa: F401
 # truth since the RM-114 extraction. gui.theme / gui.config import no
 # tkinter, so this is safe before the GUI availability guard below.
 from gui.config import (
-    APP_NAME, APP_VERSION, APP_AUTHOR,
-    LOG_DIR, LOG_FILE, SETTINGS_FILE,
+    APP_NAME,
+    APP_VERSION as APP_VERSION,
+    APP_AUTHOR as APP_AUTHOR,
+    LOG_DIR as LOG_DIR,
+    LOG_FILE,
+    SETTINGS_FILE as SETTINGS_FILE,
 )
 
 # =============================================================================

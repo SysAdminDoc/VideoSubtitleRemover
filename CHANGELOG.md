@@ -64,6 +64,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Ruff source-hygiene ratchet.** The Python 3.11 source tree now passes the
+  explicit Pyflakes and high-signal pycodestyle baseline with zero findings.
+  Release builds install the reviewed MIT-licensed Ruff 0.15.20 tool and stop
+  before tests or packaging on any regression; only the two documented
+  import-order compatibility modules receive narrow `E402` exceptions.
 - **Reviewed dependency profiles.** CPU, NVIDIA, and DirectML setup now uses
   generated exact constraints with manifest/profile hashes, a diffable update
   command, Docker parity, and strict release-evidence capture. RapidOCR is the

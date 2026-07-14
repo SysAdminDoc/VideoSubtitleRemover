@@ -27,6 +27,7 @@ from backend.ffmpeg_profiles import (
     ffmpeg_profile_entries,
     probe_ffmpeg_security,
 )
+from backend.import_safety import module_can_import
 from backend.model_downloads import installed_backend_status
 from backend.opencv_ocr import collect_opencv_dnn_ocr_status
 from backend.security_checks import opencv_libpng_status
@@ -370,7 +371,7 @@ def run_self_test() -> dict:
     def _check_rapidocr():
         try:
             from rapidocr import RapidOCR
-            r = RapidOCR()
+            RapidOCR()
             status = collect_rapidocr_engine_status()
             provider = status.get("preferredProvider") or "ONNX Runtime"
             return True, f"rapidocr loaded ({provider})"
@@ -389,11 +390,12 @@ def run_self_test() -> dict:
             return False, "paddleocr not installed"
 
     def _check_easyocr():
-        try:
-            import easyocr
+        if module_can_import(
+            "easyocr",
+            failure_context="EasyOCR self-test unavailable",
+        ):
             return True, "easyocr available"
-        except ImportError:
-            return False, "easyocr not installed"
+        return False, "easyocr not installed or failed its import probe"
 
     def _check_lama_onnx():
         try:

@@ -87,7 +87,7 @@ def write_edl(path: str, source: str, cleaned: str,
     all_segments = segments if segments else [(start_s, end_s)]
     payload = []
     payload.append(f"TITLE: {title}")
-    payload.append(f"FCM: NON-DROP FRAME")
+    payload.append("FCM: NON-DROP FRAME")
     if width > 0 and height > 0:
         payload.append(f"* SOURCE DIMENSIONS: {width}x{height}")
     payload.append("")
@@ -100,7 +100,7 @@ def write_edl(path: str, source: str, cleaned: str,
         )
         payload.append(f"* FROM CLIP NAME: {_edl_comment_text(Path(source).name)}")
         payload.append(f"* TO CLIP NAME:   {_edl_comment_text(Path(cleaned).name)}")
-        payload.append(f"* CLEANED BY:     Video Subtitle Remover Pro")
+        payload.append("* CLEANED BY:     Video Subtitle Remover Pro")
         payload.append("")
     text = "\n".join(payload) + "\n"
     _write_atomic(path, text)

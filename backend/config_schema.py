@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping
 
 
 CONFIG_SCHEMA_VERSION = 3

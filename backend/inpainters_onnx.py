@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import cv2
 import numpy as np

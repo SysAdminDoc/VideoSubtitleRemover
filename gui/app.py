@@ -3,80 +3,61 @@
 from __future__ import annotations
 
 import ctypes
-import json
 import logging
 import math
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
-import traceback
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
-    from tkinter import font as tkfont
+    from tkinter import ttk, filedialog
 except ImportError:
     pass
 
 try:
-    from PIL import Image, ImageTk, ImageDraw, ImageFilter
+    from PIL import Image, ImageTk
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
 from gui.theme import (
-    Theme, apply_high_contrast_theme, apply_default_theme, f, mono,
-    scaled_control_size, set_text_scale_percent, text_scale_factor,
+    Theme, apply_high_contrast_theme, apply_default_theme, f, scaled_control_size, set_text_scale_percent, text_scale_factor,
     text_scale_percent,
 )
 from gui.config import (
-    APP_NAME, APP_VERSION, APP_AUTHOR,
-    LOG_DIR, LOG_FILE, SETTINGS_FILE, VSR_SETTINGS_FORMAT,
-    InpaintMode, ProcessingStatus, STATUS_UI,
-    ProcessingConfig, QueueItem,
-    _coerce_bool, _coerce_int, _coerce_float, _coerce_text,
-    _coerce_rect, _coerce_rect_list, _coerce_region_span_list,
-    _coerce_gui_mode,
-    _read_json_object, _write_json_atomic,
-    _migrate_settings, consume_settings_load_notice, load_settings, save_settings,
-    PRESETS_FILE, list_presets, apply_preset,
-    save_user_preset, delete_user_preset, export_preset, import_preset,
+    APP_NAME, APP_VERSION, LOG_DIR, LOG_FILE, InpaintMode, ProcessingStatus, ProcessingConfig, QueueItem,
+    _coerce_int, _coerce_region_span_list,
+    consume_settings_load_notice, load_settings, save_settings,
+    list_presets, apply_preset,
+    save_user_preset, export_preset, import_preset,
     consume_preset_import_notice,
-    status_ui, BUILTIN_PRESETS, _load_user_presets,
+    BUILTIN_PRESETS, _load_user_presets,
     save_queue_state, load_queue_state, clear_queue_state,
 )
 from gui.utils import (
     SUPPORTED_EXTENSIONS, filepicker_pattern,
-    get_app_dir, detect_gpu, format_time, format_size,
-    is_video_file, is_image_file,
+    get_app_dir, detect_gpu, is_video_file, is_image_file,
     _build_language_list,
     detect_ai_engines, detect_ffmpeg, get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
-    _queue_item_info_text, truncate_middle,
-    format_quality_report, summarize_quality_reports,
+    truncate_middle,
 )
 from gui.widgets import (
-    _get_dpi_scale, _scaled,
     Tooltip, ModernButton, ModernProgressBar, ModernToggle,
     ModernSlider, show_confirm, TaskbarProgress, make_themed_menu,
     Toast, SegmentedPicker, DragDropFrame, QueueItemWidget,
     TextWidgetHandler,
 )
-from backend.resume_checkpoint import ProcessingPaused
 from backend.ffmpeg_profiles import (
     FFMPEG_PROFILE_SCHEMA,
     collect_ffmpeg_capability_profiles,
-    ffmpeg_profile_entries,
     missing_profile_requirements_for_config,
     summarize_missing_profile_requirements,
 )
@@ -3655,7 +3636,9 @@ class VideoSubtitleRemoverApp(
                         return
                     _seek_video(idx)
                     secs = idx / fps
-                    hh = int(secs // 3600); mm = int((secs % 3600) // 60); ss = int(secs % 60)
+                    hh = int(secs // 3600)
+                    mm = int((secs % 3600) // 60)
+                    ss = int(secs % 60)
                     ts_label.config(text=f"{hh:02d}:{mm:02d}:{ss:02d}")
 
                 slider = tk.Scale(
@@ -4251,10 +4234,12 @@ class VideoSubtitleRemoverApp(
         folder = Path(folder_path)
         stats = self._new_import_stats()
         stats["folders"] = 1
-        for f in sorted(folder.rglob("*")):
-            if f.is_file() and (is_video_file(str(f)) or is_image_file(str(f))):
+        for candidate in sorted(folder.rglob("*")):
+            if candidate.is_file() and (
+                is_video_file(str(candidate)) or is_image_file(str(candidate))
+            ):
                 stats["supported_in_folders"] += 1
-                result = self._add_to_queue(str(f))
+                result = self._add_to_queue(str(candidate))
                 stats[result] = stats.get(result, 0) + 1
                 if result == "queue_full":
                     break
@@ -5406,10 +5391,12 @@ class VideoSubtitleRemoverApp(
             try:
                 size_part, _, pos_part = saved.partition('+')
                 w_s, _, h_s = size_part.partition('x')
-                w = int(w_s); h = int(h_s)
+                w = int(w_s)
+                h = int(h_s)
                 if pos_part:
                     x_s, _, y_s = pos_part.partition('+')
-                    x = int(x_s); y = int(y_s)
+                    x = int(x_s)
+                    y = int(y_s)
                     # Reject off-screen saved positions
                     if (x < -80 or y < -40
                             or x + 120 > screen_w or y + 80 > screen_h):

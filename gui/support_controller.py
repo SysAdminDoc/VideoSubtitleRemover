@@ -1,51 +1,31 @@
 from __future__ import annotations
 
-import ctypes
-import json
 import logging
 import os
-import subprocess
-import sys
-import tempfile
 import threading
-import time
-import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
+    from tkinter import ttk, filedialog
 except ImportError:  # pragma: no cover - tkinter is optional in headless imports
     pass
-
-try:
-    from PIL import Image, ImageTk, ImageDraw, ImageFilter
-    PIL_AVAILABLE = True
-except ImportError:  # pragma: no cover - preview features degrade without Pillow
-    PIL_AVAILABLE = False
 
 from gui.theme import Theme, f, mono
 from gui.config import (
     APP_NAME, APP_VERSION, LOG_DIR, LOG_FILE, SETTINGS_FILE,
-    InpaintMode, ProcessingConfig, ProcessingStatus, QueueItem,
-    clear_queue_state, save_queue_state, status_ui,
 )
 from gui.utils import (
-    _format_soft_subtitle_summary, format_quality_report, format_size,
-    format_time, get_app_dir, get_file_info, is_image_file, is_video_file,
-    summarize_quality_reports, truncate_middle,
+    truncate_middle,
 )
 from gui.widgets import (
-    ModernButton, ModernProgressBar, TaskbarProgress, Tooltip,
-    make_themed_menu, show_confirm,
+    ModernButton, Tooltip,
+    make_themed_menu,
 )
 from backend.ffmpeg_profiles import ffmpeg_profile_entries
 from backend.i18n import tr
 from backend.model_downloads import installed_backend_status
-from backend.resume_checkpoint import ProcessingPaused
-from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
 

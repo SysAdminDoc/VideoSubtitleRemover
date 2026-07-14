@@ -514,7 +514,6 @@ def import_model_cache_bundle(
                 f"{_IMPORT_MAX_MEMBERS} member ceiling"
             )
         infos = {info.filename: info for info in bundle.infolist()}
-        names = set(infos)
         declared_total = 0
         for entry in entries:
             if not isinstance(entry, dict):

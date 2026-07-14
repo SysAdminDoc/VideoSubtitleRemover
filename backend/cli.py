@@ -438,7 +438,6 @@ def main():
     from backend.processor import (
         ProcessingConfig, SubtitleRemover,
         attach_json_log, normalize_processing_config, _coerce_backend_mode,
-        is_known_backend_mode,
     )
     from backend.resume_checkpoint import ProcessingPaused
     from backend import inpainter_registry
@@ -1281,11 +1280,10 @@ def main():
             pause_requested["value"] = True
             print("\n[pause] Requested. Waiting for the next safe frame checkpoint...")
 
-    previous_sigint = signal.getsignal(signal.SIGINT)
     try:
         signal.signal(signal.SIGINT, _request_pause)
     except (ValueError, OSError):
-        previous_sigint = None
+        pass
 
     def _pause_requested() -> bool:
         return bool(pause_requested["value"])
@@ -1591,9 +1589,8 @@ def main():
 
     if args.nle_input:
         from backend.nle_sidecar import parse_nle_input
-        raw_fps = cap_fps = 24.0
+        cap_fps = 24.0
         try:
-            from backend.io import _probe_duration_seconds
             import cv2 as _cv2
             _c = _cv2.VideoCapture(args.input)
             if _c.isOpened():

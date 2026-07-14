@@ -18,6 +18,23 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from backend.config_schema import CONFIG_SCHEMA_VERSION
+from backend.io import (
+    _choose_available_output_path,
+    _probe_codec_for_log,
+    _probe_duration_seconds,
+    _probe_subtitle_streams,
+    _write_text_atomic,
+)
+from backend.output_quality_preflight import (
+    evaluate_output_quality_preflight,
+    output_quality_preflight_not_applicable,
+    output_quality_preflight_messages,
+)
+from backend.quality_gate import (
+    evaluate_quality_gate,
+    quality_gate_not_applicable,
+    quality_gate_unknown,
+)
 
 
 # Error classes/markers that are worth an automatic retry (transient hardware
@@ -63,25 +80,6 @@ def is_retriable_error(exc: BaseException) -> bool:
                         TimeoutError, ConnectionError, MemoryError)):
         return True
     return any(marker in text for marker in _RETRIABLE_MARKERS)
-
-from backend.io import (
-    _choose_available_output_path,
-    _path_key,
-    _probe_codec_for_log,
-    _probe_duration_seconds,
-    _probe_subtitle_streams,
-    _write_text_atomic,
-)
-from backend.output_quality_preflight import (
-    evaluate_output_quality_preflight,
-    output_quality_preflight_not_applicable,
-    output_quality_preflight_messages,
-)
-from backend.quality_gate import (
-    evaluate_quality_gate,
-    quality_gate_not_applicable,
-    quality_gate_unknown,
-)
 
 
 STATUS_PENDING = "pending"

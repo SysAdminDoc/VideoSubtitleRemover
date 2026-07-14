@@ -1,51 +1,34 @@
 from __future__ import annotations
 
-import ctypes
-import json
 import logging
-import os
-import subprocess
-import sys
-import tempfile
 import threading
 import time
-import traceback
 import numpy as np
-from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 try:
     import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox
 except ImportError:  # pragma: no cover - tkinter is optional in headless imports
     pass
 
 try:
-    from PIL import Image, ImageTk, ImageDraw, ImageFilter
+    from PIL import Image, ImageTk, ImageDraw
     PIL_AVAILABLE = True
 except ImportError:  # pragma: no cover - preview features degrade without Pillow
     PIL_AVAILABLE = False
 
-from gui.theme import Theme, f, mono, prefers_reduced_motion
+from gui.theme import Theme, f, prefers_reduced_motion
 from gui.config import (
-    APP_NAME, APP_VERSION, LOG_DIR, LOG_FILE, SETTINGS_FILE,
-    InpaintMode, ProcessingConfig, ProcessingStatus, QueueItem,
-    clear_queue_state, save_queue_state, status_ui,
+    ProcessingConfig, ProcessingStatus, QueueItem,
+    status_ui,
 )
 from gui.utils import (
-    _format_soft_subtitle_summary, format_quality_report, format_size,
-    format_time, get_app_dir, get_file_info, is_image_file, is_video_file,
-    summarize_quality_reports, truncate_middle,
+    _format_soft_subtitle_summary, format_quality_report, is_image_file, is_video_file,
 )
 from gui.widgets import (
-    ModernButton, ModernProgressBar, TaskbarProgress, Tooltip,
-    make_themed_menu, show_confirm,
+    ModernButton,
 )
-from backend.ffmpeg_profiles import ffmpeg_profile_entries
 from backend.i18n import tr
-from backend.model_downloads import installed_backend_status
-from backend.resume_checkpoint import ProcessingPaused
 from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
@@ -395,7 +378,8 @@ class PreviewControllerMixin:
         cap_a = _cv2.VideoCapture(in_path)
         cap_b = _cv2.VideoCapture(out_path)
         if not cap_a.isOpened() or not cap_b.isOpened():
-            cap_a.release(); cap_b.release()
+            cap_a.release()
+            cap_b.release()
             self._update_status("Could not open input/output for compare", "warning")
             return
 
@@ -478,7 +462,9 @@ class PreviewControllerMixin:
             except (TypeError, ValueError):
                 return
             secs = state["frame_idx"] / fps
-            hh = int(secs // 3600); mm = int((secs % 3600) // 60); ss = int(secs % 60)
+            hh = int(secs // 3600)
+            mm = int((secs % 3600) // 60)
+            ss = int(secs % 60)
             ts_label.config(text=f"{hh:02d}:{mm:02d}:{ss:02d}")
             _render()
 
@@ -519,7 +505,8 @@ class PreviewControllerMixin:
 
         def _close():
             try:
-                cap_a.release(); cap_b.release()
+                cap_a.release()
+                cap_b.release()
             except Exception:
                 pass
             win.destroy()
@@ -641,7 +628,7 @@ class PreviewControllerMixin:
                         f"{len(boxes)} region{'s' if len(boxes) != 1 else ''} masked.")
                 self.root.after(0, lambda: self._apply_inpaint_preview(
                     pil, meta, request_id, item.id))
-            except Exception as exc:
+            except Exception:
                 logger.warning("Inpaint preview failed", exc_info=True)
                 self.root.after(
                     0,
@@ -832,7 +819,7 @@ class PreviewControllerMixin:
             self._render_preview_region_editor()
             self._update_preview_actions()
             return True
-        except Exception as exc:
+        except Exception:
             logger.warning("Inline region editor failed", exc_info=True)
             self._update_status(
                 "Inline region editor unavailable. Opening the full selector is still available.",

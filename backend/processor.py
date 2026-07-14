@@ -44,14 +44,14 @@ logger = logging.getLogger(__name__)
 # (`from backend.processor import _open_capture`) keep working.
 from backend.io import (
     MediaInputError,
-    SubtitleStreamInfo,
+    SubtitleStreamInfo as SubtitleStreamInfo,
     _validate_video_input_file,
     _video_capture_open_error,
     _invalid_video_dimensions_error,
     _video_decode_error,
     _probe_codec_for_log,
-    _probe_audio_stream_count,
-    _probe_subtitle_streams,
+    _probe_audio_stream_count as _probe_audio_stream_count,
+    _probe_subtitle_streams as _probe_subtitle_streams,
     _probe_duration_seconds,
     _ffmpeg_subprocess_timeout,
     _probe_keyframe_indices,
@@ -59,7 +59,7 @@ from backend.io import (
     _deinterlace_to_temp,
     _ensure_output_parent,
     _path_key,
-    _choose_available_output_path,
+    _choose_available_output_path as _choose_available_output_path,
     _write_text_atomic,
     _allocate_temp_output_path,
     _cleanup_temp_output,
@@ -68,7 +68,7 @@ from backend.io import (
     validate_video_output,
     VideoFrameTiming,
     _probe_video_frame_timing,
-    _FrameSequenceCapture,
+    _FrameSequenceCapture as _FrameSequenceCapture,
     _open_capture,
     _open_bgr48_capture,
     _PrefetchReader,
@@ -111,15 +111,15 @@ from backend.work_directory import (
     resolve_work_directory,
 )
 from backend.tracking import (
-    _KalmanBox,
-    _box_from_state,
-    _iou,
+    _KalmanBox as _KalmanBox,
+    _box_from_state as _box_from_state,
+    _iou as _iou,
     SubtitleTracker,
     _group_horizontal_line,
     _phash,
     _phash_distance,
 )
-from backend.detection import SubtitleDetector, _surya_allowed
+from backend.detection import SubtitleDetector, _surya_allowed as _surya_allowed
 from backend.inpainters import (
     BaseInpainter,
     STTNInpainter,
@@ -130,27 +130,27 @@ from backend.inpainters import (
     free_inference_memory,
     _cv2_inpaint,
     _feather_blend,
-    _edge_ring_color_correct,
+    _edge_ring_color_correct as _edge_ring_color_correct,
     _expand_mask_by_color,
     _detect_scene_cuts,
-    _detect_scene_cuts_pyscenedetect,
+    _detect_scene_cuts_pyscenedetect as _detect_scene_cuts_pyscenedetect,
     stabilize_masks_rolling_union,
-    _farneback_winsize,
-    _warp_to_reference,
-    _warp_mask_to_reference,
-    _tbe_single_segment,
-    _temporal_background_expose,
+    _farneback_winsize as _farneback_winsize,
+    _warp_to_reference as _warp_to_reference,
+    _warp_mask_to_reference as _warp_mask_to_reference,
+    _tbe_single_segment as _tbe_single_segment,
+    _temporal_background_expose as _temporal_background_expose,
 )
 # CLI helpers moved to backend.cli during RFP-L-1; re-export so existing
 # callers (e.g. `processor._load_json_config`,
 # `processor._apply_auto_band_override`) keep resolving.
 from backend.cli import (
-    _default_checkpoint_dir,
+    _default_checkpoint_dir as _default_checkpoint_dir,
     _checkpoint_key,
-    _checkpoint_is_done,
-    _checkpoint_mark_done,
-    _load_json_config,
-    _apply_auto_band_override,
+    _checkpoint_is_done as _checkpoint_is_done,
+    _checkpoint_mark_done as _checkpoint_mark_done,
+    _load_json_config as _load_json_config,
+    _apply_auto_band_override as _apply_auto_band_override,
 )
 
 
@@ -234,19 +234,19 @@ def attach_json_log(path: str) -> Optional[JsonLineLogHandler]:
 # Config types and coercion moved to backend.config (RM-114
 # follow-up); re-exported here so legacy callers keep working.
 from backend.config import (
-    InpaintMode,
-    RegisteredMode,
+    InpaintMode as InpaintMode,
+    RegisteredMode as RegisteredMode,
     ProcessingConfig,
-    _MODE_ALIASES,
-    _coerce_bool,
-    _coerce_int,
-    _coerce_float,
-    _coerce_text,
-    _coerce_rect,
-    _coerce_rect_list,
-    _coerce_backend_mode,
-    _coerce_backend_device,
-    is_known_backend_mode,
+    _MODE_ALIASES as _MODE_ALIASES,
+    _coerce_bool as _coerce_bool,
+    _coerce_int as _coerce_int,
+    _coerce_float as _coerce_float,
+    _coerce_text as _coerce_text,
+    _coerce_rect as _coerce_rect,
+    _coerce_rect_list as _coerce_rect_list,
+    _coerce_backend_mode as _coerce_backend_mode,
+    _coerce_backend_device as _coerce_backend_device,
+    is_known_backend_mode as is_known_backend_mode,
     normalize_processing_config,
 )
 
@@ -2033,7 +2033,6 @@ class SubtitleRemover:
                         if self.config.kalman_tracking else None)
             # v3.10: pHash for adaptive mask reuse
             last_hash = None
-            last_hash_frame_idx = -1
 
             # Mask video writer (optional debug artifact)
             mask_path = None
@@ -2270,7 +2269,6 @@ class SubtitleRemover:
                         # Reuse the hash computed above for the skip-check if
                         # available; otherwise compute it now for the first time.
                         last_hash = cur_hash if cur_hash is not None else _phash(frame)
-                        last_hash_frame_idx = frame_idx
                     frames.append(frame)
                     masks.append(mask)
                     source_frames.append(source_frame)

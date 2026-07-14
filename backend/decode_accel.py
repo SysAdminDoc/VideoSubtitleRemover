@@ -20,8 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 import cv2
 import numpy as np

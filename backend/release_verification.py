@@ -40,7 +40,6 @@ from backend.dependency_profiles import collect_dependency_profile_status
 from backend.ffmpeg_profiles import (
     FFMPEG_RELEASE_SOURCE,
     FFMPEG_SECURITY_SOURCE,
-    classify_ffmpeg_security,
     collect_ffmpeg_capability_profiles,
     probe_ffmpeg_security,
 )

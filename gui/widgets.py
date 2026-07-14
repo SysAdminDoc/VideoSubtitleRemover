@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import os
 import queue
@@ -12,31 +11,33 @@ import tkinter as tk
 from tkinter import filedialog
 import tkinter.font as tkfont
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from backend.i18n import tr
 from gui.theme import (
     Theme,
     f,
-    mono,
     prefers_reduced_motion,
     scaled_control_size,
     scaled_font_size,
     text_scale_factor,
 )
-from gui.config import ProcessingStatus, QueueItem, STATUS_UI, status_ui
+from gui.config import ProcessingStatus, QueueItem, status_ui
+from gui.utils import (
+    IMAGE_EXTENSIONS,
+    SUPPORTED_EXTENSIONS,
+    VIDEO_EXTENSIONS,
+    filepicker_pattern,
+    format_time,
+    truncate_middle,
+    _queue_item_info_text,
+)
 from backend.a11y import (
     accessible_metadata,
     announce,
     announce_widget,
     set_accessible_metadata,
 )
-
-try:
-    from PIL import Image, ImageTk
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 _FORCE_QUOTED_CLI_VALUE_FLAGS = {"-i", "-o", "--watermark"}
@@ -204,16 +205,6 @@ def _quote_cli_arg(value: Any, *, force: bool = False) -> str:
     out += '"'
     return out
 
-
-from gui.utils import (
-    IMAGE_EXTENSIONS,
-    SUPPORTED_EXTENSIONS,
-    VIDEO_EXTENSIONS,
-    filepicker_pattern,
-    format_time,
-    truncate_middle,
-    _queue_item_info_text,
-)
 
 def _get_dpi_scale(root) -> float:
     """Get the DPI scaling factor relative to 96 DPI baseline."""
