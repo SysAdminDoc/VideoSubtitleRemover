@@ -436,6 +436,9 @@ class QualityReviewControllerMixin:
             timing_report = getattr(item, "timing_report", None)
             if isinstance(timing_report, dict) and timing_report:
                 record["source_timing"] = dict(timing_report)
+            output_contract = getattr(item, "output_contract_report", None)
+            if isinstance(output_contract, dict) and output_contract:
+                record["output_contract"] = dict(output_contract)
             elapsed = None
             if item.started_at and item.completed_at:
                 elapsed = (item.completed_at - item.started_at).total_seconds()

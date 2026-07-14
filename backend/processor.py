@@ -382,6 +382,7 @@ class SubtitleRemover:
             "time_base_seconds": 0.0,
             "average_fps": 0.0,
         }
+        self.last_output_contract: dict = {}
         self.last_resume_warning: Optional[str] = None
         self.last_pause_checkpoint: Optional[dict] = None
         self.last_pause_checkpoint_path: Optional[str] = None
@@ -398,6 +399,7 @@ class SubtitleRemover:
         # process_video once we know the input path. Used by _get_encode_args
         # to preserve HDR / BT.2020 tagging on the output.
         self._color_metadata = None
+        self._output_contract = None
         self._hdr_codec_warning_logged = False
         self._hdr_software_warning_logged = False
         self._active_writer = None
@@ -1485,10 +1487,14 @@ class SubtitleRemover:
             "time_base_seconds": 0.0,
             "average_fps": 0.0,
         }
+        self.last_output_contract = {}
+        self._color_metadata = None
+        self._output_contract = None
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.0, "Opening video...")
             _validate_video_input_file(input_path)
+            self._prepare_output_contract(input_path, output_path)
 
             # Optional deinterlace preprocessing. Produces a temp
             # progressive-scan mp4; the rest of the pipeline runs against
@@ -1505,6 +1511,7 @@ class SubtitleRemover:
                     processed_input = _deinterlace_to_temp(
                         input_path,
                         temp_dir,
+                        output_contract=self._output_contract,
                         on_process=self._set_active_subprocess,
                         cancel_check=self._is_teardown_requested,
                     )
@@ -1518,46 +1525,6 @@ class SubtitleRemover:
                     decode_path = input_path
             else:
                 decode_path = input_path
-
-            # RM-73: probe source color signalling once so HDR / BT.2020
-            # sources can be encoded with HDR-compatible codecs, 10-bit
-            # output pixel formats, and matching final color tags.
-            # RM-74: explicit AV1 / VP9 ingest validation. cv2 4.12+
-            # decodes both via the ffmpeg backend on every supported
-            # platform, but the codec field varies enough in the wild
-            # that we log it explicitly. Lets the user reproduce a
-            # decode failure with the same ffmpeg invocation when
-            # something goes wrong.
-            if not Path(input_path).is_dir():
-                try:
-                    from backend.hdr import probe_color_metadata as _probe
-                    _meta = _probe(input_path)  # only used for the codec probe
-                    _codec_line = _probe_codec_for_log(input_path)
-                    if _codec_line:
-                        logger.info(f"Source codec: {_codec_line}")
-                except Exception:
-                    logger.warning("Source codec probe failed", exc_info=True)
-
-            if (self.config.preserve_color_metadata
-                    and not Path(input_path).is_dir()):
-                try:
-                    from backend.hdr import probe_color_metadata
-                    meta = probe_color_metadata(input_path)
-                    if meta is not None:
-                        self._color_metadata = meta
-                        if meta.is_hdr:
-                            logger.info(
-                                f"HDR source detected: {meta.label} -- "
-                                f"final encode will use HDR-safe 10-bit "
-                                f"HEVC/AV1/VVC output and source color tags."
-                            )
-                        else:
-                            logger.info(f"Color signalling: {meta.label}")
-                except Exception as exc:
-                    logger.warning(
-                        f"Color-metadata probe failed: {exc}",
-                        exc_info=True,
-                    )
 
             # Optional keyframe-driven detection: get the set of I-frame
             # indices once, OCR only those, propagate masks between.
@@ -2450,6 +2417,8 @@ class SubtitleRemover:
                 # so the user-visible output is the post-processed file;
                 # each adapter degrades gracefully when its dep is missing.
                 self._run_post_restore_passes(final_output_path, temp_dir)
+                if not use_frame_output:
+                    self._validate_output_contract(final_output_path)
 
                 # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
                 self._write_nle_sidecar(input_path, final_output_path,
@@ -2662,11 +2631,144 @@ class SubtitleRemover:
                 stage_timings=self.last_stage_timings,
                 quality_report=quality_report,
                 quality_gate=quality_gate,
+                output_contract=self.last_output_contract,
                 checkpoint_resumed=checkpoint_resumed,
                 app_version=APP_VERSION,
             )
         except Exception as exc:
             logger.debug("Reproducibility sidecar write failed: %s", exc)
+
+    def _prepare_output_contract(self, input_path: str, output_path: str) -> None:
+        """Probe source media once and freeze the policy used by every pass."""
+        meta = None
+        if not Path(input_path).is_dir():
+            try:
+                from backend.hdr import probe_color_metadata
+
+                meta = probe_color_metadata(input_path)
+                codec_line = _probe_codec_for_log(input_path)
+                if codec_line:
+                    logger.info(f"Source codec: {codec_line}")
+            except Exception:
+                logger.warning("Source codec/color probe failed", exc_info=True)
+        if self.config.preserve_color_metadata:
+            self._color_metadata = meta
+        requested = getattr(self.config, "output_codec", "h264")
+        effective = requested
+        if self.config.preserve_color_metadata:
+            try:
+                from backend.hdr import hdr_safe_codec
+
+                effective = hdr_safe_codec(requested, meta)
+            except Exception:
+                logger.warning("HDR codec policy failed", exc_info=True)
+        if effective != requested:
+            logger.info(
+                f"HDR output cannot use {requested}; promoting final encode "
+                f"to {effective}."
+            )
+            self._hdr_codec_warning_logged = True
+        if self.config.use_hw_encode and effective != requested:
+            self._hw_encoder = _detect_hw_encoder(effective)
+        from backend.output_contract import build_output_contract
+
+        self._output_contract = build_output_contract(
+            input_path=input_path,
+            output_path=output_path,
+            codec=effective,
+            preserve_audio=self.config.preserve_audio,
+            preserve_color_metadata=self.config.preserve_color_metadata,
+            color_metadata=meta,
+            hardware_requested=self.config.use_hw_encode,
+        )
+        self.last_output_contract = self._output_contract.report()
+        if meta is not None:
+            if meta.is_hdr:
+                logger.info(
+                    f"HDR source detected: {meta.label} -- output contract "
+                    f"requires {effective}, 10-bit pixels, and source color tags."
+                )
+            else:
+                logger.info(f"Color signalling: {meta.label}")
+        for warning in self._output_contract.warnings:
+            logger.warning(warning)
+
+    def _validate_output_contract(self, output_path: str) -> None:
+        contract = getattr(self, "_output_contract", None)
+        if contract is None or Path(output_path).is_dir():
+            return
+        ok, issues = contract.validate(output_path)
+        self.last_output_contract = contract.report()
+        self.last_output_contract["status"] = "preserved" if ok else "failed"
+        self.last_output_contract["issues"] = list(issues)
+        if not ok:
+            raise OutputIntegrityError(
+                "output contract mismatch: " + "; ".join(issues),
+                {"output_contract": self.last_output_contract},
+            )
+
+    def _promote_post_restore_result(
+        self,
+        produced: str,
+        output_path: str,
+        temp_dir: str,
+        label: str,
+    ) -> bool:
+        """Normalize an adapter result before it can replace the final output."""
+        contract = getattr(self, "_output_contract", None)
+        if contract is None:
+            _promote_temp_output(produced, output_path)
+            return True
+        ok, issues = contract.validate(produced)
+        candidate = produced
+        normalized = None
+        if not ok:
+            logger.info(
+                "%s result needs output-contract normalization: %s",
+                label,
+                "; ".join(issues),
+            )
+            normalized = contract.temp_path(temp_dir, f"{label}-contract")
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-nostats", "-i", produced,
+            ]
+            if contract.preserve_audio and contract.source_has_audio:
+                cmd += ["-i", output_path]
+            cmd += ["-map", "0:v:0"]
+            if contract.preserve_audio and contract.source_has_audio:
+                cmd += ["-map", "1:a?"]
+            cmd += self._get_encode_args()
+            cmd += ["-c:a", "copy"] if contract.preserve_audio else ["-an"]
+            cmd += [normalized]
+            try:
+                self._run_checked_ffmpeg(
+                    cmd,
+                    _ffmpeg_subprocess_timeout(
+                        _probe_duration_seconds(output_path)
+                    ),
+                )
+                ok, issues = contract.validate(normalized)
+                candidate = normalized
+            except Exception as exc:
+                logger.warning(
+                    "%s output-contract normalization failed: %s", label, exc
+                )
+                ok = False
+        if not ok:
+            logger.warning(
+                "%s result was not promoted because it violates the output "
+                "contract: %s",
+                label,
+                "; ".join(issues),
+            )
+            _cleanup_temp_output(normalized)
+            _cleanup_temp_output(produced)
+            return False
+        _promote_temp_output(candidate, output_path)
+        if candidate != produced:
+            _cleanup_temp_output(produced)
+        return True
 
     def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
         """RM-78 / RM-80: run optional post-restore passes against the
@@ -2674,39 +2776,52 @@ class SubtitleRemover:
         dep is missing; the original output is preserved on every
         failure path so users always have a result.
         """
+        contract = getattr(self, "_output_contract", None)
+
+        def post_path(stem: str) -> str:
+            if contract is not None:
+                return contract.temp_path(temp_dir, stem)
+            return os.path.join(temp_dir, f"{stem}{Path(output_path).suffix or '.mp4'}")
+
         if self.config.upscale_factor in (2, 3, 4):
             try:
                 from backend.post_restore import realesrgan_upscale
-                upscaled = os.path.join(temp_dir, "upscaled.mp4")
+                upscaled = post_path("upscaled")
                 produced = realesrgan_upscale(
                     output_path, upscaled,
                     scale=int(self.config.upscale_factor),
                 )
                 if produced and Path(produced).is_file():
-                    _promote_temp_output(produced, output_path)
-                    logger.info(
-                        f"Real-ESRGAN x{self.config.upscale_factor} pass complete"
-                    )
+                    if self._promote_post_restore_result(
+                        produced, output_path, temp_dir, "realesrgan"
+                    ):
+                        logger.info(
+                            f"Real-ESRGAN x{self.config.upscale_factor} pass complete"
+                        )
             except Exception as exc:
                 logger.warning(f"Real-ESRGAN pass failed: {exc}", exc_info=True)
         if self.config.swinir_restore:
             try:
                 from backend.post_restore import swinir_restore
-                restored = os.path.join(temp_dir, "swinir.mp4")
+                restored = post_path("swinir")
                 produced = swinir_restore(output_path, restored)
                 if produced and Path(produced).is_file():
-                    _promote_temp_output(produced, output_path)
-                    logger.info("SwinIR restoration pass complete")
+                    if self._promote_post_restore_result(
+                        produced, output_path, temp_dir, "swinir"
+                    ):
+                        logger.info("SwinIR restoration pass complete")
             except Exception as exc:
                 logger.warning(f"SwinIR pass failed: {exc}", exc_info=True)
         if self.config.seedvr2_restore:
             try:
                 from backend.post_restore import seedvr2_restore
-                restored = os.path.join(temp_dir, "seedvr2.mp4")
+                restored = post_path("seedvr2")
                 produced = seedvr2_restore(output_path, restored)
                 if produced and Path(produced).is_file():
-                    _promote_temp_output(produced, output_path)
-                    logger.info("SeedVR2 restoration pass complete")
+                    if self._promote_post_restore_result(
+                        produced, output_path, temp_dir, "seedvr2"
+                    ):
+                        logger.info("SeedVR2 restoration pass complete")
             except Exception as exc:
                 logger.warning(f"SeedVR2 pass failed: {exc}", exc_info=True)
         if self.config.film_grain_strength > 0.0:
@@ -2718,47 +2833,59 @@ class SubtitleRemover:
             else:
                 try:
                     from backend.post_restore import add_film_grain
-                    grain_out = os.path.join(temp_dir, "grainy.mp4")
+                    grain_out = post_path("grainy")
                     produced = add_film_grain(
                         output_path, grain_out,
                         strength=self.config.film_grain_strength,
+                        video_encode_args=self._get_encode_args(),
+                        preserve_audio=self.config.preserve_audio,
                     )
                     if produced and Path(produced).is_file():
-                        _promote_temp_output(produced, output_path)
-                        logger.info(
-                            f"Film-grain pass complete "
-                            f"(strength={self.config.film_grain_strength:.3f})"
-                        )
+                        if self._promote_post_restore_result(
+                            produced, output_path, temp_dir, "film-grain"
+                        ):
+                            logger.info(
+                                f"Film-grain pass complete "
+                                f"(strength={self.config.film_grain_strength:.3f})"
+                            )
                 except Exception as exc:
                     logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
         if self.config.restyle_subtitle:
             try:
                 from backend.post_restore import burn_subtitles
-                restyle_out = os.path.join(temp_dir, "restyled.mp4")
+                restyle_out = post_path("restyled")
                 produced = burn_subtitles(
                     output_path, restyle_out,
                     subtitle_path=self.config.restyle_subtitle,
                     style_override=self.config.restyle_style,
+                    video_encode_args=self._get_encode_args(),
+                    preserve_audio=self.config.preserve_audio,
                 )
                 if produced and Path(produced).is_file():
-                    _promote_temp_output(produced, output_path)
-                    logger.info("Restyle subtitle burn pass complete")
+                    if self._promote_post_restore_result(
+                        produced, output_path, temp_dir, "restyle"
+                    ):
+                        logger.info("Restyle subtitle burn pass complete")
             except Exception as exc:
                 logger.warning(f"Restyle pass failed: {exc}", exc_info=True)
         if self.config.watermark_image:
             try:
                 from backend.post_restore import burn_watermark
-                wm_out = os.path.join(temp_dir, "watermarked.mp4")
+                wm_out = post_path("watermarked")
                 produced = burn_watermark(
                     output_path, wm_out,
                     watermark_path=self.config.watermark_image,
                     position=self.config.watermark_position,
                     opacity=self.config.watermark_opacity,
                     margin=self.config.watermark_margin,
+                    video_encode_args=self._get_encode_args(),
+                    preserve_audio=self.config.preserve_audio,
                 )
                 if produced and Path(produced).is_file():
-                    _promote_temp_output(produced, output_path)
-                    logger.info("Watermark burn pass complete")
+                    if self._promote_post_restore_result(
+                        produced, output_path, temp_dir, "watermark"
+                    ):
+                        logger.info("Watermark burn pass complete")
             except Exception as exc:
                 logger.warning(f"Watermark burn failed: {exc}", exc_info=True)
 
@@ -2782,14 +2909,29 @@ class SubtitleRemover:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
         codec = self._effective_output_codec()
         hdr_mode = self._source_is_hdr()
-        if hdr_mode and self._hw_encoder and self.config.use_hw_encode:
+        static_hdr = bool(
+            hdr_mode
+            and getattr(self._color_metadata, "mastering_display", "")
+        )
+        encoder_prefix = {
+            "h264": "h264_",
+            "h265": "hevc_",
+            "av1": "av1_",
+            "vvc": "vvc_",
+        }.get(codec, "")
+        hardware_matches = bool(
+            self._hw_encoder
+            and encoder_prefix
+            and self._hw_encoder.startswith(encoder_prefix)
+        )
+        if static_hdr and self._hw_encoder and self.config.use_hw_encode:
             if not getattr(self, "_hdr_software_warning_logged", False):
                 logger.info(
-                    "HDR source detected; using software encoder to guarantee "
-                    "10-bit yuv420p output."
+                    "Static HDR mastering metadata requires the software "
+                    "encoder so the final bitstream can reproduce its SEI."
                 )
                 self._hdr_software_warning_logged = True
-        if self._hw_encoder and self.config.use_hw_encode and not hdr_mode:
+        if hardware_matches and self.config.use_hw_encode and not static_hdr:
             if 'nvenc' in self._hw_encoder:
                 base = ['-c:v', self._hw_encoder, '-preset', 'p4',
                         '-cq', str(self.config.output_quality)]
@@ -2806,7 +2948,6 @@ class SubtitleRemover:
             return (
                 base
                 + self._hdr_pixel_format_args(codec, hardware=True)
-                + self._hdr_encoder_private_args(codec)
                 + self._hdr_encode_args()
             )
         # F-8: software fallback honours the chosen output codec.
@@ -2818,10 +2959,7 @@ class SubtitleRemover:
             # into the encoder's valid window. -preset 8 is the
             # speed/quality midpoint for libsvtav1.
             crf = min(63, self.config.output_quality)
-            base = (
-                ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
-                + self._svt_av1_film_grain_args()
-            )
+            base = ['-c:v', 'libsvtav1', '-crf', str(crf), '-preset', '8']
         elif codec == "vvc":
             base = ['-c:v', 'libvvenc', '-qp', str(self.config.output_quality),
                     '-preset', 'medium']
@@ -2831,7 +2969,7 @@ class SubtitleRemover:
         return (
             base
             + self._hdr_pixel_format_args(codec)
-            + self._hdr_encoder_private_args(codec)
+            + self._encoder_private_args(codec)
             + self._hdr_encode_args()
         )
 
@@ -2844,6 +2982,9 @@ class SubtitleRemover:
         )
 
     def _effective_output_codec(self) -> str:
+        contract = getattr(self, "_output_contract", None)
+        if contract is not None:
+            return contract.codec
         requested = getattr(self.config, "output_codec", "h264")
         if not getattr(self.config, "preserve_color_metadata", True):
             return requested
@@ -2883,6 +3024,17 @@ class SubtitleRemover:
         except Exception:
             logger.warning("HDR encoder-private argument generation failed", exc_info=True)
             return []
+
+    def _encoder_private_args(self, codec: str) -> List[str]:
+        hdr_args = self._hdr_encoder_private_args(codec)
+        grain_args = self._svt_av1_film_grain_args() if codec == "av1" else []
+        if not hdr_args:
+            return grain_args
+        if not grain_args:
+            return hdr_args
+        if hdr_args[0] == grain_args[0] == "-svtav1-params":
+            return ["-svtav1-params", f"{hdr_args[1]}:{grain_args[1]}"]
+        return hdr_args + grain_args
 
     def _hdr_encode_args(self) -> List[str]:
         """RM-73 partial: re-tag the output with source color signalling."""
@@ -3229,7 +3381,10 @@ class SubtitleRemover:
                     exc.reason,
                 )
                 return self._salvage_intermediate(processed, output)
-            encoder_name = self._hw_encoder or 'libx264'
+            encoder_name = (
+                cmd[cmd.index('-c:v') + 1]
+                if '-c:v' in cmd else 'unknown'
+            )
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")
             return output
         except subprocess.TimeoutExpired:
@@ -3239,7 +3394,7 @@ class SubtitleRemover:
             return self._salvage_intermediate(processed, output)
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
-            if self._hw_encoder:
+            if self._hw_encoder and self._hw_encoder in cmd:
                 logger.warning(f"HW encoder failed, retrying with libx264: {e}")
                 self._hw_encoder = None
                 return self._merge_audio(

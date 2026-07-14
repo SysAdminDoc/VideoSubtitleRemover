@@ -3486,10 +3486,118 @@ class HdrPipelineTests(unittest.TestCase):
         )
         args = hdr_encoder_private_args(meta, "h265")
         self.assertEqual(args[0], "-x265-params")
-        self.assertIn("colorprim=bt2020", args[1])
-        self.assertIn("transfer=smpte2084", args[1])
-        self.assertIn("colormatrix=bt2020nc", args[1])
+        self.assertIn("colorprim=9", args[1])
+        self.assertIn("transfer=16", args[1])
+        self.assertIn("colormatrix=9", args[1])
         self.assertEqual(hdr_encoder_private_args(meta, "av1"), [])
+
+    def test_static_and_dynamic_hdr_metadata_policy(self):
+        from backend import hdr
+
+        payload = {
+            "streams": [{
+                "color_primaries": "bt2020",
+                "color_transfer": "smpte2084",
+                "color_space": "bt2020nc",
+                "color_range": "tv",
+                "codec_tag_string": "dvh1",
+                "side_data_list": [{
+                    "side_data_type": "Mastering display metadata",
+                    "red_x": "34000/50000",
+                    "red_y": "16000/50000",
+                    "green_x": "13250/50000",
+                    "green_y": "34500/50000",
+                    "blue_x": "7500/50000",
+                    "blue_y": "3000/50000",
+                    "white_point_x": "15635/50000",
+                    "white_point_y": "16450/50000",
+                    "max_luminance": "10000000/10000",
+                    "min_luminance": "1/10000",
+                }, {
+                    "side_data_type": "Content light level metadata",
+                    "max_content": 1000,
+                    "max_average": 400,
+                }, {
+                    "side_data_type": "HDR Dynamic Metadata SMPTE2094-40",
+                }],
+            }],
+        }
+        completed = SimpleNamespace(
+            returncode=0, stdout=json.dumps(payload), stderr="")
+        with unittest.mock.patch(
+            "backend.hdr.shutil.which", return_value="ffprobe"
+        ), unittest.mock.patch(
+            "backend.hdr.subprocess.run", return_value=completed
+        ):
+            meta = hdr.probe_color_metadata("hdr.mkv")
+
+        self.assertEqual(
+            meta.mastering_display,
+            "G(13250,34500)B(7500,3000)R(34000,16000)"
+            "WP(15635,16450)L(10000000,1)",
+        )
+        self.assertEqual((meta.max_cll, meta.max_fall), (1000, 400))
+        self.assertIn("HDR Dynamic Metadata SMPTE2094-40", meta.dynamic_metadata)
+        self.assertIn("Dolby Vision Configuration Record", meta.dynamic_metadata)
+        self.assertIn("master-display=", hdr.hdr_encoder_private_args(meta, "h265")[1])
+        self.assertIn("mastering-display=", hdr.hdr_encoder_private_args(meta, "av1")[1])
+        self.assertIn(
+            "MasteringDisplayColourVolume=",
+            hdr.hdr_encoder_private_args(meta, "vvc")[1],
+        )
+
+        from backend.output_contract import build_output_contract
+        with unittest.mock.patch(
+            "backend.output_contract._probe_source_audio", return_value=True
+        ):
+            contract = build_output_contract(
+                input_path="hdr.mkv",
+                output_path="cleaned.mkv",
+                codec="h265",
+                preserve_audio=True,
+                preserve_color_metadata=True,
+                color_metadata=meta,
+                hardware_requested=True,
+            )
+        report = contract.report()
+        self.assertEqual(report["container"], "mkv")
+        self.assertEqual(report["color"]["max_cll"], 1000)
+        self.assertEqual(len(report["warnings"]), 2)
+        self.assertTrue(all("Dropped stale" in item for item in report["warnings"]))
+
+    def test_deinterlace_uses_lossless_contract_intermediate(self):
+        from backend.io import _deinterlace_to_temp
+        from backend.output_contract import OutputContract
+
+        contract = OutputContract(
+            output_suffix=".mkv",
+            codec="h265",
+            preserve_audio=False,
+            source_has_audio=True,
+            preserve_color_metadata=True,
+            color_metadata=__import__(
+                "backend.hdr", fromlist=["ColorMetadata"]
+            ).ColorMetadata(
+                color_primaries="bt2020",
+                color_transfer="smpte2084",
+                color_space="bt2020nc",
+                color_range="tv",
+            ),
+            hardware_requested=False,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir, unittest.mock.patch(
+            "backend.io._run_subprocess_checked"
+        ) as run, unittest.mock.patch(
+            "backend.io._probe_duration_seconds", return_value=1.0
+        ):
+            result = _deinterlace_to_temp(
+                "source.mkv", tmpdir, output_contract=contract)
+        command = run.call_args.args[0]
+        self.assertTrue(result.endswith("deinterlaced.mkv"))
+        self.assertIn("ffv1", command)
+        self.assertIn("yuv420p10le", command)
+        self.assertIn("-an", command)
+        self.assertNotIn("libx264", command)
 
     def test_processing_frame_downconverts_uint16_to_uint8(self):
         frame = np.array([[[0, 257, 65535]]], dtype=np.uint16)
@@ -3572,6 +3680,30 @@ class PostRestoreTests(unittest.TestCase):
             ) as add_grain:
                 remover._run_post_restore_passes(str(output), tmpdir)
             add_grain.assert_not_called()
+
+    def test_film_grain_uses_selected_encode_and_audio_contract(self):
+        from backend import post_restore
+
+        completed = SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        with unittest.mock.patch(
+            "backend.post_restore.shutil.which", return_value="ffmpeg"
+        ), unittest.mock.patch(
+            "backend.post_restore.subprocess.run", return_value=completed
+        ) as run:
+            produced = post_restore.add_film_grain(
+                "source.mkv",
+                "grain.mkv",
+                video_encode_args=(
+                    "-c:v", "libx265", "-pix_fmt", "yuv420p10le"
+                ),
+                preserve_audio=False,
+            )
+        self.assertEqual(produced, "grain.mkv")
+        command = run.call_args.args[0]
+        self.assertIn("libx265", command)
+        self.assertIn("yuv420p10le", command)
+        self.assertIn("-an", command)
+        self.assertNotIn("libx264", command)
 
 
 class CrashReporterScaffoldTests(unittest.TestCase):
@@ -4812,6 +4944,50 @@ class OutputCodecTests(unittest.TestCase):
         self.assertIn("-pix_fmt", args)
         self.assertIn("yuv420p10le", args)
 
+    def test_hdr_hevc_keeps_compatible_hardware_encoder(self):
+        from backend.hdr import ColorMetadata
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._hw_encoder = "hevc_nvenc"
+        remover._output_contract = None
+        remover._color_metadata = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+            color_range="tv",
+        )
+        remover.config = processor.ProcessingConfig(
+            output_codec="h265", use_hw_encode=True)
+
+        args = remover._get_encode_args()
+
+        self.assertIn("hevc_nvenc", args)
+        self.assertIn("p010le", args)
+        self.assertNotIn("libx265", args)
+
+    def test_static_hdr_uses_metadata_capable_software_encoder(self):
+        from backend.hdr import ColorMetadata
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._hw_encoder = "hevc_nvenc"
+        remover._output_contract = None
+        remover._hdr_software_warning_logged = False
+        remover._color_metadata = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+            mastering_display=(
+                "G(13250,34500)B(7500,3000)R(34000,16000)"
+                "WP(15635,16450)L(10000000,1)"
+            ),
+        )
+        remover.config = processor.ProcessingConfig(
+            output_codec="h265", use_hw_encode=True)
+
+        args = remover._get_encode_args()
+
+        self.assertIn("libx265", args)
+        self.assertIn("master-display=", args[args.index("-x265-params") + 1])
+        self.assertNotIn("hevc_nvenc", args)
+
     def test_av1_film_grain_uses_svtav1_native_param(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover._hw_encoder = None
@@ -5525,6 +5701,87 @@ class EndToEndPipelineTests(unittest.TestCase):
             self.assertTrue(capture._ensure_proc())
         command = popen.call_args.args[0]
         self.assertEqual(command[command.index("-ss") + 1], "0.120000000")
+
+    def test_hdr_output_contract_survives_audio_and_post_restore(self):
+        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+            self.skipTest("ffmpeg/ffprobe not on PATH")
+        encoders = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        ).stdout
+        if "libx265" not in encoders:
+            self.skipTest("libx265 not available")
+
+        class PassthroughInpainter:
+            def inpaint(self, frames, masks):
+                return frames
+
+        mastering = (
+            "G(13250,34500)B(7500,3000)R(34000,16000)"
+            "WP(15635,16450)L(10000000,1)"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            source = tmp / "hdr-source.mkv"
+            subprocess.run([
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i",
+                "color=c=red:size=64x48:rate=4:duration=1",
+                "-f", "lavfi", "-i",
+                "sine=frequency=440:sample_rate=48000:duration=1",
+                "-vf", "format=yuv420p10le",
+                "-c:v", "libx265", "-preset", "ultrafast",
+                "-x265-params",
+                "hdr-opt=1:repeat-headers=1:colorprim=9:"
+                "transfer=16:colormatrix=9:"
+                f"master-display={mastering}:max-cll=1000,400",
+                "-pix_fmt", "yuv420p10le",
+                "-color_primaries", "bt2020",
+                "-color_trc", "smpte2084",
+                "-colorspace", "bt2020nc",
+                "-color_range", "tv",
+                "-c:a", "pcm_s16le",
+                str(source),
+            ], check=True, timeout=60)
+            output = tmp / "hdr-cleaned.mkv"
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    subtitle_area=(8, 36, 56, 44),
+                    preserve_audio=True,
+                    preserve_color_metadata=True,
+                    output_codec="h265",
+                    output_quality=28,
+                    film_grain_strength=0.02,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                    sttn_max_load_num=4,
+                    prefetch_decode=False,
+                )
+            )
+            remover = self._stub_remover(cfg, PassthroughInpainter())
+
+            self.assertTrue(
+                remover.process_video(str(source), str(output)),
+                remover.last_error_message,
+            )
+            contract = remover.last_output_contract
+            self.assertEqual(contract["status"], "preserved")
+            self.assertEqual(contract["container"], "mkv")
+            self.assertEqual(contract["codec"], "h265")
+            self.assertEqual(contract["pixel_format"], "10-bit")
+            self.assertTrue(contract["preserve_audio"])
+            self.assertEqual(contract["color"]["mastering_display"], mastering)
+            self.assertEqual(contract["color"]["max_cll"], 1000)
+            self.assertEqual(processor._probe_audio_stream_count(str(output)), 1)
+            sidecar = json.loads(
+                Path(str(output) + ".vsr.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(sidecar["outputContract"]["status"], "preserved")
 
     def test_av1_and_vp9_decode_serial_and_prefetch_paths(self):
         if shutil.which("ffmpeg") is None:

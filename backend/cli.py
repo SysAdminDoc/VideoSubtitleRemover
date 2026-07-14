@@ -1386,6 +1386,10 @@ def main():
                 timing_report = getattr(remover, "last_timing_report", None)
                 if isinstance(timing_report, dict):
                     record["source_timing"] = dict(timing_report)
+                output_contract = getattr(
+                    remover, "last_output_contract", None)
+                if isinstance(output_contract, dict):
+                    record["output_contract"] = dict(output_contract)
                 if ok:
                     return True
                 failure_message = (
@@ -1674,6 +1678,7 @@ def main():
             "stage_timings": getattr(remover, "last_stage_timings", None),
             "quality_report": getattr(remover, "last_quality_report", None),
             "source_timing": getattr(remover, "last_timing_report", None),
+            "output_contract": getattr(remover, "last_output_contract", None),
         }, indent=2))
     sys.exit(0 if success else 1)
 

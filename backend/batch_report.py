@@ -181,6 +181,7 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "retry_attempts": 0,
         "retry_errors": [],
         "source_timing": {"mode": "unknown"},
+        "output_contract": {"status": "unknown"},
         "mask_export": {
             "requested": bool(_config_value(config, "export_mask_video", False)),
             "status": (
@@ -708,6 +709,7 @@ def build_output_sidecar(
     stage_timings: Optional[dict] = None,
     quality_report: Optional[dict] = None,
     quality_gate: Optional[dict] = None,
+    output_contract: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> dict:
@@ -758,6 +760,8 @@ def build_output_sidecar(
         payload["qualityReport"] = _quality_report_record(quality_report)
     if quality_gate is not None:
         payload["qualityGate"] = quality_gate
+    if output_contract is not None:
+        payload["outputContract"] = dict(output_contract)
     return payload
 
 
@@ -771,6 +775,7 @@ def write_output_sidecar(
     stage_timings: Optional[dict] = None,
     quality_report: Optional[dict] = None,
     quality_gate: Optional[dict] = None,
+    output_contract: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> Optional[Path]:
@@ -785,6 +790,7 @@ def write_output_sidecar(
             stage_timings=stage_timings,
             quality_report=quality_report,
             quality_gate=quality_gate,
+            output_contract=output_contract,
             checkpoint_resumed=checkpoint_resumed,
             app_version=app_version,
         )

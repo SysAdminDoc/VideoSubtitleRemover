@@ -33,6 +33,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Pre/post-processing could violate the selected media contract.** One
+  probed output contract now governs deinterlace, encode/mux, restoration,
+  film-grain, subtitle-restyle, and watermark passes. Outputs are validated
+  before promotion for container, codec, audio policy, pixel depth, color
+  tags, HDR10 mastering display, and MaxCLL/MaxFALL; stale HDR10+/Dolby Vision
+  dynamic metadata is intentionally dropped and reported. HDR deinterlace now
+  uses lossless 10-bit FFV1, while compatible hardware encoding remains active
+  unless static HDR SEI requires the metadata-capable software encoder.
 - **Variable-frame-rate timing and A/V drift.** Processing now carries the
   source frame PTS/time base through time ranges, Whisper spans, checkpoints,
   SRT/NLE sidecars, VFR encoding, and audio muxing. Irregular VFR sources use

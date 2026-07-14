@@ -889,18 +889,26 @@ def _deinterlace_to_temp(
     src: str,
     temp_dir: str,
     *,
+    output_contract=None,
     on_process: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
 ) -> str:
-    """v3.12: run `ffmpeg -vf yadif` and return the temp progressive path."""
-    dst = os.path.join(temp_dir, "deinterlaced.mp4")
+    """Run yadif into a lossless contract-aware progressive intermediate."""
+    dst = (
+        output_contract.deinterlace_path(temp_dir)
+        if output_contract is not None
+        else os.path.join(temp_dir, "deinterlaced.mkv")
+    )
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
         '-i', src,
         '-vf', 'yadif=1',
-        '-c:v', 'libx264', '-crf', '16', '-preset', 'veryfast',
-        '-c:a', 'copy', dst,
     ]
+    if output_contract is not None:
+        cmd += output_contract.deinterlace_args()
+    else:
+        cmd += ['-c:v', 'ffv1', '-level', '3', '-c:a', 'copy']
+    cmd += [dst]
     timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(src))
     _run_subprocess_checked(
         cmd,

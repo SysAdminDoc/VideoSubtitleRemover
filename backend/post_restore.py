@@ -21,7 +21,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import cv2
 import numpy as np
@@ -191,6 +191,8 @@ def burn_watermark(
     position: str = "bottom-right",
     opacity: float = 1.0,
     margin: int = 16,
+    video_encode_args: Optional[Sequence[str]] = None,
+    preserve_audio: bool = True,
 ) -> Optional[str]:
     """Burn a PNG watermark onto the output at a named corner position.
 
@@ -218,9 +220,12 @@ def burn_watermark(
         "-i", input_path,
         "-i", watermark_path,
         "-filter_complex", filter_str,
-        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
-        "-c:a", "copy", output_path,
     ]
+    cmd += list(video_encode_args or (
+        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast"
+    ))
+    cmd += ["-c:a", "copy"] if preserve_audio else ["-an"]
+    cmd += [output_path]
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
         if Path(output_path).is_file():
@@ -241,6 +246,8 @@ def burn_subtitles(
     output_path: str,
     subtitle_path: str,
     style_override: str = "",
+    video_encode_args: Optional[Sequence[str]] = None,
+    preserve_audio: bool = True,
 ) -> Optional[str]:
     """Re-burn a subtitle file (.srt or .ass) into the cleaned video.
 
@@ -279,9 +286,12 @@ def burn_subtitles(
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
         "-i", input_path,
         "-vf", vf,
-        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
-        "-c:a", "copy", output_path,
     ]
+    cmd += list(video_encode_args or (
+        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast"
+    ))
+    cmd += ["-c:a", "copy"] if preserve_audio else ["-an"]
+    cmd += [output_path]
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
         if Path(output_path).is_file():
@@ -297,8 +307,14 @@ def burn_subtitles(
     return None
 
 
-def add_film_grain(input_path: str, output_path: str,
-                    strength: float = 0.04) -> Optional[str]:
+def add_film_grain(
+    input_path: str,
+    output_path: str,
+    strength: float = 0.04,
+    *,
+    video_encode_args: Optional[Sequence[str]] = None,
+    preserve_audio: bool = True,
+) -> Optional[str]:
     """RM-80: cheap additive film grain.
 
     Two paths:
@@ -321,9 +337,12 @@ def add_film_grain(input_path: str, output_path: str,
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
         "-i", input_path,
         "-vf", f"noise=alls={noise_level}:allf=t",
-        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast",
-        "-c:a", "copy", output_path,
     ]
+    cmd += list(video_encode_args or (
+        "-c:v", "libx264", "-crf", "20", "-preset", "veryfast"
+    ))
+    cmd += ["-c:a", "copy"] if preserve_audio else ["-an"]
+    cmd += [output_path]
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=7200)
         return output_path

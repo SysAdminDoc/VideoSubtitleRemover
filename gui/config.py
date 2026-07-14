@@ -678,6 +678,7 @@ class QueueItem:
     retry_errors: List[str] = field(default_factory=list)
     mask_export: dict = field(default_factory=dict)
     timing_report: dict = field(default_factory=dict)
+    output_contract_report: dict = field(default_factory=dict)
 
 
 # -- Helpers ----------------------------------------------------------------
@@ -918,6 +919,8 @@ def save_queue_state(queue_items):
                         getattr(item, "mask_export", {}) or {}),
                     "timing_report": dict(
                         getattr(item, "timing_report", {}) or {}),
+                    "output_contract_report": dict(
+                        getattr(item, "output_contract_report", {}) or {}),
                 })
             if not records:
                 if QUEUE_STATE_FILE.exists():
@@ -986,6 +989,8 @@ def load_queue_state():
                     or not isinstance(record.get("stage_timings", {}), dict)
                     or not isinstance(record.get("mask_export", {}), dict)
                     or not isinstance(record.get("timing_report", {}), dict)
+                    or not isinstance(
+                        record.get("output_contract_report", {}), dict)
                 ):
                     _quarantine_queue_state("item evidence fields are malformed")
                     return None
