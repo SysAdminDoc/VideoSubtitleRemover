@@ -501,6 +501,36 @@ def run_self_test() -> dict:
         })
 
     try:
+        from backend.dependency_caps import (
+            collect_onnxruntime_provider_status,
+            onnxruntime_release_advisories,
+        )
+        ort_status = collect_onnxruntime_provider_status()
+        floor = [
+            a for a in onnxruntime_release_advisories(ort_status)
+            if a.get("id") == "ORT-PARSER-OOB-1.25.0"
+        ]
+        if floor:
+            results["security"].append({
+                "name": "ONNX Runtime CVE floor",
+                "available": False,
+                "reason": floor[0].get("mitigation")
+                or "onnxruntime below the 1.25.0 security floor",
+            })
+        else:
+            results["security"].append({
+                "name": "ONNX Runtime CVE floor",
+                "available": True,
+                "reason": "onnxruntime >= 1.25.0 or not installed",
+            })
+    except Exception as exc:
+        results["security"].append({
+            "name": "ONNX Runtime CVE floor",
+            "available": False,
+            "reason": str(exc)[:200],
+        })
+
+    try:
         results["ffmpeg_profiles"] = ffmpeg_profile_entries(
             collect_ffmpeg_capability_profiles()
         )

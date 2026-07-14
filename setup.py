@@ -427,7 +427,7 @@ def install_dependencies(gpu_info=None):
         if gpu_info and (gpu_info.get("amd") or gpu_info.get("intel")):
             print("  Installing ONNX Runtime DirectML provider...")
             _run_pip_install(
-                [pip, 'install', 'onnxruntime-directml>=1.18.0'],
+                [pip, 'install', 'onnxruntime-directml>=1.25.0'],
                 "installing ONNX Runtime DirectML",
             )
             print(f"  [OK] ONNX Runtime DirectML installed")
@@ -447,7 +447,7 @@ def install_dependencies(gpu_info=None):
             print("  Stable PyPI onnxruntime-gpu is the CUDA 12.x path; CUDA 13 uses ONNX Runtime nightly/custom wheels.")
             try:
                 _run_pip_install(
-                    [pip, 'install', 'onnxruntime-gpu>=1.21.0'],
+                    [pip, 'install', 'onnxruntime-gpu>=1.25.0'],
                     "installing ONNX Runtime CUDA",
                 )
                 print(f"  [OK] ONNX Runtime CUDA provider installed")

@@ -161,7 +161,35 @@ class DependencyCapTests(unittest.TestCase):
         ids = {item["id"] for item in advisories}
         self.assertIn("ORT-CUDA-LEGACY-PACKAGE", ids)
         self.assertIn("ORT-CUDA-PRELOAD-MISSING", ids)
-        self.assertTrue(all(item["allowed"] for item in advisories))
+        # Provider-migration warnings remain allowed/non-blocking.
+        migration = [a for a in advisories if a["id"].startswith("ORT-CUDA")]
+        self.assertTrue(all(item["allowed"] for item in migration))
+
+    def test_onnxruntime_security_floor_blocks_old_runtime(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={"onnxruntime-gpu": "1.21.0"},
+            providers=["CPUExecutionProvider"],
+            runtime_version="1.21.0",
+            preload_dlls_available=True,
+        )
+        advisories = dependency_caps.onnxruntime_release_advisories(status)
+        floor = [a for a in advisories if a["id"] == "ORT-PARSER-OOB-1.25.0"]
+        self.assertTrue(floor, "expected a security-floor advisory below 1.25.0")
+        self.assertTrue(floor[0]["blocking"])
+        self.assertEqual(floor[0]["severity"], "high")
+        self.assertFalse(floor[0]["allowed"])
+
+    def test_onnxruntime_security_floor_passes_current_runtime(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={"onnxruntime-gpu": "1.25.0"},
+            providers=["CUDAExecutionProvider"],
+            runtime_version="1.25.0",
+            preload_dlls_available=True,
+        )
+        advisories = dependency_caps.onnxruntime_release_advisories(status)
+        self.assertFalse(
+            [a for a in advisories if a["id"] == "ORT-PARSER-OOB-1.25.0"]
+        )
 
     def test_opencv_wheel_status_reports_single_owner(self):
         status = dependency_caps.collect_opencv_wheel_status(

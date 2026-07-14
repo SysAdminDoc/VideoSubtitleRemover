@@ -73,13 +73,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: a simulated OOM during a batch triggers cache clear + batch-size halving + retry down to size 1, then a logged CPU fallback; the run completes or fails with an actionable message and never leaves a corrupt partial output, covered by an injected-OOM test.
   Complexity: M
 
-- [ ] P1 — Raise the ONNX Runtime dependency floor to >=1.25.0
-  Why: Current floors (`onnxruntime-gpu>=1.21.0`, `onnxruntime-directml>=1.18.0`) predate the 1.25.0 parser integer-truncation heap-OOB hardening, and VSR runs untrusted OCR/inpaint ONNX models through this runtime.
-  Evidence: `requirements.txt:37,44`, `setup.py:430,450`; https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0
-  Touches: `requirements.txt`, `setup.py`, `README.md`, `backend/dependency_caps.py`, `backend/release_verification.py`, `tests/test_dependency_caps.py`
-  Acceptance: all onnxruntime install lines and dependency-cap checks require `>=1.25.0`, release/self-test evidence flags an installed runtime below 1.25.0 as vulnerable, and docs note the floor.
-  Complexity: S
-
 ### P2 — Later
 
 - [ ] P2 — Pin build-toolchain versions carrying LPE fixes (PyInstaller, NSIS)

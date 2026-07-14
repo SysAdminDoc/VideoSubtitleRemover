@@ -38,8 +38,15 @@ RAPIDOCR_ENGINE_PACKAGES = (
 )
 
 ONNXRUNTIME_PROVIDER_STATUS_SCHEMA = "vsr.onnxruntime_providers.v1"
-ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.21.0"
+ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.25.0"
 ONNXRUNTIME_GPU_STABLE_CUDA12_MIN = "1.19.0"
+# Security floor: ONNX Runtime < 1.25.0 predates parser integer-truncation
+# heap out-of-bounds hardening. VSR runs untrusted OCR/inpaint ONNX models
+# through this runtime, so an older build is a blocking release advisory.
+ONNXRUNTIME_SECURITY_MIN = "1.25.0"
+ONNXRUNTIME_SECURITY_SOURCE = (
+    "https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0"
+)
 ONNXRUNTIME_PACKAGES = (
     "onnxruntime",
     "onnxruntime-gpu",
@@ -573,6 +580,30 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
             "mitigation": str(warning.get("message") or ""),
             "blocking": False,
         })
+
+    packages = status.get("packages", {})
+    if isinstance(packages, Mapping):
+        for package in ("onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"):
+            info = packages.get(package)
+            version = info.get("version") if isinstance(info, Mapping) else None
+            if version and not _version_gte(str(version), ONNXRUNTIME_SECURITY_MIN):
+                advisories.append({
+                    "id": "ORT-PARSER-OOB-1.25.0",
+                    "package": package,
+                    "installedVersion": str(version),
+                    "affected": f"<{ONNXRUNTIME_SECURITY_MIN}",
+                    "fixedIn": f">={ONNXRUNTIME_SECURITY_MIN}",
+                    "severity": "high",
+                    "source": ONNXRUNTIME_SECURITY_SOURCE,
+                    "allowed": False,
+                    "allowReason": "",
+                    "mitigation": (
+                        f"Upgrade {package} to >={ONNXRUNTIME_SECURITY_MIN}; "
+                        "older builds predate parser heap-OOB hardening and VSR "
+                        "runs untrusted ONNX models through this runtime."
+                    ),
+                    "blocking": True,
+                })
     return advisories
 
 
@@ -611,9 +642,9 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
     ("paddleocr", "3.0.0", "4.0.0"),
     ("easyocr", "1.7.0", ""),
-    ("onnxruntime", "", ""),
-    ("onnxruntime-gpu", "1.21.0", ""),
-    ("onnxruntime-directml", "1.18.0", ""),
+    ("onnxruntime", "1.25.0", ""),
+    ("onnxruntime-gpu", "1.25.0", ""),
+    ("onnxruntime-directml", "1.25.0", ""),
     ("openvino", "2025.0.0", ""),
     ("simple-lama-inpainting", "0.1.0", ""),
     ("torch", "2.10.0", ""),

@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **ONNX Runtime security floor raised to 1.25.0.** `onnxruntime`,
+  `onnxruntime-gpu`, and `onnxruntime-directml` now require `>=1.25.0` (below
+  which parser integer-truncation heap-OOB hardening is missing). The
+  self-test, support bundle, and strict release validation flag an older
+  runtime as a blocking `ORT-PARSER-OOB-1.25.0` advisory; requirements, setup,
+  and the drift report track the new floor. VSR runs untrusted OCR/inpaint
+  ONNX models through this runtime.
+
 - **Bounded, transactional model-cache imports.** `import_model_cache_bundle`
   now preflights an untrusted bundle against member-count, per-member size,
   compression-ratio (zip-bomb), total-expansion, and free-space ceilings
