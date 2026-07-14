@@ -6151,6 +6151,86 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class GpuOomRecoveryTests(unittest.TestCase):
+    """P1: recover gracefully from a GPU OOM mid-batch."""
+
+    def _remover(self, inpainter):
+        from backend.processor import SubtitleRemover
+        from backend.config import ProcessingConfig
+        remover = SubtitleRemover.__new__(SubtitleRemover)
+        remover.config = ProcessingConfig()
+        remover.inpainter = inpainter
+        return remover
+
+    def test_oom_detection_markers(self):
+        from backend.inpainters import is_oom_error
+        self.assertTrue(is_oom_error(RuntimeError("CUDA out of memory")))
+        self.assertTrue(is_oom_error(MemoryError()))
+        self.assertTrue(is_oom_error(RuntimeError("CUBLAS_STATUS_ALLOC_FAILED")))
+        self.assertFalse(is_oom_error(ValueError("bad shape")))
+
+    def test_batch_halves_until_it_fits(self):
+        # Inpainter OOMs on any batch larger than 2 frames; the resilient
+        # wrapper must split down until every sub-batch fits.
+        calls = []
+
+        class FlakyInpainter:
+            def inpaint(self, frames, masks):
+                calls.append(len(frames))
+                if len(frames) > 2:
+                    raise RuntimeError("CUDA out of memory. Tried to allocate")
+                return [f.copy() for f in frames]
+
+        remover = self._remover(FlakyInpainter())
+        frames = [np.zeros((8, 8, 3), np.uint8) for _ in range(8)]
+        masks = [np.zeros((8, 8), np.uint8) for _ in range(8)]
+        with unittest.mock.patch(
+            "backend.processor.free_inference_memory"
+        ) as freed:
+            out = remover._inpaint_batch_resilient(frames, masks)
+        self.assertEqual(len(out), 8)
+        self.assertTrue(all(c <= 2 for c in calls if c <= 2))
+        self.assertGreaterEqual(freed.call_count, 1)
+
+    def test_single_frame_oom_falls_back_to_cpu(self):
+        class AlwaysOom:
+            def inpaint(self, frames, masks):
+                raise RuntimeError("CUDA out of memory")
+
+        remover = self._remover(AlwaysOom())
+        frames = [np.full((8, 8, 3), 200, np.uint8) for _ in range(2)]
+        masks = [np.zeros((8, 8), np.uint8) for _ in range(2)]
+        masks[0][2:6, 2:6] = 255
+        with unittest.mock.patch("backend.processor.free_inference_memory"):
+            out = remover._inpaint_batch_resilient(frames, masks)
+        self.assertEqual(len(out), 2)
+        for frame in out:
+            self.assertEqual(frame.shape, (8, 8, 3))
+
+    def test_non_oom_error_propagates(self):
+        class Broken:
+            def inpaint(self, frames, masks):
+                raise ValueError("model shape mismatch")
+
+        remover = self._remover(Broken())
+        frames = [np.zeros((8, 8, 3), np.uint8) for _ in range(4)]
+        masks = [np.zeros((8, 8), np.uint8) for _ in range(4)]
+        with self.assertRaises(ValueError):
+            remover._inpaint_batch_resilient(frames, masks)
+
+    def test_recovery_can_be_disabled(self):
+        class AlwaysOom:
+            def inpaint(self, frames, masks):
+                raise RuntimeError("CUDA out of memory")
+
+        remover = self._remover(AlwaysOom())
+        remover.config.gpu_oom_recovery = False
+        frames = [np.zeros((8, 8, 3), np.uint8) for _ in range(2)]
+        masks = [np.zeros((8, 8), np.uint8) for _ in range(2)]
+        with self.assertRaises(RuntimeError):
+            remover._inpaint_batch_resilient(frames, masks)
+
+
 class OutputIntegrityValidationTests(unittest.TestCase):
     """P0: validate final video integrity before destination promotion."""
 

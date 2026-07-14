@@ -197,6 +197,11 @@ class ProcessingConfig:
     # sttn_max_load_num to match. Safe default: on.
     adaptive_batch: bool = True
 
+    # Recover from a GPU out-of-memory error mid-batch by clearing the CUDA
+    # cache, halving the batch, and retrying down to a single frame, then
+    # falling back to CPU inpainting for that frame. Safe default: on.
+    gpu_oom_recovery: bool = True
+
     # v3.12 AUTO mode routing
     # Fraction of masked pixels that must be exposed in >=1 batch frame
     # to send the batch through TBE. Below threshold, route to LaMa.
@@ -628,6 +633,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
     config.export_srt = _coerce_bool(config.export_srt, False)
     config.adaptive_batch = _coerce_bool(config.adaptive_batch, True)
+    config.gpu_oom_recovery = _coerce_bool(config.gpu_oom_recovery, True)
     config.auto_exposure_threshold = _coerce_float(config.auto_exposure_threshold, 0.55, 0.0, 1.0)
     config.deinterlace = _coerce_bool(config.deinterlace, False)
     config.deinterlace_auto = _coerce_bool(config.deinterlace_auto, True)

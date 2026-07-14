@@ -66,13 +66,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: an encode-stage marker records that inpainting completed and where the encode/mux left off; resuming a job whose encode was interrupted skips re-inpainting and either resumes or restarts only the encode, verified by a fixture that kills the process mid-encode and re-runs to a byte-valid output without redoing detection.
   Complexity: L
 
-- [ ] P1 — Recover gracefully from GPU out-of-memory mid-batch
-  Why: Adaptive batch sizing probes VRAM/host RAM up front but has no handler if a batch still OOMs during inference, so borderline-VRAM users crash with a raw CUDA error instead of degrading.
-  Evidence: `backend/processor.py` (no OutOfMemory/CUDA-memory recovery path); YaoFANGUK issues #240/#242 (GPU-accel reliability).
-  Touches: `backend/processor.py`, `backend/config.py`, `backend/inpainters/_common.py`, `tests/test_hardening.py`
-  Acceptance: a simulated OOM during a batch triggers cache clear + batch-size halving + retry down to size 1, then a logged CPU fallback; the run completes or fails with an actionable message and never leaves a corrupt partial output, covered by an injected-OOM test.
-  Complexity: M
-
 ### P2 — Later
 
 - [ ] P2 — Pin build-toolchain versions carrying LPE fixes (PyInstaller, NSIS)

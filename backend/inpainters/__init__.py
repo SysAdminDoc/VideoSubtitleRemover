@@ -9,6 +9,8 @@ deterministic and tests can predict which name resolves where.
 
 from backend.inpainters._common import (
     BaseInpainter,
+    is_oom_error,
+    free_inference_memory,
     _cv2_inpaint,
     _feather_blend,
     _edge_ring_color_correct,
@@ -28,6 +30,8 @@ from backend.inpainters.auto import AutoInpainter
 
 __all__ = [
     "BaseInpainter",
+    "is_oom_error",
+    "free_inference_memory",
     "STTNInpainter",
     "LAMAInpainter",
     "ProPainterInpainter",

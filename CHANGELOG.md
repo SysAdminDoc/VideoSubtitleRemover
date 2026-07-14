@@ -27,6 +27,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Reliability
 
+- **Graceful GPU out-of-memory recovery.** A CUDA OOM during batch inpainting
+  no longer crashes the run: the CUDA cache is cleared and the batch is split
+  in half and retried recursively down to a single frame, which falls back to
+  CPU (OpenCV) inpainting if it still cannot fit. Output always has one frame
+  per input so no partial/corrupt write can result. Controlled by the new
+  `gpu_oom_recovery` config flag (default on); OOM detection lives in
+  `backend.inpainters.is_oom_error` / `free_inference_memory`.
+
 - **Output integrity validation before promotion.** A finished video is now
   probed (ffprobe, with a bounded OpenCV fallback) for a decodable video
   stream and a duration/frame envelope before it replaces any destination.

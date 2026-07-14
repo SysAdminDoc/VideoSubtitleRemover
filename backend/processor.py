@@ -111,6 +111,8 @@ from backend.inpainters import (
     LAMAInpainter,
     ProPainterInpainter,
     AutoInpainter,
+    is_oom_error,
+    free_inference_memory,
     _cv2_inpaint,
     _feather_blend,
     _edge_ring_color_correct,
@@ -1316,6 +1318,51 @@ class SubtitleRemover:
             for idx, result in enumerate(results)
         ]
 
+    def _inpaint_batch_resilient(self, frames: List[np.ndarray],
+                                 masks: List[np.ndarray]) -> List[np.ndarray]:
+        """Inpaint a batch, recovering from GPU OOM by shrinking and retrying.
+
+        On an out-of-memory failure the CUDA cache is cleared and the batch is
+        split in half and retried recursively down to a single frame; a frame
+        that still cannot run on the GPU falls back to CPU (OpenCV) inpainting.
+        The output list always has one frame per input, so a partial/corrupt
+        write can never result from a recovered batch.
+        """
+        if not getattr(self.config, "gpu_oom_recovery", True):
+            return self._inpaint_with_optional_rife_fast(frames, masks)
+        try:
+            return self._inpaint_with_optional_rife_fast(frames, masks)
+        except Exception as exc:  # noqa: BLE001 - re-raised unless it is OOM
+            if not is_oom_error(exc):
+                raise
+            free_inference_memory()
+            if len(frames) <= 1:
+                logger.warning(
+                    "GPU out of memory on a single frame; using CPU inpainting "
+                    "fallback for this frame."
+                )
+                return self._inpaint_cpu_fallback(frames, masks)
+            half = max(1, len(frames) // 2)
+            logger.warning(
+                "GPU out of memory on a batch of %d frames; clearing cache and "
+                "retrying as %d + %d.", len(frames), half, len(frames) - half,
+            )
+            left = self._inpaint_batch_resilient(frames[:half], masks[:half])
+            right = self._inpaint_batch_resilient(frames[half:], masks[half:])
+            return left + right
+
+    def _inpaint_cpu_fallback(self, frames: List[np.ndarray],
+                              masks: List[np.ndarray]) -> List[np.ndarray]:
+        """Guaranteed-CPU inpaint of a (usually single-frame) batch."""
+        results: List[np.ndarray] = []
+        for frame, mask in zip(frames, masks):
+            filled = _cv2_inpaint(frame, mask, 5, cv2.INPAINT_TELEA)
+            feather = getattr(self.config, "mask_feather_px", 0) or 0
+            if feather > 0:
+                filled = _feather_blend(frame, filled, mask, feather)
+            results.append(self._valid_output_frame(filled, frame))
+        return results
+
     def process_video(self, input_path: str, output_path: str, *,
                       checkpoint_dir: Optional[str | Path] = None,
                       checkpoint_key: Optional[str] = None,
@@ -1940,7 +1987,7 @@ class SubtitleRemover:
                 self._report_progress(progress, f"Processing frame {frame_idx}/{frames_to_process}...")
 
                 with self._time_stage("inpaint"):
-                    results = self._inpaint_with_optional_rife_fast(frames, masks)
+                    results = self._inpaint_batch_resilient(frames, masks)
                 stride = max(1, self.live_preview_stride)
                 with self._time_stage("encode"):
                     for offset, result in enumerate(results):

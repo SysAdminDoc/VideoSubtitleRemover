@@ -33,6 +33,53 @@ def _cv2_inpaint(frame: np.ndarray, mask: np.ndarray, radius: int = 5,
     return frame.copy()
 
 
+_OOM_MARKERS = (
+    "out of memory",
+    "cublas_status_alloc_failed",
+    "cudnn_status_alloc_failed",
+    "cuda_error_out_of_memory",
+    "failed to allocate memory",
+    "hiperroroutofmemory",
+    "bad_alloc",
+)
+
+
+def is_oom_error(exc: BaseException) -> bool:
+    """Best-effort detection of a GPU/host out-of-memory failure.
+
+    Covers torch.cuda.OutOfMemoryError, Python MemoryError, and the runtime
+    error strings raised by torch, CUDA/cuBLAS/cuDNN, ROCm, and ONNX Runtime
+    allocators. Kept string-based so it works whether or not torch is present.
+    """
+    if isinstance(exc, MemoryError):
+        return True
+    try:
+        import torch
+        oom_cls = getattr(getattr(torch, "cuda", None), "OutOfMemoryError", None)
+        if oom_cls is not None and isinstance(exc, oom_cls):
+            return True
+    except Exception:
+        pass
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return any(marker in text for marker in _OOM_MARKERS)
+
+
+def free_inference_memory() -> None:
+    """Release cached GPU allocations and run a GC pass. Best-effort, no-raise."""
+    import gc
+    gc.collect()
+    try:
+        import torch
+        if getattr(torch, "cuda", None) is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            try:
+                torch.cuda.ipc_collect()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def _feather_blend(original: np.ndarray, filled: np.ndarray,
                    mask: np.ndarray, feather_px: int = 4) -> np.ndarray:
     """Alpha-blend the inpainted `filled` result back onto `original`
