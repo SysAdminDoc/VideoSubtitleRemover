@@ -714,10 +714,17 @@ def main():
                             "downloads. Uses --gpu to pick the device.")
     parser.add_argument("--ocr-benchmark", action="store_true",
                        help="Benchmark the active OCR detector on synthetic "
-                            "ground-truth subtitle fixtures (recall + latency) "
+                            "ground-truth subtitle fixtures (recall, latency, "
+                            "and memory) "
                             "and print JSON evidence, then exit. Use --gpu to "
                             "pick the device. Gate any default-detector swap on "
                             "the meets_floors verdict.")
+    parser.add_argument(
+        "--ocr-engine",
+        choices=("auto", "opencv-dnn", "rapidocr"),
+        default="auto",
+        help="Select the provider used by --ocr-benchmark.",
+    )
     parser.add_argument("--dry-run", action="store_true",
                        help="Validate the run without encoding: probe each input, "
                             "run detection on a few sampled frames, check the "
@@ -840,7 +847,10 @@ def main():
     if getattr(args, "ocr_benchmark", False):
         from backend.ocr_benchmark import run_default_detector_benchmark
         device = f"cuda:{args.gpu}" if getattr(args, "gpu", 0) >= 0 else "cpu"
-        result = run_default_detector_benchmark(device=device)
+        result = run_default_detector_benchmark(
+            device=device,
+            engine=args.ocr_engine,
+        )
         print(json.dumps(result, indent=2))
         sys.exit(0 if result["meets_floors"] else 1)
 

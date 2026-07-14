@@ -3,7 +3,7 @@
 # Profile: cpu
 # Provider: CPUExecutionProvider
 # Reviewed: 2026-07-14
-# Manifest-SHA256: f784ecca00d2b25f6516b05d953cde1fae908abb77eb27a7c818a287770bc0d0
+# Manifest-SHA256: f4ae8c91476e90574c5f6e4e5ea3199408675bb680904c2ada5ae0fd872596a8
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
@@ -12,8 +12,8 @@
 
 # Exact reviewed direct-dependency constraints.
 numpy==2.2.6
-opencv-python==4.13.0.92
-opencv-python-headless==4.13.0.92
+opencv-python==5.0.0.93
+opencv-python-headless==5.0.0.93
 Pillow==12.3.0
 rapidocr==3.9.1
 paddleocr==3.6.0

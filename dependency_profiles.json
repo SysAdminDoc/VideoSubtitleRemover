@@ -4,8 +4,8 @@
   "python": ">=3.11,<3.15",
   "commonConstraints": [
     "numpy==2.2.6",
-    "opencv-python==4.13.0.92",
-    "opencv-python-headless==4.13.0.92",
+    "opencv-python==5.0.0.93",
+    "opencv-python-headless==5.0.0.93",
     "Pillow==12.3.0",
     "rapidocr==3.9.1",
     "paddleocr==3.6.0",
@@ -65,7 +65,7 @@
   },
   "intentionalExceptions": [
     "Python 3.10 is no longer a supported setup target because the security-reviewed ONNX Runtime 1.25+ CPU/CUDA line and the pinned DirectML 1.24.4 line do not publish CPython 3.10 wheels; Python 3.11 is the minimum reproducible runtime.",
-    "PaddleOCR, EasyOCR, and simple-lama remain reviewed opt-ins rather than default setup packages because their OpenCV wheel ownership or NumPy caps conflict with the primary OpenCV 4.13 and NumPy 2 runtime.",
+    "PaddleOCR, EasyOCR, and simple-lama remain reviewed opt-ins rather than default setup packages because their OpenCV wheel ownership or NumPy caps conflict with the primary OpenCV 5 and NumPy 2 runtime.",
     "Native wheel hashes are not embedded in pip constraints because the supported Python, Windows, Linux, CPU, CUDA, and DirectML matrix produces different artifacts; exact versions, profile hashes, the frozen SBOM, and pip-audit evidence remain mandatory.",
     "PyTorch and PaddlePaddle use vendor indexes whose platform-specific wheels are resolved during setup; release evidence records the reviewed index list and resolved artifact versions.",
     "The Docker image installs the CPU profile's core smoke subset rather than optional OCR and PyTorch backends; it is a local pipeline smoke image, not the frozen Windows distribution."

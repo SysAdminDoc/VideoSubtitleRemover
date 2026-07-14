@@ -122,6 +122,15 @@ class ReleaseVerificationTests(unittest.TestCase):
                 },
             ),
             mock.patch(
+                "backend.release_verification.collect_opencv_dnn_ocr_status",
+                return_value={
+                    "schema": "vsr.opencv_dnn_ocr.v1",
+                    "eligible": True,
+                    "opencvVersion": "5.0.0",
+                    "errors": [],
+                },
+            ),
+            mock.patch(
                 "backend.release_verification.collect_rapidocr_engine_status",
                 return_value={
                     "schema": "vsr.rapidocr_engines.v1",
@@ -330,6 +339,11 @@ class ReleaseVerificationTests(unittest.TestCase):
             evidence["releaseTools"]["opencvWheels"]["schema"],
             "vsr.opencv_wheels.v1",
         )
+        self.assertEqual(
+            evidence["releaseTools"]["opencvDnnOcr"]["schema"],
+            "vsr.opencv_dnn_ocr.v1",
+        )
+        self.assertTrue(evidence["releaseTools"]["opencvDnnOcr"]["eligible"])
         self.assertEqual(
             evidence["releaseTools"]["rapidocrEngines"]["schema"],
             "vsr.rapidocr_engines.v1",
@@ -580,6 +594,13 @@ class ReleaseVerificationTests(unittest.TestCase):
         ), mock.patch(
             "backend.release_verification.probe_ffmpeg_security",
             return_value={"vulnerable": False},
+        ), mock.patch(
+            "backend.release_verification.opencv_libpng_status",
+            return_value={
+                "vulnerable": False,
+                "libpng_version": "1.6.57",
+                "fixed_version": "1.6.54",
+            },
         ):
             advisories = release_verification.collect_release_advisories(deps)
 
@@ -779,7 +800,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             evidence["errors"],
         )
 
-    def test_opencv_libpng_exception_is_removed_when_runtime_is_fixed(self):
+    def test_opencv_libpng_blocks_until_runtime_is_fixed(self):
         deps = [{"name": "opencv-python", "version": "4.13.0.92"}]
         with mock.patch(
             "backend.release_verification.probe_ffmpeg_security",
@@ -807,7 +828,8 @@ class ReleaseVerificationTests(unittest.TestCase):
             fixed = release_verification.collect_release_advisories(deps)
 
         self.assertEqual(vulnerable["advisories"][0]["id"], "CVE-2026-22801")
-        self.assertTrue(vulnerable["advisories"][0]["allowed"])
+        self.assertTrue(vulnerable["advisories"][0]["blocking"])
+        self.assertFalse(vulnerable["advisories"][0]["allowed"])
         self.assertEqual(fixed["advisories"], [])
 
 
@@ -836,6 +858,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("sbom.cdx.json", self.bat)
         self.assertIn("pip-audit.json", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr", self.bat)
+        self.assertIn("--hidden-import backend.opencv_ocr", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)
         self.assertIn("--add-data locale;locale", self.bat)
         self.assertIn("Run_VSR_Pro.bat", self.bat)

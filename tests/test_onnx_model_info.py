@@ -3,7 +3,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from backend.onnx_model_info import rapidocr_release_provenance
+from backend.onnx_model_info import (
+    rapidocr_release_provenance,
+    read_onnx_metadata_props,
+)
 
 
 def _minimal_onnx_model_with_opset(version: int) -> bytes:
@@ -12,7 +15,26 @@ def _minimal_onnx_model_with_opset(version: int) -> bytes:
     return bytes([0x42, 0x02, 0x10, version])
 
 
+def _minimal_onnx_model_with_metadata(name: str, value: str) -> bytes:
+    name_bytes = name.encode("utf-8")
+    value_bytes = value.encode("utf-8")
+    pair = bytes([0x0A, len(name_bytes)]) + name_bytes
+    pair += bytes([0x12, len(value_bytes)]) + value_bytes
+    return bytes([0x72, len(pair)]) + pair
+
+
 class RapidOcrProvenanceTests(unittest.TestCase):
+    def test_reads_model_string_metadata_without_onnx_dependency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            model = Path(tmp) / "rec.onnx"
+            model.write_bytes(_minimal_onnx_model_with_metadata(
+                "character", "blank\nA\nB",
+            ))
+            self.assertEqual(
+                read_onnx_metadata_props(model),
+                {"character": "blank\nA\nB"},
+            )
+
     def test_rapidocr_provenance_hashes_and_audits_models(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

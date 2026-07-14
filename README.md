@@ -28,7 +28,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
 - **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
 - **AUTO Inpaint Routing** -- Per-batch routing between TBE and LaMa based on exposure score
-- **Multi-Engine Detection** -- RapidOCR (ONNX PP-OCR, 4-5x faster, leak-free) > PaddleOCR > Surya (GPL opt-in) > EasyOCR > OpenCV fallback chain (automatic)
+- **Multi-Engine Detection** -- RapidOCR PP-OCRv6 through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR > threshold fallback (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame, optionally with start/end seconds for moving subtitle layouts
@@ -226,7 +226,7 @@ The app automatically selects the best available engine:
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
-| 1 | **RapidOCR** (ONNX/OpenVINO PP-OCR) | `pip install "rapidocr>=2.0.0,<4.0.0"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | ONNX Runtime by default; OpenVINO auto-preferred on CPU/Intel when installed |
+| 1 | **RapidOCR** (OpenCV/ONNX/OpenVINO PP-OCRv6) | `pip install "rapidocr>=2.0.0,<4.0.0"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | OpenCV 5 DNN is the dependency-light CPU path; accelerated providers remain available |
 | 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.6.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | High accuracy reference implementation; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
 | 4 | EasyOCR | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Legacy fallback; installs its own OpenCV wheel |
@@ -257,8 +257,11 @@ Windows ML audit. DirectML is in sustained engineering, with new Windows ONNX
 Runtime feature development moving to Windows ML, so diagnostics and release
 evidence report that lifecycle separately from CPU/CUDA security floors. On
 Intel systems setup also tries `openvino>=2025.0.0` so RapidOCR can use its
-OpenVINO engine for CPU/iGPU OCR acceleration. Set
-`VSR_RAPIDOCR_ENGINE=onnxruntime` to force the default ONNX Runtime path or
+OpenVINO engine for CPU/iGPU OCR acceleration. OpenCV 5 DNN runs RapidOCR's
+bundled PP-OCRv6 detection and recognition models on CPU without ONNX Runtime;
+`python -m backend.cli --ocr-benchmark --ocr-engine opencv-dnn` records recall,
+latency, and resident-memory evidence. Set `VSR_RAPIDOCR_ENGINE=opencv` to
+force that path, `VSR_RAPIDOCR_ENGINE=onnxruntime` to force ONNX Runtime, or
 `VSR_RAPIDOCR_ENGINE=openvino` to request OpenVINO explicitly. When ONNX
 Runtime reports `DmlExecutionProvider`,
 RapidOCR is initialized with its DirectML provider settings; unsupported
@@ -286,8 +289,9 @@ instead of deserializing the file. Legacy adapters without a pinned hash still
 run, but new strict adapters can require a known hash unless
 `VSR_ALLOW_UNVERIFIED_MODELS=1` is set and recorded in release evidence.
 Local release evidence also writes `release-advisories.json`; strict mode
-blocks unallowed high/critical dependency advisories while keeping the current
-OpenCV/libpng exception explicit until fixed wheels are available.
+blocks unallowed high/critical dependency advisories. The reviewed OpenCV
+5.0.0.93 wheel bundles libpng 1.6.57, so older vulnerable OpenCV builds no
+longer receive a release exception.
 Wan2.1-VACE is available as an opt-in registry mode: set `VSR_VACE=1`, install
 the reviewed upstream `vace` package, then either set `VSR_VACE_CKPT_DIR` to a
 local `Wan-AI/Wan2.1-VACE-1.3B` snapshot or set `VSR_VACE_AUTO_FETCH=1` with
@@ -649,12 +653,11 @@ content, colors are preserved. If you still see a mismatch, attach the
   `Run_VSR_Pro.ps1` from PowerShell to see setup/launch errors there
 - Check the log file: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log`
 - If the log or support bundle reports OpenCV's bundled libpng below
-  `1.6.54`, avoid opening untrusted PNG files. As of June 26, 2026,
-  opencv-python still needs a fixed bundled-libpng wheel; update this
-  guidance only when `security.opencv_libpng.vulnerable` reports `false`
+  `1.6.54`, upgrade to the reviewed `opencv-python>=5.0.0.93` wheel before
+  opening untrusted PNG files or producing a release
 - If self-test, backend status, or a support bundle reports multiple OpenCV
   wheels, run the printed `pip uninstall` command for every OpenCV variant,
-  then reinstall one wheel, normally `opencv-python>=4.12.0`
+  then reinstall one wheel, normally `opencv-python>=5.0.0.93`
 
 </details>
 

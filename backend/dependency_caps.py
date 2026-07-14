@@ -71,7 +71,7 @@ OPENCV_PACKAGES = (
 OPENCV_REMEDIATION_COMMANDS = (
     "python -m pip uninstall -y opencv-python opencv-contrib-python "
     "opencv-python-headless opencv-contrib-python-headless",
-    "python -m pip install \"opencv-python>=4.12.0\"",
+    "python -m pip install \"opencv-python>=5.0.0.93\"",
 )
 
 
@@ -718,7 +718,7 @@ PILLOW_MINIMUM_VERSION = "12.3.0"
 
 TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("numpy", "1.21.0", ""),
-    ("opencv-python", "4.12.0", ""),
+    ("opencv-python", "5.0.0.93", ""),
     ("Pillow", PILLOW_MINIMUM_VERSION, ""),
     ("rapidocr", "2.0.0", "4.0.0"),
     ("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
@@ -738,9 +738,7 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("pyinstaller", "6.10.0", ""),
 )
 
-BLOCKED_EXCEPTIONS: Tuple[Tuple[str, str], ...] = (
-    ("opencv-python", "libpng < 1.6.54 bundled; CVE-2026-22801 allowed until fixed wheel"),
-)
+BLOCKED_EXCEPTIONS: Tuple[Tuple[str, str], ...] = ()
 
 
 def collect_dependency_drift_report(

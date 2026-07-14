@@ -20,7 +20,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && python -m pip install --no-cache-dir \
         --constraint dependency_profiles/cpu.txt \
         "numpy>=1.26" \
-        "opencv-python-headless>=4.12.0" \
+        "opencv-python-headless>=5.0.0.93" \
         "Pillow>=12.3.0" \
         "onnxruntime>=1.25.0"
 

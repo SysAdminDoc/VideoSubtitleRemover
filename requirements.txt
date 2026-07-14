@@ -6,21 +6,22 @@
 # update` when intentionally changing reviewed versions.
 
 # Core
-# opencv-python >= 4.12.0 patches CVE-2025-53644 (uninitialised pointer in
-# JPEG read can become an arbitrary heap write on a crafted file).
+# opencv-python >= 5.0.0.93 patches CVE-2025-53644 and bundles libpng 1.6.57,
+# above the 1.6.54 floor for CVE-2026-22801. It also enables PP-OCRv6 and LaMa
+# ONNX execution through cv2.dnn without ONNX Runtime.
 # Pillow >= 12.3.0 patches CVE-2026-55798 command injection,
 # CVE-2026-54059/54060/55379/55380 decompression bombs, and multiple
 # image-operation out-of-bounds reads/writes fixed by the 2026-07-01 release.
 #
-# OpenCV 5 upgrade path: opencv-python >= 5.0 enables the built-in
-# cv2.dnn LaMa inpaint backend, which needs only OpenCV + numpy (no
+# OpenCV 5 enables the built-in cv2.dnn PP-OCRv6 and LaMa backends, which
+# need only OpenCV + numpy plus RapidOCR's pure-Python processing/model assets (no
 # onnxruntime, no torch). Download the model from
 # https://huggingface.co/opencv/inpainting_lama and set
 # VSR_OPENCV_LAMA=path/to/inpainting_lama_2025jan.onnx, or place it in
 # %APPDATA%/VideoSubtitleRemoverPro/models/ for auto-discovery. The
 # 4.x floor is kept for users who have not upgraded yet.
 numpy>=1.21.0
-opencv-python>=4.12.0
+opencv-python>=5.0.0.93
 Pillow>=12.3.0
 
 # AI/ML Frameworks (choose based on your GPU)
@@ -87,7 +88,7 @@ rapidocr>=2.0.0,<4.0.0
 # preferred backends (ONNX Runtime or OpenCV 5 DNN) avoid the torch.load
 # CVE surface entirely. Install simple-lama-inpainting only if neither
 # onnxruntime nor opencv-python >= 5.0 is available. Its NumPy <2 requirement
-# is incompatible with the reviewed OpenCV 4.13 / NumPy 2 runtime, so install
+# is incompatible with the reviewed OpenCV 5 / NumPy 2 runtime, so install
 # it only in an isolated legacy environment.
 # simple-lama-inpainting>=0.1.0
 

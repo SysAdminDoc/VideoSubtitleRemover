@@ -21,14 +21,14 @@ class DependencyCapTests(unittest.TestCase):
         self.assertIn("paddleocr==3.6.0", profiles)
 
         self.assertNotIn("rapidocr-onnxruntime", requirements)
-        self.assertIn("opencv-python>=4.12.0", requirements)
+        self.assertIn("opencv-python>=5.0.0.93", requirements)
         self.assertIn(
             f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", requirements
         )
         self.assertIn(
             f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", setup
         )
-        self.assertNotIn("opencv-python>=4.12.0,<", requirements)
+        self.assertNotIn("opencv-python>=5.0.0.93,<", requirements)
         self.assertNotIn("numpy>=1.21.0,<", requirements)
 
     def test_checker_passes_missing_or_in_range_engines(self):
@@ -266,14 +266,14 @@ class DependencyCapTests(unittest.TestCase):
         commands = status["remediation"]["commands"]
         self.assertEqual(len(commands), 2)
         self.assertIn("opencv-contrib-python-headless", commands[0])
-        self.assertEqual(commands[1], 'python -m pip install "opencv-python>=4.12.0"')
+        self.assertEqual(commands[1], 'python -m pip install "opencv-python>=5.0.0.93"')
 
 
 class DriftReportTests(unittest.TestCase):
     def test_drift_report_schema_and_summary(self):
         versions = {
             "numpy": "1.26.4",
-            "opencv-python": "4.12.0",
+            "opencv-python": "5.0.0.93",
             "pillow": "12.3.0",
             "rapidocr": "3.9.0",
         }
@@ -332,15 +332,11 @@ class DriftReportTests(unittest.TestCase):
         self.assertIn("1.26.4", text)
         self.assertIn("Tracked:", text)
 
-    def test_drift_report_includes_blocked_exceptions(self):
+    def test_drift_report_has_no_resolved_blocked_exceptions(self):
         report = dependency_caps.collect_dependency_drift_report(
             package_versions={},
         )
-        self.assertGreater(len(report["blockedExceptions"]), 0)
-        self.assertEqual(
-            report["blockedExceptions"][0]["package"],
-            "opencv-python",
-        )
+        self.assertEqual(report["blockedExceptions"], [])
 
 
 if __name__ == "__main__":

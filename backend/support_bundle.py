@@ -28,6 +28,7 @@ from backend.ffmpeg_profiles import (
     probe_ffmpeg_security,
 )
 from backend.model_downloads import installed_backend_status
+from backend.opencv_ocr import collect_opencv_dnn_ocr_status
 from backend.security_checks import opencv_libpng_status
 from backend.subprocess_policy import run_process
 
@@ -193,6 +194,7 @@ def _support_payload(*, app_version: str,
         "dependencies": _dependency_versions(),
         "dependency_diagnostics": {
             "opencv": collect_opencv_wheel_status(),
+            "opencv_dnn_ocr": collect_opencv_dnn_ocr_status(),
             "onnxruntime": collect_onnxruntime_provider_status(),
         },
         "backend_status": installed_backend_status(),

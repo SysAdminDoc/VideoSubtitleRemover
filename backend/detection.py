@@ -78,6 +78,30 @@ def _rapidocr_engine_preference() -> str:
     return os.environ.get("VSR_RAPIDOCR_ENGINE", "auto").strip().lower()
 
 
+def _should_try_opencv_dnn_ocr(device: str) -> bool:
+    preference = _rapidocr_engine_preference()
+    if preference in {"opencv", "opencv-dnn", "cv2"}:
+        return True
+    if preference != "auto":
+        return False
+    if "cuda" in str(device).lower() or str(device).lower() == "directml":
+        return False
+    if _openvino_runtime_available():
+        return False
+    version = tuple(
+        int(part) if part.isdigit() else 0
+        for part in str(getattr(cv2, "__version__", "0.0.0")).split(".")[:3]
+    )
+    return (
+        version >= (5, 0, 0)
+        and not _module_can_import(
+            "onnxruntime",
+            logger=logger,
+            failure_context="ONNX Runtime OCR probe skipped",
+        )
+    )
+
+
 def _openvino_runtime_available() -> bool:
     return _module_can_import(
         "openvino",
@@ -182,7 +206,27 @@ class SubtitleDetector:
             logger.debug(f"VLM detector probe failed: {exc}")
         self._vlm_detector = None
 
-        # RapidOCR (ONNX PP-OCR, default)
+        # OpenCV 5 can execute RapidOCR's bundled PP-OCRv6 detection and
+        # recognition models without ONNX Runtime. Keep accelerated
+        # OpenVINO/CUDA/DirectML providers and the regular RapidOCR path as
+        # fallbacks.
+        if _should_try_opencv_dnn_ocr(self.device):
+            try:
+                from backend.opencv_ocr import build_opencv_dnn_rapidocr
+                self._rapid_model = build_opencv_dnn_rapidocr()
+                self._engine_name = "RapidOCR (OpenCV 5 DNN)"
+                logger.info(
+                    "RapidOCR loaded via OpenCV 5 DNN PP-OCRv6 "
+                    f"(lang={self.lang})"
+                )
+                return
+            except Exception as exc:
+                logger.warning(
+                    "OpenCV 5 DNN OCR init failed; retrying RapidOCR "
+                    f"provider: {exc}"
+                )
+
+        # RapidOCR (ONNX/OpenVINO provider fallback)
         try:
             rapid_obj = None
             if _module_can_import("rapidocr"):
@@ -329,6 +373,34 @@ class SubtitleDetector:
                     out.append((ox1, oy1, ox2, oy2, conf))
             return out
         return self._detect_axis_aligned_conf(frame, threshold)
+
+    def benchmark_detect(
+        self,
+        frame: np.ndarray,
+        threshold: float = 0.3,
+    ) -> tuple[List[Tuple[int, int, int, int]], list[str]]:
+        """Run one OCR pass and retain recognized text for benchmark evidence."""
+        if self._rapid_model is None:
+            return self.detect(frame, threshold), []
+        try:
+            output = self._rapid_model(frame)
+            boxes = self._rapid_output_to_boxes(output, threshold)
+            results = output[0] if isinstance(output, tuple) and output else output
+            texts = self._rapid_field(
+                results,
+                "txts",
+                "texts",
+                "rec_texts",
+                "text",
+            )
+            if texts is None:
+                return boxes, []
+            if isinstance(texts, str):
+                return boxes, [texts]
+            return boxes, [str(text) for text in texts if str(text).strip()]
+        except Exception as exc:
+            logger.error(f"RapidOCR benchmark error: {exc}")
+            return self._fallback_detection(frame), []
 
     def _detect_axis_aligned_conf(
         self, frame: np.ndarray, threshold: float

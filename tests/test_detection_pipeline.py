@@ -259,7 +259,6 @@ class VerticalTextRotationTests(unittest.TestCase):
         with _fresh_detection_module() as detection:
             h, w = 1080, 1920
             frame = np.zeros((h, w, 3), dtype=np.uint8)
-            original_box = (1800, 400, 1900, 500)
             detector = detection.SubtitleDetector.__new__(
                 detection.SubtitleDetector)
             detector.vertical = True
@@ -558,6 +557,8 @@ class OcrBenchmarkHarnessTests(unittest.TestCase):
         self.assertEqual(result["engine"], "oracle")
         self.assertEqual(result["recall"], 1.0)
         self.assertTrue(result["meets_floors"])
+        self.assertIn("memory", result)
+        self.assertIn("peakRssBytes", result["memory"])
 
     def test_blind_detector_fails_recall_floor(self):
         from backend import ocr_benchmark
@@ -584,6 +585,29 @@ class OcrBenchmarkHarnessTests(unittest.TestCase):
         result = ocr_benchmark.run_ocr_detection_benchmark(BrokenDetector())
         self.assertFalse(result["meets_floors"])
         self.assertTrue(all("error" in r for r in result["results"]))
+
+    def test_recognition_text_is_scored_when_provider_exposes_it(self):
+        from backend import ocr_benchmark
+
+        expected = {}
+        for text, (image, box) in zip(
+            ocr_benchmark._FIXTURE_TEXTS,
+            ocr_benchmark.iter_fixtures(),
+        ):
+            expected[image.tobytes()] = (box, text)
+
+        class TextDetector:
+            _engine_name = "text-provider"
+
+            def benchmark_detect(self, image, threshold):
+                box, text = expected[image.tobytes()]
+                return [box], [text]
+
+        result = ocr_benchmark.run_ocr_detection_benchmark(TextDetector())
+        self.assertTrue(result["recognition_ran"])
+        self.assertEqual(result["recognition_mean"], 1.0)
+        self.assertTrue(result["recognition_meets_floor"])
+        self.assertTrue(result["meets_floors"])
 
 
 if __name__ == "__main__":

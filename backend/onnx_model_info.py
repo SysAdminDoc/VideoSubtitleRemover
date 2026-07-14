@@ -80,6 +80,23 @@ def read_onnx_opset_imports(path: str | Path) -> List[OnnxOpsetImport]:
             return _parse_model_opsets(mm)
 
 
+def read_onnx_metadata_props(path: str | Path) -> Dict[str, str]:
+    """Return model-level ONNX string metadata without importing ``onnx``.
+
+    RapidOCR embeds its recognition alphabet in the ``character`` metadata
+    property. OpenCV DNN does not expose ONNX metadata, so the dependency-light
+    OCR path reads that small protobuf field directly while skipping tensors.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise OnnxModelInfoError(f"ONNX model does not exist: {p}")
+    if p.stat().st_size == 0:
+        raise OnnxModelInfoError(f"ONNX model is empty: {p}")
+    with p.open("rb") as handle:
+        with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            return _parse_model_metadata_props(mm)
+
+
 def directml_incompatible_opsets(
     path: str | Path,
     max_opset: int = DIRECTML_MAX_ONNX_OPSET,
@@ -130,6 +147,46 @@ def _parse_opset_import(buf: Sequence[int]) -> OnnxOpsetImport | None:
     if version is None:
         return None
     return OnnxOpsetImport(domain=domain, version=int(version))
+
+
+def _parse_model_metadata_props(buf: Sequence[int]) -> Dict[str, str]:
+    pos = 0
+    found: Dict[str, str] = {}
+    size = len(buf)
+    while pos < size:
+        key, pos = _read_varint(buf, pos)
+        field_number = key >> 3
+        wire_type = key & 0x07
+        # ModelProto.metadata_props is repeated StringStringEntryProto field 14.
+        if field_number == 14 and wire_type == 2:
+            payload, pos = _read_length_delimited(buf, pos)
+            name, value = _parse_string_pair(payload)
+            if name:
+                found[name] = value
+        else:
+            pos = _skip_field(buf, pos, wire_type)
+    return found
+
+
+def _parse_string_pair(buf: Sequence[int]) -> tuple[str, str]:
+    pos = 0
+    name = ""
+    value = ""
+    size = len(buf)
+    while pos < size:
+        key, pos = _read_varint(buf, pos)
+        field_number = key >> 3
+        wire_type = key & 0x07
+        if field_number in {1, 2} and wire_type == 2:
+            raw, pos = _read_length_delimited(buf, pos)
+            decoded = bytes(raw).decode("utf-8", errors="replace")
+            if field_number == 1:
+                name = decoded
+            else:
+                value = decoded
+        else:
+            pos = _skip_field(buf, pos, wire_type)
+    return name, value
 
 
 def _read_varint(buf: Sequence[int], pos: int) -> tuple[int, int]:
@@ -456,7 +513,7 @@ def print_audit_report(records: Optional[List[Dict[str, object]]] = None) -> Non
     if records is None:
         records = audit_onnx_models()
     print(f"DirectML ONNX opset audit (ceiling: opset {DIRECTML_MAX_ONNX_OPSET})")
-    print(f"Known model opsets (from source repos):")
+    print("Known model opsets (from source repos):")
     for name, opset in sorted(KNOWN_MODEL_OPSETS.items()):
         compat = "OK" if opset <= DIRECTML_MAX_ONNX_OPSET else "EXCEEDS"
         print(f"  {name}: opset {opset} [{compat}]")

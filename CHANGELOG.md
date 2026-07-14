@@ -44,6 +44,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **OpenCV 5 PP-OCRv6 provider and benchmark evidence.** RapidOCR's bundled
+  detection and recognition ONNX assets can now execute
+  through `cv2.dnn` without ONNX Runtime. The OCR benchmark selects OpenCV DNN
+  or the regular RapidOCR provider explicitly and records recall, per-frame
+  latency, and resident-memory deltas; release evidence reports model and
+  libpng eligibility.
+
 - **Accessible interface text scaling.** Detailed controls now persist a
   100%-200% interface text-size setting that scales Canvas controls and
   dependent geometry. The 980x720 minimum window reflows into a compact,
@@ -65,6 +72,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   the primary runtime. The supported Python floor is now 3.11 because the
   reviewed ONNX Runtime CPU/CUDA and DirectML releases do not publish Python
   3.10 wheels.
+- **OpenCV 5 is the reviewed runtime floor.** Profiles, setup, Docker, drift
+  diagnostics, and remediation now require `opencv-python==5.0.0.93`. Its
+  bundled libpng 1.6.57 resolves CVE-2026-22801, so vulnerable older wheels
+  block strict releases instead of using the former temporary exception.
 - **Local release builds are fail-closed and artifact-derived.**
   `build_exe.bat` now runs the full suite, a frozen-runtime dependency audit,
   the reference corpus, PyInstaller/launcher smoke, production NSIS compile,

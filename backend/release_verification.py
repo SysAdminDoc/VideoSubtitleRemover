@@ -45,6 +45,7 @@ from backend.ffmpeg_profiles import (
     probe_ffmpeg_security,
 )
 from backend.onnx_model_info import rapidocr_release_provenance
+from backend.opencv_ocr import collect_opencv_dnn_ocr_status
 from backend.remote_model_policy import release_remote_model_status
 from backend.security_checks import opencv_libpng_status
 from backend.subprocess_policy import run_process
@@ -462,11 +463,12 @@ def _advisory(
     allowed: bool = False,
     allow_reason: str = "",
     mitigation: str = "",
+    blocking: Optional[bool] = None,
 ) -> dict:
     severity_norm = severity.lower()
-    blocking = (
-        severity_norm in STRICT_BLOCKING_SEVERITIES
-        and not allowed
+    is_blocking = (
+        (severity_norm in STRICT_BLOCKING_SEVERITIES and not allowed)
+        if blocking is None else bool(blocking and not allowed)
     )
     return {
         "id": advisory_id,
@@ -479,7 +481,7 @@ def _advisory(
         "allowed": bool(allowed),
         "allowReason": allow_reason,
         "mitigation": mitigation,
-        "blocking": blocking,
+        "blocking": is_blocking,
     }
 
 
@@ -536,13 +538,11 @@ def collect_release_advisories(
             fixed_in=str(libpng.get("fixed_version") or "1.6.54"),
             severity="medium",
             source="https://nvd.nist.gov/vuln/detail/CVE-2026-22801",
-            allowed=True,
-            allow_reason=(
-                "opencv-python has not shipped a fixed bundled libpng wheel; "
-                "user-supplied PNG still-image reads are routed through Pillow "
-                "while the runtime remains vulnerable."
+            blocking=True,
+            mitigation=(
+                "Upgrade to opencv-python >= 5.0.0.93, which bundles libpng "
+                ">= 1.6.54, before producing a release."
             ),
-            mitigation="Update opencv-python once it bundles libpng >= 1.6.54.",
         ))
     package_versions = {
         str(dep.get("name") or "").lower().replace("_", "-"): str(dep.get("version") or "")
@@ -1226,6 +1226,7 @@ def build_release_evidence(
     opencv_wheels = collect_opencv_wheel_status(
         package_versions=package_versions,
     )
+    opencv_dnn_ocr = collect_opencv_dnn_ocr_status()
     rapidocr_engines = collect_rapidocr_engine_status(
         package_versions=package_versions,
     )
@@ -1274,6 +1275,7 @@ def build_release_evidence(
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "opencvWheels": opencv_wheels,
+            "opencvDnnOcr": opencv_dnn_ocr,
             "onnxRuntimeProviders": onnxruntime_providers,
             "rapidocrEngines": rapidocr_engines,
             "referenceCorpus": (
@@ -1358,6 +1360,14 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     if (isinstance(ffsmoke, Mapping)
             and ffsmoke.get("ran") and not ffsmoke.get("passed")):
         yield f"FFmpeg subprocess smoke failed: {ffsmoke.get('error', 'unknown')}"
+    opencv_dnn_ocr = evidence.get("releaseTools", {}).get("opencvDnnOcr", {})
+    if isinstance(opencv_dnn_ocr, Mapping) and not opencv_dnn_ocr.get("eligible"):
+        errors = "; ".join(
+            str(item) for item in opencv_dnn_ocr.get("errors", [])
+        )
+        yield "OpenCV DNN OCR release path is not eligible" + (
+            f": {errors}" if errors else ""
+        )
     runtime_hooks = evidence.get("releaseTools", {}).get("pyinstallerRuntimeHooks", [])
     if isinstance(runtime_hooks, list):
         hook_names = {
