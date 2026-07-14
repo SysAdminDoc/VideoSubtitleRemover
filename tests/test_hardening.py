@@ -3052,6 +3052,63 @@ class CliBatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["status"], "hardcoded-processed")
         self.assertIn("clip_no_sub.mp4", markdown)
 
+    def test_pattern_retries_false_result_and_records_attempt(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mp4"
+            out_dir = work / "out"
+            ckpt = work / "ckpt"
+            src.write_bytes(b"video")
+            out_dir.mkdir()
+
+            calls = {"count": 0}
+
+            def process_video(*_args, **_kwargs):
+                calls["count"] += 1
+                if calls["count"] == 1:
+                    fake_remover.last_error_message = "CUDA out of memory"
+                    fake_remover.last_error_reason = "video_processing_error"
+                    return False
+                fake_remover.last_error_message = None
+                fake_remover.last_error_reason = None
+                return True
+
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(side_effect=process_video),
+                process_image=mock.Mock(return_value=True),
+                last_mask_export={
+                    "requested": False,
+                    "status": "not-requested",
+                    "path": "",
+                },
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--pattern", str(work / "*.mp4"),
+                        "--out-dir", str(out_dir),
+                        "--checkpoint-dir", str(ckpt),
+                        "--gpu", "-1",
+                        "--max-retries", "1",
+                        "--retry-backoff", "0",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(
+                    encoding="utf-8")
+            )
+
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(fake_remover.process_video.call_count, 2)
+        self.assertIn("[retry] clip.mp4: attempt 1/1", stdout)
+        self.assertEqual(payload["files"][0]["retry_attempts"], 1)
+        self.assertIn("CUDA out of memory", payload["files"][0]["retry_errors"][0])
+
     def test_paused_status_is_reported_distinctly(self):
         from backend import batch_report as _br
 
@@ -5218,6 +5275,56 @@ class EndToEndPipelineTests(unittest.TestCase):
                 cap.release()
             self.assertGreaterEqual(frames_read, 20)
 
+    def test_mask_video_is_promoted_and_reported(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not on PATH")
+
+        class PassthroughInpainter:
+            def inpaint(self, frames, masks):
+                return frames
+
+        import cv2 as _cv2
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            src = self._write_clip(tmp, n_frames=8, size=(64, 48))
+            output = tmp / "cleaned.mp4"
+            mask_output = tmp / "cleaned.mask.mp4"
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    subtitle_area=(8, 36, 56, 44),
+                    preserve_audio=False,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                    export_mask_video=True,
+                    sttn_max_load_num=4,
+                    prefetch_decode=False,
+                )
+            )
+            remover = self._stub_remover(cfg, PassthroughInpainter())
+            ok = remover.process_video(str(src), str(output))
+
+            self.assertTrue(ok)
+            self.assertTrue(mask_output.is_file())
+            self.assertGreater(mask_output.stat().st_size, 0)
+            self.assertEqual(remover.last_mask_export["status"], "created")
+            self.assertEqual(
+                Path(remover.last_mask_export["path"]), mask_output)
+            cap = _cv2.VideoCapture(str(mask_output))
+            try:
+                self.assertTrue(cap.isOpened())
+                frames_read = 0
+                while True:
+                    ret, _frame = cap.read()
+                    if not ret:
+                        break
+                    frames_read += 1
+            finally:
+                cap.release()
+            self.assertEqual(frames_read, 8)
+
     def test_av1_and_vp9_decode_serial_and_prefetch_paths(self):
         if shutil.which("ffmpeg") is None:
             self.skipTest("ffmpeg not on PATH")
@@ -6197,6 +6304,70 @@ class BatchRetryTests(unittest.TestCase):
         cfg.batch_max_retries = 99
         normalize_processing_config(cfg)
         self.assertLessEqual(cfg.batch_max_retries, 10)
+
+    def test_gui_retries_false_result_and_preserves_attempt_evidence(self):
+        from unittest import mock
+
+        app = gui.VideoSubtitleRemoverApp.__new__(gui.VideoSubtitleRemoverApp)
+        app._update_item_display = mock.Mock()
+        app._process_soft_subtitle_item = mock.Mock(return_value=False)
+        app._announce_model_download_guidance = mock.Mock()
+        app._gui_to_backend_mode = mock.Mock(
+            return_value=processor.InpaintMode.STTN)
+        app._gui_to_backend_device = mock.Mock(return_value="cpu")
+        app._cached_remover = None
+        app._cached_remover_key = None
+        app._active_remover = None
+        app._batch_report_records = {"retry-item": {}}
+        app.cancel_event = threading.Event()
+        app.pause_event = threading.Event()
+        app._batch_times = []
+
+        class FakeBackendRemover:
+            calls = 0
+
+            def __init__(self, config):
+                self.config = config
+                self.last_error_message = None
+                self.last_error_reason = None
+                self.last_quality_report = None
+                self.last_output_path = None
+                self.last_mask_export = {
+                    "requested": False,
+                    "status": "not-requested",
+                    "path": "",
+                }
+
+            def process_video(self, *_args, **_kwargs):
+                type(self).calls += 1
+                if type(self).calls == 1:
+                    self.last_error_message = "CUDA out of memory"
+                    self.last_error_reason = "video_processing_error"
+                    return False
+                self.last_error_message = None
+                self.last_error_reason = None
+                return True
+
+        cfg = gui.ProcessingConfig()
+        cfg.batch_max_retries = 1
+        cfg.batch_retry_backoff_seconds = 0.0
+        item = gui.QueueItem(
+            id="retry-item",
+            file_path="clip.mp4",
+            output_path="clip_no_sub.mp4",
+            config=cfg,
+        )
+        with mock.patch(
+            "backend.processor.SubtitleRemover", FakeBackendRemover,
+        ):
+            app._process_item(item)
+
+        self.assertEqual(FakeBackendRemover.calls, 2)
+        self.assertEqual(item.status, gui.ProcessingStatus.COMPLETE)
+        self.assertEqual(item.retry_attempts, 1)
+        self.assertIn("CUDA out of memory", item.retry_errors[0])
+        self.assertEqual(
+            app._batch_report_records[item.id]["retry_attempts"], 1)
 
 
 class DryRunCliTests(unittest.TestCase):

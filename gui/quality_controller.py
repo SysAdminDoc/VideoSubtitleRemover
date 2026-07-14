@@ -426,6 +426,13 @@ class QualityReviewControllerMixin:
             item = by_id.get(item_id)
             if item is None:
                 continue
+            record["retry_attempts"] = int(
+                getattr(item, "retry_attempts", 0) or 0)
+            record["retry_errors"] = list(
+                getattr(item, "retry_errors", []) or [])
+            mask_export = getattr(item, "mask_export", None)
+            if isinstance(mask_export, dict) and mask_export:
+                record["mask_export"] = dict(mask_export)
             elapsed = None
             if item.started_at and item.completed_at:
                 elapsed = (item.completed_at - item.started_at).total_seconds()

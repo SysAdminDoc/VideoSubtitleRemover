@@ -448,6 +448,9 @@ class ProcessingControllerMixin:
             item.message = "Initializing..."
             item.error = None
             item.quality_report = None
+            item.retry_attempts = 0
+            item.retry_errors = []
+            item.mask_export = {}
             item.cancel_requested = False  # F-7 reset on fresh attempt
             if not hasattr(self, "pause_event"):
                 self.pause_event = threading.Event()
@@ -524,6 +527,9 @@ class ProcessingControllerMixin:
                 adaptive_batch=getattr(item.config, 'adaptive_batch', True),
                 temporal_mask_union=getattr(item.config, 'temporal_mask_union', False),
                 temporal_mask_window=getattr(item.config, 'temporal_mask_window', 3),
+                batch_max_retries=getattr(item.config, 'batch_max_retries', 0),
+                batch_retry_backoff_seconds=getattr(
+                    item.config, 'batch_retry_backoff_seconds', 5.0),
                 auto_exposure_threshold=getattr(item.config, 'auto_exposure_threshold', 0.55),
                 deinterlace=getattr(item.config, 'deinterlace', False),
                 deinterlace_auto=getattr(item.config, 'deinterlace_auto', True),
@@ -665,21 +671,104 @@ class ProcessingControllerMixin:
             file_name = Path(item.file_path).name
             logger.info(f"Processing: {file_name} with {item.config.mode.value}")
 
-            if is_video_file(item.file_path):
-                ckpt_dir = _default_checkpoint_dir()
-                ckpt_key = _checkpoint_key(item.file_path, item.output_path)
-                success = remover.process_video(
-                    item.file_path,
-                    item.output_path,
-                    checkpoint_dir=ckpt_dir,
-                    checkpoint_key=ckpt_key,
-                    resume_checkpoint=True,
-                    pause_check=self.pause_event.is_set,
+            max_retries = max(0, int(getattr(
+                item.config, 'batch_max_retries', 0)))
+            retry_backoff = max(0.0, float(getattr(
+                item.config, 'batch_retry_backoff_seconds', 5.0)))
+            attempt = 0
+            while True:
+                raised_error = False
+                try:
+                    if is_video_file(item.file_path):
+                        ckpt_dir = _default_checkpoint_dir()
+                        ckpt_key = _checkpoint_key(
+                            item.file_path, item.output_path)
+                        success = remover.process_video(
+                            item.file_path,
+                            item.output_path,
+                            checkpoint_dir=ckpt_dir,
+                            checkpoint_key=ckpt_key,
+                            resume_checkpoint=True,
+                            pause_check=self.pause_event.is_set,
+                        )
+                    elif is_image_file(item.file_path):
+                        success = remover.process_image(
+                            item.file_path, item.output_path)
+                    else:
+                        raise ValueError(
+                            f"Unsupported file type: "
+                            f"{Path(item.file_path).suffix}"
+                        )
+                except (ProcessingPaused, InterruptedError):
+                    raise
+                except Exception as exc:
+                    failure = exc
+                    raised_error = True
+                    success = False
+                else:
+                    mask_export = getattr(remover, "last_mask_export", None)
+                    if isinstance(mask_export, dict):
+                        item.mask_export = dict(mask_export)
+                    if success:
+                        break
+                    failure_message = (
+                        getattr(remover, "last_error_message", None)
+                        or "Processing failed"
+                    )
+                    failure_reason = (
+                        getattr(remover, "last_error_reason", None) or ""
+                    )
+                    detail = ": ".join(
+                        part for part in (failure_reason, failure_message)
+                        if part
+                    )
+                    failure = RuntimeError(detail or "Processing failed")
+
+                from backend.batch_report import is_retriable_error
+                item.retry_errors.append(str(failure))
+                if (
+                    attempt >= max_retries
+                    or not is_retriable_error(failure)
+                ):
+                    if raised_error:
+                        raise failure
+                    break
+
+                if self.cancel_event.is_set() or item.cancel_requested:
+                    raise InterruptedError("Processing cancelled")
+                if self.pause_event.is_set():
+                    raise ProcessingPaused("Processing paused before retry")
+
+                attempt += 1
+                item.retry_attempts = attempt
+                record = getattr(self, "_batch_report_records", {}).get(
+                    item.id)
+                if isinstance(record, dict):
+                    record["retry_attempts"] = attempt
+                    record["retry_errors"] = list(item.retry_errors)
+                    if item.mask_export:
+                        record["mask_export"] = dict(item.mask_export)
+                wait = round(retry_backoff * attempt, 2)
+                item.status = ProcessingStatus.LOADING
+                item.message = (
+                    f"Retrying after transient failure "
+                    f"({attempt}/{max_retries})..."
                 )
-            elif is_image_file(item.file_path):
-                success = remover.process_image(item.file_path, item.output_path)
-            else:
-                raise ValueError(f"Unsupported file type: {Path(item.file_path).suffix}")
+                self._update_item_display(item)
+                logger.warning(
+                    "Transient failure on %s (attempt %d/%d): %s; "
+                    "retrying in %.1fs",
+                    file_name, attempt, max_retries, failure, wait,
+                )
+                deadline = time.monotonic() + wait
+                while time.monotonic() < deadline:
+                    if self.cancel_event.is_set() or item.cancel_requested:
+                        raise InterruptedError("Processing cancelled")
+                    if self.pause_event.is_set():
+                        raise ProcessingPaused(
+                            "Processing paused before retry")
+                    time.sleep(min(
+                        0.1, max(0.0, deadline - time.monotonic())))
 
             resume_warning = getattr(remover, "last_resume_warning", None)
             if resume_warning:

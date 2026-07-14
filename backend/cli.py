@@ -579,6 +579,9 @@ def main():
                        help="Automatically re-attempt a batch item that fails with "
                             "a transient error (GPU glitch, ffmpeg hiccup, timeout) "
                             "up to N times with backoff (0=off, max 10)")
+    parser.add_argument("--retry-backoff", type=float, default=5.0,
+                       help="Base seconds between transient retries (0-600; "
+                            "each later attempt waits a multiple of this value)")
     parser.add_argument("--export-srt", action="store_true",
                        help="Write an .srt sidecar with detected text")
     parser.add_argument("--export-mask", action="store_true",
@@ -950,6 +953,8 @@ def main():
         parser.error("--loudnorm must be 0 (off) or between -70 and -5 LUFS")
     if args.ffmpeg_whisper_queue < 0.02:
         parser.error("--ffmpeg-whisper-queue must be at least 0.02 seconds")
+    if not 0.0 <= args.retry_backoff <= 600.0:
+        parser.error("--retry-backoff must be between 0 and 600 seconds")
 
     config = ProcessingConfig(
         mode=_coerce_backend_mode(args.mode),
@@ -1003,6 +1008,7 @@ def main():
         temporal_mask_union=args.temporal_mask_union,
         temporal_mask_window=args.temporal_mask_window,
         batch_max_retries=args.max_retries,
+        batch_retry_backoff_seconds=args.retry_backoff,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,
         kalman_tracking=not args.no_kalman,
@@ -1352,32 +1358,68 @@ def main():
 
     def _process_one_with_retry(inp: str, outp: str, record: dict) -> bool:
         """Run _process_one, retrying transient failures up to the configured
-        limit with backoff. Permanent errors and ProcessingPaused propagate."""
+        limit with backoff. Permanent errors and ProcessingPaused propagate.
+
+        The processor deliberately converts most failures to ``False`` so it
+        can retain a user-facing error message. Treat that result exactly like
+        a raised exception for retry classification; otherwise the common
+        failure path can never reach this loop.
+        """
         from backend.batch_report import is_retriable_error
         max_retries = max(0, int(getattr(config, "batch_max_retries", 0)))
         backoff = float(getattr(config, "batch_retry_backoff_seconds", 5.0))
         attempt = 0
         while True:
+            raised_error = False
             try:
-                return _process_one(inp, outp)
+                ok = _process_one(inp, outp)
             except ProcessingPaused:
                 raise
             except Exception as exc:  # noqa: BLE001
-                if attempt >= max_retries or not is_retriable_error(exc):
-                    if attempt:
-                        record["retry_attempts"] = attempt
-                    raise
-                attempt += 1
-                record["retry_attempts"] = attempt
-                wait = round(backoff * attempt, 2)
-                logger.warning(
-                    "Transient failure on %s (attempt %d/%d): %s; retrying in %.1fs",
-                    Path(inp).name, attempt, max_retries, exc, wait,
+                failure = exc
+                raised_error = True
+                ok = False
+            else:
+                mask_export = getattr(remover, "last_mask_export", None)
+                if isinstance(mask_export, dict):
+                    record["mask_export"] = dict(mask_export)
+                if ok:
+                    return True
+                failure_message = (
+                    getattr(remover, "last_error_message", None)
+                    or "Processing failed"
                 )
-                print(f"[retry] {Path(inp).name}: attempt {attempt}/{max_retries} "
-                      f"after transient error; waiting {wait:.1f}s")
-                if wait > 0:
-                    time.sleep(wait)
+                failure_reason = (
+                    getattr(remover, "last_error_reason", None) or ""
+                )
+                detail = ": ".join(
+                    part for part in (failure_reason, failure_message) if part
+                )
+                failure = RuntimeError(detail or "Processing failed")
+
+            record.setdefault("retry_errors", []).append(str(failure))
+            if attempt >= max_retries or not is_retriable_error(failure):
+                record["retry_attempts"] = attempt
+                if raised_error:
+                    raise failure
+                return False
+
+            if _pause_requested():
+                raise ProcessingPaused("Processing paused before retry")
+            attempt += 1
+            record["retry_attempts"] = attempt
+            wait = round(backoff * attempt, 2)
+            logger.warning(
+                "Transient failure on %s (attempt %d/%d): %s; retrying in %.1fs",
+                Path(inp).name, attempt, max_retries, failure, wait,
+            )
+            print(f"[retry] {Path(inp).name}: attempt {attempt}/{max_retries} "
+                  f"after transient error; waiting {wait:.1f}s")
+            deadline = time.monotonic() + wait
+            while time.monotonic() < deadline:
+                if _pause_requested():
+                    raise ProcessingPaused("Processing paused before retry")
+                time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
 
     if args.pattern:
         from glob import glob

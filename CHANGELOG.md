@@ -33,6 +33,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Batch retries skipped normal processor failures.** CLI and GUI batch jobs
+  now classify the processor's usual `False` failure result, apply bounded and
+  pause/cancel-aware backoff, and retain retry attempts/errors in batch reports.
+  Copied CLI commands now include each queue item's retry policy.
+- **Requested mask videos were discarded after encoding.** The completed mask
+  artifact is now validated and atomically promoted after its writer closes;
+  processor and batch-report evidence distinguishes not requested, created,
+  and failed exports.
 - **VLM detector dropped all boxes on a common response shape.** The
   Qwen2.5-VL box extractor assumed every JSON entry was a `{"bbox": [...]}`
   dict, so a model returning bare `[[x1,y1,x2,y2], ...]` arrays hit an

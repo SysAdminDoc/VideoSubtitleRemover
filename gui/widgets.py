@@ -129,6 +129,12 @@ def _build_cli_command(item: QueueItem) -> str:
         args.append("--export-srt")
     if getattr(cfg, "export_mask_video", False):
         args.append("--export-mask")
+    retries = getattr(cfg, "batch_max_retries", 0) or 0
+    if retries:
+        args.extend(["--max-retries", str(retries)])
+        backoff = getattr(cfg, "batch_retry_backoff_seconds", 5.0)
+        if backoff != 5.0:
+            args.extend(["--retry-backoff", str(backoff)])
     if getattr(cfg, "output_frames", False):
         args.append("--output-frames")
     if getattr(cfg, "quality_report", False):
@@ -2280,4 +2286,3 @@ class TextWidgetHandler(logging.Handler):
                 self.on_count_change(0, 0)
             except Exception:
                 pass
-

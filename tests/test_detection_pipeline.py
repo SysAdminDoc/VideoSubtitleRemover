@@ -449,6 +449,8 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg.karaoke_grouping = True
         cfg.export_srt = True
         cfg.export_mask_video = True
+        cfg.batch_max_retries = 2
+        cfg.batch_retry_backoff_seconds = 0.25
         cfg.quality_report_sheet = True
         cfg.nle_sidecar = "edl"
         item = QueueItem(
@@ -477,6 +479,8 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--karaoke-grouping", cmd)
         self.assertIn("--export-srt", cmd)
         self.assertIn("--export-mask", cmd)
+        self.assertIn("--max-retries 2", cmd)
+        self.assertIn("--retry-backoff 0.25", cmd)
         self.assertIn("--quality-sheet", cmd)
         self.assertIn("--nle-sidecar edl", cmd)
 

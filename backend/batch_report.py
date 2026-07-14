@@ -178,6 +178,21 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "soft_action": soft_action or "",
         "quality_report": None,
         "quality_gate": quality_gate_unknown("quality gate has not run yet"),
+        "retry_attempts": 0,
+        "retry_errors": [],
+        "mask_export": {
+            "requested": bool(_config_value(config, "export_mask_video", False)),
+            "status": (
+                "pending"
+                if bool(_config_value(config, "export_mask_video", False))
+                else "not-requested"
+            ),
+            "path": (
+                str(output_file.with_suffix("")) + ".mask.mp4"
+                if bool(_config_value(config, "export_mask_video", False))
+                else ""
+            ),
+        },
     }
 
 

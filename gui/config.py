@@ -671,6 +671,9 @@ class QueueItem:
     soft_subtitle_action: str = "burned_in"
     cancel_requested: bool = False
     retry_config: Optional[dict] = None
+    retry_attempts: int = 0
+    retry_errors: List[str] = field(default_factory=list)
+    mask_export: dict = field(default_factory=dict)
 
 
 # -- Helpers ----------------------------------------------------------------

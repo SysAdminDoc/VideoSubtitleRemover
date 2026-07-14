@@ -368,6 +368,11 @@ class SubtitleRemover:
         self.last_output_path: Optional[str] = None
         self.last_error_message: Optional[str] = None
         self.last_error_reason: Optional[str] = None
+        self.last_mask_export: dict = {
+            "requested": False,
+            "status": "not-requested",
+            "path": "",
+        }
         self.last_resume_warning: Optional[str] = None
         self.last_pause_checkpoint: Optional[dict] = None
         self.last_pause_checkpoint_path: Optional[str] = None
@@ -1426,9 +1431,17 @@ class SubtitleRemover:
         writer = None
         mask_writer = None
         temp_mask_path = None
+        mask_video_ready = False
         whisper_audio_dir = None
         self.last_error_message = None
         self.last_error_reason = None
+        self.last_mask_export = {
+            "requested": bool(self.config.export_mask_video),
+            "status": (
+                "pending" if self.config.export_mask_video else "not-requested"
+            ),
+            "path": "",
+        }
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.0, "Opening video...")
@@ -1818,6 +1831,7 @@ class SubtitleRemover:
             mask_path = None
             if self.config.export_mask_video:
                 mask_path = str(Path(output_path).with_suffix('')) + '.mask.mp4'
+                self.last_mask_export["path"] = mask_path
                 temp_mask_path = _allocate_temp_output_path(mask_path)
                 mask_writer = cv2.VideoWriter(
                     str(temp_mask_path), cv2.VideoWriter_fourcc(*'mp4v'),
@@ -1825,6 +1839,10 @@ class SubtitleRemover:
                 if not mask_writer.isOpened():
                     logger.warning(f"Could not open mask video writer: {mask_path}")
                     mask_writer = None
+                    self.last_mask_export.update({
+                        "status": "failed",
+                        "error": "Could not open mask video writer",
+                    })
 
             timed_region_spans = bool(getattr(
                 self.config, "subtitle_region_spans", None))
@@ -2160,6 +2178,19 @@ class SubtitleRemover:
                 with self._time_stage("encode"):
                     mask_writer.release()
                 mask_writer = None
+                try:
+                    mask_video_ready = bool(
+                        temp_mask_path
+                        and Path(temp_mask_path).is_file()
+                        and Path(temp_mask_path).stat().st_size > 0
+                    )
+                except OSError:
+                    mask_video_ready = False
+                if not mask_video_ready:
+                    self.last_mask_export.update({
+                        "status": "failed",
+                        "error": "Mask video writer produced no playable artifact",
+                    })
 
             self._report_progress(0.9, "Merging audio...")
             with self._time_stage("mux"):
@@ -2190,9 +2221,13 @@ class SubtitleRemover:
                     else:
                         final_output_path = self._reencode_or_copy(
                             temp_video, output_path)
-                if mask_writer is not None and mask_path and temp_mask_path:
+                if mask_video_ready and mask_path and temp_mask_path:
                     _promote_temp_output(temp_mask_path, mask_path)
                     temp_mask_path = None
+                    self.last_mask_export.update({
+                        "status": "created",
+                        "path": mask_path,
+                    })
                     logger.info(f"Mask video written: {mask_path}")
 
                 if self.config.export_srt and self._srt_entries:
@@ -2294,6 +2329,14 @@ class SubtitleRemover:
                     mask_writer.release()
                 except Exception:
                     logger.warning("Mask writer release failed", exc_info=True)
+            if self.last_mask_export.get("status") == "pending":
+                self.last_mask_export.update({
+                    "status": "failed",
+                    "error": (
+                        self.last_error_message
+                        or "Processing ended before mask export completed"
+                    ),
+                })
             # If a prefetch reader was set up, release it (which also stops
             # the worker thread and releases the underlying cap). Otherwise
             # release the raw cap. Tolerate either being unset on early
