@@ -30,10 +30,11 @@ Pillow>=12.3.0
 # CUDA wheels. Python 3.14 currently resolves CPU-only torch on Windows;
 # setup.py blocks that NVIDIA path unless VSR_ALLOW_PY314_CPU=1 is set.
 
-# ONNX Runtime >= 1.25.0 is required. Older builds predate parser
+# ONNX Runtime >= 1.25.0 is required for CPU/CUDA. Older builds predate parser
 # integer-truncation heap out-of-bounds hardening, and VSR runs untrusted
 # OCR/inpaint ONNX models through this runtime. The self-test and strict
-# release validation flag onnxruntime / -gpu / -directml below 1.25.0.
+# release validation flag onnxruntime / -gpu below 1.25.0. DirectML is a
+# separate sustained-engineering line, pinned below to its latest PyPI build.
 #
 # For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada):
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
@@ -51,7 +52,7 @@ Pillow>=12.3.0
 # not the stable PyPI default.
 
 # For AMD/Intel (DirectML via ONNX Runtime):
-# pip install onnxruntime-directml>=1.25.0
+# pip install onnxruntime-directml==1.24.4
 # Intel CPU/iGPU users can add OpenVINO for RapidOCR:
 # pip install openvino>=2025.0.0
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu

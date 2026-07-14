@@ -22,6 +22,8 @@ PYTHON_CUDA_WHEEL_MAX = (3, 13)
 PY314_CPU_OVERRIDE_ENV = "VSR_ALLOW_PY314_CPU"
 VENV_CREATE_TIMEOUT_SECONDS = 600
 PIP_INSTALL_TIMEOUT_SECONDS = 1800
+DIRECTML_PACKAGE_VERSION = "1.24.4"
+DIRECTML_PACKAGE_SPEC = f"onnxruntime-directml=={DIRECTML_PACKAGE_VERSION}"
 
 
 def _windows_cuda_wheels_unavailable(version=None, system_name=None):
@@ -69,6 +71,50 @@ def _run_setup_command(args, timeout_seconds, action):
 def _run_pip_install(args, action):
     """Run a pip install command with the standard installer timeout."""
     return _run_setup_command(args, PIP_INSTALL_TIMEOUT_SECONDS, action)
+
+
+def _preflight_directml_distribution(pip):
+    """Verify the reviewed DirectML wheel resolves before changing the venv."""
+    print(f"  Preflighting {DIRECTML_PACKAGE_SPEC} wheel availability...")
+    command = [
+        pip,
+        "install",
+        "--dry-run",
+        "--only-binary=:all:",
+        "--no-deps",
+        DIRECTML_PACKAGE_SPEC,
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=PIP_INSTALL_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            f"{Colors.RED}  ERROR: Timed out while checking the DirectML "
+            f"wheel on PyPI.{Colors.END}"
+        )
+        print("  Check the network/PyPI mirror, then rerun setup.py.")
+        return False
+    if result.returncode == 0:
+        print(f"  [OK] {DIRECTML_PACKAGE_SPEC} is available for this Python/platform")
+        return True
+    detail = (result.stderr or result.stdout or "no compatible wheel").strip()
+    if detail:
+        detail = detail.splitlines()[-1]
+    print(
+        f"{Colors.RED}  ERROR: {DIRECTML_PACKAGE_SPEC} is not available for "
+        f"this Python/platform: {detail}{Colors.END}"
+    )
+    print(
+        "  No packages were changed. Use the CPU setup path, install a supported "
+        "Python 3.11-3.14 Windows environment, or evaluate Windows ML with "
+        "`python -m backend.processor --audit-windows-ml`."
+    )
+    return False
 
 
 def _is_reparse_point(path):
@@ -381,6 +427,12 @@ def install_dependencies(gpu_info=None):
     
     pip = get_pip_command()
 
+    directml_requested = bool(
+        gpu_info and (gpu_info.get("amd") or gpu_info.get("intel"))
+    )
+    if directml_requested and not _preflight_directml_distribution(pip):
+        return False
+
     try:
         print("  Refreshing packaging tools...")
         _run_pip_install(
@@ -424,10 +476,10 @@ def install_dependencies(gpu_info=None):
             except subprocess.CalledProcessError:
                 print(f"  Note: PaddleOCR skipped (RapidOCR / EasyOCR will be used instead)")
 
-        if gpu_info and (gpu_info.get("amd") or gpu_info.get("intel")):
+        if directml_requested:
             print("  Installing ONNX Runtime DirectML provider...")
             _run_pip_install(
-                [pip, 'install', 'onnxruntime-directml>=1.25.0'],
+                [pip, 'install', DIRECTML_PACKAGE_SPEC],
                 "installing ONNX Runtime DirectML",
             )
             print(f"  [OK] ONNX Runtime DirectML installed")

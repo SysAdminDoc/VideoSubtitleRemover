@@ -212,17 +212,23 @@ available, detection falls back to the normal cascade.
 On NVIDIA systems, setup installs `onnxruntime-gpu>=1.25.0` for the tested
 CUDA 12.x ONNX Runtime path; CUDA 13.x currently requires ONNX Runtime
 nightly/custom wheels rather than the stable PyPI default. ONNX Runtime
-`>=1.25.0` is required across `onnxruntime` / `-gpu` / `-directml` -- VSR runs
-untrusted OCR/inpaint ONNX models through the runtime, and the self-test and
-strict release validation flag any build below 1.25.0 as a blocking security
-advisory. Backend status and
+`>=1.25.0` is required for the CPU and CUDA packages -- VSR runs untrusted
+OCR/inpaint ONNX models through the runtime, and the self-test and strict
+release validation flag older CPU/CUDA builds as a blocking security advisory.
+Backend status and
 release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
 channel, `onnxruntime-directml`, and the providers reported at runtime. On
-AMD/Intel systems, setup installs `onnxruntime-directml`; on Intel systems it
-also tries `openvino>=2025.0.0` so RapidOCR can use its OpenVINO engine for
-CPU/iGPU OCR acceleration. Set `VSR_RAPIDOCR_ENGINE=onnxruntime` to force the
-default ONNX Runtime path or `VSR_RAPIDOCR_ENGINE=openvino` to request
-OpenVINO explicitly. When ONNX Runtime reports `DmlExecutionProvider`,
+AMD/Intel systems, setup preflights and installs the latest published/reviewed
+DirectML wheel, `onnxruntime-directml==1.24.4`; incompatible Python/platform
+combinations fail before the environment is changed and point to CPU or the
+Windows ML audit. DirectML is in sustained engineering, with new Windows ONNX
+Runtime feature development moving to Windows ML, so diagnostics and release
+evidence report that lifecycle separately from CPU/CUDA security floors. On
+Intel systems setup also tries `openvino>=2025.0.0` so RapidOCR can use its
+OpenVINO engine for CPU/iGPU OCR acceleration. Set
+`VSR_RAPIDOCR_ENGINE=onnxruntime` to force the default ONNX Runtime path or
+`VSR_RAPIDOCR_ENGINE=openvino` to request OpenVINO explicitly. When ONNX
+Runtime reports `DmlExecutionProvider`,
 RapidOCR is initialized with its DirectML provider settings; unsupported
 RapidOCR versions or missing providers fall back to CPU automatically.
 OpenVINO initialization failures also fall back to ONNX Runtime. RapidOCR

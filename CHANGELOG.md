@@ -29,6 +29,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Resolvable DirectML setup policy.** AMD/Intel setup now preflights and pins
+  the latest reviewed PyPI wheel (`onnxruntime-directml==1.24.4`) before making
+  any environment changes, with CPU and Windows ML guidance when no compatible
+  wheel exists. Diagnostics and release evidence treat the DirectML
+  sustained-engineering lifecycle separately from CPU/CUDA security floors.
 - **Calmer, more consistent microcopy.** Disabled-action hints were reworded
   from dismissive/double-negative phrasing ("No completed outputs are available
   yet", "No failed or stopped items need retry", "The queue is already empty")

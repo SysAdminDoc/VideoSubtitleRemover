@@ -238,12 +238,15 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
             "intel": False,
         }
         with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
-            with mock.patch.object(self.setup_mod.subprocess, "run") as run:
-                ok = self.setup_mod.install_dependencies(gpu_info)
+            with mock.patch.object(
+                self.setup_mod, "_preflight_directml_distribution", return_value=True
+            ):
+                with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                    ok = self.setup_mod.install_dependencies(gpu_info)
 
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
-        self.assertTrue(any("onnxruntime-directml>=1.25.0" in call for call in calls))
+        self.assertTrue(any("onnxruntime-directml==1.24.4" in call for call in calls))
         self.assertFalse(any("torch-directml" in call for call in calls))
         self.assertFalse(any("openvino" in call for call in calls))
 
@@ -254,13 +257,53 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
             "intel": True,
         }
         with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
-            with mock.patch.object(self.setup_mod.subprocess, "run") as run:
-                ok = self.setup_mod.install_dependencies(gpu_info)
+            with mock.patch.object(
+                self.setup_mod, "_preflight_directml_distribution", return_value=True
+            ):
+                with mock.patch.object(self.setup_mod.subprocess, "run") as run:
+                    ok = self.setup_mod.install_dependencies(gpu_info)
 
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
-        self.assertTrue(any("onnxruntime-directml>=1.25.0" in call for call in calls))
+        self.assertTrue(any("onnxruntime-directml==1.24.4" in call for call in calls))
         self.assertTrue(any("openvino>=2025.0.0" in call for call in calls))
+
+    def test_directml_unavailable_fails_before_environment_mutation(self):
+        gpu_info = {
+            "nvidia": False,
+            "amd": True,
+            "intel": False,
+        }
+        result = SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="ERROR: No matching distribution found",
+        )
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(
+                self.setup_mod.subprocess, "run", return_value=result
+            ) as run:
+                with mock.patch("builtins.print") as printed:
+                    ok = self.setup_mod.install_dependencies(gpu_info)
+
+        self.assertFalse(ok)
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        self.assertIn("--dry-run", command)
+        self.assertIn("--only-binary=:all:", command)
+        self.assertIn("onnxruntime-directml==1.24.4", command)
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("No packages were changed", output)
+        self.assertIn("CPU setup path", output)
+        self.assertIn("Windows ML", output)
+
+    def test_directml_floor_matches_runtime_policy(self):
+        from backend import dependency_caps
+
+        self.assertEqual(
+            self.setup_mod.DIRECTML_PACKAGE_VERSION,
+            dependency_caps.ONNXRUNTIME_DIRECTML_VERSION,
+        )
 
     def test_nvidia_dependencies_install_onnxruntime_gpu(self):
         gpu_info = {

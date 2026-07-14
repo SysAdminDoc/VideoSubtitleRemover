@@ -47,6 +47,14 @@ ONNXRUNTIME_SECURITY_MIN = "1.25.0"
 ONNXRUNTIME_SECURITY_SOURCE = (
     "https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0"
 )
+ONNXRUNTIME_DIRECTML_VERSION = "1.24.4"
+ONNXRUNTIME_DIRECTML_MAX_EXCLUSIVE = "1.24.5"
+ONNXRUNTIME_DIRECTML_SOURCE = (
+    "https://pypi.org/project/onnxruntime-directml/"
+)
+ONNXRUNTIME_DIRECTML_LIFECYCLE_SOURCE = (
+    "https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html"
+)
 ONNXRUNTIME_PACKAGES = (
     "onnxruntime",
     "onnxruntime-gpu",
@@ -473,6 +481,7 @@ def collect_onnxruntime_provider_status(
     gpu_channel = _onnxruntime_gpu_channel(gpu_version)
     cuda_provider = "CUDAExecutionProvider" in providers
     directml_provider = "DmlExecutionProvider" in providers
+    directml_version = package_status["onnxruntime-directml"]["version"]
     cuda_preload_status = preload_status_from_mapping(
         preload_status
         if preload_status is not None
@@ -522,6 +531,26 @@ def collect_onnxruntime_provider_status(
                 f"session: {reason}"
             ),
         })
+    if directml_version and str(directml_version) != ONNXRUNTIME_DIRECTML_VERSION:
+        warnings.append({
+            "id": "ORT-DIRECTML-UNSUPPORTED-VERSION",
+            "severity": "high",
+            "message": (
+                f"onnxruntime-directml=={directml_version} is outside the "
+                f"reviewed DirectML build; install "
+                f"onnxruntime-directml=={ONNXRUNTIME_DIRECTML_VERSION}."
+            ),
+        })
+    if directml_version:
+        warnings.append({
+            "id": "ORT-DIRECTML-SUSTAINED-ENGINEERING",
+            "severity": "medium",
+            "message": (
+                "DirectML is supported in sustained-engineering mode; new "
+                "Windows ONNX Runtime feature development has moved to "
+                "Windows ML."
+            ),
+        })
 
     return {
         "schema": ONNXRUNTIME_PROVIDER_STATUS_SCHEMA,
@@ -545,8 +574,16 @@ def collect_onnxruntime_provider_status(
             "packageInstalled": bool(
                 package_status["onnxruntime-directml"]["installed"]
             ),
-            "packageVersion": package_status["onnxruntime-directml"]["version"],
+            "packageVersion": directml_version,
             "providerAvailable": directml_provider,
+            "supportedVersion": ONNXRUNTIME_DIRECTML_VERSION,
+            "versionSupported": bool(
+                directml_version
+                and str(directml_version) == ONNXRUNTIME_DIRECTML_VERSION
+            ),
+            "lifecycle": "sustained-engineering",
+            "lifecycleSource": ONNXRUNTIME_DIRECTML_LIFECYCLE_SOURCE,
+            "migrationTarget": "Windows ML",
         },
         "warnings": warnings,
     }
@@ -581,9 +618,52 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
             "blocking": False,
         })
 
+    directml = (
+        status.get("directml", {})
+        if isinstance(status.get("directml"), Mapping) else {}
+    )
+    for warning in iterable_warnings:
+        if not isinstance(warning, Mapping):
+            continue
+        warning_id = str(warning.get("id") or "")
+        if warning_id not in {
+            "ORT-DIRECTML-UNSUPPORTED-VERSION",
+            "ORT-DIRECTML-SUSTAINED-ENGINEERING",
+        }:
+            continue
+        allowed = warning_id == "ORT-DIRECTML-SUSTAINED-ENGINEERING"
+        advisories.append({
+            "id": warning_id,
+            "package": "onnxruntime-directml",
+            "installedVersion": str(
+                directml.get("packageVersion") or "not installed"
+            ),
+            "affected": (
+                "sustained-engineering lifecycle"
+                if allowed else "unreviewed DirectML package version"
+            ),
+            "fixedIn": (
+                "Windows ML migration"
+                if allowed else f"=={ONNXRUNTIME_DIRECTML_VERSION}"
+            ),
+            "severity": str(warning.get("severity") or "medium").lower(),
+            "source": (
+                ONNXRUNTIME_DIRECTML_LIFECYCLE_SOURCE
+                if allowed else ONNXRUNTIME_DIRECTML_SOURCE
+            ),
+            "allowed": allowed,
+            "allowReason": (
+                "The latest reviewed PyPI DirectML build remains supported "
+                "while Windows ML compatibility is audited."
+                if allowed else ""
+            ),
+            "mitigation": str(warning.get("message") or ""),
+            "blocking": not allowed,
+        })
+
     packages = status.get("packages", {})
     if isinstance(packages, Mapping):
-        for package in ("onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"):
+        for package in ("onnxruntime", "onnxruntime-gpu"):
             info = packages.get(package)
             version = info.get("version") if isinstance(info, Mapping) else None
             if version and not _version_gte(str(version), ONNXRUNTIME_SECURITY_MIN):
@@ -645,7 +725,11 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("easyocr", "1.7.0", ""),
     ("onnxruntime", "1.25.0", ""),
     ("onnxruntime-gpu", "1.25.0", ""),
-    ("onnxruntime-directml", "1.25.0", ""),
+    (
+        "onnxruntime-directml",
+        ONNXRUNTIME_DIRECTML_VERSION,
+        ONNXRUNTIME_DIRECTML_MAX_EXCLUSIVE,
+    ),
     ("openvino", "2025.0.0", ""),
     ("simple-lama-inpainting", "0.1.0", ""),
     ("torch", "2.10.0", ""),

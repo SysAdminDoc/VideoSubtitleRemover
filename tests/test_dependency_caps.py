@@ -107,7 +107,7 @@ class DependencyCapTests(unittest.TestCase):
         status = dependency_caps.collect_onnxruntime_provider_status(
             package_versions={
                 "onnxruntime-gpu": "1.21.0",
-                "onnxruntime-directml": "1.22.0",
+                "onnxruntime-directml": "1.24.4",
             },
             providers=[
                 "CUDAExecutionProvider",
@@ -131,7 +131,10 @@ class DependencyCapTests(unittest.TestCase):
         self.assertTrue(status["cuda"]["providerAvailable"])
         self.assertTrue(status["cuda"]["preloadStatus"]["succeeded"])
         self.assertTrue(status["directml"]["providerAvailable"])
-        self.assertEqual(status["warnings"], [])
+        self.assertTrue(status["directml"]["versionSupported"])
+        self.assertEqual(status["directml"]["lifecycle"], "sustained-engineering")
+        warning_ids = {item["id"] for item in status["warnings"]}
+        self.assertEqual(warning_ids, {"ORT-DIRECTML-SUSTAINED-ENGINEERING"})
 
     def test_onnxruntime_provider_status_reports_failed_cuda_preload(self):
         status = dependency_caps.collect_onnxruntime_provider_status(
@@ -197,6 +200,38 @@ class DependencyCapTests(unittest.TestCase):
             [a for a in advisories if a["id"] == "ORT-PARSER-OOB-1.25.0"]
         )
 
+    def test_directml_uses_separate_reviewed_version_policy(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={"onnxruntime-directml": "1.24.4"},
+            providers=["DmlExecutionProvider", "CPUExecutionProvider"],
+            runtime_version="1.24.4",
+            preload_dlls_available=False,
+        )
+        advisories = dependency_caps.onnxruntime_release_advisories(status)
+        ids = {item["id"]: item for item in advisories}
+        self.assertNotIn("ORT-PARSER-OOB-1.25.0", ids)
+        lifecycle = ids["ORT-DIRECTML-SUSTAINED-ENGINEERING"]
+        self.assertTrue(lifecycle["allowed"])
+        self.assertFalse(lifecycle["blocking"])
+        self.assertEqual(lifecycle["installedVersion"], "1.24.4")
+
+    def test_unreviewed_directml_version_blocks_release(self):
+        status = dependency_caps.collect_onnxruntime_provider_status(
+            package_versions={"onnxruntime-directml": "1.22.0"},
+            providers=["DmlExecutionProvider", "CPUExecutionProvider"],
+            runtime_version="1.22.0",
+            preload_dlls_available=False,
+        )
+        advisories = dependency_caps.onnxruntime_release_advisories(status)
+        unsupported = next(
+            item
+            for item in advisories
+            if item["id"] == "ORT-DIRECTML-UNSUPPORTED-VERSION"
+        )
+        self.assertTrue(unsupported["blocking"])
+        self.assertFalse(unsupported["allowed"])
+        self.assertEqual(unsupported["fixedIn"], "==1.24.4")
+
     def test_opencv_wheel_status_reports_single_owner(self):
         status = dependency_caps.collect_opencv_wheel_status(
             package_versions={"opencv-python": "4.12.0.88"},
@@ -252,7 +287,11 @@ class DriftReportTests(unittest.TestCase):
         self.assertGreater(report["summary"]["notInstalled"], 0)
 
     def test_drift_report_detects_below_minimum(self):
-        versions = {"numpy": "1.20.0", "pillow": "12.2.0"}
+        versions = {
+            "numpy": "1.20.0",
+            "pillow": "12.2.0",
+            "onnxruntime-directml": "1.25.0",
+        }
         report = dependency_caps.collect_dependency_drift_report(
             package_versions=versions,
         )
@@ -265,6 +304,14 @@ class DriftReportTests(unittest.TestCase):
         )
         self.assertEqual(pillow_item["minimum"], "12.3.0")
         self.assertEqual(pillow_item["status"], "below-minimum")
+        directml_item = next(
+            i
+            for i in report["packages"]
+            if i["package"] == "onnxruntime-directml"
+        )
+        self.assertEqual(directml_item["minimum"], "1.24.4")
+        self.assertEqual(directml_item["maximum"], "1.24.5")
+        self.assertEqual(directml_item["status"], "above-maximum")
 
     def test_drift_report_detects_above_maximum(self):
         versions = {"rapidocr": "5.0.0"}
