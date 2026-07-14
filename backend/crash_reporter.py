@@ -95,23 +95,33 @@ def install() -> bool:
         return False
 
 
+def _scrub_tree(value):
+    """Recursively replace absolute paths in every nested string value."""
+    if isinstance(value, str):
+        return _path_scrub(value)
+    if isinstance(value, dict):
+        return {k: _scrub_tree(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_tree(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_scrub_tree(v) for v in value)
+    return value
+
+
 def _before_send(event: dict, hint: dict) -> Optional[dict]:
-    """Scrub paths out of every string field in the event."""
+    """Scrub absolute paths out of every string field in the event.
+
+    Walks the whole event tree so paths embedded in exception messages,
+    breadcrumbs, extra data, and request fields are redacted too -- not just
+    top-level strings and stack-frame paths. Frame locals are dropped first
+    since they can carry frame buffers / mask arrays we never want uploaded.
+    """
     try:
-        for key in list(event.keys()):
-            value = event[key]
-            if isinstance(value, str):
-                event[key] = _path_scrub(value)
-        # Walk known stack-frame structures.
         for exc in event.get("exception", {}).get("values", []):
             for frame in exc.get("stacktrace", {}).get("frames", []):
-                if "abs_path" in frame:
-                    frame["abs_path"] = _path_scrub(str(frame["abs_path"]))
-                if "filename" in frame:
-                    frame["filename"] = _path_scrub(str(frame["filename"]))
-                # Drop locals -- they can carry frame buffers / mask
-                # arrays we don't want uploaded.
+                # Drop locals before the recursive walk so large arrays are
+                # never serialized or scrubbed.
                 frame.pop("vars", None)
+        return _scrub_tree(event)
     except Exception:
-        pass
-    return event
+        return event

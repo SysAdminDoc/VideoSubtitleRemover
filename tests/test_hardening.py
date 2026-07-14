@@ -3553,6 +3553,29 @@ class CrashReporterScaffoldTests(unittest.TestCase):
         self.assertNotIn("Users", scrubbed)
         self.assertIn("<path>", scrubbed)
 
+    def test_before_send_scrubs_nested_paths_and_drops_locals(self):
+        from backend.crash_reporter import _before_send
+        home = "C:\\Users\\xxx"
+        event = {
+            "message": home + "\\top.mp4",
+            "exception": {"values": [{
+                "type": "ValueError",
+                "value": "Cannot open " + home + "\\secret\\clip.mp4",
+                "stacktrace": {"frames": [{
+                    "abs_path": home + "\\app.py",
+                    "vars": {"frame": "huge-array"},
+                }]},
+            }]},
+            "breadcrumbs": {"values": [{"message": "read " + home + "\\a.srt"}]},
+            "extra": {"path": home + "\\out.mp4"},
+        }
+        out = _before_send(event, {})
+        import json
+        blob = json.dumps(out)
+        self.assertNotIn("Users", blob)          # no user path leaks anywhere
+        self.assertNotIn("huge-array", blob)     # frame locals dropped
+        self.assertIn("<path>", blob)
+
 
 class NsisInstallerArtefactTests(unittest.TestCase):
     """RM-51: the NSIS installer script ships in installer/vsr.nsi so

@@ -17,6 +17,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **PaddleOCR-VL server probe scheme guard.** The llama.cpp server reachability
   probe now only opens `http(s)` URLs, so a misconfigured server URL cannot be
   coerced into a `file://` local read.
+- **Crash-report path leak.** The opt-in GlitchTip `before_send` scrubber now
+  walks the whole event tree, so absolute paths embedded in exception messages,
+  breadcrumbs, and extra/request data are redacted too -- not just top-level
+  strings and stack-frame paths. Frame locals are dropped before serialization.
 
 ### Changed
 
