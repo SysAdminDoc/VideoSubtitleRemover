@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.i18n import tr
-from gui.theme import Theme, f, mono
+from gui.theme import Theme, f, mono, prefers_reduced_motion
 from gui.config import ProcessingStatus, QueueItem, STATUS_UI, status_ui
 from backend.a11y import (
     accessible_metadata,
@@ -622,6 +622,8 @@ class ModernProgressBar(tk.Canvas):
         """Set the displayed progress. With `animate=True`, eases from the
         current value to the target over several frames."""
         target = max(0.0, min(1.0, value))
+        if prefers_reduced_motion():
+            animate = False
         self._target = target
         if self._tween_id:
             try:
@@ -1336,6 +1338,9 @@ class Toast:
         """Fade the toast out over ~300ms using the -alpha attribute, then
         destroy and restack any later toasts."""
         if not self._win:
+            return
+        if prefers_reduced_motion():
+            self._close()
             return
         steps = [0.85, 0.65, 0.45, 0.25, 0.08]
 
@@ -2202,6 +2207,10 @@ class QueueItemWidget(tk.Frame):
 
     def _start_pulse(self):
         if getattr(self, "_pulse_id", None) is not None:
+            return
+        if prefers_reduced_motion():
+            self.config(highlightbackground=Theme.GREEN_PRIMARY)
+            self.accent_stripe.config(bg=Theme.GREEN_PRIMARY)
             return
         self._pulse_phase = 0
         self._pulse_tick()

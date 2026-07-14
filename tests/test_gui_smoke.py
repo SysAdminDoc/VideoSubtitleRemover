@@ -130,6 +130,30 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_high_contrast_palette_is_applied_before_root_creation(self):
+        from gui import app as app_module
+        from gui.theme import Theme, apply_default_theme
+
+        cfg = self._g.ProcessingConfig(
+            high_contrast=True,
+            onboarding_seen=True,
+        )
+        app = None
+        try:
+            with mock.patch.object(app_module, "load_settings", return_value=cfg):
+                app = self._make_app()
+            self.assertEqual(Theme.BG_DARK, "#000000")
+            self.assertEqual(app.root.cget("bg"), Theme.BG_DARK)
+            main_surface = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Frame)
+            )
+            self.assertEqual(main_surface.cget("bg"), Theme.BG_DARK)
+        finally:
+            if app is not None:
+                self._destroy_app(app)
+            apply_default_theme()
+
     def test_work_directory_control_round_trips_into_queue_snapshots(self):
         app = self._make_app()
         try:
@@ -213,6 +237,34 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_per_file_override_dialog_has_modal_keyboard_contract(self):
+        app = self._make_app()
+        try:
+            from backend.a11y import accessible_metadata
+
+            source = Path(self._tmpdir.name) / "override-dialog.png"
+            Image.new("RGB", (24, 16), "navy").save(source)
+            self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[-1]
+
+            app._open_per_file_overrides(item.id)
+            dialog = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title().startswith("Override settings:")
+            )
+            metadata = accessible_metadata(dialog)
+
+            self.assertEqual(metadata["role"], "dialog")
+            self.assertEqual(metadata["state"], "modal")
+            self.assertIn("Control+Enter", metadata["description"])
+            self.assertTrue(dialog.bind("<Control-Return>"))
+            self.assertTrue(dialog.bind("<Escape>"))
+            dialog.grab_release()
+            dialog.destroy()
+        finally:
+            self._destroy_app(app)
+
     def test_custom_widgets_expose_accessibility_snapshots(self):
         app = self._make_app()
         try:
@@ -275,6 +327,46 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app.preview_meta_label.cget("text"), "The file could not be read.")
             self.assertEqual(app._preview_label.cget("text"), "No frame available")
             self.assertEqual(app.preview_status_chip.cget("text"), "Needs attention")
+        finally:
+            self._destroy_app(app)
+
+    def test_reduced_motion_snaps_progress_and_keeps_static_status(self):
+        app = self._make_app()
+        try:
+            from gui import widgets as widget_module
+
+            with mock.patch.object(
+                widget_module, "prefers_reduced_motion", return_value=True,
+            ):
+                progress = widget_module.ModernProgressBar(app.root, width=120)
+                progress.set_progress(0.75)
+                self.assertEqual(progress.progress, 0.75)
+                self.assertIsNone(progress._tween_id)
+
+                item = self._g.QueueItem(
+                    id="reduced-motion-row",
+                    file_path=str(Path(self._tmpdir.name) / "clip.mp4"),
+                    output_path=str(Path(self._tmpdir.name) / "out.mp4"),
+                    config=self._g.ProcessingConfig(),
+                    status=self._g.ProcessingStatus.PROCESSING,
+                    progress=0.5,
+                )
+                row = widget_module.QueueItemWidget(
+                    app.root, item, on_remove=lambda _id: None)
+                self.assertIsNone(row._pulse_id)
+                self.assertEqual(
+                    row.cget("highlightbackground"),
+                    widget_module.Theme.GREEN_PRIMARY,
+                )
+                row.destroy()
+                progress.destroy()
+
+            with mock.patch(
+                "gui.preview_controller.prefers_reduced_motion",
+                return_value=True,
+            ):
+                app._start_throbber()
+            self.assertIsNone(app._throbber_id)
         finally:
             self._destroy_app(app)
 

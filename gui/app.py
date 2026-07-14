@@ -97,6 +97,17 @@ class VideoSubtitleRemoverApp(
     """Main application class."""
 
     def __init__(self):
+        # Resolve the palette before creating the root so the native root
+        # surface and every child start in the same theme. Explicitly restore
+        # defaults for embedders/tests that create more than one app instance
+        # in a process after a high-contrast instance.
+        self.config = load_settings()
+        self._settings_load_notice = consume_settings_load_notice()
+        if getattr(self.config, "high_contrast", False):
+            apply_high_contrast_theme()
+        else:
+            apply_default_theme()
+
         self.root = tk.Tk()
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
         self.root.geometry("1240x860")
@@ -130,12 +141,6 @@ class VideoSubtitleRemoverApp(
                 pass
 
         # State
-        self.config = load_settings()
-        self._settings_load_notice = consume_settings_load_notice()
-        # RM-96: high-contrast theme applies BEFORE widget construction so
-        # every Canvas / ttk style reads the swapped palette on first draw.
-        if getattr(self.config, "high_contrast", False):
-            apply_high_contrast_theme()
         # RM-98: RTL layout mirror -- set the Tk option DB before widgets
         # build so labels right-align and `pack(side="right")` becomes
         # the dominant orientation. Full pack-side flipping for every
@@ -1662,13 +1667,13 @@ class VideoSubtitleRemoverApp(
             value=self.config.confidence_weighted_dilation)
         conf_dilate_toggle = ModernToggle(
             det_frame,
-            text=tr("Confidence-weighted dilation"),
+            text=tr("Adaptive edge padding"),
             variable=self.conf_dilate_var,
         )
         conf_dilate_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(conf_dilate_toggle,
-                tr("Scale mask dilation inversely with OCR confidence: "
-                   "low-confidence boxes get more padding, high-confidence boxes stay tight."))
+                tr("Add more padding around uncertain text detections while "
+                   "keeping confident detections tight. Helps catch faint edges."))
         self._create_slider(det_frame, "Mask feather", 0, 15,
                             self.config.mask_feather_px, "mask_feather_px",
                             hint="Soft-blend the removal edge for seamless boundaries.")
@@ -1688,25 +1693,27 @@ class VideoSubtitleRemoverApp(
         self.flow_warp_var = tk.BooleanVar(value=self.config.tbe_flow_warp)
         flow_toggle = ModernToggle(
             det_frame,
-            text=tr("Flow-warped temporal exposure (motion-heavy)"),
+            text=tr("Motion-aligned background recovery"),
             variable=self.flow_warp_var,
         )
         flow_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(flow_toggle, tr("Farneback optical flow aligns frames before TBE aggregation. Slower but cleaner on pans and zooms."))
+        Tooltip(flow_toggle, tr("Align nearby frames before rebuilding hidden "
+                                "background pixels. Slower, but cleaner on pans and zooms."))
 
         self.scene_split_var = tk.BooleanVar(value=self.config.tbe_scene_cut_split)
         scene_toggle = ModernToggle(
             det_frame,
-            text=tr("Split TBE batches at scene cuts"),
+            text=tr("Keep scene changes separate"),
             variable=self.scene_split_var,
         )
         scene_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(scene_toggle, tr("Prevents background aggregation across hard cuts. Turn off if your footage is uncut."))
+        Tooltip(scene_toggle, tr("Keep background recovery from mixing frames "
+                                 "across scene changes. Recommended for edited video."))
 
         self.kalman_var = tk.BooleanVar(value=self.config.kalman_tracking)
         kalman_toggle = ModernToggle(
             det_frame,
-            text=tr("Kalman box tracking (flicker reduction)"),
+            text=tr("Smooth detection between frames"),
             variable=self.kalman_var,
         )
         kalman_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
@@ -1715,7 +1722,7 @@ class VideoSubtitleRemoverApp(
         self.phash_var = tk.BooleanVar(value=self.config.phash_skip_enable)
         phash_toggle = ModernToggle(
             det_frame,
-            text=tr("Adaptive mask reuse (perceptual hash)"),
+            text=tr("Reuse masks on unchanged frames"),
             variable=self.phash_var,
         )
         phash_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
@@ -1738,7 +1745,8 @@ class VideoSubtitleRemoverApp(
             variable=self.vertical_text_var,
         )
         vertical_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(vertical_toggle, tr("Rotates each frame 90 CCW before OCR so columnar CJK reads as a line. Boxes rotate back to the source frame."))
+        Tooltip(vertical_toggle, tr("Improve detection for top-to-bottom Japanese "
+                                    "or Chinese text. Saved masks stay aligned to the source."))
 
         tk.Frame(det_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
@@ -1758,7 +1766,8 @@ class VideoSubtitleRemoverApp(
             variable=self.hw_encode_var,
         )
         self.hw_encode_check.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(self.hw_encode_check, tr("If hardware encoding fails the app retries automatically with libx264."))
+        Tooltip(self.hw_encode_check, tr("Use the GPU's media encoder when "
+                                         "available. The app retries with CPU encoding if it fails."))
 
         # F-8: output codec selector lives next to the HW-encode toggle.
         codec_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
@@ -1773,29 +1782,30 @@ class VideoSubtitleRemoverApp(
         )
         codec_combo.pack(side="right")
         Tooltip(codec_combo,
-                tr("h264 is universal; h265 and av1 cut bitrate ~50% on 4K; vvc (H.266) needs FFmpeg with libvvenc. Uses NVENC/QSV/AMF when available."))
+                tr("H.264 plays almost everywhere. H.265 and AV1 make smaller "
+                   "files but take longer; VVC needs a compatible FFmpeg build."))
 
         self.adaptive_batch_var = tk.BooleanVar(value=self.config.adaptive_batch)
         adaptive_toggle = ModernToggle(
             quality_frame,
-            text=tr("Adaptive batch sizing (probe free VRAM on init)"),
+            text=tr("Fit frame batches to GPU memory"),
             variable=self.adaptive_batch_var,
         )
         adaptive_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(adaptive_toggle, tr("Scale the TBE window to fit free VRAM. Prevents OOM on 4K, unlocks headroom on 24 GB cards."))
+        Tooltip(adaptive_toggle, tr("Adjust how many frames are processed together "
+                                    "to fit available GPU memory. Recommended for 4K video."))
 
         self.temporal_mask_union_var = tk.BooleanVar(
             value=self.config.temporal_mask_union)
         temporal_mask_toggle = ModernToggle(
             quality_frame,
-            text=tr("Temporal mask stabilization (retain missed text)"),
+            text=tr("Carry masks across missed detections"),
             variable=self.temporal_mask_union_var,
         )
         temporal_mask_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(temporal_mask_toggle, tr(
-            "Automatic detection only. OR each frame's mask with a short "
-            "trailing window (reset at scene cuts) so single-frame OCR misses "
-            "and moving overlays keep the pixels their neighbours saw."))
+            "Automatic detection only. Carry recent text masks forward for a "
+            "few frames so a single missed detection does not leave a flash."))
 
         self.export_srt_var = tk.BooleanVar(value=self.config.export_srt)
         srt_toggle = ModernToggle(
@@ -1818,29 +1828,32 @@ class VideoSubtitleRemoverApp(
         self.deinterlace_var = tk.BooleanVar(value=self.config.deinterlace_auto)
         deinterlace_toggle = ModernToggle(
             quality_frame,
-            text=tr("Auto-deinterlace interlaced sources (yadif)"),
+            text=tr("Clean up interlaced video automatically"),
             variable=self.deinterlace_var,
         )
         deinterlace_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(deinterlace_toggle, tr("ffprobe-checks the input for combing; runs ffmpeg yadif if detected."))
+        Tooltip(deinterlace_toggle, tr("Detect and remove comb-like lines from "
+                                       "older interlaced video before cleanup."))
 
         self.keyframe_var = tk.BooleanVar(value=self.config.keyframe_detection)
         keyframe_toggle = ModernToggle(
             quality_frame,
-            text=tr("Keyframe-driven detection (OCR only at I-frames)"),
+            text=tr("Faster keyframe-only detection"),
             variable=self.keyframe_var,
         )
         keyframe_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(keyframe_toggle, tr("Large speedup for long videos. Falls back to pHash skip if ffprobe is missing."))
+        Tooltip(keyframe_toggle, tr("Check text on major scene frames and reuse "
+                                    "masks between them. Faster on long videos, less precise on motion."))
 
         self.quality_report_var = tk.BooleanVar(value=self.config.quality_report)
         quality_toggle = ModernToggle(
             quality_frame,
-            text=tr("Compute PSNR / SSIM quality report after run"),
+            text=tr("Check output quality after processing"),
             variable=self.quality_report_var,
         )
         quality_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(quality_toggle, tr("Samples 10 random frames, compares input vs output; logged and shown in the batch summary."))
+        Tooltip(quality_toggle, tr("Sample the finished video for visual damage, "
+                                   "remaining text, and flicker, then flag results that need review."))
 
         # Video Range card
         time_frame = self._create_card(self.adv_panel)
@@ -1892,7 +1905,8 @@ class VideoSubtitleRemoverApp(
             variable=self.remove_subs_var,
         )
         remove_subs_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
-        Tooltip(remove_subs_toggle, tr("Tracks the chyron classifier marks as dialogue subtitles."))
+        Tooltip(remove_subs_toggle, tr("Remove short-lived dialogue text. Persistent "
+                                       "logos and lower-thirds are controlled separately below."))
 
         self.remove_chyrons_var = tk.BooleanVar(value=self.config.remove_chyrons)
         remove_chyrons_toggle = ModernToggle(
@@ -1901,7 +1915,8 @@ class VideoSubtitleRemoverApp(
             variable=self.remove_chyrons_var,
         )
         remove_chyrons_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(remove_chyrons_toggle, tr("Kalman tracks lasting longer than ~3s are treated as chyrons."))
+        Tooltip(remove_chyrons_toggle, tr("Remove text that stays in one place for "
+                                          "about three seconds or longer, such as lower-thirds."))
 
         self.karaoke_grouping_var = tk.BooleanVar(value=self.config.karaoke_grouping)
         karaoke_toggle = ModernToggle(
@@ -1961,11 +1976,12 @@ class VideoSubtitleRemoverApp(
             state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
         )
         accel_combo.pack(side="right")
-        Tooltip(accel_combo, tr("Hint for cv2.VideoCapture. Falls back to software if the HW path returns no frames."))
+        Tooltip(accel_combo, tr("Try hardware video decoding for faster input. "
+                                "The app falls back to software decoding if needed."))
 
         rife_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
         rife_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        tk.Label(rife_row, text=tr("RIFE fast stride"), font=f(Theme.F_BODY_SM),
+        tk.Label(rife_row, text=tr("Frame interpolation stride"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
         self.rife_stride_var = tk.StringVar(
             value=str(getattr(self.config, "rife_fast_stride", 0) or 0)
@@ -1979,16 +1995,18 @@ class VideoSubtitleRemoverApp(
             highlightcolor=Theme.BORDER_FOCUS,
             relief="flat", bd=6, textvariable=self.rife_stride_var)
         rife_entry.pack(side="right")
-        Tooltip(rife_entry, tr("0 disables. Values above 1 inpaint keyframes and synthesize skipped frames with Practical-RIFE when installed."))
+        Tooltip(rife_entry, tr("0 cleans every frame. Values above 1 clean fewer "
+                               "frames and recreate the gaps when Practical-RIFE is installed."))
 
         self.prefetch_var = tk.BooleanVar(value=self.config.prefetch_decode)
         prefetch_toggle = ModernToggle(
             perf_frame,
-            text=tr("Worker-thread frame prefetch (overlap decode and inpaint)"),
+            text=tr("Read frames ahead in the background"),
             variable=self.prefetch_var,
         )
         prefetch_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
-        Tooltip(prefetch_toggle, tr("Decouples cv2.VideoCapture.read() from the detect+inpaint critical path. On by default."))
+        Tooltip(prefetch_toggle, tr("Read upcoming frames in the background so "
+                                    "cleanup spends less time waiting on the source file."))
 
         # Quality sheet toggle (lives under Output but kept separate so we
         # don't disturb the existing Output card layout)
@@ -1999,7 +2017,8 @@ class VideoSubtitleRemoverApp(
             variable=self.quality_sheet_var,
         )
         quality_sheet_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
-        Tooltip(quality_sheet_toggle, tr("Renders <output>.qualitysheet.png with per-sample PSNR/SSIM. Implies the numeric report."))
+        Tooltip(quality_sheet_toggle, tr("Save a side-by-side source/output image "
+                                         "for sampled frames. Also enables the numeric quality report."))
 
         self.json_log_var = tk.BooleanVar(value=getattr(self.config, "json_log_enabled", False))
         json_log_toggle = ModernToggle(
@@ -3992,6 +4011,20 @@ class VideoSubtitleRemoverApp(
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.resizable(False, False)
         dialog.transient(self.root)
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                dialog,
+                role="dialog",
+                label=tr("Per-file overrides"),
+                state="modal",
+                description=tr(
+                    "Change cleanup settings for this queue item only. "
+                    "Press Control+Enter to save or Escape to cancel."
+                ),
+            )
+        except Exception:
+            pass
 
         outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
         outer.pack()
@@ -4028,7 +4061,6 @@ class VideoSubtitleRemoverApp(
         lang_row.pack(fill="x", pady=(0, Theme.S_SM))
         tk.Label(lang_row, text=tr("Subtitle language"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(side="left")
-        lang_codes = [code for code, _ in self._lang_display]
         lang_var = tk.StringVar(value=item.config.detection_lang)
         lang_combo = ttk.Combobox(
             lang_row, textvariable=lang_var, width=18,
@@ -4116,6 +4148,8 @@ class VideoSubtitleRemoverApp(
                          side="left", padx=(Theme.S_SM, 0))
 
         dialog.bind("<Escape>", lambda e: dialog.destroy())
+        dialog.bind("<Control-Return>", lambda e: _save())
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.update_idletasks()
@@ -4126,6 +4160,7 @@ class VideoSubtitleRemoverApp(
             dialog.geometry(f"+{px + (pw - dw) // 2}+{py + (ph - dh) // 3}")
         except Exception:
             pass
+        mode_picker.focus_set()
 
     def _cancel_queue_item(self, item_id: str):
         """F-7: per-item cancellation. Sets the QueueItem's cancel flag;

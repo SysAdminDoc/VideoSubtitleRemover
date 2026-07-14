@@ -26,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover - preview features degrade without Pillow
     PIL_AVAILABLE = False
 
-from gui.theme import Theme, f, mono
+from gui.theme import Theme, f, mono, prefers_reduced_motion
 from gui.config import (
     APP_NAME, APP_VERSION, LOG_DIR, LOG_FILE, SETTINGS_FILE,
     InpaintMode, ProcessingConfig, ProcessingStatus, QueueItem,
@@ -58,7 +58,7 @@ class PreviewControllerMixin:
         to signal a background task in progress."""
         self._stop_throbber()
         self._throbber_phase = 0
-        self._throbber_tick()
+        self._throbber_tick(animate=not prefers_reduced_motion())
 
     def _stop_throbber(self):
         tid = getattr(self, "_throbber_id", None)
@@ -69,11 +69,13 @@ class PreviewControllerMixin:
                 pass
             self._throbber_id = None
 
-    def _throbber_tick(self):
+    def _throbber_tick(self, *, animate: bool = True):
         if not PIL_AVAILABLE:
             self._preview_label.config(
                 text=tr("Detecting") + "." * (self._throbber_phase % 4))
             try:
+                if not animate:
+                    return
                 self._throbber_id = self.root.after(240, self._throbber_tick)
                 self._throbber_phase += 1
             except tk.TclError:
@@ -102,6 +104,8 @@ class PreviewControllerMixin:
             self._preview_label.config(image=self._preview_photo, text="")
             self._throbber_phase += 1
             try:
+                if not animate:
+                    return
                 self._throbber_id = self.root.after(240, self._throbber_tick)
             except tk.TclError:
                 pass
@@ -1209,7 +1213,7 @@ class PreviewControllerMixin:
                            fill=self._hex_to_rgb(Theme.SUCCESS_BG))
             draw.text((input_img.width + 24, 14), "Cleaned",
                       fill=self._hex_to_rgb(Theme.SUCCESS))
-            photo = ImageTk.PhotoImage(composite)
+            display_image = composite
             title = f"Before / after for {Path(item_file).name}"
             meta = ("Completed items show the source frame beside the cleaned result so you can "
                     "spot-check the cleanup immediately.")
@@ -1218,7 +1222,7 @@ class PreviewControllerMixin:
                 meta += f" Quality check: {quality_note}."
         else:
             input_img.thumbnail((max_w, max_h), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(input_img)
+            display_image = input_img
             title = f"Source frame for {Path(item_file).name}"
             soft_summary = _format_soft_subtitle_summary(item_soft)
             if soft_summary:
@@ -1237,7 +1241,11 @@ class PreviewControllerMixin:
                     or self._selected_queue_item_id != item_id):
                 return
             self._stop_throbber()
-            self._preview_photo = photo
+            # Tk image objects must be created by the main thread.  The PIL
+            # compositing and resizing above intentionally stays on the
+            # preview worker, while PhotoImage construction happens only in
+            # this callback dispatched through Tk's event loop.
+            self._preview_photo = ImageTk.PhotoImage(display_image)
             self.preview_title_label.config(text=title)
             self.preview_meta_label.config(text=meta)
             self._preview_label.config(image=self._preview_photo, text="")

@@ -39,6 +39,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Advanced settings explain outcomes instead of backend names.** Labels and
+  tooltips now describe the visible benefit and tradeoff for motion alignment,
+  scene cuts, adaptive memory, mask carry-forward, deinterlacing, keyframes,
+  hardware decode/encode, interpolation, and quality reports. Per-file
+  overrides expose modal accessibility metadata, a Ctrl+Enter save path, and
+  initial focus.
+- **Reduced-motion preference is respected.** Windows' client-animation
+  setting now disables progress easing, active-card pulsing, toast fades, and
+  preview loading animation while retaining clear static status indicators;
+  `VSR_REDUCED_MOTION=1` provides an explicit override.
 - **Queue-card actions are keyboard reachable.** Focused queue items now open
   the same complete action menu with the Menu key or Shift+F10, place it at a
   deterministic card-relative position, expose the shortcut to assistive
@@ -61,6 +71,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Preview rendering could create Tk images on a worker thread.** Frame
+  decoding and PIL compositing remain asynchronous, but `PhotoImage` objects
+  are now created only by the UI event-loop callback, preventing intermittent
+  `main thread is not in main loop` failures and native Tk instability.
+- **High-contrast root surface used the default palette.** Settings and theme
+  tokens now load before the Tk root is created, so the window background,
+  nested surfaces, custom controls, and ttk styles start in one palette.
+  Creating a later default-theme instance in the same process also restores
+  the canonical palette instead of leaking high-contrast state.
 - **Configured work storage was only cosmetic.** The GUI, CLI, canonical
   config, copied commands, sidecars, processing intermediates, mask exports,
   Whisper scratch data, and pause/resume checkpoints now share one validated

@@ -4987,6 +4987,18 @@ class HighContrastThemeTests(unittest.TestCase):
         self.assertEqual(gui.Theme.BG_DARK, original_bg)
         self.assertEqual(gui.Theme.TEXT_PRIMARY, original_text)
 
+    def test_reduced_motion_environment_override_is_deterministic(self):
+        from gui.theme import prefers_reduced_motion
+
+        with unittest.mock.patch.dict(
+            os.environ, {"VSR_REDUCED_MOTION": "1"}, clear=False,
+        ):
+            self.assertTrue(prefers_reduced_motion())
+        with unittest.mock.patch.dict(
+            os.environ, {"VSR_REDUCED_MOTION": "0"}, clear=False,
+        ):
+            self.assertFalse(prefers_reduced_motion())
+
 
 class OutputCodecTests(unittest.TestCase):
     """F-8: output_codec must coerce to h264 / h265 / av1 / vvc and
@@ -7830,6 +7842,66 @@ class OutputIntegrityValidationTests(unittest.TestCase):
             ok, reason, _ = vio.validate_video_output(str(merged), reference=str(video))
             self.assertFalse(ok, "short-audio -shortest mux should fail closed")
             self.assertIn("shorter", reason)
+
+
+class PreviewThreadSafetyTests(unittest.TestCase):
+    """Keep Tk image construction on the event-loop thread."""
+
+    def test_normal_preview_defers_photoimage_creation_to_ui_callback(self):
+        from gui.config import ProcessingStatus
+        from gui.preview_controller import PreviewControllerMixin
+
+        callbacks = []
+        photo_threads = []
+        main_thread = threading.get_ident()
+
+        class FakeRoot:
+            @staticmethod
+            def after(_delay, callback, *args):
+                callbacks.append((callback, args))
+
+        class FakeImage:
+            @staticmethod
+            def thumbnail(_size, _resample):
+                return None
+
+        controller = PreviewControllerMixin()
+        controller.root = FakeRoot()
+        controller._preview_request_id = 7
+        controller._selected_queue_item_id = "queue-item"
+        controller._throbber_id = None
+        controller._preview_photo = None
+        controller.preview_title_label = unittest.mock.Mock()
+        controller.preview_meta_label = unittest.mock.Mock()
+        controller._preview_label = unittest.mock.Mock()
+
+        def make_photo(_image):
+            photo_threads.append(threading.get_ident())
+            return object()
+
+        with unittest.mock.patch(
+            "gui.preview_controller.ImageTk.PhotoImage", side_effect=make_photo,
+        ):
+            worker = threading.Thread(
+                target=controller._preview_bg_normal,
+                args=(
+                    object(), "clip.mp4", "queue-item", ProcessingStatus.IDLE,
+                    "missing.mp4", None, [], 7, 390, 260,
+                    SimpleNamespace(), lambda _frame: FakeImage(),
+                    lambda _path: None,
+                ),
+            )
+            worker.start()
+            worker.join(timeout=2)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(photo_threads, [])
+            self.assertEqual(len(callbacks), 1)
+
+            callback, args = callbacks.pop()
+            callback(*args)
+
+        self.assertEqual(photo_threads, [main_thread])
+        controller._preview_label.config.assert_called_once()
 
 
 if __name__ == "__main__":

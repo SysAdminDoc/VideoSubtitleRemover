@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import sys
+
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+_SYSTEM_REDUCED_MOTION = None
+
 
 class Theme:
     """Design system. Dark-first, refined tonal layering, calm accents."""
@@ -152,6 +160,36 @@ def apply_default_theme():
         return
     for k, v in defaults.items():
         setattr(Theme, k, v)
+
+
+def prefers_reduced_motion() -> bool:
+    """Return the explicit or Windows system reduced-animation preference."""
+    override = os.environ.get("VSR_REDUCED_MOTION", "").strip().lower()
+    if override in _TRUE_VALUES:
+        return True
+    if override in _FALSE_VALUES:
+        return False
+
+    global _SYSTEM_REDUCED_MOTION
+    if _SYSTEM_REDUCED_MOTION is not None:
+        return bool(_SYSTEM_REDUCED_MOTION)
+    if sys.platform != "win32":
+        _SYSTEM_REDUCED_MOTION = False
+        return False
+    try:
+        import ctypes
+
+        animations_enabled = ctypes.c_int(1)
+        ok = ctypes.windll.user32.SystemParametersInfoW(
+            0x1042,  # SPI_GETCLIENTAREAANIMATION
+            0,
+            ctypes.byref(animations_enabled),
+            0,
+        )
+        _SYSTEM_REDUCED_MOTION = bool(ok and not animations_enabled.value)
+    except Exception:
+        _SYSTEM_REDUCED_MOTION = False
+    return bool(_SYSTEM_REDUCED_MOTION)
 
 
 def f(size: int, weight: str = "normal") -> tuple:
