@@ -3,8 +3,8 @@
 These adapters are default-off, but once a user opts in they can execute
 Python from a model repository (Hugging Face ``trust_remote_code`` or
 ``torch.hub``). Keep that boundary explicit: a loader may run only when
-the user points to a reviewed local checkout or names an immutable-looking
-revision/tag.
+the user points to a reviewed local checkout or, when repository code runs,
+names a full immutable commit SHA.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Mapping, Optional, Tuple
 
 
 _PINNED_REV_RE = re.compile(r"^(?:[0-9a-fA-F]{7,40}|v?\d+(?:\.\d+){1,3}(?:[-._][A-Za-z0-9]+)*)$")
+_FULL_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _UNPINNED_NAMES = {"", "main", "master", "latest", "dev", "develop", "trunk"}
 
 
@@ -106,6 +107,12 @@ def _looks_pinned_revision(value: str) -> bool:
     return bool(_PINNED_REV_RE.match(value))
 
 
+def _revision_is_allowed(policy: RemoteModelPolicy, value: str) -> bool:
+    if policy.executes_code:
+        return bool(_FULL_COMMIT_RE.fullmatch(value.strip()))
+    return _looks_pinned_revision(value)
+
+
 def _hash_file(path: Path) -> Optional[str]:
     if not path.is_file():
         return None
@@ -147,13 +154,17 @@ def resolve_remote_model_source(
 
     revision = str(source_env.get(policy.revision_env, "") or "").strip()
     if revision:
-        if not _looks_pinned_revision(revision):
+        if not _revision_is_allowed(policy, revision):
+            requirement = (
+                "a full 40-character commit SHA; tags and branches are mutable"
+                if policy.executes_code else
+                "a pinned commit SHA or version tag, not a moving branch"
+            )
             return RemoteModelSource(
                 policy=policy,
                 allowed=False,
                 reason=(
-                    f"{policy.revision_env} must be a pinned commit SHA or "
-                    "version tag, not a moving branch"
+                    f"{policy.revision_env} must be {requirement}"
                 ),
                 source=policy.repo,
                 source_type="remote",
@@ -163,22 +174,29 @@ def resolve_remote_model_source(
         return RemoteModelSource(
             policy=policy,
             allowed=True,
-            reason="approved pinned remote revision",
+            reason=(
+                "approved immutable remote commit"
+                if policy.executes_code else
+                "approved pinned remote revision"
+            ),
             source=policy.repo,
             source_type="remote",
             revision=revision,
             configured_env_var=policy.revision_env,
         )
 
-    return RemoteModelSource(
-        policy=policy,
-        allowed=False,
-        reason=(
+    if policy.executes_code:
+        reason = (
             f"{policy.name} executes repository code; set {policy.path_env} "
             f"to a reviewed local checkout or {policy.revision_env} to a "
-            "pinned commit/tag"
-        ),
-    )
+            "full 40-character commit SHA"
+        )
+    else:
+        reason = (
+            f"set {policy.path_env} to a reviewed local snapshot or "
+            f"{policy.revision_env} to a pinned commit SHA/version tag"
+        )
+    return RemoteModelSource(policy=policy, allowed=False, reason=reason)
 
 
 def release_remote_model_status(

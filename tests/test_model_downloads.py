@@ -72,7 +72,7 @@ class ModelDownloadHintTests(unittest.TestCase):
                 "USERPROFILE": tmpdir,
                 "APPDATA": tmpdir,
                 "VSR_VLM_OCR": "florence2",
-                "VSR_FLORENCE2_REVISION": "v1.0.0",
+                "VSR_FLORENCE2_REVISION": "a" * 40,
             }
             with mock.patch.object(md.importlib.util, "find_spec", return_value=None):
                 hints = md.pending_model_download_hints(_cfg(), env)

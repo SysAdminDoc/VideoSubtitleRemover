@@ -283,9 +283,14 @@ or missing alpha mattes fall back to the original OCR/SAM mask.
 CoTracker3 can fill OCR-empty masks inside a video batch by propagating sparse
 points from the nearest detected subtitle mask: pass `--cotracker-propagate`,
 set `VSR_COTRACKER=1`, and set either `VSR_COTRACKER_REPO` to a reviewed local
-co-tracker checkout or `VSR_COTRACKER_REF` to a pinned commit/tag before any
-`torch.hub` load is allowed. Set `VSR_COTRACKER_MODE=online` only if you need
+co-tracker checkout or `VSR_COTRACKER_REF` to a full 40-character commit SHA
+before any `torch.hub` load is allowed. Tags and branches are rejected because
+they can move after review. Set `VSR_COTRACKER_MODE=online` only if you need
 the online model; the default uses the offline CoTracker3 entrypoint.
+VapourSynth `.vpy` input executes Python and therefore requires both
+`VSR_VAPOURSYNTH=1` and `VSR_VAPOURSYNTH_SCRIPT_DIR` pointing to a reviewed
+script directory. Scripts that resolve outside that directory are rejected,
+including through symlinks.
 NVIDIA users can request PyNvVideoCodec decode with `--decode-accel pynv`
 or `--decode-accel nvdec` after installing NVIDIA's `PyNvVideoCodec` package.
 The decoder uses GPU-backed surfaces when available, then converts to CPU BGR

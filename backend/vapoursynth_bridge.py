@@ -6,10 +6,10 @@ post pipeline. The user passes a trusted `.vpy` script as input; when
 API and expose a `cv2.VideoCapture`-shaped reader so the rest of
 `process_video` does not need to know about the bridge.
 
-This is opt-in at two levels: users must enable the env gate because
-`.vpy` files are Python scripts, and users without VapourSynth installed
-see a graceful fallback when `_open_capture` is asked to handle a `.vpy`
-file.
+This is opt-in at three levels: users must enable the env gate because
+`.vpy` files are Python scripts, name a trusted script directory, and pass a
+script that resolves inside that directory. Users without VapourSynth
+installed see a graceful fallback when `_open_capture` handles a `.vpy` file.
 """
 
 from __future__ import annotations
@@ -29,6 +29,34 @@ _TRUE_VALUES = {"1", "true", "yes", "on"}
 
 def _vapoursynth_enabled() -> bool:
     return os.environ.get("VSR_VAPOURSYNTH", "").strip().lower() in _TRUE_VALUES
+
+
+def _approved_script_path(path: str) -> tuple[Optional[Path], str]:
+    """Resolve *path* only when it is confined to the configured trust root."""
+    configured_root = os.environ.get(
+        "VSR_VAPOURSYNTH_SCRIPT_DIR", "").strip()
+    if not configured_root:
+        return None, (
+            "set VSR_VAPOURSYNTH_SCRIPT_DIR to a reviewed script directory "
+            "before enabling .vpy execution"
+        )
+    try:
+        root = Path(os.path.expandvars(configured_root)).expanduser().resolve(
+            strict=True)
+        script = Path(path).expanduser().resolve(strict=True)
+    except OSError as exc:
+        return None, f"could not resolve the trusted script path: {exc}"
+    if not root.is_dir():
+        return None, f"trusted script root is not a directory: {root}"
+    if not script.is_file() or script.suffix.casefold() != ".vpy":
+        return None, f"VapourSynth input is not a .vpy file: {script}"
+    try:
+        script.relative_to(root)
+    except ValueError:
+        return None, (
+            f"VapourSynth script resolves outside the trusted root '{root}'"
+        )
+    return script, ""
 
 
 class _VapourSynthCapture:
@@ -138,8 +166,12 @@ def try_open_vpy(path: str):
     if not _vapoursynth_enabled():
         logger.info(
             "VapourSynth .vpy input disabled; set VSR_VAPOURSYNTH=1 "
-            "to execute trusted scripts."
+            "and VSR_VAPOURSYNTH_SCRIPT_DIR to execute reviewed scripts."
         )
         return None
-    cap = _VapourSynthCapture(path)
+    approved, reason = _approved_script_path(path)
+    if approved is None:
+        logger.warning("VapourSynth .vpy input rejected: %s", reason)
+        return None
+    cap = _VapourSynthCapture(str(approved))
     return cap if cap.isOpened() else None

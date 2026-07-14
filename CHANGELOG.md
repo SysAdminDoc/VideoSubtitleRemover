@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Remote-code adapter trust boundaries.** VapourSynth `.vpy` input now
+  requires an explicit reviewed script root and rejects paths (including
+  symlinks) that resolve outside it. CoTracker3 and Florence-2 remote code now
+  require a full 40-character commit SHA; mutable tags, branches, and short
+  revisions no longer reach `torch.hub` or `trust_remote_code`.
 - **Fail-closed FFmpeg branch classification.** Runtime diagnostics now label
   FFmpeg as safe, vulnerable, unsupported, or unknown. Only reviewed 8.1.2+
   and 8.0.3+ patch lines pass; older branches, development snapshots, and

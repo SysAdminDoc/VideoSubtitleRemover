@@ -3899,12 +3899,19 @@ class VapourSynthBridgeTests(unittest.TestCase):
     a missing dep."""
 
     def setUp(self):
-        self._saved_env = os.environ.pop("VSR_VAPOURSYNTH", None)
+        self._saved_env = {
+            name: os.environ.pop(name, None)
+            for name in (
+                "VSR_VAPOURSYNTH",
+                "VSR_VAPOURSYNTH_SCRIPT_DIR",
+            )
+        }
 
     def tearDown(self):
-        os.environ.pop("VSR_VAPOURSYNTH", None)
-        if self._saved_env is not None:
-            os.environ["VSR_VAPOURSYNTH"] = self._saved_env
+        for name, value in self._saved_env.items():
+            os.environ.pop(name, None)
+            if value is not None:
+                os.environ[name] = value
 
     def test_returns_none_for_non_vpy(self):
         from backend.vapoursynth_bridge import try_open_vpy
@@ -3927,6 +3934,73 @@ class VapourSynthBridgeTests(unittest.TestCase):
         from backend.vapoursynth_bridge import _vapoursynth_enabled
         os.environ["VSR_VAPOURSYNTH"] = "yes"
         self.assertTrue(_vapoursynth_enabled())
+
+    def test_enabled_gate_still_requires_explicit_trusted_root(self):
+        from backend.vapoursynth_bridge import try_open_vpy
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script = Path(tmpdir) / "input.vpy"
+            script.write_text("raise RuntimeError('must not run')\n", encoding="utf-8")
+            os.environ["VSR_VAPOURSYNTH"] = "1"
+
+            self.assertIsNone(try_open_vpy(str(script)))
+
+    def test_script_outside_trusted_root_is_rejected(self):
+        from backend.vapoursynth_bridge import try_open_vpy
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            trusted = base / "trusted"
+            trusted.mkdir()
+            script = base / "outside.vpy"
+            script.write_text("raise RuntimeError('must not run')\n", encoding="utf-8")
+            os.environ["VSR_VAPOURSYNTH"] = "1"
+            os.environ["VSR_VAPOURSYNTH_SCRIPT_DIR"] = str(trusted)
+
+            self.assertIsNone(try_open_vpy(str(script)))
+
+    def test_script_inside_trusted_root_reaches_capture(self):
+        from backend import vapoursynth_bridge as bridge
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trusted = Path(tmpdir) / "trusted"
+            trusted.mkdir()
+            script = trusted / "approved.vpy"
+            script.write_text("clip = None\n", encoding="utf-8")
+            os.environ["VSR_VAPOURSYNTH"] = "1"
+            os.environ["VSR_VAPOURSYNTH_SCRIPT_DIR"] = str(trusted)
+            fake_capture = unittest.mock.Mock()
+            fake_capture.isOpened.return_value = True
+
+            with unittest.mock.patch.object(
+                bridge, "_VapourSynthCapture", return_value=fake_capture,
+            ) as capture_type:
+                self.assertIs(bridge.try_open_vpy(str(script)), fake_capture)
+
+            capture_type.assert_called_once_with(str(script.resolve()))
+
+
+class RemoteModelPolicyTests(unittest.TestCase):
+    def test_code_executing_remote_adapter_requires_full_commit_sha(self):
+        from backend.remote_model_policy import resolve_remote_model_source
+
+        tag = resolve_remote_model_source(
+            "cotracker3", {"VSR_COTRACKER_REF": "v1.2.3"})
+        short_sha = resolve_remote_model_source(
+            "cotracker3", {"VSR_COTRACKER_REF": "deadbeef"})
+        full_sha = resolve_remote_model_source(
+            "cotracker3", {"VSR_COTRACKER_REF": "a" * 40})
+
+        self.assertFalse(tag.allowed)
+        self.assertFalse(short_sha.allowed)
+        self.assertIn("tags and branches are mutable", tag.reason)
+        self.assertTrue(full_sha.allowed)
+        self.assertEqual(full_sha.reason, "approved immutable remote commit")
+
+    def test_non_executing_adapter_can_use_version_tag(self):
+        from backend.remote_model_policy import resolve_remote_model_source
+
+        source = resolve_remote_model_source(
+            "qwen25vl", {"VSR_QWEN25VL_REVISION": "v1.2.3"})
+
+        self.assertTrue(source.allowed)
 
 
 class TensorrtCompileTests(unittest.TestCase):
