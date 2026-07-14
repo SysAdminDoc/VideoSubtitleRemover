@@ -452,6 +452,7 @@ class ProcessingControllerMixin:
             item.retry_attempts = 0
             item.retry_errors = []
             item.mask_export = {}
+            item.timing_report = {}
             item.cancel_requested = False  # F-7 reset on fresh attempt
             if not hasattr(self, "pause_event"):
                 self.pause_event = threading.Event()
@@ -710,6 +711,10 @@ class ProcessingControllerMixin:
                     mask_export = getattr(remover, "last_mask_export", None)
                     if isinstance(mask_export, dict):
                         item.mask_export = dict(mask_export)
+                    timing_report = getattr(
+                        remover, "last_timing_report", None)
+                    if isinstance(timing_report, dict):
+                        item.timing_report = dict(timing_report)
                     if success:
                         break
                     failure_message = (

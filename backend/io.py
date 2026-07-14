@@ -21,6 +21,7 @@ The module imports ``backend.processor`` symbols lazily where needed
 from __future__ import annotations
 
 import json
+import bisect
 import logging
 import os
 import queue
@@ -39,6 +40,87 @@ import numpy as np
 from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class VideoFrameTiming:
+    """Presentation timing for a decoded video stream.
+
+    Timestamps are normalized so the first decoded frame starts at zero;
+    durations are derived from the next presentation timestamp wherever
+    possible.  The structure is intentionally codec-independent so OpenCV,
+    checkpoint PNGs, SRT/NLE exporters, and ffmpeg encoding share one clock.
+    """
+
+    timestamps: List[float]
+    durations: List[float]
+    time_base: float
+    average_fps: float
+    source_start: float
+    is_vfr: bool
+
+    @property
+    def frame_count(self) -> int:
+        return len(self.timestamps)
+
+    @property
+    def duration(self) -> float:
+        if not self.timestamps:
+            return 0.0
+        tail = self.durations[-1] if self.durations else 0.0
+        return max(0.0, self.timestamps[-1] + tail)
+
+    def frame_time(self, index: int, fallback_fps: float = 30.0) -> float:
+        if 0 <= int(index) < len(self.timestamps):
+            return float(self.timestamps[int(index)])
+        rate = self.average_fps if self.average_fps > 0 else fallback_fps
+        return max(0.0, int(index) / max(rate, 1.0))
+
+    def frame_duration(self, index: int, fallback_fps: float = 30.0) -> float:
+        if 0 <= int(index) < len(self.durations):
+            return float(self.durations[int(index)])
+        rate = self.average_fps if self.average_fps > 0 else fallback_fps
+        return 1.0 / max(rate, 1.0)
+
+    def frame_range(
+        self,
+        start_seconds: float,
+        end_seconds: float,
+        total_frames: int,
+    ) -> Tuple[int, int]:
+        limit = min(max(0, int(total_frames)), self.frame_count)
+        if limit <= 0:
+            return 0, 0
+        values = self.timestamps[:limit]
+        start = (
+            bisect.bisect_left(values, max(0.0, float(start_seconds)))
+            if start_seconds > 0 else 0
+        )
+        end = (
+            bisect.bisect_left(values, max(0.0, float(end_seconds)))
+            if end_seconds > 0 else limit
+        )
+        return min(start, limit - 1), min(max(0, end), limit)
+
+    def range_durations(
+        self,
+        start_frame: int,
+        end_frame: int,
+        fallback_fps: float = 30.0,
+    ) -> List[float]:
+        return [
+            self.frame_duration(index, fallback_fps)
+            for index in range(max(0, start_frame), max(0, end_frame))
+        ]
+
+    def report(self) -> dict:
+        return {
+            "mode": "vfr" if self.is_vfr else "cfr",
+            "frame_count": self.frame_count,
+            "duration_seconds": round(self.duration, 9),
+            "time_base_seconds": round(max(0.0, self.time_base), 12),
+            "average_fps": round(max(0.0, self.average_fps), 6),
+        }
 
 
 class MediaInputError(ValueError):
@@ -443,6 +525,155 @@ def _probe_duration_seconds(path: str) -> float:
     except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
         pass
     return 0.0
+
+
+def _parse_ffmpeg_ratio(value, default: float = 0.0) -> float:
+    text = str(value or "").strip()
+    try:
+        if "/" in text:
+            numerator, denominator = text.split("/", 1)
+            denominator_value = float(denominator)
+            if denominator_value == 0:
+                return default
+            result = float(numerator) / denominator_value
+        else:
+            result = float(text)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return default
+    return result if np.isfinite(result) and result > 0 else default
+
+
+def _probe_video_frame_timing(
+    path: str,
+    *,
+    timeout: float = 120.0,
+) -> Optional[VideoFrameTiming]:
+    """Read per-frame presentation timestamps with ffprobe.
+
+    Returns ``None`` when ffprobe is absent or cannot provide at least two
+    video-frame timestamps.  Callers then retain the existing CFR behavior.
+    ``best_effort_timestamp_time`` is presentation-ordered, unlike packet DTS,
+    and therefore matches the decoded frame order exposed by OpenCV.
+    """
+    if Path(path).is_dir() or shutil.which("ffprobe") is None:
+        return None
+    cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_frames",
+        "-show_entries",
+        (
+            "stream=time_base,avg_frame_rate,r_frame_rate,start_time,duration:"
+            "frame=best_effort_timestamp_time,pkt_duration_time"
+        ),
+        "-of", "json", str(path),
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=max(1.0, float(timeout)),
+        )
+        if result.returncode != 0:
+            logger.debug("Frame-timing probe failed: %s", result.stderr)
+            return None
+        payload = json.loads(result.stdout or "{}")
+    except (
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+        OSError,
+        ValueError,
+    ) as exc:
+        logger.debug("Frame-timing probe failed: %s", exc)
+        return None
+
+    streams = payload.get("streams") or []
+    stream = streams[0] if streams and isinstance(streams[0], dict) else {}
+    average_fps = _parse_ffmpeg_ratio(stream.get("avg_frame_rate"), 0.0)
+    if average_fps <= 0:
+        average_fps = _parse_ffmpeg_ratio(stream.get("r_frame_rate"), 30.0)
+    fallback_duration = 1.0 / max(average_fps, 1.0)
+    time_base = _parse_ffmpeg_ratio(stream.get("time_base"), 0.0)
+    stream_start = _parse_ffmpeg_ratio(stream.get("start_time"), 0.0)
+    try:
+        stream_duration = float(stream.get("duration") or 0.0)
+    except (TypeError, ValueError):
+        stream_duration = 0.0
+    if not np.isfinite(stream_duration) or stream_duration <= 0:
+        stream_duration = 0.0
+
+    raw_timestamps: List[float] = []
+    packet_durations: List[float] = []
+    previous = None
+    for frame in payload.get("frames") or []:
+        if not isinstance(frame, dict):
+            continue
+        try:
+            timestamp = float(frame.get("best_effort_timestamp_time"))
+        except (TypeError, ValueError):
+            timestamp = (
+                previous + fallback_duration
+                if previous is not None else stream_start
+            )
+        if not np.isfinite(timestamp):
+            timestamp = (
+                previous + fallback_duration
+                if previous is not None else stream_start
+            )
+        if previous is not None and timestamp <= previous:
+            timestamp = previous + fallback_duration
+        try:
+            packet_duration = float(frame.get("pkt_duration_time") or 0.0)
+        except (TypeError, ValueError):
+            packet_duration = 0.0
+        if not np.isfinite(packet_duration) or packet_duration <= 0:
+            packet_duration = 0.0
+        raw_timestamps.append(timestamp)
+        packet_durations.append(packet_duration)
+        previous = timestamp
+
+    if len(raw_timestamps) < 2:
+        return None
+    origin = raw_timestamps[0]
+    timestamps = [max(0.0, value - origin) for value in raw_timestamps]
+    deltas = [
+        timestamps[index + 1] - timestamps[index]
+        for index in range(len(timestamps) - 1)
+    ]
+    positive_deltas = [value for value in deltas if value > 0]
+    typical = (
+        float(np.median(np.asarray(positive_deltas, dtype=np.float64)))
+        if positive_deltas else fallback_duration
+    )
+    durations = list(positive_deltas)
+    if len(durations) != len(timestamps) - 1:
+        durations = [max(fallback_duration, value) for value in deltas]
+    last_duration = packet_durations[-1]
+    if last_duration <= 0 and stream_duration > 0:
+        last_duration = origin + stream_duration - raw_timestamps[-1]
+    if last_duration <= 0 or last_duration > max(typical * 10.0, 1.0):
+        last_duration = typical if typical > 0 else fallback_duration
+    durations.append(last_duration)
+
+    tolerance = max(time_base * 1.1, typical * 0.01, 1e-6)
+    is_vfr = any(abs(value - typical) > tolerance for value in positive_deltas)
+    observed_duration = timestamps[-1] + last_duration
+    observed_fps = (
+        len(timestamps) / observed_duration if observed_duration > 0 else average_fps
+    )
+    return VideoFrameTiming(
+        timestamps=timestamps,
+        durations=durations,
+        time_base=time_base,
+        average_fps=(
+            observed_fps
+            if is_vfr and observed_fps > 0
+            else average_fps
+        ),
+        source_start=origin,
+        is_vfr=is_vfr,
+    )
 
 
 def _probe_frame_count(path: str) -> int:
@@ -859,6 +1090,7 @@ class _FfmpegBgr48Capture:
         self._fps = fps_f if np.isfinite(fps_f) and fps_f > 0 else 30.0
         self._frame_count = max(1, int(frame_count))
         self._pos = 0
+        self._frame_timestamps: Optional[List[float]] = None
         self._proc: Optional[subprocess.Popen] = None
         self._frame_bytes = self._width * self._height * 3 * 2
         self._opened = (
@@ -895,6 +1127,21 @@ class _FfmpegBgr48Capture:
         self._restart()
         return True
 
+    def set_frame_timing(self, timestamps: List[float]) -> None:
+        """Use source PTS for seeks instead of the average-frame-rate guess."""
+        values = []
+        for value in timestamps:
+            try:
+                timestamp = float(value)
+            except (TypeError, ValueError):
+                return
+            if not np.isfinite(timestamp) or timestamp < 0:
+                return
+            values.append(timestamp)
+        if values:
+            self._frame_timestamps = values
+            self._frame_count = len(values)
+
     def _restart(self) -> None:
         self.release()
 
@@ -905,7 +1152,14 @@ class _FfmpegBgr48Capture:
             return True
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostats"]
         if self._pos > 0:
-            cmd += ["-ss", f"{self._pos / max(self._fps, 1.0):.6f}"]
+            if (
+                self._frame_timestamps is not None
+                and self._pos < len(self._frame_timestamps)
+            ):
+                seek_seconds = self._frame_timestamps[self._pos]
+            else:
+                seek_seconds = self._pos / max(self._fps, 1.0)
+            cmd += ["-ss", f"{seek_seconds:.9f}"]
         cmd += [
             "-i", self._path,
             "-map", "0:v:0",

@@ -5325,6 +5325,207 @@ class EndToEndPipelineTests(unittest.TestCase):
                 cap.release()
             self.assertEqual(frames_read, 8)
 
+    def test_vfr_pipeline_preserves_pts_tail_and_audio_sync(self):
+        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+            self.skipTest("ffmpeg/ffprobe not on PATH")
+
+        class PassthroughInpainter:
+            def inpaint(self, frames, masks):
+                return frames
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            frame_dir = tmp / "source-frames"
+            frame_dir.mkdir()
+            durations = [0.033, 0.067, 0.041, 0.109, 0.052, 0.074, 0.038, 0.096]
+            concat_lines = ["ffconcat version 1.0"]
+            for index, duration in enumerate(durations):
+                frame = np.full(
+                    (48, 64, 3),
+                    (index * 27) % 255,
+                    dtype=np.uint8,
+                )
+                frame_path = frame_dir / f"frame_{index:06d}.png"
+                self.assertTrue(processor.cv2.imwrite(str(frame_path), frame))
+                concat_lines.extend([
+                    f"file frame_{index:06d}.png",
+                    "option framerate 1000",
+                    f"duration {duration:.9f}",
+                ])
+            concat_lines.append(f"file frame_{len(durations) - 1:06d}.png")
+            concat_lines.append("option framerate 1000")
+            concat_path = frame_dir / "source.ffconcat"
+            concat_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+            silent = tmp / "silent-vfr.mkv"
+            subprocess.run([
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "concat", "-safe", "0", "-i", str(concat_path),
+                "-fps_mode:v", "vfr", "-frames:v", str(len(durations)),
+                "-c:v", "ffv1", str(silent),
+            ], check=True, timeout=30)
+            source = tmp / "source-vfr.mkv"
+            subprocess.run([
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(silent),
+                "-f", "lavfi", "-i",
+                f"sine=frequency=880:sample_rate=48000:duration={sum(durations):.9f}",
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                "-c:a", "pcm_s16le", "-shortest", str(source),
+            ], check=True, timeout=30)
+
+            source_timing = processor._probe_video_frame_timing(str(source))
+            self.assertIsNotNone(source_timing)
+            self.assertTrue(source_timing.is_vfr)
+            output = tmp / "cleaned-vfr.mkv"
+            cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    subtitle_area=(8, 36, 56, 44),
+                    preserve_audio=True,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                    output_codec="h264",
+                    sttn_max_load_num=4,
+                    prefetch_decode=False,
+                )
+            )
+            remover = self._stub_remover(cfg, PassthroughInpainter())
+            ok = remover.process_video(
+                str(source),
+                str(output),
+                checkpoint_dir=tmp / "checkpoints",
+                checkpoint_key="vfr-test",
+            )
+
+            self.assertTrue(ok, remover.last_error_message)
+            output_timing = processor._probe_video_frame_timing(str(output))
+            self.assertIsNotNone(output_timing)
+            self.assertTrue(output_timing.is_vfr)
+            self.assertEqual(output_timing.frame_count, source_timing.frame_count)
+            tick = max(
+                source_timing.time_base,
+                output_timing.time_base,
+                0.001,
+            )
+            for expected, actual in zip(
+                source_timing.timestamps, output_timing.timestamps
+            ):
+                self.assertLessEqual(abs(expected - actual), tick + 1e-6)
+            self.assertLessEqual(
+                abs(source_timing.duration - output_timing.duration),
+                tick + 1e-6,
+            )
+            self.assertEqual(remover.last_timing_report["mode"], "vfr")
+            self.assertEqual(processor._probe_audio_stream_count(str(output)), 1)
+
+            direct_cfg = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    subtitle_area=(8, 36, 56, 44),
+                    preserve_audio=False,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                    output_codec="h264",
+                    sttn_max_load_num=4,
+                    prefetch_decode=False,
+                )
+            )
+            direct_output = tmp / "cleaned-vfr-direct.mkv"
+            direct_remover = self._stub_remover(
+                direct_cfg, PassthroughInpainter())
+            self.assertTrue(direct_remover.process_video(
+                str(source), str(direct_output)))
+            direct_timing = processor._probe_video_frame_timing(
+                str(direct_output))
+            self.assertEqual(direct_timing.frame_count, source_timing.frame_count)
+            for expected, actual in zip(
+                source_timing.timestamps, direct_timing.timestamps
+            ):
+                self.assertLessEqual(abs(expected - actual), tick + 1e-6)
+
+            def packet_end(selector: str) -> float:
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", selector,
+                    "-show_packets", "-show_entries",
+                    "packet=pts_time,duration_time", "-of", "csv=p=0",
+                    str(output),
+                ], capture_output=True, text=True, check=True, timeout=30)
+                ends = []
+                for line in result.stdout.splitlines():
+                    fields = line.split(",")
+                    try:
+                        ends.append(float(fields[0]) + float(fields[1]))
+                    except (IndexError, TypeError, ValueError):
+                        continue
+                return max(ends)
+
+            self.assertLessEqual(abs(packet_end("v:0") - packet_end("a:0")), 0.05)
+
+    def test_vfr_pts_drive_ranges_srt_and_checkpoint_manifest(self):
+        from backend import resume_checkpoint as rc
+        from backend.io import _FfmpegBgr48Capture
+
+        timing = processor.VideoFrameTiming(
+            timestamps=[0.0, 0.04, 0.12, 0.16, 0.28],
+            durations=[0.04, 0.08, 0.04, 0.12, 0.06],
+            time_base=0.001,
+            average_fps=14.705882,
+            source_start=0.0,
+            is_vfr=True,
+        )
+        self.assertEqual(timing.frame_range(0.05, 0.20, 5), (2, 4))
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._srt_entries = [(0, "first"), (1, "second")]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            srt = tmp / "timed.srt"
+            remover._write_srt(
+                str(srt), 25.0, 1, frame_timing=timing)
+            payload = srt.read_text(encoding="utf-8")
+            self.assertIn("00:00:00,040 --> 00:00:00,120", payload)
+            self.assertIn("00:00:00,120 --> 00:00:00,160", payload)
+
+            source = tmp / "source.mp4"
+            source.write_bytes(b"source")
+            manifest = tmp / "frames" / "frame_timing.json"
+            checkpoint = rc.write_pause_checkpoint(
+                tmp,
+                "timed",
+                input_path=str(source),
+                output_path=str(tmp / "out.mp4"),
+                config_hash="abc",
+                frame_dir=tmp / "frames",
+                next_frame=0,
+                total_frames=5,
+                width=64,
+                height=48,
+                fps=25.0,
+                status="running",
+                timing_manifest_path=manifest,
+            )
+            self.assertEqual(checkpoint["timing_manifest"], str(manifest))
+
+        capture = _FfmpegBgr48Capture(
+            "hdr-vfr.mkv",
+            width=64,
+            height=48,
+            fps=25.0,
+            frame_count=5,
+        )
+        capture.set_frame_timing(timing.timestamps)
+        capture.set(processor.cv2.CAP_PROP_POS_FRAMES, 2)
+        fake_process = SimpleNamespace(poll=lambda: None)
+        with unittest.mock.patch(
+            "backend.io.subprocess.Popen", return_value=fake_process
+        ) as popen:
+            self.assertTrue(capture._ensure_proc())
+        command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("-ss") + 1], "0.120000000")
+
     def test_av1_and_vp9_decode_serial_and_prefetch_paths(self):
         if shutil.which("ffmpeg") is None:
             self.skipTest("ffmpeg not on PATH")

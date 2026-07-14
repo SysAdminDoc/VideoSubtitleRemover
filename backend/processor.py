@@ -67,6 +67,8 @@ from backend.io import (
     _promote_temp_output,
     _copy_file_atomic,
     validate_video_output,
+    VideoFrameTiming,
+    _probe_video_frame_timing,
     _FrameSequenceCapture,
     _open_capture,
     _open_bgr48_capture,
@@ -372,6 +374,13 @@ class SubtitleRemover:
             "requested": False,
             "status": "not-requested",
             "path": "",
+        }
+        self.last_timing_report: dict = {
+            "mode": "unknown",
+            "frame_count": 0,
+            "duration_seconds": 0.0,
+            "time_base_seconds": 0.0,
+            "average_fps": 0.0,
         }
         self.last_resume_warning: Optional[str] = None
         self.last_pause_checkpoint: Optional[dict] = None
@@ -1041,7 +1050,14 @@ class SubtitleRemover:
         logger.info(f"Quality sheet written: {sheet_path}")
         return sheet_path
 
-    def _write_srt(self, path: str, fps: float, offset_frames: int = 0):
+    def _write_srt(
+        self,
+        path: str,
+        fps: float,
+        offset_frames: int = 0,
+        *,
+        frame_timing: Optional[VideoFrameTiming] = None,
+    ):
         """Collapse consecutive per-frame entries with the same text into SRT
         cues and write to disk. Gaps of up to 0.5s are bridged."""
         if not self._srt_entries:
@@ -1062,7 +1078,18 @@ class SubtitleRemover:
             if cur_text is None:
                 cur_start, cur_end, cur_text = frame_idx, frame_idx, text
                 continue
-            if text == cur_text and frame_idx - cur_end <= gap_tol:
+            if frame_timing is not None:
+                previous_end = (
+                    frame_timing.frame_time(cur_end + offset_frames, fps)
+                    + frame_timing.frame_duration(
+                        cur_end + offset_frames, fps)
+                )
+                current_start = frame_timing.frame_time(
+                    frame_idx + offset_frames, fps)
+                bridge_gap = current_start - previous_end <= 0.5
+            else:
+                bridge_gap = frame_idx - cur_end <= gap_tol
+            if text == cur_text and bridge_gap:
                 cur_end = frame_idx
             else:
                 cues.append((cur_start, cur_end, cur_text))
@@ -1073,8 +1100,17 @@ class SubtitleRemover:
         try:
             payload = []
             for i, (s, e, txt) in enumerate(cues, 1):
-                t_start = (s + offset_frames) / fps
-                t_end = (e + offset_frames + 1) / fps
+                if frame_timing is not None:
+                    absolute_start = s + offset_frames
+                    absolute_end = e + offset_frames
+                    t_start = frame_timing.frame_time(absolute_start, fps)
+                    t_end = (
+                        frame_timing.frame_time(absolute_end, fps)
+                        + frame_timing.frame_duration(absolute_end, fps)
+                    )
+                else:
+                    t_start = (s + offset_frames) / fps
+                    t_end = (e + offset_frames + 1) / fps
                 payload.append(f"{i}\n{ts(t_start)} --> {ts(t_end)}\n{txt}\n\n")
             _write_text_atomic(Path(path), "".join(payload))
             logger.info(f"SRT written: {path} ({len(cues)} cues)")
@@ -1442,6 +1478,13 @@ class SubtitleRemover:
             ),
             "path": "",
         }
+        self.last_timing_report = {
+            "mode": "unknown",
+            "frame_count": 0,
+            "duration_seconds": 0.0,
+            "time_base_seconds": 0.0,
+            "average_fps": 0.0,
+        }
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.0, "Opening video...")
@@ -1570,6 +1613,43 @@ class SubtitleRemover:
             high_bit_depth_surface = (
                 getattr(cap, "pixel_format", "") == "bgr48le"
             )
+            frame_timing: Optional[VideoFrameTiming] = None
+            if not Path(decode_path).is_dir():
+                frame_timing = _probe_video_frame_timing(decode_path)
+                if (
+                    frame_timing is not None
+                    and frame_timing.frame_count != total_frames
+                ):
+                    logger.warning(
+                        "Using ffprobe's %d-frame PTS map instead of the "
+                        "decoder's %d-frame header estimate",
+                        frame_timing.frame_count,
+                        total_frames,
+                    )
+                    total_frames = frame_timing.frame_count
+            if frame_timing is not None:
+                set_frame_timing = getattr(cap, "set_frame_timing", None)
+                if callable(set_frame_timing):
+                    set_frame_timing(frame_timing.timestamps)
+                if frame_timing.average_fps > 0:
+                    fps = float(min(frame_timing.average_fps, 1000.0))
+                self.last_timing_report = frame_timing.report()
+                timing_label = "variable" if frame_timing.is_vfr else "constant"
+                logger.info(
+                    "Source timing: %s frame rate, %d timestamps, "
+                    "time base %.9fs",
+                    timing_label,
+                    frame_timing.frame_count,
+                    frame_timing.time_base,
+                )
+            else:
+                self.last_timing_report = {
+                    "mode": "cfr-fallback",
+                    "frame_count": total_frames,
+                    "duration_seconds": round(total_frames / fps, 9),
+                    "time_base_seconds": 0.0,
+                    "average_fps": round(fps, 6),
+                }
 
             if width == 0 or height == 0:
                 raise _invalid_video_dimensions_error(input_path, width, height)
@@ -1590,16 +1670,36 @@ class SubtitleRemover:
             time_end_s = _sane_seconds(self.config.time_end)
             start_frame = 0
             end_frame = total_frames
-            if time_start_s > 0:
-                start_frame = max(0, min(total_frames - 1, int(time_start_s * fps)))
+            if frame_timing is not None:
+                start_frame, end_frame = frame_timing.frame_range(
+                    time_start_s, time_end_s, total_frames)
+            else:
+                if time_start_s > 0:
+                    start_frame = max(
+                        0, min(total_frames - 1, int(time_start_s * fps)))
+                if time_end_s > 0:
+                    end_frame = max(
+                        0, min(total_frames, int(time_end_s * fps)))
+            if start_frame > 0:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-            if time_end_s > 0:
-                end_frame = max(0, min(total_frames, int(time_end_s * fps)))
             if end_frame <= start_frame:
                 raise ValueError(
                     f"Invalid time range: end ({time_end_s}s) "
                     f"must be after start ({time_start_s}s)")
             frames_to_process = end_frame - start_frame
+            selected_frame_durations = (
+                frame_timing.range_durations(start_frame, end_frame, fps)
+                if frame_timing is not None else None
+            )
+            processed_time_start = (
+                frame_timing.frame_time(start_frame, fps)
+                if frame_timing is not None else start_frame / fps
+            )
+            processed_time_end = (
+                processed_time_start + sum(selected_frame_durations or [])
+                if selected_frame_durations is not None
+                else end_frame / fps
+            )
 
             if start_frame > 0 or end_frame < total_frames:
                 logger.info(f"Video: {width}x{height} @ {fps:.1f}fps, "
@@ -1678,6 +1778,8 @@ class SubtitleRemover:
             # so the pipeline still produces output, just at the old
             # quality.
             use_frame_output = getattr(self.config, "output_frames", False)
+            vfr_frame_dir: Optional[Path] = None
+            timing_manifest_path: Optional[Path] = None
             with self._time_stage("encode"):
                 if use_frame_output:
                     frame_out_dir = output_path
@@ -1700,6 +1802,10 @@ class SubtitleRemover:
                         start_index=resume_frame_count,
                     )
                     temp_video = None
+                elif frame_timing is not None and frame_timing.is_vfr:
+                    vfr_frame_dir = Path(temp_dir) / "vfr_frames"
+                    writer = _FrameSequenceWriter(str(vfr_frame_dir))
+                    temp_video = None
                 else:
                     temp_video_target = os.path.join(temp_dir, "temp_video.mkv")
                     writer = _LosslessIntermediateWriter(
@@ -1716,6 +1822,38 @@ class SubtitleRemover:
                             f"Could not create video writer for: {temp_video}"
                         )
 
+            if (
+                frame_timing is not None
+                and frame_timing.is_vfr
+            ):
+                timing_dir = (
+                    Path(frame_out_dir)
+                    if use_frame_output else checkpoint_frame_dir or vfr_frame_dir
+                )
+                if timing_dir is not None:
+                    timing_manifest_path = Path(timing_dir) / "frame_timing.json"
+                    timing_payload = {
+                        "schema": "vsr.frame_timing.v1",
+                        "source": str(input_path),
+                        "source_start_seconds": frame_timing.source_start,
+                        "source_time_base_seconds": frame_timing.time_base,
+                        "start_frame": start_frame,
+                        "end_frame": end_frame,
+                        "timestamps_seconds": [
+                            frame_timing.frame_time(index, fps)
+                            for index in range(start_frame, end_frame)
+                        ],
+                        "durations_seconds": selected_frame_durations,
+                    }
+                    _write_text_atomic(
+                        timing_manifest_path,
+                        json.dumps(
+                            timing_payload,
+                            indent=2,
+                            ensure_ascii=True,
+                        ) + "\n",
+                    )
+
             if checkpoint_active and checkpoint_root is not None and checkpoint_key:
                 payload = write_pause_checkpoint(
                     checkpoint_root,
@@ -1731,6 +1869,7 @@ class SubtitleRemover:
                     height=height,
                     fps=fps,
                     status="running",
+                    timing_manifest_path=timing_manifest_path,
                 )
                 self.last_pause_checkpoint = payload
                 if checkpoint_state_path is not None:
@@ -1787,9 +1926,20 @@ class SubtitleRemover:
                             min_speech_duration=self.config.whisper_min_speech_duration,
                         )
                         if segments:
-                            whisper_spans = _wf.segments_to_frame_spans(
-                                segments, fps
-                            )
+                            if frame_timing is not None:
+                                whisper_spans = [
+                                    frame_timing.frame_range(
+                                        float(segment[0]),
+                                        float(segment[1]),
+                                        total_frames,
+                                    )
+                                    for segment in segments
+                                    if len(segment) >= 2
+                                ]
+                            else:
+                                whisper_spans = _wf.segments_to_frame_spans(
+                                    segments, fps
+                                )
                             logger.info(
                                 f"FFmpeg Whisper fallback active: "
                                 f"{len(whisper_spans)} speech spans"
@@ -1806,9 +1956,20 @@ class SubtitleRemover:
                                 language=(self.config.detection_lang or None),
                             )
                             if segments:
-                                whisper_spans = _wf.segments_to_frame_spans(
-                                    segments, fps
-                                )
+                                if frame_timing is not None:
+                                    whisper_spans = [
+                                        frame_timing.frame_range(
+                                            float(segment[0]),
+                                            float(segment[1]),
+                                            total_frames,
+                                        )
+                                        for segment in segments
+                                        if len(segment) >= 2
+                                    ]
+                                else:
+                                    whisper_spans = _wf.segments_to_frame_spans(
+                                        segments, fps
+                                    )
                                 logger.info(
                                     f"Whisper fallback active: "
                                     f"{len(whisper_spans)} speech spans"
@@ -1870,7 +2031,11 @@ class SubtitleRemover:
                         frame = self._processing_frame(raw_frame)
 
                     absolute_idx = start_frame + frame_idx
-                    frame_seconds = absolute_idx / max(fps, 1.0)
+                    frame_seconds = (
+                        frame_timing.frame_time(absolute_idx, fps)
+                        if frame_timing is not None
+                        else absolute_idx / max(fps, 1.0)
+                    )
                     fixed_boxes = (
                         self._fixed_region_boxes(frame_seconds)
                         if timed_region_spans else static_fixed_boxes
@@ -1892,7 +2057,7 @@ class SubtitleRemover:
                         else:
                             with self._time_stage("mask"):
                                 fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-                        frame_s = (start_frame + frame_idx) / fps if fps > 0 else 0.0
+                        frame_s = frame_seconds
                         corrected = self._apply_manual_mask_corrections(
                             fixed_mask.copy(), frame_s)
                         frames.append(frame)
@@ -2033,7 +2198,7 @@ class SubtitleRemover:
                                 tolerance=self.config.colour_tune_tolerance,
                                 padding=4,
                             )
-                        frame_s = (start_frame + frame_idx) / fps if fps > 0 else 0.0
+                        frame_s = frame_seconds
                         mask = self._apply_manual_mask_corrections(mask, frame_s)
                     last_mask = mask
                     if self.config.phash_skip_enable:
@@ -2125,6 +2290,7 @@ class SubtitleRemover:
                         height=height,
                         fps=fps,
                         status="paused" if should_pause else "running",
+                        timing_manifest_path=timing_manifest_path,
                     )
                     self.last_pause_checkpoint = payload
                     if checkpoint_state_path is not None:
@@ -2171,6 +2337,7 @@ class SubtitleRemover:
                     height=height,
                     fps=fps,
                     status="running",
+                    timing_manifest_path=timing_manifest_path,
                     stage="encoding",
                     inpaint_complete=True,
                 )
@@ -2202,7 +2369,19 @@ class SubtitleRemover:
                 elif checkpoint_active:
                     assert checkpoint_frame_dir is not None
                     processed_video = self._encode_frame_sequence(
-                        checkpoint_frame_dir, fps, output_path)
+                        checkpoint_frame_dir,
+                        fps,
+                        output_path,
+                        frame_durations=(
+                            selected_frame_durations
+                            if frame_timing is not None and frame_timing.is_vfr
+                            else None
+                        ),
+                        source_time_base=(
+                            frame_timing.time_base
+                            if frame_timing is not None else None
+                        ),
+                    )
                     final_output_path = processed_video
                     is_frame_sequence_input = Path(input_path).is_dir()
                     if (
@@ -2211,13 +2390,40 @@ class SubtitleRemover:
                         and not Path(processed_video).is_dir()
                     ):
                         final_output_path = self._merge_audio(
-                            input_path, processed_video, output_path)
+                            input_path,
+                            processed_video,
+                            output_path,
+                            start_seconds=processed_time_start,
+                            end_seconds=processed_time_end,
+                        )
+                elif vfr_frame_dir is not None:
+                    processed_video = self._encode_frame_sequence(
+                        vfr_frame_dir,
+                        fps,
+                        output_path,
+                        frame_durations=selected_frame_durations,
+                        source_time_base=frame_timing.time_base,
+                    )
+                    final_output_path = processed_video
+                    if self.config.preserve_audio:
+                        final_output_path = self._merge_audio(
+                            input_path,
+                            processed_video,
+                            output_path,
+                            start_seconds=processed_time_start,
+                            end_seconds=processed_time_end,
+                        )
                 else:
                     final_output_path = output_path
                     is_frame_sequence_input = Path(input_path).is_dir()
                     if self.config.preserve_audio and not is_frame_sequence_input:
                         final_output_path = self._merge_audio(
-                            input_path, temp_video, output_path)
+                            input_path,
+                            temp_video,
+                            output_path,
+                            start_seconds=processed_time_start,
+                            end_seconds=processed_time_end,
+                        )
                     else:
                         final_output_path = self._reencode_or_copy(
                             temp_video, output_path)
@@ -2232,7 +2438,12 @@ class SubtitleRemover:
 
                 if self.config.export_srt and self._srt_entries:
                     srt_path = str(Path(final_output_path).with_suffix('.srt'))
-                    self._write_srt(srt_path, fps, start_frame)
+                    self._write_srt(
+                        srt_path,
+                        fps,
+                        start_frame,
+                        frame_timing=frame_timing,
+                    )
 
                 # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
                 # upscale, film-grain re-synthesis). Run after the main mux
@@ -2243,7 +2454,9 @@ class SubtitleRemover:
                 # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
                 self._write_nle_sidecar(input_path, final_output_path,
                                          start_frame, end_frame, fps,
-                                         width=width, height=height)
+                                         width=width, height=height,
+                                         start_seconds=processed_time_start,
+                                         end_seconds=processed_time_end)
 
             # Quality report: PSNR/SSIM across a sample of unmasked regions
             if self.config.quality_report:
@@ -2365,7 +2578,9 @@ class SubtitleRemover:
     def _write_nle_sidecar(self, input_path: str, output_path: str,
                              start_frame: int, end_frame: int,
                              fps: float, width: int = 0,
-                             height: int = 0) -> None:
+                             height: int = 0,
+                             start_seconds: Optional[float] = None,
+                             end_seconds: Optional[float] = None) -> None:
         """RM-76: emit an EDL or FCPXML sidecar next to the output so an
         NLE operator can hand-conform the cleaned clip into a Premiere
         / DaVinci timeline at the same timecode."""
@@ -2380,8 +2595,16 @@ class SubtitleRemover:
         try:
             if fps <= 0:
                 fps = 30.0
-            start_s = max(0.0, start_frame / fps)
-            end_s = max(start_s + 1.0 / fps, end_frame / fps)
+            start_s = max(
+                0.0,
+                float(start_seconds)
+                if start_seconds is not None else start_frame / fps,
+            )
+            end_s = max(
+                start_s + 1.0 / fps,
+                float(end_seconds)
+                if end_seconds is not None else end_frame / fps,
+            )
             spans = getattr(self.config, "subtitle_region_spans", None)
             segments = None
             if spans and isinstance(spans, list) and len(spans) >= 1:
@@ -2767,30 +2990,95 @@ class SubtitleRemover:
         )
         return salvage
 
-    def _encode_frame_sequence(self, frame_dir: Path, fps: float,
-                               output: str) -> str:
+    def _encode_frame_sequence(
+        self,
+        frame_dir: Path,
+        fps: float,
+        output: str,
+        *,
+        frame_durations: Optional[List[float]] = None,
+        source_time_base: Optional[float] = None,
+    ) -> str:
         """Encode checkpoint/output frames into the requested video path."""
         frame_dir = Path(frame_dir)
         pattern = frame_dir / "frame_%06d.png"
         if not (frame_dir / "frame_000000.png").is_file():
             raise ValueError(f"No checkpoint frames found in {frame_dir}")
         temp_output = _allocate_temp_output_path(output)
+        concat_path: Optional[Path] = None
         try:
             _ensure_output_parent(output)
             frame_total = len(list(frame_dir.glob("frame_*.png")))
-            cmd = [
-                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-                '-nostats', '-framerate', f"{float(fps):.6f}",
-                '-i', str(pattern),
-            ]
+            use_vfr = bool(
+                frame_durations
+                and len(frame_durations) >= frame_total
+                and frame_total > 0
+            )
+            if use_vfr:
+                normalized_durations = []
+                fallback = 1.0 / max(float(fps), 1.0)
+                for value in frame_durations[:frame_total]:
+                    try:
+                        duration = float(value)
+                    except (TypeError, ValueError):
+                        duration = fallback
+                    if not np.isfinite(duration) or duration <= 0:
+                        duration = fallback
+                    normalized_durations.append(duration)
+                concat_path = frame_dir / ".vsr-vfr.ffconcat"
+                concat_lines = ["ffconcat version 1.0"]
+                try:
+                    timing_tick = float(source_time_base or 0.0)
+                except (TypeError, ValueError):
+                    timing_tick = 0.0
+                if not np.isfinite(timing_tick) or timing_tick <= 0:
+                    timing_tick = min(normalized_durations) / 100.0
+                concat_rate = max(
+                    1000,
+                    min(1_000_000, int(round(1.0 / max(timing_tick, 1e-6)))),
+                )
+                for index, duration in enumerate(normalized_durations):
+                    concat_lines.append(f"file frame_{index:06d}.png")
+                    concat_lines.append(f"option framerate {concat_rate}")
+                    concat_lines.append(f"duration {duration:.9f}")
+                _write_text_atomic(
+                    concat_path, "\n".join(concat_lines) + "\n")
+                cmd = [
+                    'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                    '-nostats', '-f', 'concat', '-safe', '0',
+                    '-i', str(concat_path),
+                ]
+            else:
+                normalized_durations = []
+                cmd = [
+                    'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                    '-nostats', '-framerate', f"{float(fps):.6f}",
+                    '-i', str(pattern),
+                ]
             cmd += self._get_encode_args()
+            if use_vfr:
+                cmd += [
+                    '-fps_mode:v', 'vfr',
+                    '-enc_time_base:v', 'demux',
+                ]
             cmd += ['-an', str(temp_output)]
             timeout = _ffmpeg_subprocess_timeout(
-                max(1.0, frame_total / max(fps, 1.0))
+                max(
+                    1.0,
+                    sum(normalized_durations)
+                    if normalized_durations
+                    else frame_total / max(fps, 1.0),
+                )
             )
             self._run_checked_ffmpeg(cmd, timeout)
             self._promote_video_output(
-                temp_output, output, expected_frames=frame_total
+                temp_output,
+                output,
+                expected_frames=frame_total,
+                expected_duration=(
+                    sum(normalized_durations)
+                    if normalized_durations else None
+                ),
             )
             return output
         except FileNotFoundError:
@@ -2800,6 +3088,7 @@ class SubtitleRemover:
             return str(frame_dir)
         finally:
             _cleanup_temp_output(temp_output)
+            _cleanup_temp_output(concat_path)
 
     def _reencode_or_copy(self, source: str, output: str) -> str:
         """Re-encode with preferred encoder, or salvage the intermediate
@@ -2835,7 +3124,15 @@ class SubtitleRemover:
         finally:
             _cleanup_temp_output(temp_output)
 
-    def _merge_audio(self, original: str, processed: str, output: str) -> str:
+    def _merge_audio(
+        self,
+        original: str,
+        processed: str,
+        output: str,
+        *,
+        start_seconds: Optional[float] = None,
+        end_seconds: Optional[float] = None,
+    ) -> str:
         temp_output = _allocate_temp_output_path(output)
         try:
             _ensure_output_parent(output)
@@ -2843,15 +3140,23 @@ class SubtitleRemover:
                 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
                 '-i', processed,
             ]
-            # When a time range was used, seek audio to match the processed segment
-            if self.config.time_start > 0:
-                cmd += ['-ss', str(self.config.time_start)]
+            # Seek audio to the first selected source PTS. For VFR input this
+            # can differ from frame_index / average_fps.
+            audio_start = (
+                max(0.0, float(start_seconds))
+                if start_seconds is not None else
+                max(0.0, float(self.config.time_start or 0.0))
+            )
+            audio_end = (
+                max(audio_start, float(end_seconds))
+                if end_seconds is not None else
+                max(0.0, float(self.config.time_end or 0.0))
+            )
+            if audio_start > 0:
+                cmd += ['-ss', f'{audio_start:.9f}']
             cmd += ['-i', original]
-            if self.config.time_end > 0 and self.config.time_start > 0:
-                duration = self.config.time_end - self.config.time_start
-                cmd += ['-t', str(duration)]
-            elif self.config.time_end > 0:
-                cmd += ['-t', str(self.config.time_end)]
+            if audio_end > audio_start:
+                cmd += ['-t', f'{audio_end - audio_start:.9f}']
             cmd += self._get_encode_args()
             cmd += [
                 '-c:a', 'aac',
@@ -2898,10 +3203,12 @@ class SubtitleRemover:
                 if loudnorm_active:
                     cmd += ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
                     logger.info(f"Applying EBU R128 loudnorm I={target} LUFS")
-            cmd += [
-                '-shortest',
-                str(temp_output),
-            ]
+            # With an explicit processed PTS range, -t above is the length of
+            # record. Do not also use -shortest: audio packet rounding can be
+            # a few milliseconds shorter and would drop the final video frame.
+            if end_seconds is None:
+                cmd += ['-shortest']
+            cmd += [str(temp_output)]
             # Adaptive timeout: scales with the duration of the original
             # input so multi-hour videos do not silently lose audio when the
             # mux pass takes longer than the legacy 10-minute fixed budget.
@@ -2935,7 +3242,13 @@ class SubtitleRemover:
             if self._hw_encoder:
                 logger.warning(f"HW encoder failed, retrying with libx264: {e}")
                 self._hw_encoder = None
-                return self._merge_audio(original, processed, output)
+                return self._merge_audio(
+                    original,
+                    processed,
+                    output,
+                    start_seconds=start_seconds,
+                    end_seconds=end_seconds,
+                )
             # The merge often fails on the AUDIO side (bad stream, odd
             # layout); a video-only encode to the requested container is
             # usually still possible and beats a mislabeled raw copy.

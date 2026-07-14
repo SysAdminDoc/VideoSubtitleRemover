@@ -4757,6 +4757,11 @@ class VideoSubtitleRemoverApp(
                     if isinstance(record.get("mask_export"), dict)
                     else {}
                 ),
+                timing_report=(
+                    dict(record.get("timing_report"))
+                    if isinstance(record.get("timing_report"), dict)
+                    else {}
+                ),
             )
             if item.soft_subtitle_action not in {
                 "strip", "keep_all", "burned_in"

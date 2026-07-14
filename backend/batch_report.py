@@ -180,6 +180,7 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "quality_gate": quality_gate_unknown("quality gate has not run yet"),
         "retry_attempts": 0,
         "retry_errors": [],
+        "source_timing": {"mode": "unknown"},
         "mask_export": {
             "requested": bool(_config_value(config, "export_mask_video", False)),
             "status": (

@@ -433,6 +433,9 @@ class QualityReviewControllerMixin:
             mask_export = getattr(item, "mask_export", None)
             if isinstance(mask_export, dict) and mask_export:
                 record["mask_export"] = dict(mask_export)
+            timing_report = getattr(item, "timing_report", None)
+            if isinstance(timing_report, dict) and timing_report:
+                record["source_timing"] = dict(timing_report)
             elapsed = None
             if item.started_at and item.completed_at:
                 elapsed = (item.completed_at - item.started_at).total_seconds()
@@ -731,4 +734,3 @@ class QualityReviewControllerMixin:
             logger.info(f"Batch report written: {json_path}")
         self._last_batch_report_paths = written
         return written
-

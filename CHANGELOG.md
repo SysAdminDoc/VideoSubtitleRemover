@@ -33,6 +33,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Variable-frame-rate timing and A/V drift.** Processing now carries the
+  source frame PTS/time base through time ranges, Whisper spans, checkpoints,
+  SRT/NLE sidecars, VFR encoding, and audio muxing. Irregular VFR sources use
+  exact frame-sequence timestamps instead of a synthesized average FPS, and
+  HDR range/resume seeks use source PTS so tail frames remain aligned.
 - **Queue recovery could lose behavior and disappear after one restore.** Queue
   state schema 2 now atomically preserves order, locked output paths, complete
   config snapshots, embedded-subtitle choices, pause/retry evidence, and all

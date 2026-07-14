@@ -147,6 +147,7 @@ def write_pause_checkpoint(
     height: int,
     fps: float,
     status: str,
+    timing_manifest_path: Optional[Path] = None,
     stage: str = "inpainting",
     inpaint_complete: bool = False,
 ) -> dict:
@@ -166,6 +167,9 @@ def write_pause_checkpoint(
         "width": max(0, int(width)),
         "height": max(0, int(height)),
         "fps": round(float(fps), 6),
+        "timing_manifest": (
+            str(timing_manifest_path) if timing_manifest_path else ""
+        ),
         "updated_at": now,
     }
     path = pause_checkpoint_path(checkpoint_dir, key)

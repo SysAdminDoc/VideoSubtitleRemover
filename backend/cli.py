@@ -1383,6 +1383,9 @@ def main():
                 mask_export = getattr(remover, "last_mask_export", None)
                 if isinstance(mask_export, dict):
                     record["mask_export"] = dict(mask_export)
+                timing_report = getattr(remover, "last_timing_report", None)
+                if isinstance(timing_report, dict):
+                    record["source_timing"] = dict(timing_report)
                 if ok:
                     return True
                 failure_message = (
@@ -1670,6 +1673,7 @@ def main():
                       else getattr(remover, "last_error_message", None)),
             "stage_timings": getattr(remover, "last_stage_timings", None),
             "quality_report": getattr(remover, "last_quality_report", None),
+            "source_timing": getattr(remover, "last_timing_report", None),
         }, indent=2))
     sys.exit(0 if success else 1)
 
