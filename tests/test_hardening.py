@@ -1174,6 +1174,8 @@ class SettingsMigrationTests(unittest.TestCase):
         cfg = gui.ProcessingConfig()
         payload = cfg.to_dict()
         self.assertEqual(payload.get("vsr_settings_format"), gui.VSR_SETTINGS_FORMAT)
+        from backend.config_schema import CONFIG_SCHEMA_VERSION
+        self.assertEqual(payload.get("config_schema_version"), CONFIG_SCHEMA_VERSION)
 
     def test_load_settings_round_trips_legacy_file(self):
         """A v3.12-era settings.json (no version field) loads, gets stamped,
@@ -6774,6 +6776,128 @@ class ManualMaskCorrectionTests(unittest.TestCase):
         self.assertIn("manual_mask_corrections", snap)
 
 
+class CanonicalConfigSchemaTests(unittest.TestCase):
+    def test_registry_round_trips_every_backend_field_losslessly(self):
+        from backend.config import (
+            InpaintMode,
+            ProcessingConfig,
+            normalize_processing_config,
+        )
+        from backend.config_schema import (
+            apply_backend_payload,
+            processing_field_names,
+            serialize_backend_config,
+        )
+
+        source = normalize_processing_config(ProcessingConfig(
+            mode=InpaintMode.AUTO,
+            device="cpu",
+            detection_lang="ja",
+            subtitle_area=(4, 8, 640, 700),
+            subtitle_areas=[(4, 8, 640, 700), (20, 30, 500, 600)],
+            subtitle_region_spans=[
+                {"rect": (4, 8, 640, 700), "start": 1.25, "end": 5.5},
+            ],
+            manual_mask_corrections=[
+                {"polygons": [[1, 2, 10, 2, 10, 12]], "start": 2.0, "end": 3.0},
+            ],
+            confidence_weighted_dilation=True,
+            confidence_dilation_scale=2.25,
+            whisper_vad_model="models/vad.onnx",
+            whisper_vad_threshold=0.7,
+            whisper_min_speech_duration=0.4,
+            watermark_image="branding/logo.png",
+            watermark_position="top-left",
+            watermark_opacity=0.65,
+            restyle_subtitle="captions/clean.ass",
+            gpu_oom_recovery=False,
+            output_codec="h265",
+            batch_max_retries=3,
+        ))
+        payload = serialize_backend_config(source)
+        restored = apply_backend_payload(ProcessingConfig(), payload)
+
+        self.assertEqual(tuple(payload), processing_field_names())
+        self.assertEqual(serialize_backend_config(restored), payload)
+
+    def test_gui_projection_covers_backend_schema_and_per_item_overrides(self):
+        from backend.config_schema import (
+            gui_to_backend_config,
+            validate_gui_schema,
+        )
+        from gui.config import ProcessingConfig as GuiConfig
+
+        validate_gui_schema(GuiConfig)
+        gui_config = GuiConfig(
+            use_gpu=False,
+            manual_mask_corrections=[
+                {"polygons": [[1, 2, 10, 2, 10, 12]], "start": 0.0, "end": 2.0},
+            ],
+            confidence_dilation_scale=2.0,
+            whisper_vad_threshold=0.8,
+            watermark_image="logo.png",
+            gpu_oom_recovery=False,
+        )
+        backend_config = gui_to_backend_config(gui_config)
+
+        self.assertEqual(backend_config.device, "cpu")
+        self.assertEqual(backend_config.manual_mask_corrections,
+                         gui_config.manual_mask_corrections)
+        self.assertEqual(backend_config.confidence_dilation_scale, 2.0)
+        self.assertEqual(backend_config.whisper_vad_threshold, 0.8)
+        self.assertEqual(backend_config.watermark_image, "logo.png")
+        self.assertFalse(backend_config.gpu_oom_recovery)
+
+    def test_generated_cli_overrides_round_trip_non_default_fields(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        from backend.config_schema import (
+            apply_backend_payload,
+            backend_config_cli_args,
+            parse_cli_assignments,
+            serialize_backend_config,
+        )
+
+        source = normalize_processing_config(ProcessingConfig(
+            device="cpu",
+            manual_mask_corrections=[
+                {"polygons": [[0, 0, 8, 0, 8, 8]], "start": 1.0, "end": 4.0},
+            ],
+            confidence_dilation_scale=2.5,
+            gpu_oom_recovery=False,
+            restyle_subtitle="caption.ass",
+        ))
+        args = backend_config_cli_args(source)
+        assignments = [args[index + 1] for index, value in enumerate(args)
+                       if value == "--set"]
+        restored = apply_backend_payload(
+            ProcessingConfig(), parse_cli_assignments(assignments))
+
+        self.assertEqual(serialize_backend_config(restored),
+                         serialize_backend_config(source))
+
+    def test_validate_config_cli_exposes_complete_registry(self):
+        from backend.config_schema import processing_field_names
+
+        completed = subprocess.run(
+            [
+                sys.executable, "-m", "backend.processor", "--validate-config",
+                "--config-schema-version", "1",
+                "--set", 'manual_mask_corrections=[{"polygons":[[0,0,8,0,8,8]]}]',
+                "--set", "gpu_oom_recovery=false",
+            ],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)["resolved_config"]
+        self.assertEqual(set(payload), set(processing_field_names()))
+        self.assertFalse(payload["gpu_oom_recovery"])
+        self.assertTrue(payload["manual_mask_corrections"])
+
+
 class AdapterConformanceMatrixTests(unittest.TestCase):
     def test_conformance_matrix_schema_and_structure(self):
         from backend.adapter_manifest import (
@@ -6861,6 +6985,44 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertEqual(sidecar["stageTimings"]["ocr"], 2.5)
         self.assertEqual(sidecar["qualityReport"]["psnr"], 25.0)
         self.assertEqual(sidecar["qualityGate"]["status"], "passed")
+
+    def test_sidecar_snapshot_contains_every_canonical_config_field(self):
+        from backend.batch_report import build_output_sidecar
+        from backend.config import ProcessingConfig
+        from backend.config_schema import CONFIG_SCHEMA_VERSION, processing_field_names
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inp = os.path.join(tmpdir, "input.mp4")
+            out = os.path.join(tmpdir, "output.mp4")
+            Path(inp).write_bytes(b"source")
+            Path(out).write_bytes(b"output")
+            sidecar = build_output_sidecar(
+                input_path=inp,
+                output_path=out,
+                config=ProcessingConfig(),
+                status="processed",
+            )
+
+        self.assertEqual(sidecar["configSchemaVersion"], CONFIG_SCHEMA_VERSION)
+        self.assertEqual(set(sidecar["config"]), set(processing_field_names()))
+
+    def test_source_hash_has_no_legacy_large_file_cutoff(self):
+        import hashlib
+        from backend.batch_report import _sha256_file
+
+        class VirtualLargePath:
+            def stat(self):
+                return SimpleNamespace(st_size=513 * 1024 * 1024)
+
+            def open(self, mode):
+                self.assert_mode = mode
+                return io.BytesIO(b"streamed payload")
+
+        virtual_path = VirtualLargePath()
+        digest = _sha256_file(virtual_path)  # type: ignore[arg-type]
+
+        self.assertEqual(virtual_path.assert_mode, "rb")
+        self.assertEqual(digest, hashlib.sha256(b"streamed payload").hexdigest())
 
     def test_write_output_sidecar_creates_file(self):
         from backend.batch_report import write_output_sidecar, SIDECAR_SCHEMA

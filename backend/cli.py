@@ -451,6 +451,20 @@ def main():
     parser.add_argument("--pattern", help="Glob pattern for batch mode (e.g. 'inputs/*.mp4')")
     parser.add_argument("--out-dir", help="Output directory for batch mode")
     parser.add_argument("--config", help="JSON config file (key=value pairs overriding CLI defaults)")
+    parser.add_argument(
+        "--config-schema-version",
+        type=int,
+        default=None,
+        help="Canonical processing-config schema version for reproducible commands.",
+    )
+    parser.add_argument(
+        "--set",
+        dest="config_overrides",
+        action="append",
+        default=[],
+        metavar="FIELD=JSON",
+        help="Override any canonical processing field; repeat for multiple values.",
+    )
     parser.add_argument("--preset", metavar="NAME",
                        help="Apply a built-in or user preset by name.")
     parser.add_argument("--list-presets", action="store_true",
@@ -1040,105 +1054,45 @@ def main():
     )
     config = normalize_processing_config(config)
 
+    from backend.config_schema import (
+        CONFIG_SCHEMA_VERSION_KEY,
+        apply_backend_payload,
+        ensure_supported_schema_version,
+        parse_cli_assignments,
+        processing_field_names,
+        serialize_backend_config,
+    )
+
     ffmpeg_ready = shutil.which("ffmpeg") is not None
 
     if args.config:
         try:
             overlay = _load_json_config(args.config)
-            from dataclasses import fields as _dc_fields
-            _allowed = {f.name for f in _dc_fields(config)}
-            for k, v in overlay.items():
-                if k == "mode":
-                    if is_known_backend_mode(v):
-                        config.mode = _coerce_backend_mode(v)
-                    else:
-                        logger.warning(f"Ignoring unknown mode in config: {v}")
-                    continue
-                if k in _allowed:
-                    setattr(config, k, v)
-                else:
-                    logger.warning(f"Ignoring unknown config field: {k}")
-            config = normalize_processing_config(config)
+            schema_version = overlay.pop(CONFIG_SCHEMA_VERSION_KEY, None)
+            if schema_version is not None:
+                ensure_supported_schema_version(schema_version)
+            allowed = set(processing_field_names())
+            for name in sorted(set(overlay) - allowed):
+                logger.warning(f"Ignoring unknown config field: {name}")
+            config = apply_backend_payload(
+                config,
+                {name: value for name, value in overlay.items() if name in allowed},
+            )
             logger.info(f"Loaded config overlay from {args.config}")
         except Exception as exc:
             parser.error(f"Could not load --config {args.config}: {exc}")
 
+    try:
+        if args.config_schema_version is not None:
+            ensure_supported_schema_version(args.config_schema_version)
+        if args.config_overrides:
+            config = apply_backend_payload(
+                config, parse_cli_assignments(args.config_overrides))
+    except ValueError as exc:
+        parser.error(str(exc))
+
     if args.validate_config:
-        resolved = {
-            "mode": config.mode.value,
-            "device": config.device,
-            "detection_lang": config.detection_lang,
-            "detection_threshold": config.detection_threshold,
-            "detection_frame_skip": config.detection_frame_skip,
-            "rife_fast_stride": config.rife_fast_stride,
-            "subtitle_area": list(config.subtitle_area) if config.subtitle_area else None,
-            "subtitle_areas": (
-                [list(r) for r in config.subtitle_areas]
-                if config.subtitle_areas else None
-            ),
-            "subtitle_region_spans": (
-                [
-                    {
-                        "rect": list(span["rect"]),
-                        "start": float(span.get("start", 0.0)),
-                        "end": float(span.get("end", 0.0)),
-                    }
-                    for span in (config.subtitle_region_spans or [])
-                ] or None
-            ),
-            "mask_dilate_px": config.mask_dilate_px,
-            "mask_feather_px": config.mask_feather_px,
-            "edge_ring_px": config.edge_ring_px,
-            "tbe_enable": config.tbe_enable,
-            "tbe_min_coverage": config.tbe_min_coverage,
-            "tbe_flow_warp": config.tbe_flow_warp,
-            "tbe_scene_cut_split": config.tbe_scene_cut_split,
-            "tbe_scene_cut_threshold": config.tbe_scene_cut_threshold,
-            "kalman_tracking": config.kalman_tracking,
-            "kalman_iou_threshold": config.kalman_iou_threshold,
-            "kalman_max_age": config.kalman_max_age,
-            "phash_skip_enable": config.phash_skip_enable,
-            "phash_skip_distance": config.phash_skip_distance,
-            "colour_tune_enable": config.colour_tune_enable,
-            "colour_tune_tolerance": config.colour_tune_tolerance,
-            "auto_exposure_threshold": config.auto_exposure_threshold,
-            "deinterlace": config.deinterlace,
-            "deinterlace_auto": config.deinterlace_auto,
-            "keyframe_detection": config.keyframe_detection,
-            "quality_report": config.quality_report,
-            "adaptive_batch": config.adaptive_batch,
-            "sttn_skip_detection": config.sttn_skip_detection,
-            "sttn_neighbor_stride": config.sttn_neighbor_stride,
-            "sttn_reference_length": config.sttn_reference_length,
-            "sttn_max_load_num": config.sttn_max_load_num,
-            "lama_super_fast": config.lama_super_fast,
-            "time_start": config.time_start,
-            "time_end": config.time_end,
-            "preserve_audio": config.preserve_audio,
-            "output_format": config.output_format,
-            "output_quality": config.output_quality,
-            "use_hw_encode": config.use_hw_encode,
-            "loudnorm_target": config.loudnorm_target,
-            "decode_hw_accel": config.decode_hw_accel,
-            "multi_audio_passthrough": config.multi_audio_passthrough,
-            "prefetch_decode": config.prefetch_decode,
-            "prefetch_queue_size": config.prefetch_queue_size,
-            "input_fps": config.input_fps,
-            "quality_report_sheet": config.quality_report_sheet,
-            "whisper_fallback": config.whisper_fallback,
-            "whisper_backend": config.whisper_backend,
-            "whisper_model_size": config.whisper_model_size,
-            "whisper_model_path": config.whisper_model_path,
-            "whisper_queue_seconds": config.whisper_queue_seconds,
-            "remove_subtitles": config.remove_subtitles,
-            "remove_chyrons": config.remove_chyrons,
-            "chyron_min_hits": config.chyron_min_hits,
-            "karaoke_grouping": config.karaoke_grouping,
-            "karaoke_x_gap_px": config.karaoke_x_gap_px,
-            "karaoke_y_overlap": config.karaoke_y_overlap,
-            "export_srt": config.export_srt,
-            "export_mask_video": config.export_mask_video,
-        }
+        resolved = serialize_backend_config(config)
         print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
         sys.exit(0)
 

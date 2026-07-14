@@ -470,6 +470,7 @@ class ProcessingControllerMixin:
                 _checkpoint_key,
                 _default_checkpoint_dir,
             )
+            from backend.config_schema import gui_to_backend_config
 
             backend_mode = self._gui_to_backend_mode(item.config.mode.value)
             device = self._gui_to_backend_device(
@@ -478,91 +479,7 @@ class ProcessingControllerMixin:
             vertical = bool(getattr(item.config, 'detection_vertical', False))
             cache_key = (backend_mode, device, lang, vertical)
 
-            backend_config = BackendConfig(
-                mode=backend_mode,
-                device=device,
-                sttn_skip_detection=item.config.sttn_skip_detection,
-                sttn_neighbor_stride=item.config.sttn_neighbor_stride,
-                sttn_reference_length=item.config.sttn_reference_length,
-                sttn_max_load_num=item.config.sttn_max_load_num,
-                lama_super_fast=item.config.lama_super_fast,
-                preserve_audio=item.config.preserve_audio,
-                output_quality=item.config.output_quality,
-                detection_lang=lang,
-                detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
-                detection_vertical=getattr(item.config, 'detection_vertical', False),
-                whisper_fallback=getattr(item.config, 'whisper_fallback', False),
-                whisper_backend=getattr(item.config, 'whisper_backend', 'faster-whisper'),
-                whisper_model_size=getattr(item.config, 'whisper_model_size', 'tiny'),
-                whisper_model_path=getattr(item.config, 'whisper_model_path', ''),
-                whisper_queue_seconds=getattr(item.config, 'whisper_queue_seconds', 3.0),
-                upscale_factor=getattr(item.config, 'upscale_factor', 0),
-                film_grain_strength=getattr(item.config, 'film_grain_strength', 0.0),
-                swinir_restore=getattr(item.config, 'swinir_restore', False),
-                seedvr2_restore=getattr(item.config, 'seedvr2_restore', False),
-                preserve_color_metadata=getattr(item.config, 'preserve_color_metadata', True),
-                nle_sidecar=getattr(item.config, 'nle_sidecar', 'off'),
-                subtitle_area=item.config.subtitle_area,
-                time_start=getattr(item.config, 'time_start', 0.0),
-                time_end=getattr(item.config, 'time_end', 0.0),
-                detection_frame_skip=getattr(item.config, 'detection_frame_skip', 0),
-                mask_dilate_px=getattr(item.config, 'mask_dilate_px', 8),
-                mask_feather_px=getattr(item.config, 'mask_feather_px', 4),
-                tbe_enable=getattr(item.config, 'tbe_enable', True),
-                tbe_min_coverage=getattr(item.config, 'tbe_min_coverage', 3),
-                tbe_use_median=getattr(item.config, 'tbe_use_median', True),
-                tbe_flow_warp=getattr(item.config, 'tbe_flow_warp', False),
-                tbe_scene_cut_split=getattr(item.config, 'tbe_scene_cut_split', True),
-                tbe_scene_cut_threshold=getattr(item.config, 'tbe_scene_cut_threshold', 0.35),
-                tbe_scene_cut_use_pyscenedetect=getattr(item.config, 'tbe_scene_cut_use_pyscenedetect', False),
-                tbe_scene_cut_use_transnetv2=getattr(item.config, 'tbe_scene_cut_use_transnetv2', False),
-                detection_denoise=getattr(item.config, 'detection_denoise', False),
-                sam2_refine=getattr(item.config, 'sam2_refine', False),
-                matanyone_refine=getattr(item.config, 'matanyone_refine', False),
-                cotracker_propagate=getattr(item.config, 'cotracker_propagate', False),
-                rife_fast_stride=getattr(item.config, 'rife_fast_stride', 0),
-                edge_ring_px=getattr(item.config, 'edge_ring_px', 2),
-                subtitle_areas=getattr(item.config, 'subtitle_areas', None),
-                subtitle_region_spans=getattr(
-                    item.config, 'subtitle_region_spans', None),
-                export_srt=getattr(item.config, 'export_srt', False),
-                export_mask_video=getattr(item.config, 'export_mask_video', False),
-                adaptive_batch=getattr(item.config, 'adaptive_batch', True),
-                temporal_mask_union=getattr(item.config, 'temporal_mask_union', False),
-                temporal_mask_window=getattr(item.config, 'temporal_mask_window', 3),
-                batch_max_retries=getattr(item.config, 'batch_max_retries', 0),
-                batch_retry_backoff_seconds=getattr(
-                    item.config, 'batch_retry_backoff_seconds', 5.0),
-                auto_exposure_threshold=getattr(item.config, 'auto_exposure_threshold', 0.55),
-                deinterlace=getattr(item.config, 'deinterlace', False),
-                deinterlace_auto=getattr(item.config, 'deinterlace_auto', True),
-                keyframe_detection=getattr(item.config, 'keyframe_detection', False),
-                quality_report=getattr(item.config, 'quality_report', False),
-                kalman_tracking=getattr(item.config, 'kalman_tracking', True),
-                kalman_iou_threshold=getattr(item.config, 'kalman_iou_threshold', 0.3),
-                kalman_max_age=getattr(item.config, 'kalman_max_age', 2),
-                phash_skip_enable=getattr(item.config, 'phash_skip_enable', True),
-                phash_skip_distance=getattr(item.config, 'phash_skip_distance', 4),
-                colour_tune_enable=getattr(item.config, 'colour_tune_enable', False),
-                colour_tune_tolerance=getattr(item.config, 'colour_tune_tolerance', 25),
-                use_hw_encode=getattr(item.config, 'use_hw_encode', True),
-                output_codec=getattr(item.config, 'output_codec', 'h264'),
-                # v3.13 GUI-exposed fields: previously CLI-only, now plumbed
-                # through so a GUI user can drive every backend feature.
-                loudnorm_target=getattr(item.config, 'loudnorm_target', 0.0),
-                multi_audio_passthrough=getattr(item.config, 'multi_audio_passthrough', True),
-                decode_hw_accel=getattr(item.config, 'decode_hw_accel', 'off'),
-                prefetch_decode=getattr(item.config, 'prefetch_decode', True),
-                prefetch_queue_size=getattr(item.config, 'prefetch_queue_size', 0),
-                input_fps=getattr(item.config, 'input_fps', 24.0),
-                quality_report_sheet=getattr(item.config, 'quality_report_sheet', False),
-                remove_subtitles=getattr(item.config, 'remove_subtitles', True),
-                remove_chyrons=getattr(item.config, 'remove_chyrons', True),
-                chyron_min_hits=getattr(item.config, 'chyron_min_hits', 90),
-                karaoke_grouping=getattr(item.config, 'karaoke_grouping', False),
-                karaoke_x_gap_px=getattr(item.config, 'karaoke_x_gap_px', 20),
-                karaoke_y_overlap=getattr(item.config, 'karaoke_y_overlap', 0.5),
-            )
+            backend_config = gui_to_backend_config(item.config)
 
             # Auto subtitle-band detection -- run before the main pass so we
             # can pin the dominant band once per file. Cheap (30-frame probe).

@@ -156,6 +156,11 @@ def _build_cli_command(item: QueueItem) -> str:
         wm_margin = getattr(cfg, "watermark_margin", 16)
         if wm_margin != 16:
             args.extend(["--watermark-margin", str(wm_margin)])
+    # The friendly flags above keep copied commands readable.  Canonical
+    # FIELD=JSON overrides then cover every non-default processing control,
+    # including per-item fields that have no dedicated legacy flag.
+    from backend.config_schema import backend_config_cli_args, gui_to_backend_config
+    args.extend(backend_config_cli_args(gui_to_backend_config(cfg)))
     return " ".join(
         _quote_cli_arg(
             arg,

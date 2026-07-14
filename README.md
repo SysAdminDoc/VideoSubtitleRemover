@@ -386,6 +386,8 @@ clip you shot and grant as CC0.
 | `--pattern` | Glob pattern for batch (e.g. `inputs/*.mp4`) | - |
 | `--out-dir` | Output directory for batch mode | - |
 | `--config` | JSON config overlay | - |
+| `--config-schema-version N` | Require the canonical processing-config schema version | - |
+| `--set FIELD=JSON` | Override any canonical processing field; repeatable | - |
 | `--preset NAME` | Apply a built-in or user preset by name | - |
 | `--list-presets` | List every preset and exit | - |
 | `--checkpoint-dir` | Directory for done markers and pause/resume checkpoint frames | `%APPDATA%` app cache |
@@ -454,6 +456,11 @@ rectangles, or `subtitle_region_spans` for frame-time-specific masks:
 `end: 0.0` means the region stays active through the end of the processed
 range. With `sttn_skip_detection` enabled, inactive timed ranges produce an
 empty mask instead of reusing a previous manual mask.
+
+Queue-card **Copy CLI command** output includes a schema version and repeatable
+`--set FIELD=JSON` values for every non-default per-item processing control.
+This keeps fields without a dedicated legacy flag reproducible too. Use
+`--validate-config` to inspect the complete resolved canonical config.
 
 ## Configuration
 

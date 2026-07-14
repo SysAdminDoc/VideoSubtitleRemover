@@ -17,6 +17,8 @@ import subprocess
 from pathlib import Path
 from typing import Any, List, Optional
 
+from backend.config_schema import CONFIG_SCHEMA_VERSION
+
 
 # Error classes/markers that are worth an automatic retry (transient hardware
 # or subprocess hiccups) versus permanent failures that a retry cannot fix.
@@ -633,57 +635,30 @@ def _format_quality_preflight(value: Any) -> str:
 
 _sidecar_logger = logging.getLogger(__name__ + ".sidecar")
 
-SIDECAR_SCHEMA = "vsr.output_sidecar.v1"
-
-
-_SIDECAR_HASH_SIZE_LIMIT = 512 * 1024 * 1024
+SIDECAR_SCHEMA = "vsr.output_sidecar.v2"
 
 
 def _sha256_file(path: Path) -> str:
+    """Stream a complete source fingerprint with bounded memory.
+
+    GUI processing invokes sidecar generation on its existing worker thread,
+    so large inputs no longer lose provenance and Tk remains responsive.
+    """
+    h = hashlib.sha256()
     try:
-        size = path.stat().st_size
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(4 * 1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
     except OSError:
         return ""
-    if size > _SIDECAR_HASH_SIZE_LIMIT:
-        return ""
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _config_snapshot(config: Any) -> dict:
     """Serialize processing config to a reproducibility-safe dict."""
-    fields = (
-        "mode", "device", "sttn_skip_detection", "sttn_neighbor_stride",
-        "sttn_reference_length", "sttn_max_load_num", "lama_super_fast",
-        "subtitle_area", "subtitle_areas", "subtitle_region_spans",
-        "manual_mask_corrections",
-        "detection_threshold", "detection_lang", "detection_frame_skip",
-        "detection_vertical", "whisper_fallback", "mask_dilate_px",
-        "mask_feather_px", "tbe_enable", "tbe_min_coverage",
-        "tbe_use_median", "tbe_flow_warp", "tbe_scene_cut_split",
-        "kalman_tracking", "phash_skip_enable", "phash_skip_distance",
-        "colour_tune_enable", "time_start", "time_end",
-        "preserve_audio", "output_quality", "output_codec",
-        "use_hw_encode", "decode_hw_accel", "output_frames",
-        "adaptive_batch", "quality_report", "nle_sidecar",
-        "keyframe_detection", "deinterlace", "deinterlace_auto",
-        "preserve_color_metadata", "loudnorm_target",
-        "multi_audio_passthrough", "prefetch_decode",
-    )
-    snapshot = {}
-    for name in fields:
-        value = _config_value(config, name, None)
-        if value is None:
-            continue
-        if hasattr(value, "value"):
-            value = value.value
-        if isinstance(value, (list, tuple)):
-            value = [list(v) if isinstance(v, tuple) else v for v in value]
-        snapshot[name] = value
-    return snapshot
+    from backend.config_schema import serialize_backend_config
+
+    return serialize_backend_config(config)
 
 
 def _detection_engine_status() -> str:
@@ -736,6 +711,7 @@ def build_output_sidecar(
 
     payload = {
         "schema": SIDECAR_SCHEMA,
+        "configSchemaVersion": CONFIG_SCHEMA_VERSION,
         "generatedAt": now.isoformat(timespec="seconds"),
         "appVersion": app_version,
         "source": {

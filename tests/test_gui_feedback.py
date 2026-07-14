@@ -186,6 +186,29 @@ class QueueCliCommandTests(unittest.TestCase):
         self.assertIn(r'--watermark "C:\media\logo & proof.png"', command)
         self.assertIn("--watermark-position top-left", command)
 
+    def test_cli_command_carries_schema_only_per_item_controls(self):
+        cfg = ProcessingConfig(
+            manual_mask_corrections=[
+                {"polygons": [[0, 0, 8, 0, 8, 8]], "start": 1.0, "end": 2.0},
+            ],
+            confidence_dilation_scale=2.25,
+            gpu_oom_recovery=False,
+        )
+        item = QueueItem(
+            id="complete-config",
+            file_path="source.mp4",
+            output_path="clean.mp4",
+            status=ProcessingStatus.IDLE,
+            config=cfg,
+        )
+
+        command = _build_cli_command(item)
+
+        self.assertIn("--config-schema-version 1", command)
+        self.assertIn("manual_mask_corrections=", command)
+        self.assertIn("confidence_dilation_scale=2.25", command)
+        self.assertIn("gpu_oom_recovery=false", command)
+
 
 if __name__ == "__main__":
     unittest.main()

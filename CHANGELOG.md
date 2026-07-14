@@ -52,6 +52,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Reproducibility artifacts no longer omit active processing controls.** A
+  versioned canonical backend field registry now drives GUI-to-backend mapping,
+  settings migration, complete sidecar snapshots, copied CLI overrides, and
+  `--validate-config` output. Per-item corrections and advanced controls round
+  trip losslessly, while source SHA-256 fingerprints stream without the former
+  512 MiB cutoff on the GUI processing worker.
 - **Processed outputs preserve their compatible container payload.** A single
   ffprobe manifest now drives remuxing for audio, soft subtitles, chapters,
   attachments, MP4 timecode, global/stream metadata, tags, and dispositions.

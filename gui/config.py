@@ -17,6 +17,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from backend.i18n import tr
+from backend.config_schema import (
+    CONFIG_SCHEMA_VERSION,
+    GUI_SETTINGS_FORMAT,
+    gui_config_kwargs,
+    migrate_gui_settings,
+    serialize_dataclass_config,
+)
 from gui.theme import Theme
 
 logger = logging.getLogger(__name__)
@@ -77,7 +84,8 @@ _queue_state_io_lock = threading.RLock()
 # users saw before the bump -- no field-rename migration needed.
 # Format 2 -> 3: added subtitle_region_spans for time-ranged manual masks.
 # Format 3 -> 4: added rife_fast_stride for opt-in keyframe interpolation.
-VSR_SETTINGS_FORMAT = 4
+# Format 4 -> 5: payloads are tied to the canonical backend config schema.
+VSR_SETTINGS_FORMAT = GUI_SETTINGS_FORMAT
 
 # -- Enums ------------------------------------------------------------------
 
@@ -329,6 +337,12 @@ class ProcessingConfig:
     swinir_restore: bool = False
     seedvr2_restore: bool = False
     preserve_color_metadata: bool = True
+    watermark_image: str = ""
+    watermark_position: str = "bottom-right"
+    watermark_opacity: float = 1.0
+    watermark_margin: int = 16
+    restyle_subtitle: str = ""
+    restyle_style: str = ""
     nle_sidecar: str = "off"
 
     time_start: float = 0.0
@@ -366,6 +380,7 @@ class ProcessingConfig:
     export_srt: bool = False
     export_mask_video: bool = False
     adaptive_batch: bool = True
+    gpu_oom_recovery: bool = True
     temporal_mask_union: bool = False
     temporal_mask_window: int = 3
     batch_max_retries: int = 0
@@ -419,37 +434,9 @@ class ProcessingConfig:
     work_directory: str = ""
 
     def to_dict(self) -> dict:
-        from dataclasses import fields as _dc_fields
-        payload: dict = {}
-        for field_def in _dc_fields(self):
-            value = getattr(self, field_def.name)
-            if isinstance(value, InpaintMode):
-                payload[field_def.name] = value.value
-            elif field_def.name == "subtitle_area":
-                payload[field_def.name] = list(value) if value else None
-            elif field_def.name == "subtitle_areas":
-                payload[field_def.name] = (
-                    [list(r) for r in value] if value else None
-                )
-            elif field_def.name == "subtitle_region_spans":
-                spans = _coerce_region_span_list(value) or []
-                payload[field_def.name] = (
-                    [
-                        {
-                            "rect": list(span["rect"]),
-                            "start": float(span.get("start", 0.0)),
-                            "end": float(span.get("end", 0.0)),
-                        }
-                        for span in spans
-                    ] or None
-                )
-            elif field_def.name == "manual_mask_corrections":
-                from backend.config import _coerce_mask_correction_list
-                corrections = _coerce_mask_correction_list(value) or []
-                payload[field_def.name] = corrections or None
-            else:
-                payload[field_def.name] = value
+        payload = serialize_dataclass_config(self)
         payload["vsr_settings_format"] = VSR_SETTINGS_FORMAT
+        payload["config_schema_version"] = CONFIG_SCHEMA_VERSION
         return payload
 
     def normalized(self) -> "ProcessingConfig":
@@ -493,6 +480,21 @@ class ProcessingConfig:
         self.seedvr2_restore = _coerce_bool(self.seedvr2_restore, False)
         self.preserve_color_metadata = _coerce_bool(
             self.preserve_color_metadata, True)
+        self.watermark_image = _coerce_text(self.watermark_image, "", 1024)
+        wm_pos = _coerce_text(
+            self.watermark_position, "bottom-right", 32).lower()
+        if wm_pos not in {
+            "top-left", "top-right", "bottom-left", "bottom-right", "center",
+        }:
+            wm_pos = "bottom-right"
+        self.watermark_position = wm_pos
+        self.watermark_opacity = _coerce_float(
+            self.watermark_opacity, 1.0, 0.0, 1.0)
+        self.watermark_margin = _coerce_int(
+            self.watermark_margin, 16, 0, 500)
+        self.restyle_subtitle = _coerce_text(
+            self.restyle_subtitle, "", 1024)
+        self.restyle_style = _coerce_text(self.restyle_style, "", 512)
         sidecar = _coerce_text(self.nle_sidecar, "off", 16).lower()
         if sidecar not in {"off", "edl", "fcpxml"}:
             sidecar = "off"
@@ -526,6 +528,7 @@ class ProcessingConfig:
         self.export_srt = _coerce_bool(self.export_srt, False)
         self.export_mask_video = _coerce_bool(self.export_mask_video, False)
         self.adaptive_batch = _coerce_bool(self.adaptive_batch, True)
+        self.gpu_oom_recovery = _coerce_bool(self.gpu_oom_recovery, True)
         self.temporal_mask_union = _coerce_bool(self.temporal_mask_union, False)
         self.temporal_mask_window = _coerce_int(
             self.temporal_mask_window, 3, 1, 15)
@@ -621,31 +624,21 @@ class ProcessingConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProcessingConfig":
-        if not isinstance(data, dict):
-            data = {}
-        from dataclasses import fields as _dc_fields
-        kwargs: dict = {}
-        for field_def in _dc_fields(cls):
-            name = field_def.name
-            if name not in data:
-                continue
-            raw = data.get(name)
-            if name == "mode":
-                kwargs[name] = raw
-            elif name == "subtitle_area":
-                kwargs[name] = _coerce_rect(
-                    raw, label=name, warn_invalid=raw is not None)
-            elif name == "subtitle_areas":
-                kwargs[name] = _coerce_rect_list(
-                    raw, label=name, warn_invalid=raw is not None)
-            elif name == "subtitle_region_spans":
-                kwargs[name] = _coerce_region_span_list(
-                    raw, label=name, warn_invalid=raw is not None)
-            elif name == "manual_mask_corrections":
-                from backend.config import _coerce_mask_correction_list
-                kwargs[name] = _coerce_mask_correction_list(raw)
-            else:
-                kwargs[name] = raw
+        kwargs = gui_config_kwargs(cls, data)
+        # Retain actionable load diagnostics while the registry owns field
+        # selection and normalization owns the final runtime shape.
+        if "subtitle_area" in kwargs:
+            raw = kwargs["subtitle_area"]
+            kwargs["subtitle_area"] = _coerce_rect(
+                raw, label="subtitle_area", warn_invalid=raw is not None)
+        if "subtitle_areas" in kwargs:
+            raw = kwargs["subtitle_areas"]
+            kwargs["subtitle_areas"] = _coerce_rect_list(
+                raw, label="subtitle_areas", warn_invalid=raw is not None)
+        if "subtitle_region_spans" in kwargs:
+            raw = kwargs["subtitle_region_spans"]
+            kwargs["subtitle_region_spans"] = _coerce_region_span_list(
+                raw, label="subtitle_region_spans", warn_invalid=raw is not None)
         return cls(**kwargs).normalized()
 
 
@@ -747,43 +740,15 @@ def _write_json_atomic(path: Path, payload: dict):
 
 
 def _migrate_settings(data: dict) -> dict:
-    if not isinstance(data, dict):
-        return {}
-    version = data.get("vsr_settings_format")
-    try:
-        version = int(version) if version is not None else 0
-    except (TypeError, ValueError):
-        version = 0
-
-    if version > VSR_SETTINGS_FORMAT:
+    migrated = migrate_gui_settings(data)
+    version = migrated.get("vsr_settings_format")
+    if isinstance(data, dict) and isinstance(version, int) and version > VSR_SETTINGS_FORMAT:
         logger.info(
             f"settings.json reports vsr_settings_format={version} "
             f"(this build understands up to {VSR_SETTINGS_FORMAT}); "
             f"unknown keys will be ignored."
         )
-        return data
-
-    if version < 1:
-        data = dict(data)
-        data["vsr_settings_format"] = 1
-        version = 1
-
-    if version < 2:
-        data = dict(data)
-        data["vsr_settings_format"] = 2
-        version = 2
-
-    if version < 3:
-        data = dict(data)
-        data["vsr_settings_format"] = 3
-        version = 3
-
-    if version < 4:
-        data = dict(data)
-        data["vsr_settings_format"] = 4
-        version = 4
-
-    return data
+    return migrated
 
 
 _DEFAULT_SETTINGS_FILE = SETTINGS_FILE
