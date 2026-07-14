@@ -15,6 +15,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _onnxruntime_facts() -> dict:
+    """Return the resolved CPU runtime identity for smoke evidence."""
+    try:
+        import onnxruntime as ort  # type: ignore
+    except Exception as exc:
+        return {
+            "schema": "vsr.local_smoke_runtime.v1",
+            "available": False,
+            "version": "",
+            "providers": [],
+            "error": str(exc),
+        }
+    try:
+        providers = [str(item) for item in ort.get_available_providers()]
+    except Exception as exc:
+        providers = []
+        error = str(exc)
+    else:
+        error = ""
+    return {
+        "schema": "vsr.local_smoke_runtime.v1",
+        "available": True,
+        "version": str(getattr(ort, "__version__", "unknown")),
+        "providers": providers,
+        "error": error,
+    }
+
+
 def _run(cmd: list[str], *, cwd: Path) -> None:
     print("[run] " + " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=str(cwd), check=True)
@@ -56,6 +84,10 @@ def _write_smoke_config(path: Path) -> None:
 
 
 def run_smoke(*, skip_self_test: bool, work_dir: Path | None, keep_artifacts: bool) -> Path:
+    print(
+        "[runtime] " + json.dumps(_onnxruntime_facts(), sort_keys=True),
+        flush=True,
+    )
     if not skip_self_test:
         _run([sys.executable, "-m", "backend.processor", "--self-test"], cwd=ROOT)
 

@@ -165,9 +165,10 @@ docker build -t vsr-pro-smoke .
 docker run --rm vsr-pro-smoke
 ```
 
-The container path installs only the minimal CPU smoke dependencies, runs
-`python -m backend.processor --self-test`, then processes a generated tiny
-image through the CLI with a fixed mask.
+The container path installs only the minimal CPU smoke dependencies (including
+the canonical `onnxruntime>=1.25.0` security floor), records the resolved ONNX
+Runtime version/providers, runs `python -m backend.processor --self-test`, then
+processes a generated tiny image through the CLI with a fixed mask.
 
 ## Usage
 

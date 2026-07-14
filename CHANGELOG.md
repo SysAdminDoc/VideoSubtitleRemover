@@ -34,6 +34,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Canonical container ONNX Runtime floor.** The CPU smoke container now
+  requires `onnxruntime>=1.25.0`, matching source and strict-release parser
+  hardening policy, and its smoke output records the resolved runtime version
+  and execution providers for reproducible evidence.
 - **Resolvable DirectML setup policy.** AMD/Intel setup now preflights and pins
   the latest reviewed PyPI wheel (`onnxruntime-directml==1.24.4`) before making
   any environment changes, with CPU and Windows ML guidance when no compatible
