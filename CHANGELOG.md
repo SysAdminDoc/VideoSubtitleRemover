@@ -29,6 +29,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Unstable box identities in the Kalman tracker.** Detection-to-track
+  matching used per-track first-best-available greedy assignment, so which
+  track claimed an overlapping detection depended on track order and could
+  churn identities (and destabilize chyron vs subtitle classification). It now
+  uses order-independent global-greedy assignment (highest-IoU pairs first).
 - **UI froze during support-bundle and model-cache operations.** Saving a
   support bundle and exporting/importing a model cache zipped potentially
   hundreds of MB synchronously on the Tk main loop, freezing the window with

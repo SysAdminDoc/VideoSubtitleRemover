@@ -56,6 +56,24 @@ class SubtitleTrackerTests(unittest.TestCase):
             self.assertEqual(tracker._tracks[0].hits, 2)
             self.assertEqual(tracker.categorize(min_chyron_hits=2), ["chyron"])
 
+    def test_assignment_is_best_match_not_track_order(self):
+        # Two tracks; a detection overlaps both but matches the second track
+        # best. Global-greedy assignment must give it to the better-matching
+        # track and keep both identities stable, not spawn a third track.
+        with _fresh_tracking_module() as tracking:
+            tracker = tracking.SubtitleTracker(iou_threshold=0.2, max_age=2)
+            tracker.update([(0, 0, 20, 20), (100, 0, 120, 20)])
+            self.assertEqual(len(tracker._tracks), 2)
+            hits_before = [t.hits for t in tracker._tracks]
+            # Move both boxes slightly; both should re-match their own track.
+            tracker.update([(2, 0, 22, 20), (101, 0, 121, 20)])
+            self.assertEqual(len(tracker._tracks), 2)
+            self.assertTrue(all(t.age == 0 for t in tracker._tracks))
+            self.assertEqual(
+                [t.hits for t in tracker._tracks],
+                [h + 1 for h in hits_before],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

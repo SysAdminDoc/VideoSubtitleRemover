@@ -138,19 +138,28 @@ class SubtitleTracker:
         predictions = [t.predict() for t in self._tracks]
         used_det = set()
         used_trk = set()
+        # Global greedy assignment: consider every (track, detection) pair,
+        # then match highest-IoU pairs first. This makes assignment independent
+        # of track order, so a detection is claimed by its best track rather
+        # than the first track that happens to clear the threshold -- avoiding
+        # identity churn (and unstable chyron/subtitle classification) when two
+        # predicted boxes overlap the same region.
+        pairs = []
         for ti, pred in enumerate(predictions):
-            best_di, best_iou = -1, 0.0
             for di, det in enumerate(detections):
-                if di in used_det:
-                    continue
                 score = _iou(pred, det)
-                if score > best_iou:
-                    best_iou, best_di = score, di
-            if best_di >= 0 and best_iou >= self.iou_threshold:
-                self._tracks[ti].update(detections[best_di])
-                used_det.add(best_di)
-                used_trk.add(ti)
-            else:
+                if score >= self.iou_threshold:
+                    pairs.append((score, ti, di))
+        pairs.sort(reverse=True)
+        for score, ti, di in pairs:
+            if ti in used_trk or di in used_det:
+                continue
+            self._tracks[ti].update(detections[di])
+            used_trk.add(ti)
+            used_det.add(di)
+
+        for ti in range(len(self._tracks)):
+            if ti not in used_trk:
                 self._tracks[ti].age += 1
 
         for di, det in enumerate(detections):
