@@ -4,6 +4,26 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **FFV1 intermediate writer stderr deadlock.** `_LosslessIntermediateWriter`
+  now drains the ffmpeg `stderr` pipe on a background thread, so a noisy ffmpeg
+  (enough warnings to fill the ~64 KB pipe buffer) can no longer deadlock the
+  frame writer that is blocked writing to stdin.
+- **Inline region editor discarded existing regions.** Drawing a box in the
+  preview inline editor now appends to the configured static subtitle regions
+  instead of replacing them all and clearing timed spans.
+- **ETA probe race.** `_probe_batch_eta` snapshots the queue under `queue_lock`
+  before iterating, preventing a "list changed size during iteration" crash
+  when the user edits the queue mid-probe.
+- **Onboarding could be permanently skipped.** The persisted `onboarding_seen`
+  flag is now set only after the welcome dialog actually builds, with a
+  separate in-session guard, so a failure while showing it no longer hides
+  onboarding forever.
+- **Toast reference leak.** The class-level active-toast list is pruned of
+  destroyed windows on each new toast and exposes a `reset()` for teardown, so
+  it cannot accumulate dead references over a long session.
+
 ### Security
 
 - **ONNX Runtime security floor raised to 1.25.0.** `onnxruntime`,

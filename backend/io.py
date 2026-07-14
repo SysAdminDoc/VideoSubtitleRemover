@@ -1190,7 +1190,32 @@ class _LosslessIntermediateWriter:
         self._fallback: Optional[cv2.VideoWriter] = None
         self._opened = False
         self._lossless = False
+        self._stderr_thread: Optional[threading.Thread] = None
+        self._stderr_tail_buf = bytearray()
+        self._stderr_lock = threading.Lock()
         self._open()
+
+    def _drain_stderr(self) -> None:
+        """Continuously drain ffmpeg stderr so a full pipe buffer can never
+        deadlock the frame writer blocked on stdin. Keeps only the tail for
+        diagnostics."""
+        proc = self._proc
+        if proc is None or proc.stderr is None:
+            return
+        try:
+            for chunk in iter(lambda: proc.stderr.read(4096), b""):
+                if not chunk:
+                    break
+                with self._stderr_lock:
+                    self._stderr_tail_buf.extend(chunk)
+                    if len(self._stderr_tail_buf) > 8192:
+                        del self._stderr_tail_buf[:-8192]
+        except Exception:
+            pass
+
+    def _stderr_tail(self) -> str:
+        with self._stderr_lock:
+            return self._stderr_tail_buf.decode("utf-8", errors="replace")[-400:]
 
     def _open(self):
         if shutil.which("ffmpeg") is None:
@@ -1213,6 +1238,10 @@ class _LosslessIntermediateWriter:
                 cmd, stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
             )
+            self._stderr_thread = threading.Thread(
+                target=self._drain_stderr, name="vsr-ffv1-stderr", daemon=True,
+            )
+            self._stderr_thread.start()
             self._opened = True
             self._lossless = True
             logger.info(
@@ -1273,13 +1302,10 @@ class _LosslessIntermediateWriter:
             try:
                 self._proc.stdin.write(frame.tobytes())
             except (BrokenPipeError, OSError) as exc:
-                stderr_excerpt = ""
-                if self._proc.stderr is not None:
-                    try:
-                        stderr_excerpt = self._proc.stderr.read().decode(
-                            "utf-8", errors="replace")[-400:]
-                    except Exception:
-                        pass
+                # stderr is drained by a background thread; read the buffered
+                # tail instead of the pipe (reading it here would race the
+                # drainer and could block).
+                stderr_excerpt = self._stderr_tail()
                 logger.error(
                     f"FFV1 ffmpeg stdin broke after writing frames: {exc}"
                     + (f"\nffmpeg stderr: {stderr_excerpt}" if stderr_excerpt else "")
@@ -1304,6 +1330,10 @@ class _LosslessIntermediateWriter:
                     self._proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     pass
+            stderr_thread = getattr(self, "_stderr_thread", None)
+            if stderr_thread is not None:
+                stderr_thread.join(timeout=5.0)
+                self._stderr_thread = None
             if self._proc.stderr is not None:
                 try:
                     self._proc.stderr.close()
@@ -1326,6 +1356,10 @@ class _LosslessIntermediateWriter:
             except Exception:
                 pass
             _terminate_subprocess(self._proc, timeout=timeout)
+            stderr_thread = getattr(self, "_stderr_thread", None)
+            if stderr_thread is not None:
+                stderr_thread.join(timeout=2.0)
+                self._stderr_thread = None
             if self._proc.stderr is not None:
                 try:
                     self._proc.stderr.close()

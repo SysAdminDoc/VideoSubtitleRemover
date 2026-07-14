@@ -964,14 +964,28 @@ class PreviewControllerMixin:
             self._render_preview_region_editor()
             return "break"
 
-        self.config.subtitle_area = rect
-        self.config.subtitle_areas = [rect]
-        self.config.subtitle_region_spans = None
+        # Append to any previously configured static regions instead of
+        # replacing them, so a multi-region setup is not silently lost when the
+        # user draws another box in the inline editor. Timed spans are left
+        # untouched for the same reason.
+        existing = list(self.config.subtitle_areas or [])
+        if self.config.subtitle_area and self.config.subtitle_area not in existing:
+            existing.insert(0, tuple(self.config.subtitle_area))
+        new_rect = tuple(rect)
+        if new_rect not in existing:
+            existing.append(new_rect)
+        self.config.subtitle_areas = existing
+        self.config.subtitle_area = existing[0] if existing else rect
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         item = self._queue_item_by_id(state["item_id"])
         self._clear_preview_region_editor()
-        self._update_status("Saved subtitle region from the preview", "success")
+        count = len(existing)
+        msg = (
+            "Added subtitle region from the preview"
+            if count > 1 else "Saved subtitle region from the preview"
+        )
+        self._update_status(msg, "success")
         if item:
             self._show_preview(item, show_mask=True)
         return "break"

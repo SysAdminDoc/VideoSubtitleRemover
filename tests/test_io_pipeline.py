@@ -108,5 +108,29 @@ class LosslessIntermediateWriterTests(unittest.TestCase):
             self.assertIsNone(writer._proc)
 
 
+class LosslessWriterStderrDrainTests(unittest.TestCase):
+    def test_stderr_drain_prevents_deadlock_on_noisy_ffmpeg(self):
+        # A real ffmpeg run that emits many stderr warnings must not deadlock
+        # the stdin frame writer even when the stderr pipe would otherwise fill.
+        import shutil
+        import tempfile
+        from pathlib import Path
+        import numpy as np
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not installed")
+        from backend import io as real_io
+        tmp = Path(tempfile.mkdtemp())
+        out = tmp / "noisy.mkv"
+        writer = real_io._LosslessIntermediateWriter(str(out), 48, 48, 24.0)
+        self.assertTrue(writer.isOpened())
+        for i in range(120):
+            frame = (np.random.RandomState(i).randint(0, 255, (48, 48, 3))
+                     ).astype(np.uint8)
+            writer.write(frame)
+        writer.release()
+        self.assertIsNone(writer._proc)
+        self.assertGreater(out.stat().st_size, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

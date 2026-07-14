@@ -2850,13 +2850,18 @@ class VideoSubtitleRemoverApp(
         """Show a short 3-card welcome overlay on first launch."""
         if self.config.onboarding_seen:
             return
-        # Guard against showing twice in the same session
-        self.config.onboarding_seen = True
+        # In-session guard prevents a double-schedule, but the *persisted*
+        # onboarding_seen flag is only set once the dialog actually builds
+        # (in _show_onboarding) so a failure here does not permanently hide
+        # onboarding from the user.
+        if getattr(self, "_onboarding_scheduled", False):
+            return
+        self._onboarding_scheduled = True
         # Let the main window settle first
         try:
             self.root.after(420, self._show_onboarding)
         except tk.TclError:
-            pass
+            self._onboarding_scheduled = False
 
     def _show_onboarding(self):
         dialog = tk.Toplevel(self.root)
@@ -2974,6 +2979,9 @@ class VideoSubtitleRemoverApp(
             pass
         dialog.deiconify()
         dialog.grab_set()
+        # The dialog is now on screen; only now persist the "seen" flag so an
+        # earlier failure would have re-tried on the next launch.
+        self.config.onboarding_seen = True
 
     def _set_lang_display(self, code: str):
         """Sync the friendly-name label to the underlying lang code."""

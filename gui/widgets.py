@@ -1205,8 +1205,37 @@ class Toast:
         self._win = None
         self._fade_id = None
         self._build()
+        # Prune toasts whose window was destroyed without _close running (e.g.
+        # the root was torn down under them) so the class-level list cannot
+        # accumulate dead references across a long session or many test runs.
+        Toast._prune_active()
         Toast._active.append(self)
         self._schedule_close()
+
+    @classmethod
+    def _prune_active(cls) -> None:
+        alive = []
+        for toast in cls._active:
+            win = getattr(toast, "_win", None)
+            if win is None:
+                continue
+            try:
+                if not win.winfo_exists():
+                    continue
+            except Exception:
+                continue
+            alive.append(toast)
+        cls._active[:] = alive
+
+    @classmethod
+    def reset(cls) -> None:
+        """Close and forget every tracked toast (used by tests/teardown)."""
+        for toast in list(cls._active):
+            try:
+                toast._close()
+            except Exception:
+                pass
+        cls._active[:] = []
 
     @classmethod
     def show(cls, root, message: str, tone: str = "success"):

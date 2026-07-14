@@ -831,7 +831,12 @@ class ProcessingControllerMixin:
         first item still starts promptly on slow CPUs.
         """
         first_video = None
-        for item in self.queue:
+        # Snapshot the queue under the lock: iterating self.queue directly on
+        # the worker thread races the main thread adding/removing items and can
+        # raise "list changed size during iteration".
+        with self.queue_lock:
+            queue_snapshot = list(self.queue)
+        for item in queue_snapshot:
             if is_video_file(item.file_path) and item.status == ProcessingStatus.IDLE:
                 first_video = item
                 break
