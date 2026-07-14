@@ -39,6 +39,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Queue-card actions are keyboard reachable.** Focused queue items now open
+  the same complete action menu with the Menu key or Shift+F10, place it at a
+  deterministic card-relative position, expose the shortcut to assistive
+  metadata, and return focus to the card after dismissal or Escape.
 - **Canonical container ONNX Runtime floor.** The CPU smoke container now
   requires `onnxruntime>=1.25.0`, matching source and strict-release parser
   hardening policy, and its smoke output records the resolved runtime version

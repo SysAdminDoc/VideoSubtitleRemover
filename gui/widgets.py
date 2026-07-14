@@ -1853,12 +1853,30 @@ class QueueItemWidget(tk.Frame):
         self.bind("<FocusOut>", self._on_focus_out, add="+")
         self.bind("<Return>", self._on_card_activate, add="+")
         self.bind("<space>", self._on_card_activate, add="+")
+        self.bind(
+            "<KeyPress-Menu>",
+            lambda _event: self._on_context_menu(None),
+            add="+",
+        )
+        self.bind(
+            "<Shift-F10>",
+            lambda _event: self._on_context_menu(None),
+            add="+",
+        )
 
         self._sync_a11y()
         self.update_item(item)
 
-    def _on_context_menu(self, event):
-        """Show a themed right-click menu for this queue item."""
+    def _on_context_menu(self, event=None):
+        """Show the shared pointer/keyboard action menu for this item."""
+        self.focus_set()
+        if event is None:
+            self.update_idletasks()
+            popup_x = self.winfo_rootx() + min(24, max(1, self.winfo_width() // 2))
+            popup_y = self.winfo_rooty() + max(1, self.winfo_height() - 8)
+        else:
+            popup_x = int(event.x_root)
+            popup_y = int(event.y_root)
         menu = make_themed_menu(self)
         is_active = self.item.status in (
             ProcessingStatus.LOADING, ProcessingStatus.DETECTING,
@@ -1940,12 +1958,25 @@ class QueueItemWidget(tk.Frame):
                          state="disabled" if is_active else "normal")
 
         try:
-            menu.tk_popup(event.x_root, event.y_root)
+            menu.tk_popup(popup_x, popup_y)
         finally:
             menu.grab_release()
             # Menus are created per right-click; destroy after dismissal so they
             # do not accumulate as child widgets over a long session.
             menu.destroy()
+            try:
+                self.after_idle(self._restore_context_focus)
+            except tk.TclError:
+                pass
+        return "break"
+
+    def _restore_context_focus(self):
+        """Return keyboard focus to the card after menu dismissal/Escape."""
+        try:
+            if int(self.winfo_exists()):
+                self.focus_set()
+        except tk.TclError:
+            pass
 
     def _reveal_output(self):
         """Open the folder containing the output in Explorer."""
@@ -2099,7 +2130,10 @@ class QueueItemWidget(tk.Frame):
                 tr("focused") if self.focused else "",
             ),
             value=f"{pct}% complete",
-            description=self.item.message or tr("Ready to process"),
+            description=(
+                f"{self.item.message or tr('Ready to process')}. "
+                f"{tr('Press Shift+F10 or the Menu key for item actions.')}"
+            ),
         )
 
     def accessibility_snapshot(self) -> dict:

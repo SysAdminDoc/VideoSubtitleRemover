@@ -179,7 +179,7 @@ processes a generated tiny image through the CLI with a fixed mask.
 4. **Set language** if subtitles are non-English
 5. **Optionally set region** — select a queued item and drag on the preview for a fixed subtitle band, or use the settings card's Set Region action for multi-region and timed ranges
 6. **Start Processing** and monitor progress
-7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame
+7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame. Right-click the queue card, or press **Menu / Shift+F10** while it is focused, for all per-item actions.
 
 ### Algorithm Comparison
 

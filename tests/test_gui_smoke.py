@@ -143,6 +143,76 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_queue_card_context_actions_are_keyboard_reachable(self):
+        app = self._make_app()
+        try:
+            from gui import widgets as widget_module
+
+            removed = []
+            overridden = []
+            item = self._g.QueueItem(
+                id="keyboard-row",
+                file_path=str(Path(self._tmpdir.name) / "clip.mp4"),
+                output_path=str(Path(self._tmpdir.name) / "clip_no_sub.mp4"),
+                config=self._g.ProcessingConfig(),
+            )
+            row = widget_module.QueueItemWidget(
+                app.root,
+                item,
+                on_remove=removed.append,
+                on_override=overridden.append,
+            )
+            row.pack()
+            app.root.update_idletasks()
+
+            class FakeMenu:
+                def __init__(self):
+                    self.commands = []
+                    self.popup = None
+                    self.released = False
+                    self.destroyed = False
+
+                def add_command(self, **kwargs):
+                    self.commands.append(kwargs)
+
+                def add_separator(self):
+                    return None
+
+                def tk_popup(self, x, y):
+                    self.popup = (x, y)
+
+                def grab_release(self):
+                    self.released = True
+
+                def destroy(self):
+                    self.destroyed = True
+
+            menu = FakeMenu()
+            with mock.patch.object(
+                widget_module, "make_themed_menu", return_value=menu,
+            ):
+                result = row._on_context_menu(None)
+                app.root.update_idletasks()
+
+            labels = {entry["label"]: entry for entry in menu.commands}
+            self.assertEqual(result, "break")
+            self.assertTrue(row.bind("<KeyPress-Menu>"))
+            self.assertTrue(row.bind("<Shift-F10>"))
+            self.assertIsNotNone(menu.popup)
+            self.assertTrue(menu.released)
+            self.assertTrue(menu.destroyed)
+            self.assertEqual(labels["Open result"]["state"], "disabled")
+            self.assertEqual(labels["Remove from queue"]["state"], "normal")
+            labels["Override settings for this file..."]["command"]()
+            labels["Remove from queue"]["command"]()
+            self.assertEqual(overridden, [item.id])
+            self.assertEqual(removed, [item.id])
+            self.assertIn(
+                "Shift+F10", row.accessibility_snapshot()["description"])
+            row.destroy()
+        finally:
+            self._destroy_app(app)
+
     def test_custom_widgets_expose_accessibility_snapshots(self):
         app = self._make_app()
         try:
