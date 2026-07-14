@@ -444,9 +444,12 @@ class PreviewControllerMixin:
             fb_r = _cv2.resize(fb, (dw, dh), interpolation=_cv2.INTER_AREA)
             composite = fa_r.copy()
             composite[:, seam:] = fb_r[:, seam:]
-            # Draw a 2-pixel green seam line for the wipe boundary.
+            # Draw a 2-pixel accent seam line for the wipe boundary. Derive it
+            # from the theme focus token so it brightens in high-contrast mode
+            # instead of a fixed green.
             if 0 < seam < dw:
-                _cv2.line(composite, (seam, 0), (seam, dh - 1), (0, 255, 0), 2)
+                _r, _g, _b = self._hex_to_rgb(Theme.BORDER_FOCUS)
+                _cv2.line(composite, (seam, 0), (seam, dh - 1), (_b, _g, _r), 2)
             rgb = _cv2.cvtColor(composite, _cv2.COLOR_BGR2RGB)
             pil = Image.fromarray(rgb)
             canvas._photo = ImageTk.PhotoImage(pil)
@@ -1129,8 +1132,11 @@ class PreviewControllerMixin:
             else:
                 boxes = det.detect(frame_copy, threshold)
             vis = frame_copy.copy()
+            # Detection boxes use the theme's danger accent (BGR for cv2) so
+            # they stay visible in the high-contrast palette.
+            _dr, _dg, _db = self._hex_to_rgb(Theme.DANGER)
             for (bx1, by1, bx2, by2) in boxes:
-                _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (0, 0, 255), 2)
+                _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (_db, _dg, _dr), 2)
             img = to_pil(vis)
             img.thumbnail((max_w, max_h), Image.LANCZOS)
             engine = det._engine_name

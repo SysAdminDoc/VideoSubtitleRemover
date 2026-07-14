@@ -1587,7 +1587,7 @@ class DragDropFrame(tk.Frame):
         support_text = tk.Label(inner,
                                 text=tr("Videos and images supported"),
                                 font=f(Theme.F_META, "bold"), bg=self.normal_bg,
-                                fg=Theme.TEXT_DISABLED)
+                                fg=Theme.TEXT_MUTED)
         support_text.pack(pady=(12, 0))
         self._surface_widgets.extend([glyph, main_text, sub_text, actions, support_text])
 
@@ -1932,6 +1932,9 @@ class QueueItemWidget(tk.Frame):
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
+            # Menus are created per right-click; destroy after dismissal so they
+            # do not accumulate as child widgets over a long session.
+            menu.destroy()
 
     def _reveal_output(self):
         """Open the folder containing the output in Explorer."""
@@ -2202,7 +2205,11 @@ class TextWidgetHandler(logging.Handler):
         self.on_count_change = on_count_change
         self.warn_count = 0
         self.error_count = 0
-        self._pending: "queue.Queue[Tuple[str, int]]" = queue.Queue()
+        # Bound the backlog so a tight backend error loop cannot grow the queue
+        # without limit while the UI drains only ~2000 records/sec; the on-screen
+        # text is already trimmed to 2000 lines, so an older-than-that backlog
+        # would never be shown anyway.
+        self._pending: "queue.Queue[Tuple[str, int]]" = queue.Queue(maxsize=5000)
         try:
             self.text_widget.after(100, self._drain_pending)
         except tk.TclError:
@@ -2210,7 +2217,16 @@ class TextWidgetHandler(logging.Handler):
 
     def emit(self, record):
         msg = self.format(record) + '\n'
-        self._pending.put((msg, record.levelno))
+        try:
+            self._pending.put_nowait((msg, record.levelno))
+        except queue.Full:
+            # Drop the oldest queued record to make room, keeping the log live
+            # rather than blocking the emitting (often background) thread.
+            try:
+                self._pending.get_nowait()
+                self._pending.put_nowait((msg, record.levelno))
+            except (queue.Empty, queue.Full):
+                pass
 
     def _drain_pending(self):
         try:

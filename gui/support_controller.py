@@ -318,6 +318,7 @@ class SupportControllerMixin:
             )
         finally:
             menu.grab_release()
+            menu.destroy()
 
     @staticmethod
     def _backend_status_tone_color(tone: str) -> str:

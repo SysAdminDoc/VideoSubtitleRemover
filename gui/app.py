@@ -3834,6 +3834,7 @@ class VideoSubtitleRemoverApp(
             menu.tk_popup(bx, by)
         finally:
             menu.grab_release()
+            menu.destroy()
 
     def _sort_queue(self, strategy: str):
         """Reorder queue items by the chosen strategy and re-render."""

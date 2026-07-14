@@ -20,6 +20,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **High-contrast theme leaks in preview overlays.** The A/B compare seam line
+  and detection-box overlays were drawn with fixed green/red; they now derive
+  from the theme focus/danger tokens so they brighten correctly in the
+  high-contrast palette. The empty drop-zone "Videos and images supported"
+  hint used the disabled-text token (too low contrast for live text) and now
+  uses the muted token.
+- **Context-menu widget leak.** Right-click menus (queue rows, queue sort,
+  support tools) were re-created on every open and never destroyed; they are
+  now destroyed after dismissal so they cannot accumulate over a long session.
+- **Log panel backlog was unbounded.** The activity-log handler queue is now
+  capped and drops the oldest record under a log flood instead of growing
+  without limit and lagging the UI behind reality.
 - **Cross-thread Tk call on resume warning.** The batch worker surfaced a
   resume-checkpoint warning by calling the status/toast update directly from
   the processing thread; it is now marshalled to the Tk main loop like every

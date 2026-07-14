@@ -658,11 +658,17 @@ class GuiSmokeTests(unittest.TestCase):
                 )
             app.root.update()
 
+            # Detection boxes are drawn in the theme danger accent (BGR for
+            # cv2) so they track the active palette, not a fixed red.
+            from gui.theme import Theme
+            _dr, _dg, _db = (int(Theme.DANGER.lstrip("#")[i:i + 2], 16)
+                             for i in (0, 2, 4))
+            danger_bgr = (_db, _dg, _dr)
             self.assertEqual(
                 calls,
                 [
-                    ((80, 120), (880, 400), (0, 0, 255), 2),
-                    ((120, 420), (840, 500), (0, 0, 255), 2),
+                    ((80, 120), (880, 400), danger_bgr, 2),
+                    ((120, 420), (840, 500), danger_bgr, 2),
                 ],
             )
             self.assertEqual(
