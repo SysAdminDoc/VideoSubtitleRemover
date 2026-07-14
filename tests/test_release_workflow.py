@@ -181,6 +181,101 @@ class ReleaseVerificationTests(unittest.TestCase):
         )
         self.assertEqual(hooks, ("assets/runtime_hook_mp.py",))
 
+    def test_parse_excluded_modules_records_lean_release_profile(self):
+        excluded = release_verification.parse_excluded_modules(
+            "--exclude-module torch --exclude-module=paddleocr "
+            "--exclude-module 'easyocr' --exclude-module torch"
+        )
+        self.assertEqual(excluded, ("easyocr", "paddleocr", "torch"))
+
+    def test_artifact_sbom_excludes_unbundled_environment_packages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dist = root / "dist"
+            internal = dist / "_internal"
+            internal.mkdir(parents=True)
+            (dist / "VideoSubtitleRemoverPro.exe").write_bytes(b"MZapp")
+            (internal / "native.dll").write_bytes(b"native-payload")
+            analysis = root / "Analysis-00.toc"
+            analysis.write_text(
+                repr(([
+                    (
+                        "bundled_pkg.core",
+                        str(root / "site-packages" / "bundled_pkg" / "core.py"),
+                        "PYMODULE",
+                    ),
+                    (
+                        "native.dll",
+                        str(root / "site-packages" / "bundled_pkg" / "native.dll"),
+                        "BINARY",
+                    ),
+                ],)),
+                encoding="utf-8",
+            )
+            sbom = release_verification.build_cyclonedx_sbom(
+                [
+                    {"name": "bundled-pkg", "version": "1.2.3"},
+                    {"name": "excluded-pkg", "version": "9.9.9"},
+                    {"name": "PyInstaller", "version": "6.21.0"},
+                ],
+                dist_dir=dist,
+                analysis_path=analysis,
+            )
+
+        properties = {
+            item["name"]: item["value"]
+            for item in sbom["metadata"]["properties"]
+        }
+        self.assertEqual(properties["vsr:artifactDerived"], "true")
+        libraries = {
+            item["name"]: item["scope"]
+            for item in sbom["components"]
+            if item["type"] == "library"
+        }
+        self.assertEqual(libraries["bundled-pkg"], "required")
+        self.assertEqual(libraries["PyInstaller"], "excluded")
+        self.assertNotIn("excluded-pkg", libraries)
+        native = next(
+            item for item in sbom["components"]
+            if item["type"] == "file" and item["name"] == "native.dll"
+        )
+        self.assertEqual(native["hashes"][0]["alg"], "SHA-256")
+        self.assertEqual(len(native["hashes"][0]["content"]), 64)
+
+    def test_dependency_audit_uses_only_required_frozen_libraries(self):
+        sbom = {
+            "components": [
+                {
+                    "type": "library", "name": "runtime-lib",
+                    "version": "1.2.3", "scope": "required",
+                },
+                {
+                    "type": "library", "name": "build-tool",
+                    "version": "4.5.6", "scope": "excluded",
+                },
+                {"type": "file", "name": "native.dll", "scope": "required"},
+            ],
+        }
+        completed = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({
+                "dependencies": [
+                    {"name": "runtime-lib", "version": "1.2.3", "vulns": []},
+                ],
+            }),
+            stderr="",
+        )
+        with mock.patch(
+            "backend.release_verification.subprocess.run", return_value=completed,
+        ) as run:
+            result = release_verification._audit_frozen_dependencies(sbom)
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["requirements"], ["runtime-lib==1.2.3"])
+        command = run.call_args.args[0]
+        self.assertIn("--strict", command)
+        self.assertIn("--no-deps", command)
+
     def test_build_release_evidence_records_local_release_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             dist_dir = Path(tmp) / "VideoSubtitleRemoverPro"
@@ -306,6 +401,28 @@ class ReleaseVerificationTests(unittest.TestCase):
             self.assertIn("Video Subtitle Remover Pro", str(call.kwargs["cwd"]))
             self.assertEqual(call.kwargs["env"]["VSR_LAUNCHER_WAIT"], "1")
             self.assertEqual(call.kwargs["env"]["VSR_LAUNCHER_SMOKE"], "1")
+
+    def test_installer_artifact_and_extracted_payload_are_proven(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installer = root / "VideoSubtitleRemoverPro-Setup.exe"
+            installed = root / "installed" / "VideoSubtitleRemoverPro.exe"
+            installed.parent.mkdir()
+            installer.write_bytes(b"MZinstaller")
+            installed.write_bytes(b"MZinstalled")
+            completed = mock.Mock(returncode=0, stdout="ok", stderr="")
+            with mock.patch(
+                "backend.release_verification.subprocess.run",
+                return_value=completed,
+            ) as run:
+                status = release_verification._installer_status(installer)
+                smoke = release_verification._run_installer_smoke(installed)
+
+        self.assertTrue(status["validPortableExecutable"])
+        self.assertEqual(len(status["sha256"]), 64)
+        self.assertTrue(smoke["passed"])
+        self.assertEqual(run.call_args.args[0], [str(installed), "--smoke-test"])
+        self.assertEqual(run.call_args.kwargs["env"]["VSR_LAUNCHER_SMOKE"], "1")
 
     def test_write_release_evidence_writes_json_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -692,18 +809,27 @@ class ReleaseVerificationTests(unittest.TestCase):
 class LocalBuildScriptTests(unittest.TestCase):
     def setUp(self):
         self.bat = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
+        self.nsi = (ROOT / "installer" / "vsr.nsi").read_text(encoding="utf-8")
 
     def test_build_script_generates_local_release_evidence(self):
         self.assertIn("-m backend.release_verification", self.bat)
         self.assertIn("--hidden-imports", self.bat)
         self.assertIn("--runtime-hooks", self.bat)
         self.assertIn("--collect-data", self.bat)
+        self.assertIn("--analysis-path", self.bat)
+        self.assertIn("--run-dependency-audit", self.bat)
+        self.assertIn("--quality strict", self.bat)
+        self.assertIn("-m unittest discover -s tests -q", self.bat)
+        self.assertIn("installer\\vsr.nsi", self.bat)
+        self.assertIn("/DVSR_SMOKE_BUILD=1", self.bat)
+        self.assertIn("--installer-smoke-executable", self.bat)
         self.assertIn("--runtime-hook assets\\runtime_hook_mp.py", self.bat)
         self.assertNotIn("pause", self.bat.lower())
         self.assertIn("release-verification.json", self.bat)
         self.assertIn("release-hidden-imports.json", self.bat)
         self.assertIn("release-advisories.json", self.bat)
         self.assertIn("sbom.cdx.json", self.bat)
+        self.assertIn("pip-audit.json", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)
         self.assertIn("Run_VSR_Pro.bat", self.bat)
@@ -737,6 +863,13 @@ class LocalBuildScriptTests(unittest.TestCase):
     def test_no_torch_directml_hidden_import(self):
         self.assertNotIn("torch_directml", self.bat)
         self.assertNotIn("torch-directml", self.bat)
+
+    def test_nsis_floor_and_running_app_guard_use_bundled_capabilities(self):
+        self.assertIn("0x03012000", self.nsi)
+        self.assertIn("OpenMutexW", self.nsi)
+        self.assertNotIn("FindProcDLL::FindProc", self.nsi)
+        self.assertIn("VSR_SMOKE_BUILD", self.nsi)
+        self.assertIn("RequestExecutionLevel user", self.nsi)
 
     def test_entrypoint_and_runtime_hook_freeze_support_before_heavy_imports(self):
         entry = (ROOT / "VideoSubtitleRemover.py").read_text(encoding="utf-8")

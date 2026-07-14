@@ -55,9 +55,18 @@ FROZEN_LAUNCHER_SOURCE_DIR = ROOT / "assets" / "frozen"
 VERSIONED_DOCS = ("README.md", "CHANGELOG.md")
 HIDDEN_IMPORT_RE = re.compile(r"--hidden-import(?:=|\s+)([^\s]+)")
 RUNTIME_HOOK_RE = re.compile(r"--runtime-hook(?:=|\s+)([^\s]+)")
+EXCLUDE_MODULE_RE = re.compile(r"--exclude-module(?:=|\s+)([^\s]+)")
 STRICT_BLOCKING_SEVERITIES = {"high", "critical"}
 REQUIRED_RUNTIME_HOOK = "assets/runtime_hook_mp.py"
 NSIS_MINIMUM_VERSION = "3.12"
+BUILD_ONLY_DISTRIBUTIONS = {
+    "pip",
+    "pip-audit",
+    "pyinstaller",
+    "pyinstaller-hooks-contrib",
+    "setuptools",
+    "wheel",
+}
 
 
 def _read_config_constant(name: str, default: str) -> str:
@@ -116,6 +125,14 @@ def parse_runtime_hooks(value: str | Sequence[str]) -> tuple[str, ...]:
     return tuple(sorted(normalised))
 
 
+def parse_excluded_modules(value: str | Sequence[str]) -> tuple[str, ...]:
+    text = value if isinstance(value, str) else " ".join(str(part) for part in value)
+    found = EXCLUDE_MODULE_RE.findall(text)
+    return tuple(sorted(dict.fromkeys(
+        name.strip("\"'") for name in found if name
+    )))
+
+
 def _dist_file_status(root: Path, name: str) -> dict:
     source = ROOT / name
     bundled = root / name
@@ -170,19 +187,201 @@ def collect_dependency_versions() -> list[dict]:
     return items
 
 
-def build_cyclonedx_sbom(dependencies: Sequence[Mapping[str, object]]) -> dict:
-    components = []
-    for dep in dependencies:
-        name = str(dep.get("name") or "")
-        version = str(dep.get("version") or "")
-        if not name:
+def _normalise_distribution_name(value: object) -> str:
+    return re.sub(r"[-_.]+", "-", str(value or "").strip().lower())
+
+
+def _pyinstaller_analysis_entries(path: Path) -> tuple[list[tuple[str, str, str]], str]:
+    """Read PyInstaller's literal TOC without executing build output."""
+    if not path.is_file():
+        return [], "PyInstaller Analysis TOC not found"
+    try:
+        payload = ast.literal_eval(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError) as exc:
+        return [], f"PyInstaller Analysis TOC could not be parsed: {exc}"
+    entries: list[tuple[str, str, str]] = []
+    seen = set()
+    if not isinstance(payload, (tuple, list)):
+        return [], "PyInstaller Analysis TOC has an unexpected root type"
+    for group in payload:
+        if not isinstance(group, (tuple, list)):
             continue
-        components.append({
-            "type": "library",
-            "name": name,
-            "version": version,
-            "purl": f"pkg:pypi/{name.lower()}@{version}" if version else "",
-        })
+        for item in group:
+            if not isinstance(item, (tuple, list)) or len(item) < 3:
+                continue
+            name, source, kind = (str(item[0]), str(item[1]), str(item[2]))
+            if kind not in {"BINARY", "DATA", "EXTENSION", "PYMODULE", "PYSOURCE"}:
+                continue
+            key = (name, source, kind)
+            if key not in seen:
+                seen.add(key)
+                entries.append(key)
+    return entries, "" if entries else "PyInstaller Analysis TOC contains no artifact entries"
+
+
+def _site_package_top_level(source: str) -> str:
+    parts = [part for part in re.split(r"[\\/]", source) if part]
+    lowered = [part.lower() for part in parts]
+    try:
+        index = lowered.index("site-packages")
+    except ValueError:
+        return ""
+    if index + 1 >= len(parts):
+        return ""
+    candidate = parts[index + 1]
+    if candidate.endswith((".dist-info", ".egg-info")):
+        candidate = re.split(r"-(?=\d)", candidate, maxsplit=1)[0]
+    return candidate.split(".")[0]
+
+
+def _packaged_file(dist_dir: Path, destination: str) -> Optional[Path]:
+    relative = Path(destination.replace("\\", os.sep).replace("/", os.sep))
+    for candidate in (dist_dir / relative, dist_dir / "_internal" / relative):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def build_cyclonedx_sbom(
+    dependencies: Sequence[Mapping[str, object]],
+    *,
+    dist_dir: str | Path | None = None,
+    analysis_path: str | Path | None = None,
+) -> dict:
+    """Build an SBOM from the frozen artifact, with an explicit fallback.
+
+    PyInstaller's Analysis TOC is the source of truth for Python modules and
+    native binaries.  Environment-wide metadata is used only to attach names
+    and versions to entries proven present in that TOC.
+    """
+    dependencies_by_name = {
+        _normalise_distribution_name(dep.get("name")): dep
+        for dep in dependencies
+        if dep.get("name")
+    }
+    entries: list[tuple[str, str, str]] = []
+    analysis_error = "PyInstaller Analysis TOC was not supplied"
+    analysis = Path(analysis_path) if analysis_path else None
+    if analysis is not None:
+        entries, analysis_error = _pyinstaller_analysis_entries(analysis)
+    artifact_derived = bool(entries and dist_dir is not None)
+    dist = Path(dist_dir) if dist_dir is not None else None
+    components = []
+
+    if artifact_derived:
+        top_levels = set()
+        for name, source, kind in entries:
+            if kind in {"PYMODULE", "PYSOURCE"}:
+                top_levels.add(name.split(".")[0])
+            source_top = _site_package_top_level(source)
+            if source_top:
+                top_levels.add(source_top)
+
+        distribution_names = set()
+        try:
+            package_map = metadata.packages_distributions()
+        except Exception:
+            package_map = {}
+        for top_level in top_levels:
+            distribution_names.update(package_map.get(top_level, ()) or ())
+            normalised_top = _normalise_distribution_name(top_level)
+            if normalised_top in dependencies_by_name:
+                distribution_names.add(str(
+                    dependencies_by_name[normalised_top].get("name") or ""
+                ))
+
+        runtime_names = {
+            _normalise_distribution_name(name)
+            for name in distribution_names
+        } - BUILD_ONLY_DISTRIBUTIONS
+        for normalised in sorted(runtime_names):
+            dep = dependencies_by_name.get(normalised)
+            if not dep:
+                continue
+            name = str(dep.get("name") or "")
+            version = str(dep.get("version") or "")
+            components.append({
+                "type": "library",
+                "name": name,
+                "version": version,
+                "scope": "required",
+                "purl": f"pkg:pypi/{name.lower()}@{version}" if version else "",
+                "properties": [
+                    {"name": "vsr:evidence", "value": "pyinstaller-analysis"},
+                ],
+            })
+
+        for normalised in sorted(BUILD_ONLY_DISTRIBUTIONS):
+            dep = dependencies_by_name.get(normalised)
+            if not dep:
+                continue
+            name = str(dep.get("name") or "")
+            version = str(dep.get("version") or "")
+            components.append({
+                "type": "library",
+                "name": name,
+                "version": version,
+                "scope": "excluded",
+                "purl": f"pkg:pypi/{name.lower()}@{version}" if version else "",
+                "properties": [
+                    {"name": "vsr:evidence", "value": "build-tool-only"},
+                ],
+            })
+
+        native_seen = set()
+        for destination, source, kind in entries:
+            if kind not in {"BINARY", "EXTENSION"}:
+                continue
+            relative = destination.replace("\\", "/")
+            key = relative.lower()
+            if key in native_seen:
+                continue
+            native_seen.add(key)
+            packaged = _packaged_file(dist, destination) if dist else None
+            component = {
+                "type": "file",
+                "name": relative,
+                "scope": "required",
+                "properties": [
+                    {"name": "vsr:evidence", "value": "pyinstaller-analysis"},
+                    {"name": "vsr:sourceName", "value": Path(source).name},
+                ],
+            }
+            if packaged is not None:
+                component["hashes"] = [
+                    {"alg": "SHA-256", "content": sha256_file(packaged)},
+                ]
+            components.append(component)
+    else:
+        # Compatibility mode for source-only diagnostics. Strict releases
+        # reject this mode; it remains useful before a frozen artifact exists.
+        for dep in dependencies:
+            name = str(dep.get("name") or "")
+            version = str(dep.get("version") or "")
+            if not name:
+                continue
+            components.append({
+                "type": "library",
+                "name": name,
+                "version": version,
+                "scope": "required",
+                "purl": f"pkg:pypi/{name.lower()}@{version}" if version else "",
+                "properties": [
+                    {"name": "vsr:evidence", "value": "environment-fallback"},
+                ],
+            })
+
+    app_component = {
+        "type": "application",
+        "name": APP_NAME,
+        "version": APP_VERSION,
+    }
+    if dist is not None:
+        executable = dist / "VideoSubtitleRemoverPro.exe"
+        if executable.is_file():
+            app_component["hashes"] = [
+                {"alg": "SHA-256", "content": sha256_file(executable)},
+            ]
     return {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
@@ -195,11 +394,18 @@ def build_cyclonedx_sbom(dependencies: Sequence[Mapping[str, object]]) -> dict:
         "version": 1,
         "metadata": {
             "timestamp": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-            "component": {
-                "type": "application",
-                "name": APP_NAME,
-                "version": APP_VERSION,
-            },
+            "component": app_component,
+            "properties": [
+                {
+                    "name": "vsr:artifactDerived",
+                    "value": str(artifact_derived).lower(),
+                },
+                {
+                    "name": "vsr:analysisSource",
+                    "value": analysis.name if analysis is not None else "",
+                },
+                {"name": "vsr:analysisError", "value": analysis_error},
+            ],
         },
         "components": components,
     }
@@ -782,6 +988,154 @@ def _run_smoke(dist_dir: Path, timeout: float = 45.0) -> dict:
     return payload
 
 
+def _installer_status(installer_path: str | Path | None) -> dict:
+    path = Path(installer_path) if installer_path else Path()
+    available = bool(installer_path) and path.is_file()
+    valid_pe = False
+    if available:
+        try:
+            valid_pe = path.read_bytes()[:2] == b"MZ"
+        except OSError:
+            valid_pe = False
+    return {
+        "schema": "vsr.installer_artifact.v1",
+        "path": str(path) if installer_path else "",
+        "available": available,
+        "validPortableExecutable": valid_pe,
+        "sha256": sha256_file(path) if available else "",
+        "sizeBytes": path.stat().st_size if available else 0,
+    }
+
+
+def _run_installer_smoke(
+    installed_executable: str | Path | None,
+    timeout: float = 45.0,
+) -> dict:
+    path = Path(installed_executable) if installed_executable else Path()
+    payload = {
+        "schema": "vsr.installer_smoke.v1",
+        "path": str(path) if installed_executable else "",
+        "available": bool(installed_executable) and path.is_file(),
+        "ran": False,
+        "passed": False,
+        "returncode": None,
+        "stdout": "",
+        "stderr": "",
+        "error": "",
+    }
+    if not payload["available"]:
+        payload["error"] = "installer smoke executable not found"
+        return payload
+    env = os.environ.copy()
+    env["VSR_LAUNCHER_WAIT"] = "1"
+    env["VSR_LAUNCHER_SMOKE"] = "1"
+    try:
+        proc = subprocess.run(
+            [str(path), "--smoke-test"],
+            cwd=path.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        payload.update({
+            "ran": True,
+            "passed": proc.returncode == 0,
+            "returncode": proc.returncode,
+            "stdout": (proc.stdout or "")[-4000:],
+            "stderr": (proc.stderr or "")[-4000:],
+        })
+    except Exception as exc:  # pragma: no cover - depends on frozen runtime
+        payload["error"] = str(exc)
+    return payload
+
+
+def _component_property(component: Mapping[str, object], name: str) -> str:
+    for item in component.get("properties", []):
+        if isinstance(item, Mapping) and item.get("name") == name:
+            return str(item.get("value") or "")
+    return ""
+
+
+def _audit_frozen_dependencies(sbom: Mapping[str, object], timeout: float = 300.0) -> dict:
+    requirements = []
+    for component in sbom.get("components", []):
+        if not isinstance(component, Mapping):
+            continue
+        if component.get("type") != "library" or component.get("scope") != "required":
+            continue
+        name = str(component.get("name") or "").strip()
+        version = str(component.get("version") or "").strip()
+        if name and version:
+            requirements.append(f"{name}=={version}")
+    requirements = sorted(set(requirements), key=str.lower)
+    payload = {
+        "schema": "vsr.pip_audit.v1",
+        "scope": "frozen-runtime-components",
+        "requirements": requirements,
+        "ran": False,
+        "passed": False,
+        "returncode": None,
+        "vulnerabilityCount": 0,
+        "skippedCount": 0,
+        "dependencies": [],
+        "stderr": "",
+        "error": "",
+    }
+    if not requirements:
+        payload["error"] = "artifact SBOM contains no auditable runtime libraries"
+        return payload
+    try:
+        with tempfile.TemporaryDirectory(prefix="vsr-pip-audit-") as tmp:
+            requirement_path = Path(tmp) / "frozen-requirements.txt"
+            requirement_path.write_text("\n".join(requirements) + "\n", encoding="utf-8")
+            command = [
+                sys.executable,
+                "-m",
+                "pip_audit",
+                "--requirement",
+                str(requirement_path),
+                "--no-deps",
+                "--strict",
+                "--progress-spinner",
+                "off",
+                "--format",
+                "json",
+            ]
+            proc = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        report = json.loads(proc.stdout or "{}")
+        dependencies = report.get("dependencies", [])
+        vulnerabilities = sum(
+            len(item.get("vulns", []))
+            for item in dependencies
+            if isinstance(item, Mapping)
+        )
+        skipped = sum(
+            1 for item in dependencies
+            if isinstance(item, Mapping) and item.get("skip_reason")
+        )
+        payload.update({
+            "ran": True,
+            "passed": proc.returncode == 0 and vulnerabilities == 0 and skipped == 0,
+            "returncode": proc.returncode,
+            "vulnerabilityCount": vulnerabilities,
+            "skippedCount": skipped,
+            "dependencies": dependencies,
+            "stderr": (proc.stderr or "")[-8000:],
+        })
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        payload["ran"] = True
+        payload["error"] = str(exc)
+    return payload
+
+
 def _run_reference_corpus(timeout_note: str = "local release") -> dict:
     payload = {
         "schema": "vsr.reference_corpus.v1",
@@ -810,16 +1164,22 @@ def _run_reference_corpus(timeout_note: str = "local release") -> dict:
 def build_release_evidence(
     *,
     dist_dir: str | Path,
+    analysis_path: str | Path | None = None,
+    installer_path: str | Path | None = None,
+    installer_smoke_executable: str | Path | None = None,
     hidden_imports: str | Sequence[str] = (),
     runtime_hooks: str | Sequence[str] = (),
+    excludes: str | Sequence[str] = (),
     collect_data: str | Sequence[str] = (),
     run_smoke: bool = True,
     run_reference_corpus: bool = False,
+    run_dependency_audit: bool = False,
     env: Optional[Mapping[str, str]] = None,
-) -> tuple[dict, dict, dict]:
+) -> tuple[dict, dict, dict, dict]:
     dist = Path(dist_dir)
     hidden = parse_hidden_imports(hidden_imports)
     hooks = parse_runtime_hooks(runtime_hooks)
+    excluded = parse_excluded_modules(excludes)
     collected = tuple(str(collect_data).split()) if isinstance(collect_data, str) else tuple(collect_data)
     dependencies = collect_dependency_versions()
     package_versions = {
@@ -827,7 +1187,33 @@ def build_release_evidence(
         for dep in dependencies
         if dep.get("name")
     }
-    sbom = build_cyclonedx_sbom(dependencies)
+    sbom = build_cyclonedx_sbom(
+        dependencies,
+        dist_dir=dist,
+        analysis_path=analysis_path,
+    )
+    sbom_metadata = sbom.get("metadata", {})
+    artifact_derived = _component_property(
+        sbom_metadata if isinstance(sbom_metadata, Mapping) else {},
+        "vsr:artifactDerived",
+    ) == "true"
+    dependency_audit = (
+        _audit_frozen_dependencies(sbom)
+        if run_dependency_audit else
+        {
+            "schema": "vsr.pip_audit.v1",
+            "scope": "frozen-runtime-components",
+            "requirements": [],
+            "ran": False,
+            "passed": None,
+            "returncode": None,
+            "vulnerabilityCount": 0,
+            "skippedCount": 0,
+            "dependencies": [],
+            "stderr": "",
+            "error": "dependency audit skipped",
+        }
+    )
     onnxruntime_providers = collect_onnxruntime_provider_status(
         package_versions=package_versions,
     )
@@ -843,6 +1229,7 @@ def build_release_evidence(
         "hiddenImports": list(hidden),
         "runtimeHooks": list(hooks),
         "collectData": list(collected),
+        "excludedModules": list(excluded),
     }
     documents = [_dist_file_status(dist, name) for name in DOCUMENTS]
     launchers = [_frozen_launcher_status(dist, name) for name in LAUNCHERS]
@@ -864,6 +1251,7 @@ def build_release_evidence(
         "dependencies": dependencies,
         "hiddenImports": list(hidden),
         "runtimeHooks": list(hooks),
+        "excludedModules": list(excluded),
         "adapterSecurity": list(release_manifest_status(env=env)),
         "remoteModelSecurity": list(release_remote_model_status(env=env)),
         "rapidocrModels": rapidocr_release_provenance(),
@@ -900,6 +1288,7 @@ def build_release_evidence(
                 package_versions=package_versions,
             ),
             "adapterConformance": collect_adapter_conformance_matrix(env=env),
+            "dependencyAudit": dependency_audit,
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {
             "ran": False,
@@ -909,7 +1298,21 @@ def build_release_evidence(
         "sbom": {
             "file": "sbom.cdx.json",
             "componentCount": len(sbom.get("components", [])),
+            "runtimeComponentCount": sum(
+                1 for item in sbom.get("components", [])
+                if isinstance(item, Mapping)
+                and item.get("type") == "library"
+                and item.get("scope") == "required"
+            ),
+            "nativeComponentCount": sum(
+                1 for item in sbom.get("components", [])
+                if isinstance(item, Mapping) and item.get("type") == "file"
+            ),
+            "artifactDerived": artifact_derived,
+            "analysisPath": str(analysis_path or ""),
         },
+        "installer": _installer_status(installer_path),
+        "installerSmoke": _run_installer_smoke(installer_smoke_executable),
         "advisories": {
             "file": "release-advisories.json",
             "total": advisories["summary"]["total"],
@@ -971,11 +1374,16 @@ def write_release_evidence(
     *,
     dist_dir: str | Path,
     evidence_dir: str | Path | None = None,
+    analysis_path: str | Path | None = None,
+    installer_path: str | Path | None = None,
+    installer_smoke_executable: str | Path | None = None,
     hidden_imports: str | Sequence[str] = (),
     runtime_hooks: str | Sequence[str] = (),
+    excludes: str | Sequence[str] = (),
     collect_data: str | Sequence[str] = (),
     run_smoke: bool = True,
     run_reference_corpus: bool = False,
+    run_dependency_audit: bool = False,
     strict: bool = False,
     env: Optional[Mapping[str, str]] = None,
 ) -> dict:
@@ -983,11 +1391,16 @@ def write_release_evidence(
     out_dir.mkdir(parents=True, exist_ok=True)
     evidence, hidden_payload, sbom, advisories = build_release_evidence(
         dist_dir=dist_dir,
+        analysis_path=analysis_path,
+        installer_path=installer_path,
+        installer_smoke_executable=installer_smoke_executable,
         hidden_imports=hidden_imports,
         runtime_hooks=runtime_hooks,
+        excludes=excludes,
         collect_data=collect_data,
         run_smoke=run_smoke,
         run_reference_corpus=run_reference_corpus,
+        run_dependency_audit=run_dependency_audit,
         env=env,
     )
     outputs = {
@@ -995,6 +1408,9 @@ def write_release_evidence(
         "release-hidden-imports.json": hidden_payload,
         "release-advisories.json": advisories,
         "sbom.cdx.json": sbom,
+        "pip-audit.json": evidence.get("releaseTools", {}).get(
+            "dependencyAudit", {}
+        ),
     }
     for filename, payload in outputs.items():
         (out_dir / filename).write_text(
@@ -1007,6 +1423,27 @@ def write_release_evidence(
         for item in advisories.get("advisories", [])
         if isinstance(item, Mapping) and item.get("blocking")
     )
+    if strict:
+        if not evidence.get("sbom", {}).get("artifactDerived"):
+            strict_errors.append(
+                "SBOM is not derived from a PyInstaller Analysis TOC"
+            )
+        audit = evidence.get("releaseTools", {}).get("dependencyAudit", {})
+        if not isinstance(audit, Mapping) or not audit.get("ran"):
+            strict_errors.append("Frozen-runtime dependency audit did not run")
+        elif not audit.get("passed"):
+            strict_errors.append(
+                "Frozen-runtime dependency audit found vulnerabilities or skipped packages"
+            )
+        installer = evidence.get("installer", {})
+        if (not isinstance(installer, Mapping)
+                or not installer.get("validPortableExecutable")):
+            strict_errors.append("NSIS installer artifact is missing or invalid")
+        installer_smoke = evidence.get("installerSmoke", {})
+        if (not isinstance(installer_smoke, Mapping)
+                or not installer_smoke.get("ran")
+                or not installer_smoke.get("passed")):
+            strict_errors.append("Installer payload smoke did not pass")
     if strict and strict_errors:
         raise SystemExit(
             "Strict release verification failed:\n- "
@@ -1021,8 +1458,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--dist-dir", default="dist/VideoSubtitleRemoverPro")
     parser.add_argument("--evidence-dir", default="")
+    parser.add_argument("--analysis-path", default="")
+    parser.add_argument("--installer-path", default="")
+    parser.add_argument("--installer-smoke-executable", default="")
     parser.add_argument("--hidden-imports", default="")
     parser.add_argument("--runtime-hooks", default="")
+    parser.add_argument("--excludes", default="")
     parser.add_argument("--collect-data", default="")
     parser.add_argument(
         "--quality",
@@ -1031,15 +1472,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--skip-smoke", action="store_true")
     parser.add_argument("--run-reference-corpus", action="store_true")
+    parser.add_argument("--run-dependency-audit", action="store_true")
     args = parser.parse_args(argv)
     write_release_evidence(
         dist_dir=args.dist_dir,
         evidence_dir=args.evidence_dir or None,
+        analysis_path=args.analysis_path or None,
+        installer_path=args.installer_path or None,
+        installer_smoke_executable=args.installer_smoke_executable or None,
         hidden_imports=args.hidden_imports,
         runtime_hooks=args.runtime_hooks,
+        excludes=args.excludes,
         collect_data=args.collect_data,
         run_smoke=not args.skip_smoke,
         run_reference_corpus=args.run_reference_corpus,
+        run_dependency_audit=args.run_dependency_audit,
         strict=args.quality == "strict",
     )
     return 0

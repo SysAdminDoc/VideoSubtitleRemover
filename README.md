@@ -154,8 +154,21 @@ python -m backend.reference_corpus --json
 python tools/local_smoke.py
 ```
 
-`build_exe.bat` also runs the committed reference corpus during local release
-evidence generation and records the result in `release-verification.json`.
+`build_exe.bat` is the fail-closed local release command. It runs the complete
+unit suite, builds the PyInstaller folder, compiles the production NSIS
+installer plus a non-elevated extraction harness, smoke-tests every frozen
+entry point and the extracted installer payload, runs the reference corpus,
+audits the exact frozen Python components with `pip-audit`, and applies strict
+runtime/advisory gates. It exits nonzero at the first failed stage.
+
+The default frozen profile packages RapidOCR/ONNX and excludes the
+multi-gigabyte PaddleOCR, EasyOCR, and PyTorch fallbacks. Set
+`VSR_ENABLE_FULL_OCR=1` and/or `VSR_ENABLE_PYTORCH_LAMA=1` before the build to
+include those optional runtimes intentionally. `sbom.cdx.json` is derived from
+PyInstaller's `Analysis-00.toc`: required Python libraries and hashed native
+files reflect the folder that actually ships, while PyInstaller and other
+build tools are marked with excluded scope. `release-verification.json` and
+`pip-audit.json` record the remaining release proof.
 
 For an isolated CPU smoke without touching the Windows launcher, run the same
 check in the local container recipe:

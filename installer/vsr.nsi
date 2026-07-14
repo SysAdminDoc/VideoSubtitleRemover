@@ -20,10 +20,10 @@
 ; while elevated, enabling a possible privilege escalation for installers
 ; running as SYSTEM. The compile-time guard fails older toolchains.
 
-; NSIS_PACKEDVERSION is a hex-packed version (major<<24 | minor<<16 | ...).
-; 3.12 packs to 0x030C0000. Fail compilation on anything older.
+; NSIS_PACKEDVERSION uses NSIS' major<<24 | minor<<12 | revision<<4 layout.
+; 3.12 packs to 0x03012000. Fail compilation on anything older.
 !ifdef NSIS_PACKEDVERSION
-  !if ${NSIS_PACKEDVERSION} < 0x030C0000
+  !if ${NSIS_PACKEDVERSION} < 0x03012000
     !error "NSIS >= 3.12 required (elevated Low IL temp hardening). Upgrade makensis."
   !endif
 !else
@@ -35,21 +35,42 @@
 !define APPID        "VideoSubtitleRemoverPro"
 !define EXENAME      "VideoSubtitleRemoverPro.exe"
 
+!ifndef OUTPUT_DIR
+  !define OUTPUT_DIR ".."
+!endif
+!ifndef DIST_DIR
+  !define DIST_DIR "..\dist\VideoSubtitleRemoverPro"
+!endif
+
 !define VERSIONMAJOR 3
 !define VERSIONMINOR 17
 !define VERSIONPATCH 3
 
 Name "${APPNAME}"
-OutFile "VideoSubtitleRemoverPro-Setup.exe"
-InstallDir "$PROGRAMFILES64\${APPID}"
-InstallDirRegKey HKLM "Software\${APPID}" "InstallDir"
-RequestExecutionLevel admin
-SetCompressor /SOLID lzma
+!ifdef VSR_SMOKE_BUILD
+  ; Compile the identical application payload into a non-elevated harness so
+  ; local release automation can prove extraction and frozen startup without
+  ; changing the operator's Program Files or registry state.
+  OutFile "${OUTPUT_DIR}\VideoSubtitleRemoverPro-Smoke-Setup.exe"
+  InstallDir "$TEMP\${APPID}-Installer-Smoke"
+  RequestExecutionLevel user
+  SetCompress off
+!else
+  OutFile "${OUTPUT_DIR}\VideoSubtitleRemoverPro-Setup.exe"
+  InstallDir "$PROGRAMFILES64\${APPID}"
+  RequestExecutionLevel admin
+  SetCompressor /SOLID lzma
+!endif
+!ifndef VSR_SMOKE_BUILD
+  InstallDirRegKey HKLM "Software\${APPID}" "InstallDir"
+!endif
 
 VIProductVersion "${VERSIONMAJOR}.${VERSIONMINOR}.${VERSIONPATCH}.0"
 VIAddVersionKey "ProductName" "${APPNAME}"
 VIAddVersionKey "CompanyName" "${COMPANY}"
 VIAddVersionKey "FileDescription" "AI-powered subtitle remover."
+VIAddVersionKey "FileVersion" "${VERSIONMAJOR}.${VERSIONMINOR}.${VERSIONPATCH}.0"
+VIAddVersionKey "LegalCopyright" "Copyright (c) ${COMPANY}"
 
 !include "MUI2.nsh"
 !define MUI_ABORTWARNING
@@ -59,38 +80,49 @@ VIAddVersionKey "FileDescription" "AI-powered subtitle remover."
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
-!insertmacro MUI_UNPAGE_CONFIRM
-!insertmacro MUI_UNPAGE_INSTFILES
+!ifndef VSR_SMOKE_BUILD
+  !insertmacro MUI_UNPAGE_CONFIRM
+  !insertmacro MUI_UNPAGE_INSTFILES
+!endif
 
 !insertmacro MUI_LANGUAGE "English"
 
 Section "Application files (required)" SecCore
     SectionIn RO
 
-    ; Refuse to install while the app is running.
-    FindProcDLL::FindProc "${EXENAME}"
-    Pop $R0
-    IntCmp $R0 1 0 +3
-        MessageBox MB_OK|MB_ICONSTOP "Close Video Subtitle Remover Pro before installing."
-        Abort
+    !ifndef VSR_SMOKE_BUILD
+        ; Refuse to install while the app is running.
+        ; The app owns this named mutex for its process lifetime. System.dll
+        ; ships with NSIS, avoiding an undeclared FindProcDLL dependency.
+        System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "Local\VideoSubtitleRemoverPro.Running") p .R0'
+        IntCmp $R0 0 app_not_running app_running app_running
+        app_running:
+            System::Call 'kernel32::CloseHandle(p r0)'
+            MessageBox MB_OK|MB_ICONSTOP "Close Video Subtitle Remover Pro before installing."
+            Abort
+        app_not_running:
+    !endif
 
     SetOutPath "$INSTDIR"
-    File /r "..\dist\VideoSubtitleRemoverPro\*.*"
+    File /r "${DIST_DIR}\*.*"
 
-    WriteRegStr HKLM "Software\${APPID}" "InstallDir" "$INSTDIR"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
-        "DisplayName" "${APPNAME}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
-        "DisplayIcon" "$\"$INSTDIR\${EXENAME}$\""
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
-        "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
-        "Publisher" "${COMPANY}"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
-        "DisplayVersion" "${VERSIONMAJOR}.${VERSIONMINOR}.${VERSIONPATCH}"
-    WriteUninstaller "$INSTDIR\uninstall.exe"
+    !ifndef VSR_SMOKE_BUILD
+        WriteRegStr HKLM "Software\${APPID}" "InstallDir" "$INSTDIR"
+        WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
+            "DisplayName" "${APPNAME}"
+        WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
+            "DisplayIcon" "$\"$INSTDIR\${EXENAME}$\""
+        WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
+            "UninstallString" "$\"$INSTDIR\uninstall.exe$\""
+        WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
+            "Publisher" "${COMPANY}"
+        WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPID}" \
+            "DisplayVersion" "${VERSIONMAJOR}.${VERSIONMINOR}.${VERSIONPATCH}"
+        WriteUninstaller "$INSTDIR\uninstall.exe"
+    !endif
 SectionEnd
 
+!ifndef VSR_SMOKE_BUILD
 Section "Start menu + desktop shortcuts" SecShortcuts
     CreateDirectory "$SMPROGRAMS\${APPNAME}"
     CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXENAME}"
@@ -141,3 +173,4 @@ Section "Uninstall"
 
     RMDir /r "$INSTDIR"
 SectionEnd
+!endif

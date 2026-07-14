@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import logging
 import math
@@ -113,6 +114,22 @@ class VideoSubtitleRemoverApp(
         self.root.geometry("1240x860")
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
+        self._running_mutex_handle = None
+        if sys.platform == "win32":
+            try:
+                self._running_mutex_handle = ctypes.windll.kernel32.CreateMutexW(
+                    None,
+                    False,
+                    "Local\\VideoSubtitleRemoverPro.Running",
+                )
+            except Exception:
+                self._running_mutex_handle = None
+        self.root.bind(
+            "<Destroy>",
+            lambda event: self._release_running_mutex()
+            if event.widget is self.root else None,
+            add="+",
+        )
 
         # Set window icon
         try:
@@ -328,6 +345,7 @@ class VideoSubtitleRemoverApp(
         if not self._has_active_processing_thread() or time.monotonic() >= deadline:
             self._join_processing_thread(0.2)
             save_queue_state(self.queue)
+            self._release_running_mutex()
             try:
                 self.root.destroy()
             except Exception:
@@ -340,6 +358,16 @@ class VideoSubtitleRemoverApp(
                 self.root.destroy()
             except Exception:
                 pass
+
+    def _release_running_mutex(self):
+        handle = getattr(self, "_running_mutex_handle", None)
+        if not handle:
+            return
+        try:
+            ctypes.windll.kernel32.CloseHandle(handle)
+        except Exception:
+            pass
+        self._running_mutex_handle = None
 
     def _sync_config_from_ui(self):
         """Sync config object from current UI state."""

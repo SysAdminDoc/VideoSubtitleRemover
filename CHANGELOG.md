@@ -39,6 +39,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Local release builds are fail-closed and artifact-derived.**
+  `build_exe.bat` now runs the full suite, a frozen-runtime dependency audit,
+  the reference corpus, PyInstaller/launcher smoke, production NSIS compile,
+  a non-elevated installer extraction/startup smoke, and strict advisory
+  validation. The CycloneDX SBOM now maps PyInstaller Analysis entries to
+  required runtime packages and hashed native files, separates build tools as
+  excluded scope, and omits unrelated environment packages. Heavy
+  PaddleOCR/EasyOCR/PyTorch fallbacks are explicit packaging opt-ins.
 - **Advanced settings explain outcomes instead of backend names.** Labels and
   tooltips now describe the visible benefit and tradeoff for motion alignment,
   scene cuts, adaptive memory, mask carry-forward, deinterlacing, keyframes,
@@ -71,6 +79,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The NSIS 3.12 guard rejected NSIS 3.12 and required an undeclared plugin.**
+  The packed-version threshold now uses NSIS' actual bit layout, and the
+  running-app guard uses a named application mutex plus NSIS' bundled
+  `System` plugin instead of the absent `FindProcDLL` extension.
 - **Preview rendering could create Tk images on a worker thread.** Frame
   decoding and PIL compositing remain asynchronous, but `PhotoImage` objects
   are now created only by the UI event-loop callback, preventing intermittent
