@@ -57,6 +57,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   setting now disables progress easing, active-card pulsing, toast fades, and
   preview loading animation while retaining clear static status indicators;
   `VSR_REDUCED_MOTION=1` provides an explicit override.
+- **Interface locale detection preserves BCP-47 detail.** Windows locale
+  detection now uses the OS locale API instead of mistaking
+  `English_United States` for a language code, retains territory/script
+  subtags, chains full-tag/script/language catalogs, and packages the locale
+  directory in frozen releases. `VSR_UI_LOCALE` remains available for
+  deterministic overrides.
 - **Queue-card actions are keyboard reachable.** Focused queue items now open
   the same complete action menu with the Menu key or Shift+F10, place it at a
   deterministic card-relative position, expose the shortcut to assistive

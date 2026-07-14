@@ -22,8 +22,12 @@ where users typically have bigger problems.
 from __future__ import annotations
 
 import gettext
+import locale as _locale
 import logging
 import os
+import re
+import struct
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -49,32 +53,146 @@ def _candidate_locale_dirs() -> list:
 
 
 _active_translation: Optional[gettext.NullTranslations] = None
+_active_locale = "en"
 
 
-def bind_locale(lang: Optional[str]) -> None:
+def normalise_locale_tag(value: Optional[str]) -> str:
+    """Return a conservative BCP-47-style tag or an empty string."""
+    raw = str(value or "").strip().split(".", 1)[0].split("@", 1)[0]
+    if not raw:
+        return ""
+    parts = [part for part in raw.replace("_", "-").split("-") if part]
+    if not parts or not re.fullmatch(r"[A-Za-z]{2,8}", parts[0]):
+        return ""
+    result = [parts[0].lower()]
+    for part in parts[1:]:
+        if not re.fullmatch(r"[A-Za-z0-9]{1,8}", part):
+            return ""
+        if len(part) == 4 and part.isalpha():
+            result.append(part.title())
+        elif len(part) in {2, 3} and part.isalpha():
+            result.append(part.upper())
+        else:
+            result.append(part.lower())
+    return "-".join(result)
+
+
+def system_locale_tag() -> str:
+    """Return the OS locale without collapsing territory/script subtags."""
+    override = normalise_locale_tag(os.environ.get("VSR_UI_LOCALE"))
+    if override:
+        return override
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            buffer = ctypes.create_unicode_buffer(85)
+            if ctypes.windll.kernel32.GetUserDefaultLocaleName(
+                buffer, len(buffer),
+            ):
+                detected = normalise_locale_tag(buffer.value)
+                if detected:
+                    return detected
+        except Exception:
+            pass
+    try:
+        detected = normalise_locale_tag(_locale.getlocale()[0])
+        if detected:
+            return detected
+    except Exception:
+        pass
+    return "en"
+
+
+def locale_fallback_chain(value: Optional[str]) -> tuple[str, ...]:
+    tag = normalise_locale_tag(value)
+    if not tag:
+        return ()
+    parts = tag.split("-")
+    chain = [tag]
+    if len(parts) >= 3 and len(parts[1]) == 4:
+        chain.append("-".join(parts[:2]))
+    if parts[0] not in chain:
+        chain.append(parts[0])
+    return tuple(chain)
+
+
+def available_catalogs() -> tuple[str, ...]:
+    found = {}
+    for root in _candidate_locale_dirs():
+        try:
+            children = root.iterdir()
+        except OSError:
+            continue
+        for child in children:
+            if not child.is_dir():
+                continue
+            tag = normalise_locale_tag(child.name)
+            catalog = child / "LC_MESSAGES" / f"{DOMAIN}.mo"
+            if tag and catalog.is_file():
+                found.setdefault(tag.lower(), tag)
+    return tuple(sorted(found.values(), key=str.lower))
+
+
+def bind_locale(lang: Optional[str]) -> str:
     """Bind the active gettext catalog. `lang` is a BCP-47 / ISO 639-1
     code (`en`, `ja`, `pt_BR`). Passing None / empty keeps the
     NullTranslations -- every string returns unchanged.
 
     Logs a single line stating which catalog (if any) bound."""
-    global _active_translation
-    if not lang:
+    global _active_translation, _active_locale
+    requested = (
+        system_locale_tag()
+        if str(lang or "").lower() == "system"
+        else normalise_locale_tag(lang)
+    )
+    if not requested or requested.split("-", 1)[0].lower() == "en":
         _active_translation = None
-        return
+        _active_locale = "en"
+        return _active_locale
     locale_dirs = _candidate_locale_dirs()
-    for d in locale_dirs:
-        try:
-            t = gettext.translation(DOMAIN, localedir=str(d), languages=[lang])
-            _active_translation = t
-            logger.info(f"Bound locale '{lang}' from {d}")
-            return
-        except FileNotFoundError:
-            continue
+    translations = []
+    loaded_paths = []
+    for fallback_tag in locale_fallback_chain(requested):
+        wanted = fallback_tag.lower()
+        for root in locale_dirs:
+            try:
+                directories = {
+                    normalise_locale_tag(child.name).lower(): child
+                    for child in root.iterdir()
+                    if child.is_dir() and normalise_locale_tag(child.name)
+                }
+            except OSError:
+                continue
+            locale_dir = directories.get(wanted)
+            catalog = (
+                locale_dir / "LC_MESSAGES" / f"{DOMAIN}.mo"
+                if locale_dir is not None else None
+            )
+            if catalog is None or not catalog.is_file():
+                continue
+            try:
+                with catalog.open("rb") as handle:
+                    translations.append(gettext.GNUTranslations(handle))
+                loaded_paths.append(str(catalog))
+            except (OSError, EOFError, UnicodeError, struct.error) as exc:
+                logger.warning("Ignoring unreadable locale catalog %s: %s", catalog, exc)
+            break
+    if translations:
+        primary = translations[0]
+        for fallback in translations[1:]:
+            primary.add_fallback(fallback)
+        _active_translation = primary
+        _active_locale = requested
+        logger.info("Bound locale '%s' from %s", requested, loaded_paths)
+        return _active_locale
     logger.info(
-        f"No locale catalog for '{lang}' (searched: "
+        f"No locale catalog for '{requested}' (searched: "
         f"{[str(d) for d in locale_dirs]}); falling back to source strings."
     )
     _active_translation = None
+    _active_locale = "en"
+    return _active_locale
 
 
 def _(text: str) -> str:

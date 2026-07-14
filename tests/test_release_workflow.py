@@ -832,6 +832,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("pip-audit.json", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)
+        self.assertIn("--add-data locale;locale", self.bat)
         self.assertIn("Run_VSR_Pro.bat", self.bat)
         self.assertIn("Run_VSR_Pro_Debug.bat", self.bat)
         self.assertIn("Run_VSR_Pro.ps1", self.bat)

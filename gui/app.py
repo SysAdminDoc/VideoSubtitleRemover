@@ -80,7 +80,7 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.safe_image import safe_imread
-from backend.i18n import tr
+from backend.i18n import bind_locale, system_locale_tag, tr
 from gui.preview_controller import PreviewControllerMixin
 from gui.processing_controller import ProcessingControllerMixin
 from gui.quality_controller import QualityReviewControllerMixin
@@ -104,6 +104,7 @@ class VideoSubtitleRemoverApp(
         # in a process after a high-contrast instance.
         self.config = load_settings()
         self._settings_load_notice = consume_settings_load_notice()
+        bind_locale(system_locale_tag())
         if getattr(self.config, "high_contrast", False):
             apply_high_contrast_theme()
         else:
@@ -163,17 +164,6 @@ class VideoSubtitleRemoverApp(
         # the dominant orientation. Full pack-side flipping for every
         # widget is a much larger pass; this lands the framework.
         self._rtl_layout = bool(getattr(self.config, "rtl_layout", False))
-        # RM-97: bind a gettext catalog if one matches the user's locale.
-        # No-op when no `.mo` file ships -- every UI string falls back to
-        # the literal english form.
-        try:
-            import locale as _locale
-            _user_locale = (_locale.getlocale()[0] or "").split("_")[0]
-            from backend.i18n import bind_locale as _bind_locale
-            if _user_locale and _user_locale != "en":
-                _bind_locale(_user_locale)
-        except Exception:
-            pass
         self.queue: List[QueueItem] = []
         self.queue_widgets: dict = {}
         self.is_processing = False

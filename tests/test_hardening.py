@@ -3315,6 +3315,57 @@ class I18nScaffoldTests(unittest.TestCase):
         self.assertEqual(i18n._("Start batch"), "Start batch")
         self.assertFalse(i18n.is_translation_active())
 
+    def test_locale_tags_keep_script_and_territory_fallbacks(self):
+        from backend import i18n
+
+        self.assertEqual(i18n.normalise_locale_tag("pt_BR.UTF-8"), "pt-BR")
+        self.assertEqual(
+            i18n.locale_fallback_chain("zh_Hant_TW"),
+            ("zh-Hant-TW", "zh-Hant", "zh"),
+        )
+        with unittest.mock.patch.dict(
+            os.environ, {"VSR_UI_LOCALE": "sr_Latn_RS"}, clear=False,
+        ):
+            self.assertEqual(i18n.system_locale_tag(), "sr-Latn-RS")
+
+    def test_catalog_chain_uses_territory_then_language(self):
+        from backend import i18n
+
+        class FakeCatalog:
+            def __init__(self, mapping):
+                self.mapping = mapping
+                self.fallback = None
+
+            def add_fallback(self, fallback):
+                self.fallback = fallback
+
+            def gettext(self, text):
+                if text in self.mapping:
+                    return self.mapping[text]
+                return self.fallback.gettext(text) if self.fallback else text
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for tag in ("pt-BR", "pt"):
+                catalog = root / tag / "LC_MESSAGES" / "vsr.mo"
+                catalog.parent.mkdir(parents=True)
+                catalog.write_bytes(b"catalog fixture")
+            catalogs = [
+                FakeCatalog({"Start batch": "Iniciar lote"}),
+                FakeCatalog({"Settings": "Definicoes"}),
+            ]
+            with unittest.mock.patch(
+                "backend.i18n._candidate_locale_dirs", return_value=[root],
+            ), unittest.mock.patch(
+                "backend.i18n.gettext.GNUTranslations", side_effect=catalogs,
+            ):
+                try:
+                    self.assertEqual(i18n.bind_locale("pt_BR"), "pt-BR")
+                    self.assertEqual(i18n.tr("Start batch"), "Iniciar lote")
+                    self.assertEqual(i18n.tr("Settings"), "Definicoes")
+                finally:
+                    i18n.bind_locale(None)
+
     def test_status_ui_uses_bound_catalog_and_missing_keys_fall_back(self):
         from backend import i18n
         from gui.config import ProcessingStatus, status_ui

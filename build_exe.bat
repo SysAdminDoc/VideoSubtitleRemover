@@ -51,6 +51,7 @@ if exist "icon.png" set "DATA_ARGS=%DATA_ARGS% --add-data icon.png;."
 if exist "favicon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data favicon.ico;."
 if exist "icon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data icon.ico;."
 if exist "icons" set "DATA_ARGS=%DATA_ARGS% --add-data icons;icons"
+if exist "locale" set "DATA_ARGS=%DATA_ARGS% --add-data locale;locale"
 
 set "HIDDEN_IMPORTS=--hidden-import PIL._tkinter_finder --hidden-import cv2 --hidden-import numpy --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox"
 set "EXCLUDES="
