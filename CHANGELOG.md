@@ -33,6 +33,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **VLM detector dropped all boxes on a common response shape.** The
+  Qwen2.5-VL box extractor assumed every JSON entry was a `{"bbox": [...]}`
+  dict, so a model returning bare `[[x1,y1,x2,y2], ...]` arrays hit an
+  AttributeError that the broad handler turned into an empty result. It now
+  accepts both the dict and bare-list shapes and ignores non-box entries.
 - **Unstable box identities in the Kalman tracker.** Detection-to-track
   matching used per-track first-best-available greedy assignment, so which
   track claimed an overlapping detection depended on track order and could

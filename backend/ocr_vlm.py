@@ -244,9 +244,19 @@ class _Qwen25VLDetector(_BaseVlmDetector):
             arr = _json.loads(raw[start:end])
         except (ValueError, _json.JSONDecodeError):
             return []
+        if not isinstance(arr, list):
+            return []
         out: List[Tuple[int, int, int, int]] = []
         for entry in arr:
-            bbox = entry.get("bbox") or entry.get("box")
+            if isinstance(entry, dict):
+                bbox = entry.get("bbox") or entry.get("box")
+            elif isinstance(entry, (list, tuple)):
+                # Some models emit a bare [x1, y1, x2, y2] per detection
+                # instead of {"bbox": [...]}; accept that shape too rather
+                # than dropping every box.
+                bbox = entry
+            else:
+                continue
             if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
                 continue
             try:
