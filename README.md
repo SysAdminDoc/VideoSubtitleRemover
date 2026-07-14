@@ -112,11 +112,13 @@ python VideoSubtitleRemover.py
 winget install ffmpeg
 ```
 
-Use **FFmpeg 8.1.2 / 8.0.3 or newer.** VSR decodes untrusted media through
-FFmpeg, and builds `8.1.0-8.1.1` and `8.0.0-8.0.2` predate the security
-backports for CVE-2026-8461 (MagicYUV heap out-of-bounds write, RCE) and
-CVE-2026-30999. The self-test, support bundle, and strict release validation
-flag a known-vulnerable runtime as blocking.
+Use **FFmpeg 8.1.2+ on the 8.1 branch, or 8.0.3+ on the 8.0 branch.** VSR
+decodes untrusted media through FFmpeg, and builds `8.1.0-8.1.1` and
+`8.0.0-8.0.2` predate the security backports for CVE-2026-8461 (MagicYUV heap
+out-of-bounds write, RCE) and CVE-2026-30999. Older branches are outside VSR's
+reviewed support policy; development snapshots and future branches remain
+unknown until explicitly classified. The self-test, support bundle, and strict
+release validation block vulnerable, unsupported, and unknown runtimes.
 
 **Build toolchain floors:** the local build requires **PyInstaller >= 6.10.0**
 (CVE-2025-59042 writable-CWD LPE) and the installer requires **NSIS >= 3.12**

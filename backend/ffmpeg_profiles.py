@@ -64,6 +64,7 @@ _PROFILE_DEFS: dict[str, dict[str, Any]] = {
 # line. Source: https://ffmpeg.org/security.html
 FFMPEG_SECURITY_ADVISORY_IDS = ("CVE-2026-8461", "CVE-2026-30999")
 FFMPEG_SECURITY_SOURCE = "https://ffmpeg.org/security.html"
+FFMPEG_RELEASE_SOURCE = "https://ffmpeg.org/download.html"
 # Map of (major, minor) line -> (exclusive-below fixed patch, fixed version).
 _FFMPEG_VULNERABLE_LINES: dict[tuple[int, int], tuple[int, str]] = {
     (8, 1): (2, "8.1.2"),
@@ -89,23 +90,42 @@ def parse_ffmpeg_version(text: object) -> tuple[int, ...]:
 
 
 def classify_ffmpeg_security(version_text: object) -> dict:
-    """Classify an FFmpeg version banner against known-vulnerable floors."""
+    """Classify a banner against VSR's explicitly reviewed FFmpeg branches."""
     parsed = parse_ffmpeg_version(version_text)
     payload = {
         "raw": str(version_text or ""),
         "version": ".".join(str(part) for part in parsed) if parsed else "",
         "parsed": bool(parsed),
+        "classification": "unknown",
+        "supported": False,
+        "safe": False,
         "vulnerable": False,
         "fixed_in": "",
         "advisories": [],
         "reason": "",
     }
     if not parsed:
-        payload["reason"] = "ffmpeg version not recognized (snapshot or missing)"
+        payload["reason"] = (
+            "FFmpeg version is unknown (development snapshot, missing, or "
+            "unrecognized); use a reviewed stable 8.1.2+ or 8.0.3+ build"
+        )
         return payload
     major, minor, patch = parsed
     line = _FFMPEG_VULNERABLE_LINES.get((major, minor))
-    if line is not None and patch < line[0]:
+    if major < 8:
+        payload["classification"] = "unsupported"
+        payload["reason"] = (
+            f"FFmpeg {payload['version']} is outside VSR's reviewed 8.0/8.1 "
+            "security branches; use a stable 8.1.2+ or 8.0.3+ build"
+        )
+    elif line is None:
+        payload["reason"] = (
+            f"FFmpeg {payload['version']} is on an unclassified release "
+            "branch; update VSR's security policy before treating it as safe"
+        )
+    elif patch < line[0]:
+        payload["classification"] = "vulnerable"
+        payload["supported"] = True
         payload["vulnerable"] = True
         payload["fixed_in"] = line[1]
         payload["advisories"] = list(FFMPEG_SECURITY_ADVISORY_IDS)
@@ -115,7 +135,14 @@ def classify_ffmpeg_security(version_text: object) -> dict:
             f"upgrade to {line[1]} or newer"
         )
     else:
-        payload["reason"] = "no known-vulnerable release floor matched"
+        payload["classification"] = "safe"
+        payload["supported"] = True
+        payload["safe"] = True
+        payload["fixed_in"] = line[1]
+        payload["reason"] = (
+            f"FFmpeg {payload['version']} is on the reviewed {major}.{minor} "
+            f"branch and meets its {line[1]} security floor"
+        )
     return payload
 
 

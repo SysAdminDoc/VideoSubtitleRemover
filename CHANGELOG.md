@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Fail-closed FFmpeg branch classification.** Runtime diagnostics now label
+  FFmpeg as safe, vulnerable, unsupported, or unknown. Only reviewed 8.1.2+
+  and 8.0.3+ patch lines pass; older branches, development snapshots, and
+  unclassified future branches block strict release evidence instead of being
+  described as having no matched vulnerability floor.
 - **Pillow and NSIS security floors.** Source, Docker, dependency diagnostics,
   and strict release evidence now require Pillow 12.3.0, which includes the
   2026-07-01 decoder, memory-safety, and decompression-bomb fixes. Installer

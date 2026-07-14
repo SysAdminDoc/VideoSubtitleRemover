@@ -428,17 +428,31 @@ class ReleaseVerificationTests(unittest.TestCase):
         for banner in (
             "ffmpeg version 8.1.2-full_build",
             "ffmpeg version 8.0.3",
-            "ffmpeg version 8.2.0",
-            "ffmpeg version 9.0",
+            "ffmpeg version 8.1.9",
+            "ffmpeg version 8.0.4",
         ):
             status = ffmpeg_profiles.classify_ffmpeg_security(banner)
             self.assertFalse(status["vulnerable"], banner)
+            self.assertTrue(status["safe"], banner)
+            self.assertEqual(status["classification"], "safe")
+
+        unsupported = ffmpeg_profiles.classify_ffmpeg_security(
+            "ffmpeg version 7.1.5"
+        )
+        self.assertEqual(unsupported["classification"], "unsupported")
+        self.assertFalse(unsupported["safe"])
+
+        for banner in ("ffmpeg version 8.2.0", "ffmpeg version 9.0"):
+            status = ffmpeg_profiles.classify_ffmpeg_security(banner)
+            self.assertEqual(status["classification"], "unknown", banner)
+            self.assertFalse(status["safe"], banner)
 
         snapshot = ffmpeg_profiles.classify_ffmpeg_security(
             "ffmpeg version N-119876-g1a2b3c"
         )
         self.assertFalse(snapshot["parsed"])
         self.assertFalse(snapshot["vulnerable"])
+        self.assertEqual(snapshot["classification"], "unknown")
 
     def test_ffmpeg_security_advisory_blocks_vulnerable_runtime(self):
         advisory = release_verification.ffmpeg_security_advisory({
@@ -454,6 +468,23 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertIsNone(
             release_verification.ffmpeg_security_advisory({"vulnerable": False})
         )
+
+    def test_ffmpeg_security_advisory_blocks_unsupported_and_unknown(self):
+        from backend import ffmpeg_profiles
+
+        unsupported = release_verification.ffmpeg_security_advisory(
+            ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 7.1.5")
+        )
+        unknown = release_verification.ffmpeg_security_advisory(
+            ffmpeg_profiles.classify_ffmpeg_security(
+                "ffmpeg version N-119876-g1a2b3c"
+            )
+        )
+
+        self.assertEqual(unsupported["id"], "FFMPEG-UNSUPPORTED-BRANCH")
+        self.assertTrue(unsupported["blocking"])
+        self.assertEqual(unknown["id"], "FFMPEG-UNCLASSIFIED-VERSION")
+        self.assertTrue(unknown["blocking"])
 
     def test_pyinstaller_below_floor_blocks(self):
         deps = [{"name": "pyinstaller", "version": "6.6.0"}]

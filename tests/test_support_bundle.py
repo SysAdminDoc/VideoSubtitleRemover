@@ -330,6 +330,28 @@ class FfmpegProfileTests(unittest.TestCase):
         self.assertFalse(security["FFmpeg runtime CVE floor"]["available"])
         self.assertIn("8.1.2", security["FFmpeg runtime CVE floor"]["reason"])
 
+    def test_self_test_flags_unclassified_ffmpeg_runtime(self):
+        from backend import support_bundle
+
+        with mock.patch.object(
+            support_bundle,
+            "probe_ffmpeg_security",
+            return_value={
+                "available": True,
+                "version": "9.0.0",
+                "classification": "unknown",
+                "safe": False,
+                "vulnerable": False,
+                "reason": "FFmpeg 9.0.0 is on an unclassified release branch",
+            },
+        ):
+            results = support_bundle.run_self_test()
+
+        security = {entry["name"]: entry for entry in results.get("security", [])}
+        check = security["FFmpeg runtime CVE floor"]
+        self.assertFalse(check["available"])
+        self.assertIn("unclassified", check["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,7 @@ from backend.dependency_caps import (
     onnxruntime_release_advisories,
 )
 from backend.ffmpeg_profiles import (
+    FFMPEG_RELEASE_SOURCE,
     FFMPEG_SECURITY_SOURCE,
     classify_ffmpeg_security,
     collect_ffmpeg_capability_profiles,
@@ -434,32 +435,49 @@ def nsis_security_advisory(version: Optional[str] = None) -> Optional[dict]:
 def ffmpeg_security_advisory(
     status: Optional[Mapping[str, object]] = None,
 ) -> Optional[dict]:
-    """Return a blocking advisory when the FFmpeg runtime is known-vulnerable.
+    """Return a blocker unless FFmpeg is on an explicitly reviewed safe line.
 
     Accepts a pre-computed classification (from ``classify_ffmpeg_security`` or
     ``probe_ffmpeg_security``) for testability; probes the local runtime when
-    not supplied. Returns ``None`` when FFmpeg is safe, unavailable, or an
-    unclassifiable snapshot build.
+    not supplied. Legacy callers that only provide ``vulnerable=False`` retain
+    their earlier safe meaning, but live probes always include classification.
     """
     if status is None:
         status = probe_ffmpeg_security()
-    if not status.get("vulnerable"):
+    classification = str(status.get("classification") or "").lower()
+    if not classification:
+        classification = "vulnerable" if status.get("vulnerable") else "safe"
+    if classification == "safe":
         return None
     version = str(status.get("version") or "unknown")
-    fixed_in = str(status.get("fixed_in") or "8.1.2")
-    advisories = status.get("advisories") or []
-    advisory_id = advisories[0] if advisories else "CVE-2026-8461"
+    if classification == "vulnerable":
+        fixed_in = str(status.get("fixed_in") or "8.1.2")
+        advisories = status.get("advisories") or []
+        advisory_id = advisories[0] if advisories else "CVE-2026-8461"
+        affected = "8.1.0-8.1.1, 8.0.0-8.0.2"
+        source = FFMPEG_SECURITY_SOURCE
+    elif classification == "unsupported":
+        advisory_id = "FFMPEG-UNSUPPORTED-BRANCH"
+        affected = "outside VSR's reviewed 8.0/8.1 branches"
+        fixed_in = "8.1.2 (reviewed stable branch)"
+        source = FFMPEG_RELEASE_SOURCE
+    else:
+        advisory_id = "FFMPEG-UNCLASSIFIED-VERSION"
+        affected = "snapshot, missing, or unclassified future branch"
+        fixed_in = "8.1.2 (reviewed stable branch)"
+        source = FFMPEG_RELEASE_SOURCE
     return _advisory(
         advisory_id=str(advisory_id),
         package="ffmpeg (external runtime)",
         installed_version=version,
-        affected="8.1.0-8.1.1, 8.0.0-8.0.2",
+        affected=affected,
         fixed_in=fixed_in,
         severity="high",
-        source=FFMPEG_SECURITY_SOURCE,
+        source=source,
         mitigation=(
-            "VSR decodes untrusted media through FFmpeg; upgrade the external "
-            f"FFmpeg/FFprobe binaries to {fixed_in} or newer before shipping."
+            "VSR decodes untrusted media through FFmpeg; install a reviewed "
+            "stable FFmpeg 8.1.2+ build (or 8.0.3+ on the 8.0 branch) before "
+            f"shipping. Probe result: {status.get('reason') or classification}."
         ),
     )
 

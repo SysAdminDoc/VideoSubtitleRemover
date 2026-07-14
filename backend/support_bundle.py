@@ -479,6 +479,12 @@ def run_self_test() -> dict:
         if not ffmpeg_security.get("available"):
             available = False
             reason = "ffmpeg not on PATH"
+        elif ffmpeg_security.get("classification") not in (None, "safe"):
+            available = False
+            reason = (
+                ffmpeg_security.get("reason")
+                or "FFmpeg runtime is not on a reviewed safe branch"
+            )
         elif ffmpeg_security.get("vulnerable"):
             available = False
             reason = ffmpeg_security.get("reason") or "vulnerable FFmpeg runtime"
@@ -486,7 +492,7 @@ def run_self_test() -> dict:
             available = True
             reason = (
                 f"ffmpeg {ffmpeg_security.get('version') or 'unknown'} "
-                "(no known-vulnerable release floor matched)"
+                "(reviewed security branch and patch floor)"
             )
         results["security"].append({
             "name": "FFmpeg runtime CVE floor",
