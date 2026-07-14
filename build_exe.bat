@@ -40,9 +40,16 @@ if errorlevel 1 (
 )
 
 echo Checking Python source hygiene...
-"%PYTHON%" -m ruff check backend gui VideoSubtitleRemover.py --no-cache
+"%PYTHON%" -m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache
 if errorlevel 1 (
     echo Ruff found source violations; release build stopped.
+    exit /b 1
+)
+
+echo Checking generated CLI and config reference...
+"%PYTHON%" scripts\generate_cli_reference.py
+if errorlevel 1 (
+    echo README CLI/config reference drifted; release build stopped.
     exit /b 1
 )
 

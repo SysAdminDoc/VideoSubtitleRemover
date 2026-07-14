@@ -12,6 +12,7 @@ Extracted from processor.py as part of RFP-L-1. Provides:
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import datetime
 import json
@@ -31,6 +32,198 @@ _write_text_atomic = None
 write_output_sidecar = None
 SoftSubtitleAction = None
 remux_soft_subtitles = None
+
+
+_CLI_CATEGORY_OPTIONS = (
+    (
+        "General",
+        ("--help",),
+    ),
+    (
+        "Inputs, batches, and reproducibility",
+        (
+            "--input", "--output", "--pattern", "--out-dir", "--config",
+            "--config-schema-version", "--set", "--preset", "--list-presets",
+            "--checkpoint-dir", "--work-dir", "--no-resume", "--start", "--end",
+            "--input-fps", "--output-frames", "--nle-input", "--skip-existing",
+        ),
+    ),
+    (
+        "Removal, detection, and masks",
+        (
+            "--mode", "--gpu", "--lang", "--skip-detection", "--fast",
+            "--threshold", "--vertical", "--frame-skip", "--mask-dilate",
+            "--confidence-dilate", "--mask-feather", "--temporal-smooth",
+            "--edge-ring", "--flow-warp", "--no-scene-split", "--pyscenedetect",
+            "--transnetv2", "--denoise-detect", "--sam2-refine",
+            "--matanyone-refine", "--cotracker-propagate", "--no-tbe",
+            "--no-adaptive-batch", "--temporal-mask-union",
+            "--temporal-mask-window", "--auto-band", "--no-kalman", "--no-phash",
+            "--phash-distance", "--colour-tune", "--colour-tolerance",
+            "--auto-threshold", "--keep-chyrons", "--keep-subtitles",
+            "--chyron-min-hits", "--karaoke-grouping", "--karaoke-x-gap",
+            "--karaoke-y-overlap",
+        ),
+    ),
+    (
+        "Speech and subtitle tracks",
+        (
+            "--whisper-fallback", "--whisper-backend", "--whisper-model",
+            "--ffmpeg-whisper-model", "--ffmpeg-whisper-queue",
+            "--ffmpeg-whisper-vad-model", "--ffmpeg-whisper-vad-threshold",
+            "--ffmpeg-whisper-min-speech", "--export-srt", "--soft-subtitle-dry-run",
+            "--soft-subtitle-plan-json", "--strip-soft-subtitles",
+            "--keep-soft-subtitles", "--burned-in-only", "--restyle",
+            "--restyle-style",
+        ),
+    ),
+    (
+        "Output and post-processing",
+        (
+            "--no-audio", "--crf", "--upscale", "--no-color-preserve",
+            "--nle-sidecar", "--swinir", "--seedvr2", "--film-grain", "--watermark",
+            "--watermark-position", "--watermark-opacity", "--watermark-margin",
+            "--no-hw-encode", "--codec", "--export-mask", "--deinterlace",
+            "--no-deinterlace-detect", "--keyframe-detect", "--quality-report",
+            "--quality-sheet", "--loudnorm", "--decode-accel", "--single-audio",
+        ),
+    ),
+    (
+        "Performance and recovery",
+        (
+            "--rife-fast-stride", "--max-retries", "--retry-backoff",
+            "--no-prefetch", "--prefetch-queue",
+        ),
+    ),
+    (
+        "Diagnostics and automation",
+        (
+            "--audit-onnx", "--audit-windows-ml", "--scan-weights", "--cache-info",
+            "--cache-clean", "--model-cache-export", "--model-cache-import",
+            "--support-bundle", "--validate-config", "--self-test",
+            "--inference-smoke", "--ocr-benchmark", "--ocr-engine", "--dry-run",
+            "--json", "--auto-lang-probe", "--intent", "--json-log",
+            "--dump-cli-reference",
+        ),
+    ),
+)
+
+_CLI_VALUE_RANGES = {
+    "--gpu": "-1 or >=0",
+    "--crf": "15..35",
+    "--start": ">=0 seconds",
+    "--end": "0 or >= start",
+    "--threshold": "0.1..1.0",
+    "--film-grain": "0..0.5",
+    "--watermark-opacity": "0..1",
+    "--watermark-margin": "0..500 pixels",
+    "--ffmpeg-whisper-queue": "0.02..3600 seconds",
+    "--ffmpeg-whisper-vad-threshold": "0..1",
+    "--ffmpeg-whisper-min-speech": "0..30 seconds",
+    "--frame-skip": "0..240 frames",
+    "--rife-fast-stride": "0..60 frames",
+    "--mask-dilate": "0..100 pixels",
+    "--mask-feather": "0..100 pixels",
+    "--temporal-smooth": "0..5 frames",
+    "--edge-ring": "0..32 pixels",
+    "--temporal-mask-window": "1..15 frames",
+    "--max-retries": "0..10",
+    "--retry-backoff": "0..600 seconds",
+    "--phash-distance": "0..64",
+    "--colour-tolerance": "0..255",
+    "--auto-threshold": "0..1",
+    "--input-fps": "1..240",
+    "--chyron-min-hits": "1..100000 frames",
+    "--karaoke-x-gap": "0..1024 pixels",
+    "--karaoke-y-overlap": "0..1",
+    "--loudnorm": "0 (off) or -70..-5 LUFS",
+    "--prefetch-queue": "0..512 frames",
+}
+
+# There are currently no deprecated public options. Keeping the set explicit
+# makes the generated reference fail closed when a compatibility flag is added.
+_CLI_DEPRECATED_OPTIONS = frozenset()
+_CLI_INTERNAL_OPTIONS = frozenset({"--dump-cli-reference"})
+
+
+def _primary_option(action: argparse.Action) -> str:
+    return next(
+        (flag for flag in action.option_strings if flag.startswith("--")),
+        action.option_strings[0] if action.option_strings else action.dest,
+    )
+
+
+def _apply_cli_option_metadata(parser: argparse.ArgumentParser) -> None:
+    """Attach complete option metadata and group ``--help`` from that source."""
+    category_by_option: dict[str, str] = {}
+    for category, options in _CLI_CATEGORY_OPTIONS:
+        for option in options:
+            if option in category_by_option:
+                raise RuntimeError(f"duplicate CLI metadata for {option}")
+            category_by_option[option] = category
+
+    actions_by_category = {category: [] for category, _ in _CLI_CATEGORY_OPTIONS}
+    seen: set[str] = set()
+    for action in parser._actions:
+        if not action.option_strings:
+            continue
+        option = _primary_option(action)
+        category = category_by_option.get(option)
+        if category is None:
+            raise RuntimeError(f"CLI option has no metadata: {option}")
+        metadata = {
+            "category": category,
+            "value_range": _CLI_VALUE_RANGES.get(option, ""),
+            "deprecated": option in _CLI_DEPRECATED_OPTIONS,
+            "internal": option in _CLI_INTERNAL_OPTIONS,
+        }
+        action.vsr_metadata = metadata
+        actions_by_category[category].append(action)
+        seen.add(option)
+
+    stale = sorted(set(category_by_option) - seen)
+    if stale:
+        raise RuntimeError("CLI metadata refers to missing options: " + ", ".join(stale))
+
+    parser._optionals.title = _CLI_CATEGORY_OPTIONS[0][0]
+    parser._optionals._group_actions = actions_by_category[_CLI_CATEGORY_OPTIONS[0][0]]
+    for category, _options in _CLI_CATEGORY_OPTIONS[1:]:
+        group = parser.add_argument_group(category)
+        group._group_actions = actions_by_category[category]
+
+
+def _cli_reference_payload(parser: argparse.ArgumentParser) -> dict:
+    """Return deterministic JSON-safe reference data from live parser actions."""
+    options = []
+    for action in parser._actions:
+        if not action.option_strings:
+            continue
+        metadata = getattr(action, "vsr_metadata", None)
+        if metadata is None:
+            raise RuntimeError(f"CLI option metadata was not attached: {_primary_option(action)}")
+        choices = list(action.choices) if action.choices is not None else []
+        value_range = metadata["value_range"]
+        if not value_range and choices:
+            value_range = " | ".join(str(choice) for choice in choices)
+        help_text = "" if action.help is argparse.SUPPRESS else str(action.help or "")
+        options.append(
+            {
+                "flags": list(action.option_strings),
+                "dest": action.dest,
+                "category": metadata["category"],
+                "description": help_text.replace("%%", "%").strip(),
+                "default": action.default,
+                "range": value_range,
+                "metavar": action.metavar,
+                "deprecated": metadata["deprecated"],
+                "internal": metadata["internal"],
+            }
+        )
+    return {
+        "schema": "vsr.cli_reference.v1",
+        "categories": [category for category, _options in _CLI_CATEGORY_OPTIONS],
+        "options": options,
+    }
 
 
 def _load_runtime_helpers() -> None:
@@ -418,7 +611,6 @@ def _run_dry_run_and_exit(remover, config, args, video_exts) -> None:
 
 def main():
     """CLI entry point."""
-    import argparse
     early_parser = argparse.ArgumentParser(add_help=False)
     early_parser.add_argument("--support-bundle", metavar="PATH")
     early_args, _remaining = early_parser.parse_known_args()
@@ -448,6 +640,8 @@ def main():
     for _name, _builder in inpainter_registry.list_modes():
         if _name not in mode_choices:
             mode_choices.append(_name)
+    if "--dump-cli-reference" in sys.argv:
+        mode_choices = ["sttn", "lama", "propainter", "auto", "migan"]
 
     parser = argparse.ArgumentParser(
         description="Video Subtitle Remover Pro CLI",
@@ -741,8 +935,18 @@ def main():
                             " 'remove logo'). Prints config changes and exits.")
     parser.add_argument("--json-log", metavar="PATH",
                        help="Append a structured JSON-line log at PATH.")
+    parser.add_argument(
+        "--dump-cli-reference",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
 
+    _apply_cli_option_metadata(parser)
     args = parser.parse_args()
+
+    if args.dump_cli_reference:
+        print(json.dumps(_cli_reference_payload(parser), ensure_ascii=True, sort_keys=True))
+        return
 
     if args.json_log:
         attach_json_log(args.json_log)

@@ -166,7 +166,8 @@ device.
 
 ```powershell
 python -m pip install ruff==0.15.20
-python -m ruff check backend gui VideoSubtitleRemover.py --no-cache
+python -m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache
+python scripts/generate_cli_reference.py
 python -m unittest discover -s tests -v
 python -m backend.reference_corpus --json
 python tools/local_smoke.py
@@ -422,66 +423,166 @@ metric floors. Good starting sources are NASA public-domain media, Library of
 Congress public-domain media, Wikimedia Commons compatible-license files, or a
 clip you shot and grant as CC0.
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-i`, `--input` | Input file path | Required |
-| `-o`, `--output` | Output file path | Required |
-| `--pattern` | Glob pattern for batch (e.g. `inputs/*.mp4`) | - |
-| `--out-dir` | Output directory for batch mode | - |
-| `--config` | JSON config overlay | - |
-| `--config-schema-version N` | Require the canonical processing-config schema version | - |
-| `--set FIELD=JSON` | Override any canonical processing field; repeatable | - |
-| `--preset NAME` | Apply a built-in or user preset by name | - |
-| `--list-presets` | List every preset and exit | - |
-| `--work-dir` | Writable root for temporary, mask, checkpoint, and resume files | System temporary directory |
-| `--checkpoint-dir` | Directory for done markers and pause/resume checkpoint frames | `%APPDATA%` app cache |
-| `--no-resume` | Ignore existing checkpoints and reprocess files; this run still writes new pause checkpoints | Off |
-| `-m`, `--mode` | Algorithm (sttn/lama/propainter/auto) | sttn |
-| `--codec` | Output codec (h264/h265/av1/vvc; VVC requires FFmpeg with `libvvenc`) | h264 |
-| `-g`, `--gpu` | GPU device ID (-1 for CPU) | 0 |
-| `-l`, `--lang` | Detection language | en |
-| `--crf` | Output quality (15-35, lower=better) | 23 |
-| `--skip-detection` | Use manual region only | Off |
-| `--fast` | LAMA fast mode | Off |
-| `--no-audio` | Strip audio | Off |
-| `--single-audio` | Mux only first audio stream | Off |
-| `--loudnorm <LUFS>` | EBU R128 loudness target (0 disables) | 0 |
-| `--frame-skip N` | Reuse mask for N frames (0=every frame) | 0 |
-| `--rife-fast-stride N` | Inpaint keyframes and synthesize skipped frames with Practical-RIFE | 0 |
-| `--mask-dilate N` | Expand masks by N pixels | 8 |
-| `--no-hw-encode` | Force software encoding | Off |
-| `--decode-accel` | HW decode hint (off/auto/d3d11/vaapi/mfx/pynv/nvdec) | off |
-| `--keep-chyrons` | Leave persistent text (logos / lower-thirds) | Off |
-| `--keep-subtitles` | Leave dialogue subtitles | Off |
-| `--karaoke-grouping` | Fuse per-syllable boxes on the same line | Off |
-| `--whisper-fallback` | Use Whisper timing to mask OCR-empty speech frames | Off |
-| `--whisper-backend` | Whisper backend (`faster-whisper` or `ffmpeg`) | faster-whisper |
-| `--whisper-model` | faster-whisper model size | tiny |
-| `--ffmpeg-whisper-model` | Local whisper.cpp ggml model for FFmpeg Whisper | - |
-| `--ffmpeg-whisper-queue` | FFmpeg whisper queue size in seconds | 3.0 |
-| `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action without loading OCR | Off |
-| `--soft-subtitle-plan-json` | Write soft-subtitle dry-run preflight details as JSON | - |
-| `--strip-soft-subtitles` | Stream-copy remux that removes embedded subtitle tracks | Off |
-| `--keep-soft-subtitles` | Stream-copy remux that keeps embedded subtitle tracks | Off |
-| `--burned-in-only` | Ignore embedded tracks and run visual cleanup normally | Off |
-| `--quality-report` | Compute PSNR/SSIM and VMAF when libvmaf is available | Off |
-| `--quality-sheet` | Side-by-side comparison PNG | Off |
-| `--film-grain STRENGTH` | Add film grain after cleanup; AV1 software output uses SVT-AV1 native grain, other codecs use FFmpeg noise (0..0.5) | 0 |
-| `--audit-onnx` | Audit all ONNX models for DirectML opset compatibility and exit | Off |
-| `--audit-windows-ml` | Probe Windows ML Python bridge and tiny ONNX smoke inference | Off |
-| `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes | Off |
-| `--cache-info` | Print cache directory inventory with sizes and exit | Off |
-| `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) | Off |
-| `--model-cache-export PATH` | Write a portable model-cache zip with SHA-256 manifest | - |
-| `--model-cache-import PATH` | Import a verified model-cache zip into the app model cache | - |
-| `--support-bundle PATH` | Write a redacted diagnostics zip and exit | - |
-| `--validate-config` | Print resolved config and exit | Off |
-| `--self-test` | Probe OCR engines, GPU providers, codecs, and FFmpeg capability profiles, then exit | Off |
-| `--auto-lang-probe` | Detect subtitle script/language from first frame and exit | Off |
-| `--skip-existing` | Skip files whose output already exists | Off |
-| `--no-prefetch` | Disable worker-thread frame prefetcher | Off |
-| `--output-frames` | Write cleaned frames as individual PNGs instead of a video | Off |
-| `--json-log PATH` | Append a structured JSON-line log | - |
+<!-- BEGIN GENERATED CLI REFERENCE -->
+This table is generated from the live argparse actions and their category,
+default, range, visibility, and deprecation metadata. Regenerate it with
+`python scripts/generate_cli_reference.py --write`.
+
+#### General
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `-h`, `--help` | show this help message and exit | - | - | Public |
+
+#### Inputs, batches, and reproducibility
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `--input`, `-i` | Input file path | - | - | Public |
+| `--output`, `-o` | Output file path | - | - | Public |
+| `--pattern` | Glob pattern for batch mode (e.g. 'inputs/*.mp4') | - | - | Public |
+| `--out-dir` | Output directory for batch mode | - | - | Public |
+| `--config` | JSON config file (key=value pairs overriding CLI defaults) | - | - | Public |
+| `--config-schema-version` | Canonical processing-config schema version for reproducible commands. | - | - | Public |
+| `--set` | Override any canonical processing field; repeat for multiple values. | - | - | Public |
+| `--preset` | Apply a built-in or user preset by name. | - | - | Public |
+| `--list-presets` | Print every known preset and exit. | Off | - | Public |
+| `--checkpoint-dir` | Checkpoint dir for crash-resume and pause/resume (default: %APPDATA%/.../checkpoints) | - | - | Public |
+| `--work-dir` | Writable root for temporary, mask, checkpoint, and resume artifacts; falls back with a warning when unavailable. | - | - | Public |
+| `--no-resume` | Ignore existing checkpoints and reprocess every file; pause checkpoints are still written for this run | Off | - | Public |
+| `--start` | Start time in seconds | 0 | >=0 seconds | Public |
+| `--end` | End time in seconds (0=full) | 0 | 0 or >= start | Public |
+| `--nle-input` | Parse an EDL/FCPXML to extract time segments for processing. | - | - | Public |
+| `--input-fps` | FPS for directory-of-images input. | 24.0 | 1..240 | Public |
+| `--output-frames` | Write cleaned frames as individual PNGs instead of a video. | Off | - | Public |
+| `--skip-existing` | Skip inputs whose output path already exists. | Off | - | Public |
+
+#### Removal, detection, and masks
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `--mode`, `-m` | Inpainting algorithm. | sttn | sttn \| lama \| propainter \| auto \| migan | Public |
+| `--gpu`, `-g` | GPU device ID (-1 for CPU) | 0 | -1 or >=0 | Public |
+| `--lang`, `-l` | Detection language | en | - | Public |
+| `--skip-detection` | Skip automatic detection (STTN only) | Off | - | Public |
+| `--fast` | Fast mode (LAMA only) | Off | - | Public |
+| `--threshold` | Detection threshold (0.1-1.0) | 0.5 | 0.1..1.0 | Public |
+| `--vertical` | Vertical-text mode (rotate frames 90 CCW before OCR). | Off | - | Public |
+| `--frame-skip` | Reuse detection mask for N frames between detections | 0 | 0..240 frames | Public |
+| `--mask-dilate` | Mask dilation in pixels (0=off) | 8 | 0..100 pixels | Public |
+| `--confidence-dilate` | Scale mask dilation inversely with OCR confidence | Off | - | Public |
+| `--mask-feather` | Gaussian edge feathering in pixels (0=off) | 4 | 0..100 pixels | Public |
+| `--temporal-smooth` | Post-inpaint temporal smoothing radius for LaMa (0=off, 1-5) | 0 | 0..5 frames | Public |
+| `--edge-ring` | Edge-ring colour match width in pixels (0=off) | 2 | 0..32 pixels | Public |
+| `--flow-warp` | Farneback flow-warp TBE frames before aggregation | Off | - | Public |
+| `--no-scene-split` | Disable scene-cut splitting inside TBE batches | Off | - | Public |
+| `--pyscenedetect` | Prefer PySceneDetect AdaptiveDetector for scene cuts. | Off | - | Public |
+| `--transnetv2` | Prefer TransNetV2 (deep CNN) for scene-cut detection. | Off | - | Public |
+| `--denoise-detect` | Run a denoise pass on the detection-frame stream. | Off | - | Public |
+| `--sam2-refine` | SAM 2 mask refinement of detected boxes. | Off | - | Public |
+| `--matanyone-refine` | MatAnyone 2 alpha-matte refinement of masks. | Off | - | Public |
+| `--cotracker-propagate` | Use CoTracker3 to fill OCR-empty masks in a batch. | Off | - | Public |
+| `--no-tbe` | Disable Temporal Background Exposure (STTN/ProPainter use cv2) | Off | - | Public |
+| `--no-adaptive-batch` | Disable VRAM-probe-driven batch sizing | Off | - | Public |
+| `--temporal-mask-union` | Scene-cut-safe temporal mask stabilization: OR each frame's mask with a short trailing window (auto detection only) to retain pixels missed on single frames or moving overlays; resets at scene cuts | Off | - | Public |
+| `--temporal-mask-window` | Trailing window size for --temporal-mask-union (1-15) | 3 | 1..15 frames | Public |
+| `--auto-band` | Auto-detect the dominant subtitle band before processing | Off | - | Public |
+| `--no-kalman` | Disable Kalman detection smoothing | Off | - | Public |
+| `--no-phash` | Disable perceptual-hash adaptive mask reuse | Off | - | Public |
+| `--phash-distance` | pHash Hamming distance threshold for mask reuse (0-64) | 4 | 0..64 | Public |
+| `--colour-tune` | Grow the mask by dominant-colour match inside each box | Off | - | Public |
+| `--colour-tolerance` | Lab-space colour distance tolerance for colour-tune | 25 | 0..255 | Public |
+| `--auto-threshold` | AUTO-mode exposure threshold (0-1) | 0.55 | 0..1 | Public |
+| `--keep-chyrons` | Leave persistent text (logos, lower-thirds, tickers). | Off | - | Public |
+| `--keep-subtitles` | Leave non-persistent text (dialogue captions). | Off | - | Public |
+| `--chyron-min-hits` | Kalman-track frame count to classify as chyron. | 90 | 1..100000 frames | Public |
+| `--karaoke-grouping` | Fuse per-syllable OCR boxes on the same line. | Off | - | Public |
+| `--karaoke-x-gap` | Max horizontal gap (px) between karaoke boxes. | 20 | 0..1024 pixels | Public |
+| `--karaoke-y-overlap` | Min vertical overlap ratio for karaoke line fusion. | 0.5 | 0..1 | Public |
+
+#### Speech and subtitle tracks
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `--whisper-fallback` | Whisper-driven bottom-band default mask on OCR-empty frames. | Off | - | Public |
+| `--whisper-backend` | Whisper fallback backend. | faster-whisper | faster-whisper \| ffmpeg | Public |
+| `--restyle` | Re-burn an .srt or .ass subtitle file onto the cleaned output. | - | - | Public |
+| `--restyle-style` | ASS force_style override for --restyle (e.g. 'FontSize=24,PrimaryColour=&H00FFFFFF'). | - | - | Public |
+| `--whisper-model` | faster-whisper model size. | tiny | tiny \| base \| small \| medium \| large \| large-v2 \| large-v3 | Public |
+| `--ffmpeg-whisper-model` | Path to a local whisper.cpp ggml model for --whisper-backend ffmpeg. | - | - | Public |
+| `--ffmpeg-whisper-queue` | FFmpeg whisper filter queue size in seconds. | 3.0 | 0.02..3600 seconds | Public |
+| `--ffmpeg-whisper-vad-model` | Path to a Silero VAD ONNX model for FFmpeg Whisper. | - | - | Public |
+| `--ffmpeg-whisper-vad-threshold` | VAD confidence threshold (0.0-1.0, default 0.5). | 0.5 | 0..1 | Public |
+| `--ffmpeg-whisper-min-speech` | Minimum speech duration for VAD segments (default 0). | 0.0 | 0..30 seconds | Public |
+| `--export-srt` | Write an .srt sidecar with detected text | Off | - | Public |
+| `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action, then exit. | Off | - | Public |
+| `--soft-subtitle-plan-json` | Write soft-subtitle dry-run preflight details as JSON. | - | - | Public |
+| `--strip-soft-subtitles` | Fast remux that removes embedded subtitle tracks without OCR. | Off | - | Public |
+| `--keep-soft-subtitles` | Fast remux that keeps embedded subtitle tracks without OCR. | Off | - | Public |
+| `--burned-in-only` | Ignore embedded subtitle tracks and run burned-in cleanup normally. | Off | - | Public |
+
+#### Output and post-processing
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `--no-audio` | Don't preserve audio | Off | - | Public |
+| `--crf` | Output CRF quality (15-35) | 23 | 15..35 | Public |
+| `--upscale` | Post-cleanup upscale (Real-ESRGAN). | 0 | 0 \| 2 \| 3 \| 4 | Public |
+| `--no-color-preserve` | Do not re-tag the output with the source's color signalling. | Off | - | Public |
+| `--nle-sidecar` | Emit an EDL or FCPXML sidecar next to the output. | off | off \| edl \| fcpxml | Public |
+| `--swinir` | Post-cleanup SwinIR restoration pass. | Off | - | Public |
+| `--seedvr2` | Post-cleanup SeedVR2 restoration pass. | Off | - | Public |
+| `--film-grain` | Additive film grain after cleanup (0..0.5; 0 disables). | 0.0 | 0..0.5 | Public |
+| `--watermark` | Burn a PNG watermark onto the output after cleanup. | - | - | Public |
+| `--watermark-position` | Watermark corner position (default bottom-right). | bottom-right | top-left \| top-right \| bottom-left \| bottom-right \| center | Public |
+| `--watermark-opacity` | Watermark opacity 0.0-1.0 (default 1.0). | 1.0 | 0..1 | Public |
+| `--watermark-margin` | Watermark margin from edge in pixels (default 16). | 16 | 0..500 pixels | Public |
+| `--no-hw-encode` | Disable hardware encoding (force libx264) | Off | - | Public |
+| `--codec` | Output video codec (vvc requires FFmpeg with libvvenc). | h264 | h264 \| h265 \| av1 \| vvc | Public |
+| `--export-mask` | Write a B/W .mask.mp4 debug video | Off | - | Public |
+| `--deinterlace` | Force ffmpeg yadif deinterlace before processing | Off | - | Public |
+| `--no-deinterlace-detect` | Skip the automatic ffprobe interlacing detection | Off | - | Public |
+| `--keyframe-detect` | OCR only at video I-frames (ffprobe-probed) | Off | - | Public |
+| `--quality-report` | Compute PSNR/SSIM on a random frame sample after run | Off | - | Public |
+| `--quality-sheet` | Render a side-by-side comparison PNG alongside the report. | Off | - | Public |
+| `--loudnorm` | EBU R128 loudness target in LUFS. | 0.0 | 0 (off) or -70..-5 LUFS | Public |
+| `--decode-accel` | Hardware-decode hint (OpenCV or PyNvVideoCodec). | off | off \| auto \| any \| d3d11 \| vaapi \| mfx \| pynv \| nvdec | Public |
+| `--single-audio` | Mux only the first audio stream. | Off | - | Public |
+
+#### Performance and recovery
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `--rife-fast-stride` | Inpaint every Nth frame and synthesize skipped frames with Practical-RIFE (0 disables). | 0 | 0..60 frames | Public |
+| `--max-retries` | Automatically re-attempt a batch item that fails with a transient error (GPU glitch, ffmpeg hiccup, timeout) up to N times with backoff (0=off, max 10) | 0 | 0..10 | Public |
+| `--retry-backoff` | Base seconds between transient retries (0-600; each later attempt waits a multiple of this value) | 5.0 | 0..600 seconds | Public |
+| `--no-prefetch` | Disable the worker-thread frame prefetcher. | Off | - | Public |
+| `--prefetch-queue` | Bounded prefetch queue size in frames. | 0 | 0..512 frames | Public |
+
+#### Diagnostics and automation
+
+| Flag | Description | Default | Range/choices | Status |
+|------|-------------|---------|---------------|--------|
+| `--audit-onnx` | Audit all discoverable ONNX models for DirectML opset compatibility and exit. | Off | - | Public |
+| `--audit-windows-ml` | Probe the Windows ML Python path with a tiny ONNX smoke model and exit. | Off | - | Public |
+| `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes, then exit. | Off | - | Public |
+| `--cache-info` | Print cache directory inventory with sizes and exit. | Off | - | Public |
+| `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) and exit. | Off | - | Public |
+| `--model-cache-export` | Write a portable model-cache zip with SHA-256 manifest and exit. | - | - | Public |
+| `--model-cache-import` | Import a verified portable model-cache zip into the app model cache and exit. | - | - | Public |
+| `--support-bundle` | Write a redacted diagnostics zip and exit. | - | - | Public |
+| `--validate-config` | Print the resolved ProcessingConfig as JSON and exit. | Off | - | Public |
+| `--self-test` | Probe OCR engines, inpaint backends, GPU providers, and codecs, then print results and exit. | Off | - | Public |
+| `--inference-smoke` | Run a generated text image and masked frame through the OCR and inpaint backends to prove they actually execute (records provider/timing), then exit. No model downloads. Uses --gpu to pick the device. | Off | - | Public |
+| `--ocr-benchmark` | Benchmark the active OCR detector on synthetic ground-truth subtitle fixtures (recall, latency, and memory) and print JSON evidence, then exit. Use --gpu to pick the device. Gate any default-detector swap on the meets_floors verdict. | Off | - | Public |
+| `--ocr-engine` | Select the provider used by --ocr-benchmark. | auto | auto \| opencv-dnn \| rapidocr | Public |
+| `--dry-run` | Validate the run without encoding: probe each input, run detection on a few sampled frames, check the requested codec is available, and print a per-file plan, then exit. Combine with --json for machine output. | Off | - | Public |
+| `--json` | Emit a machine-readable JSON result to stdout (the --dry-run plan, or the batch/file result). | Off | - | Public |
+| `--auto-lang-probe` | Probe the first frame for script/language and print a suggestion, then exit. Requires -i. | Off | - | Public |
+| `--intent` | Natural-language cleanup intent (e.g. 'remove subtitles', 'remove logo'). Prints config changes and exits. | - | - | Public |
+| `--json-log` | Append a structured JSON-line log at PATH. | - | - | Public |
+
+<!-- END GENERATED CLI REFERENCE -->
 
 `--config` accepts the same manual region schema used by the GUI. Use
 `subtitle_area` for one global rectangle, `subtitle_areas` for multiple global
@@ -528,6 +629,116 @@ This keeps fields without a dedicated legacy flag reproducible too. Use
 ## Configuration
 
 Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and persist across sessions.
+
+<!-- BEGIN GENERATED CONFIG REFERENCE -->
+### Canonical processing fields
+
+These fields are accepted by `--set FIELD=JSON` and JSON config overlays.
+The table is generated directly from `ProcessingConfig` in registry order.
+
+| Field | Type | Default |
+|-------|------|---------|
+| `mode` | `InpaintMode` | `sttn` |
+| `device` | `str` | `cuda:0` |
+| `sttn_skip_detection` | `bool` | `Off` |
+| `sttn_neighbor_stride` | `int` | `10` |
+| `sttn_reference_length` | `int` | `10` |
+| `sttn_max_load_num` | `int` | `30` |
+| `lama_super_fast` | `bool` | `Off` |
+| `subtitle_area` | `Optional[Tuple[int, int, int, int]]` | `-` |
+| `detection_threshold` | `float` | `0.5` |
+| `detection_lang` | `str` | `en` |
+| `detection_frame_skip` | `int` | `0` |
+| `detection_vertical` | `bool` | `Off` |
+| `whisper_fallback` | `bool` | `Off` |
+| `whisper_backend` | `str` | `faster-whisper` |
+| `whisper_model_size` | `str` | `tiny` |
+| `whisper_model_path` | `str` | `-` |
+| `whisper_queue_seconds` | `float` | `3.0` |
+| `whisper_vad_model` | `str` | `-` |
+| `whisper_vad_threshold` | `float` | `0.5` |
+| `whisper_min_speech_duration` | `float` | `0.0` |
+| `upscale_factor` | `int` | `0` |
+| `film_grain_strength` | `float` | `0.0` |
+| `swinir_restore` | `bool` | `Off` |
+| `seedvr2_restore` | `bool` | `Off` |
+| `preserve_color_metadata` | `bool` | `On` |
+| `watermark_image` | `str` | `-` |
+| `watermark_position` | `str` | `bottom-right` |
+| `watermark_opacity` | `float` | `1.0` |
+| `watermark_margin` | `int` | `16` |
+| `restyle_subtitle` | `str` | `-` |
+| `restyle_style` | `str` | `-` |
+| `nle_sidecar` | `str` | `off` |
+| `mask_dilate_px` | `int` | `8` |
+| `mask_feather_px` | `int` | `4` |
+| `confidence_weighted_dilation` | `bool` | `Off` |
+| `confidence_dilation_scale` | `float` | `1.5` |
+| `lama_tile_size` | `int` | `512` |
+| `lama_tile_overlap` | `int` | `64` |
+| `temporal_smooth_radius` | `int` | `0` |
+| `tbe_enable` | `bool` | `On` |
+| `tbe_min_coverage` | `int` | `3` |
+| `tbe_use_median` | `bool` | `On` |
+| `tbe_flow_warp` | `bool` | `Off` |
+| `tbe_scene_cut_split` | `bool` | `On` |
+| `tbe_scene_cut_threshold` | `float` | `0.35` |
+| `tbe_scene_cut_use_pyscenedetect` | `bool` | `Off` |
+| `tbe_scene_cut_use_transnetv2` | `bool` | `Off` |
+| `detection_denoise` | `bool` | `Off` |
+| `sam2_refine` | `bool` | `Off` |
+| `matanyone_refine` | `bool` | `Off` |
+| `cotracker_propagate` | `bool` | `Off` |
+| `rife_fast_stride` | `int` | `0` |
+| `edge_ring_px` | `int` | `2` |
+| `subtitle_areas` | `Optional[List[Tuple[int, int, int, int]]]` | `-` |
+| `subtitle_region_spans` | `Optional[List[dict]]` | `-` |
+| `subtitle_region_keyframes` | `Optional[List[dict]]` | `-` |
+| `manual_mask_corrections` | `Optional[List[dict]]` | `-` |
+| `export_mask_video` | `bool` | `Off` |
+| `export_srt` | `bool` | `Off` |
+| `adaptive_batch` | `bool` | `On` |
+| `gpu_oom_recovery` | `bool` | `On` |
+| `batch_max_retries` | `int` | `0` |
+| `batch_retry_backoff_seconds` | `float` | `5.0` |
+| `temporal_mask_union` | `bool` | `Off` |
+| `temporal_mask_window` | `int` | `3` |
+| `auto_exposure_threshold` | `float` | `0.55` |
+| `deinterlace` | `bool` | `Off` |
+| `deinterlace_auto` | `bool` | `On` |
+| `keyframe_detection` | `bool` | `Off` |
+| `quality_report` | `bool` | `Off` |
+| `kalman_tracking` | `bool` | `On` |
+| `kalman_iou_threshold` | `float` | `0.3` |
+| `kalman_max_age` | `int` | `2` |
+| `phash_skip_enable` | `bool` | `On` |
+| `phash_skip_distance` | `int` | `4` |
+| `colour_tune_enable` | `bool` | `Off` |
+| `colour_tune_tolerance` | `int` | `25` |
+| `time_start` | `float` | `0.0` |
+| `time_end` | `float` | `0.0` |
+| `work_directory` | `str` | `-` |
+| `preserve_audio` | `bool` | `On` |
+| `output_format` | `str` | `mp4` |
+| `output_quality` | `int` | `23` |
+| `use_hw_encode` | `bool` | `On` |
+| `output_frames` | `bool` | `Off` |
+| `output_codec` | `str` | `h264` |
+| `loudnorm_target` | `float` | `0.0` |
+| `decode_hw_accel` | `str` | `off` |
+| `multi_audio_passthrough` | `bool` | `On` |
+| `prefetch_decode` | `bool` | `On` |
+| `prefetch_queue_size` | `int` | `0` |
+| `input_fps` | `float` | `24.0` |
+| `quality_report_sheet` | `bool` | `Off` |
+| `remove_subtitles` | `bool` | `On` |
+| `remove_chyrons` | `bool` | `On` |
+| `chyron_min_hits` | `int` | `90` |
+| `karaoke_grouping` | `bool` | `Off` |
+| `karaoke_x_gap_px` | `int` | `20` |
+| `karaoke_y_overlap` | `float` | `0.5` |
+
+<!-- END GENERATED CONFIG REFERENCE -->
 
 ### Advanced Settings
 

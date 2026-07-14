@@ -1,5 +1,8 @@
 import ast
+import json
 from pathlib import Path
+import subprocess
+import sys
 import tomllib
 import unittest
 
@@ -57,9 +60,58 @@ class SourceHygieneTests(unittest.TestCase):
         build_script = (ROOT / "build_exe.bat").read_text(encoding="ascii")
         self.assertIn('"ruff==0.15.20"', build_script)
         self.assertIn(
-            "-m ruff check backend gui VideoSubtitleRemover.py --no-cache",
+            "-m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache",
             build_script,
         )
+        self.assertIn('"%PYTHON%" scripts\\generate_cli_reference.py', build_script)
+
+    def test_generated_cli_and_config_reference_is_current(self):
+        check = subprocess.run(
+            [sys.executable, "scripts/generate_cli_reference.py"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(check.returncode, 0, check.stderr or check.stdout)
+
+        dump = subprocess.run(
+            [sys.executable, "-m", "backend.processor", "--dump-cli-reference"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(dump.returncode, 0, dump.stderr or dump.stdout)
+        payload = json.loads(dump.stdout)
+        self.assertEqual(payload["schema"], "vsr.cli_reference.v1")
+        internal = [
+            option["flags"][0]
+            for option in payload["options"]
+            if option["internal"]
+        ]
+        self.assertEqual(internal, ["--dump-cli-reference"])
+        for option in payload["options"]:
+            self.assertIn(option["category"], payload["categories"])
+            self.assertIsInstance(option["deprecated"], bool)
+            self.assertIn("default", option)
+            self.assertIn("range", option)
+
+        help_result = subprocess.run(
+            [sys.executable, "-m", "backend.processor", "--help"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        for category in payload["categories"]:
+            if category != "Diagnostics and automation":
+                self.assertIn(category + ":", help_result.stdout)
+        self.assertIn("Diagnostics and automation:", help_result.stdout)
 
     def test_backend_launches_only_through_subprocess_policy(self):
         policy = ROOT / "backend" / "subprocess_policy.py"

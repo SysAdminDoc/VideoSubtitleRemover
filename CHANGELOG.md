@@ -44,6 +44,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Generated CLI and config reference.** Every live CLI action now carries a
+  category, default, range/choice, visibility, and deprecation record used by
+  grouped `--help` output and the README generator. The same deterministic
+  command documents all 99 canonical `ProcessingConfig` fields, and source
+  tests plus release builds fail when either generated section drifts.
 - **OpenCV 5 PP-OCRv6 provider and benchmark evidence.** RapidOCR's bundled
   detection and recognition ONNX assets can now execute
   through `cv2.dnn` without ONNX Runtime. The OCR benchmark selects OpenCV DNN
