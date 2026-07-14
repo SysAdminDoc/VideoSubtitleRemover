@@ -243,7 +243,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
-        self.assertTrue(any("onnxruntime-directml>=1.18.0" in call for call in calls))
+        self.assertTrue(any("onnxruntime-directml>=1.25.0" in call for call in calls))
         self.assertFalse(any("torch-directml" in call for call in calls))
         self.assertFalse(any("openvino" in call for call in calls))
 
@@ -259,7 +259,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
-        self.assertTrue(any("onnxruntime-directml>=1.18.0" in call for call in calls))
+        self.assertTrue(any("onnxruntime-directml>=1.25.0" in call for call in calls))
         self.assertTrue(any("openvino>=2025.0.0" in call for call in calls))
 
     def test_nvidia_dependencies_install_onnxruntime_gpu(self):
@@ -276,7 +276,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
         self.assertTrue(any("setuptools<82" in call for call in calls))
-        self.assertTrue(any("onnxruntime-gpu>=1.21.0" in call for call in calls))
+        self.assertTrue(any("onnxruntime-gpu>=1.25.0" in call for call in calls))
         self.assertFalse(any("onnxruntime-directml" in call for call in calls))
 
     def test_repair_argument_enables_unattended_recreate_mode(self):

@@ -323,7 +323,8 @@ def _dry_run_plan_for(remover, config, inp: str, video_exts) -> dict:
 
     if not is_video:
         try:
-            img = _cv2.imread(inp)
+            from backend.safe_image import safe_imread
+            img = safe_imread(inp)
             if img is not None:
                 boxes = remover.detector.detect(img, config.detection_threshold)
                 plan["sampled"] = 1
