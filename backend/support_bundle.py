@@ -542,3 +542,111 @@ def run_self_test() -> dict:
         })
 
     return results
+
+
+INFERENCE_SMOKE_SCHEMA = "vsr.inference_smoke.v1"
+
+
+def _smoke_text_image():
+    """Generate a deterministic white image with black text for OCR smoke."""
+    import cv2
+    import numpy as np
+    img = np.full((96, 384, 3), 245, dtype=np.uint8)
+    cv2.putText(img, "SUBTITLE 12", (14, 60), cv2.FONT_HERSHEY_SIMPLEX,
+                1.4, (10, 10, 10), 3, cv2.LINE_AA)
+    return img
+
+
+def _smoke_masked_frame():
+    """Generate a smooth frame plus a rectangular mask for inpaint smoke."""
+    import cv2
+    import numpy as np
+    yy, xx = np.mgrid[0:96, 0:384]
+    frame = np.stack([(xx % 256), (yy * 2 % 256), ((xx + yy) % 256)], -1)
+    frame = cv2.GaussianBlur(frame.astype(np.uint8), (9, 9), 0)
+    mask = np.zeros((96, 384), np.uint8)
+    mask[40:70, 60:320] = 255
+    return frame, mask
+
+
+def run_inference_smoke(*, device: str = "cpu", lang: str = "en") -> dict:
+    """Prove that the selected OCR and inpaint backends actually execute.
+
+    Runs a generated text image through the detector and a generated masked
+    frame through each locally ready inpaint path, recording the actual engine
+    / execution provider, whether inference ran, timing, and a precise skip
+    reason when a backend is not installed. No model weights are downloaded:
+    OCR uses the wheel-bundled models and inpaint uses local LaMa weights or
+    the OpenCV fallback.
+    """
+    from time import perf_counter
+
+    results: dict = {"schema": INFERENCE_SMOKE_SCHEMA, "device": device,
+                     "ocr": [], "inpaint": []}
+
+    # --- OCR execution ---
+    try:
+        from backend.detection import SubtitleDetector
+        image = _smoke_text_image()
+        start = perf_counter()
+        detector = SubtitleDetector(device=device, lang=lang)
+        boxes = detector.detect(image, 0.3)
+        elapsed = (perf_counter() - start) * 1000.0
+        engine = getattr(detector, "_engine_name", "unknown")
+        ran = engine not in ("none", "unknown", None)
+        results["ocr"].append({
+            "name": "detector",
+            "ran": ran,
+            "passed": bool(ran and boxes is not None),
+            "provider": str(engine),
+            "boxes": len(boxes) if boxes is not None else 0,
+            "ms": round(elapsed, 1),
+            "reason": "" if ran else "no OCR engine available (weights absent)",
+        })
+    except Exception as exc:  # noqa: BLE001 - smoke must never raise
+        results["ocr"].append({
+            "name": "detector", "ran": False, "passed": False,
+            "provider": "", "boxes": 0, "ms": None, "reason": str(exc)[:200],
+        })
+
+    # --- inpaint execution ---
+    frame, mask = _smoke_masked_frame()
+    try:
+        from backend.inpainters import _cv2_inpaint
+        import cv2
+        start = perf_counter()
+        out = _cv2_inpaint(frame, mask, 5, cv2.INPAINT_TELEA)
+        elapsed = (perf_counter() - start) * 1000.0
+        results["inpaint"].append({
+            "name": "cv2", "ran": True,
+            "passed": out is not None and out.shape == frame.shape,
+            "provider": "opencv", "ms": round(elapsed, 1), "reason": "",
+        })
+    except Exception as exc:  # noqa: BLE001
+        results["inpaint"].append({
+            "name": "cv2", "ran": False, "passed": False,
+            "provider": "", "ms": None, "reason": str(exc)[:200],
+        })
+
+    try:
+        from backend.config import ProcessingConfig
+        from backend.inpainters import LAMAInpainter
+        inpainter = LAMAInpainter(device, ProcessingConfig())
+        start = perf_counter()
+        cleaned = inpainter.inpaint([frame], [mask])
+        elapsed = (perf_counter() - start) * 1000.0
+        backend_name = getattr(inpainter, "_backend_name", "unknown")
+        ok = bool(cleaned and cleaned[0] is not None
+                  and cleaned[0].shape == frame.shape)
+        results["inpaint"].append({
+            "name": "lama", "ran": True, "passed": ok,
+            "provider": str(backend_name), "ms": round(elapsed, 1),
+            "reason": "" if ok else "inpaint returned an unexpected result",
+        })
+    except Exception as exc:  # noqa: BLE001
+        results["inpaint"].append({
+            "name": "lama", "ran": False, "passed": False,
+            "provider": "", "ms": None, "reason": str(exc)[:200],
+        })
+
+    return results

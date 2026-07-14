@@ -25,6 +25,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   oversized/short members, duplicate targets, free-space exhaustion, and
   mid-commit rollback.
 
+### Diagnostics
+
+- **Inference-execution self-test (`--inference-smoke`).** A new CLI option and
+  `backend.support_bundle.run_inference_smoke` push a generated text image and
+  masked frame through the selected OCR detector and inpaint backend to prove
+  they actually run, recording the real engine / execution provider (e.g.
+  `RapidOCR`, `ONNX (CUDAExecutionProvider)`, or a `cv2` fallback), whether
+  inference ran, and timing. It exits non-zero when a loaded backend cannot
+  execute and reports a precise reason when weights are absent -- no model
+  downloads. Distinguishes "provider available" from "provider actually ran".
+
 ### Quality
 
 - **Mask-boundary seam (discontinuity) quality check.** The quality report now

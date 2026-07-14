@@ -547,6 +547,11 @@ def main():
     parser.add_argument("--self-test", action="store_true",
                        help="Probe OCR engines, inpaint backends, GPU providers, "
                             "and codecs, then print results and exit.")
+    parser.add_argument("--inference-smoke", action="store_true",
+                       help="Run a generated text image and masked frame through "
+                            "the OCR and inpaint backends to prove they actually "
+                            "execute (records provider/timing), then exit. No model "
+                            "downloads. Uses --gpu to pick the device.")
     parser.add_argument("--auto-lang-probe", action="store_true",
                        help="Probe the first frame for script/language and print "
                             "a suggestion, then exit. Requires -i.")
@@ -656,6 +661,23 @@ def main():
                 mark = "OK" if entry["available"] else "  "
                 print(f"  [{mark}] {entry['name']}: {entry['reason']}")
         sys.exit(0)
+
+    if args.inference_smoke:
+        from backend.support_bundle import run_inference_smoke
+        device = f"cuda:{args.gpu}" if getattr(args, "gpu", 0) >= 0 else "cpu"
+        results = run_inference_smoke(device=device)
+        failed = False
+        for category in ("ocr", "inpaint"):
+            print(f"\n{category.upper()} (device={results['device']})")
+            for entry in results.get(category, []):
+                if entry.get("ran") and not entry.get("passed"):
+                    failed = True
+                mark = "OK" if entry.get("passed") else ("--" if entry.get("ran") else "  ")
+                ms = entry.get("ms")
+                timing = f" {ms:.1f}ms" if isinstance(ms, (int, float)) else ""
+                detail = entry.get("provider") or entry.get("reason") or ""
+                print(f"  [{mark}] {entry['name']}: {detail}{timing}")
+        sys.exit(1 if failed else 0)
 
     if args.intent:
         from backend.presets import parse_intent

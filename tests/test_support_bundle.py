@@ -260,6 +260,55 @@ class FfmpegProfileTests(unittest.TestCase):
         )
         self.assertIn("ffmpeg", entries[0]["reason"])
 
+    def test_inference_smoke_records_real_execution(self):
+        import numpy as np
+        from backend import support_bundle
+
+        class FakeDetector:
+            def __init__(self, *a, **k):
+                self._engine_name = "RapidOCR"
+
+            def detect(self, image, threshold):
+                return [(10, 10, 50, 30)]
+
+        class FakeLama:
+            def __init__(self, *a, **k):
+                self._backend_name = "ONNX (CPUExecutionProvider)"
+
+            def inpaint(self, frames, masks):
+                return [f.copy() for f in frames]
+
+        with mock.patch("backend.detection.SubtitleDetector", FakeDetector), \
+                mock.patch("backend.inpainters.LAMAInpainter", FakeLama):
+            result = support_bundle.run_inference_smoke(device="cpu")
+
+        self.assertEqual(result["schema"], support_bundle.INFERENCE_SMOKE_SCHEMA)
+        ocr = result["ocr"][0]
+        self.assertTrue(ocr["ran"] and ocr["passed"])
+        self.assertEqual(ocr["provider"], "RapidOCR")
+        lama = [e for e in result["inpaint"] if e["name"] == "lama"][0]
+        self.assertTrue(lama["ran"] and lama["passed"])
+        self.assertIn("CPUExecutionProvider", lama["provider"])
+        self.assertIsInstance(lama["ms"], float)
+
+    def test_inference_smoke_reports_backend_failure(self):
+        from backend import support_bundle
+
+        class BrokenLama:
+            def __init__(self, *a, **k):
+                pass
+
+            def inpaint(self, frames, masks):
+                raise RuntimeError("model file missing")
+
+        with mock.patch("backend.inpainters.LAMAInpainter", BrokenLama):
+            result = support_bundle.run_inference_smoke(device="cpu")
+
+        lama = [e for e in result["inpaint"] if e["name"] == "lama"][0]
+        self.assertFalse(lama["ran"])
+        self.assertFalse(lama["passed"])
+        self.assertIn("model file missing", lama["reason"])
+
     def test_self_test_flags_vulnerable_ffmpeg_runtime(self):
         from backend import support_bundle
 

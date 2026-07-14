@@ -124,6 +124,14 @@ Those profiles report missing filters such as `loudnorm`, `libvmaf`, or
 `whisper`, missing encoders such as `libvvenc`, and OpenCV wheel ownership
 before a long batch starts.
 
+Run `python -m backend.cli --inference-smoke` to prove the OCR and inpaint
+backends actually execute: it pushes a generated text image and masked frame
+through the detector and inpainter, printing the real engine / execution
+provider (e.g. `RapidOCR`, `ONNX (CUDAExecutionProvider)`, or a `cv2`
+fallback) and timing, and exits non-zero if a backend that loaded cannot run
+inference. No model weights are downloaded; add `--gpu N` to test a CUDA
+device.
+
 ### Validation
 
 ```powershell

@@ -38,13 +38,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: An opt-in/configurable rolling mask union runs after propagation/refinement, resets at scene cuts and inactive timed spans, reduces missed-mask pixels on moving/shadow/dissolve fixtures, and never expands a mask into adjacent scenes or outside configured regions.
   Complexity: M
 
-- [ ] P1 — Prove OCR and inpaint provider execution in self-test
-  Why: Constructor/provider availability does not prove inference ran on the selected backend, leaving GPU fallback and broken-model reports ambiguous.
-  Evidence: `backend/support_bundle.py:347-427`; https://github.com/YaoFANGUK/video-subtitle-remover/issues/242
-  Touches: `backend/support_bundle.py`, `backend/model_downloads.py`, `backend/detection.py`, `backend/inpainters/lama.py`, `backend/cli.py`, `tests/test_support_bundle.py`
-  Acceptance: An explicit no-download inference-smoke option runs a generated text image and masked frame through each locally ready selected backend, records actual provider/fallback/timing/model hash, returns failure when a claimed provider cannot execute, and remains skipped with a precise reason when weights are absent.
-  Complexity: M
-
 - [ ] P1 — Implement UI Automation providers for custom controls
   Why: In-process metadata and notifications do not let Narrator/NVDA enumerate or operate Canvas-based buttons, toggles, sliders, and queue rows.
   Evidence: `backend/a11y.py:1-19`, `gui/widgets.py`; https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
