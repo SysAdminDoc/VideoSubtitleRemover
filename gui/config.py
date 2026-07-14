@@ -85,6 +85,7 @@ _queue_state_io_lock = threading.RLock()
 # Format 2 -> 3: added subtitle_region_spans for time-ranged manual masks.
 # Format 3 -> 4: added rife_fast_stride for opt-in keyframe interpolation.
 # Format 4 -> 5: payloads are tied to the canonical backend config schema.
+# Format 5 -> 6: work_directory becomes an end-to-end backend storage policy.
 VSR_SETTINGS_FORMAT = GUI_SETTINGS_FORMAT
 
 # -- Enums ------------------------------------------------------------------

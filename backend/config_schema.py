@@ -14,8 +14,8 @@ from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
 
-CONFIG_SCHEMA_VERSION = 1
-GUI_SETTINGS_FORMAT = 5
+CONFIG_SCHEMA_VERSION = 2
+GUI_SETTINGS_FORMAT = 6
 CONFIG_SCHEMA_VERSION_KEY = "config_schema_version"
 GUI_SETTINGS_VERSION_KEY = "vsr_settings_format"
 
@@ -93,7 +93,8 @@ def migrate_gui_settings(data: Any) -> dict[str, Any]:
     if version > GUI_SETTINGS_FORMAT:
         return result
     # Formats 1-4 added fields with backward-compatible defaults.  Format 5
-    # binds the settings payload to the canonical processing schema.
+    # binds settings to the canonical schema; format 6 adds work-directory
+    # policy with an empty/system-default migration value.
     result[GUI_SETTINGS_VERSION_KEY] = GUI_SETTINGS_FORMAT
     result[CONFIG_SCHEMA_VERSION_KEY] = CONFIG_SCHEMA_VERSION
     return result

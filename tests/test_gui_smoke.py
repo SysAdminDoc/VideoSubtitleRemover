@@ -130,6 +130,19 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_work_directory_control_round_trips_into_queue_snapshots(self):
+        app = self._make_app()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                app.work_dir_var.set(tmpdir)
+                snapshot = app._make_processing_snapshot()
+                self.assertEqual(snapshot.work_directory, tmpdir)
+                app._reset_work_directory()
+                self.assertEqual(app.config.work_directory, "")
+                self.assertEqual(app.work_dir_var.get(), "")
+        finally:
+            self._destroy_app(app)
+
     def test_custom_widgets_expose_accessibility_snapshots(self):
         app = self._make_app()
         try:

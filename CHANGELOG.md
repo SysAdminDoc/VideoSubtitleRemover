@@ -52,6 +52,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Configured work storage was only cosmetic.** The GUI, CLI, canonical
+  config, copied commands, sidecars, processing intermediates, mask exports,
+  Whisper scratch data, and pause/resume checkpoints now share one validated
+  work-directory policy. Unavailable or read-only locations fall back with an
+  actionable warning, every affected volume receives a disk-space preflight,
+  and cross-volume output promotion copies to a destination-side staging file
+  before the final atomic replace.
 - **Reproducibility artifacts no longer omit active processing controls.** A
   versioned canonical backend field registry now drives GUI-to-backend mapping,
   settings migration, complete sidecar snapshots, copied CLI overrides, and

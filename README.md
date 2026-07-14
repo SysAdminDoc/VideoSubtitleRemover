@@ -362,12 +362,13 @@ before/after retry config in the next batch report.
 
 Long video runs can pause at safe frame-batch boundaries. In the GUI, click
 **Pause batch** while processing; the current video writes checkpoint frames
-under `%APPDATA%\VideoSubtitleRemoverPro\checkpoints\` and returns to the queue
-as `Paused`. Starting the batch again resumes from the first missing frame. In
-the CLI, press Ctrl-C once to request the same safe pause; re-run the same
-command to resume. If the input, output path, frame count, frame rate, size, or
-processing settings changed, VSR warns and restarts that file from the
-beginning instead of trusting stale checkpoint frames.
+under the selected work directory, or under
+`%APPDATA%\VideoSubtitleRemoverPro\checkpoints\` when no work directory is set,
+and returns to the queue as `Paused`. Starting the batch again resumes from the
+first missing frame. In the CLI, press Ctrl-C once to request the same safe
+pause; re-run the same command to resume. If the input, output path, frame
+count, frame rate, size, or processing settings changed, VSR warns and restarts
+that file from the beginning instead of trusting stale checkpoint frames.
 
 ### Reference Clip Contributions
 
@@ -390,6 +391,7 @@ clip you shot and grant as CC0.
 | `--set FIELD=JSON` | Override any canonical processing field; repeatable | - |
 | `--preset NAME` | Apply a built-in or user preset by name | - |
 | `--list-presets` | List every preset and exit | - |
+| `--work-dir` | Writable root for temporary, mask, checkpoint, and resume files | System temporary directory |
 | `--checkpoint-dir` | Directory for done markers and pause/resume checkpoint frames | `%APPDATA%` app cache |
 | `--no-resume` | Ignore existing checkpoints and reprocess files; this run still writes new pause checkpoints | Off |
 | `-m`, `--mode` | Algorithm (sttn/lama/propainter/auto) | sttn |
@@ -484,6 +486,7 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Loudness Target | EBU R128 LUFS target (0 = off) | 0 | 0 or -70..-5 |
 | Multi-track Audio | Pass through every audio stream | On | On/Off |
 | Quality Sheet | Side-by-side PNG next to output | Off | On/Off |
+| Work Directory | Temporary, mask, checkpoint, and resume storage; write-tested before each batch | System temporary directory | Writable folder |
 
 ## Troubleshooting
 

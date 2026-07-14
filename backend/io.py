@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import bisect
+import errno
 import logging
 import os
 import queue
@@ -964,14 +965,21 @@ def _write_text_atomic(path: Path, text: str):
                 pass
 
 
-def _allocate_temp_output_path(path) -> Path:
-    """Create a sibling temp file path that preserves the final suffix."""
+def _allocate_temp_output_path(path, *, temp_dir=None) -> Path:
+    """Create a temp path that preserves the final suffix.
+
+    ``temp_dir`` lets the processing storage policy keep large staging files
+    on the selected work volume.  The default stays beside the destination for
+    callers that require same-volume atomic replacement.
+    """
     final_path = Path(path)
     final_path.parent.mkdir(parents=True, exist_ok=True)
+    parent = Path(temp_dir) if temp_dir is not None else final_path.parent
+    parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
         prefix=f".{final_path.stem}.",
         suffix=final_path.suffix or ".tmp",
-        dir=str(final_path.parent),
+        dir=str(parent),
     )
     os.close(fd)
     return Path(temp_name)
@@ -988,7 +996,36 @@ def _cleanup_temp_output(path) -> None:
 
 def _promote_temp_output(temp_path, final_path) -> None:
     _ensure_output_parent(str(final_path))
-    os.replace(Path(temp_path), Path(final_path))
+    source = Path(temp_path)
+    destination = Path(final_path)
+    try:
+        os.replace(source, destination)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV and getattr(exc, "winerror", None) != 17:
+            raise
+    # Cross-volume replace is not atomic. Copy to a sibling staging file,
+    # flush it, then atomically replace the destination on its own volume.
+    sibling = _allocate_temp_output_path(destination)
+    try:
+        with source.open("rb") as reader, sibling.open("wb") as writer:
+            shutil.copyfileobj(reader, writer, length=4 * 1024 * 1024)
+            writer.flush()
+            os.fsync(writer.fileno())
+        os.replace(sibling, destination)
+        try:
+            source.unlink()
+        except OSError:
+            # The destination is complete and durable at this point. A stale
+            # work-file cleanup failure must not turn a successful encode into
+            # an apparent processing failure (for example under an antivirus
+            # handle race on Windows).
+            logger.warning(
+                "Could not remove promoted work file '%s'", source,
+                exc_info=True,
+            )
+    finally:
+        _cleanup_temp_output(sibling)
 
 
 def _copy_file_atomic(source: str, output: str) -> None:

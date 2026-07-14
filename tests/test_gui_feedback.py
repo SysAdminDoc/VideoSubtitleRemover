@@ -165,6 +165,7 @@ class TextWidgetHandlerThreadingTests(unittest.TestCase):
 class QueueCliCommandTests(unittest.TestCase):
     def test_cli_command_quotes_user_paths_and_values(self):
         cfg = ProcessingConfig(
+            work_directory=r"D:\VSR Work",
             mode=InpaintMode.LAMA,
             detection_lang="en",
             output_quality=19,
@@ -187,7 +188,9 @@ class QueueCliCommandTests(unittest.TestCase):
         self.assertIn("--watermark-position top-left", command)
 
     def test_cli_command_carries_schema_only_per_item_controls(self):
+        from backend.config_schema import CONFIG_SCHEMA_VERSION
         cfg = ProcessingConfig(
+            work_directory=r"D:\VSR Work",
             manual_mask_corrections=[
                 {"polygons": [[0, 0, 8, 0, 8, 8]], "start": 1.0, "end": 2.0},
             ],
@@ -204,10 +207,12 @@ class QueueCliCommandTests(unittest.TestCase):
 
         command = _build_cli_command(item)
 
-        self.assertIn("--config-schema-version 1", command)
+        self.assertIn(
+            f"--config-schema-version {CONFIG_SCHEMA_VERSION}", command)
         self.assertIn("manual_mask_corrections=", command)
         self.assertIn("confidence_dilation_scale=2.25", command)
         self.assertIn("gpu_oom_recovery=false", command)
+        self.assertIn("work_directory=", command)
 
 
 if __name__ == "__main__":

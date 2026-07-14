@@ -254,6 +254,7 @@ class ProcessingConfig:
     time_end: float = 0.0     # 0 = entire video
 
     # Output settings
+    work_directory: str = ""
     preserve_audio: bool = True
     output_format: str = "mp4"
     output_quality: int = 23  # CRF value for x264
@@ -669,6 +670,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.time_end = max(0.0, _coerce_float(config.time_end, 0.0))
     if config.time_end and config.time_end < config.time_start:
         config.time_end = 0.0
+    config.work_directory = _coerce_text(config.work_directory, "", 1024)
     config.preserve_audio = _coerce_bool(config.preserve_audio, True)
     config.output_frames = _coerce_bool(config.output_frames, False)
     config.output_format = _coerce_text(config.output_format, "mp4", 16).lower()

@@ -6792,6 +6792,7 @@ class CanonicalConfigSchemaTests(unittest.TestCase):
         source = normalize_processing_config(ProcessingConfig(
             mode=InpaintMode.AUTO,
             device="cpu",
+            work_directory="D:/vsr-work",
             detection_lang="ja",
             subtitle_area=(4, 8, 640, 700),
             subtitle_areas=[(4, 8, 640, 700), (20, 30, 500, 600)],
@@ -6830,6 +6831,7 @@ class CanonicalConfigSchemaTests(unittest.TestCase):
         validate_gui_schema(GuiConfig)
         gui_config = GuiConfig(
             use_gpu=False,
+            work_directory="D:/vsr-work",
             manual_mask_corrections=[
                 {"polygons": [[1, 2, 10, 2, 10, 12]], "start": 0.0, "end": 2.0},
             ],
@@ -6841,6 +6843,7 @@ class CanonicalConfigSchemaTests(unittest.TestCase):
         backend_config = gui_to_backend_config(gui_config)
 
         self.assertEqual(backend_config.device, "cpu")
+        self.assertEqual(backend_config.work_directory, "D:/vsr-work")
         self.assertEqual(backend_config.manual_mask_corrections,
                          gui_config.manual_mask_corrections)
         self.assertEqual(backend_config.confidence_dilation_scale, 2.0)
@@ -6859,6 +6862,7 @@ class CanonicalConfigSchemaTests(unittest.TestCase):
 
         source = normalize_processing_config(ProcessingConfig(
             device="cpu",
+            work_directory="D:/vsr-work",
             manual_mask_corrections=[
                 {"polygons": [[0, 0, 8, 0, 8, 8]], "start": 1.0, "end": 4.0},
             ],
@@ -6876,12 +6880,16 @@ class CanonicalConfigSchemaTests(unittest.TestCase):
                          serialize_backend_config(source))
 
     def test_validate_config_cli_exposes_complete_registry(self):
-        from backend.config_schema import processing_field_names
+        from backend.config_schema import (
+            CONFIG_SCHEMA_VERSION,
+            processing_field_names,
+        )
 
         completed = subprocess.run(
             [
                 sys.executable, "-m", "backend.processor", "--validate-config",
-                "--config-schema-version", "1",
+                "--config-schema-version", str(CONFIG_SCHEMA_VERSION),
+                "--work-dir", "D:/vsr-work",
                 "--set", 'manual_mask_corrections=[{"polygons":[[0,0,8,0,8,8]]}]',
                 "--set", "gpu_oom_recovery=false",
             ],
@@ -6896,6 +6904,7 @@ class CanonicalConfigSchemaTests(unittest.TestCase):
         self.assertEqual(set(payload), set(processing_field_names()))
         self.assertFalse(payload["gpu_oom_recovery"])
         self.assertTrue(payload["manual_mask_corrections"])
+        self.assertEqual(payload["work_directory"], "D:/vsr-work")
 
 
 class AdapterConformanceMatrixTests(unittest.TestCase):
@@ -7197,6 +7206,90 @@ class DryRunCliTests(unittest.TestCase):
             self.assertFalse(out.exists())  # dry-run never encodes
 
 
+class WorkDirectoryPolicyTests(unittest.TestCase):
+    def test_selected_work_root_is_created_probed_and_used_for_temp(self):
+        from backend.work_directory import make_work_temp_dir, resolve_work_directory
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            requested = Path(tmpdir) / "scratch" / "nested"
+            resolution = resolve_work_directory(requested)
+            work_temp = make_work_temp_dir(resolution, prefix="policy-")
+            try:
+                self.assertEqual(resolution.path, requested.resolve())
+                self.assertFalse(resolution.used_fallback)
+                self.assertEqual(work_temp.parent, requested.resolve())
+            finally:
+                shutil.rmtree(work_temp, ignore_errors=True)
+
+    def test_unavailable_work_root_falls_back_with_actionable_warning(self):
+        from backend.work_directory import resolve_work_directory
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            unavailable = root / "not-a-directory"
+            unavailable.write_text("file", encoding="utf-8")
+            fallback = root / "fallback"
+            resolution = resolve_work_directory(unavailable, fallback=fallback)
+
+            self.assertTrue(resolution.used_fallback)
+            self.assertEqual(resolution.path, fallback.resolve())
+            self.assertIn("unavailable or read-only", resolution.warning)
+            self.assertIn("Choose a writable work folder", resolution.warning)
+
+    def test_default_checkpoint_directory_follows_selected_work_root(self):
+        from backend.cli import _default_checkpoint_dir
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir) / "work"
+            checkpoint = _default_checkpoint_dir(str(work))
+
+            self.assertEqual(checkpoint, work.resolve() / "checkpoints")
+            self.assertTrue(checkpoint.is_dir())
+
+    def test_processor_staging_output_uses_selected_work_root(self):
+        from backend.config import ProcessingConfig
+        from backend.processor import SubtitleRemover
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            work = root / "work"
+            remover = SubtitleRemover.__new__(SubtitleRemover)
+            remover.config = ProcessingConfig(work_directory=str(work))
+            remover._work_directory_resolution = None
+            remover.last_work_directory_warning = None
+            staged = remover._allocate_work_output(str(root / "out" / "movie.mp4"))
+            try:
+                self.assertEqual(staged.parent, work.resolve())
+                self.assertEqual(staged.suffix, ".mp4")
+            finally:
+                staged.unlink(missing_ok=True)
+
+    def test_cross_volume_promotion_stages_atomically_on_destination(self):
+        import errno
+        from backend import io as backend_io
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "work" / "render.mp4"
+            destination = root / "output" / "final.mp4"
+            source.parent.mkdir()
+            source.write_bytes(b"complete-output")
+            real_replace = os.replace
+
+            def replace_with_cross_volume_once(src, dst):
+                if Path(src) == source:
+                    raise OSError(errno.EXDEV, "cross-volume test")
+                return real_replace(src, dst)
+
+            with unittest.mock.patch.object(
+                backend_io.os, "replace", side_effect=replace_with_cross_volume_once,
+            ):
+                backend_io._promote_temp_output(source, destination)
+
+            self.assertEqual(destination.read_bytes(), b"complete-output")
+            self.assertFalse(source.exists())
+
+
 class DiskSpaceAndLogRotationTests(unittest.TestCase):
     """P2: pre-encode free-space preflight and bounded JSON log."""
 
@@ -7208,7 +7301,7 @@ class DiskSpaceAndLogRotationTests(unittest.TestCase):
         import collections
         remover = self._remover()
         du = collections.namedtuple("du", "total used free")(0, 0, 1024 * 1024)
-        with unittest.mock.patch("backend.processor.shutil.disk_usage",
+        with unittest.mock.patch("backend.work_directory.shutil.disk_usage",
                                  return_value=du):
             with self.assertRaises(ValueError) as ctx:
                 remover._check_encode_disk_space(
@@ -7221,10 +7314,48 @@ class DiskSpaceAndLogRotationTests(unittest.TestCase):
         remover = self._remover()
         du = collections.namedtuple("du", "total used free")(
             0, 0, 500 * 1024 ** 3)  # 500 GB free
-        with unittest.mock.patch("backend.processor.shutil.disk_usage",
+        with unittest.mock.patch("backend.work_directory.shutil.disk_usage",
                                  return_value=du):
             remover._check_encode_disk_space(
                 "out.mp4", width=640, height=480, frames=300, high_bit=False)
+
+    def test_preflight_includes_work_output_and_checkpoint_requirements(self):
+        from backend.config import ProcessingConfig
+        from backend.work_directory import StorageVolumeStatus
+
+        remover = self._remover()
+        remover.config = ProcessingConfig(work_directory="C:/work")
+        remover._work_directory_resolution = SimpleNamespace(
+            requested="C:/work", path=Path("C:/work"), warning="")
+        statuses = [StorageVolumeStatus(
+            path=Path("C:/work"),
+            free_bytes=500 * 1024 ** 3,
+            required_bytes=1024,
+            purposes=("temporary processing files",),
+        )]
+        with unittest.mock.patch(
+            "backend.processor.assess_storage_volumes",
+            return_value=statuses,
+        ) as assess:
+            remover._check_encode_disk_space(
+                "D:/output/out.mp4",
+                width=1920,
+                height=1080,
+                frames=300,
+                high_bit=False,
+                checkpoint_dir=Path("C:/work/checkpoints"),
+            )
+
+        requirements = assess.call_args.args[0]
+        self.assertEqual(len(requirements), 3)
+        self.assertEqual(
+            {requirement.purpose for requirement in requirements},
+            {
+                "temporary processing files",
+                "final output",
+                "checkpoint and resume frames",
+            },
+        )
 
     def test_zero_frames_is_noop(self):
         remover = self._remover()

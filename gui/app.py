@@ -413,6 +413,8 @@ class VideoSubtitleRemoverApp(
             self.config.json_log_enabled = self.json_log_var.get()
         if hasattr(self, 'conf_dilate_var'):
             self.config.confidence_weighted_dilation = self.conf_dilate_var.get()
+        if hasattr(self, 'work_dir_var'):
+            self.config.work_directory = self.work_dir_var.get().strip()
         # GPU sync
         if self._hardware_probe_pending or not self.gpus:
             self.config.use_gpu = False
@@ -2029,6 +2031,56 @@ class VideoSubtitleRemoverApp(
         uc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
         Tooltip(uc_toggle, tr("When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."))
 
+        storage_frame = self._create_card(self.adv_panel)
+        storage_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
+        self._card_header(
+            storage_frame,
+            "Storage",
+            "Temporary, mask, checkpoint, and resume files",
+        )
+        storage_row = tk.Frame(storage_frame, bg=Theme.BG_CARD)
+        storage_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        self.work_dir_var = tk.StringVar(
+            value=getattr(self.config, "work_directory", ""))
+        self.work_dir_entry = tk.Entry(
+            storage_row,
+            textvariable=self.work_dir_var,
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY,
+            insertbackground=Theme.TEXT_PRIMARY,
+            font=f(Theme.F_BODY_SM),
+            relief="flat",
+            bd=6,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS,
+        )
+        self.work_dir_entry.pack(side="left", fill="x", expand=True)
+        Tooltip(
+            self.work_dir_entry,
+            tr("Leave empty for the system temporary directory. The selected "
+               "folder is write-tested before a batch starts."),
+        )
+        work_browse_btn = ModernButton(
+            storage_row,
+            text=tr("Choose folder"),
+            width=118,
+            command=self._choose_work_directory,
+            style="accent",
+            size="sm",
+        )
+        work_browse_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        work_reset_btn = ModernButton(
+            storage_row,
+            text=tr("Use system"),
+            width=96,
+            command=self._reset_work_directory,
+            style="ghost",
+            size="sm",
+        )
+        work_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        self._work_directory_buttons = (work_browse_btn, work_reset_btn)
+
         self._update_region_label_display()
         self._update_mode_options()
 
@@ -3031,6 +3083,38 @@ class VideoSubtitleRemoverApp(
                 message += f". Updated {refreshed} idle output path{'s' if refreshed != 1 else ''}"
             self._update_status(message, "success")
             logger.info(f"Output directory: {self._output_dir}")
+
+    def _choose_work_directory(self):
+        """Choose and immediately persist a processing-work root."""
+        initial = self.work_dir_var.get().strip() if hasattr(
+            self, "work_dir_var") else ""
+        selected = filedialog.askdirectory(
+            title=tr("Select Processing Work Directory"),
+            initialdir=initial or None,
+        )
+        if not selected:
+            return
+        self.work_dir_var.set(selected)
+        self.config.work_directory = selected
+        self._apply_current_settings_to_idle_items()
+        save_settings(self.config)
+        self._update_status(
+            "Work directory selected for temporary and resume files",
+            "success",
+            toast=True,
+        )
+
+    def _reset_work_directory(self):
+        """Return processing scratch storage to the system temp policy."""
+        self.work_dir_var.set("")
+        self.config.work_directory = ""
+        self._apply_current_settings_to_idle_items()
+        save_settings(self.config)
+        self._update_status(
+            "Work directory reset to the system temporary location",
+            "info",
+            toast=True,
+        )
 
     def _reset_output_dir(self):
         """Reset output directory to default (input_dir/output/)."""
@@ -4502,6 +4586,10 @@ class VideoSubtitleRemoverApp(
                 self.gpu_combo.config(state=combo_state)
             self.time_start_entry.config(state=entry_state)
             self.time_end_entry.config(state=entry_state)
+            if hasattr(self, "work_dir_entry"):
+                self.work_dir_entry.config(state=entry_state)
+            for button in getattr(self, "_work_directory_buttons", ()):
+                button.set_enabled(not locked)
 
             self.region_btn.set_enabled(not locked)
             if hasattr(self, "preview_region_btn"):
@@ -4538,24 +4626,60 @@ class VideoSubtitleRemoverApp(
                 pass
 
     def _preflight_free_space_check(self):
-        """Warn if the temp/work directory has low free space."""
+        """Validate work storage and estimate every affected batch volume."""
         try:
-            work = getattr(self.config, "work_directory", "")
-            check_dir = work if (work and Path(work).is_dir()) else None
-            if check_dir is None:
-                import tempfile as _tf
-                check_dir = _tf.gettempdir()
-            usage = shutil.disk_usage(check_dir)
-            free_gb = usage.free / (1024 ** 3)
-            if free_gb < 2.0:
+            from backend.work_directory import (
+                StorageRequirement,
+                assess_storage_volumes,
+                resolve_work_directory,
+            )
+
+            resolution = resolve_work_directory(
+                getattr(self.config, "work_directory", ""))
+            if resolution.warning:
                 self._update_status(
-                    f"Low disk space: {free_gb:.1f} GB free in work directory. "
-                    "Processing may fail for large files.",
+                    resolution.warning,
                     "warning",
                     toast=True,
                 )
+            with self.queue_lock:
+                pending = [
+                    item for item in self.queue
+                    if item.status not in {
+                        ProcessingStatus.COMPLETE,
+                        ProcessingStatus.CANCELLED,
+                    }
+                ]
+            source_sizes = []
+            for item in pending:
+                try:
+                    source_sizes.append(max(0, Path(item.file_path).stat().st_size))
+                except OSError:
+                    source_sizes.append(0)
+            requirements = [StorageRequirement(
+                resolution.path,
+                max(512 * 1024 * 1024, sum(source_sizes) * 6),
+                "batch temporary/checkpoint files",
+            )]
+            for item, source_size in zip(pending, source_sizes):
+                requirements.append(StorageRequirement(
+                    Path(item.output_path).parent,
+                    max(64 * 1024 * 1024, source_size),
+                    "batch outputs",
+                ))
+            for status in assess_storage_volumes(requirements):
+                if status.free_bytes < status.required_bytes:
+                    self._update_status(
+                        f"Low disk space at {status.path}: about "
+                        f"{status.required_bytes / (1024 ** 3):.1f} GB is "
+                        f"estimated for {', '.join(status.purposes)}, but "
+                        f"{status.free_bytes / (1024 ** 3):.1f} GB is free. "
+                        "The backend will run an exact frame-based check.",
+                        "warning",
+                        toast=True,
+                    )
         except Exception:
-            pass
+            logger.warning("Storage preflight failed", exc_info=True)
 
     def _current_ffmpeg_profiles(self) -> dict:
         profiles = getattr(self, "ffmpeg_profiles", None)

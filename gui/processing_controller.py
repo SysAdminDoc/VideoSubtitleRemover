@@ -518,6 +518,16 @@ class ProcessingControllerMixin:
                 self._cached_remover = remover
                 self._cached_remover_key = cache_key
             self._active_remover = remover
+            work_warning = getattr(remover, "last_work_directory_warning", None)
+            if work_warning:
+                try:
+                    self.root.after(
+                        0,
+                        lambda msg=work_warning: self._update_status(
+                            msg, "warning", toast=True),
+                    )
+                except (RuntimeError, tk.TclError):
+                    pass
             if hasattr(remover, "last_quality_report"):
                 remover.last_quality_report = None
 
@@ -600,7 +610,8 @@ class ProcessingControllerMixin:
                 raised_error = False
                 try:
                     if is_video_file(item.file_path):
-                        ckpt_dir = _default_checkpoint_dir()
+                        ckpt_dir = _default_checkpoint_dir(
+                            item.config.work_directory)
                         ckpt_key = _checkpoint_key(
                             item.file_path, item.output_path)
                         success = remover.process_video(

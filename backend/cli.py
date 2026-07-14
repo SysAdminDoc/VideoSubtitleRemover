@@ -99,11 +99,19 @@ def _app_version() -> str:
         return ""
 
 
-def _default_checkpoint_dir() -> Path:
-    """Where to store per-file crash-resume markers."""
-    base = Path(os.environ.get("APPDATA", Path.home() / ".config")) / "VideoSubtitleRemoverPro" / "checkpoints"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+def _default_checkpoint_dir(work_directory: str = "") -> Path:
+    """Store resume artifacts under the work policy when one is selected."""
+    from backend.work_directory import checkpoint_directory
+
+    legacy = (
+        Path(os.environ.get("APPDATA", Path.home() / ".config"))
+        / "VideoSubtitleRemoverPro"
+        / "checkpoints"
+    )
+    path, resolution = checkpoint_directory(work_directory, default=legacy)
+    if resolution is not None and resolution.warning:
+        logger.warning(resolution.warning)
+    return path
 
 
 def _checkpoint_key(input_path: str, output_path: str) -> str:
@@ -472,6 +480,12 @@ def main():
     parser.add_argument("--checkpoint-dir", default=None,
                        help=("Checkpoint dir for crash-resume and pause/resume "
                              "(default: %%APPDATA%%/.../checkpoints)"))
+    parser.add_argument(
+        "--work-dir",
+        default="",
+        help=("Writable root for temporary, mask, checkpoint, and resume "
+              "artifacts; falls back with a warning when unavailable."),
+    )
     parser.add_argument("--no-resume", action="store_true",
                        help=("Ignore existing checkpoints and reprocess every file; "
                              "pause checkpoints are still written for this run"))
@@ -973,6 +987,7 @@ def main():
     config = ProcessingConfig(
         mode=_coerce_backend_mode(args.mode),
         device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
+        work_directory=args.work_dir,
         sttn_skip_detection=args.skip_detection,
         lama_super_fast=args.fast,
         preserve_audio=not args.no_audio,
@@ -1238,7 +1253,11 @@ def main():
     if config.preserve_audio and not ffmpeg_ready:
         print("[note] FFmpeg is not available, so outputs will be saved without original audio.")
 
-    ckpt_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else _default_checkpoint_dir()
+    ckpt_dir = (
+        Path(args.checkpoint_dir)
+        if args.checkpoint_dir
+        else _default_checkpoint_dir(config.work_directory)
+    )
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     pause_requested = {"value": False}
 

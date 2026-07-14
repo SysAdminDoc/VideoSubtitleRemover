@@ -31,7 +31,6 @@ import numpy as np
 import logging
 import shutil
 import subprocess
-import tempfile
 import traceback
 import time
 from contextlib import contextmanager
@@ -104,6 +103,12 @@ from backend.resume_checkpoint import (
     write_pause_checkpoint,
 )
 from backend.safe_image import safe_imread
+from backend.work_directory import (
+    StorageRequirement,
+    assess_storage_volumes,
+    make_work_temp_dir,
+    resolve_work_directory,
+)
 from backend.tracking import (
     _KalmanBox,
     _box_from_state,
@@ -350,6 +355,9 @@ class SubtitleRemover:
 
     def __init__(self, config: ProcessingConfig = None):
         self.config = normalize_processing_config(config or ProcessingConfig())
+        self._work_directory_resolution = None
+        self.last_work_directory_warning: Optional[str] = None
+        self._resolve_work_directory()
         self.detector = SubtitleDetector(
             self.config.device,
             lang=self.config.detection_lang,
@@ -1217,7 +1225,7 @@ class SubtitleRemover:
 
             self._report_progress(0.9, "Saving result...")
             ext = Path(output_path).suffix.lower()
-            temp_output = _allocate_temp_output_path(output_path)
+            temp_output = self._allocate_work_output(output_path)
             try:
                 with self._time_stage("encode"):
                     if ext in ('.jpg', '.jpeg'):
@@ -1249,11 +1257,30 @@ class SubtitleRemover:
             logger.error(f"Image processing error: {e}", exc_info=True)
             return False
 
-    def _make_temp_dir(self) -> str:
-        work = getattr(self.config, "work_directory", "")
-        if work and os.path.isdir(work):
-            return tempfile.mkdtemp(prefix="vsr_", dir=work)
-        return tempfile.mkdtemp(prefix="vsr_")
+    def _resolve_work_directory(self):
+        config = getattr(self, "config", None)
+        requested = str(getattr(config, "work_directory", "") or "").strip()
+        current = getattr(self, "_work_directory_resolution", None)
+        if current is not None and current.requested == requested:
+            return current
+        resolution = resolve_work_directory(requested)
+        self._work_directory_resolution = resolution
+        self.last_work_directory_warning = resolution.warning or None
+        if resolution.warning:
+            logger.warning(resolution.warning)
+        else:
+            logger.info("Work directory: %s", resolution.path)
+        return resolution
+
+    def _make_temp_dir(self, *, prefix: str = "vsr_") -> str:
+        return str(make_work_temp_dir(
+            self._resolve_work_directory(), prefix=prefix))
+
+    def _allocate_work_output(self, output_path: str) -> Path:
+        return _allocate_temp_output_path(
+            output_path,
+            temp_dir=self._resolve_work_directory().path,
+        )
 
     def _rife_fast_stride(self) -> int:
         try:
@@ -1741,6 +1768,7 @@ class SubtitleRemover:
                 height=height,
                 frames=max(0, frames_to_process - resume_frame_count),
                 high_bit=bool(high_bit_depth_surface),
+                checkpoint_dir=checkpoint_root,
             )
 
             # Re-use the deinterlace temp_dir if one was created, else fresh
@@ -1888,7 +1916,6 @@ class SubtitleRemover:
             whisper_audio_dir: Optional[str] = None
             if self.config.whisper_fallback and not Path(input_path).is_dir():
                 try:
-                    import tempfile as _tmp_mod
                     from backend import whisper_fallback as _wf
                     if self.config.whisper_backend == "ffmpeg":
                         segments = _wf.run_ffmpeg_whisper_segments(
@@ -1920,7 +1947,8 @@ class SubtitleRemover:
                                 f"{len(whisper_spans)} speech spans"
                             )
                     elif _wf.is_available():
-                        whisper_audio_dir = _tmp_mod.mkdtemp(prefix="vsr_whisper_")
+                        whisper_audio_dir = self._make_temp_dir(
+                            prefix="vsr_whisper_")
                         audio_path = _wf.extract_audio_to_temp(
                             input_path, whisper_audio_dir
                         )
@@ -1968,7 +1996,7 @@ class SubtitleRemover:
             if self.config.export_mask_video:
                 mask_path = str(Path(output_path).with_suffix('')) + '.mask.mp4'
                 self.last_mask_export["path"] = mask_path
-                temp_mask_path = _allocate_temp_output_path(mask_path)
+                temp_mask_path = self._allocate_work_output(mask_path)
                 mask_writer = cv2.VideoWriter(
                     str(temp_mask_path), cv2.VideoWriter_fourcc(*'mp4v'),
                     fps, (width, height), isColor=False)
@@ -3098,45 +3126,63 @@ class SubtitleRemover:
 
     def _check_encode_disk_space(self, output_path: str, *, width: int,
                                  height: int, frames: int,
-                                 high_bit: bool) -> None:
-        """Fail fast when the output drive clearly cannot hold the encode.
-
-        The lossless FFV1 intermediate is the dominant consumer. We estimate a
-        conservative fraction of the raw frame volume plus headroom and, when
-        free space is critically short, raise a clear error *before* any temp
-        file is created rather than crashing with a mid-encode OSError. A
-        merely-tight margin is logged as a warning, not aborted, to avoid
-        false positives on highly compressible footage.
-        """
+                                 high_bit: bool,
+                                 checkpoint_dir: Optional[Path] = None) -> None:
+        """Estimate and probe every volume affected by this processing run."""
         if frames <= 0 or width <= 0 or height <= 0:
             return
         bytes_per_pixel = 6 if high_bit else 3
         raw = int(width) * int(height) * bytes_per_pixel * int(frames)
-        # FFV1 on real footage lands well under raw; ~0.45x is a safe planning
-        # figure, plus the final lossy output (small relative to the FFV1 temp).
-        estimate = int(raw * 0.45) + int(raw * 0.05)
-        slack = 256 * 1024 * 1024
-        target = Path(output_path).parent
+        work_resolution = self._resolve_work_directory()
+        # Checkpoint frame sequences replace the FFV1 intermediate; without
+        # checkpointing, FFV1 is the dominant work-volume consumer.
+        work_bytes = int(raw * (0.10 if checkpoint_dir else 0.45))
+        output_bytes = int(raw * 0.05)
+        requirements = [
+            StorageRequirement(
+                work_resolution.path,
+                work_bytes + 256 * 1024 * 1024,
+                "temporary processing files",
+            ),
+            StorageRequirement(
+                Path(output_path).parent,
+                output_bytes + 64 * 1024 * 1024,
+                "final output",
+            ),
+        ]
+        if checkpoint_dir is not None:
+            requirements.append(StorageRequirement(
+                Path(checkpoint_dir),
+                int(raw * 0.35) + 64 * 1024 * 1024,
+                "checkpoint and resume frames",
+            ))
         try:
-            free = shutil.disk_usage(target if target.exists() else Path("."))
-            free_bytes = int(free.free)
+            statuses = assess_storage_volumes(requirements)
         except OSError:
             return  # cannot probe; do not block processing
-        hard_floor = max(slack, int(estimate * 0.25))
-        if free_bytes < hard_floor:
-            raise ValueError(
-                f"Insufficient disk space to process to '{output_path}': "
-                f"about {estimate // (1024*1024)} MB of working space is "
-                f"needed but only {free_bytes // (1024*1024)} MB is free. "
-                "Free up space or choose an output on a larger drive."
+        for status in statuses:
+            hard_floor = max(
+                64 * 1024 * 1024,
+                int(status.required_bytes * 0.25),
             )
-        if free_bytes < estimate + slack:
-            logger.warning(
-                "Low disk space for '%s': ~%d MB estimated, %d MB free. "
-                "Processing will continue but may fail if the estimate is high.",
-                output_path, estimate // (1024 * 1024),
-                free_bytes // (1024 * 1024),
-            )
+            purposes = ", ".join(status.purposes)
+            if status.free_bytes < hard_floor:
+                raise ValueError(
+                    f"Insufficient disk space at '{status.path}' for {purposes}: "
+                    f"about {status.required_bytes // (1024*1024)} MB is "
+                    f"estimated but only {status.free_bytes // (1024*1024)} MB "
+                    "is free. Choose a work/output folder on a larger drive."
+                )
+            if status.free_bytes < status.required_bytes:
+                logger.warning(
+                    "Low disk space at '%s' for %s: ~%d MB estimated, %d MB "
+                    "free. Processing will continue but may fail if the "
+                    "estimate is high.",
+                    status.path,
+                    purposes,
+                    status.required_bytes // (1024 * 1024),
+                    status.free_bytes // (1024 * 1024),
+                )
 
     def _promote_video_output(
         self,
@@ -3205,7 +3251,7 @@ class SubtitleRemover:
         pattern = frame_dir / "frame_%06d.png"
         if not (frame_dir / "frame_000000.png").is_file():
             raise ValueError(f"No checkpoint frames found in {frame_dir}")
-        temp_output = _allocate_temp_output_path(output)
+        temp_output = self._allocate_work_output(output)
         concat_path: Optional[Path] = None
         try:
             _ensure_output_parent(output)
@@ -3294,7 +3340,7 @@ class SubtitleRemover:
     def _reencode_or_copy(self, source: str, output: str) -> str:
         """Re-encode with preferred encoder, or salvage the intermediate
         if FFmpeg is unavailable or keeps failing."""
-        temp_output = _allocate_temp_output_path(output)
+        temp_output = self._allocate_work_output(output)
         try:
             _ensure_output_parent(output)
             cmd = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats', '-i', source]
@@ -3336,7 +3382,7 @@ class SubtitleRemover:
         _include_auxiliary: bool = True,
         _force_audio_transcode: bool = False,
     ) -> str:
-        temp_output = _allocate_temp_output_path(output)
+        temp_output = self._allocate_work_output(output)
         plan: dict = {}
         try:
             _ensure_output_parent(output)
