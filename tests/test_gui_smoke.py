@@ -823,6 +823,7 @@ class GuiSmokeTests(unittest.TestCase):
                     0.5,
                     app.config.subtitle_areas,
                     False,
+                    [],
                     item.file_path,
                     item.id,
                     request_id,

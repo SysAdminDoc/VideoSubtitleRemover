@@ -15,7 +15,15 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from backend.i18n import tr
-from gui.theme import Theme, f, mono, prefers_reduced_motion
+from gui.theme import (
+    Theme,
+    f,
+    mono,
+    prefers_reduced_motion,
+    scaled_control_size,
+    scaled_font_size,
+    text_scale_factor,
+)
 from gui.config import ProcessingStatus, QueueItem, STATUS_UI, status_ui
 from backend.a11y import (
     accessible_metadata,
@@ -216,8 +224,35 @@ def _get_dpi_scale(root) -> float:
 
 
 def _scaled(root, px: int) -> int:
-    """Scale a pixel value by the current DPI factor."""
-    return int(px * _get_dpi_scale(root))
+    """Scale geometry by both system DPI and the chosen text scale."""
+    return max(1, int(round(px * _get_dpi_scale(root) * text_scale_factor())))
+
+
+def _wrapped_line_count(text: str, font, max_width: int) -> int:
+    """Return a conservative word-wrapped line count for Canvas text."""
+    max_width = max(1, int(max_width))
+    try:
+        measure = tkfont.Font(font=font).measure
+    except Exception:
+        def measure(value):
+            return len(value) * 7
+    lines = 0
+    for paragraph in str(text or "").splitlines() or [""]:
+        words = paragraph.split() or [""]
+        current = ""
+        for word in words:
+            candidate = word if not current else current + " " + word
+            if current and measure(candidate) > max_width:
+                lines += 1
+                current = word
+            else:
+                current = candidate
+            while current and measure(current) > max_width:
+                lines += 1
+                split_at = max(1, int(len(current) * max_width / measure(current)))
+                current = current[split_at:]
+        lines += 1
+    return max(1, lines)
 
 
 class Tooltip:
@@ -316,8 +351,31 @@ class ModernButton(tk.Canvas):
             height = self.SIZES.get(size, self.SIZES["md"])[0]
         if font_size is None:
             font_size = self.SIZES.get(size, self.SIZES["md"])[1]
+        font_size = scaled_font_size(font_size)
+        minimum_width = max(44, int(width))
+        base_height = int(height)
+        minimum_height = scaled_control_size(base_height)
+        height = minimum_height
+        display_text = f"{icon} {text}" if icon else str(text)
+        button_font = (Theme.FONT_FAMILY, font_size, "bold")
+        try:
+            natural_width = tkfont.Font(font=button_font).measure(display_text)
+        except Exception:
+            natural_width = len(display_text) * max(7, font_size)
+        width = max(
+            minimum_width,
+            min(360, natural_width + scaled_control_size(20)),
+        )
+        text_width = max(20, width - scaled_control_size(16))
+        line_count = _wrapped_line_count(display_text, button_font, text_width)
+        try:
+            line_height = tkfont.Font(font=button_font).metrics("linespace")
+        except Exception:
+            line_height = font_size + 4
+        height = max(height, line_count * line_height + scaled_control_size(8))
         if corner_radius is None:
-            corner_radius = Theme.R_MD if height <= 30 else Theme.R_LG
+            corner_radius = scaled_control_size(
+                Theme.R_MD if base_height <= 30 else Theme.R_LG)
 
         parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else Theme.BG_DARK
         super().__init__(parent, width=width, height=height, highlightthickness=0,
@@ -328,8 +386,12 @@ class ModernButton(tk.Canvas):
         self.command = command
         self.width = width
         self.height = height
+        self._minimum_width = minimum_width
+        self._minimum_height = minimum_height
         self.corner_radius = corner_radius
         self.font_size = font_size
+        self._display_text = display_text
+        self._text_width_px = text_width
         self.enabled = True
         self.focused = False
         self.pressed = False
@@ -427,24 +489,15 @@ class ModernButton(tk.Canvas):
         # Press offset
         text_y = self.height // 2 + (1 if self.pressed else 0)
 
-        if self.icon:
-            gap = 6
-            text_size = self._fit_text_size(self.text, self.icon, gap)
-            icon_font = (Theme.FONT_FAMILY, text_size + 1, "bold")
-            text_font = (Theme.FONT_FAMILY, text_size, "bold")
-            icon_w = self._text_width(self.icon, icon_font)
-            text_w = self._text_width(self.text, text_font)
-            total = icon_w + gap + text_w
-            start_x = (self.width - total) // 2
-            self.create_text(start_x + icon_w // 2, text_y,
-                             text=self.icon, fill=text_color, font=icon_font)
-            self.create_text(start_x + icon_w + gap + text_w // 2, text_y,
-                             text=self.text, fill=text_color, font=text_font)
-        else:
-            text_size = self._fit_text_size(self.text)
-            self.create_text(self.width // 2, text_y, text=self.text,
-                             fill=text_color,
-                             font=(Theme.FONT_FAMILY, text_size, "bold"))
+        self.create_text(
+            self.width // 2,
+            text_y,
+            text=self._display_text,
+            fill=text_color,
+            font=(Theme.FONT_FAMILY, self.font_size, "bold"),
+            width=self._text_width_px,
+            justify="center",
+        )
 
     def _sync_a11y(self):
         state = _state_text(
@@ -476,19 +529,8 @@ class ModernButton(tk.Canvas):
             return len(text) * 7
 
     def _fit_text_size(self, text: str, icon: str = "", gap: int = 0) -> int:
-        """Keep long labels inside fixed-width canvas buttons."""
-        size = self.font_size
-        available = max(24, self.width - 18)
-        while size > Theme.F_MICRO:
-            text_font = (Theme.FONT_FAMILY, size, "bold")
-            measured = self._text_width(text, text_font)
-            if icon:
-                icon_font = (Theme.FONT_FAMILY, size + 1, "bold")
-                measured += self._text_width(icon, icon_font) + gap
-            if measured <= available:
-                return size
-            size -= 1
-        return Theme.F_MICRO
+        """Return the configured size; long labels reflow instead of shrinking."""
+        return self.font_size
 
     def _create_rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
         points = [
@@ -563,6 +605,30 @@ class ModernButton(tk.Canvas):
 
     def set_text(self, text: str):
         self.text = text
+        self._display_text = f"{self.icon} {text}" if self.icon else str(text)
+        button_font = (Theme.FONT_FAMILY, self.font_size, "bold")
+        try:
+            natural_width = tkfont.Font(font=button_font).measure(
+                self._display_text)
+        except Exception:
+            natural_width = len(self._display_text) * max(7, self.font_size)
+        self.width = max(
+            self._minimum_width,
+            min(360, natural_width + scaled_control_size(20)),
+        )
+        self._text_width_px = max(
+            20, self.width - scaled_control_size(16))
+        line_count = _wrapped_line_count(
+            self._display_text, button_font, self._text_width_px)
+        try:
+            line_height = tkfont.Font(font=button_font).metrics("linespace")
+        except Exception:
+            line_height = self.font_size + 4
+        self.height = max(
+            self._minimum_height,
+            line_count * line_height + scaled_control_size(8),
+        )
+        self.configure(width=self.width, height=self.height)
         self._sync_a11y()
         self._draw()
 
@@ -584,6 +650,7 @@ class ModernProgressBar(tk.Canvas):
 
     def __init__(self, parent, width=400, height=6, bg=Theme.PROGRESS_BG,
                  fill=Theme.PROGRESS_FILL, corner_radius=None, **kwargs):
+        height = scaled_control_size(height)
         if corner_radius is None:
             corner_radius = max(2, height // 2)
         super().__init__(parent, width=width, height=height, highlightthickness=0,
@@ -683,6 +750,9 @@ class ModernToggle(tk.Canvas):
 
     def __init__(self, parent, text="", variable=None, command=None,
                  bg=None, fg=None, **kwargs):
+        wraplength = max(160, int(kwargs.pop("wraplength", 560)))
+        self.BOX = scaled_control_size(type(self).BOX)
+        self.GAP = scaled_control_size(type(self).GAP)
         self.variable = variable if variable is not None else tk.BooleanVar(value=False)
         self.text = text
         self.command = command
@@ -694,9 +764,16 @@ class ModernToggle(tk.Canvas):
 
         # Measure text width for canvas sizing
         self._font = f(Theme.F_BODY_SM)
-        text_w = tkfont.Font(font=self._font).measure(text)
+        font_obj = tkfont.Font(font=self._font)
+        measured_text_w = font_obj.measure(text)
+        text_w = min(wraplength, max(1, measured_text_w))
+        line_count = _wrapped_line_count(text, self._font, text_w)
+        text_height = line_count * font_obj.metrics("linespace")
+        self._text_width_px = text_w
         total_w = self.BOX + self.GAP + text_w + 4
-        super().__init__(parent, width=total_w, height=max(self.BOX + 4, 24),
+        total_h = max(self.BOX + 4, text_height + scaled_control_size(6),
+                      scaled_control_size(24))
+        super().__init__(parent, width=total_w, height=total_h,
                          highlightthickness=0, bg=self.parent_bg, takefocus=1)
 
         self._sync_a11y()
@@ -736,7 +813,8 @@ class ModernToggle(tk.Canvas):
     def _draw(self):
         self.delete("all")
         y0 = (int(self["height"]) - self.BOX) // 2
-        x0 = 2
+        canvas_width = int(self["width"])
+        x0 = canvas_width - self.BOX - 2 if Theme.RTL_LAYOUT else 2
 
         checked = bool(self.variable.get())
 
@@ -769,9 +847,17 @@ class ModernToggle(tk.Canvas):
 
         # Label
         text_color = self.fg_color if self.enabled else Theme.TEXT_DISABLED
-        self.create_text(x0 + self.BOX + self.GAP, int(self["height"]) // 2,
-                         text=self.text, anchor="w",
-                         font=self._font, fill=text_color)
+        text_x = x0 - self.GAP if Theme.RTL_LAYOUT else x0 + self.BOX + self.GAP
+        self.create_text(
+            text_x,
+            int(self["height"]) // 2,
+            text=self.text,
+            anchor="e" if Theme.RTL_LAYOUT else "w",
+            justify="right" if Theme.RTL_LAYOUT else "left",
+            width=self._text_width_px,
+            font=self._font,
+            fill=text_color,
+        )
 
     def _rounded(self, x1, y1, x2, y2, r, **kw):
         points = [
@@ -835,6 +921,9 @@ class ModernSlider(tk.Frame):
     def __init__(self, parent, from_=0, to=100, value=0,
                  command=None, bg=None, width=220,
                  accessible_label: str = "Slider", **kwargs):
+        self.TRACK_H = scaled_control_size(type(self).TRACK_H)
+        self.THUMB_R = scaled_control_size(type(self).THUMB_R)
+        self.HEIGHT = scaled_control_size(type(self).HEIGHT)
         self.parent_bg = bg or (parent.cget('bg') if hasattr(parent, 'cget') else Theme.BG_CARD)
         super().__init__(parent, bg=self.parent_bg)
 
@@ -1430,6 +1519,12 @@ class _Segment(tk.Canvas):
 
     def __init__(self, parent, label: str, value: str, on_select: Callable,
                  selected: bool = False, group_label: str = "Selection"):
+        segment_font = f(Theme.F_BODY_SM)
+        try:
+            line_height = tkfont.Font(font=segment_font).metrics("linespace")
+        except Exception:
+            line_height = scaled_font_size(Theme.F_BODY_SM) + 4
+        self.H = max(scaled_control_size(type(self).H), line_height * 2 + 6)
         super().__init__(parent, height=self.H, highlightthickness=0,
                          bg=Theme.BG_TERTIARY, takefocus=1)
         self.label = label
@@ -1540,7 +1635,8 @@ class _Segment(tk.Canvas):
                                   width=1)
         font_w = "bold" if self.selected else "normal"
         self.create_text(w // 2, h // 2, text=self.label,
-                         fill=fg, font=f(Theme.F_BODY_SM, font_w))
+                         fill=fg, font=f(Theme.F_BODY_SM, font_w),
+                         width=max(12, w - 12), justify="center")
 
 
 class DragDropFrame(tk.Frame):
@@ -1558,7 +1654,7 @@ class DragDropFrame(tk.Frame):
         self.hovered = False
         self.focused = False
         self.import_enabled = True
-        self.configure(height=height)
+        self.configure(height=scaled_control_size(height))
         self.pack_propagate(False)
         self.grid_propagate(False)
         self.config(cursor="hand2")

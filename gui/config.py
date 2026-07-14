@@ -25,7 +25,7 @@ from backend.config_schema import (
     serialize_dataclass_config,
 )
 from backend.region_keyframes import normalize_region_keyframe_tracks
-from gui.theme import Theme
+from gui.theme import Theme, normalize_text_scale_percent
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,7 @@ _queue_state_io_lock = threading.RLock()
 # Format 4 -> 5: payloads are tied to the canonical backend config schema.
 # Format 5 -> 6: work_directory becomes an end-to-end backend storage policy.
 # Format 6 -> 7: added interpolated moving-region keyframe tracks.
+# Format 7 -> 8: added persisted 100-200 percent interface text scaling.
 VSR_SETTINGS_FORMAT = GUI_SETTINGS_FORMAT
 
 # -- Enums ------------------------------------------------------------------
@@ -430,6 +431,7 @@ class ProcessingConfig:
     log_panel_open: bool = True
     onboarding_seen: bool = False
     high_contrast: bool = False
+    text_scale_percent: int = 100
     rtl_layout: bool = False
     update_check: bool = False
     json_log_enabled: bool = False
@@ -607,6 +609,8 @@ class ProcessingConfig:
         self.log_panel_open = _coerce_bool(self.log_panel_open, True)
         self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)
         self.high_contrast = _coerce_bool(self.high_contrast, False)
+        self.text_scale_percent = normalize_text_scale_percent(
+            self.text_scale_percent)
         self.rtl_layout = _coerce_bool(self.rtl_layout, False)
         self.update_check = _coerce_bool(self.update_check, False)
         self.json_log_enabled = _coerce_bool(self.json_log_enabled, False)

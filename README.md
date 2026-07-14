@@ -525,6 +525,12 @@ Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and per
 | Multi-track Audio | Pass through every audio stream | On | On/Off |
 | Quality Sheet | Side-by-side PNG next to output | Off | On/Off |
 | Work Directory | Temporary, mask, checkpoint, and resume storage; write-tested before each batch | System temporary directory | Writable folder |
+| Interface Text Size | Scale text and dependent controls; restart to apply | 100% | 100%-200% |
+
+At 150% and 200%, the minimum 980x720 window switches to a compact, vertically
+scrollable layout so actions stay keyboard reachable without horizontal
+scrolling. The setting is under **Detailed controls** and applies to both the
+default and high-contrast themes after restart.
 
 ## Troubleshooting
 

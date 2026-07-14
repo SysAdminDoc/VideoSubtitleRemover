@@ -15,7 +15,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 
 CONFIG_SCHEMA_VERSION = 3
-GUI_SETTINGS_FORMAT = 7
+GUI_SETTINGS_FORMAT = 8
 CONFIG_SCHEMA_VERSION_KEY = "config_schema_version"
 GUI_SETTINGS_VERSION_KEY = "vsr_settings_format"
 
@@ -96,6 +96,7 @@ def migrate_gui_settings(data: Any) -> dict[str, Any]:
     # binds settings to the canonical schema; format 6 adds work-directory
     # policy with an empty/system-default migration value. Format 7 adds
     # moving-region keyframes while preserving legacy timed rectangles.
+    # Format 8 adds a persisted UI text scale with a 100 percent default.
     result[GUI_SETTINGS_VERSION_KEY] = GUI_SETTINGS_FORMAT
     result[CONFIG_SCHEMA_VERSION_KEY] = CONFIG_SCHEMA_VERSION
     return result

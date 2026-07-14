@@ -44,6 +44,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Accessible interface text scaling.** Detailed controls now persist a
+  100%-200% interface text-size setting that scales Canvas controls and
+  dependent geometry. The 980x720 minimum window reflows into a compact,
+  vertical-only layout for long translations and RTL text, with hidden
+  subprocess layout coverage across default and high-contrast themes.
 - **Interpolated moving manual regions.** The scrubbed region selector now
   records rectangle or polygon keyframes, previews their deterministic motion,
   and persists the tracks through settings, presets, CLI overrides, batch

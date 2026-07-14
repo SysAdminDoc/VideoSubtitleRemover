@@ -1533,6 +1533,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "karaoke_grouping", "karaoke_x_gap_px", "karaoke_y_overlap",
         "output_codec",
         "window_geometry", "adv_panel_open", "log_panel_open",
+        "text_scale_percent",
         "onboarding_seen", "vsr_settings_format",
     ]
 
@@ -1573,6 +1574,7 @@ class ConfigFuzzTests(unittest.TestCase):
             self.assertIsInstance(cfg.multi_audio_passthrough, bool)
             self.assertGreaterEqual(cfg.input_fps, 1.0)
             self.assertLessEqual(cfg.input_fps, 240.0)
+            self.assertIn(cfg.text_scale_percent, {100, 125, 150, 175, 200})
 
     def test_backend_normalize_never_crashes(self):
         import random as _random

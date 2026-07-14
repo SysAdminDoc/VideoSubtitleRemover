@@ -9,6 +9,7 @@ import sys
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
 _SYSTEM_REDUCED_MOTION = None
+_TEXT_SCALE_PERCENT = 100
 
 
 class Theme:
@@ -75,6 +76,7 @@ class Theme:
     # Typography
     FONT_FAMILY = "Segoe UI"
     FONT_MONO = "Consolas"
+    RTL_LAYOUT = False
 
     # Size tokens
     F_DISPLAY = 22
@@ -192,12 +194,48 @@ def prefers_reduced_motion() -> bool:
     return bool(_SYSTEM_REDUCED_MOTION)
 
 
+def normalize_text_scale_percent(value: object) -> int:
+    """Clamp text scaling to the supported 100-200 percent range."""
+    try:
+        percent = int(value)
+    except (TypeError, ValueError, OverflowError):
+        percent = 100
+    percent = max(100, min(200, percent))
+    choices = (100, 125, 150, 175, 200)
+    return min(choices, key=lambda choice: (abs(choice - percent), choice))
+
+
+def set_text_scale_percent(value: object) -> int:
+    """Set the process-wide text scale before constructing Tk widgets."""
+    global _TEXT_SCALE_PERCENT
+    _TEXT_SCALE_PERCENT = normalize_text_scale_percent(value)
+    return _TEXT_SCALE_PERCENT
+
+
+def text_scale_percent() -> int:
+    return int(_TEXT_SCALE_PERCENT)
+
+
+def text_scale_factor() -> float:
+    return text_scale_percent() / 100.0
+
+
+def scaled_font_size(size: int) -> int:
+    return max(1, int(round(int(size) * text_scale_factor())))
+
+
+def scaled_control_size(size: int) -> int:
+    """Scale geometry that must grow with text, such as Canvas heights."""
+    return max(1, int(round(int(size) * text_scale_factor())))
+
+
 def f(size: int, weight: str = "normal") -> tuple:
     """Build a Segoe UI font tuple."""
+    size = scaled_font_size(size)
     if weight == "bold":
         return (Theme.FONT_FAMILY, size, "bold")
     return (Theme.FONT_FAMILY, size)
 
 
 def mono(size: int) -> tuple:
-    return (Theme.FONT_MONO, size)
+    return (Theme.FONT_MONO, scaled_font_size(size))

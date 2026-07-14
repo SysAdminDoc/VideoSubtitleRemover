@@ -36,6 +36,8 @@ except ImportError:
 
 from gui.theme import (
     Theme, apply_high_contrast_theme, apply_default_theme, f, mono,
+    scaled_control_size, set_text_scale_percent, text_scale_factor,
+    text_scale_percent,
 )
 from gui.config import (
     APP_NAME, APP_VERSION, APP_AUTHOR,
@@ -110,14 +112,27 @@ class VideoSubtitleRemoverApp(
         self.config = load_settings()
         self._settings_load_notice = consume_settings_load_notice()
         bind_locale(system_locale_tag())
+        self._text_scale_percent = set_text_scale_percent(
+            getattr(self.config, "text_scale_percent", 100))
+        self._text_scale_factor = text_scale_factor()
+        self._rtl_layout = bool(getattr(self.config, "rtl_layout", False))
+        Theme.RTL_LAYOUT = self._rtl_layout
         if getattr(self.config, "high_contrast", False):
             apply_high_contrast_theme()
         else:
             apply_default_theme()
 
+        self._background_ui = bool(
+            os.environ.get("VSR_UI_BACKGROUND", "").strip().lower()
+            in {"1", "true", "yes", "on"}
+            or "--smoke-test" in sys.argv
+            or "--uia-background" in sys.argv
+        )
         self.root = tk.Tk()
+        if self._background_ui:
+            self.root.withdraw()
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
-        self.root.geometry("1240x860")
+        self.root.geometry("980x720" if self._background_ui else "1240x860")
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
         self._running_mutex_handle = None
@@ -168,7 +183,6 @@ class VideoSubtitleRemoverApp(
         # build so labels right-align and `pack(side="right")` becomes
         # the dominant orientation. Full pack-side flipping for every
         # widget is a much larger pass; this lands the framework.
-        self._rtl_layout = bool(getattr(self.config, "rtl_layout", False))
         self.queue: List[QueueItem] = []
         self.queue_widgets: dict = {}
         self.is_processing = False
@@ -240,6 +254,7 @@ class VideoSubtitleRemoverApp(
         # Build UI
         self._setup_styles()
         self._build_ui()
+        self._apply_translation_safe_reflow()
         self._bind_shortcuts()
         self.root.bind("<Configure>", self._on_root_configure, add="+")
 
@@ -270,9 +285,9 @@ class VideoSubtitleRemoverApp(
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # First-run welcome overlay (only shown once, then persisted)
-        self._start_startup_hardware_probe()
-        self._maybe_show_onboarding()
-        if "--smoke-test" not in sys.argv:
+        if not self._background_ui:
+            self._start_startup_hardware_probe()
+            self._maybe_show_onboarding()
             self.root.after(500, self._maybe_restore_queue)
 
     def _on_close(self):
@@ -435,6 +450,13 @@ class VideoSubtitleRemoverApp(
             self.config.detection_vertical = self.vertical_text_var.get()
         if hasattr(self, 'high_contrast_var'):
             self.config.high_contrast = self.high_contrast_var.get()
+        if hasattr(self, 'text_scale_var'):
+            self.config.text_scale_percent = _coerce_int(
+                str(self.text_scale_var.get()).replace("%", ""),
+                100,
+                100,
+                200,
+            )
         if hasattr(self, 'update_check_var'):
             self.config.update_check = self.update_check_var.get()
         if hasattr(self, 'json_log_var'):
@@ -520,6 +542,61 @@ class VideoSubtitleRemoverApp(
             save_queue_state(self.queue)
         return updated
 
+    def _apply_translation_safe_reflow(self):
+        """Wrap verbose labels and stack crowded Canvas-button rows."""
+        wrap_limit = 360 if self._text_scale_percent >= 150 else 520
+        anchor = "e" if self._rtl_layout else "w"
+        justify = "right" if self._rtl_layout else "left"
+
+        def walk(widget):
+            yield widget
+            for child in widget.winfo_children():
+                yield from walk(child)
+
+        widgets = list(walk(self.root))
+        for widget in widgets:
+            if isinstance(widget, tk.Label):
+                try:
+                    text = str(widget.cget("text") or "")
+                    if self._rtl_layout:
+                        widget.configure(anchor=anchor, justify=justify)
+                    if len(text) >= 24:
+                        current = int(float(str(widget.cget("wraplength") or 0)))
+                        if current <= 0 or current > wrap_limit:
+                            widget.configure(wraplength=wrap_limit)
+                except (tk.TclError, TypeError, ValueError):
+                    pass
+
+        if self._text_scale_percent < 150:
+            return
+        for widget in widgets:
+            buttons = [
+                child for child in widget.winfo_children()
+                if isinstance(child, ModernButton)
+                and child.winfo_manager() == "pack"
+            ]
+            if len(buttons) < 2:
+                continue
+            required_width = sum(button.winfo_reqwidth() for button in buttons)
+            required_width += Theme.S_SM * (len(buttons) - 1)
+            if required_width <= 760:
+                continue
+            for index, button in enumerate(buttons):
+                button.pack_forget()
+                button.pack(
+                    anchor=anchor,
+                    pady=(0 if index == 0 else Theme.S_XS, 0),
+                )
+
+        if hasattr(self, "_header_chips"):
+            self._header_chips.pack_forget()
+        if self._text_scale_percent >= 200 and hasattr(
+            self, "_header_guidance_panel"
+        ):
+            self._header_guidance_panel.pack_forget()
+        if getattr(self, "_log_visible", False):
+            self._toggle_log_panel()
+
     def _setup_styles(self):
         """Configure ttk styles for a cohesive dark theme."""
         style = ttk.Style()
@@ -535,7 +612,7 @@ class VideoSubtitleRemoverApp(
                        darkcolor=Theme.BG_TERTIARY,
                        lightcolor=Theme.BG_TERTIARY,
                        insertcolor=Theme.TEXT_PRIMARY,
-                       padding=(10, 6))
+                       padding=(scaled_control_size(10), scaled_control_size(6)))
 
         style.map("Dark.TCombobox",
                  fieldbackground=[('readonly', Theme.BG_TERTIARY),
@@ -564,7 +641,7 @@ class VideoSubtitleRemoverApp(
                         bordercolor=Theme.BG_SECONDARY,
                         arrowcolor=Theme.TEXT_MUTED,
                         gripcount=0,
-                        width=10)
+                        width=scaled_control_size(10))
         style.map("Dark.Vertical.TScrollbar",
                  background=[('active', Theme.BORDER_STRONG),
                              ('pressed', Theme.BORDER_STRONG)],
@@ -1059,6 +1136,8 @@ class VideoSubtitleRemoverApp(
         """Lock the scrollable content frame to the canvas width."""
         if hasattr(self, "_content_window"):
             self._content_canvas.itemconfig(self._content_window, width=event.width)
+            self._content_canvas.configure(
+                scrollregion=self._content_canvas.bbox("all"))
 
     def _on_content_mousewheel(self, event):
         """Scroll the workbench unless the content already fits."""
@@ -1081,8 +1160,40 @@ class VideoSubtitleRemoverApp(
         """Stack columns and footer/help clusters on narrower windows."""
         if not hasattr(self, "_content"):
             return
+        if width < 1180 and getattr(self, "_log_visible", False):
+            self._toggle_log_panel()
+        compact = width < 1180
+        if hasattr(self, "_header_title_label"):
+            self._header_title_label.configure(
+                wraplength=680 if compact else 760)
+            if compact:
+                self._header_version_label.pack_forget()
+                self._header_intro_label.pack_forget()
+            else:
+                if not self._header_version_label.winfo_manager():
+                    self._header_version_label.pack(anchor="w", pady=(2, 0))
+                if not self._header_intro_label.winfo_manager():
+                    self._header_intro_label.pack(anchor="w", pady=(8, 0))
+        if hasattr(self, "_log_title_cluster"):
+            self._log_title_cluster.pack_forget()
+            self._badge_row.pack_forget()
+            self._log_open_btn.pack_forget()
+            self._log_clear_btn.pack_forget()
+            self._log_toggle_btn.pack_forget()
+            if compact:
+                self._log_toggle_btn.pack(side="left")
+            else:
+                self._log_title_cluster.pack(side="left")
+                self._badge_row.pack(side="left", padx=(Theme.S_MD, 0))
+                self._log_toggle_btn.pack(side="left", padx=(Theme.S_MD, 0))
+                self._log_open_btn.pack(side="right")
+                self._log_clear_btn.pack(side="right", padx=(0, Theme.S_SM))
 
-        mode = "stacked" if width < 1180 else "wide"
+        mode = (
+            "stacked"
+            if width < 1180 or self._text_scale_percent >= 150
+            else "wide"
+        )
         if mode == self._layout_mode:
             if hasattr(self, "preview_meta_label"):
                 self.preview_meta_label.config(wraplength=520 if mode == "stacked" else 360)
@@ -1108,14 +1219,18 @@ class VideoSubtitleRemoverApp(
             self._left_col.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, Theme.S_MD))
             self._right_col.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
 
+            self._header_left.pack_forget()
+            self._header_left.pack(fill="x")
             self._header_right.pack_forget()
             self._header_right.pack(anchor="w", pady=(Theme.S_MD, 0))
             self._header_chips.pack_forget()
-            self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
+            if width >= 1180 and self._text_scale_percent < 150:
+                self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
             self._header_help_btn.pack_forget()
             self._header_help_btn.pack(anchor="w")
             self._header_guidance_panel.pack_forget()
-            self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
+            if width >= 1180 and self._text_scale_percent < 200:
+                self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
             if hasattr(self, "_workflow_steps_row"):
                 self._workflow_steps_row.pack_forget()
                 self._workflow_steps_row.pack(anchor="w")
@@ -1126,7 +1241,8 @@ class VideoSubtitleRemoverApp(
             self._footer_left.pack_forget()
             self._footer_left.pack(anchor="w")
             self.status_hint.pack_forget()
-            self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
+            if width >= 1180:
+                self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
         else:
             self._content.columnconfigure(0, weight=58, minsize=0, uniform="main_cols")
             self._content.columnconfigure(1, weight=42, minsize=0, uniform="main_cols")
@@ -1135,14 +1251,18 @@ class VideoSubtitleRemoverApp(
             self._left_col.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_MD))
             self._right_col.grid(row=0, column=1, sticky="nsew", padx=(Theme.S_MD, 0))
 
+            self._header_left.pack_forget()
+            self._header_left.pack(side="left", fill="both", expand=True)
             self._header_right.pack_forget()
             self._header_right.pack(side="right", anchor="n")
             self._header_chips.pack_forget()
-            self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
+            if width >= 1180 and self._text_scale_percent < 150:
+                self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
             self._header_help_btn.pack_forget()
             self._header_help_btn.pack(anchor="e")
             self._header_guidance_panel.pack_forget()
-            self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
+            if width >= 1180 and self._text_scale_percent < 200:
+                self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
             if hasattr(self, "_workflow_steps_row"):
                 self._workflow_steps_row.pack_forget()
                 self._workflow_steps_row.pack(side="left", anchor="w")
@@ -1280,6 +1400,11 @@ class VideoSubtitleRemoverApp(
         # Header
         self._build_header(main_container)
 
+        # Reserve persistent bottom surfaces before the expanding workbench so
+        # they cannot be clipped at the minimum 980x720 viewport.
+        self._build_footer(main_container)
+        self._build_log_panel(main_container)
+
         # Content area (two columns via grid) inside a scrollable workbench.
         content_shell = tk.Frame(main_container, bg=Theme.BG_DARK)
         content_shell.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
@@ -1320,12 +1445,6 @@ class VideoSubtitleRemoverApp(
 
         self._build_queue_section(right_col)
 
-        # Log panel
-        self._build_log_panel(main_container)
-
-        # Footer
-        self._build_footer(main_container)
-
     def _build_header(self, parent):
         """Minimal app header with short guidance and a few live status signals."""
         header = self._create_surface(parent)
@@ -1341,19 +1460,30 @@ class VideoSubtitleRemoverApp(
         left.pack(side="left", fill="both", expand=True)
         self._header_left = left
 
-        tk.Label(left, text=tr("Video Subtitle Remover"),
-                 font=f(Theme.F_DISPLAY, "bold"), bg=Theme.BG_SECONDARY,
-                 fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(left, text=tr("Version {version}").format(version=APP_VERSION),
-                 font=f(Theme.F_META, "bold"), bg=Theme.BG_SECONDARY,
-                 fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
-        tk.Label(
+        self._header_title_label = tk.Label(
+            left,
+            text=tr("Video Subtitle Remover"),
+            font=f(Theme.F_DISPLAY, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        )
+        self._header_title_label.pack(anchor="w")
+        self._header_version_label = tk.Label(
+            left,
+            text=tr("Version {version}").format(version=APP_VERSION),
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        )
+        self._header_version_label.pack(anchor="w", pady=(2, 0))
+        self._header_intro_label = tk.Label(
             left,
             text=tr("Add files, review one sample, then run the batch."),
             font=f(Theme.F_BODY),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_SECONDARY,
-        ).pack(anchor="w", pady=(8, 0))
+        )
+        self._header_intro_label.pack(anchor="w", pady=(8, 0))
 
         right = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
         right.pack(side="right", anchor="n")
@@ -2076,6 +2206,33 @@ class VideoSubtitleRemoverApp(
         json_log_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
         Tooltip(json_log_toggle, tr("Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."))
 
+        text_scale_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        text_scale_row.pack(
+            fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
+        tk.Label(
+            text_scale_row,
+            text=tr("Interface text size (restart required)"),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        self.text_scale_var = tk.StringVar(
+            value=f"{text_scale_percent()}%")
+        text_scale_combo = ttk.Combobox(
+            text_scale_row,
+            textvariable=self.text_scale_var,
+            values=("100%", "125%", "150%", "175%", "200%"),
+            width=7,
+            state="readonly",
+            style="Dark.TCombobox",
+            font=f(Theme.F_BODY_SM),
+        )
+        text_scale_combo.pack(side="right")
+        Tooltip(
+            text_scale_combo,
+            tr("Scales interface text and dependent controls on the next launch."),
+        )
+
         # RM-96: high-contrast theme toggle. Takes effect on next launch
         # because re-skinning every live widget mid-session would force
         # a tree-wide redraw the design tokens were not built for.
@@ -2644,7 +2801,7 @@ class VideoSubtitleRemoverApp(
     def _build_footer(self, parent):
         """Footer status bar with a colored dot + message and a right-side hint."""
         footer = tk.Frame(parent, bg=Theme.BG_DARK)
-        footer.pack(fill="x", pady=(Theme.S_SM, 0))
+        footer.pack(side="bottom", fill="x", pady=(Theme.S_SM, 0))
         self._footer = footer
 
         left = tk.Frame(footer, bg=Theme.BG_DARK)

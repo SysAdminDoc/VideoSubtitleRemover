@@ -56,7 +56,8 @@ class SupportControllerMixin:
     def _build_log_panel(self, parent):
         """Embedded, collapsible activity log."""
         log_section = self._create_surface(parent)
-        log_section.pack(fill="x", pady=(Theme.S_MD, 0))
+        log_section.pack(side="bottom", fill="x", pady=(Theme.S_MD, 0))
+        self._log_section = log_section
 
         log_header = tk.Frame(log_section, bg=Theme.BG_SECONDARY)
         log_header.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_MD, 0))
@@ -64,6 +65,7 @@ class SupportControllerMixin:
         # Title cluster (left)
         title_cluster = tk.Frame(log_header, bg=Theme.BG_SECONDARY)
         title_cluster.pack(side="left")
+        self._log_title_cluster = title_cluster
         tk.Label(title_cluster, text=tr("ACTIVITY"), font=f(Theme.F_EYEBROW, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w")
         tk.Label(title_cluster, text=tr("Runtime log"),
@@ -91,11 +93,13 @@ class SupportControllerMixin:
             command=self._open_log_file,
             style="ghost", size="sm")
         open_log_btn.pack(side="right")
+        self._log_open_btn = open_log_btn
 
         clear_log_btn = ModernButton(log_header, text=tr("Clear"), width=72,
                                      command=self._clear_log,
                                      style="ghost", size="sm")
         clear_log_btn.pack(side="right", padx=(0, Theme.S_SM))
+        self._log_clear_btn = clear_log_btn
 
         self._log_body = tk.Frame(log_section, bg=Theme.BG_LOG,
                                   highlightthickness=1,
