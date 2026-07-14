@@ -54,6 +54,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Diagnostics
 
+- **Full-pipeline `--dry-run` and machine-readable `--json`.** `--dry-run`
+  validates a run without encoding: it probes each input (frames/fps), runs
+  detection on a few sampled frames to report where text is found, checks the
+  requested codec/profile is available, prints a per-file plan, and writes no
+  output. `--json` emits a structured result to stdout -- the dry-run plan, or
+  the batch/single-file result (status, output, timings, quality report) -- for
+  scripting and CI.
+
 - **Inference-execution self-test (`--inference-smoke`).** A new CLI option and
   `backend.support_bundle.run_inference_smoke` push a generated text image and
   masked frame through the selected OCR detector and inpaint backend to prove

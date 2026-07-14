@@ -18,13 +18,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: an opt-in max-retry setting re-attempts a failed item up to N times with backoff, records each attempt in the batch report, distinguishes retriable from permanent errors, and defaults preserve current behavior.
   Complexity: M
 
-- [ ] P2 — Add a full-pipeline --dry-run and machine-readable batch result on stdout
-  Why: Only `--soft-subtitle-dry-run` and `--validate-config` exist; users must fully encode to validate detection/inpaint settings, and scripts have no structured result to consume.
-  Evidence: `backend/cli.py:519-522,545-546,1097`; RESEARCH.md Architecture.
-  Touches: `backend/cli.py`, `backend/processor.py`, `backend/batch_report.py`, `tests/test_hardening.py`
-  Acceptance: `--dry-run` runs detection + mask + codec-availability checks and prints a per-file plan without encoding, and a `--json` flag emits a structured batch result (status, timings, output paths, warnings) to stdout; both are tested.
-  Complexity: M
-
 - [ ] P2 — Benchmark PP-OCRv6 on the reference corpus before any default swap
   Why: PP-OCRv6 (reachable through the existing RapidOCR/ONNX path) claims detection/speed gains, but the default must not change without validation on this repo's subtitle fixtures.
   Evidence: `backend/reference_corpus.py`, `backend/static_logo_benchmark.py`; https://github.com/RapidAI/RapidOCR/issues/686; https://github.com/PaddlePaddle/PaddleOCR/releases

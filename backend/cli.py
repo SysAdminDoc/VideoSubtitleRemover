@@ -290,6 +290,118 @@ def _update_record_output_path(record: dict, actual_output_path: str) -> None:
         record["output_parent_free_bytes"] = None
 
 
+def _dry_run_plan_for(remover, config, inp: str, video_exts) -> dict:
+    """Build a no-encode plan for one input: probe, detect, codec check."""
+    import cv2 as _cv2
+    from backend.ffmpeg_profiles import missing_profile_requirements_for_config
+
+    plan = {
+        "input": inp,
+        "is_video": False,
+        "frames": None,
+        "fps": None,
+        "sampled": 0,
+        "frames_with_text": 0,
+        "detected_regions": [],
+        "codec_ok": True,
+        "warnings": [],
+    }
+    ext = Path(inp).suffix.lower()
+    is_video = Path(inp).is_dir() or ext in video_exts
+    plan["is_video"] = bool(is_video)
+
+    try:
+        missing = missing_profile_requirements_for_config(config)
+        if missing:
+            plan["codec_ok"] = False
+            plan["warnings"].append(
+                "codec/profile requirements unmet: "
+                + "; ".join(m.get("reason", "") for m in missing)
+            )
+    except Exception as exc:  # noqa: BLE001
+        plan["warnings"].append(f"codec probe failed: {exc}")
+
+    if not is_video:
+        try:
+            img = _cv2.imread(inp)
+            if img is not None:
+                boxes = remover.detector.detect(img, config.detection_threshold)
+                plan["sampled"] = 1
+                plan["frames_with_text"] = 1 if boxes else 0
+                plan["detected_regions"] = [list(b) for b in (boxes or [])][:8]
+            else:
+                plan["warnings"].append("could not read image")
+        except Exception as exc:  # noqa: BLE001
+            plan["warnings"].append(f"detection failed: {exc}")
+        return plan
+
+    cap = _cv2.VideoCapture(inp)
+    try:
+        if not cap.isOpened():
+            plan["warnings"].append("could not open video")
+            return plan
+        total = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = float(cap.get(_cv2.CAP_PROP_FPS) or 0.0)
+        plan["frames"] = total or None
+        plan["fps"] = round(fps, 3) if fps else None
+        sample_count = 5 if total else 0
+        indices = ([int(total * i / (sample_count + 1)) for i in range(1, sample_count + 1)]
+                   if total else [])
+        for idx in indices:
+            cap.set(_cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            plan["sampled"] += 1
+            try:
+                boxes = remover.detector.detect(frame, config.detection_threshold)
+            except Exception as exc:  # noqa: BLE001
+                plan["warnings"].append(f"detection failed at frame {idx}: {exc}")
+                break
+            if boxes:
+                plan["frames_with_text"] += 1
+                if not plan["detected_regions"]:
+                    plan["detected_regions"] = [list(b) for b in boxes][:8]
+    finally:
+        cap.release()
+    return plan
+
+
+def _run_dry_run_and_exit(remover, config, args, video_exts) -> None:
+    """Resolve inputs, build no-encode plans, print, and exit."""
+    if args.pattern:
+        from glob import glob
+        inputs = [p for p in sorted(glob(args.pattern, recursive=True))
+                  if Path(p).is_file()]
+    else:
+        inputs = [args.input] if args.input else []
+    plans = [_dry_run_plan_for(remover, config, inp, video_exts)
+             for inp in inputs]
+
+    if getattr(args, "json_output", False):
+        print(json.dumps({
+            "dry_run": True,
+            "mode": config.mode.value,
+            "device": config.device,
+            "plans": plans,
+        }, indent=2))
+    else:
+        print(f"[dry-run] {len(plans)} input(s); no files will be written")
+        for plan in plans:
+            name = Path(plan["input"]).name
+            kind = "video" if plan["is_video"] else "image"
+            frames = plan.get("frames")
+            hit = plan["frames_with_text"]
+            sampled = plan["sampled"]
+            codec = "ok" if plan["codec_ok"] else "MISSING"
+            print(f"  - {name} [{kind}] frames={frames} "
+                  f"text-in {hit}/{sampled} sampled, codec={codec}")
+            for warn in plan["warnings"]:
+                print(f"      ! {warn}")
+    any_codec_missing = any(not p["codec_ok"] for p in plans)
+    sys.exit(1 if (not plans or any_codec_missing) else 0)
+
+
 def main():
     """CLI entry point."""
     import argparse
@@ -559,6 +671,15 @@ def main():
                             "the OCR and inpaint backends to prove they actually "
                             "execute (records provider/timing), then exit. No model "
                             "downloads. Uses --gpu to pick the device.")
+    parser.add_argument("--dry-run", action="store_true",
+                       help="Validate the run without encoding: probe each input, "
+                            "run detection on a few sampled frames, check the "
+                            "requested codec is available, and print a per-file "
+                            "plan, then exit. Combine with --json for machine "
+                            "output.")
+    parser.add_argument("--json", action="store_true", dest="json_output",
+                       help="Emit a machine-readable JSON result to stdout "
+                            "(the --dry-run plan, or the batch/file result).")
     parser.add_argument("--auto-lang-probe", action="store_true",
                        help="Probe the first frame for script/language and print "
                             "a suggestion, then exit. Requires -i.")
@@ -1127,6 +1248,9 @@ def main():
     remover = SubtitleRemover(config)
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
 
+    if getattr(args, "dry_run", False):
+        _run_dry_run_and_exit(remover, config, args, video_exts)
+
     print(
         "[run] "
         f"mode={config.mode.value} | device={config.device} | lang={config.detection_lang} | "
@@ -1352,6 +1476,24 @@ def main():
             print("[batch] Some items need attention. Review the errors above before retrying.")
         if reviews:
             print("[batch] Some outputs need manual review. See vsr-batch-summary for quality-gate details.")
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "batch": True,
+                "total": len(inputs),
+                "succeeded": succeeded,
+                "failed": failures,
+                "review_needed": reviews,
+                "items": [
+                    {
+                        "input": r.get("input"),
+                        "output": r.get("output"),
+                        "status": r.get("status"),
+                        "message": r.get("message"),
+                        "elapsed_seconds": r.get("elapsed_seconds"),
+                    }
+                    for r in records
+                ],
+            }, indent=2))
         sys.exit(0 if failures == 0 else 1)
 
     if args.nle_input:
@@ -1429,6 +1571,16 @@ def main():
         if message:
             print(f"[file] error={message}")
     print(f"[file] {'completed' if success else 'failed'}")
+    if getattr(args, "json_output", False):
+        print(json.dumps({
+            "status": "completed" if success else "failed",
+            "input": args.input,
+            "output": actual_output or args.output,
+            "error": (None if success
+                      else getattr(remover, "last_error_message", None)),
+            "stage_timings": getattr(remover, "last_stage_timings", None),
+            "quality_report": getattr(remover, "last_quality_report", None),
+        }, indent=2))
     sys.exit(0 if success else 1)
 
 

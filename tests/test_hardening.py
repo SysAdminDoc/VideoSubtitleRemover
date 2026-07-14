@@ -6151,6 +6151,42 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class DryRunCliTests(unittest.TestCase):
+    """P2: full-pipeline --dry-run and machine-readable --json output."""
+
+    def test_dry_run_plan_probes_without_encoding(self):
+        import shutil as _sh
+        import subprocess as _sp
+        if _sh.which("ffmpeg") is None:
+            self.skipTest("ffmpeg not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            video = Path(tmp) / "clip.mp4"
+            out = Path(tmp) / "out.mp4"
+            _sp.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                 "-f", "lavfi", "-i", "testsrc=size=160x120:rate=10:duration=1",
+                 "-pix_fmt", "yuv420p", str(video)],
+                check=True, timeout=60,
+            )
+            proc = _sp.run(
+                [sys.executable, "-m", "backend.cli", "-i", str(video),
+                 "-o", str(out), "--gpu", "-1", "--dry-run", "--json"],
+                capture_output=True, text=True, timeout=300,
+                cwd=str(Path(__file__).resolve().parents[1]),
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+            # stdout has log noise before JSON; parse the JSON object at the end
+            start = proc.stdout.index("{")
+            payload = json.loads(proc.stdout[start:])
+            self.assertTrue(payload["dry_run"])
+            self.assertEqual(len(payload["plans"]), 1)
+            plan = payload["plans"][0]
+            self.assertTrue(plan["is_video"])
+            self.assertEqual(plan["frames"], 10)
+            self.assertTrue(plan["codec_ok"])
+            self.assertFalse(out.exists())  # dry-run never encodes
+
+
 class DiskSpaceAndLogRotationTests(unittest.TestCase):
     """P2: pre-encode free-space preflight and bounded JSON log."""
 
