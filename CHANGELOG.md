@@ -59,6 +59,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Reliability
 
+- **Encode/mux-phase resume marker.** When every frame has been inpainted and
+  written to the checkpoint frame dir, the pause checkpoint now records an
+  explicit `stage="encoding"` / `inpaint_complete` marker before the encode and
+  mux begin. If the process is interrupted during encoding or audio muxing,
+  resume detects the marker and jumps straight to the encode stage from the
+  persisted frames instead of redoing detection and inpainting -- multi-hour
+  jobs no longer lose the OCR/inpaint work to a late crash.
+
 - **Graceful GPU out-of-memory recovery.** A CUDA OOM during batch inpainting
   no longer crashes the run: the CUDA cache is cleared and the batch is split
   in half and retried recursively down to a single frame, which falls back to

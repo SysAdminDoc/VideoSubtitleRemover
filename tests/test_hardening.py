@@ -6151,6 +6151,75 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class EncodeStageCheckpointTests(unittest.TestCase):
+    """P1: encode/mux-phase resume marker."""
+
+    def _write_frames(self, frame_dir, n):
+        import cv2
+        frame_dir.mkdir(parents=True, exist_ok=True)
+        img = np.zeros((8, 8, 3), np.uint8)
+        for i in range(n):
+            cv2.imwrite(str(frame_dir / f"frame_{i:06d}.png"), img)
+
+    def _args(self, tmp, frame_dir):
+        return dict(
+            input_path=str(tmp / "in.mp4"),
+            output_path=str(tmp / "out.mp4"),
+            config_hash="abc",
+            frame_dir=frame_dir,
+            total_frames=5,
+            width=8, height=8, fps=24.0,
+        )
+
+    def test_marker_persists_stage_and_flag(self):
+        from backend import resume_checkpoint as rc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            frame_dir = tmp / "job.frames"
+            payload = rc.write_pause_checkpoint(
+                tmp, "job", next_frame=5, status="running",
+                stage="encoding", inpaint_complete=True,
+                **self._args(tmp, frame_dir))
+            self.assertEqual(payload["stage"], "encoding")
+            self.assertTrue(payload["inpaint_complete"])
+
+    def test_resume_detects_inpaint_complete(self):
+        from backend import resume_checkpoint as rc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "in.mp4").write_bytes(b"x")
+            frame_dir = tmp / "job.frames"
+            self._write_frames(frame_dir, 5)
+            args = self._args(tmp, frame_dir)
+            rc.write_pause_checkpoint(
+                tmp, "job", next_frame=5, status="running",
+                stage="encoding", inpaint_complete=True, **args)
+            state = rc.load_pause_checkpoint(
+                tmp, "job",
+                input_path=args["input_path"], output_path=args["output_path"],
+                config_hash="abc", total_frames=5, width=8, height=8, fps=24.0)
+            self.assertEqual(state.next_frame, 5)
+            self.assertTrue(state.inpaint_complete)
+
+    def test_partial_inpaint_is_not_complete(self):
+        from backend import resume_checkpoint as rc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "in.mp4").write_bytes(b"x")
+            frame_dir = tmp / "job.frames"
+            self._write_frames(frame_dir, 3)  # only 3 of 5
+            args = self._args(tmp, frame_dir)
+            rc.write_pause_checkpoint(
+                tmp, "job", next_frame=3, status="running",
+                stage="inpainting", inpaint_complete=False, **args)
+            state = rc.load_pause_checkpoint(
+                tmp, "job",
+                input_path=args["input_path"], output_path=args["output_path"],
+                config_hash="abc", total_frames=5, width=8, height=8, fps=24.0)
+            self.assertEqual(state.next_frame, 3)
+            self.assertFalse(state.inpaint_complete)
+
+
 class TemporalMaskStabilizationTests(unittest.TestCase):
     """P1: scene-cut-safe rolling mask union."""
 

@@ -38,13 +38,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: Windows UIA clients can discover stable name/role/state/value, keyboard focus, and Invoke/Toggle/RangeValue/Selection behavior for every primary custom control; state changes raise UIA events, frozen builds retain the provider, and an automated external-tree smoke plus Narrator checklist passes.
   Complexity: XL
 
-- [ ] P1 — Checkpoint and resume the encode/mux phase
-  Why: `resume_checkpoint.py` saves only frame-by-frame OCR/inpaint state, so a crash after all frames are inpainted re-runs the entire encode; multi-hour jobs can lose hours of completed work.
-  Evidence: `backend/resume_checkpoint.py` (tracks `frame_dir`/`next_frame` only); RESEARCH.md Security/Reliability.
-  Touches: `backend/resume_checkpoint.py`, `backend/processor.py`, `backend/io.py`, `backend/cli.py`, `gui/processing_controller.py`, `tests/test_hardening.py`
-  Acceptance: an encode-stage marker records that inpainting completed and where the encode/mux left off; resuming a job whose encode was interrupted skips re-inpainting and either resumes or restarts only the encode, verified by a fixture that kills the process mid-encode and re-runs to a byte-valid output without redoing detection.
-  Complexity: L
-
 ### P2 — Later
 
 - [ ] P2 — Pin build-toolchain versions carrying LPE fixes (PyInstaller, NSIS)

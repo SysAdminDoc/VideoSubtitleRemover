@@ -32,6 +32,7 @@ class CheckpointState:
     next_frame: int
     payload: dict
     warning: str = ""
+    inpaint_complete: bool = False
 
 
 def pause_checkpoint_path(checkpoint_dir: Path, key: str) -> Path:
@@ -120,7 +121,16 @@ def load_pause_checkpoint(
             f"Pause checkpoint {ckpt_path} expected frame {expected}, "
             f"but only {next_frame} contiguous frame files were present."
         )
-    return CheckpointState(ckpt_path, frame_dir, next_frame, payload, warning)
+    # Inpainting is done when the marker says so AND every frame is on disk;
+    # such a checkpoint resumes straight into the encode/mux stage.
+    inpaint_complete = (
+        bool(payload.get("inpaint_complete"))
+        and next_frame >= int(total_frames) > 0
+    )
+    return CheckpointState(
+        ckpt_path, frame_dir, next_frame, payload, warning,
+        inpaint_complete=inpaint_complete,
+    )
 
 
 def write_pause_checkpoint(
@@ -137,11 +147,15 @@ def write_pause_checkpoint(
     height: int,
     fps: float,
     status: str,
+    stage: str = "inpainting",
+    inpaint_complete: bool = False,
 ) -> dict:
     now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
     payload = {
         "schema": SCHEMA,
         "status": status,
+        "stage": str(stage or "inpainting"),
+        "inpaint_complete": bool(inpaint_complete),
         "input": str(input_path),
         "output": str(output_path),
         "input_fingerprint": file_fingerprint(input_path),

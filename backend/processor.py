@@ -1623,6 +1623,11 @@ class SubtitleRemover:
                     if state.warning:
                         self.last_resume_warning = state.warning
                         logger.warning(state.warning)
+                    if state.inpaint_complete and resume_frame_count >= frames_to_process:
+                        logger.info(
+                            f"Resuming {Path(input_path).name} at the encode "
+                            "stage; all frames were already inpainted."
+                        )
                     if resume_frame_count > 0:
                         cap.set(cv2.CAP_PROP_POS_FRAMES,
                                 start_frame + resume_frame_count)
@@ -2110,6 +2115,28 @@ class SubtitleRemover:
             with self._time_stage("encode"):
                 writer.release()
             writer = None
+
+            # Encode-stage marker: every frame is inpainted and on disk. If the
+            # encode/mux below is interrupted, resume reloads this and jumps
+            # straight to encoding instead of redoing detection/inpainting.
+            if checkpoint_active and checkpoint_root is not None and checkpoint_key:
+                write_pause_checkpoint(
+                    checkpoint_root,
+                    checkpoint_key,
+                    input_path=input_path,
+                    output_path=output_path,
+                    config_hash=checkpoint_config_hash,
+                    frame_dir=checkpoint_frame_dir or pause_frame_dir(
+                        checkpoint_root, checkpoint_key),
+                    next_frame=frames_to_process,
+                    total_frames=frames_to_process,
+                    width=width,
+                    height=height,
+                    fps=fps,
+                    status="running",
+                    stage="encoding",
+                    inpaint_complete=True,
+                )
             if mask_writer is not None:
                 with self._time_stage("encode"):
                     mask_writer.release()
