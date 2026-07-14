@@ -79,6 +79,12 @@ from backend.io import (
     _terminate_subprocess,
 )
 from backend.encoder import _detect_hw_encoder
+from backend.container_payload import (
+    build_container_mux_args,
+    build_container_mux_plan,
+    probe_container_manifest,
+    validate_container_payload,
+)
 from backend.quality import (
     _ssim,
     compute_vmaf,
@@ -383,6 +389,7 @@ class SubtitleRemover:
             "average_fps": 0.0,
         }
         self.last_output_contract: dict = {}
+        self.last_container_payload: dict = {}
         self.last_resume_warning: Optional[str] = None
         self.last_pause_checkpoint: Optional[dict] = None
         self.last_pause_checkpoint_path: Optional[str] = None
@@ -1488,6 +1495,7 @@ class SubtitleRemover:
             "average_fps": 0.0,
         }
         self.last_output_contract = {}
+        self.last_container_payload = {}
         self._color_metadata = None
         self._output_contract = None
         try:
@@ -2326,7 +2334,7 @@ class SubtitleRemover:
                         "error": "Mask video writer produced no playable artifact",
                     })
 
-            self._report_progress(0.9, "Merging audio...")
+            self._report_progress(0.9, "Preserving container streams...")
             with self._time_stage("mux"):
                 if use_frame_output:
                     logger.info(
@@ -2351,11 +2359,7 @@ class SubtitleRemover:
                     )
                     final_output_path = processed_video
                     is_frame_sequence_input = Path(input_path).is_dir()
-                    if (
-                        self.config.preserve_audio
-                        and not is_frame_sequence_input
-                        and not Path(processed_video).is_dir()
-                    ):
+                    if not is_frame_sequence_input and not Path(processed_video).is_dir():
                         final_output_path = self._merge_audio(
                             input_path,
                             processed_video,
@@ -2372,18 +2376,17 @@ class SubtitleRemover:
                         source_time_base=frame_timing.time_base,
                     )
                     final_output_path = processed_video
-                    if self.config.preserve_audio:
-                        final_output_path = self._merge_audio(
-                            input_path,
-                            processed_video,
-                            output_path,
-                            start_seconds=processed_time_start,
-                            end_seconds=processed_time_end,
-                        )
+                    final_output_path = self._merge_audio(
+                        input_path,
+                        processed_video,
+                        output_path,
+                        start_seconds=processed_time_start,
+                        end_seconds=processed_time_end,
+                    )
                 else:
                     final_output_path = output_path
                     is_frame_sequence_input = Path(input_path).is_dir()
-                    if self.config.preserve_audio and not is_frame_sequence_input:
+                    if not is_frame_sequence_input:
                         final_output_path = self._merge_audio(
                             input_path,
                             temp_video,
@@ -2682,6 +2685,9 @@ class SubtitleRemover:
             hardware_requested=self.config.use_hw_encode,
         )
         self.last_output_contract = self._output_contract.report()
+        self.last_output_contract["container_payload"] = {
+            "status": "pending",
+        }
         if meta is not None:
             if meta.is_hdr:
                 logger.info(
@@ -2698,7 +2704,14 @@ class SubtitleRemover:
         if contract is None or Path(output_path).is_dir():
             return
         ok, issues = contract.validate(output_path)
+        payload_issues = list((self.last_container_payload or {}).get("issues") or [])
+        if (self.last_container_payload or {}).get("status") == "failed":
+            issues.extend(f"container payload: {item}" for item in payload_issues)
+            ok = False
         self.last_output_contract = contract.report()
+        self.last_output_contract["container_payload"] = dict(
+            self.last_container_payload or {"status": "not-probed"}
+        )
         self.last_output_contract["status"] = "preserved" if ok else "failed"
         self.last_output_contract["issues"] = list(issues)
         if not ok:
@@ -2706,6 +2719,64 @@ class SubtitleRemover:
                 "output contract mismatch: " + "; ".join(issues),
                 {"output_contract": self.last_output_contract},
             )
+
+    def _remux_transformed_video(
+        self,
+        video_source: str,
+        payload_source: str,
+        output_path: str,
+    ) -> dict:
+        """Copy a transformed primary video while restoring container payload."""
+        manifest = probe_container_manifest(payload_source)
+        plan = build_container_mux_plan(
+            manifest,
+            output_path,
+            preserve_audio=self.config.preserve_audio,
+            multi_audio=True,
+            loudnorm_target=0.0,
+        )
+        for warning in plan.get("warnings", []):
+            logger.warning(warning)
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
+            "-i", video_source,
+            "-i", payload_source,
+            "-map", "0:v:0",
+            "-c:v", "copy",
+        ]
+        cmd += build_container_mux_args(plan, input_index=1)
+        duration = _probe_duration_seconds(video_source)
+        if duration > 0:
+            cmd += ["-t", f"{duration:.9f}"]
+        cmd += [output_path]
+        self._run_checked_ffmpeg(
+            cmd,
+            _ffmpeg_subprocess_timeout(duration or _probe_duration_seconds(payload_source)),
+        )
+        report = validate_container_payload(plan, output_path)
+        self.last_container_payload = report
+        if report.get("issues"):
+            raise OutputIntegrityError(
+                "container payload mismatch: " + "; ".join(report["issues"]),
+                {"container_payload": report},
+            )
+        return report
+
+    def _mark_container_payload_failed(self, reason: str) -> None:
+        report = dict(self.last_container_payload or {})
+        issues = list(report.get("issues") or [])
+        if reason not in issues:
+            issues.append(reason)
+        warnings = list(report.get("warnings") or [])
+        if reason not in warnings:
+            warnings.append(reason)
+        report.update({
+            "schema": report.get("schema", "vsr.container_payload.v1"),
+            "status": "failed",
+            "issues": issues,
+            "warnings": warnings,
+        })
+        self.last_container_payload = report
 
     def _promote_post_restore_result(
         self,
@@ -2719,43 +2790,22 @@ class SubtitleRemover:
         if contract is None:
             _promote_temp_output(produced, output_path)
             return True
-        ok, issues = contract.validate(produced)
-        candidate = produced
-        normalized = None
-        if not ok:
-            logger.info(
-                "%s result needs output-contract normalization: %s",
-                label,
-                "; ".join(issues),
+        if _path_key(produced) == _path_key(output_path):
+            return False
+        previous_payload = dict(self.last_container_payload)
+        normalized = contract.temp_path(temp_dir, f"{label}-contract")
+        ok = False
+        issues: list[str] = []
+        try:
+            self._remux_transformed_video(produced, output_path, normalized)
+            ok, issues = contract.validate(normalized)
+        except Exception as exc:
+            logger.warning(
+                "%s output-contract normalization failed: %s", label, exc
             )
-            normalized = contract.temp_path(temp_dir, f"{label}-contract")
-            cmd = [
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-nostats", "-i", produced,
-            ]
-            if contract.preserve_audio and contract.source_has_audio:
-                cmd += ["-i", output_path]
-            cmd += ["-map", "0:v:0"]
-            if contract.preserve_audio and contract.source_has_audio:
-                cmd += ["-map", "1:a?"]
-            cmd += self._get_encode_args()
-            cmd += ["-c:a", "copy"] if contract.preserve_audio else ["-an"]
-            cmd += [normalized]
-            try:
-                self._run_checked_ffmpeg(
-                    cmd,
-                    _ffmpeg_subprocess_timeout(
-                        _probe_duration_seconds(output_path)
-                    ),
-                )
-                ok, issues = contract.validate(normalized)
-                candidate = normalized
-            except Exception as exc:
-                logger.warning(
-                    "%s output-contract normalization failed: %s", label, exc
-                )
-                ok = False
+            issues = [str(exc)]
         if not ok:
+            self.last_container_payload = previous_payload
             logger.warning(
                 "%s result was not promoted because it violates the output "
                 "contract: %s",
@@ -2765,9 +2815,8 @@ class SubtitleRemover:
             _cleanup_temp_output(normalized)
             _cleanup_temp_output(produced)
             return False
-        _promote_temp_output(candidate, output_path)
-        if candidate != produced:
-            _cleanup_temp_output(produced)
+        _promote_temp_output(normalized, output_path)
+        _cleanup_temp_output(produced)
         return True
 
     def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
@@ -3284,8 +3333,11 @@ class SubtitleRemover:
         *,
         start_seconds: Optional[float] = None,
         end_seconds: Optional[float] = None,
+        _include_auxiliary: bool = True,
+        _force_audio_transcode: bool = False,
     ) -> str:
         temp_output = _allocate_temp_output_path(output)
+        plan: dict = {}
         try:
             _ensure_output_parent(output)
             cmd = [
@@ -3307,58 +3359,37 @@ class SubtitleRemover:
             if audio_start > 0:
                 cmd += ['-ss', f'{audio_start:.9f}']
             cmd += ['-i', original]
-            if audio_end > audio_start:
-                cmd += ['-t', f'{audio_end - audio_start:.9f}']
-            cmd += self._get_encode_args()
-            cmd += [
-                '-c:a', 'aac',
-                '-map', '0:v:0',
-            ]
+            manifest = probe_container_manifest(original)
             target = self.config.loudnorm_target
-            loudnorm_active = target != 0.0
-            multi_active = self.config.multi_audio_passthrough
-            stream_count = (
-                _probe_audio_stream_count(original) if multi_active else 1
+            plan = build_container_mux_plan(
+                manifest,
+                output,
+                preserve_audio=self.config.preserve_audio,
+                multi_audio=self.config.multi_audio_passthrough,
+                loudnorm_target=target,
+                include_auxiliary=_include_auxiliary,
+                force_audio_transcode=_force_audio_transcode,
+                start_seconds=audio_start,
+                end_seconds=audio_end,
             )
-            if loudnorm_active and multi_active and stream_count > 1:
-                # B-4: per-stream loudnorm via -filter_complex. Build one
-                # loudnorm branch per input audio stream, label each
-                # output (`[a0]`, `[a1]`, ...), and map every labelled
-                # output. Each stream gets the same LUFS target so the
-                # whole programme normalises uniformly.
-                lf = ";".join(
-                    f"[1:a:{i}]loudnorm=I={target}:TP=-1.5:LRA=11[a{i}]"
-                    for i in range(stream_count)
-                )
-                cmd += ['-filter_complex', lf]
-                for i in range(stream_count):
-                    cmd += ['-map', f'[a{i}]']
-                logger.info(
-                    f"Applying per-stream EBU R128 loudnorm I={target} LUFS "
-                    f"across {stream_count} audio tracks"
-                )
+            self.last_container_payload = plan
+            for warning in plan.get("warnings", []):
+                logger.warning(warning)
+            cmd += ['-map', '0:v:0']
+            cmd += self._get_encode_args()
+            cmd += build_container_mux_args(
+                plan,
+                input_index=1,
+                loudnorm_target=target,
+            )
+            output_duration = (
+                audio_end - audio_start
+                if audio_end > audio_start
+                else _probe_duration_seconds(processed)
+            )
+            if output_duration > 0:
+                cmd += ['-t', f'{output_duration:.9f}']
             else:
-                # Multi-track audio passthrough: '1:a?' selects every
-                # audio stream from the original input (re-encoded to
-                # AAC for mp4 container compatibility). When the user
-                # disables it we keep the legacy single-track behaviour
-                # ('1:a:0?').
-                if multi_active:
-                    cmd += ['-map', '1:a?']
-                else:
-                    cmd += ['-map', '1:a:0?']
-                # Optional EBU R128 loudness normalisation. Single-pass;
-                # for broadcast-grade accuracy a two-pass
-                # measure-then-apply would be preferable, but the
-                # single-pass filter is good enough for the platform-
-                # target use case (YouTube -14, Apple -16, broadcast -23).
-                if loudnorm_active:
-                    cmd += ['-af', f'loudnorm=I={target}:TP=-1.5:LRA=11']
-                    logger.info(f"Applying EBU R128 loudnorm I={target} LUFS")
-            # With an explicit processed PTS range, -t above is the length of
-            # record. Do not also use -shortest: audio packet rounding can be
-            # a few milliseconds shorter and would drop the final video frame.
-            if end_seconds is None:
                 cmd += ['-shortest']
             cmd += [str(temp_output)]
             # Adaptive timeout: scales with the duration of the original
@@ -3366,6 +3397,13 @@ class SubtitleRemover:
             # mux pass takes longer than the legacy 10-minute fixed budget.
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(original))
             self._run_checked_ffmpeg(cmd, timeout)
+            report = validate_container_payload(plan, temp_output)
+            self.last_container_payload = report
+            if report.get("issues"):
+                raise OutputIntegrityError(
+                    "container payload mismatch: " + "; ".join(report["issues"]),
+                    {"container_payload": report},
+                )
             # Guard against -shortest truncating the video to a shorter audio
             # stream (or any decode-integrity loss). The processed intermediate
             # is the length-of-record; on failure keep the full-length video
@@ -3380,17 +3418,74 @@ class SubtitleRemover:
                     "saving the full-length video without audio instead.",
                     exc.reason,
                 )
+                self._mark_container_payload_failed(
+                    "Container payload was not promoted because the muxed video "
+                    f"failed integrity validation: {exc.reason}"
+                )
                 return self._salvage_intermediate(processed, output)
             encoder_name = (
                 cmd[cmd.index('-c:v') + 1]
                 if '-c:v' in cmd else 'unknown'
             )
-            logger.info(f"Audio merged successfully (encoder: {encoder_name})")
+            logger.info(
+                f"Container payload merged successfully (encoder: {encoder_name})"
+            )
             return output
+        except OutputIntegrityError as exc:
+            payload_failure = "container_payload" in exc.details
+            mapped_auxiliary = any(
+                item.get("type") in {"subtitle", "attachment", "data", "video"}
+                and item.get("action") in {"copy", "transcode"}
+                for item in plan.get("streams", [])
+            )
+            copied_audio = any(
+                item.get("type") == "audio" and item.get("action") == "copy"
+                for item in plan.get("streams", [])
+            )
+            if payload_failure and _include_auxiliary and mapped_auxiliary:
+                logger.warning(
+                    "Full container preservation failed (%s); retrying with "
+                    "audio and metadata only.", exc.reason,
+                )
+                return self._merge_audio(
+                    original,
+                    processed,
+                    output,
+                    start_seconds=start_seconds,
+                    end_seconds=end_seconds,
+                    _include_auxiliary=False,
+                    _force_audio_transcode=_force_audio_transcode,
+                )
+            if payload_failure and copied_audio and not _force_audio_transcode:
+                logger.warning(
+                    "Audio stream copy failed validation (%s); retrying with "
+                    "container-compatible audio encoding.", exc.reason,
+                )
+                return self._merge_audio(
+                    original,
+                    processed,
+                    output,
+                    start_seconds=start_seconds,
+                    end_seconds=end_seconds,
+                    _include_auxiliary=False,
+                    _force_audio_transcode=True,
+                )
+            logger.warning(
+                "Container preservation failed integrity checks (%s); "
+                "saving the processed video without source payload.",
+                exc.reason,
+            )
+            self._mark_container_payload_failed(
+                f"Source container payload could not be preserved: {exc.reason}"
+            )
+            return self._salvage_intermediate(processed, output)
         except subprocess.TimeoutExpired:
             # Do not re-run ffmpeg after a duration-adaptive timeout --
             # salvage the intermediate into a container-correct path.
             logger.warning("FFmpeg audio merge timed out, saving video without audio")
+            self._mark_container_payload_failed(
+                "Source container payload was omitted after the mux timed out."
+            )
             return self._salvage_intermediate(processed, output)
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
@@ -3403,14 +3498,57 @@ class SubtitleRemover:
                     output,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
+                    _include_auxiliary=_include_auxiliary,
+                    _force_audio_transcode=_force_audio_transcode,
+                )
+            mapped_auxiliary = any(
+                item.get("type") in {"subtitle", "attachment", "data", "video"}
+                and item.get("action") in {"copy", "transcode"}
+                for item in plan.get("streams", [])
+            )
+            copied_audio = any(
+                item.get("type") == "audio" and item.get("action") == "copy"
+                for item in plan.get("streams", [])
+            )
+            if _include_auxiliary and mapped_auxiliary:
+                logger.warning(
+                    "Auxiliary stream mux failed; retrying with audio and metadata only."
+                )
+                return self._merge_audio(
+                    original,
+                    processed,
+                    output,
+                    start_seconds=start_seconds,
+                    end_seconds=end_seconds,
+                    _include_auxiliary=False,
+                    _force_audio_transcode=_force_audio_transcode,
+                )
+            if copied_audio and not _force_audio_transcode:
+                logger.warning(
+                    "Audio stream copy failed; retrying with a compatible audio codec."
+                )
+                return self._merge_audio(
+                    original,
+                    processed,
+                    output,
+                    start_seconds=start_seconds,
+                    end_seconds=end_seconds,
+                    _include_auxiliary=False,
+                    _force_audio_transcode=True,
                 )
             # The merge often fails on the AUDIO side (bad stream, odd
             # layout); a video-only encode to the requested container is
             # usually still possible and beats a mislabeled raw copy.
             logger.warning(f"Audio merge failed: {e}, encoding video without audio")
+            self._mark_container_payload_failed(
+                "Source container payload was omitted after the mux command failed."
+            )
             return self._reencode_or_copy(processed, output)
         except FileNotFoundError:
             logger.warning("FFmpeg not found, saving video without audio")
+            self._mark_container_payload_failed(
+                "Source container payload was omitted because FFmpeg is unavailable."
+            )
             return self._salvage_intermediate(processed, output)
         finally:
             _cleanup_temp_output(temp_output)

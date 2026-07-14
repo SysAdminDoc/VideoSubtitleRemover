@@ -1251,6 +1251,17 @@ def _open_bgr48_capture(path: str, *, input_fps: float = 24.0):
         cap.release()
 
 
+def _enable_orientation_auto(cap):
+    """Make source rotation a decoded-pixel property, never stale metadata."""
+    prop = getattr(cv2, "CAP_PROP_ORIENTATION_AUTO", None)
+    if prop is not None:
+        try:
+            cap.set(prop, 1)
+        except Exception:
+            pass
+    return cap
+
+
 def _open_capture(path: str, hw_accel: str = "off", *,
                   input_fps: float = 24.0):
     """Open a frame source. Directory -> ``_FrameSequenceCapture``,
@@ -1288,9 +1299,9 @@ def _open_capture(path: str, hw_accel: str = "off", *,
                 "PyNvVideoCodec decode was requested but unavailable; "
                 "falling back to software decode."
             )
-            return cv2.VideoCapture(path)
+            return _enable_orientation_auto(cv2.VideoCapture(path))
     if hw_accel in (None, "", "off"):
-        return cv2.VideoCapture(path)
+        return _enable_orientation_auto(cv2.VideoCapture(path))
     accel_map = {
         "any": getattr(cv2, "VIDEO_ACCELERATION_ANY", 1),
         "auto": getattr(cv2, "VIDEO_ACCELERATION_ANY", 1),
@@ -1305,6 +1316,7 @@ def _open_capture(path: str, hw_accel: str = "off", *,
             cv2.CAP_FFMPEG,
             [cv2.CAP_PROP_HW_ACCELERATION, accel_value],
         )
+        _enable_orientation_auto(cap)
         if cap.isOpened():
             ok, _frame = cap.read()
             if ok:
@@ -1320,7 +1332,7 @@ def _open_capture(path: str, hw_accel: str = "off", *,
             f"HW-accelerated decode '{hw_accel}' raised {exc}; "
             f"falling back to software."
         )
-    return cv2.VideoCapture(path)
+    return _enable_orientation_auto(cv2.VideoCapture(path))
 
 
 class _PrefetchReader:

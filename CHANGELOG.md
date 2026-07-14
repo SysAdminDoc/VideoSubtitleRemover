@@ -52,6 +52,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Processed outputs preserve their compatible container payload.** A single
+  ffprobe manifest now drives remuxing for audio, soft subtitles, chapters,
+  attachments, MP4 timecode, global/stream metadata, tags, and dispositions.
+  Compatible audio is copied, incompatible audio and text subtitles are
+  selectively converted, range-excluded or unsupported payload is warned and
+  recorded, decoded rotation is cleared, and post-restoration passes restore
+  the same payload before promotion. MKV/MP4 fixtures verify the contract.
 - **Frozen distributions no longer bundle source-only launchers.** Release
   builds now copy dedicated launchers that invoke `VideoSubtitleRemoverPro.exe`
   without Python, `setup.py`, or a repository-local virtual environment.
