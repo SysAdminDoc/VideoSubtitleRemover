@@ -918,14 +918,14 @@ class VideoSubtitleRemoverApp(
         if hasattr(self, "open_output_btn"):
             self.open_output_btn.set_enabled(
                 has_complete,
-                reason=tr("No completed outputs are available yet."),
+                reason=tr("Finish processing an item to open its output folder."),
             )
         if hasattr(self, "retry_btn"):
             self.retry_btn.set_enabled(
                 (not batch_busy) and has_retry,
                 reason=(
                     tr("Wait for the current batch to finish.")
-                    if batch_busy else tr("No failed or stopped items need retry.")
+                    if batch_busy else tr("Nothing to retry - every item is done.")
                 ),
             )
         if hasattr(self, "clear_btn"):
@@ -933,7 +933,7 @@ class VideoSubtitleRemoverApp(
                 (not batch_busy) and has_queue,
                 reason=(
                     tr("Wait for the current batch to finish.")
-                    if batch_busy else tr("The queue is already empty.")
+                    if batch_busy else tr("The queue is empty - add media to get started.")
                 ),
             )
         if hasattr(self, "repeat_btn"):
@@ -2402,7 +2402,7 @@ class VideoSubtitleRemoverApp(
                  font=f(Theme.F_TITLE, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(pady=(Theme.S_MD, 4))
         tk.Label(self.empty_container,
-                 text=tr("Add videos or images to build a cleanup batch. Originals stay untouched."),
+                 text=tr("Add videos or images to build a cleanup batch. Originals are never modified."),
                  font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                  wraplength=340, justify="center").pack()
@@ -2938,7 +2938,7 @@ class VideoSubtitleRemoverApp(
 
         card("1", "Import media",
              "Drop videos or images on the left, or pick an entire folder. "
-             "Originals are never touched.",
+             "Originals are never modified.",
              "info").pack(side="left", fill="both", expand=True,
                           padx=(0, Theme.S_SM))
         card("2", "Inspect the region",

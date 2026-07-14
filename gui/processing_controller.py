@@ -782,7 +782,9 @@ class ProcessingControllerMixin:
             )
             item.status = ProcessingStatus.ERROR
             item.error = str(e)
-            item.message = f"Error: {str(e)}"
+            # The row/status already signal an error state; avoid the redundant
+            # "Error:" prefix (which reads as "needs attention: Error: ...").
+            item.message = str(e) or tr("Processing failed")
             item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)

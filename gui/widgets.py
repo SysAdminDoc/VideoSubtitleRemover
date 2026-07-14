@@ -1565,7 +1565,7 @@ class DragDropFrame(tk.Frame):
 
         # Sub text -- updated after DnD setup to reflect actual capabilities
         self._sub_text = tk.Label(inner,
-                           text=tr("Drag files here, choose files, or choose a folder. Originals stay untouched."),
+                           text=tr("Drag files here, choose files, or choose a folder. Originals are never modified."),
                            font=f(Theme.F_BODY_SM), bg=self.normal_bg,
                            fg=Theme.TEXT_SECONDARY, justify="center", wraplength=480)
         self._sub_text.pack(pady=(6, 12))
@@ -1614,7 +1614,7 @@ class DragDropFrame(tk.Frame):
             pass
         if not self._dnd_available:
             self._sub_text.config(
-                text=tr("Choose files or a folder below. Originals stay untouched.")
+                text=tr("Choose files or a folder below. Originals are never modified.")
             )
         self._sync_a11y()
 

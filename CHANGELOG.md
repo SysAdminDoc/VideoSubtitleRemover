@@ -18,6 +18,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   probe now only opens `http(s)` URLs, so a misconfigured server URL cannot be
   coerced into a `file://` local read.
 
+### Changed
+
+- **Calmer, more consistent microcopy.** Disabled-action hints were reworded
+  from dismissive/double-negative phrasing ("No completed outputs are available
+  yet", "No failed or stopped items need retry", "The queue is already empty")
+  to calm, instructive copy. The three drop-zone reassurance variants
+  ("stay untouched" / "never touched" / "never modified") are unified to
+  "Originals are never modified." Error rows drop the redundant "Error:" prefix.
+
 ### Fixed
 
 - **UI froze during support-bundle and model-cache operations.** Saving a
