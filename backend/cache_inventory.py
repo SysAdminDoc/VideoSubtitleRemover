@@ -24,6 +24,17 @@ PORTABLE_MODEL_CACHE_SCHEMA = "vsr.model_cache_bundle.v1"
 MODEL_CACHE_STATUS_SCHEMA = "vsr.model_cache_status.v1"
 MODEL_CACHE_MANIFEST = "manifest.json"
 
+# Bounds for importing an untrusted model-cache bundle. A ZIP archive is
+# untrusted input, so the importer preflights these ceilings before writing
+# anything and stages every member before committing, guarding against
+# decompression-bomb disk exhaustion and partial multi-file imports.
+# Source: https://docs.python.org/3/library/zipfile.html#decompression-pitfalls
+_IMPORT_MAX_MEMBERS = 1024
+_IMPORT_MAX_MEMBER_BYTES = 8 * 1024 ** 3            # 8 GiB per file
+_IMPORT_MAX_TOTAL_BYTES = 32 * 1024 ** 3            # 32 GiB total expansion
+_IMPORT_MAX_COMPRESSION_RATIO = 200.0              # uncompressed / compressed
+_IMPORT_FREE_SPACE_SLACK_BYTES = 256 * 1024 ** 2    # keep 256 MiB headroom
+
 _MODEL_CACHE_ROOTS = {
     "app-model-cache": "",
     "torch-hub-checkpoints": "torch-hub-checkpoints",
@@ -417,19 +428,74 @@ def export_model_cache_bundle(
     return manifest
 
 
+def _cleanup_path(path: Path) -> None:
+    try:
+        Path(path).unlink()
+    except OSError:
+        pass
+
+
+def _target_key(target: Path) -> str:
+    """Case/normalized identity for duplicate-target detection."""
+    return os.path.normcase(os.path.abspath(str(target)))
+
+
+def _stream_member_capped(
+    bundle: zipfile.ZipFile,
+    archive_name: str,
+    dest: Path,
+    *,
+    cap_bytes: int,
+) -> tuple:
+    """Stream one member to ``dest`` with a hard byte cap.
+
+    Returns ``(ok, sha256_hex, bytes_written, reason)``. Aborts (ok=False)
+    when the decompressed stream exceeds ``cap_bytes`` so a member whose real
+    size exceeds its declared size cannot exhaust the disk.
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    written = 0
+    limit = max(0, int(cap_bytes))
+    try:
+        with bundle.open(archive_name, "r") as src, dest.open("wb") as out:
+            while True:
+                chunk = src.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > limit:
+                    return False, "", written, "member exceeds declared size"
+                digest.update(chunk)
+                out.write(chunk)
+    except (OSError, zipfile.BadZipFile, EOFError) as exc:
+        return False, "", written, f"member extraction failed: {exc}"
+    return True, digest.hexdigest(), written, ""
+
+
 def import_model_cache_bundle(
     bundle_path: str | Path,
     *,
     env: Optional[Mapping[str, str]] = None,
 ) -> dict:
-    """Import a portable model-cache bundle into the app model cache."""
-    from backend.model_hashes import KNOWN_WEIGHT_HASHES, hash_file
+    """Import a portable model-cache bundle into the app model cache.
+
+    Two-phase and transactional: the whole bundle is preflighted against
+    member-count / per-member size / compression-ratio / total-expansion /
+    free-space ceilings, every accepted member is staged and hash-verified in
+    a scratch directory, and only then are all staged files committed to their
+    targets. A commit failure rolls back every file already moved so the cache
+    is never left in a half-imported state.
+    """
+    from backend.model_hashes import KNOWN_WEIGHT_HASHES
 
     bundle_path = Path(bundle_path)
-    imported = []
-    rejected = []
+    imported: List[dict] = []
+    rejected: List[dict] = []
     target_root = app_model_cache_dir(env)
     target_root.mkdir(parents=True, exist_ok=True)
+
     with zipfile.ZipFile(bundle_path, "r") as bundle:
         try:
             manifest = json.loads(bundle.read(MODEL_CACHE_MANIFEST))
@@ -440,83 +506,175 @@ def import_model_cache_bundle(
         entries = manifest.get("files", [])
         if not isinstance(entries, list):
             raise ValueError("model-cache manifest files must be a list")
-        names = set(bundle.namelist())
+
+        # ---- aggregate preflight (fail the whole import, commit nothing) ----
+        if len(entries) > _IMPORT_MAX_MEMBERS:
+            raise ValueError(
+                f"bundle declares {len(entries)} members, exceeding the "
+                f"{_IMPORT_MAX_MEMBERS} member ceiling"
+            )
+        infos = {info.filename: info for info in bundle.infolist()}
+        names = set(infos)
+        declared_total = 0
         for entry in entries:
             if not isinstance(entry, dict):
-                rejected.append({"path": "", "reason": "manifest entry is not an object"})
                 continue
-            cache_name = str(entry.get("cache") or "")
-            relative = _safe_posix_path(entry.get("relative_path"))
-            archive_path = _safe_posix_path(entry.get("archive_path"))
-            filename = str(entry.get("filename") or "")
-            if relative is None or archive_path is None:
-                rejected.append({"path": filename, "reason": "unsafe manifest path"})
-                continue
-            if archive_path.as_posix() not in names:
-                rejected.append({
-                    "path": archive_path.as_posix(),
-                    "reason": "archive member is missing",
-                })
-                continue
-            if PurePosixPath(filename).name != filename or filename != relative.name:
-                rejected.append({"path": relative.as_posix(), "reason": "filename mismatch"})
-                continue
-            known_expected = KNOWN_WEIGHT_HASHES.get(filename)
-            reason = _model_file_rejection(
-                Path(filename),
-                known_hash=known_expected is not None,
+            arch = _safe_posix_path(entry.get("archive_path"))
+            info = infos.get(arch.as_posix()) if arch is not None else None
+            if info is not None:
+                declared_total += max(0, int(info.file_size))
+        if declared_total > _IMPORT_MAX_TOTAL_BYTES:
+            raise ValueError(
+                f"bundle total expansion {declared_total} bytes exceeds the "
+                f"{_IMPORT_MAX_TOTAL_BYTES}-byte ceiling"
             )
-            if reason:
-                rejected.append({"path": relative.as_posix(), "reason": reason})
-                continue
-            target = _target_path_for_import(cache_name, relative, env=env)
-            if target is None:
-                rejected.append({"path": relative.as_posix(), "reason": "unsupported cache target"})
-                continue
-            manifest_hash = str(entry.get("sha256") or "").lower()
-            expected_hash = (known_expected or manifest_hash).lower()
-            if len(expected_hash) != 64:
-                rejected.append({"path": relative.as_posix(), "reason": "missing SHA-256"})
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            fd, temp_name = tempfile.mkstemp(
-                prefix=f".{target.name}.",
-                suffix=".tmp",
-                dir=str(target.parent),
+        try:
+            free_bytes = shutil.disk_usage(target_root).free
+        except OSError:
+            free_bytes = None
+        if (free_bytes is not None
+                and free_bytes < declared_total + _IMPORT_FREE_SPACE_SLACK_BYTES):
+            raise ValueError(
+                f"insufficient free space to import: need about "
+                f"{declared_total + _IMPORT_FREE_SPACE_SLACK_BYTES} bytes, "
+                f"have {free_bytes}"
             )
-            os.close(fd)
-            temp_path = Path(temp_name)
-            try:
-                with bundle.open(archive_path.as_posix(), "r") as src:
-                    with temp_path.open("wb") as dst:
-                        shutil.copyfileobj(src, dst)
-                actual = hash_file(temp_path)
-                if actual.lower() != expected_hash:
+
+        # ---- stage each accepted member into a scratch dir ----
+        staged: List[dict] = []
+        seen_targets: set = set()
+        staging_dir = Path(tempfile.mkdtemp(prefix=".vsr-import-", dir=str(target_root)))
+        try:
+            for index, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    rejected.append({"path": "", "reason": "manifest entry is not an object"})
+                    continue
+                cache_name = str(entry.get("cache") or "")
+                relative = _safe_posix_path(entry.get("relative_path"))
+                archive_path = _safe_posix_path(entry.get("archive_path"))
+                filename = str(entry.get("filename") or "")
+                if relative is None or archive_path is None:
+                    rejected.append({"path": filename, "reason": "unsafe manifest path"})
+                    continue
+                info = infos.get(archive_path.as_posix())
+                if info is None:
                     rejected.append({
-                        "path": relative.as_posix(),
-                        "reason": "SHA-256 mismatch",
+                        "path": archive_path.as_posix(),
+                        "reason": "archive member is missing",
                     })
                     continue
-                os.replace(temp_path, target)
-                imported.append({
+                if PurePosixPath(filename).name != filename or filename != relative.name:
+                    rejected.append({"path": relative.as_posix(), "reason": "filename mismatch"})
+                    continue
+                known_expected = KNOWN_WEIGHT_HASHES.get(filename)
+                reason = _model_file_rejection(
+                    Path(filename),
+                    known_hash=known_expected is not None,
+                )
+                if reason:
+                    rejected.append({"path": relative.as_posix(), "reason": reason})
+                    continue
+                declared = max(0, int(info.file_size))
+                if declared > _IMPORT_MAX_MEMBER_BYTES:
+                    rejected.append({
+                        "path": relative.as_posix(),
+                        "reason": "member exceeds per-file size ceiling",
+                    })
+                    continue
+                ratio = declared / max(1, int(info.compress_size))
+                if ratio > _IMPORT_MAX_COMPRESSION_RATIO:
+                    rejected.append({
+                        "path": relative.as_posix(),
+                        "reason": "suspicious compression ratio (possible zip bomb)",
+                    })
+                    continue
+                target = _target_path_for_import(cache_name, relative, env=env)
+                if target is None:
+                    rejected.append({"path": relative.as_posix(), "reason": "unsupported cache target"})
+                    continue
+                key = _target_key(target)
+                if key in seen_targets:
+                    rejected.append({"path": relative.as_posix(), "reason": "duplicate import target"})
+                    continue
+                manifest_hash = str(entry.get("sha256") or "").lower()
+                expected_hash = (known_expected or manifest_hash).lower()
+                if len(expected_hash) != 64:
+                    rejected.append({"path": relative.as_posix(), "reason": "missing SHA-256"})
+                    continue
+                temp_path = staging_dir / f"{index:04d}_{filename}"
+                cap = min(declared, _IMPORT_MAX_MEMBER_BYTES)
+                ok, actual, _written, fail = _stream_member_capped(
+                    bundle, archive_path.as_posix(), temp_path, cap_bytes=cap,
+                )
+                if not ok:
+                    _cleanup_path(temp_path)
+                    rejected.append({"path": relative.as_posix(), "reason": fail})
+                    continue
+                if actual.lower() != expected_hash:
+                    _cleanup_path(temp_path)
+                    rejected.append({"path": relative.as_posix(), "reason": "SHA-256 mismatch"})
+                    continue
+                seen_targets.add(key)
+                staged.append({
                     "cache": cache_name,
-                    "relative_path": relative.as_posix(),
-                    "target": str(target),
-                    "bytes": target.stat().st_size,
+                    "relative": relative,
+                    "target": target,
+                    "temp_path": temp_path,
                     "sha256": actual,
                     "known_hash": known_expected is not None,
                 })
-            finally:
-                if temp_path.exists():
-                    try:
-                        temp_path.unlink()
-                    except OSError:
-                        pass
+
+            # ---- commit phase (all-or-nothing with rollback) ----
+            committed: List[tuple] = []
+            try:
+                for item in staged:
+                    target = item["target"]
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    backup = None
+                    if target.exists():
+                        backup = target.with_name(target.name + ".vsrbak")
+                        _cleanup_path(backup)
+                        os.replace(target, backup)
+                    os.replace(item["temp_path"], target)
+                    committed.append((target, backup))
+                    imported.append({
+                        "cache": item["cache"],
+                        "relative_path": item["relative"].as_posix(),
+                        "target": str(target),
+                        "bytes": target.stat().st_size,
+                        "sha256": item["sha256"],
+                        "known_hash": item["known_hash"],
+                    })
+            except OSError as exc:
+                for target, backup in reversed(committed):
+                    _cleanup_path(target)
+                    if backup is not None and backup.exists():
+                        try:
+                            os.replace(backup, target)
+                        except OSError:
+                            pass
+                imported.clear()
+                raise ValueError(
+                    f"model-cache import failed and was rolled back: {exc}"
+                ) from exc
+            else:
+                for _target, backup in committed:
+                    if backup is not None:
+                        _cleanup_path(backup)
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
     return {
         "schema": PORTABLE_MODEL_CACHE_SCHEMA,
         "source": str(bundle_path),
         "imported": imported,
         "rejected": rejected,
+        "limits": {
+            "max_members": _IMPORT_MAX_MEMBERS,
+            "max_member_bytes": _IMPORT_MAX_MEMBER_BYTES,
+            "max_total_bytes": _IMPORT_MAX_TOTAL_BYTES,
+            "max_compression_ratio": _IMPORT_MAX_COMPRESSION_RATIO,
+        },
         "status_after_import": model_cache_status(env),
     }
 

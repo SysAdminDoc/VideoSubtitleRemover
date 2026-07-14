@@ -116,6 +116,153 @@ class ModelCacheBundleTests(unittest.TestCase):
             self.assertIn("SHA-256 mismatch", reasons)
             self.assertFalse((root / "evil.onnx").exists())
 
+    def _write_bundle(self, bundle: Path, entries, members):
+        from backend import cache_inventory as ci
+
+        manifest = {"schema": ci.PORTABLE_MODEL_CACHE_SCHEMA, "files": entries}
+        with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(ci.MODEL_CACHE_MANIFEST, json.dumps(manifest))
+            for archive_path, data in members.items():
+                zf.writestr(archive_path, data)
+
+    def test_import_rejects_zip_bomb_compression_ratio(self):
+        from backend import cache_inventory as ci
+        from backend.model_hashes import hash_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bomb = b"\x00" * (2 * 1024 * 1024)  # 2 MiB of zeros -> tiny deflate
+            probe = root / "probe.onnx"
+            probe.write_bytes(bomb)
+            entries = [{
+                "cache": "app-model-cache",
+                "relative_path": "bomb.onnx",
+                "archive_path": "files/app-model-cache/bomb.onnx",
+                "filename": "bomb.onnx",
+                "sha256": hash_file(probe),
+            }]
+            bundle = root / "bomb.zip"
+            self._write_bundle(bundle, entries,
+                               {"files/app-model-cache/bomb.onnx": bomb})
+
+            result = ci.import_model_cache_bundle(bundle, env=_env(root / "dst"))
+            self.assertEqual(result["imported"], [])
+            reasons = " ".join(i["reason"] for i in result["rejected"])
+            self.assertIn("zip bomb", reasons)
+
+    def test_import_rejects_member_count_ceiling(self):
+        from backend import cache_inventory as ci
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            entries = [{
+                "cache": "app-model-cache",
+                "relative_path": f"m{i}.onnx",
+                "archive_path": f"files/app-model-cache/m{i}.onnx",
+                "filename": f"m{i}.onnx",
+                "sha256": "0" * 64,
+            } for i in range(ci._IMPORT_MAX_MEMBERS + 1)]
+            bundle = root / "many.zip"
+            self._write_bundle(bundle, entries, {})
+            with self.assertRaises(ValueError) as ctx:
+                ci.import_model_cache_bundle(bundle, env=_env(root / "dst"))
+            self.assertIn("member ceiling", str(ctx.exception))
+
+    def test_import_rejects_insufficient_free_space(self):
+        from backend import cache_inventory as ci
+        from backend.model_hashes import hash_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload = root / "p.onnx"
+            payload.write_bytes(b"weight-bytes")
+            entries = [{
+                "cache": "app-model-cache",
+                "relative_path": "p.onnx",
+                "archive_path": "files/app-model-cache/p.onnx",
+                "filename": "p.onnx",
+                "sha256": hash_file(payload),
+            }]
+            bundle = root / "b.zip"
+            self._write_bundle(bundle, entries,
+                               {"files/app-model-cache/p.onnx": b"weight-bytes"})
+
+            import collections
+            fake = collections.namedtuple("du", "total used free")(0, 0, 0)
+            with mock.patch.object(ci.shutil, "disk_usage", return_value=fake):
+                with self.assertRaises(ValueError) as ctx:
+                    ci.import_model_cache_bundle(bundle, env=_env(root / "dst"))
+            self.assertIn("free space", str(ctx.exception))
+
+    def test_import_rejects_duplicate_targets(self):
+        from backend import cache_inventory as ci
+        from backend.model_hashes import hash_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payload = root / "p.onnx"
+            payload.write_bytes(b"dup-weight")
+            h = hash_file(payload)
+            entry = {
+                "cache": "app-model-cache",
+                "relative_path": "dup.onnx",
+                "archive_path": "files/app-model-cache/dup.onnx",
+                "filename": "dup.onnx",
+                "sha256": h,
+            }
+            bundle = root / "dup.zip"
+            self._write_bundle(bundle, [dict(entry), dict(entry)],
+                               {"files/app-model-cache/dup.onnx": b"dup-weight"})
+
+            result = ci.import_model_cache_bundle(bundle, env=_env(root / "dst"))
+            self.assertEqual(len(result["imported"]), 1)
+            reasons = " ".join(i["reason"] for i in result["rejected"])
+            self.assertIn("duplicate import target", reasons)
+
+    def test_import_rolls_back_on_commit_failure(self):
+        from backend import cache_inventory as ci
+        from backend.model_hashes import hash_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            a = root / "a.onnx"
+            b = root / "b.onnx"
+            a.write_bytes(b"alpha")
+            b.write_bytes(b"bravo")
+            entries = [
+                {"cache": "app-model-cache", "relative_path": "a.onnx",
+                 "archive_path": "files/app-model-cache/a.onnx",
+                 "filename": "a.onnx", "sha256": hash_file(a)},
+                {"cache": "app-model-cache", "relative_path": "b.onnx",
+                 "archive_path": "files/app-model-cache/b.onnx",
+                 "filename": "b.onnx", "sha256": hash_file(b)},
+            ]
+            bundle = root / "two.zip"
+            self._write_bundle(bundle, entries, {
+                "files/app-model-cache/a.onnx": b"alpha",
+                "files/app-model-cache/b.onnx": b"bravo",
+            })
+            dst_env = _env(root / "dst")
+            models = (Path(dst_env["APPDATA"]) / "VideoSubtitleRemoverPro" / "models")
+
+            real_replace = os.replace
+            calls = {"n": 0}
+
+            def flaky_replace(src, dst):
+                # fail the commit of the second staged file (targets end in .onnx)
+                if str(dst).endswith("b.onnx"):
+                    calls["n"] += 1
+                    raise OSError("simulated commit failure")
+                return real_replace(src, dst)
+
+            with mock.patch.object(ci.os, "replace", side_effect=flaky_replace):
+                with self.assertRaises(ValueError) as ctx:
+                    ci.import_model_cache_bundle(bundle, env=dst_env)
+            self.assertIn("rolled back", str(ctx.exception))
+            # first file must not survive a rolled-back import
+            self.assertFalse((models / "a.onnx").exists())
+            self.assertFalse((models / "b.onnx").exists())
+
     def test_cli_export_import_entrypoints_do_not_require_input(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -29,13 +29,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P0 — Now
 
-- [ ] P0 — Make model-cache ZIP imports bounded and transactional
-  Why: The importer accepts unbounded manifests/members and commits files incrementally, exposing disk-exhaustion and partial-import failure modes.
-  Evidence: `backend/cache_inventory.py:420-520`; https://docs.python.org/3/library/zipfile.html#decompression-pitfalls
-  Touches: `backend/cache_inventory.py`, `backend/cli.py`, `gui/support_controller.py`, `tests/test_model_cache.py`
-  Acceptance: Import preflights duplicate targets, member count, declared and actual sizes, compression ratio, total expansion, and free-space headroom; it stages and hashes every member before commit, rolls back on any failure, and has adversarial ZIP-bomb/truncation/duplicate/partial-write tests.
-  Complexity: M
-
 ### P1 — Next
 
 - [ ] P1 — Add scene-cut-safe temporal mask stabilization

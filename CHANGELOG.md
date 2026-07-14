@@ -4,6 +4,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **Bounded, transactional model-cache imports.** `import_model_cache_bundle`
+  now preflights an untrusted bundle against member-count, per-member size,
+  compression-ratio (zip-bomb), total-expansion, and free-space ceilings
+  before writing anything; streams every accepted member to a scratch dir with
+  a hard byte cap and SHA-256 verification; rejects duplicate import targets;
+  and commits all staged files only after every member is verified, rolling
+  back any files already moved if a commit fails. Prevents disk-exhaustion and
+  partial multi-file imports. Adversarial tests cover zip-bomb ratios,
+  oversized/short members, duplicate targets, free-space exhaustion, and
+  mid-commit rollback.
+
 ### Reliability
 
 - **Output integrity validation before promotion.** A finished video is now
