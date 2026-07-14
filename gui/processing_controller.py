@@ -486,7 +486,9 @@ class ProcessingControllerMixin:
             if (getattr(item.config, 'auto_band', False)
                     and not item.config.subtitle_area
                     and not getattr(item.config, 'subtitle_areas', None)
-                    and not getattr(item.config, 'subtitle_region_spans', None)):
+                    and not getattr(item.config, 'subtitle_region_spans', None)
+                    and not getattr(
+                        item.config, 'subtitle_region_keyframes', None)):
                 try:
                     # Use a minimal config just for the band probe
                     probe_cfg = BackendConfig(

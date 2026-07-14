@@ -32,6 +32,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Multi-region Masks** -- Draw multiple subtitle rects on a scrubbable video frame, optionally with start/end seconds for moving subtitle layouts
+- **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
@@ -461,13 +462,32 @@ clip you shot and grant as CC0.
 
 `--config` accepts the same manual region schema used by the GUI. Use
 `subtitle_area` for one global rectangle, `subtitle_areas` for multiple global
-rectangles, or `subtitle_region_spans` for frame-time-specific masks:
+rectangles, `subtitle_region_spans` for frame-time-specific masks, or
+`subtitle_region_keyframes` for an interpolated moving rectangle/polygon:
 
 ```json
 {
   "subtitle_region_spans": [
     {"rect": [80, 720, 1180, 820], "start": 0.0, "end": 14.5},
     {"rect": [120, 40, 900, 150], "start": 14.5, "end": 0.0}
+  ],
+  "sttn_skip_detection": true
+}
+```
+
+Moving-region tracks use source-pixel coordinates and require at least two
+same-shape anchors. Polygon anchors keep the same vertex count across the
+track:
+
+```json
+{
+  "subtitle_region_keyframes": [
+    {
+      "keyframes": [
+        {"time": 2.0, "polygon": [80, 700, 420, 700, 420, 790, 80, 790]},
+        {"time": 8.0, "polygon": [520, 680, 860, 680, 860, 770, 520, 770]}
+      ]
+    }
   ],
   "sttn_skip_detection": true
 }

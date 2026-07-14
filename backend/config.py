@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
 
+from backend.region_keyframes import normalize_region_keyframe_tracks
+
 logger = logging.getLogger(__name__)
 
 
@@ -183,6 +185,9 @@ class ProcessingConfig:
     # {"rect": (x1,y1,x2,y2), "start": seconds, "end": seconds}; end=0 means
     # open-ended. When present, active rects are selected per video frame.
     subtitle_region_spans: Optional[List[dict]] = None
+    # Moving manual regions. Each track contains two or more time-stamped rect
+    # or polygon keyframes and is interpolated only inside its start/end span.
+    subtitle_region_keyframes: Optional[List[dict]] = None
     # Freehand/polygon mask corrections tied to a time range. Each entry is
     # {"polygons": [[x1,y1,x2,y2,...], ...], "start": seconds, "end": seconds};
     # end=0 means open-ended. Polygons are filled into the mask alongside
@@ -573,6 +578,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.subtitle_areas = _coerce_rect_list(config.subtitle_areas)
     config.subtitle_region_spans = _coerce_region_span_list(
         getattr(config, "subtitle_region_spans", None))
+    config.subtitle_region_keyframes = normalize_region_keyframe_tracks(
+        getattr(config, "subtitle_region_keyframes", None))
     config.manual_mask_corrections = _coerce_mask_correction_list(
         getattr(config, "manual_mask_corrections", None))
     config.detection_threshold = _coerce_float(config.detection_threshold, 0.5, 0.1, 1.0)

@@ -37,6 +37,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   breadcrumbs, and extra/request data are redacted too -- not just top-level
   strings and stack-frame paths. Frame locals are dropped before serialization.
 
+### Added
+
+- **Interpolated moving manual regions.** The scrubbed region selector now
+  records rectangle or polygon keyframes, previews their deterministic motion,
+  and persists the tracks through settings, presets, CLI overrides, batch
+  reports, and reproducibility sidecars. Processing fills polygons exactly and
+  activates each track only within its saved time span.
+
 ### Changed
 
 - **Local release builds are fail-closed and artifact-derived.**
@@ -86,7 +94,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 ### Fixed
 
 - **The NSIS 3.12 guard rejected NSIS 3.12 and required an undeclared plugin.**
-  The packed-version threshold now uses NSIS' actual bit layout, and the
+  The packed-version threshold now uses NSIS' actual byte layout
+  (`0x030C0000`), and the
   running-app guard uses a named application mutex plus NSIS' bundled
   `System` plugin instead of the absent `FindProcDLL` extension.
 - **Preview rendering could create Tk images on a worker thread.** Frame

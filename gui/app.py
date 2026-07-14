@@ -81,6 +81,11 @@ from backend.ffmpeg_profiles import (
 from backend.model_downloads import installed_backend_status
 from backend.safe_image import safe_imread
 from backend.i18n import bind_locale, system_locale_tag, tr
+from backend.region_keyframes import (
+    normalize_region_keyframe_tracks,
+    region_shapes_at,
+    shape_bounds,
+)
 from gui.preview_controller import PreviewControllerMixin
 from gui.processing_controller import ProcessingControllerMixin
 from gui.quality_controller import QualityReviewControllerMixin
@@ -495,6 +500,8 @@ class VideoSubtitleRemoverApp(
         )
         spans = _coerce_region_span_list(
             getattr(self.config, "subtitle_region_spans", None))
+        keyframe_tracks = normalize_region_keyframe_tracks(
+            getattr(self.config, "subtitle_region_keyframes", None))
         updated = 0
         with self.queue_lock:
             for item in self.queue:
@@ -503,6 +510,9 @@ class VideoSubtitleRemoverApp(
                     item.config.subtitle_areas = list(areas) if areas else None
                     item.config.subtitle_region_spans = (
                         list(spans) if spans else None
+                    )
+                    item.config.subtitle_region_keyframes = (
+                        list(keyframe_tracks) if keyframe_tracks else None
                     )
                     item.config.normalized()
                     updated += 1
@@ -850,8 +860,19 @@ class VideoSubtitleRemoverApp(
     def _update_region_label_display(self):
         """Refresh the region summary line."""
         spans = getattr(self.config, "subtitle_region_spans", None) or []
+        keyframe_tracks = (
+            getattr(self.config, "subtitle_region_keyframes", None) or [])
         areas = getattr(self.config, "subtitle_areas", None) or []
-        if spans:
+        if keyframe_tracks:
+            self.region_label.config(
+                text=tr("Moving manual regions: {count} track{suffix}").format(
+                    count=len(keyframe_tracks),
+                    suffix="s" if len(keyframe_tracks) != 1 else ""),
+                fg=Theme.TEXT_PRIMARY,
+            )
+            self.region_meta.config(text=tr("Interpolated keyframe masks"),
+                                    fg=Theme.SUCCESS)
+        elif spans:
             self.region_label.config(
                 text=tr("Timed manual regions: {count} rectangle{suffix}").format(
                     count=len(spans), suffix="s" if len(spans) != 1 else ""),
@@ -878,13 +899,17 @@ class VideoSubtitleRemoverApp(
             self.region_meta.config(text=tr("Recommended default"), fg=Theme.TEXT_MUTED)
         if hasattr(self, "region_reset_btn"):
             has_manual = (
-                bool(spans) or bool(areas)
+                bool(spans) or bool(keyframe_tracks) or bool(areas)
                 or self.config.subtitle_area is not None
             )
             self.region_reset_btn.set_enabled(has_manual and not self.is_processing)
 
     @staticmethod
-    def _active_timed_region_rects(spans, seconds: float = 0.0):
+    def _active_timed_region_rects(
+        spans,
+        seconds: float = 0.0,
+        keyframe_tracks=None,
+    ):
         """Return timed region rects active at ``seconds`` in GUI config shape."""
         normalized = _coerce_region_span_list(spans) or []
         try:
@@ -899,6 +924,10 @@ class VideoSubtitleRemoverApp(
             end = float(span.get("end", 0.0) or 0.0)
             if start <= current and (end <= 0.0 or current < end):
                 rects.append(tuple(span["rect"]))
+        for shape in region_shapes_at(keyframe_tracks, current):
+            bounds = shape_bounds(shape)
+            if bounds is not None:
+                rects.append(bounds)
         return rects
 
     @staticmethod
@@ -3265,8 +3294,14 @@ class VideoSubtitleRemoverApp(
             rects: List[Tuple[int, int, int, int]] = []
             region_spans = _coerce_region_span_list(
                 getattr(self.config, "subtitle_region_spans", None)) or []
+            keyframe_tracks = normalize_region_keyframe_tracks(
+                getattr(self.config, "subtitle_region_keyframes", None)) or []
+            pending_keyframes: List[dict] = []
+            polygon_shapes: List[List[int]] = []
+            polygon_points: List[Tuple[int, int]] = []
+            current_frame_index = [0]
             preload = []
-            if not region_spans:
+            if not region_spans and not keyframe_tracks:
                 preload = self.config.subtitle_areas or (
                     [self.config.subtitle_area] if self.config.subtitle_area else []
                 )
@@ -3286,6 +3321,7 @@ class VideoSubtitleRemoverApp(
             rect_ids: List[int] = []
             drag_id = [None]
             drag_start = [0, 0]
+            shape_mode_var = tk.StringVar(value=tr("Rectangle"))
 
             def _frame_to_pil(bgr):
                 rgb = _cv2.cvtColor(bgr, _cv2.COLOR_BGR2RGB)
@@ -3313,11 +3349,46 @@ class VideoSubtitleRemoverApp(
                         outline=Theme.GREEN_PRIMARY, width=2,
                         stipple="gray25", fill=Theme.GREEN_PRIMARY,
                     ))
+                current_seconds = current_frame_index[0] / max(fps, 1.0)
+                for shape in region_shapes_at(keyframe_tracks, current_seconds):
+                    if "rect" in shape:
+                        x1, y1, x2, y2 = shape["rect"]
+                        rect_ids.append(canvas.create_rectangle(
+                            x1 * scale, y1 * scale, x2 * scale, y2 * scale,
+                            outline=Theme.BLUE_PRIMARY, width=3,
+                        ))
+                    elif "polygon" in shape:
+                        coords = shape["polygon"]
+                        points = [coord * scale for coord in coords]
+                        rect_ids.append(canvas.create_polygon(
+                            *points, outline=Theme.BLUE_PRIMARY,
+                            fill="", width=3,
+                        ))
+                for polygon in polygon_shapes:
+                    points = [coord * scale for coord in polygon]
+                    rect_ids.append(canvas.create_polygon(
+                        *points, outline=Theme.GREEN_PRIMARY,
+                        fill="", width=2,
+                    ))
+                if polygon_points:
+                    points = []
+                    for px, py in polygon_points:
+                        points.extend((px * scale, py * scale))
+                    if len(points) >= 4:
+                        rect_ids.append(canvas.create_line(
+                            *points, fill=Theme.BLUE_PRIMARY, width=2))
+                    for px, py in polygon_points:
+                        radius = 3
+                        rect_ids.append(canvas.create_oval(
+                            px * scale - radius, py * scale - radius,
+                            px * scale + radius, py * scale + radius,
+                            fill=Theme.BLUE_PRIMARY, outline=""))
 
             def _seek_video(frame_idx: int):
                 if not is_video or cap is None:
                     return
                 frame_idx = max(0, min(frame_count - 1, int(frame_idx)))
+                current_frame_index[0] = frame_idx
                 cap.set(_cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 ok, f = cap.read()
                 if ok:
@@ -3329,6 +3400,12 @@ class VideoSubtitleRemoverApp(
 
             # Drawing handlers.
             def on_press(event):
+                if shape_mode_var.get() == tr("Polygon"):
+                    px = min(orig_w, max(0, int(event.x / scale)))
+                    py = min(orig_h, max(0, int(event.y / scale)))
+                    polygon_points.append((px, py))
+                    _draw_saved_rects()
+                    return
                 drag_start[0], drag_start[1] = event.x, event.y
                 if drag_id[0]:
                     canvas.delete(drag_id[0])
@@ -3339,10 +3416,14 @@ class VideoSubtitleRemoverApp(
                 )
 
             def on_drag(event):
+                if shape_mode_var.get() == tr("Polygon"):
+                    return
                 if drag_id[0]:
                     canvas.coords(drag_id[0], drag_start[0], drag_start[1], event.x, event.y)
 
             def on_release(event):
+                if shape_mode_var.get() == tr("Polygon"):
+                    return
                 x1 = int(min(drag_start[0], event.x) / scale)
                 y1 = int(min(drag_start[1], event.y) / scale)
                 x2 = int(max(drag_start[0], event.x) / scale)
@@ -3360,6 +3441,43 @@ class VideoSubtitleRemoverApp(
             canvas.bind("<B1-Motion>", on_drag)
             canvas.bind("<ButtonRelease-1>", on_release)
             canvas._vsr_region_drag_handlers = (on_press, on_drag, on_release)
+
+            shape_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
+            shape_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
+            tk.Label(shape_row, text=tr("Shape"), font=f(Theme.F_META),
+                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
+            shape_picker = ttk.Combobox(
+                shape_row,
+                width=12,
+                state="readonly",
+                textvariable=shape_mode_var,
+                values=(tr("Rectangle"), tr("Polygon")),
+                style="Dark.TCombobox",
+            )
+            shape_picker.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+            shape_hint_var = tk.StringVar(
+                value=tr("Drag a rectangle, or choose Polygon and click vertices."))
+            tk.Label(shape_row, textvariable=shape_hint_var,
+                     font=f(Theme.F_META), bg=Theme.BG_OVERLAY,
+                     fg=Theme.TEXT_MUTED).pack(side="left")
+
+            def _finish_polygon() -> bool:
+                if len(polygon_points) < 3:
+                    self._update_status(
+                        "A polygon needs at least three vertices", "warning")
+                    return False
+                coords = []
+                for px, py in polygon_points:
+                    coords.extend((px, py))
+                polygon_shapes.append(coords)
+                polygon_points.clear()
+                _draw_saved_rects()
+                return True
+
+            finish_polygon_btn = ModernButton(
+                shape_row, text=tr("Finish polygon"), command=_finish_polygon,
+                style="secondary", size="sm", width=112)
+            finish_polygon_btn.pack(side="right")
 
             # Frame slider for videos.
             if is_video and frame_count > 1:
@@ -3431,9 +3549,14 @@ class VideoSubtitleRemoverApp(
                 )
                 end_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
                 span_summary_var.set(
-                    f"{len(region_spans)} timed region"
-                    f"{'s' if len(region_spans) != 1 else ''}"
-                    if region_spans else tr("Optional")
+                    (
+                        f"{len(keyframe_tracks)} motion track"
+                        f"{'s' if len(keyframe_tracks) != 1 else ''}"
+                    ) if keyframe_tracks else (
+                        f"{len(region_spans)} timed region"
+                        f"{'s' if len(region_spans) != 1 else ''}"
+                        if region_spans else tr("Optional")
+                    )
                 )
                 span_label = tk.Label(
                     time_row, textvariable=span_summary_var,
@@ -3451,8 +3574,82 @@ class VideoSubtitleRemoverApp(
             def _clear_all():
                 rects.clear()
                 region_spans.clear()
+                keyframe_tracks.clear()
+                pending_keyframes.clear()
+                polygon_shapes.clear()
+                polygon_points.clear()
                 span_summary_var.set(tr("Optional") if is_video else "")
                 _draw_saved_rects()
+
+            def _add_region_keyframe() -> bool:
+                if not is_video:
+                    return False
+                if polygon_points and not _finish_polygon():
+                    return False
+                shape_count = len(rects) + len(polygon_shapes)
+                if shape_count != 1:
+                    self._update_status(
+                        "Draw exactly one rectangle or polygon for this keyframe",
+                        "warning",
+                    )
+                    return False
+                if polygon_shapes:
+                    shape = {"polygon": list(polygon_shapes[0])}
+                else:
+                    shape = {"rect": list(rects[0])}
+                if pending_keyframes:
+                    first = pending_keyframes[0]
+                    kind = "rect" if "rect" in first else "polygon"
+                    if kind not in shape or len(first[kind]) != len(shape[kind]):
+                        self._update_status(
+                            "Keyframes in one motion track need the same shape and vertex count",
+                            "warning",
+                        )
+                        return False
+                seconds = current_frame_index[0] / max(fps, 1.0)
+                keyframe = {"time": seconds, **shape}
+                pending_keyframes[:] = [
+                    item for item in pending_keyframes
+                    if abs(float(item["time"]) - seconds) > 1e-9
+                ]
+                pending_keyframes.append(keyframe)
+                pending_keyframes.sort(key=lambda item: float(item["time"]))
+                rects.clear()
+                polygon_shapes.clear()
+                span_summary_var.set(
+                    f"{len(pending_keyframes)} pending keyframe"
+                    f"{'s' if len(pending_keyframes) != 1 else ''}"
+                )
+                _draw_saved_rects()
+                self._update_status(
+                    f"Added motion keyframe at {seconds:.3f} seconds", "success")
+                return True
+
+            def _commit_motion_track() -> bool:
+                if len(pending_keyframes) < 2:
+                    self._update_status(
+                        "Add at least two keyframes before saving a motion track",
+                        "warning",
+                    )
+                    return False
+                track = normalize_region_keyframe_tracks([{
+                    "start": pending_keyframes[0]["time"],
+                    "end": pending_keyframes[-1]["time"],
+                    "keyframes": list(pending_keyframes),
+                }])
+                if not track:
+                    self._update_status(
+                        "The motion keyframes could not be normalized", "warning")
+                    return False
+                keyframe_tracks.append(track[0])
+                pending_keyframes.clear()
+                span_summary_var.set(
+                    f"{len(keyframe_tracks)} motion track"
+                    f"{'s' if len(keyframe_tracks) != 1 else ''}"
+                )
+                _draw_saved_rects()
+                self._update_status("Saved interpolated motion track", "success")
+                return True
 
             def _parse_time_inputs():
                 start_raw = start_var.get().strip() if is_video else ""
@@ -3477,6 +3674,10 @@ class VideoSubtitleRemoverApp(
                     if close_on_empty:
                         return True
                     self._update_status("Draw a region before adding a timed range", "warning")
+                    return False
+                if polygon_shapes or polygon_points:
+                    self._update_status(
+                        "Polygons are saved through motion keyframes", "warning")
                     return False
                 if not is_video:
                     return False
@@ -3504,13 +3705,27 @@ class VideoSubtitleRemoverApp(
                 return True
 
             def _save_and_close():
+                if pending_keyframes and not _commit_motion_track():
+                    return
                 if is_video and not _add_timed_regions(close_on_empty=True):
                     return
                 spans = _coerce_region_span_list(region_spans) or []
-                if rects:
+                tracks = normalize_region_keyframe_tracks(keyframe_tracks) or []
+                if tracks:
+                    self.config.subtitle_region_keyframes = tracks
+                    self.config.subtitle_region_spans = None
+                    self.config.subtitle_areas = None
+                    self.config.subtitle_area = None
+                    self._update_status(
+                        f"Saved {len(tracks)} moving subtitle track"
+                        f"{'s' if len(tracks) != 1 else ''}",
+                        "success",
+                    )
+                elif rects:
                     self.config.subtitle_areas = [tuple(r) for r in rects]
                     self.config.subtitle_area = rects[0]
                     self.config.subtitle_region_spans = None
+                    self.config.subtitle_region_keyframes = None
                     self._update_status(
                         f"Saved {len(rects)} subtitle region{'s' if len(rects) != 1 else ''}",
                         "success",
@@ -3519,6 +3734,7 @@ class VideoSubtitleRemoverApp(
                     self.config.subtitle_region_spans = spans
                     self.config.subtitle_areas = None
                     self.config.subtitle_area = None
+                    self.config.subtitle_region_keyframes = None
                     self._update_status(
                         f"Saved {len(spans)} timed subtitle region"
                         f"{'s' if len(spans) != 1 else ''}",
@@ -3528,6 +3744,7 @@ class VideoSubtitleRemoverApp(
                     self.config.subtitle_areas = None
                     self.config.subtitle_area = None
                     self.config.subtitle_region_spans = None
+                    self.config.subtitle_region_keyframes = None
                     self._update_status("Cleared manual subtitle regions", "info")
                 self._apply_region_settings_to_idle_items()
                 self._update_region_label_display()
@@ -3538,6 +3755,14 @@ class VideoSubtitleRemoverApp(
             if is_video:
                 ModernButton(actions, text=tr("Add timed"), command=_add_timed_regions,
                              style="secondary", size="sm", width=96).pack(
+                                 side="left", padx=(Theme.S_SM, 0))
+                ModernButton(actions, text=tr("Add keyframe"),
+                             command=_add_region_keyframe,
+                             style="secondary", size="sm", width=108).pack(
+                                 side="left", padx=(Theme.S_SM, 0))
+                ModernButton(actions, text=tr("Save motion"),
+                             command=_commit_motion_track,
+                             style="secondary", size="sm", width=108).pack(
                                  side="left", padx=(Theme.S_SM, 0))
             ModernButton(actions, text=tr("Save"), command=_save_and_close,
                          style="primary", size="sm", width=92).pack(
@@ -3553,7 +3778,7 @@ class VideoSubtitleRemoverApp(
                      font=f(Theme.F_BODY_SM, "bold"),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
             tk.Label(hint_frame,
-                     text=tr("Scrub to a visible frame; enter seconds and use Add timed for moving subtitles."),
+                     text=tr("For motion, scrub, draw one shape, add a keyframe, then repeat and save motion."),
                      font=f(Theme.F_META),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
 
@@ -3588,6 +3813,7 @@ class VideoSubtitleRemoverApp(
         self.config.subtitle_area = None
         self.config.subtitle_areas = None
         self.config.subtitle_region_spans = None
+        self.config.subtitle_region_keyframes = None
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         self._update_status("Subtitle detection returned to automatic mode")
@@ -4651,6 +4877,8 @@ class VideoSubtitleRemoverApp(
                 self.config.subtitle_area is not None
                 or bool(getattr(self.config, "subtitle_areas", None))
                 or bool(getattr(self.config, "subtitle_region_spans", None))
+                or bool(getattr(
+                    self.config, "subtitle_region_keyframes", None))
             )
             self.region_reset_btn.set_enabled(
                 (not locked) and has_manual_region)

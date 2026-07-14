@@ -103,6 +103,7 @@ from backend.resume_checkpoint import (
     write_pause_checkpoint,
 )
 from backend.safe_image import safe_imread
+from backend.region_keyframes import region_shapes_at
 from backend.work_directory import (
     StorageRequirement,
     assess_storage_volumes,
@@ -1134,26 +1135,28 @@ class SubtitleRemover:
         except Exception as exc:
             logger.warning(f"SRT write failed: {exc}", exc_info=True)
 
-    def _fixed_region_boxes(
+    def _fixed_region_shapes(
         self,
         time_seconds: Optional[float] = None,
-    ) -> Optional[List[Tuple[int, int, int, int]]]:
-        """Return explicit mask rects from config for the current time.
+    ) -> Optional[List[dict]]:
+        """Return explicit manual-region shapes for the current time.
 
-        Timed spans intentionally override the legacy global fields: a user who
-        defines time-ranged regions expects inactive ranges to stop masking
-        rather than silently falling back to a broad global rectangle.
+        Timed spans and moving keyframes intentionally override the legacy
+        global fields: inactive ranges must stop masking rather than silently
+        falling back to a broad global rectangle.
         """
         spans = getattr(self.config, "subtitle_region_spans", None)
-        if spans:
+        keyframe_tracks = getattr(
+            self.config, "subtitle_region_keyframes", None)
+        if spans or keyframe_tracks:
             try:
                 seconds = float(time_seconds or 0.0)
             except (TypeError, ValueError):
                 seconds = 0.0
             if not np.isfinite(seconds) or seconds < 0.0:
                 seconds = 0.0
-            active = []
-            for span in spans:
+            active: List[dict] = []
+            for span in spans or []:
                 if not isinstance(span, dict):
                     continue
                 rect = span.get("rect")
@@ -1169,13 +1172,49 @@ class SubtitleRemover:
                 if not np.isfinite(end) or end < 0.0:
                     end = 0.0
                 if start <= seconds and (end <= 0.0 or seconds < end):
-                    active.append(tuple(rect))
+                    active.append({"rect": tuple(rect)})
+            active.extend(region_shapes_at(keyframe_tracks, seconds))
             return active or None
         if self.config.subtitle_areas:
-            return list(self.config.subtitle_areas)
+            return [{"rect": tuple(rect)} for rect in self.config.subtitle_areas]
         if self.config.subtitle_area:
-            return [self.config.subtitle_area]
+            return [{"rect": tuple(self.config.subtitle_area)}]
         return None
+
+    def _fixed_region_boxes(
+        self,
+        time_seconds: Optional[float] = None,
+    ) -> Optional[List[Tuple[int, int, int, int]]]:
+        """Return active rectangle shapes for detection/mask creation."""
+        shapes = self._fixed_region_shapes(time_seconds) or []
+        boxes = [tuple(shape["rect"]) for shape in shapes if "rect" in shape]
+        return boxes or None
+
+    @staticmethod
+    def _apply_polygon_region_shapes(
+        mask: np.ndarray,
+        shapes: Optional[List[dict]],
+    ) -> np.ndarray:
+        """Fill active polygon keyframes without widening them to bounds."""
+        if not shapes:
+            return mask
+        h, w = mask.shape[:2]
+        for shape in shapes:
+            coords = shape.get("polygon") if isinstance(shape, dict) else None
+            if not isinstance(coords, (list, tuple)) or len(coords) < 6:
+                continue
+            try:
+                points = np.asarray(
+                    [(int(coords[i]), int(coords[i + 1]))
+                     for i in range(0, len(coords), 2)],
+                    dtype=np.int32,
+                )
+                points[:, 0] = np.clip(points[:, 0], 0, w - 1)
+                points[:, 1] = np.clip(points[:, 1], 0, h - 1)
+                cv2.fillPoly(mask, [points], 255)
+            except (TypeError, ValueError, IndexError):
+                continue
+        return mask
 
     def process_image(self, input_path: str, output_path: str) -> bool:
         self._teardown_requested = False
@@ -1190,11 +1229,14 @@ class SubtitleRemover:
                 raise ValueError(f"Could not load image: {input_path}")
 
             self._report_progress(0.3, "Detecting text regions...")
+            fixed_shapes = self._fixed_region_shapes(0.0) or []
             fixed = self._fixed_region_boxes(0.0)
             confidences = None
             with self._time_stage("ocr"):
                 if fixed:
                     boxes = fixed
+                elif fixed_shapes and self.config.sttn_skip_detection:
+                    boxes = []
                 elif self.config.confidence_weighted_dilation:
                     results = self.detector.detect_with_confidence(
                         image, self.config.detection_threshold)
@@ -1203,7 +1245,7 @@ class SubtitleRemover:
                 else:
                     boxes = self.detector.detect(image, self.config.detection_threshold)
 
-            if not boxes:
+            if not boxes and not fixed_shapes:
                 logger.info("No text detected, copying original")
                 with self._time_stage("encode"):
                     _copy_file_atomic(input_path, output_path)
@@ -1214,10 +1256,12 @@ class SubtitleRemover:
                 self._report_progress(1.0, "Complete (no text found)")
                 return True
 
-            self._report_progress(0.5, f"Removing {len(boxes)} text regions...")
+            region_count = max(len(boxes), len(fixed_shapes))
+            self._report_progress(0.5, f"Removing {region_count} text regions...")
             with self._time_stage("mask"):
                 mask = self._create_mask(image.shape, boxes, frame=image,
                                          confidences=confidences)
+                mask = self._apply_polygon_region_shapes(mask, fixed_shapes)
                 mask = self._apply_manual_mask_corrections(mask, 0.0)
                 [mask] = self._refine_masks_with_matanyone([image], [mask])
             with self._time_stage("inpaint"):
@@ -2008,10 +2052,12 @@ class SubtitleRemover:
                         "error": "Could not open mask video writer",
                     })
 
-            timed_region_spans = bool(getattr(
-                self.config, "subtitle_region_spans", None))
-            static_fixed_boxes = (
-                None if timed_region_spans else self._fixed_region_boxes())
+            timed_region_spans = bool(
+                getattr(self.config, "subtitle_region_spans", None)
+                or getattr(self.config, "subtitle_region_keyframes", None)
+            )
+            static_fixed_shapes = (
+                None if timed_region_spans else self._fixed_region_shapes())
 
             while True:
                 frames = []
@@ -2039,24 +2085,38 @@ class SubtitleRemover:
                         if frame_timing is not None
                         else absolute_idx / max(fps, 1.0)
                     )
+                    fixed_shapes = (
+                        self._fixed_region_shapes(frame_seconds)
+                        if timed_region_spans else static_fixed_shapes
+                    )
                     fixed_boxes = (
-                        self._fixed_region_boxes(frame_seconds)
-                        if timed_region_spans else static_fixed_boxes
+                        [tuple(shape["rect"]) for shape in fixed_shapes or []
+                         if "rect" in shape]
+                        or None
                     )
 
                     if self.config.sttn_skip_detection and (
-                            fixed_boxes or timed_region_spans):
+                            fixed_shapes or timed_region_spans):
                         # Fixed region: cache one mask per active rect set. With
                         # timed spans, inactive frames get an explicit empty
                         # mask so stale masks cannot leak across boundaries.
-                        if fixed_boxes:
-                            mask_key = tuple(tuple(r) for r in fixed_boxes)
-                            fixed_mask = fixed_mask_cache.get(mask_key)
+                        if fixed_shapes:
+                            has_polygon = any(
+                                "polygon" in shape for shape in fixed_shapes)
+                            dynamic_shape = timed_region_spans or has_polygon
+                            mask_key = tuple(tuple(r) for r in (fixed_boxes or []))
+                            fixed_mask = (
+                                None if dynamic_shape
+                                else fixed_mask_cache.get(mask_key)
+                            )
                             if fixed_mask is None:
                                 with self._time_stage("mask"):
                                     fixed_mask = self._create_mask(
-                                        frame.shape, fixed_boxes)
-                                fixed_mask_cache[mask_key] = fixed_mask
+                                        frame.shape, fixed_boxes or [])
+                                    fixed_mask = self._apply_polygon_region_shapes(
+                                        fixed_mask, fixed_shapes)
+                                if not dynamic_shape:
+                                    fixed_mask_cache[mask_key] = fixed_mask
                         else:
                             with self._time_stage("mask"):
                                 fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
@@ -2195,6 +2255,8 @@ class SubtitleRemover:
                     with self._time_stage("mask"):
                         mask = self._create_mask(frame.shape, boxes, frame=frame,
                                                  confidences=det_confs)
+                        mask = self._apply_polygon_region_shapes(
+                            mask, fixed_shapes)
                         if self.config.colour_tune_enable and boxes:
                             mask = _expand_mask_by_color(
                                 frame, mask, boxes,
@@ -2606,10 +2668,13 @@ class SubtitleRemover:
                 if end_seconds is not None else end_frame / fps,
             )
             spans = getattr(self.config, "subtitle_region_spans", None)
+            keyframe_tracks = getattr(
+                self.config, "subtitle_region_keyframes", None)
             segments = None
-            if spans and isinstance(spans, list) and len(spans) >= 1:
+            if ((spans and isinstance(spans, list))
+                    or (keyframe_tracks and isinstance(keyframe_tracks, list))):
                 segments = []
-                for span in spans:
+                for span in (spans or []) + (keyframe_tracks or []):
                     if not isinstance(span, dict):
                         continue
                     s = max(0.0, float(span.get("start", 0.0)))

@@ -24,6 +24,7 @@ from backend.config_schema import (
     migrate_gui_settings,
     serialize_dataclass_config,
 )
+from backend.region_keyframes import normalize_region_keyframe_tracks
 from gui.theme import Theme
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,7 @@ _queue_state_io_lock = threading.RLock()
 # Format 3 -> 4: added rife_fast_stride for opt-in keyframe interpolation.
 # Format 4 -> 5: payloads are tied to the canonical backend config schema.
 # Format 5 -> 6: work_directory becomes an end-to-end backend storage policy.
+# Format 6 -> 7: added interpolated moving-region keyframe tracks.
 VSR_SETTINGS_FORMAT = GUI_SETTINGS_FORMAT
 
 # -- Enums ------------------------------------------------------------------
@@ -376,6 +378,7 @@ class ProcessingConfig:
 
     subtitle_areas: Optional[List[Tuple[int, int, int, int]]] = None
     subtitle_region_spans: Optional[List[dict]] = None
+    subtitle_region_keyframes: Optional[List[dict]] = None
     manual_mask_corrections: Optional[List[dict]] = None
     auto_band: bool = False
     export_srt: bool = False
@@ -453,6 +456,8 @@ class ProcessingConfig:
         self.subtitle_areas = _coerce_rect_list(self.subtitle_areas)
         self.subtitle_region_spans = _coerce_region_span_list(
             self.subtitle_region_spans)
+        self.subtitle_region_keyframes = normalize_region_keyframe_tracks(
+            self.subtitle_region_keyframes)
         self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
         self.detection_vertical = _coerce_bool(self.detection_vertical, False)
@@ -640,6 +645,9 @@ class ProcessingConfig:
             raw = kwargs["subtitle_region_spans"]
             kwargs["subtitle_region_spans"] = _coerce_region_span_list(
                 raw, label="subtitle_region_spans", warn_invalid=raw is not None)
+        if "subtitle_region_keyframes" in kwargs:
+            kwargs["subtitle_region_keyframes"] = normalize_region_keyframe_tracks(
+                kwargs["subtitle_region_keyframes"])
         return cls(**kwargs).normalized()
 
 
@@ -1040,6 +1048,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "colour_tune_enable",
     "colour_tune_tolerance",
     "subtitle_region_spans",
+    "subtitle_region_keyframes",
     "manual_mask_corrections",
     "remove_subtitles",
     "remove_chyrons",

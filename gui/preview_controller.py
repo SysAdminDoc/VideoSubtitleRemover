@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import traceback
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -45,6 +46,7 @@ from backend.ffmpeg_profiles import ffmpeg_profile_entries
 from backend.i18n import tr
 from backend.model_downloads import installed_backend_status
 from backend.resume_checkpoint import ProcessingPaused
+from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
@@ -328,7 +330,8 @@ class PreviewControllerMixin:
                 if frame is None:
                     return None
                 active_regions = self._active_timed_region_rects(
-                    getattr(self.config, "subtitle_region_spans", None), 0.0)
+                    getattr(self.config, "subtitle_region_spans", None), 0.0,
+                    getattr(self.config, "subtitle_region_keyframes", None))
                 region = (
                     active_regions[0] if active_regions
                     else getattr(self.config, "subtitle_area", None)
@@ -593,6 +596,8 @@ class PreviewControllerMixin:
                     subtitle_area=snapshot_cfg.subtitle_area,
                     subtitle_areas=snapshot_cfg.subtitle_areas,
                     subtitle_region_spans=snapshot_cfg.subtitle_region_spans,
+                    subtitle_region_keyframes=(
+                        snapshot_cfg.subtitle_region_keyframes),
                     mask_dilate_px=snapshot_cfg.mask_dilate_px,
                     mask_feather_px=snapshot_cfg.mask_feather_px,
                     tbe_enable=snapshot_cfg.tbe_enable,
@@ -600,9 +605,13 @@ class PreviewControllerMixin:
                 remover = _Remover(backend_cfg)
                 # Single-frame inpaint -- detect, build mask, inpaint.
                 timed_fixed = self._active_timed_region_rects(
-                    getattr(snapshot_cfg, "subtitle_region_spans", None), 0.0)
-                timed_configured = bool(getattr(
-                    snapshot_cfg, "subtitle_region_spans", None))
+                    getattr(snapshot_cfg, "subtitle_region_spans", None), 0.0,
+                    getattr(snapshot_cfg, "subtitle_region_keyframes", None))
+                timed_configured = bool(
+                    getattr(snapshot_cfg, "subtitle_region_spans", None)
+                    or getattr(
+                        snapshot_cfg, "subtitle_region_keyframes", None))
+                active_shapes = remover._fixed_region_shapes(0.0) or []
                 fixed = timed_fixed or (
                     None if timed_configured else (
                         snapshot_cfg.subtitle_areas
@@ -618,13 +627,14 @@ class PreviewControllerMixin:
                 else:
                     boxes = remover.detector.detect(
                         frame, snapshot_cfg.detection_threshold)
-                if not boxes:
+                if not boxes and not active_shapes:
                     # No detection -- show the source with a hint.
                     pil = Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
                     self.root.after(0, lambda: self._apply_inpaint_preview(
                         pil, "No text detected on the first frame", request_id, item.id))
                     return
                 mask = remover._create_mask(frame.shape, boxes)
+                mask = remover._apply_polygon_region_shapes(mask, active_shapes)
                 [filled] = remover.inpainter.inpaint([frame], [mask])
                 pil = Image.fromarray(_cv2.cvtColor(filled, _cv2.COLOR_BGR2RGB))
                 meta = (f"Cleanup preview using {snapshot_cfg.mode.value}; "
@@ -789,7 +799,8 @@ class PreviewControllerMixin:
             display_img.thumbnail((max_w, max_h), Image.LANCZOS)
 
             timed_rects = self._active_timed_region_rects(
-                getattr(self.config, "subtitle_region_spans", None), 0.0
+                getattr(self.config, "subtitle_region_spans", None), 0.0,
+                getattr(self.config, "subtitle_region_keyframes", None)
             )
             if timed_rects:
                 current_rects = timed_rects
@@ -1051,8 +1062,14 @@ class PreviewControllerMixin:
             lang = self.lang_var.get()
             threshold = getattr(self.config, 'detection_threshold', 0.5)
             timed_spans = getattr(self.config, "subtitle_region_spans", None) or []
-            timed_regions_configured = bool(timed_spans)
+            keyframe_tracks = (
+                getattr(self.config, "subtitle_region_keyframes", None) or [])
+            timed_regions_configured = bool(timed_spans or keyframe_tracks)
+            manual_shapes = region_shapes_at(keyframe_tracks, 0.0)
             sub_areas = self._active_timed_region_rects(timed_spans, 0.0)
+            sub_areas.extend(
+                tuple(shape["rect"])
+                for shape in manual_shapes if "rect" in shape)
             if (not sub_areas and not timed_regions_configured
                     and getattr(self.config, "subtitle_areas", None)):
                 sub_areas = list(getattr(self.config, "subtitle_areas", None) or [])
@@ -1084,7 +1101,7 @@ class PreviewControllerMixin:
                     if show_mask:
                         self._preview_bg_mask(
                             raw_frame, lang, threshold, sub_areas,
-                            timed_regions_configured,
+                            timed_regions_configured, manual_shapes,
                             item_file, item_id, preview_request_id,
                             max_w, max_h, _cv2, to_pil)
                     else:
@@ -1117,7 +1134,7 @@ class PreviewControllerMixin:
             )
 
     def _preview_bg_mask(self, raw_frame, lang, threshold, sub_areas,
-                          timed_regions_configured,
+                          timed_regions_configured, manual_shapes,
                           item_file, item_id, preview_request_id,
                           max_w, max_h, _cv2, to_pil):
         try:
@@ -1128,7 +1145,7 @@ class PreviewControllerMixin:
                     self._preview_detector_lang = lang
                 det = self._preview_detector
             frame_copy = raw_frame.copy()
-            if sub_areas:
+            if sub_areas or manual_shapes:
                 boxes = sub_areas
             elif (timed_regions_configured
                   and getattr(self.config, "sttn_skip_detection", False)):
@@ -1141,10 +1158,18 @@ class PreviewControllerMixin:
             _dr, _dg, _db = self._hex_to_rgb(Theme.DANGER)
             for (bx1, by1, bx2, by2) in boxes:
                 _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (_db, _dg, _dr), 2)
+            for shape in manual_shapes or []:
+                coords = shape.get("polygon")
+                if not coords:
+                    continue
+                points = np.asarray(
+                    list(zip(coords[::2], coords[1::2])), dtype=np.int32)
+                _cv2.polylines(vis, [points], True, (_db, _dg, _dr), 2)
             img = to_pil(vis)
             img.thumbnail((max_w, max_h), Image.LANCZOS)
             engine = det._engine_name
-            n = len(boxes)
+            n = len(boxes) + sum(
+                1 for shape in manual_shapes or [] if "polygon" in shape)
             def _update_mask():
                 if (preview_request_id != self._preview_request_id
                         or self._selected_queue_item_id != item_id):
@@ -1152,7 +1177,7 @@ class PreviewControllerMixin:
                 self._stop_throbber()
                 self._preview_photo = ImageTk.PhotoImage(img)
                 self.preview_title_label.config(text=f"Detection mask for {Path(item_file).name}")
-                if sub_areas and timed_regions_configured:
+                if (sub_areas or manual_shapes) and timed_regions_configured:
                     meta = "Timed manual region is active on the first frame."
                 elif sub_areas:
                     meta = "Manual region applied. Detection used your saved subtitle band."

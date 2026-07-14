@@ -136,6 +136,31 @@ class PresetSchemaTests(unittest.TestCase):
             [{"rect": (4, 8, 80, 32), "start": 1.5, "end": 3.0}],
         )
 
+    def test_moving_region_keyframes_round_trip_when_requested(self):
+        config = gui_config.ProcessingConfig(
+            subtitle_region_keyframes=[{
+                "keyframes": [
+                    {"time": 0.0, "rect": [10, 20, 100, 60]},
+                    {"time": 2.0, "rect": [30, 20, 120, 60]},
+                ],
+            }],
+        ).normalized()
+
+        ok = gui_config.save_user_preset(
+            "Moving overlay",
+            "Moving region preset",
+            config,
+            fields=["subtitle_region_keyframes"],
+        )
+
+        self.assertTrue(ok)
+        target = gui_config.ProcessingConfig()
+        self.assertTrue(gui_config.apply_preset(target, "Moving overlay"))
+        self.assertEqual(
+            target.subtitle_region_keyframes,
+            config.subtitle_region_keyframes,
+        )
+
     def test_export_preset_filters_unsupported_existing_fields(self):
         gui_config.PRESETS_FILE.write_text(
             json.dumps({
