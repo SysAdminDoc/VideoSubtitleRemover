@@ -38,13 +38,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Acceptance: An opt-in/configurable rolling mask union runs after propagation/refinement, resets at scene cuts and inactive timed spans, reduces missed-mask pixels on moving/shadow/dissolve fixtures, and never expands a mask into adjacent scenes or outside configured regions.
   Complexity: M
 
-- [ ] P1 — Add residual-text, seam, and temporal-flicker quality checks
-  Why: PSNR/SSIM/VMAF cannot tell users that glyph edges remain or a filled region flickers, which is the only current first-party quality complaint.
-  Evidence: `backend/processor.py:733-932`; https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/6; https://arxiv.org/abs/2601.06391
-  Touches: `backend/quality.py`, `backend/processor.py`, `backend/batch_report.py`, `gui/quality_controller.py`, `backend/reference_corpus.py`, `tests/test_reference_clips.py`
-  Acceptance: Quality reports compare input/output OCR confidence inside the final mask, score mask-boundary discontinuity and inter-frame fill variance, warn on deterministic residual/flicker fixtures, avoid blocking clean/textured-background controls, and expose thresholds in sidecars/batch reports.
-  Complexity: M
-
 - [ ] P1 — Prove OCR and inpaint provider execution in self-test
   Why: Constructor/provider availability does not prove inference ran on the selected backend, leaving GPU fallback and broken-model reports ambiguous.
   Evidence: `backend/support_bundle.py:347-427`; https://github.com/YaoFANGUK/video-subtitle-remover/issues/242

@@ -142,6 +142,56 @@ def residual_text_score(frame: np.ndarray) -> Optional[float]:
     return float(min(1.0, max(edge_density, contour_density)))
 
 
+def mask_boundary_seam_score(
+    original: np.ndarray,
+    filled: np.ndarray,
+    mask: np.ndarray,
+    band_px: int = 3,
+) -> Optional[float]:
+    """Return a 0..1 seam score for the boundary of an inpainted region.
+
+    A clean fill blends into the surrounding background, so gradient energy in
+    a thin band straddling the mask edge should look like the rest of the
+    image. A visible seam (hard box, colour step, halo) shows up as excess
+    gradient in that band relative to the same band in the original frame.
+    The score is the clipped relative gradient increase; 0 means no visible
+    seam. Returns None when there is no boundary to measure.
+    """
+    if original is None or filled is None or mask is None:
+        return None
+    if original.shape[:2] != filled.shape[:2] or original.shape[:2] != mask.shape[:2]:
+        return None
+    if mask.max() == 0 or mask.min() == mask.max():
+        return None
+    band = max(1, int(band_px))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (band * 2 + 1,) * 2)
+    binary = (mask > 0).astype(np.uint8) * 255
+    # Thin ring straddling the mask edge -- a visible seam concentrates its
+    # extra gradient here, so a narrow band keeps the edge step from being
+    # diluted by flat interior or textured exterior pixels.
+    boundary = cv2.subtract(cv2.dilate(binary, kernel), cv2.erode(binary, kernel))
+    sel = boundary > 0
+    if int(np.count_nonzero(sel)) == 0:
+        return None
+
+    def _grad(img: np.ndarray) -> np.ndarray:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+        gray = gray.astype(np.float32)
+        gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+        gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+        return cv2.magnitude(gx, gy)
+
+    filled_grad = _grad(filled)
+    original_grad = _grad(original)
+    # Excess boundary gradient the fill introduced, over what the original
+    # frame already had along the same contour, normalised by the overall
+    # image texture scale. A seamless fill leaves ~0; a hard box or blur
+    # step raises the boundary gradient well above the original.
+    boundary_excess = float(np.mean(filled_grad[sel]) - np.mean(original_grad[sel]))
+    texture_scale = max(4.0, float(np.mean(original_grad)))
+    return float(min(1.0, max(0.0, boundary_excess / texture_scale)))
+
+
 def _pyiqa_available() -> bool:
     """True when pyiqa is importable (opt-in advanced metrics)."""
     try:

@@ -43,6 +43,7 @@ SSIM_FLOOR = 0.95
 VMAF_FLOOR = 90.0
 TEMPORAL_FLICKER_CEILING = 0.08
 RESIDUAL_TEXT_SCORE_CEILING = 0.025
+SEAM_SCORE_CEILING = 0.35
 
 _REMEDIATION = {
     LADDER_NONE: "",
@@ -107,6 +108,7 @@ def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
     _check_vmaf(metrics, violations)
     _check_flicker(metrics, violations)
     _check_residual_text(metrics, violations)
+    _check_seam(metrics, violations)
 
     degraded = _find_degraded_metrics(metrics)
     previews = _preview_paths(metrics)
@@ -330,6 +332,24 @@ def _check_residual_text(metrics: dict,
             "detail": (
                 f"residual text score {residual:.4f} above "
                 f"{RESIDUAL_TEXT_SCORE_CEILING:.4f}"
+            ),
+            "ladder": LADDER_INCREASE_DILATION,
+        })
+
+
+def _check_seam(metrics: dict,
+                violations: List[Dict[str, Any]]) -> None:
+    seam = _number(metrics.get("seam_score"))
+    if seam is None:
+        return
+    if seam > SEAM_SCORE_CEILING:
+        violations.append({
+            "metric": "seam_score",
+            "value": seam,
+            "threshold": SEAM_SCORE_CEILING,
+            "detail": (
+                f"mask-boundary seam score {seam:.4f} above "
+                f"{SEAM_SCORE_CEILING:.4f}"
             ),
             "ladder": LADDER_INCREASE_DILATION,
         })

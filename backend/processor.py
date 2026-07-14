@@ -84,6 +84,7 @@ from backend.quality import (
     temporal_consistency_score,
     residual_text_score,
     temporal_flicker_score,
+    mask_boundary_seam_score,
 )
 from backend.quality_gate import evaluate_quality_gate
 from backend.resume_checkpoint import (
@@ -366,6 +367,9 @@ class SubtitleRemover:
         # an awful inpaint could still report 'Good'. We track the bbox of
         # the union mask and the metric runs against that ROI only.
         self._quality_mask_bbox: Optional[Tuple[int, int, int, int]] = None
+        # Mask-boundary seam scores accumulated during inpainting (the report
+        # pass no longer has per-frame masks). Sampled to keep cost flat.
+        self._seam_scores: List[float] = []
         # RM-73 partial: source color signalling, populated lazily inside
         # process_video once we know the input path. Used by _get_encode_args
         # to preserve HDR / BT.2020 tagging on the output.
@@ -746,6 +750,31 @@ class SubtitleRemover:
                 max(ox2, x2), max(oy2, y2),
             )
 
+    def _accumulate_seam_scores(self, frames, results, masks,
+                                max_samples: int = 32) -> None:
+        """Sample mask-boundary seam scores across a processed batch.
+
+        Cheap and bounded: at most a few frames per batch and capped total
+        so long videos keep flat cost. The mean feeds the quality report and
+        the quality gate, which the report pass cannot compute because it no
+        longer holds per-frame masks.
+        """
+        if len(self._seam_scores) >= max_samples:
+            return
+        n = min(len(frames), len(results), len(masks))
+        if n == 0:
+            return
+        step = max(1, n // 3)
+        for i in range(0, n, step):
+            if len(self._seam_scores) >= max_samples:
+                break
+            try:
+                score = mask_boundary_seam_score(frames[i], results[i], masks[i])
+            except Exception:
+                score = None
+            if score is not None:
+                self._seam_scores.append(score)
+
     def _compute_quality_report(self, input_path: str, output_path: str,
                                   start_frame: int, end_frame: int,
                                   fps: float, n_samples: int = 10) -> Optional[dict]:
@@ -935,6 +964,10 @@ class SubtitleRemover:
                 'temporal_flicker_score': flicker_score,
                 'temporal_consistency': temporal_consistency,
                 'residual_text_score': residual_mean_score,
+                'seam_score': (
+                    float(np.mean(getattr(self, '_seam_scores', None) or []))
+                    if getattr(self, '_seam_scores', None) else None
+                ),
                 'lpips': extended.get('lpips'),
                 'dists': extended.get('dists'),
                 'samples': len(psnrs),
@@ -1376,6 +1409,7 @@ class SubtitleRemover:
         self._reset_stage_timings()
         self._srt_entries = []
         self._quality_mask_bbox = None
+        self._seam_scores = []
         temp_dir = None
         cap = None
         reader = None
@@ -1988,6 +2022,8 @@ class SubtitleRemover:
 
                 with self._time_stage("inpaint"):
                     results = self._inpaint_batch_resilient(frames, masks)
+                if self.config.quality_report and results:
+                    self._accumulate_seam_scores(frames, results, masks)
                 stride = max(1, self.live_preview_stride)
                 with self._time_stage("encode"):
                     for offset, result in enumerate(results):

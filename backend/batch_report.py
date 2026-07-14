@@ -538,6 +538,7 @@ def _quality_report_record(metrics: dict) -> dict:
         "temporal_flicker_score",
         "temporal_consistency",
         "residual_text_score",
+        "seam_score",
         "lpips",
         "dists",
         "sheet",

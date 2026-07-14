@@ -6151,6 +6151,77 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class SeamQualityTests(unittest.TestCase):
+    """P1: mask-boundary seam (discontinuity) quality check."""
+
+    def _smooth_bg(self):
+        import cv2
+        yy, xx = np.mgrid[0:80, 0:80]
+        bg = np.stack([(xx * 2) % 256, (yy * 2) % 256, (xx + yy) % 256], -1)
+        return cv2.GaussianBlur(bg.astype(np.uint8), (9, 9), 0)
+
+    def _mask(self):
+        m = np.zeros((80, 80), np.uint8)
+        m[24:56, 24:56] = 255
+        return m
+
+    def test_seamless_fill_scores_low(self):
+        from backend.quality import mask_boundary_seam_score
+        bg = self._smooth_bg()
+        score = mask_boundary_seam_score(bg, bg.copy(), self._mask())
+        self.assertIsNotNone(score)
+        self.assertLess(score, 0.1)
+
+    def test_hard_box_fill_scores_high(self):
+        from backend.quality import mask_boundary_seam_score
+        bg = self._smooth_bg()
+        bad = bg.copy()
+        bad[24:56, 24:56] = 128  # flat box with a hard boundary step
+        score = mask_boundary_seam_score(bg, bad, self._mask())
+        self.assertIsNotNone(score)
+        self.assertGreater(score, 0.35)
+
+    def test_seam_metric_handles_empty_mask(self):
+        from backend.quality import mask_boundary_seam_score
+        bg = self._smooth_bg()
+        self.assertIsNone(
+            mask_boundary_seam_score(bg, bg.copy(), np.zeros((80, 80), np.uint8))
+        )
+
+    def test_quality_gate_flags_high_seam(self):
+        from backend.quality_gate import evaluate_quality_gate, SEAM_SCORE_CEILING
+        gate = evaluate_quality_gate({
+            "samples": 5, "ssim": 0.99,
+            "seam_score": SEAM_SCORE_CEILING + 0.2,
+        })
+        self.assertEqual(gate["status"], "review")
+        metrics = {r["metric"] for r in gate["reasons"]}
+        self.assertIn("seam_score", metrics)
+
+    def test_quality_gate_passes_low_seam(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 5, "ssim": 0.99, "seam_score": 0.05,
+        })
+        self.assertEqual(gate["status"], "passed")
+
+    def test_accumulator_records_bounded_samples(self):
+        from backend.processor import SubtitleRemover
+        from backend.config import ProcessingConfig
+        remover = SubtitleRemover.__new__(SubtitleRemover)
+        remover.config = ProcessingConfig()
+        remover._seam_scores = []
+        bg = self._smooth_bg()
+        mask = self._mask()
+        frames = [bg.copy() for _ in range(6)]
+        results = [bg.copy() for _ in range(6)]
+        masks = [mask for _ in range(6)]
+        for _ in range(20):
+            remover._accumulate_seam_scores(frames, results, masks)
+        self.assertLessEqual(len(remover._seam_scores), 32)
+        self.assertTrue(remover._seam_scores)
+
+
 class GpuOomRecoveryTests(unittest.TestCase):
     """P1: recover gracefully from a GPU OOM mid-batch."""
 

@@ -25,6 +25,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   oversized/short members, duplicate targets, free-space exhaustion, and
   mid-commit rollback.
 
+### Quality
+
+- **Mask-boundary seam (discontinuity) quality check.** The quality report now
+  scores the visible seam at the inpaint mask boundary -- the excess gradient
+  the fill introduces along the mask contour versus the original frame,
+  normalised to the image texture scale -- complementing the existing
+  residual-text and temporal-flicker (inter-frame fill variance) scores. Seam
+  samples are accumulated cheaply during inpainting; the mean feeds the quality
+  gate (new `seam_score` metric and `SEAM_SCORE_CEILING`, remediation:
+  increase mask dilation/feather) and is surfaced in batch reports and
+  reproducibility sidecars. New `backend.quality.mask_boundary_seam_score`.
+
 ### Reliability
 
 - **Graceful GPU out-of-memory recovery.** A CUDA OOM during batch inpainting
