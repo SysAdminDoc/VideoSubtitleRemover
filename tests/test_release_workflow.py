@@ -455,6 +455,41 @@ class ReleaseVerificationTests(unittest.TestCase):
             release_verification.ffmpeg_security_advisory({"vulnerable": False})
         )
 
+    def test_pyinstaller_below_floor_blocks(self):
+        deps = [{"name": "pyinstaller", "version": "6.6.0"}]
+        with mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={"vulnerable": False},
+        ), mock.patch(
+            "backend.release_verification.nsis_security_advisory",
+            return_value=None,
+        ):
+            advisories = release_verification.collect_release_advisories(deps)
+        ids = {a["id"]: a for a in advisories["advisories"]}
+        self.assertIn("CVE-2025-59042", ids)
+        self.assertTrue(ids["CVE-2025-59042"]["blocking"])
+
+    def test_pyinstaller_at_floor_passes(self):
+        deps = [{"name": "pyinstaller", "version": "6.10.0"}]
+        with mock.patch(
+            "backend.release_verification.probe_ffmpeg_security",
+            return_value={"vulnerable": False},
+        ), mock.patch(
+            "backend.release_verification.nsis_security_advisory",
+            return_value=None,
+        ):
+            advisories = release_verification.collect_release_advisories(deps)
+        ids = {a["id"] for a in advisories["advisories"]}
+        self.assertNotIn("CVE-2025-59042", ids)
+
+    def test_nsis_advisory_flags_old_toolchain(self):
+        advisory = release_verification.nsis_security_advisory("3.09")
+        self.assertIsNotNone(advisory)
+        self.assertTrue(advisory["blocking"])
+        self.assertEqual(advisory["fixedIn"], "3.11")
+        self.assertIsNone(release_verification.nsis_security_advisory("3.11"))
+        self.assertIsNone(release_verification.nsis_security_advisory(""))
+
     def test_strict_release_fails_on_vulnerable_ffmpeg(self):
         deps = [{"name": "Pillow", "version": "12.2.0"}]
         with mock.patch(

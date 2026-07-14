@@ -649,7 +649,7 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("simple-lama-inpainting", "0.1.0", ""),
     ("torch", "2.10.0", ""),
     ("torchvision", "0.25.0", ""),
-    ("pyinstaller", "", ""),
+    ("pyinstaller", "6.10.0", ""),
 )
 
 BLOCKED_EXCEPTIONS: Tuple[Tuple[str, str], ...] = (

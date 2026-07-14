@@ -11,13 +11,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2 — Later
 
-- [ ] P2 — Pin build-toolchain versions carrying LPE fixes (PyInstaller, NSIS)
-  Why: `build_exe.bat` installs PyInstaller with no floor (<6.10.0 carries CVE-2025-59042 writable-CWD LPE) and `installer/vsr.nsi` documents no minimum NSIS (<3.11 carries CVE-2025-43715 temp-plugin-dir SYSTEM LPE); both matter for an unsigned Windows build.
-  Evidence: `build_exe.bat:26-29`, `installer/vsr.nsi:1-17`; https://nvd.nist.gov/vuln/detail/CVE-2025-59042; https://github.com/advisories/GHSA-g9m2-7jc6-pmvf
-  Touches: `build_exe.bat`, `installer/vsr.nsi`, `backend/release_verification.py`, `README.md`, `tests/test_release_workflow.py`
-  Acceptance: the build installs/requires PyInstaller `>=6.10.0`, the installer build documents and (where detectable) checks NSIS `>=3.11`, and release verification records both tool versions and fails strict validation on known-vulnerable ones.
-  Complexity: S
-
 - [ ] P2 — Preflight free disk space before encode and rotate the log file
   Why: Free space is recorded but never gated, so a mid-encode disk-full dies with a raw OSError and can leave a half-written temp file; `vsr_pro.log` has no rotation and grows unbounded in long sessions.
   Evidence: `backend/batch_report.py:268`, `backend/cli.py:288` (records only); no `RotatingFileHandler` in the tree.

@@ -340,6 +340,26 @@ def collect_release_advisories(
     if ffmpeg_advisory is not None:
         findings.append(ffmpeg_advisory)
 
+    pyinstaller_version = _dependency_version(dependencies, "pyinstaller")
+    if pyinstaller_version and _version_lt(pyinstaller_version, "6.10.0"):
+        findings.append(_advisory(
+            advisory_id="CVE-2025-59042",
+            package="pyinstaller",
+            installed_version=pyinstaller_version,
+            affected="<6.10.0",
+            fixed_in="6.10.0",
+            severity="high",
+            source="https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9w2p-rh8c-v9g5",
+            mitigation=(
+                "Build with PyInstaller >= 6.10.0; older bootloaders allow a "
+                "writable-CWD sys.path injection (local privilege escalation)."
+            ),
+        ))
+
+    nsis_advisory = nsis_security_advisory()
+    if nsis_advisory is not None:
+        findings.append(nsis_advisory)
+
     blocking = [item for item in findings if item.get("blocking")]
     return {
         "schema": "vsr.release_advisories.v1",
@@ -357,6 +377,49 @@ def collect_release_advisories(
             "allowed": sum(1 for item in findings if item.get("allowed")),
         },
     }
+
+
+def probe_makensis_version() -> str:
+    """Return the makensis version string (e.g. '3.11'), '' if unavailable."""
+    path = shutil.which("makensis")
+    if not path:
+        return ""
+    try:
+        proc = subprocess.run(
+            [path, "-VERSION"], capture_output=True, text=True,
+            timeout=10, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return (proc.stdout or proc.stderr or "").strip()
+
+
+def nsis_security_advisory(version: Optional[str] = None) -> Optional[dict]:
+    """Blocking advisory when the NSIS toolchain predates the 3.11 LPE fix.
+
+    Returns None when makensis is absent (not every build machine installs it)
+    or when the version is 3.11+. CVE-2025-43715 is a temp-plugin-dir race that
+    yields SYSTEM during install.
+    """
+    if version is None:
+        version = probe_makensis_version()
+    if not version:
+        return None
+    if not _version_lt(version, "3.11"):
+        return None
+    return _advisory(
+        advisory_id="CVE-2025-43715",
+        package="nsis (makensis)",
+        installed_version=version,
+        affected="<3.11",
+        fixed_in="3.11",
+        severity="high",
+        source="https://github.com/advisories/GHSA-g9m2-7jc6-pmvf",
+        mitigation=(
+            "Build the installer with NSIS >= 3.11; earlier releases allow a "
+            "temp plugin-dir race to run code as SYSTEM during install."
+        ),
+    )
 
 
 def ffmpeg_security_advisory(

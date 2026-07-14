@@ -22,15 +22,14 @@ if not exist "%PYTHON%" (
 :: Activate venv
 call venv\Scripts\activate.bat
 
-:: Install PyInstaller if needed
-"%PYTHON%" -m pip show pyinstaller >nul 2>&1
+:: Install/upgrade PyInstaller. >=6.10.0 carries the fix for CVE-2025-59042
+:: (writable-CWD bootstrap local privilege escalation); older bootloaders let
+:: an attacker inject Python via sys.path beside the frozen exe.
+echo Ensuring PyInstaller ^>= 6.10.0...
+"%PYTHON%" -m pip install "pyinstaller>=6.10.0"
 if errorlevel 1 (
-    echo Installing PyInstaller...
-    "%PYTHON%" -m pip install pyinstaller
-    if errorlevel 1 (
-        echo Failed to install PyInstaller.
-        exit /b 1
-    )
+    echo Failed to install PyInstaller ^>= 6.10.0.
+    exit /b 1
 )
 
 set "ICON_ARG="

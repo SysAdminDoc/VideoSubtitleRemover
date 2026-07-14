@@ -15,6 +15,20 @@
 ;   - Refuses to install over a running instance.
 ;
 ; Build with: makensis installer/vsr.nsi
+;
+; REQUIRES NSIS >= 3.11. Earlier releases carry CVE-2025-43715 (temp
+; plugin-dir race -> SYSTEM local privilege escalation during install). The
+; compile-time guard below fails the build on an older toolchain.
+
+; NSIS_PACKEDVERSION is a hex-packed version (major<<24 | minor<<16 | ...).
+; 3.11 packs to 0x030B0000. Fail compilation on anything older.
+!ifdef NSIS_PACKEDVERSION
+  !if ${NSIS_PACKEDVERSION} < 0x030B0000
+    !error "NSIS >= 3.11 required (CVE-2025-43715 SYSTEM LPE). Upgrade makensis."
+  !endif
+!else
+  !warning "Cannot verify NSIS version; ensure makensis is >= 3.11 (CVE-2025-43715)."
+!endif
 
 !define APPNAME      "Video Subtitle Remover Pro"
 !define COMPANY      "SysAdminDoc"

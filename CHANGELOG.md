@@ -26,6 +26,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Build-toolchain security floors.** The local build now requires
+  PyInstaller `>=6.10.0` (CVE-2025-59042 writable-CWD local privilege
+  escalation) and the NSIS installer requires `>=3.11` (CVE-2025-43715
+  temp-plugin-dir SYSTEM LPE): `build_exe.bat` pins the PyInstaller install,
+  `installer/vsr.nsi` fails to compile on an older NSIS via `NSIS_PACKEDVERSION`,
+  and strict release validation emits blocking advisories for either.
+
 - **ONNX Runtime security floor raised to 1.25.0.** `onnxruntime`,
   `onnxruntime-gpu`, and `onnxruntime-directml` now require `>=1.25.0` (below
   which parser integer-truncation heap-OOB hardening is missing). The
