@@ -66,6 +66,7 @@ from backend.io import (
     _cleanup_temp_output,
     _promote_temp_output,
     _copy_file_atomic,
+    validate_video_output,
     _FrameSequenceCapture,
     _open_capture,
     _open_bgr48_capture,
@@ -298,6 +299,19 @@ try:
         logger.info("External inpainter registered via VSR_EXTERNAL_INPAINTER")
 except Exception as _exc:
     logger.debug(f"External inpainter did not load: {_exc}")
+
+
+class OutputIntegrityError(Exception):
+    """Raised when a finished video fails validation before promotion.
+
+    Carries the human-readable ``reason`` and the probe ``details`` so callers
+    can log evidence and preserve the existing destination.
+    """
+
+    def __init__(self, reason: str, details: Optional[dict] = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.details = details or {}
 
 
 class SubtitleRemover:
@@ -2472,6 +2486,35 @@ class SubtitleRemover:
             logger.warning("HDR encode argument generation failed", exc_info=True)
             return []
 
+    def _promote_video_output(
+        self,
+        produced,
+        output_path: str,
+        *,
+        reference=None,
+        expected_frames: Optional[int] = None,
+        expected_duration: Optional[float] = None,
+    ) -> None:
+        """Validate a finished video, then atomically replace the destination.
+
+        Fails closed on truncation or a missing video stream: the existing
+        destination is left untouched and ``OutputIntegrityError`` is raised so
+        the caller can salvage a full-length fallback instead of shipping a
+        short/broken file as success.
+        """
+        ok, reason, details = validate_video_output(
+            produced,
+            reference=reference,
+            expected_frames=expected_frames,
+            expected_duration=expected_duration,
+        )
+        if not ok:
+            logger.error(
+                "Output integrity check failed for '%s': %s", output_path, reason
+            )
+            raise OutputIntegrityError(reason, details)
+        _promote_temp_output(produced, output_path)
+
     def _salvage_intermediate(self, source: str, output: str) -> str:
         """Copy the lossless intermediate to a container-correct path.
 
@@ -2506,6 +2549,7 @@ class SubtitleRemover:
         temp_output = _allocate_temp_output_path(output)
         try:
             _ensure_output_parent(output)
+            frame_total = len(list(frame_dir.glob("frame_*.png")))
             cmd = [
                 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
                 '-nostats', '-framerate', f"{float(fps):.6f}",
@@ -2514,10 +2558,12 @@ class SubtitleRemover:
             cmd += self._get_encode_args()
             cmd += ['-an', str(temp_output)]
             timeout = _ffmpeg_subprocess_timeout(
-                max(1.0, len(list(frame_dir.glob("frame_*.png"))) / max(fps, 1.0))
+                max(1.0, frame_total / max(fps, 1.0))
             )
             self._run_checked_ffmpeg(cmd, timeout)
-            _promote_temp_output(temp_output, output)
+            self._promote_video_output(
+                temp_output, output, expected_frames=frame_total
+            )
             return output
         except FileNotFoundError:
             logger.warning(
@@ -2538,8 +2584,14 @@ class SubtitleRemover:
             cmd += ['-an', str(temp_output)]
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(source))
             self._run_checked_ffmpeg(cmd, timeout)
-            _promote_temp_output(temp_output, output)
+            self._promote_video_output(temp_output, output, reference=source)
             return output
+        except OutputIntegrityError as exc:
+            logger.warning(
+                "Re-encode failed integrity check (%s); salvaging intermediate.",
+                exc.reason,
+            )
+            return self._salvage_intermediate(source, output)
         except subprocess.CalledProcessError as e:
             if self._hw_encoder:
                 logger.warning(f"HW encoder failed, retrying with libx264: {e}")
@@ -2627,7 +2679,21 @@ class SubtitleRemover:
             # mux pass takes longer than the legacy 10-minute fixed budget.
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(original))
             self._run_checked_ffmpeg(cmd, timeout)
-            _promote_temp_output(temp_output, output)
+            # Guard against -shortest truncating the video to a shorter audio
+            # stream (or any decode-integrity loss). The processed intermediate
+            # is the length-of-record; on failure keep the full-length video
+            # without audio rather than promote a truncated mux.
+            try:
+                self._promote_video_output(
+                    temp_output, output, reference=processed
+                )
+            except OutputIntegrityError as exc:
+                logger.warning(
+                    "Audio merge produced a truncated/invalid output (%s); "
+                    "saving the full-length video without audio instead.",
+                    exc.reason,
+                )
+                return self._salvage_intermediate(processed, output)
             encoder_name = self._hw_encoder or 'libx264'
             logger.info(f"Audio merged successfully (encoder: {encoder_name})")
             return output

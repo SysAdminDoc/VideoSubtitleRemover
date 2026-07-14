@@ -4,6 +4,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Reliability
+
+- **Output integrity validation before promotion.** A finished video is now
+  probed (ffprobe, with a bounded OpenCV fallback) for a decodable video
+  stream and a duration/frame envelope before it replaces any destination.
+  The `-shortest` audio-merge path, the re-encode/copy path, and the
+  checkpoint-frame encode path all fail closed on truncation -- the audio
+  merge salvages the full-length video without audio, the re-encode salvages
+  the intermediate, and a stalled/short encode preserves the existing
+  destination instead of shipping a truncated file as success. New
+  `backend.io.probe_video_integrity` / `validate_video_output` and
+  `backend.processor.OutputIntegrityError`.
+
 ### Security
 
 - **FFmpeg runtime CVE floor.** VSR decodes untrusted media through FFmpeg, so

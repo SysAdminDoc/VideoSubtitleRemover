@@ -445,6 +445,149 @@ def _probe_duration_seconds(path: str) -> float:
     return 0.0
 
 
+def _probe_frame_count(path: str) -> int:
+    """Video frame count from the stream header (``nb_frames``), 0 if unknown.
+
+    Uses the cheap header field rather than ``-count_packets`` so promotion
+    stays fast on multi-hour outputs; callers treat 0 as "unknown, skip the
+    frame check" and fall back to the duration envelope.
+    """
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=nb_frames',
+            '-of', 'default=noprint_wrappers=1:nokey=1', path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if result.returncode == 0:
+            text = (result.stdout or "").strip()
+            if text and text.lower() != "n/a":
+                return max(0, int(text))
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return 0
+
+
+def _opencv_video_integrity(path: str) -> dict:
+    """Bounded OpenCV fallback used when ffprobe is unavailable."""
+    result = {
+        "has_video": False, "duration": 0.0, "frames": 0,
+        "width": None, "height": None, "error": "", "prober": "opencv",
+    }
+    try:
+        import cv2  # local import; OpenCV is a hard dep but keep io import light
+    except Exception as exc:  # pragma: no cover - cv2 is installed in practice
+        result["error"] = f"opencv unavailable: {exc}"
+        return result
+    cap = cv2.VideoCapture(str(path))
+    try:
+        if not cap.isOpened():
+            result["error"] = "opencv could not open the file"
+            return result
+        frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        ok, frame = cap.read()
+        result["has_video"] = bool(ok and frame is not None)
+        result["frames"] = max(0, frames)
+        result["width"] = width or None
+        result["height"] = height or None
+        if fps > 0 and frames > 0:
+            result["duration"] = frames / fps
+        if not result["has_video"]:
+            result["error"] = "opencv could not decode a first frame"
+    finally:
+        cap.release()
+    return result
+
+
+def probe_video_integrity(path, *, timeout: float = 30.0) -> dict:
+    """Return a decode-integrity summary for ``path``.
+
+    Prefers ffprobe; falls back to a bounded OpenCV probe when ffprobe is not
+    on PATH. Keys: has_video, duration, frames, width, height, error, prober.
+    """
+    path = str(path)
+    result = {
+        "path": path, "has_video": False, "duration": 0.0, "frames": 0,
+        "width": None, "height": None, "error": "", "prober": "",
+    }
+    status = _probe_video_stream_status(path)
+    if status.get("available"):
+        result["prober"] = "ffprobe"
+        result["has_video"] = bool(status.get("hasVideo"))
+        result["width"] = status.get("width")
+        result["height"] = status.get("height")
+        if status.get("ok") is False:
+            result["error"] = status.get("error") or "ffprobe could not read a video stream"
+        result["duration"] = _probe_duration_seconds(path)
+        result["frames"] = _probe_frame_count(path)
+        return result
+    return _opencv_video_integrity(path)
+
+
+def validate_video_output(
+    candidate,
+    *,
+    reference=None,
+    expected_frames: Optional[int] = None,
+    expected_duration: Optional[float] = None,
+    duration_tol_ratio: float = 0.05,
+    duration_tol_abs: float = 0.75,
+    frame_tol_ratio: float = 0.02,
+    frame_tol_abs: int = 2,
+    timeout: float = 30.0,
+) -> tuple:
+    """Validate a finished video before it replaces a destination.
+
+    Fails closed (returns ``(False, reason, details)``) when the candidate has
+    no decodable video stream, or when its duration/frame count falls below the
+    expected envelope (truncation, e.g. ``-shortest`` shortening video to a
+    shorter audio track, or a fixed-frame-limit stall). Only *short* deviations
+    fail; equal-or-longer valid CFR/VFR/time-range outputs pass. When neither a
+    prober nor an expectation can determine a problem, it passes -- it never
+    invents a failure it cannot substantiate.
+    """
+    details = {}
+    cand = probe_video_integrity(candidate, timeout=timeout)
+    details["candidate"] = cand
+    probed = bool(cand.get("prober"))
+    if probed and not cand.get("has_video"):
+        reason = cand.get("error") or "output has no decodable video stream"
+        return False, reason, details
+
+    if reference is not None and (expected_duration is None or expected_frames is None):
+        ref = probe_video_integrity(reference, timeout=timeout)
+        details["reference"] = ref
+        if expected_duration is None:
+            expected_duration = ref.get("duration") or None
+        if expected_frames is None:
+            expected_frames = ref.get("frames") or None
+
+    cand_duration = float(cand.get("duration") or 0.0)
+    if expected_duration and expected_duration > 0 and cand_duration > 0:
+        tol = max(duration_tol_abs, expected_duration * duration_tol_ratio)
+        if cand_duration < expected_duration - tol:
+            reason = (
+                f"output duration {cand_duration:.3f}s is shorter than the "
+                f"expected {float(expected_duration):.3f}s (tolerance {tol:.3f}s)"
+            )
+            return False, reason, details
+
+    cand_frames = int(cand.get("frames") or 0)
+    if expected_frames and expected_frames > 0 and cand_frames > 0:
+        tol = max(frame_tol_abs, int(expected_frames * frame_tol_ratio))
+        if cand_frames < expected_frames - tol:
+            reason = (
+                f"output frame count {cand_frames} is below the expected "
+                f"{int(expected_frames)} (tolerance {tol})"
+            )
+            return False, reason, details
+
+    return True, "ok", details
+
+
 def _ffmpeg_subprocess_timeout(duration_seconds: float,
                                 base: float = 180.0,
                                 factor: float = 4.0,

@@ -6151,5 +6151,120 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertNotIn("qualityGate", sidecar)
 
 
+class OutputIntegrityValidationTests(unittest.TestCase):
+    """P0: validate final video integrity before destination promotion."""
+
+    def _probe(self, **kwargs):
+        base = {
+            "path": "x", "has_video": True, "duration": 3.0, "frames": 90,
+            "width": 320, "height": 240, "error": "", "prober": "ffprobe",
+        }
+        base.update(kwargs)
+        return base
+
+    def test_passes_when_output_matches_reference_envelope(self):
+        from backend import io as vio
+        with unittest.mock.patch.object(
+            vio, "probe_video_integrity",
+            side_effect=[self._probe(duration=3.0, frames=90),
+                         self._probe(duration=3.0, frames=90)],
+        ):
+            ok, reason, _ = vio.validate_video_output("cand.mp4", reference="ref.mp4")
+        self.assertTrue(ok, reason)
+
+    def test_fails_closed_on_shortest_audio_truncation(self):
+        from backend import io as vio
+        with unittest.mock.patch.object(
+            vio, "probe_video_integrity",
+            side_effect=[self._probe(duration=1.021, frames=30),
+                         self._probe(duration=3.0, frames=90)],
+        ):
+            ok, reason, _ = vio.validate_video_output("cand.mp4", reference="ref.mp4")
+        self.assertFalse(ok)
+        self.assertIn("shorter", reason)
+
+    def test_fails_closed_on_fixed_frame_limit_stall(self):
+        from backend import io as vio
+        with unittest.mock.patch.object(
+            vio, "probe_video_integrity",
+            side_effect=[self._probe(duration=8.0, frames=240),
+                         self._probe(duration=40.0, frames=1200)],
+        ):
+            ok, reason, _ = vio.validate_video_output("cand.mp4", reference="ref.mp4")
+        self.assertFalse(ok)
+
+    def test_fails_closed_when_no_video_stream(self):
+        from backend import io as vio
+        with unittest.mock.patch.object(
+            vio, "probe_video_integrity",
+            return_value=self._probe(has_video=False, error="no video stream"),
+        ):
+            ok, reason, _ = vio.validate_video_output("cand.mp4")
+        self.assertFalse(ok)
+        self.assertIn("video", reason)
+
+    def test_longer_valid_output_still_passes(self):
+        from backend import io as vio
+        with unittest.mock.patch.object(
+            vio, "probe_video_integrity",
+            side_effect=[self._probe(duration=3.2, frames=96),
+                         self._probe(duration=3.0, frames=90)],
+        ):
+            ok, _, _ = vio.validate_video_output("cand.mp4", reference="ref.mp4")
+        self.assertTrue(ok)
+
+    def test_inconclusive_probe_does_not_invent_failure(self):
+        from backend import io as vio
+        with unittest.mock.patch.object(
+            vio, "probe_video_integrity",
+            return_value={"path": "x", "has_video": False, "duration": 0.0,
+                          "frames": 0, "error": "", "prober": ""},
+        ):
+            ok, _, _ = vio.validate_video_output("cand.mp4")
+        self.assertTrue(ok)
+
+    def test_promote_video_output_raises_and_preserves_destination(self):
+        from backend import processor as proc
+        remover = proc.SubtitleRemover.__new__(proc.SubtitleRemover)
+        promoted = []
+        with unittest.mock.patch.object(
+            proc, "validate_video_output",
+            return_value=(False, "output duration shorter", {}),
+        ), unittest.mock.patch.object(
+            proc, "_promote_temp_output",
+            side_effect=lambda *a, **k: promoted.append(a),
+        ):
+            with self.assertRaises(proc.OutputIntegrityError):
+                remover._promote_video_output("cand.mp4", "out.mp4", reference="ref.mp4")
+        self.assertEqual(promoted, [])  # destination never replaced
+
+    def test_end_to_end_short_audio_mux_is_caught(self):
+        """Integration: real ffmpeg -shortest mux of a 3s video + 1s audio
+        must fail validation against the 3s processed video."""
+        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+            self.skipTest("ffmpeg/ffprobe not installed")
+        from backend import io as vio
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "video.mp4"
+            merged = root / "merged.mp4"
+            subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                 "-f", "lavfi", "-i", "testsrc=size=64x64:rate=30:duration=3",
+                 "-pix_fmt", "yuv420p", str(video)],
+                check=True, timeout=60,
+            )
+            subprocess.run(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                 "-i", str(video),
+                 "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+                 "-shortest", "-map", "0:v:0", "-map", "1:a:0", str(merged)],
+                check=True, timeout=60,
+            )
+            ok, reason, _ = vio.validate_video_output(str(merged), reference=str(video))
+            self.assertFalse(ok, "short-audio -shortest mux should fail closed")
+            self.assertIn("shorter", reason)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -29,13 +29,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P0 — Now
 
-- [ ] P0 — Validate final video integrity before destination promotion
-  Why: `-shortest` can truncate video to a shorter audio stream, and successful FFmpeg exits are currently trusted without checking output duration, frames, or a decodable video stream.
-  Evidence: `backend/processor.py:2558-2654`; https://github.com/allenk/VeoWatermarkRemover/issues/29
-  Touches: `backend/processor.py`, `backend/io.py`, `backend/remux.py`, `tests/test_hardening.py`, `tests/test_reference_clips.py`
-  Acceptance: FFprobe, with a bounded OpenCV fallback when absent, validates a video stream plus expected duration/frame envelope before any destination is replaced; short-audio and deliberately truncated fixtures fail closed while preserving an existing destination, and valid CFR/VFR/time-range outputs pass documented tolerances.
-  Complexity: M
-
 - [ ] P0 — Make model-cache ZIP imports bounded and transactional
   Why: The importer accepts unbounded manifests/members and commits files incrementally, exposing disk-exhaustion and partial-import failure modes.
   Evidence: `backend/cache_inventory.py:420-520`; https://docs.python.org/3/library/zipfile.html#decompression-pitfalls
