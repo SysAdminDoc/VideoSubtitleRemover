@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import json
+import logging
 import shutil
 import sys
 import tempfile
@@ -117,11 +118,31 @@ class GuiSmokeTests(unittest.TestCase):
                     except tk.TclError:
                         pass
             app.root.update_idletasks()
+            app._shutdown_ui_resources()
         finally:
             try:
                 app.root.destroy()
             except tk.TclError:
                 pass
+
+    def test_teardown_cancels_callbacks_and_detaches_log_handler(self):
+        app = self._make_app()
+        handler = app._log_handler
+        try:
+            app.root.after(60_000, lambda: None)
+            pending = app.root.tk.splitlist(app.root.tk.call("after", "info"))
+            self.assertTrue(pending)
+            self.assertIn(handler, logging.getLogger().handlers)
+
+            app._shutdown_ui_resources()
+
+            self.assertEqual(
+                app.root.tk.splitlist(app.root.tk.call("after", "info")), ())
+            self.assertNotIn(handler, logging.getLogger().handlers)
+            self.assertTrue(handler._closed)
+            app._shutdown_ui_resources()  # idempotent during Destroy events
+        finally:
+            self._destroy_app(app)
 
     def test_construct_and_close(self):
         app = self._make_app()

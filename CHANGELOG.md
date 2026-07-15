@@ -180,6 +180,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **GUI teardown no longer leaks Tk callbacks between tests.** Closing an app
+  now cancels its pending Tcl timers, detaches and closes the recurring log
+  handler, and invalidates preview workers. Preview completions use a
+  shutdown-aware dispatcher, eliminating late `main thread is not in main
+  loop` exceptions and full-suite Tk resource accumulation.
 - **The NSIS 3.12 guard rejected NSIS 3.12 and required an undeclared plugin.**
   The packed-version threshold now uses NSIS' actual byte layout
   (`0x030C0000`), and the

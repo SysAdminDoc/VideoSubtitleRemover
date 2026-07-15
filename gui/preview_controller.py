@@ -38,6 +38,15 @@ logger = logging.getLogger(__name__)
 class PreviewControllerMixin:
     """Focused controller methods mixed into VideoSubtitleRemoverApp."""
 
+    def _dispatch_preview_ui(self, callback, *args):
+        """Marshal preview work without leaking teardown races from workers."""
+        if getattr(self, "_shutdown_started", False):
+            return None
+        try:
+            return self.root.after(0, callback, *args)
+        except (RuntimeError, tk.TclError):
+            return None
+
     def _render_clean_reference_preview(self, frame, span):
         """Return alignment/composite evidence for one selected timed region."""
         from backend.reference_fill import apply_clean_reference
@@ -371,10 +380,7 @@ class PreviewControllerMixin:
 
         def _worker():
             result = _probe()
-            try:
-                self.root.after(0, _on_result, result)
-            except (RuntimeError, tk.TclError):
-                pass
+            self._dispatch_preview_ui(_on_result, result)
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -588,8 +594,7 @@ class PreviewControllerMixin:
                 else:
                     frame = None
                 if frame is None:
-                    self.root.after(
-                        0,
+                    self._dispatch_preview_ui(
                         lambda: self._set_preview_unavailable(
                             "Test cleanup unavailable",
                             "The selected file could not be read. Verify the file path and add it again.",
@@ -642,7 +647,7 @@ class PreviewControllerMixin:
                 if not boxes and not active_shapes:
                     # No detection -- show the source with a hint.
                     pil = Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
-                    self.root.after(0, lambda: self._apply_inpaint_preview(
+                    self._dispatch_preview_ui(lambda: self._apply_inpaint_preview(
                         pil, "No text detected on the first frame", request_id, item.id))
                     return
                 mask = remover._create_mask(frame.shape, boxes)
@@ -651,12 +656,11 @@ class PreviewControllerMixin:
                 pil = Image.fromarray(_cv2.cvtColor(filled, _cv2.COLOR_BGR2RGB))
                 meta = (f"Cleanup preview using {snapshot_cfg.mode.value}; "
                         f"{len(boxes)} region{'s' if len(boxes) != 1 else ''} masked.")
-                self.root.after(0, lambda: self._apply_inpaint_preview(
+                self._dispatch_preview_ui(lambda: self._apply_inpaint_preview(
                     pil, meta, request_id, item.id))
             except Exception:
                 logger.warning("Inpaint preview failed", exc_info=True)
-                self.root.after(
-                    0,
+                self._dispatch_preview_ui(
                     lambda: self._set_preview_unavailable(
                         "Test cleanup failed",
                         "The cleanup preview could not be rendered. Check the activity log, then try Review mask or Set region.",
@@ -1114,7 +1118,7 @@ class PreviewControllerMixin:
                                 "The selected file could not be read. Verify the file path and add it again.",
                                 label="No frame available",
                             )
-                        self.root.after(0, _no_frame)
+                        self._dispatch_preview_ui(_no_frame)
                         return
 
                     if show_mask:
@@ -1144,7 +1148,7 @@ class PreviewControllerMixin:
                             label="Preview failed",
                             tone="error",
                         )
-                    self.root.after(0, _err)
+                    self._dispatch_preview_ui(_err)
 
             threading.Thread(target=_preview_bg, daemon=True).start()
         except Exception:
@@ -1270,7 +1274,7 @@ class PreviewControllerMixin:
                 self._preview_label.config(
                     image=self._preview_photo,
                     text=f"{engine}: {n} detected" if n else "No text detected")
-            self.root.after(0, _update_mask)
+            self._dispatch_preview_ui(_update_mask)
         except Exception:
             logger.warning("Detection preview failed", exc_info=True)
             def _show_mask_error():
@@ -1283,7 +1287,7 @@ class PreviewControllerMixin:
                     label="Mask preview failed",
                     tone="error",
                 )
-            self.root.after(0, _show_mask_error)
+            self._dispatch_preview_ui(_show_mask_error)
 
     def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,
                             item_output, item_quality, item_soft,
@@ -1352,5 +1356,5 @@ class PreviewControllerMixin:
             self.preview_title_label.config(text=title)
             self.preview_meta_label.config(text=meta)
             self._preview_label.config(image=self._preview_photo, text="")
-        self.root.after(0, _update_normal)
+        self._dispatch_preview_ui(_update_normal)
 

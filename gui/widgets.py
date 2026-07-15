@@ -2387,17 +2387,26 @@ class TextWidgetHandler(logging.Handler):
         self.on_count_change = on_count_change
         self.warn_count = 0
         self.error_count = 0
+        self._closed = False
+        self._after_id = None
         # Bound the backlog so a tight backend error loop cannot grow the queue
         # without limit while the UI drains only ~2000 records/sec; the on-screen
         # text is already trimmed to 2000 lines, so an older-than-that backlog
         # would never be shown anyway.
         self._pending: "queue.Queue[Tuple[str, int]]" = queue.Queue(maxsize=5000)
+        self._schedule_drain()
+
+    def _schedule_drain(self):
+        if self._closed:
+            return
         try:
-            self.text_widget.after(100, self._drain_pending)
-        except tk.TclError:
-            pass
+            self._after_id = self.text_widget.after(100, self._drain_pending)
+        except (tk.TclError, RuntimeError):
+            self._after_id = None
 
     def emit(self, record):
+        if self._closed:
+            return
         msg = self.format(record) + '\n'
         try:
             self._pending.put_nowait((msg, record.levelno))
@@ -2411,10 +2420,13 @@ class TextWidgetHandler(logging.Handler):
                 pass
 
     def _drain_pending(self):
+        self._after_id = None
+        if self._closed:
+            return
         try:
             if not int(self.text_widget.winfo_exists()):
                 return
-        except tk.TclError:
+        except (tk.TclError, RuntimeError):
             return
         for _ in range(200):
             try:
@@ -2422,10 +2434,18 @@ class TextWidgetHandler(logging.Handler):
             except queue.Empty:
                 break
             self._append(msg, levelno)
-        try:
-            self.text_widget.after(100, self._drain_pending)
-        except tk.TclError:
-            pass
+        self._schedule_drain()
+
+    def close(self):
+        self._closed = True
+        after_id = self._after_id
+        self._after_id = None
+        if after_id is not None:
+            try:
+                self.text_widget.after_cancel(after_id)
+            except (tk.TclError, RuntimeError):
+                pass
+        super().close()
 
     def _append(self, msg, levelno):
         try:

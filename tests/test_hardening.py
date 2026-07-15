@@ -214,6 +214,7 @@ class GuiConfigHardeningTests(unittest.TestCase):
         finally:
             try:
                 if app.root.winfo_exists():
+                    app._shutdown_ui_resources()
                     app.root.destroy()
             except Exception:
                 pass

@@ -979,6 +979,8 @@ class ProcessingControllerMixin:
             if self._taskbar:
                 self._taskbar.clear()
             try:
+                self.root.update_idletasks()
+                self._shutdown_ui_resources()
                 self.root.destroy()
             except Exception:
                 pass

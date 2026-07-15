@@ -128,6 +128,7 @@ class VideoSubtitleRemoverApp(
         self.root.geometry("980x720" if self._background_ui else "1240x860")
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
+        self._ui_resources_released = False
         self._running_mutex_handle = None
         if sys.platform == "win32":
             try:
@@ -140,8 +141,7 @@ class VideoSubtitleRemoverApp(
                 self._running_mutex_handle = None
         self.root.bind(
             "<Destroy>",
-            lambda event: self._release_running_mutex()
-            if event.widget is self.root else None,
+            self._on_root_destroyed,
             add="+",
         )
 
@@ -348,7 +348,7 @@ class VideoSubtitleRemoverApp(
         if not self._has_active_processing_thread() or time.monotonic() >= deadline:
             self._join_processing_thread(0.2)
             save_queue_state(self.queue)
-            self._release_running_mutex()
+            self._shutdown_ui_resources()
             try:
                 self.root.destroy()
             except Exception:
@@ -361,6 +361,42 @@ class VideoSubtitleRemoverApp(
                 self.root.destroy()
             except Exception:
                 pass
+
+    def _on_root_destroyed(self, event):
+        if event.widget is self.root:
+            self._shutdown_ui_resources()
+
+    def _shutdown_ui_resources(self):
+        """Release callbacks and handlers before the Tcl interpreter closes."""
+        if getattr(self, "_ui_resources_released", False):
+            return
+        self._ui_resources_released = True
+        self._shutdown_started = True
+        self._preview_request_id = getattr(self, "_preview_request_id", 0) + 1
+
+        handler = getattr(self, "_log_handler", None)
+        if handler is not None:
+            logging.getLogger().removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+            self._log_handler = None
+
+        root = getattr(self, "root", None)
+        if root is not None:
+            try:
+                pending = root.tk.splitlist(root.tk.call("after", "info"))
+                for callback_id in pending:
+                    try:
+                        root.tk.call("after", "cancel", callback_id)
+                    except (tk.TclError, RuntimeError):
+                        pass
+            except (tk.TclError, RuntimeError):
+                pass
+        self._elapsed_timer_id = None
+        self._throbber_id = None
+        self._release_running_mutex()
 
     def _release_running_mutex(self):
         handle = getattr(self, "_running_mutex_handle", None)
