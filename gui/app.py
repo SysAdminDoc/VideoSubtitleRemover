@@ -405,6 +405,10 @@ class VideoSubtitleRemoverApp(
             self.config.export_srt = self.export_srt_var.get()
         if hasattr(self, 'export_mask_var'):
             self.config.export_mask_video = self.export_mask_var.get()
+        if hasattr(self, 'mask_export_format_var'):
+            self.config.mask_export_format = self.mask_export_format_var.get()
+        if hasattr(self, 'mask_import_mode_var'):
+            self.config.mask_import_mode = self.mask_import_mode_var.get()
         if hasattr(self, 'kalman_var'):
             self.config.kalman_tracking = self.kalman_var.get()
         if hasattr(self, 'phash_var'):
@@ -1992,11 +1996,68 @@ class VideoSubtitleRemoverApp(
         self.export_mask_var = tk.BooleanVar(value=self.config.export_mask_video)
         mask_toggle = ModernToggle(
             quality_frame,
-            text=tr("Export debug mask video (.mask.mp4)"),
+            text=tr("Export lossless mask / alpha matte"),
             variable=self.export_mask_var,
         )
         mask_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(mask_toggle, tr("Writes a black-and-white mp4 of the per-frame detection mask alongside the output."))
+        Tooltip(mask_toggle, tr(
+            "Writes an exact grayscale matte and versioned timestamp manifest "
+            "alongside the output."))
+
+        matte_format_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        matte_format_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        tk.Label(
+            matte_format_row, text=tr("Matte format"), font=f(Theme.F_META),
+            bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED,
+        ).pack(side="left")
+        self.mask_export_format_var = tk.StringVar(
+            value=self.config.mask_export_format)
+        matte_format = ttk.Combobox(
+            matte_format_row, textvariable=self.mask_export_format_var,
+            values=("ffv1", "png"), state="readonly", width=9,
+            style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
+        )
+        matte_format.pack(side="right")
+        set_accessible_metadata(
+            matte_format, role="combo box", label=tr("Lossless matte format"),
+            description=tr("Choose FFV1 video or an ordered PNG sequence."))
+
+        matte_import_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        matte_import_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        self.mask_import_label_var = tk.StringVar(value=(
+            Path(self.config.mask_import_path).name
+            if self.config.mask_import_path else tr("No imported matte")
+        ))
+        tk.Label(
+            matte_import_row, textvariable=self.mask_import_label_var,
+            font=f(Theme.F_META), bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED,
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
+        ModernButton(
+            matte_import_row, text=tr("Import matte"), width=112,
+            command=self._choose_mask_import_manifest,
+            style="ghost", size="sm",
+        ).pack(side="right")
+
+        matte_mode_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        matte_mode_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        ModernButton(
+            matte_mode_row, text=tr("Clear import"), width=100,
+            command=self._clear_mask_import_manifest,
+            style="ghost", size="sm",
+        ).pack(side="left")
+        self.mask_import_mode_var = tk.StringVar(
+            value=self.config.mask_import_mode)
+        matte_mode = ttk.Combobox(
+            matte_mode_row, textvariable=self.mask_import_mode_var,
+            values=("replace", "add", "subtract"), state="readonly",
+            width=11, style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
+        )
+        matte_mode.pack(side="right")
+        set_accessible_metadata(
+            matte_mode, role="combo box", label=tr("Imported matte mode"),
+            description=tr(
+                "Replace, add to, or subtract from the native composed mask."))
 
         self.deinterlace_var = tk.BooleanVar(value=self.config.deinterlace_auto)
         deinterlace_toggle = ModernToggle(
@@ -2946,12 +3007,62 @@ class VideoSubtitleRemoverApp(
             ("temporal_mask_union_var", "temporal_mask_union"),
             ("export_srt_var", "export_srt"),
             ("export_mask_var", "export_mask_video"),
+            ("mask_export_format_var", "mask_export_format"),
+            ("mask_import_mode_var", "mask_import_mode"),
         ):
             if hasattr(self, attr):
                 getattr(self, attr).set(getattr(self.config, field))
+        if hasattr(self, "mask_import_label_var"):
+            self.mask_import_label_var.set(
+                Path(self.config.mask_import_path).name
+                if self.config.mask_import_path else tr("No imported matte"))
         self._on_mode_changed()
         save_settings(self.config)
         self._update_status(f"Applied preset '{name}'", "success")
+
+    def _choose_mask_import_manifest(self):
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title=tr("Import edited mask / alpha matte"),
+            filetypes=[
+                (tr("VSR matte manifest"), "*.mask.json"),
+                (tr("JSON manifest"), "*.json"),
+                (tr("All files"), "*.*"),
+            ],
+        )
+        if not path:
+            return
+        try:
+            from backend.matte_interchange import inspect_matte_manifest
+
+            info = inspect_matte_manifest(path)
+        except Exception as exc:
+            self._update_status(
+                tr("Matte manifest could not be imported: {error}").format(
+                    error=exc),
+                "warning",
+            )
+            return
+        self.config.mask_import_path = str(path)
+        if hasattr(self, "mask_import_label_var"):
+            self.mask_import_label_var.set(Path(path).name)
+        self._apply_current_settings_to_idle_items()
+        save_settings(self.config)
+        self._update_status(
+            tr("Imported {format} matte manifest ({frames} frames)").format(
+                format=str(info["format"]).upper(),
+                frames=info["frame_count"],
+            ),
+            "success",
+        )
+
+    def _clear_mask_import_manifest(self):
+        self.config.mask_import_path = ""
+        if hasattr(self, "mask_import_label_var"):
+            self.mask_import_label_var.set(tr("No imported matte"))
+        self._apply_current_settings_to_idle_items()
+        save_settings(self.config)
+        self._update_status(tr("Cleared imported matte"), "info")
 
     def _export_preset_dialog(self):
         """Export the currently-selected preset to a shareable JSON file."""
@@ -5929,6 +6040,11 @@ class VideoSubtitleRemoverApp(
                 mask_export=(
                     dict(record.get("mask_export"))
                     if isinstance(record.get("mask_export"), dict)
+                    else {}
+                ),
+                mask_import=(
+                    dict(record.get("mask_import"))
+                    if isinstance(record.get("mask_import"), dict)
                     else {}
                 ),
                 timing_report=(

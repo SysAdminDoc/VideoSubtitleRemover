@@ -106,6 +106,12 @@ from backend.mask_corrections import (
     merge_frame_ranges,
     merge_review_spans,
 )
+from backend.matte_interchange import (
+    MaskInterchangeReader,
+    MaskInterchangeWriter,
+    compose_imported_matte,
+    mask_interchange_paths,
+)
 from backend.resume_checkpoint import (
     ProcessingPaused,
     cleanup_pause_checkpoint,
@@ -401,6 +407,12 @@ class SubtitleRemover:
             "requested": False,
             "status": "not-requested",
             "path": "",
+        }
+        self.last_mask_import: dict = {
+            "requested": False,
+            "status": "not-requested",
+            "manifest": "",
+            "mode": "replace",
         }
         self.last_timing_report: dict = {
             "mode": "unknown",
@@ -1581,9 +1593,8 @@ class SubtitleRemover:
         selective_ranges = merge_frame_ranges(selective_rerun_ranges or [])
         reader = None
         writer = None
-        mask_writer = None
-        temp_mask_path = None
-        mask_video_ready = False
+        matte_writer = None
+        matte_reader = None
         whisper_audio_dir = None
         self.last_error_message = None
         self.last_error_reason = None
@@ -1593,6 +1604,13 @@ class SubtitleRemover:
                 "pending" if self.config.export_mask_video else "not-requested"
             ),
             "path": "",
+            "format": self.config.mask_export_format,
+        }
+        self.last_mask_import = {
+            "requested": bool(self.config.mask_import_path),
+            "status": "pending" if self.config.mask_import_path else "not-requested",
+            "manifest": self.config.mask_import_path,
+            "mode": self.config.mask_import_mode,
         }
         self.last_timing_report = {
             "mode": "unknown",
@@ -1783,6 +1801,54 @@ class SubtitleRemover:
                 else end_frame / fps
             )
 
+            matte_timestamps = [
+                (
+                    frame_timing.frame_time(index, fps)
+                    if frame_timing is not None else index / fps
+                )
+                for index in range(start_frame, end_frame)
+            ]
+            matte_durations = list(selected_frame_durations or (
+                [1.0 / fps] * frames_to_process
+            ))
+            matte_time_base = (
+                frame_timing.time_base
+                if frame_timing is not None else 1.0 / fps
+            )
+            if self.config.mask_import_path:
+                matte_reader = MaskInterchangeReader(
+                    self.config.mask_import_path,
+                    width=width,
+                    height=height,
+                    start_frame=start_frame,
+                    end_frame=end_frame,
+                    timestamps=matte_timestamps,
+                    durations=matte_durations,
+                    is_vfr=bool(
+                        frame_timing is not None and frame_timing.is_vfr),
+                    source_time_base=matte_time_base,
+                    mode=self.config.mask_import_mode,
+                )
+                self.last_mask_import = {
+                    **matte_reader.evidence,
+                    "requested": True,
+                    "status": "validated",
+                }
+                logger.info(
+                    "Validated imported %s matte (%s mode, %d frames)",
+                    matte_reader.export_format,
+                    matte_reader.mode,
+                    matte_reader.frame_count,
+                )
+
+            if selective_rerun_from and self.config.export_mask_video:
+                logger.warning(
+                    "A complete matte export was requested; running all frames "
+                    "instead of reusing cleaned frames without their masks"
+                )
+                selective_rerun_from = None
+                selective_ranges = []
+
             if selective_rerun_from:
                 selective_path = Path(selective_rerun_from)
                 if not selective_path.is_file():
@@ -1889,6 +1955,14 @@ class SubtitleRemover:
                             f"Resuming {Path(input_path).name} from frame "
                             f"{resume_frame_count}/{frames_to_process}"
                         )
+
+            if self.config.export_mask_video and resume_frame_count > 0:
+                logger.warning(
+                    "Restarting from frame zero so the lossless matte export "
+                    "contains a complete, timestamp-aligned sequence"
+                )
+                resume_frame_count = 0
+                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
             if selective_cap is not None:
                 selective_cap.set(
@@ -2126,22 +2200,35 @@ class SubtitleRemover:
             # v3.10: pHash for adaptive mask reuse
             last_hash = None
 
-            # Mask video writer (optional debug artifact)
-            mask_path = None
+            # Lossless mask/alpha-matte interchange artifact.
             if self.config.export_mask_video:
-                mask_path = str(Path(output_path).with_suffix('')) + '.mask.mp4'
-                self.last_mask_export["path"] = mask_path
-                temp_mask_path = self._allocate_work_output(mask_path)
-                mask_writer = cv2.VideoWriter(
-                    str(temp_mask_path), cv2.VideoWriter_fourcc(*'mp4v'),
-                    fps, (width, height), isColor=False)
-                if not mask_writer.isOpened():
-                    logger.warning(f"Could not open mask video writer: {mask_path}")
-                    mask_writer = None
+                mask_path, mask_manifest_path = mask_interchange_paths(
+                    output_path, self.config.mask_export_format)
+                self.last_mask_export.update({
+                    "path": str(mask_path),
+                    "manifest": str(mask_manifest_path),
+                })
+                try:
+                    matte_writer = MaskInterchangeWriter(
+                        output_path,
+                        self.config.mask_export_format,
+                        width=width,
+                        height=height,
+                        fps=fps,
+                        start_frame=start_frame,
+                        end_frame=end_frame,
+                        timestamps=matte_timestamps,
+                        durations=matte_durations,
+                        is_vfr=bool(
+                            frame_timing is not None and frame_timing.is_vfr),
+                        source_time_base=matte_time_base,
+                    )
+                except Exception as exc:
                     self.last_mask_export.update({
                         "status": "failed",
-                        "error": "Could not open mask video writer",
+                        "error": str(exc),
                     })
+                    raise
 
             timed_region_spans = bool(
                 getattr(self.config, "subtitle_region_spans", None)
@@ -2458,6 +2545,18 @@ class SubtitleRemover:
                                 segment_masks, scene_starts,
                                 self.config.temporal_mask_window)
                         masks[segment_start:segment_end] = segment_masks
+                    if matte_reader is not None:
+                        batch_start = frame_idx - len(frames)
+                        for offset, passthrough in enumerate(passthrough_flags):
+                            if passthrough:
+                                continue
+                            imported_matte = matte_reader.read(
+                                batch_start + offset)
+                            masks[offset] = compose_imported_matte(
+                                masks[offset],
+                                imported_matte,
+                                matte_reader.mode,
+                            )
                     # B-3: accumulate the union-mask bbox for the quality report
                     # ROI after optional mask refiners have finalized the mask.
                     if self.config.quality_report:
@@ -2509,10 +2608,10 @@ class SubtitleRemover:
                                 f"on_preview_frame hook raised: {exc}",
                                 exc_info=True,
                             )
-                if mask_writer is not None:
+                if matte_writer is not None:
                     with self._time_stage("encode"):
                         for m in masks:
-                            mask_writer.write(m)
+                            matte_writer.write(m)
 
                 if checkpoint_active and checkpoint_root is not None and checkpoint_key:
                     should_pause = bool(pause_check and pause_check())
@@ -2584,23 +2683,9 @@ class SubtitleRemover:
                     stage="encoding",
                     inpaint_complete=True,
                 )
-            if mask_writer is not None:
-                with self._time_stage("encode"):
-                    mask_writer.release()
-                mask_writer = None
-                try:
-                    mask_video_ready = bool(
-                        temp_mask_path
-                        and Path(temp_mask_path).is_file()
-                        and Path(temp_mask_path).stat().st_size > 0
-                    )
-                except OSError:
-                    mask_video_ready = False
-                if not mask_video_ready:
-                    self.last_mask_export.update({
-                        "status": "failed",
-                        "error": "Mask video writer produced no playable artifact",
-                    })
+            if matte_reader is not None:
+                matte_reader.close()
+                self.last_mask_import["status"] = "composed"
 
             self._report_progress(0.9, "Preserving container streams...")
             with self._time_stage("mux"):
@@ -2665,14 +2750,14 @@ class SubtitleRemover:
                     else:
                         final_output_path = self._reencode_or_copy(
                             temp_video, output_path)
-                if mask_video_ready and mask_path and temp_mask_path:
-                    _promote_temp_output(temp_mask_path, mask_path)
-                    temp_mask_path = None
-                    self.last_mask_export.update({
-                        "status": "created",
-                        "path": mask_path,
-                    })
-                    logger.info(f"Mask video written: {mask_path}")
+                if matte_writer is not None:
+                    with self._time_stage("encode"):
+                        self.last_mask_export.update(matte_writer.finalize())
+                    matte_writer = None
+                    logger.info(
+                        "Lossless matte written: %s",
+                        self.last_mask_export.get("path"),
+                    )
 
                 if self.config.export_srt and self._srt_entries:
                     srt_path = str(Path(final_output_path).with_suffix('.srt'))
@@ -2777,17 +2862,30 @@ class SubtitleRemover:
                 finally:
                     if self._active_writer is writer:
                         self._active_writer = None
-            if mask_writer is not None:
+            if matte_writer is not None:
                 try:
-                    mask_writer.release()
+                    matte_writer.abort()
                 except Exception:
-                    logger.warning("Mask writer release failed", exc_info=True)
+                    logger.warning("Matte writer cleanup failed", exc_info=True)
+            if matte_reader is not None:
+                try:
+                    matte_reader.close()
+                except Exception:
+                    logger.warning("Matte reader cleanup failed", exc_info=True)
             if self.last_mask_export.get("status") == "pending":
                 self.last_mask_export.update({
                     "status": "failed",
                     "error": (
                         self.last_error_message
                         or "Processing ended before mask export completed"
+                    ),
+                })
+            if self.last_mask_import.get("status") == "pending":
+                self.last_mask_import.update({
+                    "status": "failed",
+                    "error": (
+                        self.last_error_message
+                        or "Processing ended before matte import was validated"
                     ),
                 })
             # If a prefetch reader was set up, release it (which also stops
@@ -2810,7 +2908,6 @@ class SubtitleRemover:
                 except Exception:
                     logger.warning(
                         "Selective-rerun capture release failed", exc_info=True)
-            _cleanup_temp_output(temp_mask_path)
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             # RM-27: Whisper audio temp dir is created lazily inside the
@@ -2913,6 +3010,14 @@ class SubtitleRemover:
                 quality_gate=quality_gate,
                 output_contract=self.last_output_contract,
                 selective_rerun=getattr(self, "last_selective_rerun", None),
+                mask_export=(
+                    self.last_mask_export
+                    if self.last_mask_export.get("requested") else None
+                ),
+                mask_import=(
+                    self.last_mask_import
+                    if self.last_mask_import.get("requested") else None
+                ),
                 checkpoint_resumed=checkpoint_resumed,
                 app_version=APP_VERSION,
             )

@@ -1518,6 +1518,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
         "tbe_scene_cut_split", "tbe_scene_cut_threshold",
         "auto_band", "export_srt", "export_mask_video",
+        "mask_export_format", "mask_import_path", "mask_import_mode",
         "adaptive_batch", "auto_exposure_threshold",
         "deinterlace", "deinterlace_auto", "keyframe_detection",
         "quality_report", "kalman_tracking", "kalman_iou_threshold",
@@ -5659,7 +5660,7 @@ class EndToEndPipelineTests(unittest.TestCase):
                 cap.release()
             self.assertGreaterEqual(frames_read, 20)
 
-    def test_mask_video_is_promoted_and_reported(self):
+    def test_lossless_mask_video_and_manifest_are_promoted_and_reported(self):
         if shutil.which("ffmpeg") is None:
             self.skipTest("ffmpeg not on PATH")
 
@@ -5672,7 +5673,8 @@ class EndToEndPipelineTests(unittest.TestCase):
             tmp = Path(tmpdir)
             src = self._write_clip(tmp, n_frames=8, size=(64, 48))
             output = tmp / "cleaned.mp4"
-            mask_output = tmp / "cleaned.mask.mp4"
+            mask_output = tmp / "cleaned.mask.mkv"
+            mask_manifest = tmp / "cleaned.mask.json"
             cfg = processor.normalize_processing_config(
                 processor.ProcessingConfig(
                     mode=processor.InpaintMode.STTN,
@@ -5692,10 +5694,17 @@ class EndToEndPipelineTests(unittest.TestCase):
 
             self.assertTrue(ok)
             self.assertTrue(mask_output.is_file())
+            self.assertTrue(mask_manifest.is_file())
             self.assertGreater(mask_output.stat().st_size, 0)
             self.assertEqual(remover.last_mask_export["status"], "created")
             self.assertEqual(
                 Path(remover.last_mask_export["path"]), mask_output)
+            self.assertEqual(
+                Path(remover.last_mask_export["manifest"]), mask_manifest)
+            self.assertEqual(remover.last_mask_export["format"], "ffv1")
+            manifest = json.loads(mask_manifest.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema"], "vsr.mask_interchange.v1")
+            self.assertEqual(manifest["frame_count"], 8)
             cap = _cv2.VideoCapture(str(mask_output))
             try:
                 self.assertTrue(cap.isOpened())

@@ -83,7 +83,9 @@ _CLI_CATEGORY_OPTIONS = (
             "--no-audio", "--crf", "--upscale", "--no-color-preserve",
             "--nle-sidecar", "--swinir", "--seedvr2", "--film-grain", "--watermark",
             "--watermark-position", "--watermark-opacity", "--watermark-margin",
-            "--no-hw-encode", "--codec", "--export-mask", "--deinterlace",
+            "--no-hw-encode", "--codec", "--export-mask",
+            "--mask-export-format", "--import-mask", "--mask-import-mode",
+            "--deinterlace",
             "--no-deinterlace-detect", "--keyframe-detect", "--quality-report",
             "--quality-sheet", "--loudnorm", "--decode-accel", "--single-audio",
         ),
@@ -811,7 +813,17 @@ def main():
     parser.add_argument("--export-srt", action="store_true",
                        help="Write an .srt sidecar with detected text")
     parser.add_argument("--export-mask", action="store_true",
-                       help="Write a B/W .mask.mp4 debug video")
+                       help="Export a lossless grayscale matte plus timing manifest")
+    parser.add_argument(
+        "--mask-export-format", choices=["ffv1", "png"], default="ffv1",
+        help="Lossless matte export as FFV1 video or a PNG sequence.")
+    parser.add_argument(
+        "--import-mask", default="", metavar="MANIFEST",
+        help="Import an edited .mask.json timing manifest before inpainting.")
+    parser.add_argument(
+        "--mask-import-mode", choices=["replace", "add", "subtract"],
+        default="replace",
+        help="Compose the imported matte after native mask generation.")
     parser.add_argument("--auto-band", action="store_true",
                        help="Auto-detect the dominant subtitle band before processing")
     parser.add_argument("--no-kalman", action="store_true",
@@ -1258,6 +1270,9 @@ def main():
         batch_retry_backoff_seconds=args.retry_backoff,
         export_srt=args.export_srt,
         export_mask_video=args.export_mask,
+        mask_export_format=args.mask_export_format,
+        mask_import_path=args.import_mask,
+        mask_import_mode=args.mask_import_mode,
         kalman_tracking=not args.no_kalman,
         phash_skip_enable=not args.no_phash,
         phash_skip_distance=args.phash_distance,
@@ -1581,6 +1596,9 @@ def main():
                 mask_export = getattr(remover, "last_mask_export", None)
                 if isinstance(mask_export, dict):
                     record["mask_export"] = dict(mask_export)
+                mask_import = getattr(remover, "last_mask_import", None)
+                if isinstance(mask_import, dict):
+                    record["mask_import"] = dict(mask_import)
                 timing_report = getattr(remover, "last_timing_report", None)
                 if isinstance(timing_report, dict):
                     record["source_timing"] = dict(timing_report)

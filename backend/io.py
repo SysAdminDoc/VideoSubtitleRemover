@@ -1442,14 +1442,19 @@ class _LosslessIntermediateWriter:
         fps: float,
         *,
         pixel_format: str = "bgr24",
+        allow_lossy_fallback: bool = True,
     ):
         self._path = path
         self._width = int(width)
         self._height = int(height)
+        requested_pixel_format = str(pixel_format).lower()
         self._pixel_format = (
-            "bgr48le" if str(pixel_format).lower() == "bgr48le" else "bgr24"
+            requested_pixel_format
+            if requested_pixel_format in {"bgr24", "bgr48le", "gray"}
+            else "bgr24"
         )
         self._dtype = np.uint16 if self._pixel_format == "bgr48le" else np.uint8
+        self._allow_lossy_fallback = bool(allow_lossy_fallback)
         try:
             fps_f = float(fps)
         except (TypeError, ValueError):
@@ -1524,6 +1529,11 @@ class _LosslessIntermediateWriter:
             self._open_fallback(f"ffmpeg Popen failed: {exc}")
 
     def _open_fallback(self, reason: str) -> None:
+        if not self._allow_lossy_fallback:
+            logger.warning("Lossless FFV1 writer unavailable (%s)", reason)
+            self._opened = False
+            self._lossless = False
+            return
         logger.warning(
             f"Lossless intermediate unavailable ({reason}); "
             f"falling back to mp4v writer."
@@ -1534,7 +1544,8 @@ class _LosslessIntermediateWriter:
             self._path = fallback_path
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         self._fallback = cv2.VideoWriter(
-            fallback_path, fourcc, self._fps, (self._width, self._height)
+            fallback_path, fourcc, self._fps, (self._width, self._height),
+            isColor=self._pixel_format != "gray",
         )
         self._opened = self._fallback.isOpened()
         self._lossless = False

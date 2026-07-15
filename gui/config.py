@@ -71,7 +71,7 @@ LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
 QUEUE_STATE_FILE = LOG_DIR / "queue_state.json"
 MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
-QUEUE_STATE_SCHEMA = 3
+QUEUE_STATE_SCHEMA = 4
 _queue_state_io_lock = threading.RLock()
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
@@ -92,6 +92,7 @@ _queue_state_io_lock = threading.RLock()
 # Format 7 -> 8: added persisted 100-200 percent interface text scaling.
 # Format 8 -> 9: added persisted System/English/catalog locale preference.
 # Format 9 -> 10: added ordered add/subtract mask-correction semantics.
+# Format 10 -> 11: added lossless matte export/import interchange settings.
 VSR_SETTINGS_FORMAT = GUI_SETTINGS_FORMAT
 
 # -- Enums ------------------------------------------------------------------
@@ -387,6 +388,9 @@ class ProcessingConfig:
     auto_band: bool = False
     export_srt: bool = False
     export_mask_video: bool = False
+    mask_export_format: str = "ffv1"
+    mask_import_path: str = ""
+    mask_import_mode: str = "replace"
     adaptive_batch: bool = True
     gpu_oom_recovery: bool = True
     temporal_mask_union: bool = False
@@ -541,6 +545,16 @@ class ProcessingConfig:
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
         self.export_mask_video = _coerce_bool(self.export_mask_video, False)
+        from backend.matte_interchange import (
+            normalize_mask_export_format,
+            normalize_mask_import_mode,
+        )
+        self.mask_export_format = normalize_mask_export_format(
+            self.mask_export_format)
+        self.mask_import_path = _coerce_text(
+            self.mask_import_path, "", 2048)
+        self.mask_import_mode = normalize_mask_import_mode(
+            self.mask_import_mode)
         self.adaptive_batch = _coerce_bool(self.adaptive_batch, True)
         self.gpu_oom_recovery = _coerce_bool(self.gpu_oom_recovery, True)
         self.temporal_mask_union = _coerce_bool(self.temporal_mask_union, False)
@@ -696,6 +710,7 @@ class QueueItem:
     retry_attempts: int = 0
     retry_errors: List[str] = field(default_factory=list)
     mask_export: dict = field(default_factory=dict)
+    mask_import: dict = field(default_factory=dict)
     timing_report: dict = field(default_factory=dict)
     output_contract_report: dict = field(default_factory=dict)
     correction_retry: Optional[dict] = None
@@ -910,6 +925,8 @@ def save_queue_state(queue_items):
                         getattr(item, "retry_errors", []) or []),
                     "mask_export": dict(
                         getattr(item, "mask_export", {}) or {}),
+                    "mask_import": dict(
+                        getattr(item, "mask_import", {}) or {}),
                     "timing_report": dict(
                         getattr(item, "timing_report", {}) or {}),
                     "output_contract_report": dict(
@@ -965,7 +982,7 @@ def load_queue_state():
                 _quarantine_queue_state("unreadable JSON object")
                 return None
             schema = data.get("schema")
-            if schema not in (1, 2, QUEUE_STATE_SCHEMA):
+            if schema not in (1, 2, 3, QUEUE_STATE_SCHEMA):
                 _quarantine_queue_state(f"unsupported schema {schema!r}")
                 return None
             items = data.get("items")
@@ -989,6 +1006,7 @@ def load_queue_state():
                     or not isinstance(record.get("retry_errors", []), list)
                     or not isinstance(record.get("stage_timings", {}), dict)
                     or not isinstance(record.get("mask_export", {}), dict)
+                    or not isinstance(record.get("mask_import", {}), dict)
                     or not isinstance(record.get("timing_report", {}), dict)
                     or not isinstance(
                         record.get("output_contract_report", {}), dict)

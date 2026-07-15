@@ -198,8 +198,12 @@ class ProcessingConfig:
     # automatic detections. Coordinates are in source-frame pixel space.
     manual_mask_corrections: Optional[List[dict]] = None
 
-    # Optional debug artifacts
-    export_mask_video: bool = False   # write a B/W mp4 of the per-frame masks
+    # Lossless mask/alpha-matte interchange. ``export_mask_video`` remains the
+    # compatibility switch used by the GUI and --export-mask.
+    export_mask_video: bool = False
+    mask_export_format: str = "ffv1"
+    mask_import_path: str = ""
+    mask_import_mode: str = "replace"
     export_srt: bool = False          # write an .srt sidecar of detected text
 
     # Adaptive batch sizing -- probe free VRAM on CUDA init, scale
@@ -625,6 +629,16 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.rife_fast_stride = _coerce_int(config.rife_fast_stride, 0, 0, 60)
     config.edge_ring_px = _coerce_int(config.edge_ring_px, 2, 0, 32)
     config.export_mask_video = _coerce_bool(config.export_mask_video, False)
+    from backend.matte_interchange import (
+        normalize_mask_export_format,
+        normalize_mask_import_mode,
+    )
+    config.mask_export_format = normalize_mask_export_format(
+        getattr(config, "mask_export_format", "ffv1"))
+    config.mask_import_path = _coerce_text(
+        getattr(config, "mask_import_path", ""), "", 2048)
+    config.mask_import_mode = normalize_mask_import_mode(
+        getattr(config, "mask_import_mode", "replace"))
     config.export_srt = _coerce_bool(config.export_srt, False)
     config.adaptive_batch = _coerce_bool(config.adaptive_batch, True)
     config.gpu_oom_recovery = _coerce_bool(config.gpu_oom_recovery, True)

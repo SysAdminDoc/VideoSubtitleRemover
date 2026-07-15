@@ -44,6 +44,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Lossless mask and alpha-matte interchange.** `--export-mask` now writes an
+  exact gray8 FFV1/MKV artifact by default, or an ordered PNG sequence, with a
+  versioned CFR/VFR timestamp-and-duration manifest. Edited manifests import in
+  replace/add/subtract mode after native mask composition; every frame,
+  dimension, count, and timestamp is preflighted before processing. GUI
+  controls and Review mask expose the same composition, while batch and output
+  sidecars record content hashes, edit state, and composition order.
 - **Quality-directed per-frame mask correction.** Residual-text, temporal-
   flicker, and low-confidence quality signals now produce an exact frame review
   queue. The internal editor paints ordered add/subtract corrections with
@@ -65,7 +72,7 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **Generated CLI and config reference.** Every live CLI action now carries a
   category, default, range/choice, visibility, and deprecation record used by
   grouped `--help` output and the README generator. The same deterministic
-  command documents all 99 canonical `ProcessingConfig` fields, and source
+  command documents all 102 canonical `ProcessingConfig` fields, and source
   tests plus release builds fail when either generated section drifts.
 - **OpenCV 5 PP-OCRv6 provider and benchmark evidence.** RapidOCR's bundled
   detection and recognition ONNX assets can now execute

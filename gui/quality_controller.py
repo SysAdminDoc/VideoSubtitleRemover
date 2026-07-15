@@ -410,6 +410,9 @@ class QualityReviewControllerMixin:
             mask_export = getattr(item, "mask_export", None)
             if isinstance(mask_export, dict) and mask_export:
                 record["mask_export"] = dict(mask_export)
+            mask_import = getattr(item, "mask_import", None)
+            if isinstance(mask_import, dict) and mask_import:
+                record["mask_import"] = dict(mask_import)
             timing_report = getattr(item, "timing_report", None)
             if isinstance(timing_report, dict) and timing_report:
                 record["source_timing"] = dict(timing_report)

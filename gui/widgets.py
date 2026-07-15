@@ -40,7 +40,9 @@ from backend.a11y import (
 )
 
 logger = logging.getLogger(__name__)
-_FORCE_QUOTED_CLI_VALUE_FLAGS = {"-i", "-o", "--watermark"}
+_FORCE_QUOTED_CLI_VALUE_FLAGS = {
+    "-i", "-o", "--watermark", "--import-mask",
+}
 
 
 def _state_text(*values: str) -> str:
@@ -138,6 +140,15 @@ def _build_cli_command(item: QueueItem) -> str:
         args.append("--export-srt")
     if getattr(cfg, "export_mask_video", False):
         args.append("--export-mask")
+        export_format = getattr(cfg, "mask_export_format", "ffv1")
+        if export_format != "ffv1":
+            args.extend(["--mask-export-format", str(export_format)])
+    import_mask = getattr(cfg, "mask_import_path", "")
+    if import_mask:
+        args.extend(["--import-mask", str(import_mask)])
+        import_mode = getattr(cfg, "mask_import_mode", "replace")
+        if import_mode != "replace":
+            args.extend(["--mask-import-mode", str(import_mode)])
     retries = getattr(cfg, "batch_max_retries", 0) or 0
     if retries:
         args.extend(["--max-retries", str(retries)])

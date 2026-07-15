@@ -1074,6 +1074,13 @@ class PreviewControllerMixin:
             item_output = item.output_path
             item_quality = item.quality_report
             item_soft = getattr(item, "soft_subtitle_streams", [])
+            item_config = getattr(item, "config", self.config)
+            mask_corrections = getattr(
+                item_config, "manual_mask_corrections", None)
+            mask_import_path = getattr(item_config, "mask_import_path", "")
+            mask_import_mode = getattr(
+                item_config, "mask_import_mode", "replace")
+            mask_dilate_px = getattr(item_config, "mask_dilate_px", 0)
 
             def _preview_bg():
                 try:
@@ -1095,7 +1102,11 @@ class PreviewControllerMixin:
                             raw_frame, lang, threshold, sub_areas,
                             timed_regions_configured, manual_shapes,
                             item_file, item_id, preview_request_id,
-                            max_w, max_h, _cv2, to_pil)
+                            max_w, max_h, _cv2, to_pil,
+                            mask_corrections=mask_corrections,
+                            mask_import_path=mask_import_path,
+                            mask_import_mode=mask_import_mode,
+                            mask_dilate_px=mask_dilate_px)
                     else:
                         self._preview_bg_normal(
                             raw_frame, item_file, item_id, item_status,
@@ -1128,7 +1139,9 @@ class PreviewControllerMixin:
     def _preview_bg_mask(self, raw_frame, lang, threshold, sub_areas,
                           timed_regions_configured, manual_shapes,
                           item_file, item_id, preview_request_id,
-                          max_w, max_h, _cv2, to_pil):
+                          max_w, max_h, _cv2, to_pil,
+                          mask_corrections=None, mask_import_path="",
+                          mask_import_mode="replace", mask_dilate_px=0):
         try:
             from backend.processor import SubtitleDetector
             with self._detector_lock:
@@ -1157,6 +1170,57 @@ class PreviewControllerMixin:
                 points = np.asarray(
                     list(zip(coords[::2], coords[1::2])), dtype=np.int32)
                 _cv2.polylines(vis, [points], True, (_db, _dg, _dr), 2)
+            import cv2 as _mask_cv2
+
+            composed_mask = np.zeros(frame_copy.shape[:2], dtype=np.uint8)
+            for bx1, by1, bx2, by2 in boxes:
+                _mask_cv2.rectangle(
+                    composed_mask, (bx1, by1), (bx2, by2), 255, -1)
+            for shape in manual_shapes or []:
+                coords = shape.get("polygon")
+                if not coords:
+                    continue
+                points = np.asarray(
+                    list(zip(coords[::2], coords[1::2])), dtype=np.int32)
+                _mask_cv2.fillPoly(composed_mask, [points], 255)
+            dilation = max(0, int(mask_dilate_px or 0))
+            if dilation and np.any(composed_mask):
+                kernel = _mask_cv2.getStructuringElement(
+                    _mask_cv2.MORPH_ELLIPSE,
+                    (dilation * 2 + 1, dilation * 2 + 1),
+                )
+                composed_mask = _mask_cv2.dilate(composed_mask, kernel)
+            from backend.mask_corrections import apply_mask_corrections
+
+            composed_mask = apply_mask_corrections(
+                composed_mask, mask_corrections, 0.0, 0)
+            imported_note = ""
+            if mask_import_path:
+                from backend.matte_interchange import (
+                    compose_imported_matte,
+                    load_matte_preview_frame,
+                )
+
+                imported, imported_info = load_matte_preview_frame(
+                    mask_import_path,
+                    frame_index=0,
+                    width=frame_copy.shape[1],
+                    height=frame_copy.shape[0],
+                )
+                composed_mask = compose_imported_matte(
+                    composed_mask, imported, mask_import_mode)
+                imported_note = (
+                    f" Imported {imported_info['format'].upper()} matte "
+                    f"composed in {mask_import_mode} mode."
+                )
+            overlay = composed_mask.astype(np.float32) / 255.0 * 0.42
+            color = np.asarray([_db, _dg, _dr], dtype=np.float32)
+            vis = np.clip(
+                vis.astype(np.float32) * (1.0 - overlay[..., None])
+                + color * overlay[..., None],
+                0,
+                255,
+            ).astype(np.uint8)
             img = to_pil(vis)
             img.thumbnail((max_w, max_h), Image.LANCZOS)
             engine = det._engine_name
@@ -1168,7 +1232,8 @@ class PreviewControllerMixin:
                     return
                 self._stop_throbber()
                 self._preview_photo = ImageTk.PhotoImage(img)
-                self.preview_title_label.config(text=f"Detection mask for {Path(item_file).name}")
+                self.preview_title_label.config(
+                    text=f"Composed mask for {Path(item_file).name}")
                 if (sub_areas or manual_shapes) and timed_regions_configured:
                     meta = "Timed manual region is active on the first frame."
                 elif sub_areas:
@@ -1180,6 +1245,7 @@ class PreviewControllerMixin:
                 else:
                     meta = ("No regions were found on the first frame. Try Set region, or lower the "
                             "Threshold in detailed controls.")
+                meta += imported_note
                 self.preview_meta_label.config(text=meta)
                 self._preview_label.config(
                     image=self._preview_photo,

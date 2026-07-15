@@ -26,7 +26,7 @@ class ProcessingExceptionLoggingTests(unittest.TestCase):
             "Quality ROI metric calculation failed",
             "Detection denoise fell back",
             "Video writer release failed",
-            "Mask writer release failed",
+            "Matte writer cleanup failed",
             "Prefetch reader release failed",
             "Input capture release failed",
             "Whisper temp cleanup failed",

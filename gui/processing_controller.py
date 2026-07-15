@@ -433,6 +433,7 @@ class ProcessingControllerMixin:
             item.retry_attempts = 0
             item.retry_errors = []
             item.mask_export = {}
+            item.mask_import = {}
             item.timing_report = {}
             item.output_contract_report = {}
             item.selective_rerun = {}
@@ -634,6 +635,9 @@ class ProcessingControllerMixin:
                     mask_export = getattr(remover, "last_mask_export", None)
                     if isinstance(mask_export, dict):
                         item.mask_export = dict(mask_export)
+                    mask_import = getattr(remover, "last_mask_import", None)
+                    if isinstance(mask_import, dict):
+                        item.mask_import = dict(mask_import)
                     timing_report = getattr(
                         remover, "last_timing_report", None)
                     if isinstance(timing_report, dict):
@@ -685,6 +689,8 @@ class ProcessingControllerMixin:
                     record["retry_errors"] = list(item.retry_errors)
                     if item.mask_export:
                         record["mask_export"] = dict(item.mask_export)
+                    if item.mask_import:
+                        record["mask_import"] = dict(item.mask_import)
                 wait = round(retry_backoff * attempt, 2)
                 item.status = ProcessingStatus.LOADING
                 item.message = (

@@ -792,6 +792,66 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_review_mask_previews_imported_matte_composition(self):
+        app = self._make_app()
+        try:
+            import cv2
+            import numpy as np
+            from backend.matte_interchange import MaskInterchangeWriter
+
+            source = Path(self._tmpdir.name) / "matte-preview.avi"
+            writer = cv2.VideoWriter(
+                str(source), cv2.VideoWriter_fourcc(*"MJPG"), 10.0, (64, 48))
+            if not writer.isOpened():
+                self.skipTest("OpenCV video writer unavailable")
+            try:
+                for value in (30, 60):
+                    writer.write(np.full((48, 64, 3), value, np.uint8))
+            finally:
+                writer.release()
+            matte_writer = MaskInterchangeWriter(
+                Path(self._tmpdir.name) / "matte-preview-output.mp4",
+                "png", width=64, height=48, fps=10.0,
+                start_frame=0, end_frame=2,
+                timestamps=[0.0, 0.1], durations=[0.1, 0.1],
+                is_vfr=False, source_time_base=0.1,
+            )
+            matte = np.zeros((48, 64), dtype=np.uint8)
+            matte[20:32, 12:52] = 180
+            matte_writer.write(matte)
+            matte_writer.write(np.zeros_like(matte))
+            matte_evidence = matte_writer.finalize()
+
+            with mock.patch.object(app, "_start_soft_subtitle_probe"):
+                with mock.patch.object(app, "_show_preview"):
+                    self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+            item.config.mask_import_path = matte_evidence["manifest"]
+            item.config.mask_import_mode = "replace"
+            app._preview_detector = SimpleNamespace(
+                detect=lambda *_args, **_kwargs: [],
+                _engine_name="test detector",
+            )
+            app._preview_detector_lang = app.lang_var.get()
+
+            def immediate_thread(*_args, **kwargs):
+                return SimpleNamespace(start=kwargs["target"])
+
+            with mock.patch(
+                "gui.preview_controller.threading.Thread",
+                side_effect=immediate_thread,
+            ):
+                app._show_preview(item, show_mask=True)
+            app.root.update()
+
+            self.assertIn("Composed mask", app.preview_title_label.cget("text"))
+            self.assertIn(
+                "Imported PNG matte composed in replace mode",
+                app.preview_meta_label.cget("text"),
+            )
+        finally:
+            self._destroy_app(app)
+
     def test_region_selector_saves_timed_video_regions(self):
         app = self._make_app(withdraw=False)
         try:

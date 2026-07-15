@@ -448,6 +448,9 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg.karaoke_grouping = True
         cfg.export_srt = True
         cfg.export_mask_video = True
+        cfg.mask_export_format = "png"
+        cfg.mask_import_path = r"C:\mattes\clip.mask.json"
+        cfg.mask_import_mode = "subtract"
         cfg.batch_max_retries = 2
         cfg.batch_retry_backoff_seconds = 0.25
         cfg.quality_report_sheet = True
@@ -460,6 +463,10 @@ class CliCommandBuilderTests(unittest.TestCase):
         )
         cmd = _build_cli_command(item)
         self.assertIn("--mask-feather 6", cmd)
+        self.assertIn("--export-mask", cmd)
+        self.assertIn("--mask-export-format png", cmd)
+        self.assertIn('--import-mask "C:\\mattes\\clip.mask.json"', cmd)
+        self.assertIn("--mask-import-mode subtract", cmd)
         self.assertIn("--edge-ring 0", cmd)
         self.assertIn("--temporal-smooth 2", cmd)
         self.assertIn("--vertical", cmd)

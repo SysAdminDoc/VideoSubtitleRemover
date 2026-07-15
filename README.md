@@ -34,6 +34,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
 - **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
+- **Lossless Matte Interchange** -- Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
@@ -412,6 +413,25 @@ before preparing the retry. VSR persists the ordered corrections with exact
 frame bounds and, when the prior cleaned output is still available, reprocesses
 only those ranges while copying the previously cleaned frames everywhere else.
 
+Masks and soft alpha mattes can round-trip through an external compositor
+without the old lossy `.mask.mp4` artifact. FFV1 writes
+`<output>.mask.mkv`; PNG mode writes `<output>.mask/frame_########.png`.
+Both formats include `<output>.mask.json` with exact source frame bounds,
+CFR/VFR timestamps, durations, dimensions, and the export hash:
+
+```bash
+python -m backend.processor -i input.mp4 -o cleaned.mp4 --export-mask --mask-export-format ffv1
+python -m backend.processor -i input.mp4 -o cleaned.mp4 --export-mask --mask-export-format png
+python -m backend.processor -i input.mp4 -o revised.mp4 --import-mask cleaned.mask.json --mask-import-mode replace
+```
+
+Edit the referenced artifact while keeping the manifest beside it, then import
+in `replace`, `add`, or `subtract` mode. VSR validates every frame, dimension,
+frame count, timestamp, duration, and timing mode before processing begins.
+The output reproducibility sidecar records the imported artifact's current
+SHA-256, whether it differs from the exported hash, and the deterministic mask
+composition order. **Review mask** shows that composed result before a run.
+
 Long video runs can pause at safe frame-batch boundaries. In the GUI, click
 **Pause batch** while processing; the current video writes checkpoint frames
 under the selected work directory, or under
@@ -548,7 +568,10 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--watermark-margin` | Watermark margin from edge in pixels (default 16). | 16 | 0..500 pixels | Public |
 | `--no-hw-encode` | Disable hardware encoding (force libx264) | Off | - | Public |
 | `--codec` | Output video codec (vvc requires FFmpeg with libvvenc). | h264 | h264 \| h265 \| av1 \| vvc | Public |
-| `--export-mask` | Write a B/W .mask.mp4 debug video | Off | - | Public |
+| `--export-mask` | Export a lossless grayscale matte plus timing manifest | Off | - | Public |
+| `--mask-export-format` | Lossless matte export as FFV1 video or a PNG sequence. | ffv1 | ffv1 \| png | Public |
+| `--import-mask` | Import an edited .mask.json timing manifest before inpainting. | - | - | Public |
+| `--mask-import-mode` | Compose the imported matte after native mask generation. | replace | replace \| add \| subtract | Public |
 | `--deinterlace` | Force ffmpeg yadif deinterlace before processing | Off | - | Public |
 | `--no-deinterlace-detect` | Skip the automatic ffprobe interlacing detection | Off | - | Public |
 | `--keyframe-detect` | OCR only at video I-frames (ffprobe-probed) | Off | - | Public |
@@ -705,6 +728,9 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `subtitle_region_keyframes` | `Optional[List[dict]]` | `-` |
 | `manual_mask_corrections` | `Optional[List[dict]]` | `-` |
 | `export_mask_video` | `bool` | `Off` |
+| `mask_export_format` | `str` | `ffv1` |
+| `mask_import_path` | `str` | `-` |
+| `mask_import_mode` | `str` | `replace` |
 | `export_srt` | `bool` | `Off` |
 | `adaptive_batch` | `bool` | `On` |
 | `gpu_oom_recovery` | `bool` | `On` |
