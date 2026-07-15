@@ -1019,7 +1019,10 @@ VideoSubtitleRemover/
 |-- Dockerfile                # Local CPU-only smoke container recipe
 |-- .dockerignore             # Excludes build outputs, models, and venvs
 |-- gui/
-|   |-- app.py                # Main Tk shell and shared UI state
+|   |-- app.py                # Tk construction and controller composition root
+|   |-- region_controller.py  # Timed region/keyframe editor workflow
+|   |-- settings_controller.py # Presets and detailed-settings behavior
+|   |-- mask_correction_controller.py # Quality-directed mask corrections
 |   |-- processing_controller.py  # Queue worker, pause/stop, reports, notify
 |   |-- preview_controller.py     # Preview, A/B compare, inline region editor
 |   |-- quality_controller.py     # Quality review, retry, report helpers

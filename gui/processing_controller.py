@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Protocol
 
 try:
     import tkinter as tk
@@ -29,6 +29,19 @@ from backend.i18n import tr
 from backend.resume_checkpoint import ProcessingPaused
 
 logger = logging.getLogger(__name__)
+
+
+class ProcessingControllerHost(Protocol):
+    """Queue and UI surface required by the processing controller."""
+
+    root: Any
+    queue: list[QueueItem]
+    is_processing: bool
+
+    def _update_status(
+        self, message: str, tone: str = "neutral", toast: bool = False
+    ) -> None:
+        ...
 
 
 class ProcessingControllerMixin:

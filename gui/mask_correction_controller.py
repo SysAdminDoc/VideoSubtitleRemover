@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, Protocol
 
 import numpy as np
 
@@ -42,8 +42,20 @@ from gui.widgets import ModernButton
 logger = logging.getLogger(__name__)
 
 
+class MaskCorrectionControllerHost(Protocol):
+    """Selection and status surface required by mask correction."""
+
+    root: Any
+    queue: list[QueueItem]
+
+    def _update_status(
+        self, message: str, tone: str = "neutral", toast: bool = False
+    ) -> None:
+        ...
+
+
 class MaskCorrectionControllerMixin:
-    """Host protocol: queue selection/status helpers supplied by the app."""
+    """Focused correction behavior mixed into the composed GUI host."""
 
     @staticmethod
     def _mask_review_spans_for_item(item: QueueItem) -> list[dict]:

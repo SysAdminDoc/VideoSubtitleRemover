@@ -117,6 +117,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **GUI workflows now have explicit controller boundaries.** Region editing
+  and advanced-settings behavior moved out of `gui/app.py` alongside the
+  existing preview, processing, quality, support, and mask controllers. Every
+  controller declares its host protocol, imports only focused dependencies,
+  and has construction-free boundary tests; the app remains the composition
+  root and preserves its public launch/import surface.
 - **Ruff source-hygiene ratchet.** The Python 3.11 source tree now passes the
   explicit Pyflakes and high-signal pycodestyle baseline with zero findings.
   Release builds install the reviewed MIT-licensed Ruff 0.15.20 tool and stop

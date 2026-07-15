@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional, Protocol
 
 try:
     import tkinter as tk
@@ -25,6 +25,19 @@ from gui.widgets import (
 from backend.i18n import tr
 
 logger = logging.getLogger(__name__)
+
+
+class QualityControllerHost(Protocol):
+    """Queue and modal surface required by the quality controller."""
+
+    root: Any
+    config: ProcessingConfig
+    queue: list[QueueItem]
+
+    def _update_status(
+        self, message: str, tone: str = "neutral", toast: bool = False
+    ) -> None:
+        ...
 
 
 class QualityReviewControllerMixin:

@@ -5,6 +5,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Protocol
 
 try:
     import tkinter as tk
@@ -28,6 +29,16 @@ from backend.i18n import tr
 from backend.model_downloads import installed_backend_status
 
 logger = logging.getLogger(__name__)
+
+
+class SupportControllerHost(Protocol):
+    """Root and surface factories required by the support controller."""
+
+    root: Any
+    config: Any
+
+    def _create_surface(self, parent, bg: str = Theme.BG_SECONDARY):
+        ...
 
 
 class SupportControllerMixin:

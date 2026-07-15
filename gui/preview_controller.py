@@ -5,6 +5,7 @@ import threading
 import time
 import numpy as np
 from pathlib import Path
+from typing import Any, Protocol
 
 try:
     import tkinter as tk
@@ -33,6 +34,20 @@ from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
+
+
+class PreviewControllerHost(Protocol):
+    """Selection and UI surface required by the preview controller."""
+
+    root: Any
+    config: ProcessingConfig
+    queue: list[QueueItem]
+    _shutdown_started: bool
+
+    def _update_status(
+        self, message: str, tone: str = "neutral", toast: bool = False
+    ) -> None:
+        ...
 
 
 class PreviewControllerMixin:
