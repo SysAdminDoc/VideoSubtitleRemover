@@ -90,19 +90,27 @@ class AdvancedSettingsControllerMixin:
         if self.adv_visible:
             self.adv_toggle.icon = "-"
             self.adv_toggle.set_text(tr("Hide detailed controls"))
+            for panel, pack_options in getattr(
+                self, "_inspector_detail_panels", ()
+            ):
+                panel.pack(**pack_options)
             self.adv_panel.pack(fill="x")
         else:
             self.adv_toggle.icon = "+"
             self.adv_toggle.set_text(tr("Show detailed controls"))
+            for panel, _pack_options in getattr(
+                self, "_inspector_detail_panels", ()
+            ):
+                panel.pack_forget()
             self.adv_panel.pack_forget()
 
     def _get_algo_description(self) -> str:
         """Get description for current algorithm."""
         descriptions = {
-            "Auto": tr("Routes each batch to TBE or LaMa based on temporal exposure. Fastest on easy footage, automatically falls back to neural fill on hard frames."),
-            "STTN": tr("Temporal background exposure. Reconstructs the real background from neighbouring frames where the subtitle is absent. Fastest, usually the best choice for live action."),
-            "LAMA": tr("Neural single-frame fill. Highest-quality spatial inpaint for stills, animation, and clean backgrounds. Slower per frame."),
-            "ProPainter": tr("Hybrid temporal + LaMa refinement. Best for motion-heavy footage or thick text. Higher VRAM and slower than STTN."),
+            "Auto": tr("Automatically chooses the best cleanup method for each file."),
+            "STTN": tr("Fast temporal recovery for live action and changing backgrounds."),
+            "LAMA": tr("Detailed single-frame fill for stills, animation, and clean scenes."),
+            "ProPainter": tr("High-quality temporal fill for motion-heavy footage and thick text."),
         }
         return descriptions.get(self.mode_var.get(), "")
 

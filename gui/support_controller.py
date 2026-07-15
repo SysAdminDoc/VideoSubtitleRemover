@@ -121,11 +121,19 @@ class SupportControllerMixin:
         """Toggle log panel visibility."""
         self._log_visible = not self._log_visible
         if self._log_visible:
+            if not self._log_section.winfo_manager():
+                self._log_section.pack(
+                    side="bottom", fill="x", pady=(Theme.S_MD, 0))
             self._log_body.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_SM, Theme.S_LG))
             self._log_toggle_btn.set_text(tr("Hide activity"))
+            if hasattr(self, "_footer_activity_btn"):
+                self._footer_activity_btn.set_text(tr("Hide activity"))
         else:
             self._log_body.pack_forget()
+            self._log_section.pack_forget()
             self._log_toggle_btn.set_text(tr("Show activity"))
+            if hasattr(self, "_footer_activity_btn"):
+                self._footer_activity_btn.set_text(tr("Activity"))
 
     def _update_log_badges(self, warn_count: int, error_count: int):
         """Show/hide warn/error count pills in the log header (always before toggle)."""

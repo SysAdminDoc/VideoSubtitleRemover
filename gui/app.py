@@ -114,7 +114,7 @@ class VideoSubtitleRemoverApp(
         if self._background_ui:
             self.root.withdraw()
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
-        self.root.geometry("980x720" if self._background_ui else "1240x860")
+        self.root.geometry("980x720" if self._background_ui else "1380x880")
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
         self._ui_resources_released = False
@@ -1194,23 +1194,28 @@ class VideoSubtitleRemoverApp(
         self._apply_responsive_layout(event.width)
 
     def _apply_responsive_layout(self, width: int):
-        """Stack columns and footer/help clusters on narrower windows."""
+        """Reflow the workbench without changing its workflow order."""
         if not hasattr(self, "_content"):
             return
         if width < 1180 and getattr(self, "_log_visible", False):
             self._toggle_log_panel()
-        compact = width < 1180
+        compact = width < 1180 or self._text_scale_percent >= 150
         if hasattr(self, "_header_title_label"):
-            self._header_title_label.configure(
-                wraplength=680 if compact else 760)
+            title_wrap = (
+                1200 if self._text_scale_percent >= 150
+                else (520 if compact else 760)
+            )
+            self._header_title_label.configure(wraplength=title_wrap)
             if compact:
                 self._header_version_label.pack_forget()
                 self._header_intro_label.pack_forget()
             else:
                 if not self._header_version_label.winfo_manager():
-                    self._header_version_label.pack(anchor="w", pady=(2, 0))
+                    self._header_version_label.pack(
+                        side="left", padx=(Theme.S_SM, 0))
                 if not self._header_intro_label.winfo_manager():
-                    self._header_intro_label.pack(anchor="w", pady=(8, 0))
+                    self._header_intro_label.pack(
+                        side="left", padx=(Theme.S_MD, 0))
         if hasattr(self, "_log_title_cluster"):
             self._log_title_cluster.pack_forget()
             self._badge_row.pack_forget()
@@ -1226,54 +1231,60 @@ class VideoSubtitleRemoverApp(
                 self._log_open_btn.pack(side="right")
                 self._log_clear_btn.pack(side="right", padx=(0, Theme.S_SM))
 
-        mode = (
-            "stacked"
-            if width < 1180 or self._text_scale_percent >= 150
-            else "wide"
-        )
+        mode = "stacked" if compact else "wide"
         if mode == self._layout_mode:
+            self._layout_queue_actions(
+                compact=compact,
+                dense=self._text_scale_percent >= 150,
+            )
             if hasattr(self, "preview_meta_label"):
-                self.preview_meta_label.config(wraplength=520 if mode == "stacked" else 360)
+                self.preview_meta_label.config(
+                    wraplength=720 if mode == "stacked" else 520)
             if hasattr(self, "preview_action_hint"):
-                self.preview_action_hint.config(wraplength=520 if mode == "stacked" else 360)
+                self.preview_action_hint.config(
+                    wraplength=720 if mode == "stacked" else 520)
             if hasattr(self, "header_guidance_body"):
-                self.header_guidance_body.config(wraplength=520 if mode == "stacked" else 680)
+                self.header_guidance_body.config(
+                    wraplength=720 if mode == "stacked" else 124)
             if hasattr(self, "status_hint"):
-                self.status_hint.config(wraplength=520 if mode == "stacked" else 360)
+                self.status_hint.config(
+                    wraplength=520 if mode == "stacked" else 360)
             return
 
         self._layout_mode = mode
         stacked = (mode == "stacked")
+        self._layout_queue_actions(
+            compact=stacked,
+            dense=self._text_scale_percent >= 150,
+        )
 
-        self._left_col.grid_forget()
-        self._right_col.grid_forget()
+        self._workflow_col.grid_forget()
+        self._preview_col.grid_forget()
+        self._settings_col.grid_forget()
+
+        self._header_left.pack_forget()
+        self._header_right.pack_forget()
+        self._header_chips.pack_forget()
 
         if stacked:
             self._content.columnconfigure(0, weight=1, minsize=0, uniform="")
             self._content.columnconfigure(1, weight=0, minsize=0, uniform="")
-            self._content.rowconfigure(0, weight=0)
+            self._content.columnconfigure(2, weight=0, minsize=0, uniform="")
+            for row in range(3):
+                self._content.rowconfigure(row, weight=0)
             self._content.rowconfigure(1, weight=1)
-            self._left_col.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, Theme.S_MD))
-            self._right_col.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+            self._workflow_col.grid(row=0, column=0, sticky="nsew",
+                                    pady=(0, Theme.S_MD))
+            self._preview_col.grid(row=1, column=0, sticky="nsew",
+                                   pady=(0, Theme.S_MD))
+            self._settings_col.grid(row=2, column=0, sticky="nsew",
+                                    pady=(0, Theme.S_MD))
 
-            self._header_left.pack_forget()
             self._header_left.pack(fill="x")
-            self._header_right.pack_forget()
             self._header_right.pack(anchor="w", pady=(Theme.S_MD, 0))
-            self._header_chips.pack_forget()
             if width >= 1180 and self._text_scale_percent < 150:
                 self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
-            self._header_help_btn.pack_forget()
-            self._header_help_btn.pack(anchor="w")
-            self._header_guidance_panel.pack_forget()
-            if width >= 1180 and self._text_scale_percent < 200:
-                self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
-            if hasattr(self, "_workflow_steps_row"):
-                self._workflow_steps_row.pack_forget()
-                self._workflow_steps_row.pack(anchor="w")
-            if hasattr(self, "_header_guidance_copy"):
-                self._header_guidance_copy.pack_forget()
-                self._header_guidance_copy.pack(fill="x", pady=(Theme.S_SM, 0))
+            self._layout_workflow_rail(compact=True)
 
             self._footer_left.pack_forget()
             self._footer_left.pack(anchor="w")
@@ -1281,44 +1292,159 @@ class VideoSubtitleRemoverApp(
             if width >= 1180:
                 self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
         else:
-            self._content.columnconfigure(0, weight=58, minsize=0, uniform="main_cols")
-            self._content.columnconfigure(1, weight=42, minsize=0, uniform="main_cols")
+            self._content.columnconfigure(0, weight=0, minsize=176, uniform="")
+            self._content.columnconfigure(1, weight=7, minsize=440, uniform="")
+            self._content.columnconfigure(2, weight=4, minsize=380, uniform="")
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
-            self._left_col.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_MD))
-            self._right_col.grid(row=0, column=1, sticky="nsew", padx=(Theme.S_MD, 0))
+            self._content.rowconfigure(2, weight=0)
+            self._workflow_col.grid(row=0, column=0, sticky="nsew",
+                                    padx=(0, Theme.S_MD))
+            self._preview_col.grid(row=0, column=1, sticky="nsew",
+                                   padx=(0, Theme.S_MD))
+            self._settings_col.grid(row=0, column=2, sticky="nsew")
 
-            self._header_left.pack_forget()
-            self._header_left.pack(side="left", fill="both", expand=True)
-            self._header_right.pack_forget()
+            self._header_left.pack(side="left", fill="y")
             self._header_right.pack(side="right", anchor="n")
-            self._header_chips.pack_forget()
             if width >= 1180 and self._text_scale_percent < 150:
-                self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
-            self._header_help_btn.pack_forget()
-            self._header_help_btn.pack(anchor="e")
-            self._header_guidance_panel.pack_forget()
-            if width >= 1180 and self._text_scale_percent < 200:
-                self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
-            if hasattr(self, "_workflow_steps_row"):
-                self._workflow_steps_row.pack_forget()
-                self._workflow_steps_row.pack(side="left", anchor="w")
-            if hasattr(self, "_header_guidance_copy"):
-                self._header_guidance_copy.pack_forget()
-                self._header_guidance_copy.pack(side="left", fill="x", expand=True,
-                                                padx=(Theme.S_LG, 0))
+                self._header_chips.pack(side="right",
+                                        padx=(Theme.S_XL, Theme.S_LG))
+            self._layout_workflow_rail(compact=False)
 
             self._footer_left.pack_forget()
             self._footer_left.pack(side="left")
             self.status_hint.pack_forget()
             self.status_hint.pack(side="right")
 
-        self.preview_meta_label.config(wraplength=520 if stacked else 360)
+        self.preview_meta_label.config(wraplength=720 if stacked else 520)
         if hasattr(self, "preview_action_hint"):
-            self.preview_action_hint.config(wraplength=520 if stacked else 360)
-        self.header_guidance_body.config(wraplength=520 if stacked else 680)
+            self.preview_action_hint.config(wraplength=720 if stacked else 520)
+        self.header_guidance_body.config(wraplength=720 if stacked else 124)
         self.status_hint.config(wraplength=520 if stacked else 360)
         self._render_header_chips()
+
+    def _layout_workflow_rail(self, *, compact: bool):
+        """Switch the workflow rail between horizontal and vertical forms."""
+        if not hasattr(self, "_workflow_step_blocks"):
+            return
+        for block in self._workflow_step_blocks:
+            block.pack_forget()
+        for connector in self._workflow_connectors:
+            connector.pack_forget()
+
+        if compact:
+            for index, block in enumerate(self._workflow_step_blocks):
+                block.pack(
+                    side="left", fill="x", expand=True,
+                    padx=(0 if index == 0 else Theme.S_SM, 0),
+                )
+                description = self._workflow_pills[index].get("description")
+                if description is not None:
+                    description.pack_forget()
+            self._header_guidance_panel.pack_forget()
+        else:
+            for index, block in enumerate(self._workflow_step_blocks):
+                block.pack(fill="x")
+                description = self._workflow_pills[index].get("description")
+                if description is not None and not description.winfo_manager():
+                    description.pack(anchor="w", pady=(2, 0))
+                if index < len(self._workflow_connectors):
+                    self._workflow_connectors[index].pack(
+                        anchor="w", padx=14, pady=3)
+            if not self._header_guidance_panel.winfo_manager():
+                self._header_guidance_panel.pack(
+                    side="bottom", fill="x", padx=Theme.S_MD,
+                    pady=(Theme.S_XL, Theme.S_MD))
+
+    def _layout_queue_actions(self, *, compact: bool, dense: bool):
+        """Keep primary queue controls visible at narrow or scaled layouts."""
+        if not hasattr(self, "_queue_action_frame"):
+            return
+        for button in (
+            self.start_btn, self.open_output_btn, self.retry_btn,
+            self.repeat_btn, self.clear_btn, self._queue_more_btn,
+        ):
+            button.pack_forget()
+
+        self.start_btn.pack(side="right")
+        self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
+        if compact:
+            self._queue_more_btn.pack(side="left")
+        else:
+            self.retry_btn.pack(side="left")
+            self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
+            self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
+
+        self.queue_canvas.configure(height=64 if dense else 112)
+        self._queue_dense_mode = dense
+        if dense:
+            self._queue_subtitle_label.pack_forget()
+            self._queue_batch_frame.pack_forget()
+            self._queue_batch_bar_frame.pack_forget()
+        elif not self._queue_subtitle_label.winfo_manager():
+            self._queue_subtitle_label.pack(anchor="w", pady=(2, 0))
+        if not dense:
+            if not self._queue_batch_frame.winfo_manager():
+                self._queue_batch_frame.pack(
+                    fill="x", padx=Theme.S_XL, pady=(Theme.S_MD, 0),
+                    before=self._queue_container,
+                )
+            if not self._queue_batch_bar_frame.winfo_manager():
+                self._queue_batch_bar_frame.pack(
+                    fill="x", padx=Theme.S_XL,
+                    pady=(4, Theme.S_SM), before=self._queue_container,
+                )
+        dense_expanded = getattr(self, "_queue_dense_expanded", False)
+        if dense and not dense_expanded:
+            self._queue_container.pack_forget()
+        elif not self._queue_container.winfo_manager():
+            self._queue_container.pack(
+                fill="both", expand=True, padx=Theme.S_XL,
+                pady=(0, Theme.S_SM), before=self._queue_action_frame,
+            )
+
+    def _open_queue_actions_menu(self):
+        """Expose less frequent queue commands in compact layouts."""
+        menu = tk.Menu(
+            self.root, tearoff=False,
+            bg=Theme.BG_RAISED, fg=Theme.TEXT_PRIMARY,
+            activebackground=Theme.BLUE_MUTED,
+            activeforeground=Theme.TEXT_PRIMARY,
+            bd=1, relief="solid",
+        )
+        for label, command, enabled in (
+            (tr("Retry failed"), self._retry_failed, self.retry_btn.enabled),
+            (tr("Repeat last"), self._repeat_last_job, self.repeat_btn.enabled),
+            (tr("Clear queue"), self._clear_queue, self.clear_btn.enabled),
+        ):
+            menu.add_command(
+                label=label, command=command,
+                state="normal" if enabled else "disabled",
+            )
+        if getattr(self, "_queue_dense_mode", False):
+            menu.add_separator()
+            menu.add_command(
+                label=(
+                    tr("Hide queued files")
+                    if getattr(self, "_queue_dense_expanded", False)
+                    else tr("Show queued files")
+                ),
+                command=self._toggle_dense_queue_list,
+            )
+        try:
+            menu.tk_popup(
+                self._queue_more_btn.winfo_rootx(),
+                self._queue_more_btn.winfo_rooty()
+                + self._queue_more_btn.winfo_height(),
+            )
+        finally:
+            menu.grab_release()
+
+    def _toggle_dense_queue_list(self):
+        """Expand or collapse the queue list at very large text scales."""
+        self._queue_dense_expanded = not getattr(
+            self, "_queue_dense_expanded", False)
+        self._layout_queue_actions(compact=True, dense=True)
 
     def _get_selected_queue_item(self, fallback_to_first: bool = False) -> Optional[QueueItem]:
         """Return the selected queue item, optionally falling back to the first item."""
@@ -1340,26 +1466,28 @@ class VideoSubtitleRemoverApp(
         """Update the compact workflow pills in the header."""
         for idx, pill in enumerate(self._workflow_pills, start=1):
             if idx < stage:
-                frame_bg = Theme.SUCCESS_BG
                 frame_border = Theme.GREEN_HOVER
                 badge_bg = Theme.GREEN_PRIMARY
                 badge_fg = Theme.INK_ON_GREEN
                 text_fg = Theme.SUCCESS
             elif idx == stage:
-                frame_bg = Theme.BLUE_MUTED
                 frame_border = Theme.BLUE_PRIMARY
                 badge_bg = Theme.BLUE_PRIMARY
                 badge_fg = Theme.INK_ON_BLUE
                 text_fg = Theme.TEXT_PRIMARY
             else:
-                frame_bg = Theme.BG_CARD
                 frame_border = Theme.BORDER
                 badge_bg = Theme.BG_TERTIARY
                 badge_fg = Theme.TEXT_MUTED
                 text_fg = Theme.TEXT_SECONDARY
-            pill["frame"].config(bg=frame_bg, highlightbackground=frame_border)
-            pill["badge"].config(bg=badge_bg, fg=badge_fg)
-            pill["text"].config(bg=frame_bg, fg=text_fg)
+            pill["frame"].config(bg=Theme.BG_SECONDARY)
+            pill["badge"].config(
+                bg=badge_bg, fg=badge_fg, highlightbackground=frame_border)
+            pill["text"].config(bg=Theme.BG_SECONDARY, fg=text_fg)
+            description = pill.get("description")
+            if description is not None:
+                description.config(
+                    fg=text_fg if idx == stage else Theme.TEXT_MUTED)
 
     def _update_guidance_surface(self):
         """Keep the header guidance card and footer hint aligned with state."""
@@ -1429,10 +1557,10 @@ class VideoSubtitleRemoverApp(
             self.status_hint.config(text=tr(hint))
 
     def _build_ui(self):
-        """Build the main user interface with balanced spacing rhythm."""
+        """Build a preview-first workbench with a dedicated inspector and queue."""
         main_container = tk.Frame(self.root, bg=Theme.BG_DARK)
         main_container.pack(fill="both", expand=True,
-                            padx=Theme.S_XL, pady=(Theme.S_LG, Theme.S_MD))
+                            padx=Theme.S_LG, pady=(Theme.S_MD, Theme.S_SM))
 
         # Header
         self._build_header(main_container)
@@ -1442,7 +1570,15 @@ class VideoSubtitleRemoverApp(
         self._build_footer(main_container)
         self._build_log_panel(main_container)
 
-        # Content area (two columns via grid) inside a scrollable workbench.
+        # Keep the operational queue and primary action visible while the
+        # preview/inspector workbench scrolls independently above it.
+        queue_row = tk.Frame(main_container, bg=Theme.BG_DARK)
+        queue_row.pack(side="bottom", fill="x", pady=(Theme.S_MD, 0))
+        self._queue_row = queue_row
+        self._build_queue_section(queue_row)
+
+        # A single scroll surface keeps the three-part workbench usable at the
+        # 980x720 minimum without compromising the desktop hierarchy.
         content_shell = tk.Frame(main_container, bg=Theme.BG_DARK)
         content_shell.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
         self._content_canvas = tk.Canvas(
@@ -1462,39 +1598,48 @@ class VideoSubtitleRemoverApp(
         self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
         self._content_canvas.bind("<MouseWheel>", self._on_content_mousewheel)
         content.bind("<MouseWheel>", self._on_content_mousewheel)
-        content.columnconfigure(0, weight=58, minsize=0, uniform="main_cols")
-        content.columnconfigure(1, weight=42, minsize=0, uniform="main_cols")
+        content.columnconfigure(0, weight=0, minsize=176)
+        content.columnconfigure(1, weight=7, minsize=440)
+        content.columnconfigure(2, weight=4, minsize=380)
         content.rowconfigure(0, weight=1)
-
-        # Left column - Input & Settings
-        left_col = tk.Frame(content, bg=Theme.BG_DARK)
-        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_MD))
         self._content = content
-        self._left_col = left_col
 
-        self._build_input_section(left_col)
-        self._build_settings_section(left_col)
+        # Workflow rail: orientation and current stage without unrelated nav.
+        workflow_col = tk.Frame(content, bg=Theme.BG_DARK)
+        workflow_col.grid(row=0, column=0, sticky="nsew",
+                          padx=(0, Theme.S_MD))
+        self._workflow_col = workflow_col
+        self._build_workflow_rail(workflow_col)
 
-        # Right column - Queue & Preview
-        right_col = tk.Frame(content, bg=Theme.BG_DARK)
-        right_col.grid(row=0, column=1, sticky="nsew", padx=(Theme.S_MD, 0))
-        self._right_col = right_col
+        # Preview is the primary work surface. Import remains immediately
+        # discoverable above it, but no longer competes with configuration.
+        preview_col = tk.Frame(content, bg=Theme.BG_DARK)
+        preview_col.grid(row=0, column=1, sticky="nsew",
+                         padx=(0, Theme.S_MD))
+        self._preview_col = preview_col
+        self._build_input_section(preview_col)
+        self._build_preview_section(preview_col)
 
-        self._build_queue_section(right_col)
+        # Focused inspector: cleanup profile, region, output, then details.
+        settings_col = tk.Frame(content, bg=Theme.BG_DARK)
+        settings_col.grid(row=0, column=2, sticky="nsew")
+        self._settings_col = settings_col
+        self._build_settings_section(settings_col)
+
 
     def _build_header(self, parent):
-        """Minimal app header with short guidance and a few live status signals."""
+        """Compact command bar with product identity and live readiness signals."""
         header = self._create_surface(parent)
         header.pack(fill="x")
 
         inner = tk.Frame(header, bg=Theme.BG_SECONDARY)
-        inner.pack(fill="x", padx=Theme.S_XL, pady=Theme.S_LG)
+        inner.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_MD)
 
         header_top = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         header_top.pack(fill="x")
 
         left = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
-        left.pack(side="left", fill="both", expand=True)
+        left.pack(side="left", fill="y")
         self._header_left = left
 
         self._header_title_label = tk.Label(
@@ -1504,75 +1649,134 @@ class VideoSubtitleRemoverApp(
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_PRIMARY,
         )
-        self._header_title_label.pack(anchor="w")
+        self._header_title_label.pack(side="left", anchor="w")
         self._header_version_label = tk.Label(
             left,
-            text=tr("Version {version}").format(version=APP_VERSION),
+            text=f"v{APP_VERSION}",
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_MUTED,
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_SECONDARY,
+            padx=8,
+            pady=3,
         )
-        self._header_version_label.pack(anchor="w", pady=(2, 0))
+        self._header_version_label.pack(side="left", padx=(Theme.S_SM, 0))
         self._header_intro_label = tk.Label(
             left,
-            text=tr("Add files, review one sample, then run the batch."),
-            font=f(Theme.F_BODY),
+            text=tr("Private, local cleanup"),
+            font=f(Theme.F_META, "bold"),
             bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_SECONDARY,
+            fg=Theme.GREEN_PRIMARY,
         )
-        self._header_intro_label.pack(anchor="w", pady=(8, 0))
+        self._header_intro_label.pack(side="left", padx=(Theme.S_MD, 0))
 
         right = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
         right.pack(side="right", anchor="n")
         self._header_right = right
 
-        # About / help
+        settings_btn = ModernButton(
+            right, text=tr("Settings"), width=92,
+            command=self._focus_settings_panel, style="ghost",
+            size="sm", icon="*",
+        )
+        settings_btn.pack(side="left")
+        self._header_settings_btn = settings_btn
+
         help_btn = ModernButton(right, text=tr("Help"), width=80,
                                 command=self._show_about, style="ghost",
                                 size="sm", icon="?")
-        help_btn.pack(anchor="e")
+        help_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self._header_help_btn = help_btn
 
-        chips = tk.Frame(inner, bg=Theme.BG_SECONDARY)
-        chips.pack(fill="x", pady=(Theme.S_MD, 0))
+        chips = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
+        chips.pack(side="right", padx=(Theme.S_XL, Theme.S_LG))
         self._header_chips = chips
         self._render_header_chips()
 
-        self._header_guidance_panel = tk.Frame(inner, bg=Theme.BG_SECONDARY)
-        self._header_guidance_panel.pack(fill="x", pady=(Theme.S_MD, 0))
+    def _focus_settings_panel(self):
+        """Bring the inspector into view without activating another window."""
+        if not hasattr(self, "_settings_col"):
+            return
+        try:
+            if self._layout_mode == "stacked":
+                bbox = self._content_canvas.bbox("all")
+                if bbox and bbox[3] > 0:
+                    self._content_canvas.yview_moveto(
+                        max(0.0, self._settings_col.winfo_y() / bbox[3]))
+            self._settings_col.focus_set()
+        except tk.TclError:
+            pass
 
-        # Workflow step pills (Import -> Inspect -> Run)
-        pills_row = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
-        pills_row.pack(side="left", anchor="w")
-        self._workflow_steps_row = pills_row
-        for idx, step_label in enumerate((tr("Import"), tr("Inspect"), tr("Run")), start=1):
-            pill_frame = tk.Frame(pills_row, bg=Theme.BG_CARD,
-                                  highlightthickness=1, highlightbackground=Theme.BORDER)
-            badge_lbl = tk.Label(pill_frame, text=str(idx),
-                                 font=f(Theme.F_META, "bold"),
-                                 bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
-                                 padx=5, pady=2)
-            badge_lbl.pack(side="left", padx=(5, 0), pady=4)
-            text_lbl = tk.Label(pill_frame, text=step_label,
-                                font=f(Theme.F_BODY_SM),
-                                bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY)
-            text_lbl.pack(side="left", padx=(Theme.S_XS, 8), pady=4)
-            pill_frame.pack(side="left",
-                            padx=(0 if idx == 1 else Theme.S_XS, 0))
+    def _build_workflow_rail(self, parent):
+        """Build the three-step workflow rail from the redesign reference."""
+        rail = self._create_surface(parent)
+        rail.pack(fill="both", expand=True)
+        self._workflow_rail = rail
+
+        tk.Label(
+            rail, text=tr("Workflow").upper(), font=f(Theme.F_EYEBROW, "bold"),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_LG, Theme.S_MD))
+
+        steps = tk.Frame(rail, bg=Theme.BG_SECONDARY)
+        steps.pack(fill="x", padx=Theme.S_MD)
+        self._workflow_steps_row = steps
+        self._workflow_step_blocks = []
+        self._workflow_connectors = []
+        step_data = (
+            (tr("Import"), tr("Add video or image files")),
+            (tr("Configure"), tr("Choose cleanup and region")),
+            (tr("Process"), tr("Run and monitor the batch")),
+        )
+        for idx, (step_label, description) in enumerate(step_data, start=1):
+            block = tk.Frame(steps, bg=Theme.BG_SECONDARY)
+            block.pack(fill="x")
+            badge_lbl = tk.Label(
+                block, text=str(idx), width=3, height=1,
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
+                highlightthickness=1, highlightbackground=Theme.BORDER,
+            )
+            badge_lbl.pack(side="left", anchor="n", pady=2)
+            copy = tk.Frame(block, bg=Theme.BG_SECONDARY)
+            copy.pack(side="left", fill="x", expand=True,
+                      padx=(Theme.S_SM, 0))
+            text_lbl = tk.Label(
+                copy, text=step_label, font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
+            )
+            text_lbl.pack(anchor="w")
+            description_lbl = tk.Label(
+                copy, text=description, font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                wraplength=112, justify="left",
+            )
+            description_lbl.pack(anchor="w", pady=(2, 0))
+            self._workflow_step_blocks.append(block)
             self._workflow_pills.append({
-                "frame": pill_frame, "badge": badge_lbl, "text": text_lbl,
+                "frame": block, "badge": badge_lbl, "text": text_lbl,
+                "description": description_lbl,
             })
+            if idx < len(step_data):
+                connector = tk.Frame(
+                    steps, bg=Theme.BORDER_STRONG, width=2, height=24)
+                connector.pack(anchor="w", padx=14, pady=3)
+                connector.pack_propagate(False)
+                self._workflow_connectors.append(connector)
 
-        guidance_copy = tk.Frame(self._header_guidance_panel, bg=Theme.BG_SECONDARY)
-        guidance_copy.pack(side="left", fill="x", expand=True,
-                           padx=(Theme.S_LG, 0))
+        self._header_guidance_panel = self._create_card(rail)
+        self._header_guidance_panel.pack(
+            side="bottom", fill="x", padx=Theme.S_MD,
+            pady=(Theme.S_XL, Theme.S_MD))
+
+        guidance_copy = tk.Frame(self._header_guidance_panel, bg=Theme.BG_CARD)
+        guidance_copy.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_MD)
         self._header_guidance_copy = guidance_copy
 
         self.header_guidance_title = tk.Label(
             guidance_copy,
             text=tr("Build your batch"),
             font=f(Theme.F_TITLE, "bold"),
-            bg=Theme.BG_SECONDARY,
+            bg=Theme.BG_CARD,
             fg=Theme.TEXT_PRIMARY,
         )
         self.header_guidance_title.pack(anchor="w")
@@ -1580,36 +1784,35 @@ class VideoSubtitleRemoverApp(
             guidance_copy,
             text=tr("Import files or choose a folder to start."),
             font=f(Theme.F_BODY_SM),
-            wraplength=680,
+            wraplength=124,
             justify="left",
-            bg=Theme.BG_SECONDARY,
+            bg=Theme.BG_CARD,
             fg=Theme.TEXT_MUTED,
         )
         self.header_guidance_body.pack(anchor="w", fill="x", pady=(4, 0))
 
     def _build_input_section(self, parent):
-        """Workspace section: drop zone + output location."""
+        """Compact import surface above the primary preview."""
         section = self._create_surface(parent)
         section.pack(fill="x")
+        self._import_section = section
 
-        self._section_title(
-            section,
-            eyebrow="Workspace",
-            title="Import media",
-            hint="Add videos or images. Originals are never modified.",
-        )
+        self.drop_area = DragDropFrame(
+            section, self._on_files_dropped, height=92, compact=True)
+        self.drop_area.pack(fill="x", padx=Theme.S_XL,
+                            pady=Theme.S_MD)
 
-        self.drop_area = DragDropFrame(section, self._on_files_dropped, height=142)
-        self.drop_area.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_MD))
-
-        out_surface = self._create_card(section)
-        out_surface.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_LG))
+    def _build_output_card(self, parent):
+        """Build the output destination card inside the inspector."""
+        out_surface = self._create_card(parent)
+        out_surface.pack(fill="x", pady=(Theme.S_MD, 0))
+        self._card_header(out_surface, "Output", "Output")
 
         out_row = tk.Frame(out_surface, bg=Theme.BG_CARD)
-        out_row.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_MD)
+        out_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
 
         label_col = tk.Frame(out_row, bg=Theme.BG_CARD)
-        label_col.pack(side="left", fill="x", expand=True)
+        label_col.pack(fill="x")
 
         tk.Label(label_col, text=tr("OUTPUT LOCATION"), font=f(Theme.F_EYEBROW, "bold"),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(anchor="w")
@@ -1623,7 +1826,7 @@ class VideoSubtitleRemoverApp(
         self.output_dir_meta.pack(anchor="w", pady=(2, 0))
 
         actions = tk.Frame(out_row, bg=Theme.BG_CARD)
-        actions.pack(side="right", padx=(Theme.S_MD, 0))
+        actions.pack(fill="x", pady=(Theme.S_MD, 0))
 
         choose_btn = ModernButton(actions, text=tr("Choose folder"), width=120,
                                   command=self._choose_output_dir, style="accent",
@@ -1644,9 +1847,9 @@ class VideoSubtitleRemoverApp(
 
         self._section_title(
             section,
-            eyebrow="Processing",
-            title="Settings",
-            hint="Pick a profile, confirm the region, then start the batch.",
+            eyebrow="",
+            title="Configure",
+            hint="",
         )
 
         settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
@@ -1656,40 +1859,46 @@ class VideoSubtitleRemoverApp(
         profile_panel = self._create_card(settings)
         profile_panel.pack(fill="x")
 
-        self._card_header(profile_panel, "Profile", "Processing profile")
+        self._card_header(profile_panel, "Cleanup method", "Cleanup method")
+
+        profile_details = tk.Frame(profile_panel, bg=Theme.BG_CARD)
+        self._inspector_profile_details = profile_details
 
         # Preset picker -- one-click recipe application. Built-ins + user-saved.
-        preset_row = tk.Frame(profile_panel, bg=Theme.BG_CARD)
+        preset_row = tk.Frame(profile_details, bg=Theme.BG_CARD)
         preset_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, Theme.S_SM))
 
         tk.Label(preset_row, text=tr("Preset"), font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
 
         self.preset_var = tk.StringVar(value="(custom)")
         preset_names = ["(custom)"] + [n for n, _ in list_presets()]
         self.preset_combo = ttk.Combobox(
             preset_row, textvariable=self.preset_var, values=preset_names,
-            state="readonly", style="Dark.TCombobox", width=32,
+            state="readonly", style="Dark.TCombobox", width=20,
             font=f(Theme.F_BODY_SM),
         )
-        self.preset_combo.pack(side="left", padx=(Theme.S_SM, Theme.S_SM))
+        self.preset_combo.pack(fill="x", pady=(Theme.S_XS, Theme.S_SM))
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_applied)
 
+        preset_actions = tk.Frame(preset_row, bg=Theme.BG_CARD)
+        preset_actions.pack(fill="x")
+
         save_preset_btn = ModernButton(
-            preset_row, text=tr("Save as..."), command=self._save_preset_dialog,
+            preset_actions, text=tr("Save as..."), command=self._save_preset_dialog,
             size="sm", style="ghost",
         )
         save_preset_btn.pack(side="left")
 
         export_preset_btn = ModernButton(
-            preset_row, text=tr("Export"), command=self._export_preset_dialog,
+            preset_actions, text=tr("Export"), command=self._export_preset_dialog,
             size="sm", style="ghost",
         )
         export_preset_btn.pack(side="left", padx=(Theme.S_XS, 0))
         Tooltip(export_preset_btn, tr("Write the current preset to a shareable JSON file."))
 
         import_preset_btn = ModernButton(
-            preset_row, text=tr("Import"), command=self._import_preset_dialog,
+            preset_actions, text=tr("Import"), command=self._import_preset_dialog,
             size="sm", style="ghost",
         )
         import_preset_btn.pack(side="left", padx=(Theme.S_XS, 0))
@@ -1707,34 +1916,35 @@ class VideoSubtitleRemoverApp(
             command=self._on_mode_picker_changed,
             bg=Theme.BG_CARD,
             group_label=tr("Cleanup algorithm"),
+            columns=2,
         )
         self.mode_picker.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
 
         self.algo_desc = tk.Label(profile_panel, text=self._get_algo_description(),
                                   font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
                                   fg=Theme.TEXT_SECONDARY, justify="left", anchor="w",
-                                  wraplength=520)
+                                  wraplength=320)
         self.algo_desc.pack(fill="x", padx=Theme.S_LG, pady=(2, Theme.S_MD))
 
-        row2 = tk.Frame(profile_panel, bg=Theme.BG_CARD)
+        row2 = tk.Frame(profile_details, bg=Theme.BG_CARD)
         row2.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
 
         tk.Label(row2, text=tr("Compute device"), font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
 
-        self.gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=36,
+        self.gpu_combo = ttk.Combobox(row2, textvariable=self.gpu_var, width=20,
                                       values=[tr("Detecting hardware...")],
                                       style="Dark.TCombobox", state="disabled",
                                       font=f(Theme.F_BODY_SM))
-        self.gpu_combo.pack(side="right")
+        self.gpu_combo.pack(fill="x", pady=(Theme.S_XS, 0))
         self.gpu_combo.bind("<<ComboboxSelected>>", self._on_gpu_changed)
         self._refresh_gpu_selector()
 
-        lang_row = tk.Frame(profile_panel, bg=Theme.BG_CARD)
+        lang_row = tk.Frame(profile_details, bg=Theme.BG_CARD)
         lang_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
 
         tk.Label(lang_row, text=tr("Subtitle language"), font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(side="left")
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
 
         # F-5: language list = curated friendly names plus compatible
         # OCR engine codes so users can pick e.g. Thai or Polish without
@@ -1746,17 +1956,19 @@ class VideoSubtitleRemoverApp(
         self._lang_display_var = tk.StringVar()
         self._set_lang_display(self.lang_var.get())
 
-        self.lang_combo = ttk.Combobox(lang_row, textvariable=self._lang_display_var,
+        language_picker = tk.Frame(lang_row, bg=Theme.BG_CARD)
+        language_picker.pack(fill="x", pady=(Theme.S_XS, 0))
+        self.lang_combo = ttk.Combobox(language_picker, textvariable=self._lang_display_var,
                                        width=20, values=self._lang_labels,
                                        style="Dark.TCombobox",
                                        state="readonly", font=f(Theme.F_BODY_SM))
-        self.lang_combo.pack(side="right")
+        self.lang_combo.pack(side="left", fill="x", expand=True)
         self.lang_combo.bind("<<ComboboxSelected>>", self._on_lang_changed)
         self._lang_detect_btn = ModernButton(
-            lang_row, text=tr("Detect"), width=68,
+            language_picker, text=tr("Detect"), width=68,
             command=self._probe_language_from_preview,
             style="ghost", size="sm")
-        self._lang_detect_btn.pack(side="right", padx=(0, Theme.S_SM))
+        self._lang_detect_btn.pack(side="right", padx=(Theme.S_SM, 0))
         Tooltip(self._lang_detect_btn,
                 tr("Auto-detect the subtitle language from a sample frame."))
 
@@ -1766,13 +1978,16 @@ class VideoSubtitleRemoverApp(
 
         self._card_header(workflow_panel, "Workflow", "Detection and output")
 
-        checks_frame = tk.Frame(workflow_panel, bg=Theme.BG_CARD)
+        workflow_details = tk.Frame(workflow_panel, bg=Theme.BG_CARD)
+        self._inspector_workflow_details = workflow_details
+        checks_frame = tk.Frame(workflow_details, bg=Theme.BG_CARD)
         checks_frame.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
 
         self.skip_check = ModernToggle(
             checks_frame,
             text=tr("Reuse a fixed subtitle region (skip per-frame scanning)"),
             variable=self.skip_detection_var,
+            wraplength=300,
         )
         self.skip_check.pack(anchor="w")
         Tooltip(self.skip_check, tr("Skip repeated detection when you have already set a precise subtitle region."))
@@ -1781,6 +1996,7 @@ class VideoSubtitleRemoverApp(
             checks_frame,
             text=tr("LaMa fast mode - favor speed over fill detail"),
             variable=self.lama_fast_var,
+            wraplength=300,
         )
         self.lama_check.pack(anchor="w", pady=(Theme.S_SM, 0))
         Tooltip(self.lama_check, tr("LaMa fast mode is useful for quick passes and lower-resolution drafts."))
@@ -1789,6 +2005,7 @@ class VideoSubtitleRemoverApp(
             checks_frame,
             text=tr("Preserve the source audio track"),
             variable=self.preserve_audio_var,
+            wraplength=300,
         )
         self.preserve_audio_check.pack(anchor="w", pady=(Theme.S_SM, 0))
         self.ffmpeg_warning_label = tk.Label(
@@ -1797,7 +2014,7 @@ class VideoSubtitleRemoverApp(
             font=f(Theme.F_META),
             bg=Theme.BG_CARD,
             fg=Theme.INFO,
-            wraplength=520,
+            wraplength=320,
             justify="left",
         )
         self._refresh_ffmpeg_warning()
@@ -1806,10 +2023,12 @@ class VideoSubtitleRemoverApp(
         region_surface = tk.Frame(workflow_panel, bg=Theme.BG_TERTIARY,
                                   highlightthickness=1,
                                   highlightbackground=Theme.BORDER_SUBTLE)
+        self._inspector_region_surface = region_surface
         region_surface.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, Theme.S_LG))
 
         region_text = tk.Frame(region_surface, bg=Theme.BG_TERTIARY)
-        region_text.pack(side="left", fill="x", expand=True, padx=Theme.S_MD, pady=Theme.S_MD)
+        region_text.pack(side="left", fill="x", expand=True,
+                         padx=(Theme.S_MD, 0), pady=Theme.S_MD)
 
         tk.Label(region_text, text=tr("SUBTITLE REGION"), font=f(Theme.F_EYEBROW, "bold"),
                  bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED).pack(anchor="w")
@@ -1827,15 +2046,27 @@ class VideoSubtitleRemoverApp(
         region_actions = tk.Frame(region_surface, bg=Theme.BG_TERTIARY)
         region_actions.pack(side="right", padx=Theme.S_MD, pady=Theme.S_MD)
 
-        self.region_btn = ModernButton(region_actions, text=tr("Set region"), width=100,
+        self.region_btn = ModernButton(region_actions, text=tr("Set region"), width=88,
                                        command=self._open_region_selector_modal, style="accent",
                                        size="sm")
         self.region_btn.pack(side="left")
 
-        self.region_reset_btn = ModernButton(region_actions, text=tr("Reset"), width=76,
+        self.region_reset_btn = ModernButton(region_actions, text=tr("Reset"), width=64,
                                              command=self._reset_region, style="ghost",
                                              size="sm")
         self.region_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
+
+        self._build_output_card(settings)
+
+        self._inspector_detail_panels = (
+            (profile_details, {
+                "fill": "x", "padx": Theme.S_LG,
+                "pady": (Theme.S_SM, Theme.S_MD),
+            }),
+            (workflow_details, {
+                "fill": "x", "before": region_surface,
+            }),
+        )
 
         # ---- Advanced toggle --------------------------------------------
         adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
@@ -2623,10 +2854,138 @@ class VideoSubtitleRemoverApp(
         self._update_region_label_display()
         self._update_mode_options()
 
+    def _build_preview_section(self, parent):
+        """Build the central 16:9 preview and its contextual tools."""
+        section = self._create_surface(parent)
+        section.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
+        self._preview_frame = section
 
+        preview_header = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        preview_header.pack(fill="x", padx=Theme.S_XL,
+                            pady=(Theme.S_LG, Theme.S_SM))
+
+        preview_text = tk.Frame(preview_header, bg=Theme.BG_SECONDARY)
+        preview_text.pack(side="left", fill="x", expand=True)
+        self.preview_title_label = tk.Label(
+            preview_text, text=tr("Preview"),
+            font=f(Theme.F_HEADING, "bold"),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+        )
+        self.preview_title_label.pack(anchor="w")
+        self.preview_meta_label = tk.Label(
+            preview_text,
+            text=tr("Select a queue item to inspect its subtitle region."),
+            font=f(Theme.F_META), wraplength=520, justify="left",
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+        )
+        self.preview_meta_label.pack(anchor="w", pady=(3, 0))
+
+        self.preview_status_chip = tk.Label(
+            preview_header, text=tr("Waiting"),
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
+            padx=10, pady=4,
+        )
+        self.preview_status_chip.pack(side="right", anchor="ne")
+        self.preview_ab_btn = ModernButton(
+            preview_header, text=tr("Before / after"), width=118,
+            command=self._open_ab_scrubber, style="ghost", size="sm",
+        )
+        self.preview_ab_btn.pack(side="right", padx=(0, Theme.S_SM))
+        Tooltip(
+            self.preview_ab_btn,
+            tr("Wipe between the source frame and cleaned output."),
+        )
+
+        media_surface = tk.Frame(
+            section, bg=Theme.BG_CARD, highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+        )
+        media_surface.pack(fill="x", padx=Theme.S_XL)
+        self._preview_media_surface = media_surface
+
+        self._preview_label = tk.Label(
+            media_surface, bg=Theme.BG_CARD, text="",
+            font=f(Theme.F_META), fg=Theme.TEXT_MUTED,
+            compound="bottom", justify="center", cursor="hand2",
+        )
+        self._preview_label.pack(fill="both", expand=True, padx=Theme.S_SM,
+                                 pady=Theme.S_SM)
+        self._preview_photo = None
+        self._preview_label.bind("<Double-Button-1>", self._open_preview_zoom)
+        self._preview_label.bind(
+            "<ButtonPress-1>", self._on_preview_region_press, add="+")
+        self._preview_label.bind(
+            "<B1-Motion>", self._on_preview_region_drag, add="+")
+        self._preview_label.bind(
+            "<ButtonRelease-1>", self._on_preview_region_release, add="+")
+        Tooltip(
+            self._preview_label,
+            tr("Double-click for full size, or draw the subtitle region directly."),
+        )
+
+        self.preview_action_hint = tk.Label(
+            section,
+            text=tr("Add media, then select a queue item to enable preview tools."),
+            font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED, wraplength=520, justify="left", anchor="w",
+        )
+        self.preview_action_hint.pack(fill="x", padx=Theme.S_XL,
+                                      pady=(Theme.S_SM, 0))
+
+        preview_actions = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        preview_actions.pack(fill="x", padx=Theme.S_XL,
+                             pady=(Theme.S_SM, Theme.S_LG))
+        self._preview_primary_actions = preview_actions
+
+        self.preview_region_btn = ModernButton(
+            preview_actions, text=tr("Set region"), width=104,
+            command=self._open_region_selector, style="accent", size="sm",
+        )
+        self.preview_region_btn.pack(side="left")
+        Tooltip(self.preview_region_btn,
+                tr("Draw the subtitle region directly on the preview frame."))
+        self.preview_mask_btn = ModernButton(
+            preview_actions, text=tr("Review mask"), width=108,
+            command=self._open_selected_mask_preview,
+            style="ghost", size="sm",
+        )
+        self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self.preview_mask_btn,
+                tr("Detect subtitles and inspect the first-frame mask."))
+        self.preview_inpaint_btn = ModernButton(
+            preview_actions, text=tr("Test cleanup"), width=112,
+            command=self._open_selected_inpaint_preview,
+            style="ghost", size="sm",
+        )
+        self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self.preview_inpaint_btn,
+                tr("Run detection and cleanup on one sample frame."))
+
+        self.preview_zoom_btn = ModernButton(
+            preview_actions, text=tr("Full size"), width=86,
+            command=self._open_preview_zoom, style="ghost", size="sm",
+        )
+        self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        self.preview_correction_btn = ModernButton(
+            preview_actions, text=tr("Correct mask"), width=112,
+            command=self._open_selected_mask_correction,
+            style="ghost", size="sm",
+        )
+        self.preview_correction_btn.pack(side="left", padx=(Theme.S_SM, 0))
+
+        Tooltip(self.preview_zoom_btn, tr("Open the source frame at full size."))
+        Tooltip(
+            self.preview_correction_btn,
+            tr("Paint frame-local mask corrections for a selective rerun."),
+        )
+        self._set_preview_placeholder(
+            "Preview",
+            "Select a queue item to inspect its subtitle region before cleanup.",
+        )
 
     def _build_queue_section(self, parent):
-        """Queue + preview + batch controls column."""
+        """Build the full-width processing queue and batch controls."""
         section = self._create_surface(parent)
         section.pack(fill="both", expand=True)
 
@@ -2636,13 +2995,16 @@ class VideoSubtitleRemoverApp(
         heading = tk.Frame(header, bg=Theme.BG_SECONDARY)
         heading.pack(side="left", fill="x", expand=True)
 
-        tk.Label(heading, text=tr("Queue"),
+        tk.Label(heading, text=tr("Processing queue"),
                  font=f(Theme.F_HEADING, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(heading, text=tr("Review queued files before starting."),
-                 font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-                 wraplength=360, justify="left").pack(anchor="w", pady=(2, 0))
+        self._queue_subtitle_label = tk.Label(
+            heading,
+            text=tr("Review files, progress, and output status in one place."),
+            font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED, wraplength=360, justify="left",
+        )
+        self._queue_subtitle_label.pack(anchor="w", pady=(2, 0))
 
         # Count + status chip cluster (right-aligned)
         count_cluster = tk.Frame(header, bg=Theme.BG_SECONDARY)
@@ -2675,6 +3037,7 @@ class VideoSubtitleRemoverApp(
         # Batch progress -- labels row above the bar
         batch_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         batch_frame.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_MD, 0))
+        self._queue_batch_frame = batch_frame
 
         meta_row = tk.Frame(batch_frame, bg=Theme.BG_SECONDARY)
         meta_row.pack(fill="x")
@@ -2691,14 +3054,11 @@ class VideoSubtitleRemoverApp(
 
         batch_bar_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         batch_bar_frame.pack(fill="x", padx=Theme.S_XL, pady=(4, Theme.S_SM))
+        self._queue_batch_bar_frame = batch_bar_frame
 
         self.batch_progress = ModernProgressBar(batch_bar_frame, width=300, height=5,
                                                  fill=Theme.BLUE_PRIMARY)
         self.batch_progress.pack(fill="x")
-        def _resize_batch(event):
-            if event.width > 40:
-                self.batch_progress.resize(event.width - 4)
-        batch_bar_frame.bind("<Configure>", _resize_batch)
 
         # Queue filter input -- appears when there are >5 items
         self._queue_filter_var = tk.StringVar()
@@ -2741,7 +3101,7 @@ class VideoSubtitleRemoverApp(
         queue_container = self._queue_container
 
         self.queue_canvas = tk.Canvas(queue_container, bg=Theme.BG_SECONDARY,
-                                     highlightthickness=0)
+                                     highlightthickness=0, height=112)
         scrollbar = ttk.Scrollbar(queue_container, orient="vertical",
                                  command=self.queue_canvas.yview,
                                  style="Dark.Vertical.TScrollbar")
@@ -2764,213 +3124,66 @@ class VideoSubtitleRemoverApp(
 
         self._build_queue_empty_state()
 
-        # Preview card
-        self._preview_frame = self._create_card(section)
-        self._preview_frame.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_MD))
-
-        preview_header = tk.Frame(self._preview_frame, bg=Theme.BG_CARD)
-        preview_header.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_MD, 0))
-
-        preview_text = tk.Frame(preview_header, bg=Theme.BG_CARD)
-        preview_text.pack(side="left", fill="x", expand=True)
-
-        self.preview_title_label = tk.Label(preview_text, text=tr("Preview a sample frame"),
-                                            font=f(Theme.F_TITLE, "bold"),
-                                            bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY)
-        self.preview_title_label.pack(anchor="w")
-        self.preview_meta_label = tk.Label(
-            preview_text,
-            text=tr("Click a queue item, then use Set region or Review mask."),
-            font=f(Theme.F_META), wraplength=360,
-            justify="left", bg=Theme.BG_CARD,
-            fg=Theme.TEXT_MUTED)
-        self.preview_meta_label.pack(anchor="w", pady=(4, 0))
-
-        preview_status = tk.Frame(preview_header, bg=Theme.BG_CARD)
-        preview_status.pack(side="right", anchor="ne")
-        self.preview_status_chip = tk.Label(
-            preview_status,
-            text=tr("Waiting"),
-            font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_TERTIARY,
-            fg=Theme.TEXT_MUTED,
-            padx=10,
-            pady=4,
-        )
-        self.preview_status_chip.pack(side="right")
-
-        preview_actions = tk.Frame(self._preview_frame, bg=Theme.BG_CARD)
-        preview_actions.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        self.preview_region_btn = ModernButton(
-            preview_actions,
-            text=tr("Set region"),
-            width=96,
-            command=self._open_region_selector,
-            style="accent",
-            size="sm",
-        )
-        self.preview_region_btn.pack(side="left")
-        Tooltip(self.preview_region_btn,
-                tr("Draw the subtitle region directly on the preview frame."))
-        self.preview_mask_btn = ModernButton(
-            preview_actions,
-            text=tr("Review mask"),
-            width=102,
-            command=self._open_selected_mask_preview,
-            style="ghost",
-            size="sm",
-        )
-        self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(self.preview_mask_btn,
-                tr("Run detection on the selected item and show the first-frame mask."))
-        self.preview_zoom_btn = ModernButton(
-            preview_actions,
-            text=tr("Full size"),
-            width=86,
-            command=self._open_preview_zoom,
-            style="ghost",
-            size="sm",
-        )
-        self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(self.preview_zoom_btn,
-                tr("Open the selected source frame in a larger viewer."))
-        # F-3: cheap inpaint preview for the first frame of the selected
-        # item. Runs detect + inpaint once and renders the result inline
-        # so users can A/B settings before committing the batch.
-        self.preview_inpaint_btn = ModernButton(
-            preview_actions,
-            text=tr("Test cleanup"),
-            width=112,
-            command=self._open_selected_inpaint_preview,
-            style="ghost",
-            size="sm",
-        )
-        self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(self.preview_inpaint_btn,
-                tr("Run detect + inpaint on the first frame of the selected item."))
-        # RM-30: A/B flicker scrubber for completed items.
-        self.preview_ab_btn = ModernButton(
-            preview_actions,
-            text=tr("A/B compare"),
-            width=102,
-            command=self._open_ab_scrubber,
-            style="ghost",
-            size="sm",
-        )
-        self.preview_ab_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(self.preview_ab_btn,
-                tr("Open a frame slider that wipes between source and cleaned output."))
-
-        correction_actions = tk.Frame(self._preview_frame, bg=Theme.BG_CARD)
-        correction_actions.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
-        self.preview_correction_btn = ModernButton(
-            correction_actions,
-            text=tr("Correct mask"),
-            width=112,
-            command=self._open_selected_mask_correction,
-            style="ghost",
-            size="sm",
-        )
-        self.preview_correction_btn.pack(side="left")
-        Tooltip(
-            self.preview_correction_btn,
-            tr("Paint frame-local add/subtract corrections and prepare a selective rerun."),
-        )
-
-        self.preview_action_hint = tk.Label(
-            self._preview_frame,
-            text=tr("Select a queue item to enable preview tools."),
-            font=f(Theme.F_META),
-            bg=Theme.BG_CARD,
-            fg=Theme.TEXT_MUTED,
-            wraplength=360,
-            justify="left",
-            anchor="w",
-        )
-        self.preview_action_hint.pack(
-            fill="x",
-            padx=Theme.S_LG,
-            pady=(Theme.S_XS, 0),
-        )
-
-        self._preview_label = tk.Label(self._preview_frame, bg=Theme.BG_CARD,
-                                       text="", font=f(Theme.F_META),
-                                       fg=Theme.TEXT_MUTED, compound="bottom",
-                                       justify="center", cursor="hand2")
-        self._preview_label.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_MD, Theme.S_LG))
-        self._preview_photo = None
-        self._preview_label.bind("<Double-Button-1>", self._open_preview_zoom)
-        self._preview_label.bind("<ButtonPress-1>", self._on_preview_region_press, add="+")
-        self._preview_label.bind("<B1-Motion>", self._on_preview_region_drag, add="+")
-        self._preview_label.bind("<ButtonRelease-1>", self._on_preview_region_release, add="+")
-        Tooltip(self._preview_label,
-                tr("Double-click to view at full size. Use Set region above to draw the subtitle band."))
-
-        # Action bar -- primary row first, secondary queue actions below.
+        # One quiet command row with the dominant action anchored at right.
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
         btn_frame.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_LG))
+        self._queue_action_frame = btn_frame
 
-        primary_actions = tk.Frame(btn_frame, bg=Theme.BG_SECONDARY)
-        primary_actions.pack(fill="x")
-        secondary_actions = tk.Frame(btn_frame, bg=Theme.BG_SECONDARY)
-        secondary_actions.pack(fill="x", pady=(Theme.S_SM, 0))
-
-        self.start_btn = ModernButton(primary_actions, text=tr("Start batch"), width=180,
+        self.start_btn = ModernButton(btn_frame, text=tr("Start batch"), width=180,
+                                     height=44,
                                      command=self._start_processing,
                                      style="primary", size="lg", icon=">")
-        self.start_btn.pack(side="left")
+        self.start_btn.pack(side="right")
 
-        self.open_output_btn = ModernButton(primary_actions, text=tr("Open output"), width=132,
+        self.open_output_btn = ModernButton(btn_frame, text=tr("Open output"), width=132,
                                             command=self._open_output_folder,
                                             style="ghost", size="lg", icon="^")
-        self.open_output_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
 
-        self.retry_btn = ModernButton(secondary_actions, text=tr("Retry failed"), width=124,
+        self.retry_btn = ModernButton(btn_frame, text=tr("Retry failed"), width=124,
                                       command=self._retry_failed,
                                       style="ghost", size="lg")
         self.retry_btn.pack(side="left")
 
-        self.repeat_btn = ModernButton(secondary_actions, text=tr("Repeat last"), width=120,
+        self.repeat_btn = ModernButton(btn_frame, text=tr("Repeat last"), width=120,
                                       command=self._repeat_last_job,
                                       style="ghost", size="lg")
         self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.clear_btn = ModernButton(secondary_actions, text=tr("Clear queue"), width=120,
+        self.clear_btn = ModernButton(btn_frame, text=tr("Clear queue"), width=120,
                                      command=self._clear_queue,
                                      style="ghost", size="lg")
         self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self._set_preview_placeholder(
-            "Preview a sample frame",
-            "Click a queued item to preview it. Use Set region to mark the subtitle band.",
+        self._queue_more_btn = ModernButton(
+            btn_frame, text=tr("Queue actions"), width=124,
+            command=self._open_queue_actions_menu,
+            style="ghost", size="lg", icon="...",
         )
+
         self._refresh_action_states()
 
     def _build_queue_empty_state(self):
-        """Queue empty state with short, clear guidance and direct actions."""
+        """Compact empty state that fits the persistent queue surface."""
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
-        self.empty_container.pack(pady=(Theme.S_3XL, Theme.S_LG), fill="x")
+        self.empty_container.pack(pady=Theme.S_LG, fill="x")
 
-        icon = tk.Canvas(self.empty_container, width=60, height=60,
-                         bg=Theme.BG_SECONDARY, highlightthickness=0)
-        icon.pack()
-        # Simple minimalist film-strip icon
-        icon.create_rectangle(6, 12, 54, 48, outline=Theme.BORDER_STRONG, width=2)
-        for x in (14, 30, 46):
-            icon.create_rectangle(x - 5, 20, x + 5, 40,
-                                  fill=Theme.BG_TERTIARY, outline="")
-
-        tk.Label(self.empty_container, text=tr("No media queued"),
-                 font=f(Theme.F_TITLE, "bold"),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(pady=(Theme.S_MD, 4))
-        tk.Label(self.empty_container,
-                 text=tr("Add videos or images to build a cleanup batch. Originals are never modified."),
-                 font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-                 wraplength=340, justify="center").pack()
+        copy = tk.Frame(self.empty_container, bg=Theme.BG_SECONDARY)
+        copy.pack(side="left", fill="x", expand=True)
+        tk.Label(
+            copy, text=tr("No media queued"),
+            font=f(Theme.F_TITLE, "bold"),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
+        ).pack(anchor="w")
+        tk.Label(
+            copy,
+            text=tr("Add videos or images. Originals are never modified."),
+            font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED, wraplength=460, justify="left",
+        ).pack(anchor="w", pady=(Theme.S_XS, 0))
 
         actions = tk.Frame(self.empty_container, bg=Theme.BG_SECONDARY)
-        actions.pack(pady=(Theme.S_MD, 0))
+        actions.pack(side="right", padx=(Theme.S_LG, 0))
         choose_files = ModernButton(
             actions,
             text=tr("Choose files"),
@@ -3122,6 +3335,13 @@ class VideoSubtitleRemoverApp(
             fg=Theme.TEXT_MUTED,
         )
         self.status_hint.pack(side="right")
+
+        self._footer_activity_btn = ModernButton(
+            footer, text=tr("Activity"), width=92,
+            command=self._toggle_log_panel,
+            style="ghost", size="sm",
+        )
+        self._footer_activity_btn.pack(side="right", padx=(0, Theme.S_MD))
 
 
 

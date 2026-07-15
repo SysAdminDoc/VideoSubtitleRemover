@@ -697,7 +697,14 @@ class ModernProgressBar(tk.Canvas):
         self._target = 0.0
         self._tween_id = None
 
+        self.bind("<Configure>", self._on_configure, add="+")
         self._draw()
+
+    def _on_configure(self, event):
+        """Redraw to the allocated width without inflating requested size."""
+        if event.width > 1 and event.width != self.bar_width:
+            self.bar_width = event.width
+            self._draw()
 
     def _draw(self):
         self.delete("all")
@@ -1499,12 +1506,12 @@ class Toast:
 
 
 class SegmentedPicker(tk.Frame):
-    """A segmented radio-style selector. Renders a horizontal group of
-    Canvas-based buttons. Used for the algorithm picker."""
+    """A segmented radio-style selector with optional wrapped columns."""
 
     def __init__(self, parent, options: List[Tuple[str, str]],
                  value: str = None, command: Callable = None,
-                 bg: str = None, group_label: str = "Selection", **kwargs):
+                 bg: str = None, group_label: str = "Selection",
+                 columns: int = None, **kwargs):
         """options: list of (value, label) tuples."""
         self.parent_bg = bg or (parent.cget('bg') if hasattr(parent, 'cget')
                                 else Theme.BG_CARD)
@@ -1519,12 +1526,24 @@ class SegmentedPicker(tk.Frame):
                         highlightbackground=Theme.BORDER)
         wrap.pack(fill="x")
 
-        for val, label in options:
+        column_count = max(1, int(columns or len(options) or 1))
+        if columns:
+            for column in range(column_count):
+                wrap.columnconfigure(column, weight=1, uniform="segments")
+
+        for index, (val, label) in enumerate(options):
             seg = _Segment(wrap, label=label, value=val,
                             on_select=self._select,
                             selected=(val == self.value),
                             group_label=self.group_label)
-            seg.pack(side="left", fill="x", expand=True, padx=1, pady=1)
+            if columns:
+                seg.grid(
+                    row=index // column_count,
+                    column=index % column_count,
+                    sticky="ew", padx=1, pady=1,
+                )
+            else:
+                seg.pack(side="left", fill="x", expand=True, padx=1, pady=1)
             self._segments[val] = seg
 
     def _select(self, val):
@@ -1557,7 +1576,7 @@ class _Segment(tk.Canvas):
         except Exception:
             line_height = scaled_font_size(Theme.F_BODY_SM) + 4
         self.H = max(scaled_control_size(type(self).H), line_height * 2 + 6)
-        super().__init__(parent, height=self.H, highlightthickness=0,
+        super().__init__(parent, width=112, height=self.H, highlightthickness=0,
                          bg=Theme.BG_TERTIARY, takefocus=1)
         self.label = label
         self.value = value
@@ -1675,7 +1694,7 @@ class DragDropFrame(tk.Frame):
     """A calm drop target surface with a single clear import action."""
 
     def __init__(self, parent, on_drop: Callable[[List[str]], None],
-                 width=400, height=200, **kwargs):
+                 width=400, height=200, compact=False, **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
                         highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE_PRIMARY,
                         takefocus=1)
@@ -1697,12 +1716,16 @@ class DragDropFrame(tk.Frame):
         self._surface_widgets = [self, inner]
 
         # Import glyph
-        glyph = tk.Label(inner, text="+", font=f(22, "bold"),
+        glyph = tk.Label(inner, text="+", font=f(18 if compact else 22, "bold"),
                          bg=self.normal_bg, fg=Theme.BLUE_PRIMARY)
-        glyph.pack()
+        if not compact:
+            glyph.pack()
 
         # Main text
-        main_text = tk.Label(inner, text=tr("Add files to the queue"),
+        main_text = tk.Label(
+            inner,
+            text=tr("Drop a video or image here") if compact
+            else tr("Add files to the queue"),
                             font=f(Theme.F_TITLE, "bold"), bg=self.normal_bg,
                             fg=Theme.TEXT_PRIMARY)
         main_text.pack(pady=(2, 0))
@@ -1712,7 +1735,8 @@ class DragDropFrame(tk.Frame):
                            text=tr("Drag files here, choose files, or choose a folder. Originals are never modified."),
                            font=f(Theme.F_BODY_SM), bg=self.normal_bg,
                            fg=Theme.TEXT_SECONDARY, justify="center", wraplength=480)
-        self._sub_text.pack(pady=(6, 12))
+        if not compact:
+            self._sub_text.pack(pady=(6, 12))
         sub_text = self._sub_text
 
         actions = tk.Frame(inner, bg=self.normal_bg)
@@ -1732,7 +1756,8 @@ class DragDropFrame(tk.Frame):
                                 text=tr("Videos and images supported"),
                                 font=f(Theme.F_META, "bold"), bg=self.normal_bg,
                                 fg=Theme.TEXT_MUTED)
-        support_text.pack(pady=(12, 0))
+        if not compact:
+            support_text.pack(pady=(12, 0))
         self._surface_widgets.extend([glyph, main_text, sub_text, actions, support_text])
 
         # Bind click (left = files, right = folder)

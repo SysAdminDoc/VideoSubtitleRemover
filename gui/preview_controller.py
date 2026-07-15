@@ -175,23 +175,40 @@ class PreviewControllerMixin:
         # preview never collapses to empty space.
         if PIL_AVAILABLE:
             try:
-                w, h = 420, 128
+                w, h = 400, 225
                 base = Image.new("RGB", (w, h), self._hex_to_rgb(Theme.BG_TERTIARY))
                 draw = ImageDraw.Draw(base)
-                # Outer border
-                draw.rectangle([(0, 0), (w - 1, h - 1)],
-                               outline=self._hex_to_rgb(Theme.BORDER_SUBTLE), width=1)
-                # Faux film-strip glyph (three tall rects in the center)
+                # 16:9 media stage with a restrained dashed focus boundary.
+                border = self._hex_to_rgb(Theme.BORDER)
+                dash = 12
+                for x in range(0, w, dash * 2):
+                    draw.line((x, 0, min(w - 1, x + dash), 0), fill=border, width=2)
+                    draw.line((x, h - 1, min(w - 1, x + dash), h - 1),
+                              fill=border, width=2)
+                for y in range(0, h, dash * 2):
+                    draw.line((0, y, 0, min(h - 1, y + dash)), fill=border, width=2)
+                    draw.line((w - 1, y, w - 1, min(h - 1, y + dash)),
+                              fill=border, width=2)
+
+                # Film frame and subtitle band, echoing the generated mockup.
                 cx, cy = w // 2, h // 2
-                for dx in (-44, 0, 44):
-                    draw.rectangle(
-                        [(cx + dx - 10, cy - 22), (cx + dx + 10, cy + 22)],
-                        outline=self._hex_to_rgb(Theme.BORDER),
-                        fill=self._hex_to_rgb(Theme.BG_CARD_HOVER),
-                    )
-                # Underline
-                draw.line([(cx - 70, cy + 32), (cx + 70, cy + 32)],
-                          fill=self._hex_to_rgb(Theme.BORDER_SUBTLE), width=1)
+                draw.rounded_rectangle(
+                    (cx - 64, cy - 54, cx + 64, cy + 42), radius=8,
+                    outline=self._hex_to_rgb(Theme.BORDER_STRONG), width=2,
+                    fill=self._hex_to_rgb(Theme.BG_CARD_HOVER),
+                )
+                for x in range(cx - 52, cx + 53, 26):
+                    draw.rectangle((x, cy - 43, x + 10, cy - 34),
+                                   fill=self._hex_to_rgb(Theme.BORDER_STRONG))
+                draw.rounded_rectangle(
+                    (cx - 44, cy + 6, cx + 44, cy + 24), radius=5,
+                    fill=self._hex_to_rgb(Theme.BLUE_MUTED),
+                    outline=self._hex_to_rgb(Theme.BLUE_PRIMARY), width=1,
+                )
+                draw.line((cx - 30, cy + 13, cx + 30, cy + 13),
+                          fill=self._hex_to_rgb(Theme.TEXT_SECONDARY), width=2)
+                draw.line((cx - 20, cy + 19, cx + 20, cy + 19),
+                          fill=self._hex_to_rgb(Theme.TEXT_MUTED), width=1)
                 self._preview_photo = ImageTk.PhotoImage(base)
                 self._preview_label.config(image=self._preview_photo, text="")
             except Exception:
@@ -825,7 +842,7 @@ class PreviewControllerMixin:
                 max_w = max(220, self._preview_frame.winfo_width() - 36)
             except Exception:
                 max_w = 390
-            max_h = 260
+            max_h = 320
             display_img = source_img.copy()
             display_img.thumbnail((max_w, max_h), Image.LANCZOS)
 
@@ -1083,7 +1100,7 @@ class PreviewControllerMixin:
                 max_w = max(220, self._preview_frame.winfo_width() - 36)
             except Exception:
                 max_w = 390
-            max_h = 260
+            max_h = 320
 
             self.preview_title_label.config(
                 text=f"Loading {Path(item.file_path).name}...")

@@ -213,12 +213,20 @@ processes a generated tiny image through the CLI with a fixed mask.
 
 1. **Launch** via `Run_VSR_Pro.bat`, `Run_VSR_Pro_Debug.bat`, or
    `Run_VSR_Pro.ps1`
-2. **Add files** -- Click to browse, right-click for folders, or drag & drop
-3. **Select algorithm** — LAMA (recommended), STTN, or ProPainter
-4. **Set language** if subtitles are non-English
-5. **Optionally set region** — select a queued item and drag on the preview for a fixed subtitle band, or use the settings card's Set Region action for multi-region and timed ranges. The full selector supports exact rectangle or polygon coordinates, second/frame timing, arrow-key nudging, Ctrl+arrow resizing, and Ctrl+Z/Ctrl+Y history.
-6. **Start Processing** and monitor progress
-7. **Select a queue item** to preview it, use **Review mask** to confirm detection, and **double-click the preview** for a larger source frame. Right-click the queue card, or press **Menu / Shift+F10** while it is focused, for all per-item actions.
+2. **Import** -- Use the compact drop target to browse for files or folders,
+   or drag media directly into the window
+3. **Configure** -- Choose Auto, STTN, LAMA, or ProPainter in the right-side
+   inspector; set a subtitle region and confirm the output location
+4. **Open Advanced** when you need preset management, compute-device and
+   language selection, workflow toggles, or expert tuning
+5. **Inspect** -- Select a queue item to preview it, use **Review mask** to
+   confirm detection, or draw a fixed subtitle band directly on the preview.
+   The full selector supports exact rectangle or polygon coordinates,
+   second/frame timing, arrow-key nudging, Ctrl+arrow resizing, and
+   Ctrl+Z/Ctrl+Y history
+6. **Process** -- Use **Start batch** at the lower right of the persistent
+   queue and monitor per-file status and progress in place. Right-click a queue
+   card, or press **Menu / Shift+F10** while it is focused, for per-item actions
 
 ### Algorithm Comparison
 
@@ -1001,7 +1009,8 @@ content, colors are preserved. If you still see a mismatch, attach the
 
 ### Log Files
 
-- GUI log panel (collapsible, click "Open Log File" for full log)
+- GUI activity panel (open it from the footer, then click "Open Log File" for
+  the full log)
 - File log: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log` (5MB rotating)
 - About -> Support bundle saves a redacted `.zip` with runtime facts,
   dependency versions, settings summary, recent log lines, and batch report

@@ -1349,6 +1349,82 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_redesign_desktop_hierarchy_matches_reference(self):
+        """Desktop layout keeps preview primary, inspector right, queue fixed."""
+        from gui.theme import Theme
+
+        app = self._make_app()
+        try:
+            app._apply_responsive_layout(1380)
+            app._on_content_canvas_configure(type(
+                "ConfigureEvent", (), {"width": 1340},
+            )())
+            app.root.update_idletasks()
+
+            self.assertEqual(app._layout_mode, "wide")
+            self.assertEqual(int(app._workflow_col.grid_info()["column"]), 0)
+            self.assertEqual(int(app._preview_col.grid_info()["column"]), 1)
+            self.assertEqual(int(app._settings_col.grid_info()["column"]), 2)
+            self.assertLess(app._preview_col.winfo_x(), app._settings_col.winfo_x())
+            self.assertEqual(app._queue_row.winfo_manager(), "pack")
+            self.assertEqual(app._queue_row.pack_info()["side"], "bottom")
+            self.assertIsNot(app._queue_row.master, app._content)
+            self.assertEqual(app.start_btn.pack_info()["side"], "right")
+            self.assertGreaterEqual(app.start_btn.winfo_reqheight(), 44)
+            self.assertEqual(app._queue_more_btn.winfo_manager(), "")
+            self.assertEqual(
+                (app._preview_photo.width(), app._preview_photo.height()),
+                (400, 225),
+            )
+            self.assertEqual(Theme.BG_DARK, "#0b1020")
+            self.assertEqual(Theme.BLUE_PRIMARY, "#4f7cff")
+            self.assertEqual(Theme.TEXT_PRIMARY, "#f5f7fb")
+        finally:
+            self._destroy_app(app)
+
+    def test_redesign_compact_layout_preserves_workflow_and_actions(self):
+        """Minimum width stacks work in order and consolidates queue actions."""
+        app = self._make_app()
+        try:
+            app._apply_responsive_layout(980)
+            app.root.update_idletasks()
+
+            self.assertEqual(app._layout_mode, "stacked")
+            self.assertEqual(int(app._workflow_col.grid_info()["row"]), 0)
+            self.assertEqual(int(app._preview_col.grid_info()["row"]), 1)
+            self.assertEqual(int(app._settings_col.grid_info()["row"]), 2)
+            self.assertEqual(app._queue_row.winfo_manager(), "pack")
+            self.assertEqual(app._queue_more_btn.winfo_manager(), "pack")
+            self.assertEqual(app.retry_btn.winfo_manager(), "")
+            self.assertEqual(app.repeat_btn.winfo_manager(), "")
+            self.assertEqual(app.clear_btn.winfo_manager(), "")
+            self.assertEqual(app._content_canvas.xview(), (0.0, 1.0))
+        finally:
+            self._destroy_app(app)
+
+    def test_redesign_details_and_activity_are_progressively_disclosed(self):
+        """The first view stays focused while every detailed control remains reachable."""
+        Path(self._g.SETTINGS_FILE).unlink(missing_ok=True)
+        app = self._make_app()
+        try:
+            self.assertEqual(app._inspector_profile_details.winfo_manager(), "")
+            self.assertEqual(app._inspector_workflow_details.winfo_manager(), "")
+            self.assertFalse(app._log_visible)
+            self.assertEqual(app._log_section.winfo_manager(), "")
+            self.assertEqual(app._footer_activity_btn.winfo_manager(), "pack")
+
+            app._toggle_advanced()
+            self.assertEqual(app._inspector_profile_details.winfo_manager(), "pack")
+            self.assertEqual(app._inspector_workflow_details.winfo_manager(), "pack")
+            self.assertEqual(app.adv_panel.winfo_manager(), "pack")
+
+            app._toggle_advanced()
+            self.assertEqual(app._inspector_profile_details.winfo_manager(), "")
+            self.assertEqual(app._inspector_workflow_details.winfo_manager(), "")
+            self.assertEqual(app.adv_panel.winfo_manager(), "")
+        finally:
+            self._destroy_app(app)
+
     def test_visual_regression_queued_item_shows_preview_controls(self):
         """When a queue item is selected, preview action buttons must
         have positive requested dimensions."""

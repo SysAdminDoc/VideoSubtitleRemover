@@ -117,6 +117,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Preview-first desktop workbench.** The main window now follows a focused
+  Import / Configure / Process flow with a dedicated workflow rail, central
+  16:9 media stage, concise right-side inspector, and a persistent full-width
+  queue whose primary action stays anchored at the lower right. Preset,
+  device, language, and expert tuning controls progressively disclose through
+  Advanced; compact and 150%-200% text layouts consolidate secondary queue
+  commands without hiding them, and the activity log now opens from the footer
+  instead of consuming the first-run workspace.
 - **GUI workflows now have explicit controller boundaries.** Region editing
   and advanced-settings behavior moved out of `gui/app.py` alongside the
   existing preview, processing, quality, support, and mask controllers. Every

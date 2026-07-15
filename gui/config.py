@@ -452,7 +452,7 @@ class ProcessingConfig:
     # UI state (persisted across sessions)
     window_geometry: str = ""
     adv_panel_open: bool = False
-    log_panel_open: bool = True
+    log_panel_open: bool = False
     onboarding_seen: bool = False
     high_contrast: bool = False
     text_scale_percent: int = 100
@@ -666,7 +666,7 @@ class ProcessingConfig:
             self.karaoke_y_overlap, 0.5, 0.0, 1.0)
         self.window_geometry = _coerce_text(self.window_geometry, "", 64)
         self.adv_panel_open = _coerce_bool(self.adv_panel_open, False)
-        self.log_panel_open = _coerce_bool(self.log_panel_open, True)
+        self.log_panel_open = _coerce_bool(self.log_panel_open, False)
         self.onboarding_seen = _coerce_bool(self.onboarding_seen, False)
         self.high_contrast = _coerce_bool(self.high_contrast, False)
         self.text_scale_percent = normalize_text_scale_percent(
