@@ -405,6 +405,16 @@ class VideoSubtitleRemoverApp(
             self.config.temporal_mask_union = self.temporal_mask_union_var.get()
         if hasattr(self, 'export_srt_var'):
             self.config.export_srt = self.export_srt_var.get()
+        if hasattr(self, 'translation_enabled_var'):
+            self.config.translation_enabled = self.translation_enabled_var.get()
+            self.config.translation_srt = self.translation_srt_var.get()
+            self.config.translation_provider = self.translation_provider_var.get()
+            self.config.translation_source_lang = (
+                self.translation_source_lang_var.get())
+            self.config.translation_target_lang = (
+                self.translation_target_lang_var.get())
+            self.config.translation_command = self.translation_command_var.get()
+            self.config.translation_style = self.translation_style_var.get()
         if hasattr(self, 'export_mask_var'):
             self.config.export_mask_video = self.export_mask_var.get()
         if hasattr(self, 'mask_export_format_var'):
@@ -2104,6 +2114,173 @@ class VideoSubtitleRemoverApp(
         Tooltip(quality_toggle, tr("Sample the finished video for visual damage, "
                                    "remaining text, and flicker, then flag results that need review."))
 
+        translation_frame = self._create_card(self.adv_panel)
+        translation_frame.pack(fill="x", pady=(0, Theme.S_SM))
+        self._card_header(
+            translation_frame, "Localization", "Erase, translate, and re-embed")
+
+        self.translation_enabled_var = tk.BooleanVar(
+            value=self.config.translation_enabled)
+        translation_toggle = ModernToggle(
+            translation_frame,
+            text=tr("Re-embed translated subtitles after cleanup"),
+            variable=self.translation_enabled_var,
+        )
+        translation_toggle.pack(
+            anchor="w", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        Tooltip(translation_toggle, tr(
+            "Use a provided translated SRT, or send OCR/Whisper cues to a "
+            "local translation command. VSR itself does not contact a "
+            "translation service; the command you choose controls text handling."))
+
+        self.translation_srt_var = tk.StringVar(
+            value=self.config.translation_srt)
+        self.translation_srt_label_var = tk.StringVar(value=(
+            Path(self.config.translation_srt).name
+            if self.config.translation_srt else tr("No translated SRT selected")
+        ))
+        translated_row = tk.Frame(translation_frame, bg=Theme.BG_CARD)
+        translated_row.pack(
+            fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(
+            translated_row,
+            textvariable=self.translation_srt_label_var,
+            font=f(Theme.F_META),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+        ).pack(side="left", fill="x", expand=True)
+        ModernButton(
+            translated_row,
+            text=tr("Choose translated SRT"),
+            width=148,
+            command=self._choose_translated_srt,
+            style="ghost",
+            size="sm",
+        ).pack(side="right")
+        ModernButton(
+            translated_row,
+            text=tr("Clear"),
+            width=68,
+            command=self._clear_translated_srt,
+            style="ghost",
+            size="sm",
+        ).pack(side="right", padx=(0, Theme.S_XS))
+
+        language_row = tk.Frame(translation_frame, bg=Theme.BG_CARD)
+        language_row.pack(
+            fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(
+            language_row, text=tr("Language tags"),
+            font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        language_controls = tk.Frame(language_row, bg=Theme.BG_CARD)
+        language_controls.pack(side="right")
+        self.translation_source_lang_var = tk.StringVar(
+            value=self.config.translation_source_lang or "auto")
+        tk.Label(
+            language_controls, text=tr("Source"),
+            font=f(Theme.F_META), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_MUTED,
+        ).pack(side="left", padx=(0, Theme.S_XS))
+        source_lang_entry = tk.Entry(
+            language_controls, width=8, bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY, font=f(Theme.F_BODY_SM),
+            insertbackground=Theme.TEXT_PRIMARY, highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS, relief="flat", bd=6,
+            textvariable=self.translation_source_lang_var,
+        )
+        source_lang_entry.pack(side="left")
+        self.translation_target_lang_var = tk.StringVar(
+            value=self.config.translation_target_lang)
+        tk.Label(
+            language_controls, text=tr("Target"),
+            font=f(Theme.F_META), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_MUTED,
+        ).pack(side="left", padx=(Theme.S_SM, Theme.S_XS))
+        target_lang_entry = tk.Entry(
+            language_controls, width=8, bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY, font=f(Theme.F_BODY_SM),
+            insertbackground=Theme.TEXT_PRIMARY, highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS, relief="flat", bd=6,
+            textvariable=self.translation_target_lang_var,
+        )
+        target_lang_entry.pack(side="left")
+        set_accessible_metadata(
+            source_lang_entry, role="text box", label=tr("Source language tag"))
+        set_accessible_metadata(
+            target_lang_entry, role="text box", label=tr("Target language tag"))
+
+        self.translation_provider_var = tk.StringVar(
+            value=self.config.translation_provider or "command")
+        provider_row = tk.Frame(translation_frame, bg=Theme.BG_CARD)
+        provider_row.pack(
+            fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(
+            provider_row, text=tr("Local provider"),
+            font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        provider_entry = tk.Entry(
+            provider_row, width=16, bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY, font=f(Theme.F_BODY_SM),
+            insertbackground=Theme.TEXT_PRIMARY, highlightthickness=1,
+            highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS, relief="flat", bd=6,
+            textvariable=self.translation_provider_var,
+        )
+        provider_entry.pack(side="right")
+
+        self.translation_command_var = tk.StringVar(
+            value=self.config.translation_command)
+        command_row = tk.Frame(translation_frame, bg=Theme.BG_CARD)
+        command_row.pack(
+            fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(
+            command_row, text=tr("Translator command"),
+            font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        command_entry = tk.Entry(
+            command_row, bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+            font=f(Theme.F_BODY_SM), insertbackground=Theme.TEXT_PRIMARY,
+            highlightthickness=1, highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS, relief="flat", bd=6,
+            textvariable=self.translation_command_var,
+        )
+        command_entry.pack(
+            side="left", fill="x", expand=True, padx=(Theme.S_SM, Theme.S_SM))
+        ModernButton(
+            command_row, text=tr("Browse"), width=78,
+            command=self._choose_translation_command,
+            style="ghost", size="sm",
+        ).pack(side="right")
+
+        self.translation_style_var = tk.StringVar(
+            value=self.config.translation_style)
+        style_row = tk.Frame(translation_frame, bg=Theme.BG_CARD)
+        style_row.pack(
+            fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
+        tk.Label(
+            style_row, text=tr("ASS style override"),
+            font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        style_entry = tk.Entry(
+            style_row, bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+            font=f(Theme.F_BODY_SM), insertbackground=Theme.TEXT_PRIMARY,
+            highlightthickness=1, highlightbackground=Theme.BORDER,
+            highlightcolor=Theme.BORDER_FOCUS, relief="flat", bd=6,
+            textvariable=self.translation_style_var,
+        )
+        style_entry.pack(
+            side="right", fill="x", expand=True, padx=(Theme.S_SM, 0))
+        Tooltip(style_entry, tr(
+            "Optional FFmpeg force_style text, for example FontSize=24."))
+
         # Video Range card
         time_frame = self._create_card(self.adv_panel)
         time_frame.pack(fill="x")
@@ -3070,6 +3247,47 @@ class VideoSubtitleRemoverApp(
             ),
             "success",
         )
+
+    def _choose_translated_srt(self):
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title=tr("Choose translated subtitle file"),
+            filetypes=[
+                (tr("SubRip subtitles"), "*.srt"),
+                (tr("All files"), "*.*"),
+            ],
+        )
+        if not path:
+            return
+        try:
+            from backend.subtitle_translation import provided_translation_evidence
+            provided_translation_evidence(path)
+        except Exception as exc:
+            self._update_status(
+                tr("Translated SRT could not be used: {error}").format(error=exc),
+                "warning",
+            )
+            return
+        self.translation_srt_var.set(path)
+        self.translation_srt_label_var.set(Path(path).name)
+        self.translation_enabled_var.set(True)
+        self._update_status(tr("Translated SRT ready to re-embed."), "success")
+
+    def _choose_translation_command(self):
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title=tr("Choose local translation command"),
+            filetypes=[
+                (tr("Executables and Python scripts"), "*.exe *.py"),
+                (tr("All files"), "*.*"),
+            ],
+        )
+        if path:
+            self.translation_command_var.set(path)
+
+    def _clear_translated_srt(self):
+        self.translation_srt_var.set("")
+        self.translation_srt_label_var.set(tr("No translated SRT selected"))
 
     def _clear_mask_import_manifest(self):
         self.config.mask_import_path = ""

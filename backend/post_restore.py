@@ -273,7 +273,7 @@ def burn_subtitles(
     sub_escaped = (
         str(subtitle_path)
         .replace("\\", "/")
-        .replace(":", "\\\\:")
+        .replace(":", "\\:")
         .replace("'", "'\\\\''")
     )
     vf = f"subtitles='{sub_escaped}'"

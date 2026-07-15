@@ -709,6 +709,7 @@ def build_output_sidecar(
     selective_rerun: Optional[dict] = None,
     mask_export: Optional[dict] = None,
     mask_import: Optional[dict] = None,
+    translation: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> dict:
@@ -768,6 +769,8 @@ def build_output_sidecar(
         payload["maskExport"] = dict(mask_export)
     if mask_import is not None:
         payload["maskImport"] = dict(mask_import)
+    if translation is not None:
+        payload["translation"] = dict(translation)
     return payload
 
 
@@ -785,6 +788,7 @@ def write_output_sidecar(
     selective_rerun: Optional[dict] = None,
     mask_export: Optional[dict] = None,
     mask_import: Optional[dict] = None,
+    translation: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> Optional[Path]:
@@ -803,6 +807,7 @@ def write_output_sidecar(
             selective_rerun=selective_rerun,
             mask_export=mask_export,
             mask_import=mask_import,
+            translation=translation,
             checkpoint_resumed=checkpoint_resumed,
             app_version=app_version,
         )

@@ -131,6 +131,18 @@ class ProcessingConfig:
     watermark_margin: int = 16
     restyle_subtitle: str = ""
     restyle_style: str = ""
+    # One-pass erase -> translate -> re-embed workflow. A provided translated
+    # SRT bypasses translation; otherwise source captions come from a supplied
+    # SRT, OCR, or the already-enabled Whisper fallback and use a local provider.
+    translation_enabled: bool = False
+    translation_srt: str = ""
+    translation_source_srt: str = ""
+    translation_provider: str = "command"
+    translation_source_lang: str = "auto"
+    translation_target_lang: str = ""
+    translation_command: str = ""
+    translation_style: str = ""
+    translation_timeout_seconds: float = 300.0
     # RM-76 NLE round-trip sidecars. None = off; "edl" or "fcpxml"
     # writes a sibling sidecar next to the output naming the source
     # and the processed range.
@@ -605,6 +617,28 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.watermark_margin = _coerce_int(config.watermark_margin, 16, 0, 500)
     config.restyle_subtitle = _coerce_text(config.restyle_subtitle, "", 1024)
     config.restyle_style = _coerce_text(config.restyle_style, "", 512)
+    from backend.subtitle_translation import (
+        normalize_language_tag,
+        normalize_provider_name,
+    )
+    config.translation_enabled = _coerce_bool(
+        config.translation_enabled, False)
+    config.translation_srt = _coerce_text(
+        config.translation_srt, "", 2048)
+    config.translation_source_srt = _coerce_text(
+        config.translation_source_srt, "", 2048)
+    config.translation_provider = normalize_provider_name(
+        config.translation_provider)
+    config.translation_source_lang = normalize_language_tag(
+        config.translation_source_lang, "auto")
+    config.translation_target_lang = normalize_language_tag(
+        config.translation_target_lang)
+    config.translation_command = _coerce_text(
+        config.translation_command, "", 2048)
+    config.translation_style = _coerce_text(
+        config.translation_style, "", 512)
+    config.translation_timeout_seconds = _coerce_float(
+        config.translation_timeout_seconds, 300.0, 5.0, 3600.0)
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.confidence_weighted_dilation = _coerce_bool(

@@ -74,7 +74,11 @@ _CLI_CATEGORY_OPTIONS = (
             "--ffmpeg-whisper-min-speech", "--export-srt", "--soft-subtitle-dry-run",
             "--soft-subtitle-plan-json", "--strip-soft-subtitles",
             "--keep-soft-subtitles", "--burned-in-only", "--restyle",
-            "--restyle-style",
+            "--restyle-style", "--translate", "--translated-srt",
+            "--translation-source-srt", "--translation-provider",
+            "--translation-source-lang", "--translation-target-lang",
+            "--translation-command", "--translation-style",
+            "--translation-timeout",
         ),
     ),
     (
@@ -140,6 +144,7 @@ _CLI_VALUE_RANGES = {
     "--karaoke-y-overlap": "0..1",
     "--loudnorm": "0 (off) or -70..-5 LUFS",
     "--prefetch-queue": "0..512 frames",
+    "--translation-timeout": "5..3600 seconds",
 }
 
 # There are currently no deprecated public options. Keeping the set explicit
@@ -738,6 +743,33 @@ def main():
                        help="Re-burn an .srt or .ass subtitle file onto the cleaned output.")
     parser.add_argument("--restyle-style", default="", metavar="ASS_STYLE",
                        help="ASS force_style override for --restyle (e.g. 'FontSize=24,PrimaryColour=&H00FFFFFF').")
+    parser.add_argument(
+        "--translate", action="store_true",
+        help="Erase subtitles, translate a source SRT locally, and re-embed it.")
+    parser.add_argument(
+        "--translated-srt", default="", metavar="PATH",
+        help="Validated UTF-8 SRT that is already translated; bypasses a provider.")
+    parser.add_argument(
+        "--translation-source-srt", default="", metavar="PATH",
+        help="Source-language SRT to translate; otherwise OCR/Whisper cues are used.")
+    parser.add_argument(
+        "--translation-provider", default="command", metavar="NAME",
+        help="Registered local translation provider name (default: command).")
+    parser.add_argument(
+        "--translation-source-lang", default="auto", metavar="LANG",
+        help="Source language tag passed to the local translation provider.")
+    parser.add_argument(
+        "--translation-target-lang", default="", metavar="LANG",
+        help="Required target language tag when generating translated subtitles.")
+    parser.add_argument(
+        "--translation-command", default="", metavar="PATH",
+        help="Local executable or Python script using the VSR translation JSON protocol.")
+    parser.add_argument(
+        "--translation-style", default="", metavar="ASS_STYLE",
+        help="ASS force_style override for the translated subtitle burn pass.")
+    parser.add_argument(
+        "--translation-timeout", type=float, default=300.0, metavar="SECONDS",
+        help="Timeout for the local translation provider command.")
     parser.add_argument("--whisper-model", default="tiny",
                        choices=["tiny", "base", "small", "medium",
                                 "large", "large-v2", "large-v3"],
@@ -1221,6 +1253,19 @@ def main():
         parser.error("--ffmpeg-whisper-queue must be at least 0.02 seconds")
     if not 0.0 <= args.retry_backoff <= 600.0:
         parser.error("--retry-backoff must be between 0 and 600 seconds")
+    if not 5.0 <= args.translation_timeout <= 3600.0:
+        parser.error("--translation-timeout must be between 5 and 3600 seconds")
+    translation_enabled = bool(
+        args.translate or args.translated_srt or args.translation_source_srt)
+    if translation_enabled and args.restyle:
+        parser.error("--translate/--translated-srt cannot be combined with --restyle")
+    if translation_enabled and not args.translated_srt:
+        if not args.translation_target_lang:
+            parser.error(
+                "--translation-target-lang is required unless --translated-srt is used")
+        if args.translation_provider == "command" and not args.translation_command:
+            parser.error(
+                "--translation-command is required for the command provider")
 
     config = ProcessingConfig(
         mode=_coerce_backend_mode(args.mode),
@@ -1248,6 +1293,15 @@ def main():
         watermark_margin=args.watermark_margin,
         restyle_subtitle=args.restyle,
         restyle_style=args.restyle_style,
+        translation_enabled=translation_enabled,
+        translation_srt=args.translated_srt,
+        translation_source_srt=args.translation_source_srt,
+        translation_provider=args.translation_provider,
+        translation_source_lang=args.translation_source_lang,
+        translation_target_lang=args.translation_target_lang,
+        translation_command=args.translation_command,
+        translation_style=args.translation_style,
+        translation_timeout_seconds=args.translation_timeout,
         swinir_restore=args.swinir,
         seedvr2_restore=args.seedvr2,
         preserve_color_metadata=not args.no_color_preserve,
@@ -1492,7 +1546,8 @@ def main():
         f"mode={config.mode.value} | device={config.device} | lang={config.detection_lang} | "
         f"audio={'on' if config.preserve_audio else 'off'} | "
         f"hw_encode={'on' if config.use_hw_encode else 'off'} | "
-        f"d3d12={'on' if config.d3d12_accel else 'off'}"
+        f"d3d12={'on' if config.d3d12_accel else 'off'} | "
+        f"translation={'on' if config.translation_enabled else 'off'}"
     )
     if config.preserve_audio and not ffmpeg_ready:
         print("[note] FFmpeg is not available, so outputs will be saved without original audio.")

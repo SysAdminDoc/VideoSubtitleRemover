@@ -41,7 +41,8 @@ from backend.a11y import (
 
 logger = logging.getLogger(__name__)
 _FORCE_QUOTED_CLI_VALUE_FLAGS = {
-    "-i", "-o", "--watermark", "--import-mask",
+    "-i", "-o", "--watermark", "--import-mask", "--translated-srt",
+    "--translation-source-srt", "--translation-command",
 }
 
 
@@ -178,6 +179,33 @@ def _build_cli_command(item: QueueItem) -> str:
         wm_margin = getattr(cfg, "watermark_margin", 16)
         if wm_margin != 16:
             args.extend(["--watermark-margin", str(wm_margin)])
+    if getattr(cfg, "translation_enabled", False):
+        args.append("--translate")
+        translated = getattr(cfg, "translation_srt", "")
+        if translated:
+            args.extend(["--translated-srt", translated])
+        else:
+            source_srt = getattr(cfg, "translation_source_srt", "")
+            if source_srt:
+                args.extend(["--translation-source-srt", source_srt])
+            provider = getattr(cfg, "translation_provider", "command")
+            if provider != "command":
+                args.extend(["--translation-provider", provider])
+            source_lang = getattr(cfg, "translation_source_lang", "auto")
+            if source_lang != "auto":
+                args.extend(["--translation-source-lang", source_lang])
+            target_lang = getattr(cfg, "translation_target_lang", "")
+            if target_lang:
+                args.extend(["--translation-target-lang", target_lang])
+            command = getattr(cfg, "translation_command", "")
+            if command:
+                args.extend(["--translation-command", command])
+            timeout = getattr(cfg, "translation_timeout_seconds", 300.0)
+            if timeout != 300.0:
+                args.extend(["--translation-timeout", str(timeout)])
+        style = getattr(cfg, "translation_style", "")
+        if style:
+            args.extend(["--translation-style", style])
     # The friendly flags above keep copied commands readable.  Canonical
     # FIELD=JSON overrides then cover every non-default processing control,
     # including per-item fields that have no dedicated legacy flag.

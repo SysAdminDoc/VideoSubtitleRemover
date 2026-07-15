@@ -374,6 +374,8 @@ class SubtitleRemover:
 
     def __init__(self, config: ProcessingConfig = None):
         self.config = normalize_processing_config(config or ProcessingConfig())
+        from backend.subtitle_translation import validate_translation_config
+        validate_translation_config(self.config)
         self._work_directory_resolution = None
         self.last_work_directory_warning: Optional[str] = None
         self._resolve_work_directory()
@@ -414,6 +416,14 @@ class SubtitleRemover:
             "manifest": "",
             "mode": "replace",
         }
+        self.last_translation: dict = {
+            "requested": bool(self.config.translation_enabled),
+            "status": (
+                "pending" if self.config.translation_enabled else "not-requested"
+            ),
+        }
+        self._translation_burn_path = ""
+        self._whisper_segments: list[tuple[float, float, str]] = []
         self.last_timing_report: dict = {
             "mode": "unknown",
             "frame_count": 0,
@@ -1285,6 +1295,94 @@ class SubtitleRemover:
         except Exception as exc:
             logger.warning(f"SRT write failed: {exc}", exc_info=True)
 
+    def _prepare_translation_workflow(
+        self,
+        input_path: str,
+        output_path: str,
+        fps: float,
+        offset_frames: int = 0,
+        *,
+        frame_timing: Optional[VideoFrameTiming] = None,
+    ) -> None:
+        """Resolve or generate the translated SRT before post-processing."""
+        if not self.config.translation_enabled:
+            return
+        if self.config.restyle_subtitle:
+            raise ValueError(
+                "translation workflow cannot be combined with restyle_subtitle")
+        if Path(output_path).is_dir():
+            raise ValueError(
+                "translation re-embedding requires encoded video output")
+
+        from backend.subtitle_translation import (
+            SubtitleTranslationError,
+            provided_translation_evidence,
+            render_segments_srt,
+            translate_srt_file,
+            translated_srt_path,
+        )
+
+        style_configured = bool(self.config.translation_style.strip())
+        if self.config.translation_srt:
+            translated_path = Path(self.config.translation_srt)
+            report = provided_translation_evidence(
+                translated_path,
+                target_language=self.config.translation_target_lang,
+            )
+        else:
+            source_kind = "provided-source-srt"
+            if self.config.translation_source_srt:
+                source_path = Path(self.config.translation_source_srt)
+            else:
+                source_path = (
+                    Path(output_path).with_suffix(".srt")
+                    if self.config.export_srt
+                    else Path(output_path).with_name(
+                        f"{Path(output_path).stem}.source.srt")
+                )
+                if self._srt_entries:
+                    self._write_srt(
+                        str(source_path),
+                        fps,
+                        offset_frames,
+                        frame_timing=frame_timing,
+                    )
+                    source_kind = "ocr-srt"
+                elif getattr(self, "_whisper_segments", None):
+                    _write_text_atomic(
+                        source_path,
+                        render_segments_srt(self._whisper_segments),
+                    )
+                    source_kind = "whisper-srt"
+                else:
+                    raise SubtitleTranslationError(
+                        "translation needs --translation-source-srt, OCR text, "
+                        "or an enabled Whisper transcript")
+            translated_path = translated_srt_path(
+                output_path, self.config.translation_target_lang)
+            report = translate_srt_file(
+                source_path,
+                translated_path,
+                provider_name=self.config.translation_provider,
+                source_language=self.config.translation_source_lang,
+                target_language=self.config.translation_target_lang,
+                provider_options={
+                    "command": self.config.translation_command,
+                    "timeout": self.config.translation_timeout_seconds,
+                },
+                source_kind=source_kind,
+            )
+        report["styleConfigured"] = style_configured
+        report["mediaSource"] = Path(input_path).name
+        self.last_translation = report
+        self._translation_burn_path = str(translated_path)
+        logger.info(
+            "Translation captions ready: %s (%s, %d cues)",
+            translated_path,
+            report.get("provider", "unknown"),
+            int(report.get("cueCount", 0) or 0),
+        )
+
     def _fixed_region_shapes(
         self,
         time_seconds: Optional[float] = None,
@@ -1722,6 +1820,14 @@ class SubtitleRemover:
             "manifest": self.config.mask_import_path,
             "mode": self.config.mask_import_mode,
         }
+        self.last_translation = {
+            "requested": bool(self.config.translation_enabled),
+            "status": (
+                "pending" if self.config.translation_enabled else "not-requested"
+            ),
+        }
+        self._translation_burn_path = ""
+        self._whisper_segments = []
         self.last_timing_report = {
             "mode": "unknown",
             "frame_count": 0,
@@ -2238,6 +2344,7 @@ class SubtitleRemover:
             # for every batch.
             whisper_spans: List[Tuple[int, int]] = []
             whisper_audio_dir: Optional[str] = None
+            segments = None
             if self.config.whisper_fallback and not Path(input_path).is_dir():
                 try:
                     from backend import whisper_fallback as _wf
@@ -2301,6 +2408,12 @@ class SubtitleRemover:
                                     f"Whisper fallback active: "
                                     f"{len(whisper_spans)} speech spans"
                                 )
+                    if segments:
+                        self._whisper_segments = [
+                            (float(segment[0]), float(segment[1]), str(segment[2]))
+                            for segment in segments
+                            if len(segment) >= 3 and str(segment[2]).strip()
+                        ]
                 except Exception as exc:
                     logger.warning(
                         f"Whisper fallback setup failed: {exc}",
@@ -2583,7 +2696,14 @@ class SubtitleRemover:
                                 det_confs = None
                             else:
                                 boxes = smoothed
-                            if self.config.export_srt:
+                            if (
+                                self.config.export_srt
+                                or (
+                                    self.config.translation_enabled
+                                    and not self.config.translation_srt
+                                    and not self.config.translation_source_srt
+                                )
+                            ):
                                 self._collect_srt_entry(frame, frame_idx, detected_boxes)
 
                     # RM-27: when OCR returned no boxes for this frame
@@ -2882,6 +3002,14 @@ class SubtitleRemover:
                         frame_timing=frame_timing,
                     )
 
+                self._prepare_translation_workflow(
+                    input_path,
+                    final_output_path,
+                    fps,
+                    start_frame,
+                    frame_timing=frame_timing,
+                )
+
                 # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
                 # upscale, film-grain re-synthesis). Run after the main mux
                 # so the user-visible output is the post-processed file;
@@ -3131,6 +3259,10 @@ class SubtitleRemover:
                 mask_import=(
                     self.last_mask_import
                     if self.last_mask_import.get("requested") else None
+                ),
+                translation=(
+                    self.last_translation
+                    if self.last_translation.get("requested") else None
                 ),
                 checkpoint_resumed=checkpoint_resumed,
                 app_version=APP_VERSION,
@@ -3398,23 +3530,46 @@ class SubtitleRemover:
                             )
                 except Exception as exc:
                     logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
-        if self.config.restyle_subtitle:
+        translation_path = str(getattr(self, "_translation_burn_path", "") or "")
+        subtitle_path = translation_path or self.config.restyle_subtitle
+        if subtitle_path:
+            translation_requested = bool(translation_path)
             try:
                 from backend.post_restore import burn_subtitles
                 restyle_out = post_path("restyled")
                 produced = burn_subtitles(
                     output_path, restyle_out,
-                    subtitle_path=self.config.restyle_subtitle,
-                    style_override=self.config.restyle_style,
+                    subtitle_path=subtitle_path,
+                    style_override=(
+                        self.config.translation_style
+                        if translation_requested else self.config.restyle_style
+                    ),
                     video_encode_args=self._get_encode_args(allow_d3d12=False),
                     preserve_audio=self.config.preserve_audio,
                 )
+                promoted = False
                 if produced and Path(produced).is_file():
-                    if self._promote_post_restore_result(
-                        produced, output_path, temp_dir, "restyle"
-                    ):
-                        logger.info("Restyle subtitle burn pass complete")
+                    promoted = self._promote_post_restore_result(
+                        produced,
+                        output_path,
+                        temp_dir,
+                        "translation" if translation_requested else "restyle",
+                    )
+                    if promoted:
+                        logger.info(
+                            "%s subtitle burn pass complete",
+                            "Translated" if translation_requested else "Restyle",
+                        )
+                if translation_requested and not promoted:
+                    raise RuntimeError(
+                        "translated subtitle re-embedding produced no valid output")
+                if translation_requested:
+                    self.last_translation["status"] = "embedded"
             except Exception as exc:
+                if translation_requested:
+                    self.last_translation["status"] = "failed"
+                    self.last_translation["error"] = str(exc)
+                    raise
                 logger.warning(f"Restyle pass failed: {exc}", exc_info=True)
         if self.config.watermark_image:
             try:

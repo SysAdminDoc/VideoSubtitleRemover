@@ -351,6 +351,15 @@ class ProcessingConfig:
     watermark_margin: int = 16
     restyle_subtitle: str = ""
     restyle_style: str = ""
+    translation_enabled: bool = False
+    translation_srt: str = ""
+    translation_source_srt: str = ""
+    translation_provider: str = "command"
+    translation_source_lang: str = "auto"
+    translation_target_lang: str = ""
+    translation_command: str = ""
+    translation_style: str = ""
+    translation_timeout_seconds: float = 300.0
     nle_sidecar: str = "off"
 
     time_start: float = 0.0
@@ -514,6 +523,28 @@ class ProcessingConfig:
         self.restyle_subtitle = _coerce_text(
             self.restyle_subtitle, "", 1024)
         self.restyle_style = _coerce_text(self.restyle_style, "", 512)
+        from backend.subtitle_translation import (
+            normalize_language_tag,
+            normalize_provider_name,
+        )
+        self.translation_enabled = _coerce_bool(
+            self.translation_enabled, False)
+        self.translation_srt = _coerce_text(
+            self.translation_srt, "", 2048)
+        self.translation_source_srt = _coerce_text(
+            self.translation_source_srt, "", 2048)
+        self.translation_provider = normalize_provider_name(
+            self.translation_provider)
+        self.translation_source_lang = normalize_language_tag(
+            self.translation_source_lang, "auto")
+        self.translation_target_lang = normalize_language_tag(
+            self.translation_target_lang)
+        self.translation_command = _coerce_text(
+            self.translation_command, "", 2048)
+        self.translation_style = _coerce_text(
+            self.translation_style, "", 512)
+        self.translation_timeout_seconds = _coerce_float(
+            self.translation_timeout_seconds, 300.0, 5.0, 3600.0)
         sidecar = _coerce_text(self.nle_sidecar, "off", 16).lower()
         if sidecar not in {"off", "edl", "fcpxml"}:
             sidecar = "off"

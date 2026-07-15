@@ -1527,6 +1527,10 @@ class ConfigFuzzTests(unittest.TestCase):
         "time_start", "time_end",
         "preserve_audio", "output_format", "output_quality", "use_hw_encode",
         "d3d12_accel",
+        "translation_enabled", "translation_srt", "translation_source_srt",
+        "translation_provider", "translation_source_lang",
+        "translation_target_lang", "translation_command", "translation_style",
+        "translation_timeout_seconds",
         # v3.13 GUI-exposed fields (B-1 + F-8).
         "loudnorm_target", "multi_audio_passthrough",
         "decode_hw_accel", "prefetch_decode", "prefetch_queue_size",

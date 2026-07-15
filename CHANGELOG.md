@@ -44,6 +44,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Local-first erase, translate, and re-embed workflow.** The opt-in CLI and
+  Detailed controls accept a ready translated SRT or preserve OCR, Whisper,
+  or source-SRT timings while a registered provider translates cue text. The
+  built-in command provider uses a bounded, versioned JSON stdin/stdout
+  protocol with no shell; translated captions are validated, burned with an
+  optional ASS style, and recorded in output sidecars by source kind, provider,
+  language, filename, content hash, and embed status. The same change fixes
+  Windows drive-letter escaping in the existing FFmpeg subtitle-burn pass.
 - **Runtime-validated FFmpeg D3D12 acceleration.** An experimental Windows
   toggle and `--d3d12-accel` opt into FFmpeg 8.1+ D3D12 upload,
   `scale_d3d12`, deinterlacing, and H.264/H.265 encoding only after a complete

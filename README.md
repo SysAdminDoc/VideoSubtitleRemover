@@ -36,6 +36,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
 - **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
 - **Lossless Matte Interchange** -- Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
+- **Erase, Translate, and Re-embed** -- Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
 - **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
@@ -365,6 +366,34 @@ local whisper.cpp ggml model without Python ML dependencies:
 python -m backend.processor -i input.mp4 -o output.mp4 --whisper-fallback --whisper-backend ffmpeg --ffmpeg-whisper-model C:\models\ggml-base.en.bin
 ```
 
+The localization workflow can erase the original burned-in text and re-embed
+a translated UTF-8 SRT in the same run. Supplying the translated captions is
+the simplest deterministic path:
+
+```powershell
+python -m backend.processor -i input.mp4 -o localized.mp4 --translated-srt captions.es.srt --translation-style "FontSize=24,Outline=2"
+```
+
+To generate captions, provide a source SRT or let the existing OCR collection
+(and then an enabled Whisper fallback) supply source cues. VSR invokes the
+selected command directly without a shell and sends one bounded JSON document
+on stdin; VSR does not include or contact a translation service. The chosen
+command controls how cue text is handled:
+
+```powershell
+python -m backend.processor -i input.mp4 -o localized.mp4 --translate --translation-source-srt captions.en.srt --translation-source-lang en --translation-target-lang es --translation-command C:\tools\translate.py
+```
+
+The request schema is `vsr.translation_request.v1` with `sourceLanguage`,
+`targetLanguage`, and `cues` entries containing `index` and `text`. The
+command must return `vsr.translation_response.v1` with a `translations` array
+in the same order and length. Timing and cue identifiers stay unchanged; empty,
+malformed, oversized, or count-mismatched results fail the job. Generated
+source and translated SRTs are saved beside the video. The reproducibility
+sidecar records their names, SHA-256 hashes, provider, source kind, languages,
+and final embed status without recording caption text. The workflow is off by
+default and cannot be combined with the separate `--restyle` pass.
+
 Embedded subtitle tracks can be inspected or remuxed without OCR, frame
 decode, inpainting, or video re-encode:
 
@@ -538,6 +567,15 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--whisper-backend` | Whisper fallback backend. | faster-whisper | faster-whisper \| ffmpeg | Public |
 | `--restyle` | Re-burn an .srt or .ass subtitle file onto the cleaned output. | - | - | Public |
 | `--restyle-style` | ASS force_style override for --restyle (e.g. 'FontSize=24,PrimaryColour=&H00FFFFFF'). | - | - | Public |
+| `--translate` | Erase subtitles, translate a source SRT locally, and re-embed it. | Off | - | Public |
+| `--translated-srt` | Validated UTF-8 SRT that is already translated; bypasses a provider. | - | - | Public |
+| `--translation-source-srt` | Source-language SRT to translate; otherwise OCR/Whisper cues are used. | - | - | Public |
+| `--translation-provider` | Registered local translation provider name (default: command). | command | - | Public |
+| `--translation-source-lang` | Source language tag passed to the local translation provider. | auto | - | Public |
+| `--translation-target-lang` | Required target language tag when generating translated subtitles. | - | - | Public |
+| `--translation-command` | Local executable or Python script using the VSR translation JSON protocol. | - | - | Public |
+| `--translation-style` | ASS force_style override for the translated subtitle burn pass. | - | - | Public |
+| `--translation-timeout` | Timeout for the local translation provider command. | 300.0 | 5..3600 seconds | Public |
 | `--whisper-model` | faster-whisper model size. | tiny | tiny \| base \| small \| medium \| large \| large-v2 \| large-v3 | Public |
 | `--ffmpeg-whisper-model` | Path to a local whisper.cpp ggml model for --whisper-backend ffmpeg. | - | - | Public |
 | `--ffmpeg-whisper-queue` | FFmpeg whisper filter queue size in seconds. | 3.0 | 0.02..3600 seconds | Public |
@@ -703,6 +741,15 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `watermark_margin` | `int` | `16` |
 | `restyle_subtitle` | `str` | `-` |
 | `restyle_style` | `str` | `-` |
+| `translation_enabled` | `bool` | `Off` |
+| `translation_srt` | `str` | `-` |
+| `translation_source_srt` | `str` | `-` |
+| `translation_provider` | `str` | `command` |
+| `translation_source_lang` | `str` | `auto` |
+| `translation_target_lang` | `str` | `-` |
+| `translation_command` | `str` | `-` |
+| `translation_style` | `str` | `-` |
+| `translation_timeout_seconds` | `float` | `300.0` |
 | `nle_sidecar` | `str` | `off` |
 | `mask_dilate_px` | `int` | `8` |
 | `mask_feather_px` | `int` | `4` |
@@ -793,6 +840,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |
 | HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
 | FFmpeg D3D12 | Windows-only experimental upload, scale, deinterlace, and encode path with runtime validation and automatic fallback | Off | On/Off; FFmpeg 8.1+ |
+| Localization | Re-embed a provided translated SRT or translate OCR/Whisper cues through a selected local command, with optional ASS `force_style` text | Off | UTF-8 SRT; source/target language tags; executable or Python script |
 | HW Decode Hint | OpenCV/PyNvVideoCodec decode hint with software fallback | off | off/auto/d3d11/vaapi/mfx/pynv/nvdec |
 | Loudness Target | EBU R128 LUFS target (0 = off) | 0 | 0 or -70..-5 |
 | Multi-track Audio | Pass through every audio stream | On | On/Off |

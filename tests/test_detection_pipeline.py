@@ -456,6 +456,9 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg.quality_report_sheet = True
         cfg.nle_sidecar = "edl"
         cfg.d3d12_accel = True
+        cfg.translation_enabled = True
+        cfg.translation_srt = r"C:\captions\translated.srt"
+        cfg.translation_style = "FontSize=24"
         item = QueueItem(
             id="test",
             file_path="input.mp4",
@@ -491,6 +494,9 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--quality-sheet", cmd)
         self.assertIn("--nle-sidecar edl", cmd)
         self.assertIn("--d3d12-accel", cmd)
+        self.assertIn("--translate", cmd)
+        self.assertIn('--translated-srt "C:\\captions\\translated.srt"', cmd)
+        self.assertIn('--translation-style "FontSize=24"', cmd)
 
     def test_default_config_omits_expanded_fields(self):
         from gui.config import ProcessingConfig, QueueItem
@@ -508,7 +514,8 @@ class CliCommandBuilderTests(unittest.TestCase):
                      "--no-kalman", "--no-phash", "--whisper-fallback",
                      "--keep-subtitles", "--keep-chyrons", "--karaoke",
                      "--export-srt", "--export-mask", "--nle-sidecar",
-                     "--quality-sheet", "--output-frames", "--d3d12-accel"):
+                     "--quality-sheet", "--output-frames", "--d3d12-accel",
+                     "--translate", "--translated-srt"):
             self.assertNotIn(flag, cmd, f"Default config should not emit {flag}")
 
 
