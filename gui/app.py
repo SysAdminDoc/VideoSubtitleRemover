@@ -3856,6 +3856,7 @@ class VideoSubtitleRemoverApp(
             polygon_shapes: List[List[int]] = []
             polygon_points: List[Tuple[int, int]] = []
             current_frame_index = [0]
+            current_frame = [frame]
             preload = []
             if not region_spans and not keyframe_tracks:
                 preload = self.config.subtitle_areas or (
@@ -3965,6 +3966,7 @@ class VideoSubtitleRemoverApp(
                 cap.set(_cv2.CAP_PROP_POS_FRAMES, frame_idx)
                 ok, f = cap.read()
                 if ok:
+                    current_frame[0] = f
                     _draw_image(f)
                     _draw_saved_rects()
 
@@ -4273,6 +4275,97 @@ class VideoSubtitleRemoverApp(
                 description=tr("Use x,y pairs separated by semicolons; at least three vertices are required."),
             )
 
+            reference_frame = tk.Frame(
+                win,
+                bg=Theme.BG_SECONDARY,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER_SUBTLE,
+            )
+            reference_frame.pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+            reference_path_var = tk.StringVar(value="")
+            reference_status_var = tk.StringVar(
+                value=tr("Select a timed region to attach a clean reference."))
+            reference_alignment_var = tk.StringVar(value="Auto")
+            reference_color_match_var = tk.BooleanVar(value=True)
+            reference_confidence_var = tk.StringVar(value="0.75")
+            reference_top = tk.Frame(reference_frame, bg=Theme.BG_SECONDARY)
+            reference_top.pack(
+                fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
+            tk.Label(
+                reference_top, text=tr("Clean reference"),
+                font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_PRIMARY,
+            ).pack(side="left")
+            tk.Label(
+                reference_top, textvariable=reference_path_var,
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED, anchor="w",
+            ).pack(side="left", fill="x", expand=True, padx=Theme.S_SM)
+            reference_buttons = {}
+            for key, label, width, command in (
+                ("choose", tr("Choose"), 76,
+                 lambda: _choose_clean_reference()),
+                ("preview", tr("Preview"), 78,
+                 lambda: _preview_clean_reference()),
+                ("clear", tr("Clear"), 68,
+                 lambda: _clear_clean_reference()),
+            ):
+                button = ModernButton(
+                    reference_top, text=label, width=width,
+                    command=command, style="ghost", size="sm")
+                button.pack(side="right", padx=(Theme.S_XS, 0))
+                reference_buttons[key] = button
+            reference_options = tk.Frame(
+                reference_frame, bg=Theme.BG_SECONDARY)
+            reference_options.pack(
+                fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
+            tk.Label(
+                reference_options, text=tr("Alignment"), font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(side="left")
+            reference_alignment_picker = ttk.Combobox(
+                reference_options, width=13, state="readonly",
+                textvariable=reference_alignment_var,
+                values=(tr("Auto"), tr("Translation"), tr("Homography")),
+                style="Dark.TCombobox",
+            )
+            reference_alignment_picker.pack(
+                side="left", padx=(Theme.S_XS, Theme.S_MD))
+            reference_color_toggle = ModernToggle(
+                reference_options,
+                text=tr("Match each frame's color"),
+                variable=reference_color_match_var,
+                command=lambda: _save_clean_reference_options(),
+                bg=Theme.BG_SECONDARY,
+            )
+            reference_color_toggle.pack(side="left")
+            tk.Label(
+                reference_options, text=tr("Confidence floor"),
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED,
+            ).pack(side="left", padx=(Theme.S_MD, Theme.S_XS))
+            reference_confidence_entry = tk.Entry(
+                reference_options, width=6,
+                textvariable=reference_confidence_var,
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+            )
+            reference_confidence_entry.pack(side="left")
+            tk.Label(
+                reference_frame, textvariable=reference_status_var,
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED, anchor="w",
+            ).pack(
+                fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, Theme.S_XS))
+            set_accessible_metadata(
+                reference_alignment_picker, role="combo box",
+                label=tr("Clean reference alignment mode"))
+            set_accessible_metadata(
+                reference_confidence_entry, role="numeric input",
+                label=tr("Clean reference minimum confidence"),
+                description=tr("Values below this floor use normal inpainting."))
+
             selected_region_key = [None]
             history = RegionEditHistory()
             history_buttons = {"undo": None, "redo": None}
@@ -4396,6 +4489,171 @@ class VideoSubtitleRemoverApp(
                     None,
                 )
 
+            def _set_clean_reference_controls(enabled):
+                reason = tr("Clean references attach only to timed regions")
+                for button in reference_buttons.values():
+                    button.set_enabled(bool(enabled), reason)
+                reference_alignment_picker.configure(
+                    state="readonly" if enabled else "disabled")
+                reference_confidence_entry.configure(
+                    state="normal" if enabled else "disabled")
+                reference_color_toggle.set_enabled(bool(enabled))
+
+            def _selected_clean_reference_span():
+                record = _record_by_key(selected_region_key[0])
+                if record is None or record.get("source") != "span":
+                    return None, None
+                return record, region_spans[record["index"]]
+
+            def _load_clean_reference_controls(record):
+                if record is None or record.get("source") != "span":
+                    _set_clean_reference_controls(False)
+                    reference_path_var.set("")
+                    reference_status_var.set(tr(
+                        "Select a timed region to attach a clean reference."))
+                    return
+                _set_clean_reference_controls(True)
+                span = region_spans[record["index"]]
+                spec = span.get("clean_reference") or {}
+                reference_path_var.set(
+                    Path(spec.get("path", "")).name if spec else tr("None"))
+                mode_labels = {
+                    "auto": tr("Auto"),
+                    "translation": tr("Translation"),
+                    "homography": tr("Homography"),
+                }
+                reference_alignment_var.set(
+                    mode_labels.get(spec.get("alignment", "auto"), tr("Auto")))
+                reference_color_match_var.set(
+                    bool(spec.get("color_match", True)))
+                reference_confidence_var.set(
+                    f"{float(spec.get('min_confidence', 0.75)):g}")
+                reference_status_var.set(
+                    tr("Ready to preview alignment.") if spec else tr(
+                        "Choose a same-size clean image for this timed region."))
+
+            def _save_clean_reference_options():
+                record, span = _selected_clean_reference_span()
+                if span is None or not span.get("clean_reference"):
+                    return False
+                mode_values = {
+                    tr("Auto"): "auto",
+                    tr("Translation"): "translation",
+                    tr("Homography"): "homography",
+                }
+                try:
+                    confidence = float(reference_confidence_var.get().strip())
+                    if not math.isfinite(confidence) or not 0.05 <= confidence <= 0.99:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    self._update_status(
+                        tr("Confidence must be between 0.05 and 0.99"),
+                        "warning",
+                    )
+                    return False
+                from backend.reference_fill import normalize_clean_reference
+                updated = normalize_clean_reference({
+                    **span["clean_reference"],
+                    "alignment": mode_values.get(
+                        reference_alignment_var.get(), "auto"),
+                    "color_match": reference_color_match_var.get(),
+                    "min_confidence": confidence,
+                })
+                if updated != span.get("clean_reference"):
+                    _record_history()
+                    span["clean_reference"] = updated
+                _load_clean_reference_controls(record)
+                return True
+
+            def _choose_clean_reference():
+                record, span = _selected_clean_reference_span()
+                if span is None:
+                    self._update_status(
+                        tr("Select a timed region before choosing a clean reference"),
+                        "warning",
+                    )
+                    return
+                path = filedialog.askopenfilename(
+                    parent=win,
+                    title=tr("Choose clean reference image"),
+                    filetypes=[
+                        (tr("Image files"),
+                         "*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff"),
+                        (tr("All files"), "*.*"),
+                    ],
+                )
+                if not path:
+                    return
+                reference = safe_imread(path)
+                if reference is None:
+                    self._update_status(
+                        tr("The clean reference image could not be read"),
+                        "warning",
+                    )
+                    return
+                if reference.shape[:2] != (orig_h, orig_w):
+                    self._update_status(
+                        tr("Clean reference must be {width}x{height}").format(
+                            width=orig_w, height=orig_h),
+                        "warning",
+                    )
+                    return
+                from backend.reference_fill import normalize_clean_reference
+                _record_history()
+                span["clean_reference"] = normalize_clean_reference({
+                    "path": path,
+                    "alignment": "auto",
+                    "color_match": True,
+                    "min_confidence": 0.75,
+                })
+                _load_clean_reference_controls(record)
+                self._update_status(
+                    tr("Clean reference attached to the timed region"),
+                    "success",
+                )
+
+            def _clear_clean_reference():
+                record, span = _selected_clean_reference_span()
+                if span is None or "clean_reference" not in span:
+                    return
+                _record_history()
+                span.pop("clean_reference", None)
+                _load_clean_reference_controls(record)
+                self._update_status(tr("Clean reference cleared"), "info")
+
+            def _preview_clean_reference():
+                record, span = _selected_clean_reference_span()
+                if span is None or not span.get("clean_reference"):
+                    self._update_status(
+                        tr("Choose a clean reference for the selected timed region"),
+                        "warning",
+                    )
+                    return
+                if not _save_clean_reference_options():
+                    return
+                try:
+                    result = self._render_clean_reference_preview(
+                        current_frame[0], span)
+                except Exception as exc:
+                    self._update_status(str(exc), "warning")
+                    return
+                _draw_image(result.composite if result.accepted else result.aligned)
+                _draw_saved_rects()
+                status = tr(
+                    "{method} alignment: {confidence:.1%}").format(
+                        method=result.method.title(),
+                        confidence=result.confidence,
+                    )
+                if result.accepted:
+                    status += tr("; color delta BGR {delta}").format(
+                        delta=", ".join(f"{value:g}" for value in result.color_delta))
+                    reference_status_var.set(status)
+                    self._update_status(tr("Clean reference preview ready"), "success")
+                else:
+                    reference_status_var.set(
+                        status + tr("; would fall back to normal inpainting"))
+                    self._update_status(result.reason, "warning")
+
             def _load_selected_region():
                 records = _editable_region_records()
                 selected_label = selected_region_var.get()
@@ -4411,6 +4669,7 @@ class VideoSubtitleRemoverApp(
                         variable.set("")
                     for entry in geometry_entries.values():
                         entry.configure(state="disabled")
+                    _load_clean_reference_controls(None)
                     return
                 selected_region_key[0] = record["key"]
                 shape = record["shape"]
@@ -4435,6 +4694,7 @@ class VideoSubtitleRemoverApp(
                     _set_time_fields()
                 else:
                     _set_time_fields(record.get("start"), record.get("end"))
+                _load_clean_reference_controls(record)
 
             def _refresh_region_editor(prefer_key=None):
                 records = _editable_region_records()
@@ -4634,6 +4894,15 @@ class VideoSubtitleRemoverApp(
             history_buttons.update(undo=undo_edit_button, redo=redo_edit_button)
 
             region_picker.bind("<<ComboboxSelected>>", lambda _event: _load_selected_region())
+            reference_alignment_picker.bind(
+                "<<ComboboxSelected>>",
+                lambda _event: _save_clean_reference_options(),
+            )
+            reference_confidence_entry.bind(
+                "<FocusOut>",
+                lambda _event: _save_clean_reference_options(),
+                add="+",
+            )
             if is_video:
                 start_entry.bind("<KeyRelease>", lambda _event: time_input_source.update(start="seconds"))
                 end_entry.bind("<KeyRelease>", lambda _event: time_input_source.update(end="seconds"))
@@ -4650,6 +4919,11 @@ class VideoSubtitleRemoverApp(
             win._vsr_undo_region_edit = _undo_region_edit
             win._vsr_redo_region_edit = _redo_region_edit
             win._vsr_region_key_handler = _transform_selected_region
+            win._vsr_clean_reference_buttons = reference_buttons
+            win._vsr_choose_clean_reference = _choose_clean_reference
+            win._vsr_clear_clean_reference = _clear_clean_reference
+            win._vsr_preview_clean_reference = _preview_clean_reference
+            win._vsr_clean_reference_status = reference_status_var
 
             # Action row: Add another, Clear all, Save.
             actions = tk.Frame(win, bg=Theme.BG_OVERLAY)

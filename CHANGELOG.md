@@ -44,6 +44,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Timed-region clean reference fills.** Each timed rectangle can persist a
+  same-size clean plate, preview translation or homography alignment at the
+  current frame, and opt into per-frame BGR color matching. Processing applies
+  an accepted plate only where its region intersects the finalized mask;
+  low-confidence frames automatically retain that mask for normal inpainting.
+  Output sidecars capture the plate hash, scope, policy, observed confidence,
+  alignment methods, color delta, and accepted/fallback frame counts.
 - **Local-first erase, translate, and re-embed workflow.** The opt-in CLI and
   Detailed controls accept a ready translated SRT or preserve OCR, Whisper,
   or source-SRT timings while a registered provider translates cue text. The

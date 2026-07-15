@@ -213,6 +213,246 @@ class ReferenceClipHarnessTests(unittest.TestCase):
         self.assertTrue(out)
 
 
+class CleanReferenceFillTests(unittest.TestCase):
+    H, W = 120, 200
+    RECT = (55, 70, 150, 100)
+
+    @classmethod
+    def _pattern(cls):
+        import cv2
+
+        frame = np.zeros((cls.H, cls.W, 3), dtype=np.uint8)
+        frame[:] = (35, 65, 95)
+        for x in range(0, cls.W, 20):
+            cv2.line(frame, (x, 0), (x, cls.H - 1),
+                     (60 + x % 120, 150, 210), 1)
+        for y in range(0, cls.H, 16):
+            cv2.line(frame, (0, y), (cls.W - 1, y),
+                     (200, 70 + y % 120, 50), 1)
+        cv2.circle(frame, (38, 45), 18, (20, 220, 90), -1)
+        cv2.rectangle(frame, (155, 20), (190, 58), (220, 80, 210), -1)
+        return frame
+
+    @staticmethod
+    def _spec(path="reference.png", **overrides):
+        return {
+            "path": path,
+            "alignment": "auto",
+            "color_match": True,
+            "min_confidence": 0.65,
+            **overrides,
+        }
+
+    def test_config_round_trip_preserves_reference_on_timed_region(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        from gui.config import ProcessingConfig as GuiProcessingConfig
+
+        span = {
+            "rect": self.RECT,
+            "start": 1.5,
+            "end": 4.0,
+            "clean_reference": self._spec(
+                alignment="homography", min_confidence=0.81),
+        }
+        backend_config = normalize_processing_config(ProcessingConfig(
+            subtitle_region_spans=[span]))
+        gui_config = GuiProcessingConfig.from_dict({
+            "subtitle_region_spans": [span],
+        })
+
+        for config in (backend_config, gui_config):
+            reference = config.subtitle_region_spans[0]["clean_reference"]
+            self.assertEqual(reference["alignment"], "homography")
+            self.assertEqual(reference["min_confidence"], 0.81)
+            self.assertTrue(reference["color_match"])
+
+    def test_translation_alignment_and_color_match_restore_mask_only(self):
+        import cv2
+        from backend.reference_fill import apply_clean_reference
+
+        reference = self._pattern()
+        transform = np.float32([[1.0, 0.0, 6.0], [0.0, 1.0, -3.0]])
+        clean = cv2.warpAffine(
+            reference, transform, (self.W, self.H),
+            borderMode=cv2.BORDER_REFLECT101)
+        clean = np.clip(
+            clean.astype(np.int16) + np.array([7, 11, 15]),
+            0, 255).astype(np.uint8)
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        observed = clean.copy()
+        observed[mask > 0] = (250, 250, 250)
+
+        result = apply_clean_reference(
+            observed, reference, mask,
+            self._spec(alignment="translation"))
+        masked_error = np.abs(
+            result.composite[mask > 0].astype(np.float32)
+            - clean[mask > 0].astype(np.float32)).mean()
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.method, "translation")
+        self.assertGreater(result.confidence, 0.9)
+        self.assertLess(masked_error, 2.0)
+        self.assertTrue(np.array_equal(
+            result.composite[mask == 0], observed[mask == 0]))
+
+    def test_homography_alignment_handles_perspective_change(self):
+        import cv2
+        from backend.reference_fill import apply_clean_reference
+
+        reference = self._pattern()
+        source_points = np.float32([
+            [0, 0], [self.W - 1, 0],
+            [self.W - 1, self.H - 1], [0, self.H - 1],
+        ])
+        target_points = np.float32([
+            [3, 2], [self.W - 6, 0],
+            [self.W - 2, self.H - 4], [0, self.H - 1],
+        ])
+        transform = cv2.getPerspectiveTransform(source_points, target_points)
+        clean = cv2.warpPerspective(
+            reference, transform, (self.W, self.H),
+            borderMode=cv2.BORDER_REFLECT101)
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        observed = clean.copy()
+        observed[mask > 0] = 255
+
+        result = apply_clean_reference(
+            observed, reference, mask,
+            self._spec(alignment="homography", color_match=False))
+
+        self.assertTrue(result.accepted)
+        self.assertEqual(result.method, "homography")
+        self.assertGreater(result.confidence, 0.85)
+        self.assertLess(np.abs(
+            result.composite[mask > 0].astype(np.float32)
+            - clean[mask > 0].astype(np.float32)).mean(), 5.0)
+
+    def test_low_confidence_reference_falls_back_without_modifying_frame(self):
+        from backend.reference_fill import apply_clean_reference
+
+        observed = self._pattern()
+        unrelated = np.random.default_rng(42).integers(
+            0, 256, observed.shape, dtype=np.uint8)
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+
+        result = apply_clean_reference(
+            observed, unrelated, mask,
+            self._spec(min_confidence=0.95))
+
+        self.assertFalse(result.accepted)
+        self.assertIn("confidence", result.reason)
+        self.assertTrue(np.array_equal(result.composite, observed))
+
+    def test_processor_scopes_reference_and_emits_redacted_evidence(self):
+        import cv2
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        reference = self._pattern()
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        mask[5:15, 5:25] = 255
+        observed = reference.copy()
+        observed[mask > 0] = 245
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "clean.png"
+            self.assertTrue(cv2.imwrite(str(path), reference))
+            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[{
+                    "rect": self.RECT,
+                    "start": 0.0,
+                    "end": 2.0,
+                    "clean_reference": self._spec(str(path)),
+                }],
+            ))
+            remover._initialize_clean_references(self.W, self.H)
+            composite, remaining = remover._apply_clean_reference_overrides(
+                observed, mask, 1.0)
+            evidence = remover._clean_reference_sidecar_evidence()
+
+        self.assertFalse(np.any(remaining[y1:y2, x1:x2]))
+        self.assertTrue(np.all(remaining[5:15, 5:25] == 255))
+        self.assertTrue(np.array_equal(composite[5:15, 5:25], observed[5:15, 5:25]))
+        self.assertEqual(evidence["status"], "applied")
+        self.assertEqual(evidence["references"][0]["source"]["name"], "clean.png")
+        self.assertNotIn(tmpdir, str(evidence))
+
+    @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
+    def test_full_video_pipeline_uses_clean_reference_and_sidecar(self):
+        import cv2
+        import json
+
+        clean = self._pattern()
+        observed = clean.copy()
+        x1, y1, x2, y2 = self.RECT
+        observed[y1:y2, x1:x2] = 245
+        frames = [observed.copy() for _ in range(8)]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = _write_synthetic(root / "source.mkv", frames, fps=8.0)
+            reference_path = root / "clean.png"
+            self.assertTrue(cv2.imwrite(str(reference_path), clean))
+            output = root / "cleaned.mp4"
+            config = processor.normalize_processing_config(
+                processor.ProcessingConfig(
+                    mode=processor.InpaintMode.STTN,
+                    device="cpu",
+                    sttn_skip_detection=True,
+                    subtitle_region_spans=[{
+                        "rect": self.RECT,
+                        "start": 0.0,
+                        "end": 0.0,
+                        "clean_reference": self._spec(str(reference_path)),
+                    }],
+                    preserve_audio=False,
+                    adaptive_batch=False,
+                    use_hw_encode=False,
+                    output_quality=18,
+                ))
+            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+            remover.config = config
+            remover.detector = processor.SubtitleDetector.__new__(
+                processor.SubtitleDetector)
+            remover.detector.device = "cpu"
+            remover.detector.lang = "en"
+            remover.detector.vertical = False
+            remover.detector._engine_name = "clean-reference-test"
+            remover.detector._rapid_model = None
+            remover.detector._paddle_model = None
+            remover.detector._surya_det = None
+            remover.detector._surya_processor = None
+            remover.detector._easyocr_reader = None
+            remover.inpainter = processor.STTNInpainter("cpu", config)
+            remover.on_progress = None
+            remover.on_preview_frame = None
+            remover.live_preview_stride = 8
+            remover._hw_encoder = None
+            remover.last_quality_report = None
+            remover._color_metadata = None
+
+            self.assertTrue(remover.process_video(str(source), str(output)))
+            capture = cv2.VideoCapture(str(output))
+            ok, actual = capture.read()
+            capture.release()
+            sidecar = json.loads(Path(
+                str(output) + ".vsr.json").read_text(encoding="utf-8"))
+
+        self.assertTrue(ok)
+        self.assertLess(np.abs(
+            actual[y1:y2, x1:x2].astype(np.float32)
+            - clean[y1:y2, x1:x2].astype(np.float32)).mean(), 12.0)
+        self.assertEqual(sidecar["cleanReference"]["status"], "applied")
+        self.assertEqual(sidecar["cleanReference"]["acceptedFrames"], 8)
+
+
 class RealClipManifestTests(unittest.TestCase):
     """Validate the reference clip manifest and refuse unmanifested clips."""
 

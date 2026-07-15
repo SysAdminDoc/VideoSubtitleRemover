@@ -23,6 +23,13 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
+# Motion-estimation APIs live in a focused module but remain available from
+# tracking, where callers already obtain frame-to-frame alignment helpers.
+from backend.reference_fill import (
+    ReferenceFillResult as ReferenceFillResult,
+    apply_clean_reference as apply_clean_reference,
+)
+
 
 class _KalmanBox:
     """Simple constant-velocity Kalman filter for a single subtitle box.

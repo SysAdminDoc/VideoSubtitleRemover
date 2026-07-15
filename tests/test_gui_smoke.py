@@ -924,6 +924,83 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_timed_region_clean_reference_can_be_chosen_and_previewed(self):
+        app = self._make_app(withdraw=False)
+        try:
+            import cv2
+            import numpy as np
+            from gui.widgets import ModernButton
+
+            source = Path(self._tmpdir.name) / "selector-reference.avi"
+            reference = Path(self._tmpdir.name) / "selector-clean.png"
+            frame_w, frame_h = 320, 180
+            Image.new("RGB", (frame_w, frame_h), (20, 24, 32)).save(reference)
+            writer = cv2.VideoWriter(
+                str(source), cv2.VideoWriter_fourcc(*"MJPG"),
+                10.0, (frame_w, frame_h))
+            if not writer.isOpened():
+                self.skipTest("OpenCV video writer unavailable")
+            try:
+                image = Image.new("RGB", (frame_w, frame_h), (20, 24, 32))
+                ImageDraw.Draw(image).rectangle(
+                    (40, 120, 280, 152), fill=(235, 235, 235))
+                bgr = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                for _index in range(4):
+                    writer.write(bgr)
+            finally:
+                writer.release()
+
+            with mock.patch.object(app, "_start_soft_subtitle_probe"):
+                with mock.patch.object(app, "_show_preview"):
+                    self.assertEqual(app._add_to_queue(str(source)), "added")
+            item = app.queue[0]
+            app._open_region_selector_modal()
+            app.root.update()
+            selector = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+                and child.title() == "Choose subtitle region")
+            canvas = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, tk.Canvas)
+                and str(widget.cget("cursor")) == "cross")
+            self._drag_canvas(canvas, (40, 120), (280, 152))
+            selector._vsr_end_frame_entry.insert(0, "3")
+            selector._vsr_end_frame_entry.event_generate(
+                "<KeyRelease>", keysym="3", when="now")
+            add_timed = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Add timed")
+            add_timed.command()
+            app.root.update()
+
+            with mock.patch(
+                "gui.app.filedialog.askopenfilename",
+                return_value=str(reference),
+            ):
+                selector._vsr_choose_clean_reference()
+            selector._vsr_preview_clean_reference()
+            app.root.update()
+
+            self.assertIn(
+                "alignment", selector._vsr_clean_reference_status.get())
+            save_button = next(
+                widget for widget in self._walk_widgets(selector)
+                if isinstance(widget, ModernButton)
+                and getattr(widget, "text", "") == "Save")
+            save_button.command()
+            app.root.update()
+
+            spec = app.config.subtitle_region_spans[0]["clean_reference"]
+            self.assertEqual(spec["path"], str(reference))
+            self.assertEqual(spec["alignment"], "auto")
+            self.assertTrue(spec["color_match"])
+            self.assertEqual(
+                item.config.subtitle_region_spans[0]["clean_reference"], spec)
+        finally:
+            self._destroy_app(app)
+
     def test_region_selector_scaled_video_updates_preview_coordinates(self):
         app = self._make_app(withdraw=False)
         try:

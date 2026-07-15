@@ -245,6 +245,7 @@ def _coerce_region_span(value, *, label: Optional[str] = None,
     rect_source = None
     start = 0.0
     end = 0.0
+    clean_reference = None
     if isinstance(value, dict):
         rect_source = (
             value.get("rect")
@@ -256,6 +257,9 @@ def _coerce_region_span(value, *, label: Optional[str] = None,
                            value.get("x2"), value.get("y2")]
         start = value.get("start", value.get("start_seconds", 0.0))
         end = value.get("end", value.get("end_seconds", 0.0))
+        from backend.reference_fill import normalize_clean_reference
+        clean_reference = normalize_clean_reference(
+            value.get("clean_reference", value.get("cleanReference")))
     elif isinstance(value, (list, tuple)):
         if len(value) == 4:
             rect_source = value
@@ -274,7 +278,10 @@ def _coerce_region_span(value, *, label: Optional[str] = None,
     end_s = _coerce_float(end, 0.0, 0.0)
     if end_s and end_s <= start_s:
         end_s = 0.0
-    return {"rect": rect, "start": start_s, "end": end_s}
+    result = {"rect": rect, "start": start_s, "end": end_s}
+    if clean_reference is not None:
+        result["clean_reference"] = clean_reference
+    return result
 
 
 def _coerce_region_span_list(value, *, label: Optional[str] = None,

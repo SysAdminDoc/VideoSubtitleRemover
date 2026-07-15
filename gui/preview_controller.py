@@ -38,6 +38,26 @@ logger = logging.getLogger(__name__)
 class PreviewControllerMixin:
     """Focused controller methods mixed into VideoSubtitleRemoverApp."""
 
+    def _render_clean_reference_preview(self, frame, span):
+        """Return alignment/composite evidence for one selected timed region."""
+        from backend.reference_fill import apply_clean_reference
+
+        if frame is None or not isinstance(span, dict):
+            raise ValueError("Select a timed region and video frame first")
+        spec = span.get("clean_reference")
+        if not spec:
+            raise ValueError("Choose a clean reference image for this region")
+        reference = safe_imread(spec["path"])
+        if reference is None:
+            raise ValueError("The clean reference image could not be read")
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = span["rect"]
+        x1, x2 = max(0, min(width, x1)), max(0, min(width, x2))
+        y1, y2 = max(0, min(height, y1)), max(0, min(height, y2))
+        mask = np.zeros((height, width), dtype=np.uint8)
+        mask[y1:y2, x1:x2] = 255
+        return apply_clean_reference(frame, reference, mask, spec)
+
     def _start_throbber(self):
         """Animate the preview area with a shimmer placeholder and moving dots
         to signal a background task in progress."""

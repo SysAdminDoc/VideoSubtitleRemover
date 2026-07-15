@@ -34,6 +34,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
 - **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
+- **Confidence-Gated Clean Plates** -- Attach a same-size clean reference image to each timed rectangle, preview translation or homography alignment and per-frame color matching, and fall back to normal inpainting whenever alignment is uncertain
 - **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
 - **Lossless Matte Interchange** -- Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
 - **Erase, Translate, and Re-embed** -- Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
@@ -462,6 +463,20 @@ The output reproducibility sidecar records the imported artifact's current
 SHA-256, whether it differs from the exported hash, and the deterministic mask
 composition order. **Review mask** shows that composed result before a run.
 
+For static-camera overlays, a timed rectangle can use a deterministic clean
+plate instead of estimated or neural pixels. Open **Set Region**, add and
+select a timed rectangle, then choose a same-pixel-size clean image in the
+**Clean reference** panel. Preview `Auto`, `Translation`, or `Homography`
+alignment at the scrubbed frame, enable per-frame color matching, and set the
+confidence floor. Auto prefers translation unless homography materially
+improves the match. During processing, a plate is copied only where that
+region intersects the finalized mask; low-confidence frames retain their mask
+and go through the normal inpainter. Settings and queue snapshots retain the
+plate assignment. Each output sidecar records the plate filename, SHA-256,
+timed rectangle, alignment policy, confidence range/mean, method counts, color
+delta, and accepted/fallback frame counts without exposing an absolute path in
+the clean-reference evidence.
+
 Long video runs can pause at safe frame-batch boundaries. In the GUI, click
 **Pause batch** while processing; the current video writes checkpoint frames
 under the selected work directory, or under
@@ -837,6 +852,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | Frame Skip | Reuse detection mask for N frames | 0 | 0-10 |
 | Mask Dilate | Expand detected regions (px) | 8 | 0-20 |
 | Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |
+| Timed-region Clean Reference | Same-size clean plate with translation/homography preview, color matching, and confidence-gated inpaint fallback | None | Per timed rectangle |
 | TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |
 | HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
 | FFmpeg D3D12 | Windows-only experimental upload, scale, deinterlace, and encode path with runtime validation and automatic fallback | Off | On/Off; FFmpeg 8.1+ |
