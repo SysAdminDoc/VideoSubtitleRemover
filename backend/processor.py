@@ -77,7 +77,7 @@ from backend.io import (
     _run_subprocess_checked,
     _terminate_subprocess,
 )
-from backend.encoder import _detect_hw_encoder
+from backend.encoder import _detect_hw_encoder, probe_d3d12_encoder
 from backend.container_payload import (
     build_container_mux_args,
     build_container_mux_plan,
@@ -445,9 +445,22 @@ class SubtitleRemover:
         self._active_writer = None
         self._active_subprocess: Optional[subprocess.Popen] = None
         self._teardown_requested = False
+        self._d3d12_probe: dict = {
+            "schema": "vsr.d3d12_runtime.v1",
+            "requested": bool(self.config.d3d12_accel),
+            "available": False,
+            "reason": "not requested",
+        }
+        self._d3d12_fallback_encoder: Optional[str] = None
+        self._d3d12_status: dict = {
+            "requested": bool(self.config.d3d12_accel),
+            "selected_encoder": "software",
+            "fallback_encoder": "software",
+            "runtime_fallback": False,
+            "probe": dict(self._d3d12_probe),
+        }
 
-        if self.config.use_hw_encode:
-            self._hw_encoder = _detect_hw_encoder(self.config.output_codec)
+        self._select_hw_encoder(self.config.output_codec)
 
         # Adaptive batch sizing -- probe free VRAM, scale sttn_max_load_num.
         # Defaults to the user-configured value on probe failure.
@@ -680,6 +693,103 @@ class SubtitleRemover:
             frame_seconds,
             frame_index,
         )
+
+    def _select_hw_encoder(self, codec: str) -> Optional[str]:
+        """Select the opt-in D3D12 path only after its runtime smoke."""
+        if not self.config.use_hw_encode:
+            self._hw_encoder = None
+            self._d3d12_fallback_encoder = None
+            self._d3d12_probe = {
+                "schema": "vsr.d3d12_runtime.v1",
+                "requested": bool(self.config.d3d12_accel),
+                "codec": codec,
+                "available": False,
+                "reason": "hardware encoding is disabled",
+            }
+            self._d3d12_status = {
+                "requested": bool(self.config.d3d12_accel),
+                "selected_encoder": "software",
+                "fallback_encoder": "software",
+                "runtime_fallback": False,
+                "probe": dict(self._d3d12_probe),
+            }
+            return None
+        prefer_d3d12 = bool(
+            self.config.use_hw_encode and self.config.d3d12_accel)
+        if prefer_d3d12:
+            self._d3d12_probe = probe_d3d12_encoder(codec)
+        else:
+            self._d3d12_probe = {
+                "schema": "vsr.d3d12_runtime.v1",
+                "requested": bool(self.config.d3d12_accel),
+                "codec": codec,
+                "available": False,
+                "reason": (
+                    "hardware encoding is disabled"
+                    if self.config.d3d12_accel else "not requested"
+                ),
+            }
+        self._hw_encoder = _detect_hw_encoder(
+            codec,
+            prefer_d3d12=prefer_d3d12,
+            d3d12_probe=self._d3d12_probe,
+        )
+        self._d3d12_fallback_encoder = None
+        if self._using_d3d12_encoder():
+            self._d3d12_fallback_encoder = _detect_hw_encoder(codec)
+        self._d3d12_status = {
+            "requested": bool(self.config.d3d12_accel),
+            "selected_encoder": self._hw_encoder or "software",
+            "fallback_encoder": self._d3d12_fallback_encoder or "software",
+            "runtime_fallback": False,
+            "probe": dict(self._d3d12_probe),
+        }
+        return self._hw_encoder
+
+    def _using_d3d12_encoder(self) -> bool:
+        return bool(
+            self._hw_encoder
+            and self._hw_encoder.endswith("_d3d12va")
+            and self.config.use_hw_encode
+        )
+
+    def _d3d12_device_args(self) -> List[str]:
+        if not self._using_d3d12_encoder():
+            return []
+        return [
+            "-init_hw_device", "d3d12va=vsr_d3d12",
+            "-filter_hw_device", "vsr_d3d12",
+        ]
+
+    def _fallback_after_hw_failure(self, reason: object) -> bool:
+        """Move D3D12 to the established HW chain, then to software."""
+        failed = self._hw_encoder
+        if not failed:
+            return False
+        if failed.endswith("_d3d12va"):
+            self._hw_encoder = getattr(
+                self, "_d3d12_fallback_encoder", None)
+        else:
+            self._hw_encoder = None
+        status = dict(getattr(self, "_d3d12_status", {}) or {})
+        status.update({
+            "selected_encoder": self._hw_encoder or "software",
+            "runtime_fallback": True,
+            "failed_encoder": failed,
+            "fallback_reason": str(reason),
+        })
+        self._d3d12_status = status
+        return True
+
+    def _attach_d3d12_evidence(self, report: dict) -> dict:
+        selected = getattr(self, "_hw_encoder", None) or "software"
+        report["windows_d3d12"] = dict(
+            getattr(self, "_d3d12_status", {}) or {
+                "requested": False,
+                "selected_encoder": selected,
+            }
+        )
+        return report
 
     def _refine_masks_with_matanyone(self,
                                      frames: List[np.ndarray],
@@ -1645,6 +1755,10 @@ class SubtitleRemover:
                         input_path,
                         temp_dir,
                         output_contract=self._output_contract,
+                        prefer_d3d12=(
+                            self.config.d3d12_accel
+                            and not self._source_is_hdr()
+                        ),
                         on_process=self._set_active_subprocess,
                         cancel_check=self._is_teardown_requested,
                     )
@@ -3055,7 +3169,7 @@ class SubtitleRemover:
             )
             self._hdr_codec_warning_logged = True
         if self.config.use_hw_encode and effective != requested:
-            self._hw_encoder = _detect_hw_encoder(effective)
+            self._select_hw_encoder(effective)
         from backend.output_contract import build_output_contract
 
         self._output_contract = build_output_contract(
@@ -3067,7 +3181,8 @@ class SubtitleRemover:
             color_metadata=meta,
             hardware_requested=self.config.use_hw_encode,
         )
-        self.last_output_contract = self._output_contract.report()
+        self.last_output_contract = self._attach_d3d12_evidence(
+            self._output_contract.report())
         self.last_output_contract["container_payload"] = {
             "status": "pending",
         }
@@ -3091,7 +3206,8 @@ class SubtitleRemover:
         if (self.last_container_payload or {}).get("status") == "failed":
             issues.extend(f"container payload: {item}" for item in payload_issues)
             ok = False
-        self.last_output_contract = contract.report()
+        self.last_output_contract = self._attach_d3d12_evidence(
+            contract.report())
         self.last_output_contract["container_payload"] = dict(
             self.last_container_payload or {"status": "not-probed"}
         )
@@ -3269,7 +3385,7 @@ class SubtitleRemover:
                     produced = add_film_grain(
                         output_path, grain_out,
                         strength=self.config.film_grain_strength,
-                        video_encode_args=self._get_encode_args(),
+                        video_encode_args=self._get_encode_args(allow_d3d12=False),
                         preserve_audio=self.config.preserve_audio,
                     )
                     if produced and Path(produced).is_file():
@@ -3290,7 +3406,7 @@ class SubtitleRemover:
                     output_path, restyle_out,
                     subtitle_path=self.config.restyle_subtitle,
                     style_override=self.config.restyle_style,
-                    video_encode_args=self._get_encode_args(),
+                    video_encode_args=self._get_encode_args(allow_d3d12=False),
                     preserve_audio=self.config.preserve_audio,
                 )
                 if produced and Path(produced).is_file():
@@ -3310,7 +3426,7 @@ class SubtitleRemover:
                     position=self.config.watermark_position,
                     opacity=self.config.watermark_opacity,
                     margin=self.config.watermark_margin,
-                    video_encode_args=self._get_encode_args(),
+                    video_encode_args=self._get_encode_args(allow_d3d12=False),
                     preserve_audio=self.config.preserve_audio,
                 )
                 if produced and Path(produced).is_file():
@@ -3337,7 +3453,7 @@ class SubtitleRemover:
         )
         return ["-svtav1-params", f"film-grain={grain}"]
 
-    def _get_encode_args(self) -> List[str]:
+    def _get_encode_args(self, *, allow_d3d12: bool = True) -> List[str]:
         """Return FFmpeg video encoder arguments, preferring hardware encoding."""
         codec = self._effective_output_codec()
         hdr_mode = self._source_is_hdr()
@@ -3355,6 +3471,7 @@ class SubtitleRemover:
             self._hw_encoder
             and encoder_prefix
             and self._hw_encoder.startswith(encoder_prefix)
+            and (allow_d3d12 or not self._hw_encoder.endswith("_d3d12va"))
         )
         if static_hdr and self._hw_encoder and self.config.use_hw_encode:
             if not getattr(self, "_hdr_software_warning_logged", False):
@@ -3364,7 +3481,14 @@ class SubtitleRemover:
                 )
                 self._hdr_software_warning_logged = True
         if hardware_matches and self.config.use_hw_encode and not static_hdr:
-            if 'nvenc' in self._hw_encoder:
+            if self._hw_encoder.endswith("_d3d12va"):
+                base = [
+                    "-vf", "format=nv12,hwupload,scale_d3d12=w=iw:h=ih",
+                    "-c:v", self._hw_encoder,
+                    "-bf", "0", "-async_depth", "1",
+                    "-rc_mode", "CQP", "-qp", str(self.config.output_quality),
+                ]
+            elif 'nvenc' in self._hw_encoder:
                 base = ['-c:v', self._hw_encoder, '-preset', 'p4',
                         '-cq', str(self.config.output_quality)]
             elif 'qsv' in self._hw_encoder:
@@ -3647,14 +3771,18 @@ class SubtitleRemover:
                     concat_path, "\n".join(concat_lines) + "\n")
                 cmd = [
                     'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-                    '-nostats', '-f', 'concat', '-safe', '0',
+                    '-nostats',
+                ] + self._d3d12_device_args() + [
+                    '-f', 'concat', '-safe', '0',
                     '-i', str(concat_path),
                 ]
             else:
                 normalized_durations = []
                 cmd = [
                     'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-                    '-nostats', '-framerate', f"{float(fps):.6f}",
+                    '-nostats',
+                ] + self._d3d12_device_args() + [
+                    '-framerate', f"{float(fps):.6f}",
                     '-i', str(pattern),
                 ]
             cmd += self._get_encode_args()
@@ -3688,6 +3816,21 @@ class SubtitleRemover:
                 "FFmpeg not found; leaving processed checkpoint frames as output"
             )
             return str(frame_dir)
+        except (subprocess.CalledProcessError, OutputIntegrityError) as exc:
+            if self._fallback_after_hw_failure(exc):
+                logger.warning(
+                    "Hardware encoder failed, retrying with %s: %s",
+                    self._hw_encoder or "software",
+                    exc,
+                )
+                return self._encode_frame_sequence(
+                    frame_dir,
+                    fps,
+                    output,
+                    frame_durations=frame_durations,
+                    source_time_base=source_time_base,
+                )
+            raise
         finally:
             _cleanup_temp_output(temp_output)
             _cleanup_temp_output(concat_path)
@@ -3698,7 +3841,9 @@ class SubtitleRemover:
         temp_output = self._allocate_work_output(output)
         try:
             _ensure_output_parent(output)
-            cmd = ['ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats', '-i', source]
+            cmd = [
+                'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
+            ] + self._d3d12_device_args() + ['-i', source]
             cmd += self._get_encode_args()
             cmd += ['-an', str(temp_output)]
             timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(source))
@@ -3706,15 +3851,25 @@ class SubtitleRemover:
             self._promote_video_output(temp_output, output, reference=source)
             return output
         except OutputIntegrityError as exc:
+            if self._fallback_after_hw_failure(exc):
+                logger.warning(
+                    "Hardware encoder output failed validation, retrying with %s: %s",
+                    self._hw_encoder or "software",
+                    exc.reason,
+                )
+                return self._reencode_or_copy(source, output)
             logger.warning(
                 "Re-encode failed integrity check (%s); salvaging intermediate.",
                 exc.reason,
             )
             return self._salvage_intermediate(source, output)
         except subprocess.CalledProcessError as e:
-            if self._hw_encoder:
-                logger.warning(f"HW encoder failed, retrying with libx264: {e}")
-                self._hw_encoder = None
+            if self._fallback_after_hw_failure(e):
+                logger.warning(
+                    "Hardware encoder failed, retrying with %s: %s",
+                    self._hw_encoder or "software",
+                    e,
+                )
                 return self._reencode_or_copy(source, output)
             return self._salvage_intermediate(source, output)
         except Exception as exc:
@@ -3743,6 +3898,7 @@ class SubtitleRemover:
             _ensure_output_parent(output)
             cmd = [
                 'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
+            ] + self._d3d12_device_args() + [
                 '-i', processed,
             ]
             # Seek audio to the first selected source PTS. For VFR input this
@@ -3814,6 +3970,22 @@ class SubtitleRemover:
                     temp_output, output, reference=processed
                 )
             except OutputIntegrityError as exc:
+                if self._fallback_after_hw_failure(exc):
+                    logger.warning(
+                        "Hardware encoder output failed validation, retrying "
+                        "container merge with %s: %s",
+                        self._hw_encoder or "software",
+                        exc.reason,
+                    )
+                    return self._merge_audio(
+                        original,
+                        processed,
+                        output,
+                        start_seconds=start_seconds,
+                        end_seconds=end_seconds,
+                        _include_auxiliary=_include_auxiliary,
+                        _force_audio_transcode=_force_audio_transcode,
+                    )
                 logger.warning(
                     "Audio merge produced a truncated/invalid output (%s); "
                     "saving the full-length video without audio instead.",
@@ -3891,8 +4063,12 @@ class SubtitleRemover:
         except subprocess.CalledProcessError as e:
             # If hardware encoder failed, retry with software
             if self._hw_encoder and self._hw_encoder in cmd:
-                logger.warning(f"HW encoder failed, retrying with libx264: {e}")
-                self._hw_encoder = None
+                self._fallback_after_hw_failure(e)
+                logger.warning(
+                    "Hardware encoder failed, retrying with %s: %s",
+                    self._hw_encoder or "software",
+                    e,
+                )
                 return self._merge_audio(
                     original,
                     processed,

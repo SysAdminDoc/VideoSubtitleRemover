@@ -390,6 +390,8 @@ class VideoSubtitleRemoverApp(
         self.config.time_end = self._safe_float(self.time_end_entry.get())
         # HW encode
         self.config.use_hw_encode = self.hw_encode_var.get()
+        if hasattr(self, 'd3d12_accel_var'):
+            self.config.d3d12_accel = self.d3d12_accel_var.get()
         # v3.9 quality + workflow toggles
         if hasattr(self, 'auto_band_var'):
             self.config.auto_band = self.auto_band_var.get()
@@ -1945,6 +1947,19 @@ class VideoSubtitleRemoverApp(
         self.hw_encode_check.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(self.hw_encode_check, tr("Use the GPU's media encoder when "
                                          "available. The app retries with CPU encoding if it fails."))
+
+        self.d3d12_accel_var = tk.BooleanVar(
+            value=getattr(self.config, "d3d12_accel", False))
+        d3d12_toggle = ModernToggle(
+            quality_frame,
+            text=tr("Try FFmpeg D3D12 acceleration (experimental)"),
+            variable=self.d3d12_accel_var,
+        )
+        d3d12_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(d3d12_toggle, tr(
+            "Windows only. Requires FFmpeg 8.1 or newer and uses D3D12 only "
+            "after a byte-valid runtime test; NVENC, QSV, AMF, or CPU encoding "
+            "remains the automatic fallback."))
 
         # F-8: output codec selector lives next to the HW-encode toggle.
         codec_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)

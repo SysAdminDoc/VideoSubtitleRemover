@@ -14,8 +14,8 @@ from enum import Enum
 from typing import Any, Iterable, Mapping
 
 
-CONFIG_SCHEMA_VERSION = 5
-GUI_SETTINGS_FORMAT = 11
+CONFIG_SCHEMA_VERSION = 6
+GUI_SETTINGS_FORMAT = 12
 CONFIG_SCHEMA_VERSION_KEY = "config_schema_version"
 GUI_SETTINGS_VERSION_KEY = "vsr_settings_format"
 
@@ -101,6 +101,7 @@ def migrate_gui_settings(data: Any) -> dict[str, Any]:
     # Format 10 adds ordered add/subtract mask-correction semantics while
     # legacy correction entries continue to mean additive polygons.
     # Format 11 adds manifest-backed lossless matte export and import fields.
+    # Format 12 adds the opt-in FFmpeg D3D12 acceleration policy.
     result[GUI_SETTINGS_VERSION_KEY] = GUI_SETTINGS_FORMAT
     result[CONFIG_SCHEMA_VERSION_KEY] = CONFIG_SCHEMA_VERSION
     return result

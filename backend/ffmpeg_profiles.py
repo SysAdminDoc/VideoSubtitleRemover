@@ -17,9 +17,11 @@ from backend.subprocess_policy import run_process
 
 
 FFMPEG_PROFILE_SCHEMA = "vsr.ffmpeg_profiles.v1"
+D3D12_CAPABILITY_SCHEMA = "vsr.ffmpeg_d3d12.v1"
 
 _FILTER_RE = re.compile(r"^\s*[.A-Z|]+\s+([A-Za-z0-9_][A-Za-z0-9_.-]*)\s+", re.M)
 _ENCODER_RE = re.compile(r"^\s*[A-Z.]{6}\s+([A-Za-z0-9_][A-Za-z0-9_.-]*)\s+", re.M)
+_HWACCEL_RE = re.compile(r"^\s*([A-Za-z0-9_][A-Za-z0-9_.-]*)\s*$", re.M)
 
 _MODERN_ENCODER_GROUPS: dict[str, tuple[str, ...]] = {
     "h265": ("libx265", "hevc_nvenc", "hevc_qsv", "hevc_amf"),
@@ -198,6 +200,67 @@ def parse_ffmpeg_encoders(text: str) -> set[str]:
     return {match.group(1) for match in _ENCODER_RE.finditer(text or "")}
 
 
+def parse_ffmpeg_hwaccels(text: str) -> set[str]:
+    return {
+        match.group(1)
+        for match in _HWACCEL_RE.finditer(text or "")
+        if match.group(1).lower() not in {"hardware", "acceleration", "methods"}
+    }
+
+
+def d3d12_advertised_capabilities(
+    *,
+    version_text: object,
+    filters: set[str],
+    encoders: set[str],
+    hwaccels: set[str],
+) -> dict:
+    """Summarize FFmpeg's advertised Windows D3D12 surface.
+
+    This is deliberately only feature evidence. The D3D12 encoders can be
+    listed even when the installed display driver rejects a codec profile, so
+    ``backend.encoder.probe_d3d12_encoder`` performs the authoritative
+    byte-valid runtime smoke before the opt-in path is selected.
+    """
+    version = parse_ffmpeg_version(version_text)
+    required_filters = ("scale_d3d12", "deinterlace_d3d12")
+    known_encoders = ("h264_d3d12va", "hevc_d3d12va", "av1_d3d12va")
+    advertised_encoders = [name for name in known_encoders if name in encoders]
+    missing_filters = [name for name in required_filters if name not in filters]
+    missing = {
+        "minimum_version": [] if version >= (8, 1, 0) else ["8.1"],
+        "hwaccels": [] if "d3d12va" in hwaccels else ["d3d12va"],
+        "filters": missing_filters,
+        "encoders": [] if advertised_encoders else ["*_d3d12va"],
+    }
+    available = not any(missing.values())
+    reasons = []
+    if missing["minimum_version"]:
+        reasons.append("FFmpeg 8.1 or newer is required")
+    if missing["hwaccels"]:
+        reasons.append("missing hwaccel: d3d12va")
+    if missing_filters:
+        reasons.append("missing filters: " + ", ".join(missing_filters))
+    if missing["encoders"]:
+        reasons.append("missing D3D12 encoder")
+    return {
+        "schema": D3D12_CAPABILITY_SCHEMA,
+        "available": available,
+        "minimum_version": "8.1",
+        "version": ".".join(str(part) for part in version) if version else "",
+        "advertised_encoders": advertised_encoders,
+        "advertised_filters": [
+            name for name in required_filters if name in filters
+        ],
+        "advertised_hwaccels": [
+            name for name in ("d3d12va",) if name in hwaccels
+        ],
+        "missing": missing,
+        "reason": "; ".join(reasons) if reasons else "advertised; runtime smoke required",
+        "runtime_smoke_required": True,
+    }
+
+
 def _missing_for_profile(
     name: str,
     *,
@@ -295,6 +358,8 @@ def collect_ffmpeg_capability_profiles(*, timeout: float = 10.0) -> dict:
     filters_error = ""
     encoders_text = ""
     encoders_error = ""
+    hwaccels_text = ""
+    hwaccels_error = ""
     ffmpeg_path = tools["ffmpeg"].get("path")
     if ffmpeg_path:
         filters_text, filters_error = _run_ffmpeg_text(
@@ -305,8 +370,13 @@ def collect_ffmpeg_capability_profiles(*, timeout: float = 10.0) -> dict:
             [str(ffmpeg_path), "-hide_banner", "-encoders"],
             timeout,
         )
+        hwaccels_text, hwaccels_error = _run_ffmpeg_text(
+            [str(ffmpeg_path), "-hide_banner", "-hwaccels"],
+            timeout,
+        )
     filters = parse_ffmpeg_filters(filters_text)
     encoders = parse_ffmpeg_encoders(encoders_text)
+    hwaccels = parse_ffmpeg_hwaccels(hwaccels_text)
     profiles = [
         _profile_entry(
             name,
@@ -323,10 +393,18 @@ def collect_ffmpeg_capability_profiles(*, timeout: float = 10.0) -> dict:
         "feature_counts": {
             "filters": len(filters),
             "encoders": len(encoders),
+            "hwaccels": len(hwaccels),
         },
+        "windows_d3d12": d3d12_advertised_capabilities(
+            version_text=tools["ffmpeg"].get("version", ""),
+            filters=filters,
+            encoders=encoders,
+            hwaccels=hwaccels,
+        ),
         "probe_errors": {
             "filters": filters_error,
             "encoders": encoders_error,
+            "hwaccels": hwaccels_error,
         },
     }
 

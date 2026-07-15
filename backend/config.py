@@ -272,6 +272,9 @@ class ProcessingConfig:
     output_format: str = "mp4"
     output_quality: int = 23  # CRF value for x264
     use_hw_encode: bool = True  # try NVENC/QSV before falling back to libx264
+    # Explicit Windows-only experiment. FFmpeg must advertise the D3D12
+    # surface and pass a byte-valid runtime smoke before it can be selected.
+    d3d12_accel: bool = False
     # RM-35: write the processed result as a numbered frame sequence
     # (directory inputs only) instead of encoding a video. The CLI flag
     # --output-frames existed before this field did, so ProcessingConfig
@@ -669,6 +672,7 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.output_format = _coerce_text(config.output_format, "mp4", 16).lower()
     config.output_quality = _coerce_int(config.output_quality, 23, 0, 51)
     config.use_hw_encode = _coerce_bool(config.use_hw_encode, True)
+    config.d3d12_accel = _coerce_bool(config.d3d12_accel, False)
     codec = _coerce_text(config.output_codec, "h264", 16).lower()
     if codec in {"hevc", "h.265"}:
         codec = "h265"

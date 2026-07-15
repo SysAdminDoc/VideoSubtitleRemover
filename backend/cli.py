@@ -83,7 +83,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--no-audio", "--crf", "--upscale", "--no-color-preserve",
             "--nle-sidecar", "--swinir", "--seedvr2", "--film-grain", "--watermark",
             "--watermark-position", "--watermark-opacity", "--watermark-margin",
-            "--no-hw-encode", "--codec", "--export-mask",
+            "--no-hw-encode", "--d3d12-accel", "--codec", "--export-mask",
             "--mask-export-format", "--import-mask", "--mask-import-mode",
             "--deinterlace",
             "--no-deinterlace-detect", "--keyframe-detect", "--quality-report",
@@ -766,6 +766,14 @@ def main():
                        help="Scale mask dilation inversely with OCR confidence")
     parser.add_argument("--no-hw-encode", action="store_true",
                        help="Disable hardware encoding (force libx264)")
+    parser.add_argument(
+        "--d3d12-accel",
+        action="store_true",
+        help=(
+            "Opt into FFmpeg 8.1+ D3D12 filters and encoding after a "
+            "byte-valid runtime smoke; falls back automatically."
+        ),
+    )
     parser.add_argument("--codec", default="h264",
                        choices=["h264", "h265", "av1", "vvc"],
                        help="Output video codec (vvc requires FFmpeg with libvvenc).")
@@ -1284,6 +1292,7 @@ def main():
         keyframe_detection=args.keyframe_detect,
         quality_report=args.quality_report,
         use_hw_encode=not args.no_hw_encode,
+        d3d12_accel=args.d3d12_accel,
         output_codec=args.codec,
         loudnorm_target=args.loudnorm,
         decode_hw_accel=args.decode_accel,
@@ -1481,7 +1490,9 @@ def main():
     print(
         "[run] "
         f"mode={config.mode.value} | device={config.device} | lang={config.detection_lang} | "
-        f"audio={'on' if config.preserve_audio else 'off'} | hw_encode={'on' if config.use_hw_encode else 'off'}"
+        f"audio={'on' if config.preserve_audio else 'off'} | "
+        f"hw_encode={'on' if config.use_hw_encode else 'off'} | "
+        f"d3d12={'on' if config.d3d12_accel else 'off'}"
     )
     if config.preserve_audio and not ffmpeg_ready:
         print("[note] FFmpeg is not available, so outputs will be saved without original audio.")

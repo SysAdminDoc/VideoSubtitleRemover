@@ -31,6 +31,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-Engine Detection** -- RapidOCR PP-OCRv6 through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR > threshold fallback (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
+- **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
 - **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
 - **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
@@ -567,6 +568,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--watermark-opacity` | Watermark opacity 0.0-1.0 (default 1.0). | 1.0 | 0..1 | Public |
 | `--watermark-margin` | Watermark margin from edge in pixels (default 16). | 16 | 0..500 pixels | Public |
 | `--no-hw-encode` | Disable hardware encoding (force libx264) | Off | - | Public |
+| `--d3d12-accel` | Opt into FFmpeg 8.1+ D3D12 filters and encoding after a byte-valid runtime smoke; falls back automatically. | Off | - | Public |
 | `--codec` | Output video codec (vvc requires FFmpeg with libvvenc). | h264 | h264 \| h265 \| av1 \| vvc | Public |
 | `--export-mask` | Export a lossless grayscale matte plus timing manifest | Off | - | Public |
 | `--mask-export-format` | Lossless matte export as FFV1 video or a PNG sequence. | ffv1 | ffv1 \| png | Public |
@@ -757,6 +759,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `output_format` | `str` | `mp4` |
 | `output_quality` | `int` | `23` |
 | `use_hw_encode` | `bool` | `On` |
+| `d3d12_accel` | `bool` | `Off` |
 | `output_frames` | `bool` | `Off` |
 | `output_codec` | `str` | `h264` |
 | `loudnorm_target` | `float` | `0.0` |
@@ -789,12 +792,20 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |
 | TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |
 | HW Encoding | Use NVENC/QSV/AMF if available | On | On/Off |
+| FFmpeg D3D12 | Windows-only experimental upload, scale, deinterlace, and encode path with runtime validation and automatic fallback | Off | On/Off; FFmpeg 8.1+ |
 | HW Decode Hint | OpenCV/PyNvVideoCodec decode hint with software fallback | off | off/auto/d3d11/vaapi/mfx/pynv/nvdec |
 | Loudness Target | EBU R128 LUFS target (0 = off) | 0 | 0 or -70..-5 |
 | Multi-track Audio | Pass through every audio stream | On | On/Off |
 | Quality Sheet | Side-by-side PNG next to output | Off | On/Off |
 | Work Directory | Temporary, mask, checkpoint, and resume storage; write-tested before each batch | System temporary directory | Writable folder |
 | Interface Text Size | Scale text and dependent controls; restart to apply | 100% | 100%-200% |
+
+The D3D12 option stays off by default because advertised FFmpeg capabilities
+do not prove that a display driver accepts a codec profile. Each selected
+codec must first produce and re-read a complete 30-frame MP4. Processing then
+uses D3D12 frame upload and `scale_d3d12`; interlaced SDR input also tries
+`deinterlace_d3d12`. A failed smoke or processing command automatically moves
+to the existing NVENC/QSV/AMF chain and then to the software encoder.
 
 At 150% and 200%, the minimum 980x720 window switches to a compact, vertically
 scrollable layout so actions stay keyboard reachable without horizontal

@@ -44,6 +44,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Runtime-validated FFmpeg D3D12 acceleration.** An experimental Windows
+  toggle and `--d3d12-accel` opt into FFmpeg 8.1+ D3D12 upload,
+  `scale_d3d12`, deinterlacing, and H.264/H.265 encoding only after a complete
+  30-frame output can be read back. Advertised-but-rejected AV1 and runtime or
+  container failures fall back through the existing NVENC/QSV/AMF chain and
+  software encoder; output sidecars retain advertised, smoke, selection, and
+  encoder-fallback evidence. A local 300-frame 1080p evaluation measured D3D12 at
+  1.44s, warmed NVENC at 0.85s, and x264 at 1.20s, so the path remains opt-in.
 - **Lossless mask and alpha-matte interchange.** `--export-mask` now writes an
   exact gray8 FFV1/MKV artifact by default, or an ordered PNG sequence, with a
   versioned CFR/VFR timestamp-and-duration manifest. Edited manifests import in

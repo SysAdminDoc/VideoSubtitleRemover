@@ -1526,6 +1526,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "colour_tune_enable", "colour_tune_tolerance",
         "time_start", "time_end",
         "preserve_audio", "output_format", "output_quality", "use_hw_encode",
+        "d3d12_accel",
         # v3.13 GUI-exposed fields (B-1 + F-8).
         "loudnorm_target", "multi_audio_passthrough",
         "decode_hw_accel", "prefetch_decode", "prefetch_queue_size",
@@ -3714,6 +3715,25 @@ class HdrPipelineTests(unittest.TestCase):
         self.assertIn("-an", command)
         self.assertNotIn("libx264", command)
 
+    def test_d3d12_deinterlace_falls_back_to_yadif(self):
+        from backend.io import _deinterlace_to_temp
+
+        failure = subprocess.CalledProcessError(1, ["ffmpeg"])
+        with tempfile.TemporaryDirectory() as tmpdir, unittest.mock.patch(
+            "backend.io._run_subprocess_checked",
+            side_effect=[failure, None],
+        ) as run, unittest.mock.patch(
+            "backend.io._probe_duration_seconds", return_value=1.0
+        ):
+            result = _deinterlace_to_temp(
+                "source.mkv", tmpdir, prefer_d3d12=True)
+
+        self.assertTrue(result.endswith("deinterlaced.mkv"))
+        first = run.call_args_list[0].args[0]
+        second = run.call_args_list[1].args[0]
+        self.assertIn("deinterlace_d3d12=mode=field", first[first.index("-vf") + 1])
+        self.assertEqual(second[second.index("-vf") + 1], "yadif=1")
+
     def test_processing_frame_downconverts_uint16_to_uint8(self):
         frame = np.array([[[0, 257, 65535]]], dtype=np.uint16)
         out = processor.SubtitleRemover._processing_frame(frame)
@@ -5052,6 +5072,110 @@ class HighContrastThemeTests(unittest.TestCase):
             os.environ, {"VSR_REDUCED_MOTION": "0"}, clear=False,
         ):
             self.assertFalse(prefers_reduced_motion())
+
+
+class D3D12AccelerationTests(unittest.TestCase):
+    def _remover(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            output_codec="h264",
+            output_quality=23,
+            use_hw_encode=True,
+            d3d12_accel=True,
+        )
+        remover._hw_encoder = "h264_d3d12va"
+        remover._d3d12_fallback_encoder = "h264_nvenc"
+        remover._d3d12_status = {
+            "requested": True,
+            "selected_encoder": "h264_d3d12va",
+        }
+        remover._color_metadata = None
+        remover._output_contract = None
+        return remover
+
+    def test_probe_requires_byte_valid_runtime_output(self):
+        from backend import encoder
+
+        advertised = {
+            "available": True,
+            "reason": "advertised; runtime smoke required",
+            "advertised_encoders": ["h264_d3d12va"],
+            "advertised_filters": ["scale_d3d12", "deinterlace_d3d12"],
+        }
+
+        def run(command, **_kwargs):
+            if command[0] == "ffmpeg":
+                Path(command[-1]).write_bytes(b"valid-video-placeholder")
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({
+                    "streams": [{"codec_name": "h264", "nb_read_frames": "30"}],
+                }),
+                stderr="",
+            )
+
+        with unittest.mock.patch(
+            "backend.encoder.collect_ffmpeg_capability_profiles",
+            return_value={"windows_d3d12": advertised},
+        ), unittest.mock.patch(
+            "backend.encoder.run_process", side_effect=run,
+        ), unittest.mock.patch.object(encoder.sys, "platform", "win32"):
+            report = encoder.probe_d3d12_encoder("h264")
+
+        self.assertTrue(report["available"])
+        self.assertEqual(report["frames"], 30)
+        self.assertIn("byte-valid", report["reason"])
+
+    def test_advertised_but_failed_d3d12_falls_back_to_existing_chain(self):
+        from backend.encoder import _detect_hw_encoder
+
+        failed_probe = {
+            "available": False,
+            "encoder": "h264_d3d12va",
+            "reason": "driver rejected codec configuration",
+        }
+        listed = SimpleNamespace(
+            returncode=0,
+            stdout=" V..... h264_nvenc NVIDIA NVENC H.264 encoder\n",
+            stderr="",
+        )
+        with unittest.mock.patch(
+            "backend.encoder.run_process", return_value=listed
+        ):
+            selected = _detect_hw_encoder(
+                "h264", prefer_d3d12=True, d3d12_probe=failed_probe)
+
+        self.assertEqual(selected, "h264_nvenc")
+
+    def test_d3d12_command_uses_device_upload_scale_and_safe_queue(self):
+        remover = self._remover()
+
+        device_args = remover._d3d12_device_args()
+        encode_args = remover._get_encode_args()
+
+        self.assertIn("d3d12va=vsr_d3d12", device_args)
+        self.assertIn("format=nv12,hwupload,scale_d3d12=w=iw:h=ih", encode_args)
+        self.assertIn("h264_d3d12va", encode_args)
+        self.assertEqual(encode_args[encode_args.index("-bf") + 1], "0")
+        self.assertEqual(encode_args[encode_args.index("-async_depth") + 1], "1")
+
+    def test_runtime_failure_falls_back_hardware_then_software(self):
+        remover = self._remover()
+
+        self.assertTrue(remover._fallback_after_hw_failure("device lost"))
+        self.assertEqual(remover._hw_encoder, "h264_nvenc")
+        self.assertTrue(remover._d3d12_status["runtime_fallback"])
+        self.assertTrue(remover._fallback_after_hw_failure("nvenc failed"))
+        self.assertIsNone(remover._hw_encoder)
+
+    def test_post_restore_args_do_not_select_hardware_only_d3d12_encoder(self):
+        remover = self._remover()
+
+        args = remover._get_encode_args(allow_d3d12=False)
+
+        self.assertIn("libx264", args)
+        self.assertNotIn("h264_d3d12va", args)
 
 
 class OutputCodecTests(unittest.TestCase):

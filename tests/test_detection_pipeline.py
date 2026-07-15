@@ -455,6 +455,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg.batch_retry_backoff_seconds = 0.25
         cfg.quality_report_sheet = True
         cfg.nle_sidecar = "edl"
+        cfg.d3d12_accel = True
         item = QueueItem(
             id="test",
             file_path="input.mp4",
@@ -489,6 +490,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--retry-backoff 0.25", cmd)
         self.assertIn("--quality-sheet", cmd)
         self.assertIn("--nle-sidecar edl", cmd)
+        self.assertIn("--d3d12-accel", cmd)
 
     def test_default_config_omits_expanded_fields(self):
         from gui.config import ProcessingConfig, QueueItem
@@ -506,7 +508,7 @@ class CliCommandBuilderTests(unittest.TestCase):
                      "--no-kalman", "--no-phash", "--whisper-fallback",
                      "--keep-subtitles", "--keep-chyrons", "--karaoke",
                      "--export-srt", "--export-mask", "--nle-sidecar",
-                     "--quality-sheet", "--output-frames"):
+                     "--quality-sheet", "--output-frames", "--d3d12-accel"):
             self.assertNotIn(flag, cmd, f"Default config should not emit {flag}")
 
 

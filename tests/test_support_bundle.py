@@ -227,6 +227,27 @@ class FfmpegProfileTests(unittest.TestCase):
         )
         self.assertIn("libvvenc", by_name["modern_codec"]["reason"])
 
+    def test_d3d12_profile_is_advertised_evidence_not_runtime_claim(self):
+        payload = ffmpeg_profiles.d3d12_advertised_capabilities(
+            version_text="ffmpeg version 8.1.1-full_build",
+            filters={"scale_d3d12", "deinterlace_d3d12"},
+            encoders={"h264_d3d12va", "av1_d3d12va"},
+            hwaccels={"d3d12va"},
+        )
+
+        self.assertTrue(payload["available"])
+        self.assertTrue(payload["runtime_smoke_required"])
+        self.assertIn("h264_d3d12va", payload["advertised_encoders"])
+
+        missing = ffmpeg_profiles.d3d12_advertised_capabilities(
+            version_text="ffmpeg version 7.1",
+            filters=set(),
+            encoders=set(),
+            hwaccels=set(),
+        )
+        self.assertFalse(missing["available"])
+        self.assertIn("8.1", missing["reason"])
+
     def test_config_preflight_is_scoped_to_selected_options(self):
         payload = self._profiles(
             filters=" ..C loudnorm         A->A       EBU R128 loudness\n",

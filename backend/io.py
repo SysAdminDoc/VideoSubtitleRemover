@@ -851,26 +851,54 @@ def _deinterlace_to_temp(
     temp_dir: str,
     *,
     output_contract=None,
+    prefer_d3d12: bool = False,
     on_process: Optional[Callable[[Optional[subprocess.Popen]], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
 ) -> str:
-    """Run yadif into a lossless contract-aware progressive intermediate."""
+    """Create a lossless progressive intermediate with safe CPU fallback."""
     dst = (
         output_contract.deinterlace_path(temp_dir)
         if output_contract is not None
         else os.path.join(temp_dir, "deinterlaced.mkv")
     )
+    output_args = []
+    if output_contract is not None:
+        output_args += output_contract.deinterlace_args()
+    else:
+        output_args += ['-c:v', 'ffv1', '-level', '3', '-c:a', 'copy']
+    timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(src))
+    if prefer_d3d12:
+        d3d12_cmd = [
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
+            '-init_hw_device', 'd3d12va=vsr_d3d12',
+            '-filter_hw_device', 'vsr_d3d12',
+            '-i', src,
+            '-vf', (
+                'format=nv12,hwupload,'
+                'deinterlace_d3d12=mode=field,'
+                'hwdownload,format=nv12'
+            ),
+        ] + output_args + [dst]
+        try:
+            _run_subprocess_checked(
+                d3d12_cmd,
+                timeout=timeout,
+                on_process=on_process,
+                cancel_check=cancel_check,
+            )
+            return dst
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            logger.warning(
+                "D3D12 deinterlace failed; retrying with yadif: %s", exc)
+            try:
+                Path(dst).unlink(missing_ok=True)
+            except OSError:
+                pass
     cmd = [
         'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error', '-nostats',
         '-i', src,
         '-vf', 'yadif=1',
-    ]
-    if output_contract is not None:
-        cmd += output_contract.deinterlace_args()
-    else:
-        cmd += ['-c:v', 'ffv1', '-level', '3', '-c:a', 'copy']
-    cmd += [dst]
-    timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(src))
+    ] + output_args + [dst]
     _run_subprocess_checked(
         cmd,
         timeout=timeout,

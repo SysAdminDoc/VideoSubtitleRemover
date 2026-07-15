@@ -416,6 +416,7 @@ class ProcessingConfig:
     preserve_audio: bool = True
     output_quality: int = 23
     use_hw_encode: bool = True
+    d3d12_accel: bool = False
     output_codec: str = "h264"
 
     loudnorm_target: float = 0.0
@@ -584,6 +585,7 @@ class ProcessingConfig:
         self.preserve_audio = _coerce_bool(self.preserve_audio, True)
         self.output_quality = _coerce_int(self.output_quality, 23, 15, 35)
         self.use_hw_encode = _coerce_bool(self.use_hw_encode, True)
+        self.d3d12_accel = _coerce_bool(self.d3d12_accel, False)
         codec = _coerce_text(self.output_codec, "h264", 16).lower()
         if codec in {"hevc", "h.265"}:
             codec = "h265"

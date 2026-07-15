@@ -96,6 +96,8 @@ def _build_cli_command(item: QueueItem) -> str:
         args.append("--no-audio")
     if not getattr(cfg, "use_hw_encode", True):
         args.append("--no-hw-encode")
+    if getattr(cfg, "d3d12_accel", False):
+        args.append("--d3d12-accel")
     if getattr(cfg, "detection_vertical", False):
         args.append("--vertical")
     start = getattr(cfg, "time_start", 0.0) or 0.0
