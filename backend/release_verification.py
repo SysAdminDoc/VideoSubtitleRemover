@@ -46,7 +46,13 @@ from backend.ffmpeg_profiles import (
 from backend.onnx_model_info import rapidocr_release_provenance
 from backend.opencv_ocr import collect_opencv_dnn_ocr_status
 from backend.remote_model_policy import release_remote_model_status
-from backend.security_checks import opencv_libpng_status
+from backend.security_checks import (
+    LIBPNG_ADVISORY_URL,
+    LIBPNG_AFFECTED_RANGE,
+    LIBPNG_CVE,
+    libpng_fixed_version_str,
+    opencv_libpng_status,
+)
 from backend.subprocess_policy import run_process
 
 
@@ -529,18 +535,19 @@ def collect_release_advisories(
 
     libpng = opencv_libpng_status()
     if libpng.get("vulnerable") is True:
+        libpng_floor = libpng_fixed_version_str()
         findings.append(_advisory(
-            advisory_id="CVE-2026-22801",
+            advisory_id=LIBPNG_CVE,
             package="opencv-python bundled libpng",
             installed_version=str(libpng.get("libpng_version") or "unknown"),
-            affected=">=1.6.26,<1.6.54",
-            fixed_in=str(libpng.get("fixed_version") or "1.6.54"),
+            affected=LIBPNG_AFFECTED_RANGE,
+            fixed_in=str(libpng.get("fixed_version") or libpng_floor),
             severity="medium",
-            source="https://nvd.nist.gov/vuln/detail/CVE-2026-22801",
+            source=LIBPNG_ADVISORY_URL,
             blocking=True,
             mitigation=(
                 "Upgrade to opencv-python >= 5.0.0.93, which bundles libpng "
-                ">= 1.6.54, before producing a release."
+                f">= {libpng_floor}, before producing a release."
             ),
         ))
     package_versions = {

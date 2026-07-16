@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Single-source libpng security floor.** The libpng CVE floor, affected
+  range, advisory URL, and CVE id now live only in `backend.security_checks`;
+  the OpenCV DNN OCR eligibility check and strict release advisory derive their
+  version strings from that constant instead of hardcoding `1.6.54`, so the
+  runtime vulnerability check and the advisory text can no longer drift apart.
 - **Hidden, bounded external-process policy.** Every production backend child
   now launches without a shell, suppresses Windows console windows, closes
   unused stdin, drains captured output into bounded buffers, and shares

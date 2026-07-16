@@ -17,7 +17,10 @@ from typing import Any, Mapping
 import numpy as np
 
 from backend.onnx_model_info import read_onnx_metadata_props
-from backend.security_checks import opencv_libpng_status
+from backend.security_checks import (
+    libpng_fixed_version_str,
+    opencv_libpng_status,
+)
 
 
 OPENCV_DNN_OCR_SCHEMA = "vsr.opencv_dnn_ocr.v1"
@@ -113,7 +116,10 @@ def collect_opencv_dnn_ocr_status(
     elif not assets_present:
         errors.append("RapidOCR PP-OCRv6 detection/recognition assets are missing")
     if not libpng_fixed:
-        errors.append("OpenCV build information does not prove libpng >= 1.6.54")
+        errors.append(
+            "OpenCV build information does not prove libpng >= "
+            f"{libpng_fixed_version_str()}"
+        )
     return {
         "schema": OPENCV_DNN_OCR_SCHEMA,
         "eligible": not errors,

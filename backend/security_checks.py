@@ -6,7 +6,22 @@ import re
 from typing import Optional, Tuple
 
 
+# Single source of truth for the libpng security floor. CVE-2026-22801 is
+# fixed in libpng 1.6.54; the reviewed opencv-python 5.0.0.93 wheel bundles a
+# newer build (1.6.57) that satisfies this floor. Every consumer (opencv_ocr,
+# release_verification, safe_image) must derive its advisory text from these
+# constants so the floor cannot drift between modules. Raise the floor only
+# alongside a newly cited libpng CVE, never speculatively -- a higher floor
+# would falsely flag a genuinely patched build as vulnerable.
 LIBPNG_FIXED_VERSION = (1, 6, 54)
+LIBPNG_CVE = "CVE-2026-22801"
+LIBPNG_AFFECTED_RANGE = ">=1.6.26,<1.6.54"
+LIBPNG_ADVISORY_URL = "https://nvd.nist.gov/vuln/detail/CVE-2026-22801"
+
+
+def libpng_fixed_version_str() -> str:
+    """Return the libpng security floor as a dotted string (single source)."""
+    return format_libpng_version(LIBPNG_FIXED_VERSION)
 
 
 def parse_libpng_version(build_info: str) -> Optional[Tuple[int, int, int]]:
@@ -61,7 +76,7 @@ def opencv_libpng_status() -> dict:
     warning = None
     if vulnerable and current:
         warning = (
-            f"OpenCV reports bundled libpng {current}; CVE-2026-22801 is "
+            f"OpenCV reports bundled libpng {current}; {LIBPNG_CVE} is "
             f"fixed in libpng {fixed} or newer. Avoid untrusted PNG input "
             "until opencv-python ships a wheel with the fixed library."
         )
