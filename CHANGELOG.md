@@ -18,6 +18,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Unhandled GUI callback exceptions are logged.** The app now routes Tk
+  callback / `.after` exceptions through the logger with a full traceback
+  instead of Tk's default stderr dump, so a real bug in a scheduled callback
+  is captured in the log file. Teardown races (TclError/RuntimeError while the
+  app is closing) are logged at debug.
 - **Accurate time-range start seek on CFR sources.** Frame seeking for
   `--start`/`--end` time ranges, checkpoint resume, and the selective mask
   re-run capture now grab forward to the exact requested frame instead of

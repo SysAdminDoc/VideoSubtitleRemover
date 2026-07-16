@@ -111,6 +111,11 @@ class VideoSubtitleRemoverApp(
             or "--uia-background" in sys.argv
         )
         self.root = tk.Tk()
+        # Route unhandled Tk callback / .after exceptions through the logger
+        # with a full traceback instead of Tk's default stderr dump, so a real
+        # bug in a scheduled callback is never lost. Set before any widget or
+        # .after work so early setup is covered too.
+        self.root.report_callback_exception = self._log_callback_exception
         if self._background_ui:
             self.root.withdraw()
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
@@ -271,6 +276,23 @@ class VideoSubtitleRemoverApp(
             self._start_startup_hardware_probe()
             self._maybe_show_onboarding()
             self.root.after(500, self._maybe_restore_queue)
+
+    def _log_callback_exception(self, exc, val, tb):
+        """Log unhandled Tk callback / ``.after`` exceptions with a traceback.
+
+        Tk's default handler dumps these to stderr where they are easy to
+        miss; routing them through the logger means a genuine bug in a
+        scheduled callback surfaces in the log file. Teardown races -- the app
+        being destroyed while a callback is still queued -- raise TclError or
+        RuntimeError and are expected, so they are logged at debug rather than
+        error.
+        """
+        if isinstance(exc, type) and issubclass(exc, (tk.TclError, RuntimeError)):
+            logger.debug("Tk callback race during teardown",
+                         exc_info=(exc, val, tb))
+            return
+        logger.error("Unhandled Tk callback exception",
+                     exc_info=(exc, val, tb))
 
     def _on_close(self):
         """Stop processing, save settings, and close."""
