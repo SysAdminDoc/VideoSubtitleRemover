@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Split the `test_hardening` monolith by subsystem.** The single ~8,100-line
+  `tests/test_hardening.py` was divided into ten focused files
+  (`test_hardening_{core,cli,config,detection,encode_io,inpaint,quality,batch,adapters,gui_i18n}.py`)
+  with the same 410 cases; no test was added or removed.
 - **Unified post-inpaint finishing.** The ONNX, diffusion, and built-in
   inpainter families now share a single `apply_finishing` routine
   (`backend/inpainters/_common.py`) for the edge-ring colour match and feather
