@@ -1226,6 +1226,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **OCR-fix replace list for exported SRT.** With `--ocr-fix` (config
+  `ocr_fix_enable`), detected subtitle text written to the `.srt` sidecar is
+  passed through a per-language replace list that corrects common OCR
+  confusions (e.g. a lowercase `l` mis-read for `I`). A small built-in default
+  set is merged with an optional user-editable
+  `%APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json`; whole-word keys are
+  boundary-matched so real words are never rewritten.
+
 ### Fixed
 
 - **Correct Pillow security floor.** Raised the documented and fallback

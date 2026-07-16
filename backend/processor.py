@@ -888,8 +888,32 @@ class SubtitleRemover:
         except Exception:
             logger.warning("SRT text collection failed", exc_info=True)
             text = ""
+        if text and getattr(self.config, "ocr_fix_enable", False):
+            text = self._apply_ocr_fixes(text)
         if text:
             self._srt_entries.append((frame_idx, text))
+
+    def _apply_ocr_fixes(self, text: str) -> str:
+        """Apply the per-language OCR-fix replace list to detected SRT text.
+        Loaded once per job and cached on the instance."""
+        replacements = getattr(self, "_ocr_fix_replacements", None)
+        if replacements is None:
+            try:
+                from backend.ocr_fix import load_ocr_fix_replacements
+                replacements = load_ocr_fix_replacements(
+                    getattr(self.config, "detection_lang", "en"))
+            except Exception:
+                logger.warning("OCR-fix list load failed", exc_info=True)
+                replacements = {}
+            self._ocr_fix_replacements = replacements
+        if not replacements:
+            return text
+        try:
+            from backend.ocr_fix import apply_ocr_fixes
+            return apply_ocr_fixes(text, replacements)
+        except Exception:
+            logger.warning("OCR-fix application failed", exc_info=True)
+            return text
 
     def _read_text_for_boxes(self, frame: np.ndarray,
                                boxes: List[Tuple[int, int, int, int]]) -> str:
@@ -2008,6 +2032,7 @@ class SubtitleRemover:
         self.last_pause_checkpoint_path = None
         self._reset_stage_timings()
         self._srt_entries = []
+        self._ocr_fix_replacements = None
         self._quality_mask_bbox = None
         self._seam_scores = []
         self._mask_review_signals = []

@@ -606,6 +606,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--ffmpeg-whisper-vad-threshold` | VAD confidence threshold (0.0-1.0, default 0.5). | 0.5 | 0..1 | Public |
 | `--ffmpeg-whisper-min-speech` | Minimum speech duration for VAD segments (default 0). | 0.0 | 0..30 seconds | Public |
 | `--export-srt` | Write an .srt sidecar with detected text | Off | - | Public |
+| `--ocr-fix` | Apply a per-language OCR-fix replace list to exported SRT text (built-in defaults + `%APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json`) | Off | - | Public |
 | `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action, then exit. | Off | - | Public |
 | `--soft-subtitle-plan-json` | Write soft-subtitle dry-run preflight details as JSON. | - | - | Public |
 | `--strip-soft-subtitles` | Fast remux that removes embedded subtitle tracks without OCR. | Off | - | Public |

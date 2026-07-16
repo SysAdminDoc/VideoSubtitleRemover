@@ -218,6 +218,10 @@ class ProcessingConfig:
     mask_import_path: str = ""
     mask_import_mode: str = "replace"
     export_srt: bool = False          # write an .srt sidecar of detected text
+    # Apply a per-language OCR-fix replace list to exported SRT text. Opt-in;
+    # merges a small built-in default set with a user-editable JSON file under
+    # %APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json. See backend.ocr_fix.
+    ocr_fix_enable: bool = False
 
     # Adaptive batch sizing -- probe free VRAM on CUDA init, scale
     # sttn_max_load_num to match. Safe default: on.
@@ -685,6 +689,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.mask_import_mode = normalize_mask_import_mode(
         getattr(config, "mask_import_mode", "replace"))
     config.export_srt = _coerce_bool(config.export_srt, False)
+    config.ocr_fix_enable = _coerce_bool(
+        getattr(config, "ocr_fix_enable", False), False)
     config.adaptive_batch = _coerce_bool(config.adaptive_batch, True)
     config.gpu_oom_recovery = _coerce_bool(config.gpu_oom_recovery, True)
     config.temporal_mask_union = _coerce_bool(config.temporal_mask_union, False)

@@ -403,6 +403,7 @@ class ProcessingConfig:
     manual_mask_corrections: Optional[List[dict]] = None
     auto_band: bool = False
     export_srt: bool = False
+    ocr_fix_enable: bool = False
     export_mask_video: bool = False
     mask_export_format: str = "ffv1"
     mask_import_path: str = ""
@@ -583,6 +584,7 @@ class ProcessingConfig:
         self.edge_ring_px = _coerce_int(self.edge_ring_px, 2, 0, 20)
         self.auto_band = _coerce_bool(self.auto_band, False)
         self.export_srt = _coerce_bool(self.export_srt, False)
+        self.ocr_fix_enable = _coerce_bool(self.ocr_fix_enable, False)
         self.export_mask_video = _coerce_bool(self.export_mask_video, False)
         from backend.matte_interchange import (
             normalize_mask_export_format,

@@ -71,7 +71,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--whisper-fallback", "--whisper-backend", "--whisper-model",
             "--ffmpeg-whisper-model", "--ffmpeg-whisper-queue",
             "--ffmpeg-whisper-vad-model", "--ffmpeg-whisper-vad-threshold",
-            "--ffmpeg-whisper-min-speech", "--export-srt", "--soft-subtitle-dry-run",
+            "--ffmpeg-whisper-min-speech", "--export-srt", "--ocr-fix",
+            "--soft-subtitle-dry-run",
             "--soft-subtitle-plan-json", "--strip-soft-subtitles",
             "--keep-soft-subtitles", "--burned-in-only", "--restyle",
             "--restyle-style", "--translate", "--translated-srt",
@@ -852,6 +853,11 @@ def main():
                             "each later attempt waits a multiple of this value)")
     parser.add_argument("--export-srt", action="store_true",
                        help="Write an .srt sidecar with detected text")
+    parser.add_argument("--ocr-fix", action="store_true",
+                       help=("Apply a per-language OCR-fix replace list to the "
+                             "exported SRT text (built-in defaults plus "
+                             "%%APPDATA%%/VideoSubtitleRemoverPro/ocr_fix/"
+                             "{lang}.json)."))
     parser.add_argument("--export-mask", action="store_true",
                        help="Export a lossless grayscale matte plus timing manifest")
     parser.add_argument(
@@ -1331,6 +1337,7 @@ def main():
         batch_max_retries=args.max_retries,
         batch_retry_backoff_seconds=args.retry_backoff,
         export_srt=args.export_srt,
+        ocr_fix_enable=args.ocr_fix,
         export_mask_video=args.export_mask,
         mask_export_format=args.mask_export_format,
         mask_import_path=args.import_mask,
