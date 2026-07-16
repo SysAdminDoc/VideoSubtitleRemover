@@ -308,6 +308,38 @@ def _available_host_ram_gb() -> Optional[float]:
     return None
 
 
+def _seek_capture_to_frame(cap, target: int) -> int:
+    """Position ``cap`` so the next ``read()`` returns frame ``target``.
+
+    ``cap.set(CAP_PROP_POS_FRAMES, N)`` snaps to the nearest keyframe on
+    long-GOP CFR sources with some OpenCV backends (MSMF/DSHOW), so a plain
+    set can start processing a few frames off the requested ``--start`` time.
+    Seek near the target, then grab-and-discard forward to land exactly on it.
+
+    On backends that already position accurately (the bundled FFmpeg backend
+    reports the requested logical index), the reported position equals
+    ``target`` and no forward grab happens -- so this is a no-op there and
+    never over-advances. Returns the resulting position.
+    """
+    target = max(0, int(target))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+    if target == 0:
+        return 0
+    try:
+        pos = int(round(float(cap.get(cv2.CAP_PROP_POS_FRAMES))))
+    except Exception:
+        pos = target
+    if pos > target:
+        # Overshot; restart and scan forward from the beginning.
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        pos = 0
+    while pos < target:
+        if not cap.grab():
+            break
+        pos += 1
+    return pos
+
+
 # RFP-L-2: each built-in inpainter registers itself below so the
 # dispatch in SubtitleRemover._create_inpainter no longer needs an
 # if-elif chain. Opt-in third-party backends can `register()` from
@@ -2196,7 +2228,7 @@ class SubtitleRemover:
                     end_frame = max(
                         0, min(total_frames, int(time_end_s * fps)))
             if start_frame > 0:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                _seek_capture_to_frame(cap, start_frame)
             if end_frame <= start_frame:
                 raise ValueError(
                     f"Invalid time range: end ({time_end_s}s) "
@@ -2364,8 +2396,8 @@ class SubtitleRemover:
                             "stage; all frames were already inpainted."
                         )
                     if resume_frame_count > 0:
-                        cap.set(cv2.CAP_PROP_POS_FRAMES,
-                                start_frame + resume_frame_count)
+                        _seek_capture_to_frame(
+                            cap, start_frame + resume_frame_count)
                         logger.info(
                             f"Resuming {Path(input_path).name} from frame "
                             f"{resume_frame_count}/{frames_to_process}"
@@ -2377,13 +2409,11 @@ class SubtitleRemover:
                     "contains a complete, timestamp-aligned sequence"
                 )
                 resume_frame_count = 0
-                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+                _seek_capture_to_frame(cap, start_frame)
 
             if selective_cap is not None:
-                selective_cap.set(
-                    cv2.CAP_PROP_POS_FRAMES,
-                    start_frame + resume_frame_count,
-                )
+                _seek_capture_to_frame(
+                    selective_cap, start_frame + resume_frame_count)
 
             # Fail fast on a drive that clearly cannot hold the encode, before
             # any temp file is created (only the frames still to write count).

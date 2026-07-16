@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Accurate time-range start seek on CFR sources.** Frame seeking for
+  `--start`/`--end` time ranges, checkpoint resume, and the selective mask
+  re-run capture now grab forward to the exact requested frame instead of
+  trusting `cap.set(CAP_PROP_POS_FRAMES, ...)`, which snaps to the nearest
+  keyframe on long-GOP sources with some OpenCV backends. Backends that
+  already position accurately (the bundled FFmpeg backend) are unaffected.
 - **ONNX inpaint mask binarization.** The LaMa-ONNX and MI-GAN inpainters now
   threshold the mask to a strict `{0, 255}` binary before feeding it to the
   network. Feathering is applied after inpainting, so a greyscale or
