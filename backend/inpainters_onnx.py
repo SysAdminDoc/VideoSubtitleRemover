@@ -148,6 +148,23 @@ def _ensure_multiple_of(value: int, multiple: int) -> int:
     return ((value // multiple) + 1) * multiple
 
 
+def _binarize_mask(mask: np.ndarray) -> np.ndarray:
+    """Return a strict {0, 255} uint8 mask.
+
+    The ONNX LaMa / MI-GAN sessions consume ``mask / 255.0`` as an
+    inpaint indicator that the models treat as binary. Feathering is
+    applied *after* inpainting (see ``_apply_feather_blend``), so any
+    anti-aliased or greyscale mask that reaches an inpainter must be
+    thresholded here -- otherwise intermediate values (1-254) would feed
+    partial-strength hints and silently degrade the fill. A midpoint
+    threshold keeps a properly dilated binary mask unchanged while
+    resolving soft edges deterministically.
+    """
+    if mask.ndim == 3:
+        mask = mask[..., 0]
+    return np.where(mask >= 128, np.uint8(255), np.uint8(0))
+
+
 class LamaOnnxInpainter:
     """Run LaMa in ONNX Runtime. ~3-5x faster than the PyTorch
     simple-lama-inpainting path and runs without torch entirely.
@@ -204,7 +221,8 @@ class LamaOnnxInpainter:
         h, w = frame.shape[:2]
         ph = _ensure_multiple_of(h, 8)
         pw = _ensure_multiple_of(w, 8)
-        # LaMa expects RGB float32 [0,1] and a single-channel mask [0,1].
+        # LaMa expects RGB float32 [0,1] and a single-channel binary mask.
+        mask = _binarize_mask(mask)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         if (ph, pw) != (h, w):
             rgb = cv2.copyMakeBorder(rgb, 0, ph - h, 0, pw - w, cv2.BORDER_REFLECT_101)
@@ -262,6 +280,7 @@ class MiGanInpainter:
         # both inputs to the network resolution and resize the output
         # back. This costs detail; tile-based ingest is a follow-up.
         target = 512
+        mask = _binarize_mask(mask)
         scaled = cv2.resize(frame, (target, target), interpolation=cv2.INTER_AREA)
         smask = cv2.resize(mask, (target, target), interpolation=cv2.INTER_NEAREST)
         rgb = cv2.cvtColor(scaled, cv2.COLOR_BGR2RGB)

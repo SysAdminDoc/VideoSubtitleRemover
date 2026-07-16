@@ -4,6 +4,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **ONNX inpaint mask binarization.** The LaMa-ONNX and MI-GAN inpainters now
+  threshold the mask to a strict `{0, 255}` binary before feeding it to the
+  network. Feathering is applied after inpainting, so a greyscale or
+  anti-aliased mask that reached these paths previously produced
+  partial-strength fill hints and degraded quality; edges are now resolved
+  deterministically at a midpoint threshold while properly dilated binary
+  masks are unchanged.
+
 ### Security
 
 - **Single-source libpng security floor.** The libpng CVE floor, affected
