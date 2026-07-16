@@ -35,6 +35,7 @@ import traceback
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Optional, Tuple, List, Callable
 
 logger = logging.getLogger(__name__)
@@ -338,6 +339,108 @@ def _seek_capture_to_frame(cap, target: int) -> int:
             break
         pos += 1
     return pos
+
+
+@dataclass(frozen=True)
+class _FrameRange:
+    """Resolved processing window plus the per-frame timing needed by the
+    encode/matte stages. Produced by ``_resolve_frame_range`` so the
+    time-range math lives in one testable place instead of inline in
+    ``process_video``."""
+
+    time_start_s: float
+    time_end_s: float
+    start_frame: int
+    end_frame: int
+    frames_to_process: int
+    selected_frame_durations: Optional[List[float]]
+    processed_time_start: float
+    processed_time_end: float
+    matte_timestamps: List[float]
+    matte_durations: List[float]
+    matte_time_base: float
+
+
+def _resolve_frame_range(cap, total_frames: int, fps: float,
+                         frame_timing, time_start: Any,
+                         time_end: Any) -> _FrameRange:
+    """Resolve the [start, end) frame window from the configured time range.
+
+    Guards against NaN/inf/negative seconds, seeks ``cap`` to the start
+    frame, and raises ``ValueError`` when the window is empty. VFR sources
+    route through ``frame_timing`` for exact frame<->time mapping; CFR
+    sources use ``fps``. Extracted verbatim from ``process_video``.
+    """
+    def _sane_seconds(value: Any) -> float:
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        if not np.isfinite(v) or v < 0.0:
+            return 0.0
+        return v
+
+    time_start_s = _sane_seconds(time_start)
+    time_end_s = _sane_seconds(time_end)
+    start_frame = 0
+    end_frame = total_frames
+    if frame_timing is not None:
+        start_frame, end_frame = frame_timing.frame_range(
+            time_start_s, time_end_s, total_frames)
+    else:
+        if time_start_s > 0:
+            start_frame = max(
+                0, min(total_frames - 1, int(time_start_s * fps)))
+        if time_end_s > 0:
+            end_frame = max(
+                0, min(total_frames, int(time_end_s * fps)))
+    if start_frame > 0:
+        _seek_capture_to_frame(cap, start_frame)
+    if end_frame <= start_frame:
+        raise ValueError(
+            f"Invalid time range: end ({time_end_s}s) "
+            f"must be after start ({time_start_s}s)")
+    frames_to_process = end_frame - start_frame
+    selected_frame_durations = (
+        frame_timing.range_durations(start_frame, end_frame, fps)
+        if frame_timing is not None else None
+    )
+    processed_time_start = (
+        frame_timing.frame_time(start_frame, fps)
+        if frame_timing is not None else start_frame / fps
+    )
+    processed_time_end = (
+        processed_time_start + sum(selected_frame_durations or [])
+        if selected_frame_durations is not None
+        else end_frame / fps
+    )
+    matte_timestamps = [
+        (
+            frame_timing.frame_time(index, fps)
+            if frame_timing is not None else index / fps
+        )
+        for index in range(start_frame, end_frame)
+    ]
+    matte_durations = list(selected_frame_durations or (
+        [1.0 / fps] * frames_to_process
+    ))
+    matte_time_base = (
+        frame_timing.time_base
+        if frame_timing is not None else 1.0 / fps
+    )
+    return _FrameRange(
+        time_start_s=time_start_s,
+        time_end_s=time_end_s,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        frames_to_process=frames_to_process,
+        selected_frame_durations=selected_frame_durations,
+        processed_time_start=processed_time_start,
+        processed_time_end=processed_time_end,
+        matte_timestamps=matte_timestamps,
+        matte_durations=matte_durations,
+        matte_time_base=matte_time_base,
+    )
 
 
 # RFP-L-2: each built-in inpainter registers itself below so the
@@ -2226,67 +2329,21 @@ class SubtitleRemover:
                 raise _invalid_video_dimensions_error(input_path, width, height)
             self._initialize_clean_references(width, height)
 
-            # Time range support. Guard against NaN / inf / negative values
-            # coming from a malformed preset or CLI overlay -- never let them
-            # reach the ffmpeg command line or frame-count math.
-            def _sane_seconds(value: Any) -> float:
-                try:
-                    v = float(value)
-                except (TypeError, ValueError):
-                    return 0.0
-                if not np.isfinite(v) or v < 0.0:
-                    return 0.0
-                return v
-
-            time_start_s = _sane_seconds(self.config.time_start)
-            time_end_s = _sane_seconds(self.config.time_end)
-            start_frame = 0
-            end_frame = total_frames
-            if frame_timing is not None:
-                start_frame, end_frame = frame_timing.frame_range(
-                    time_start_s, time_end_s, total_frames)
-            else:
-                if time_start_s > 0:
-                    start_frame = max(
-                        0, min(total_frames - 1, int(time_start_s * fps)))
-                if time_end_s > 0:
-                    end_frame = max(
-                        0, min(total_frames, int(time_end_s * fps)))
-            if start_frame > 0:
-                _seek_capture_to_frame(cap, start_frame)
-            if end_frame <= start_frame:
-                raise ValueError(
-                    f"Invalid time range: end ({time_end_s}s) "
-                    f"must be after start ({time_start_s}s)")
-            frames_to_process = end_frame - start_frame
-            selected_frame_durations = (
-                frame_timing.range_durations(start_frame, end_frame, fps)
-                if frame_timing is not None else None
-            )
-            processed_time_start = (
-                frame_timing.frame_time(start_frame, fps)
-                if frame_timing is not None else start_frame / fps
-            )
-            processed_time_end = (
-                processed_time_start + sum(selected_frame_durations or [])
-                if selected_frame_durations is not None
-                else end_frame / fps
-            )
-
-            matte_timestamps = [
-                (
-                    frame_timing.frame_time(index, fps)
-                    if frame_timing is not None else index / fps
-                )
-                for index in range(start_frame, end_frame)
-            ]
-            matte_durations = list(selected_frame_durations or (
-                [1.0 / fps] * frames_to_process
-            ))
-            matte_time_base = (
-                frame_timing.time_base
-                if frame_timing is not None else 1.0 / fps
-            )
+            # Time range support. Resolved (with NaN/inf/negative guards and
+            # the cap seek) in _resolve_frame_range so the frame<->time math is
+            # unit-testable instead of buried inline here.
+            _range = _resolve_frame_range(
+                cap, total_frames, fps, frame_timing,
+                self.config.time_start, self.config.time_end)
+            start_frame = _range.start_frame
+            end_frame = _range.end_frame
+            frames_to_process = _range.frames_to_process
+            selected_frame_durations = _range.selected_frame_durations
+            processed_time_start = _range.processed_time_start
+            processed_time_end = _range.processed_time_end
+            matte_timestamps = _range.matte_timestamps
+            matte_durations = _range.matte_durations
+            matte_time_base = _range.matte_time_base
             if self.config.mask_import_path:
                 matte_reader = MaskInterchangeReader(
                     self.config.mask_import_path,
@@ -3299,32 +3356,13 @@ class SubtitleRemover:
                                          start_seconds=processed_time_start,
                                          end_seconds=processed_time_end)
 
-            # Quality report: PSNR/SSIM across a sample of unmasked regions
-            if self.config.quality_report:
-                try:
-                    with self._time_stage("quality"):
-                        metrics = self._compute_quality_report(
-                            input_path, final_output_path, start_frame, end_frame, fps)
-                    if metrics:
-                        self.last_quality_report = metrics
-                        tag_suffix = f" [{metrics['tag']}]" if metrics.get('tag') else ""
-                        logger.info(
-                            f"Quality report: PSNR={metrics['psnr']:.2f} dB, "
-                            f"SSIM={metrics['ssim']:.4f} "
-                            f"({metrics['samples']} samples){tag_suffix}")
-                        if metrics.get('vmaf') is not None:
-                            logger.info(
-                                f"Quality report VMAF={metrics['vmaf']:.2f}"
-                                + (
-                                    f", ROI VMAF={metrics['roi_vmaf']:.2f}"
-                                    if metrics.get('roi_vmaf') is not None
-                                    else ""
-                                )
-                            )
-                        if metrics.get('sheet'):
-                            logger.info(f"Quality sheet: {metrics['sheet']}")
-                except Exception as exc:
-                    logger.warning(f"Quality report failed: {exc}", exc_info=True)
+            self._emit_quality_report(
+                input_path=input_path,
+                final_output_path=final_output_path,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                fps=fps,
+            )
 
             self.last_output_path = final_output_path
             self._write_reproducibility_sidecar(
@@ -3433,6 +3471,42 @@ class SubtitleRemover:
                     shutil.rmtree(whisper_audio_dir, ignore_errors=True)
             except Exception:
                 logger.warning("Whisper temp cleanup failed", exc_info=True)
+
+    def _emit_quality_report(self, *, input_path: str, final_output_path: str,
+                             start_frame: int, end_frame: int,
+                             fps: float) -> None:
+        """Quality report: PSNR/SSIM across a sample of unmasked regions.
+
+        Extracted verbatim from ``process_video``; records
+        ``self.last_quality_report`` and logs the metrics. Failures are
+        swallowed with a warning so reporting never aborts a finished encode.
+        """
+        if not self.config.quality_report:
+            return
+        try:
+            with self._time_stage("quality"):
+                metrics = self._compute_quality_report(
+                    input_path, final_output_path, start_frame, end_frame, fps)
+            if metrics:
+                self.last_quality_report = metrics
+                tag_suffix = f" [{metrics['tag']}]" if metrics.get('tag') else ""
+                logger.info(
+                    f"Quality report: PSNR={metrics['psnr']:.2f} dB, "
+                    f"SSIM={metrics['ssim']:.4f} "
+                    f"({metrics['samples']} samples){tag_suffix}")
+                if metrics.get('vmaf') is not None:
+                    logger.info(
+                        f"Quality report VMAF={metrics['vmaf']:.2f}"
+                        + (
+                            f", ROI VMAF={metrics['roi_vmaf']:.2f}"
+                            if metrics.get('roi_vmaf') is not None
+                            else ""
+                        )
+                    )
+                if metrics.get('sheet'):
+                    logger.info(f"Quality sheet: {metrics['sheet']}")
+        except Exception as exc:
+            logger.warning(f"Quality report failed: {exc}", exc_info=True)
 
     def _write_nle_sidecar(self, input_path: str, output_path: str,
                              start_frame: int, end_frame: int,

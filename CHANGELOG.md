@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Extracted time-range and quality-report stages from `process_video`.** The
+  time-window-to-frame math now lives in a standalone, unit-tested
+  `_resolve_frame_range` helper (returning a `_FrameRange` bundle), and the
+  PSNR/SSIM reporting in `_emit_quality_report`. Pure relocations with no
+  behavior change; the frame loop remains inline pending a
+  hardware-verifiable refactor.
 - **Split the `test_hardening` monolith by subsystem.** The single ~8,100-line
   `tests/test_hardening.py` was divided into ten focused files
   (`test_hardening_{core,cli,config,detection,encode_io,inpaint,quality,batch,adapters,gui_i18n}.py`)
