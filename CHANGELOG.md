@@ -4,6 +4,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependency-floor consistency guard.** A new test cross-checks the version
+  floors declared in `requirements.txt`, `dependency_profiles.json`,
+  `backend/dependency_caps.py`, and the shared Pillow floor used by release
+  verification, failing if any of them drift apart.
+
 ### Fixed
 
 - **Accurate time-range start seek on CFR sources.** Frame seeking for
