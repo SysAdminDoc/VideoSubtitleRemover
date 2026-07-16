@@ -1226,6 +1226,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.18.0]
+
 ### Added
 
 - **OCR-fix replace list for exported SRT.** With `--ocr-fix` (config

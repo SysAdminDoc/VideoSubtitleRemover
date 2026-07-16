@@ -4,7 +4,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.17.3-22c55e)
+![Version](https://img.shields.io/badge/version-3.18.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
@@ -606,7 +606,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--ffmpeg-whisper-vad-threshold` | VAD confidence threshold (0.0-1.0, default 0.5). | 0.5 | 0..1 | Public |
 | `--ffmpeg-whisper-min-speech` | Minimum speech duration for VAD segments (default 0). | 0.0 | 0..30 seconds | Public |
 | `--export-srt` | Write an .srt sidecar with detected text | Off | - | Public |
-| `--ocr-fix` | Apply a per-language OCR-fix replace list to exported SRT text (built-in defaults + `%APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json`) | Off | - | Public |
+| `--ocr-fix` | Apply a per-language OCR-fix replace list to the exported SRT text (built-in defaults plus %APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json). | Off | - | Public |
 | `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action, then exit. | Off | - | Public |
 | `--soft-subtitle-plan-json` | Write soft-subtitle dry-run preflight details as JSON. | - | - | Public |
 | `--strip-soft-subtitles` | Fast remux that removes embedded subtitle tracks without OCR. | Off | - | Public |
@@ -805,6 +805,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `mask_import_path` | `str` | `-` |
 | `mask_import_mode` | `str` | `replace` |
 | `export_srt` | `bool` | `Off` |
+| `ocr_fix_enable` | `bool` | `Off` |
 | `adaptive_batch` | `bool` | `On` |
 | `gpu_oom_recovery` | `bool` | `On` |
 | `batch_max_retries` | `int` | `0` |
