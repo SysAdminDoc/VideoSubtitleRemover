@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Unified post-inpaint finishing.** The ONNX, diffusion, and built-in
+  inpainter families now share a single `apply_finishing` routine
+  (`backend/inpainters/_common.py`) for the edge-ring colour match and feather
+  blend, replacing three separate re-implementations of the same per-frame
+  loop. Boundary handling is now identical across every backend.
 - **Dependency-floor consistency guard.** A new test cross-checks the version
   floors declared in `requirements.txt`, `dependency_profiles.json`,
   `backend/dependency_caps.py`, and the shared Pillow floor used by release

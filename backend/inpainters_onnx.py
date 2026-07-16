@@ -316,21 +316,14 @@ def _cv2_inpaint_single(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def _apply_feather_blend(original, filled, masks, config):
-    """Reuse the shared feather-blend at every boundary."""
-    if config is None:
-        return list(filled)
+    """Delegate to the shared post-inpaint finishing step so ONNX backends
+    use identical edge-ring + feather boundary handling as every other
+    inpainter family."""
     try:
-        from backend.inpainters import _feather_blend, _edge_ring_color_correct
+        from backend.inpainters import apply_finishing
     except Exception:
         return list(filled)
-    out = []
-    feather = getattr(config, "mask_feather_px", 4)
-    ring = getattr(config, "edge_ring_px", 2)
-    for f, r, m in zip(original, filled, masks):
-        if ring > 0 and m.max() > 0:
-            r = _edge_ring_color_correct(f, r, m, ring)
-        out.append(_feather_blend(f, r, m, feather))
-    return out
+    return apply_finishing(original, filled, masks, config)
 
 
 def maybe_register() -> List[str]:

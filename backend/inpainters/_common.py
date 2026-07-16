@@ -160,6 +160,37 @@ def _edge_ring_color_correct(original: np.ndarray, filled: np.ndarray,
     return out.astype(np.uint8)
 
 
+def apply_finishing(original, filled, masks, config=None, *,
+                    edge_ring: bool = True,
+                    feather_px: Optional[int] = None,
+                    edge_ring_px: Optional[int] = None):
+    """Single post-inpaint finishing step shared by every inpainter family.
+
+    Applies the shared edge-ring colour match (when ``edge_ring`` is true and
+    ``edge_ring_px > 0``) followed by the feather blend at each mask boundary.
+    ``feather_px``/``edge_ring_px`` default to ``config.mask_feather_px`` and
+    ``config.edge_ring_px``. When ``config`` is ``None`` and no explicit
+    ``feather_px`` is given, the filled frames pass through unchanged so a
+    session without config never crashes.
+
+    Centralizing this here keeps the ONNX, diffusion, and built-in backends on
+    identical boundary handling instead of each re-implementing the loop.
+    """
+    if feather_px is None:
+        if config is None:
+            return list(filled)
+        feather_px = getattr(config, "mask_feather_px", 4)
+    if edge_ring_px is None:
+        edge_ring_px = (
+            getattr(config, "edge_ring_px", 2) if config is not None else 0)
+    out = []
+    for f, r, m in zip(original, filled, masks):
+        if edge_ring and edge_ring_px > 0 and m.max() > 0:
+            r = _edge_ring_color_correct(f, r, m, edge_ring_px)
+        out.append(_feather_blend(f, r, m, feather_px))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Scene-cut detector cascade
 # ---------------------------------------------------------------------------

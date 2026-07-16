@@ -47,9 +47,8 @@ from backend.config import ProcessingConfig
 from backend.inpainters import (
     BaseInpainter,
     _cv2_inpaint,
-    _edge_ring_color_correct,
-    _feather_blend,
     _temporal_background_expose,
+    apply_finishing,
 )
 from backend.safe_image import safe_imread
 from backend.subprocess_policy import run_process
@@ -111,13 +110,11 @@ def _fallback_to_tbe(config: ProcessingConfig,
             scene_cut_use_pyscenedetect=config.tbe_scene_cut_use_pyscenedetect,
             scene_cut_use_transnetv2=config.tbe_scene_cut_use_transnetv2,
         )
-    out: List[np.ndarray] = []
-    for f, m in zip(frames, masks):
-        filled = _cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
-        if config.edge_ring_px > 0:
-            filled = _edge_ring_color_correct(f, filled, m, config.edge_ring_px)
-        out.append(_feather_blend(f, filled, m, config.mask_feather_px))
-    return out
+    filled = [
+        _cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
+        for f, m in zip(frames, masks)
+    ]
+    return apply_finishing(frames, filled, masks, config)
 
 
 class _DiffusionBackendBase(BaseInpainter):
@@ -191,12 +188,8 @@ class _PropainterRealBackend(_DiffusionBackendBase):
         frames_arr = np.stack(frames, axis=0)
         masks_arr = np.stack([(m > 0).astype(np.uint8) for m in masks], axis=0)
         out = self._model.inpaint(frames_arr, masks_arr)
-        results = []
-        for i, (f, m) in enumerate(zip(frames, masks)):
-            results.append(
-                _feather_blend(f, out[i], m, self.config.mask_feather_px)
-            )
-        return results
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -223,10 +216,8 @@ class _DiffuEraserBackend(_DiffusionBackendBase):
 
     def _run_model(self, frames, masks):
         result = self._model.run(frames, masks)
-        out = []
-        for f, r, m in zip(frames, result, masks):
-            out.append(_feather_blend(f, r, m, self.config.mask_feather_px))
-        return out
+        return apply_finishing(
+            frames, list(result), masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -284,10 +275,8 @@ class _VaceBackend(_DiffusionBackendBase):
         )
         out = _call_vace_model(self._model, frames, masks, prompt)
         out = _coerce_adapter_frames(out, len(frames), "VACE")
-        return [
-            _feather_blend(f, r, m, self.config.mask_feather_px)
-            for f, r, m in zip(frames, out, masks)
-        ]
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 def _vace_cache_dir(env=None) -> Path:
@@ -922,10 +911,8 @@ class _VideoPainterBackend(_DiffusionBackendBase):
         )
         out = _call_videopainter_model(self._model, frames, masks, prompt)
         out = _coerce_adapter_frames(out, len(frames), "VideoPainter")
-        return [
-            _feather_blend(f, r, m, self.config.mask_feather_px)
-            for f, r, m in zip(frames, out, masks)
-        ]
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -953,10 +940,8 @@ class _CocoCoBackend(_DiffusionBackendBase):
         # set VSR_COCOCO_PROMPT.
         prompt = os.environ.get("VSR_COCOCO_PROMPT", "background")
         out = self._model.inpaint(frames, masks, prompt=prompt)
-        return [
-            _feather_blend(f, r, m, self.config.mask_feather_px)
-            for f, r, m in zip(frames, out, masks)
-        ]
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -981,10 +966,8 @@ class _EraserDitBackend(_DiffusionBackendBase):
 
     def _run_model(self, frames, masks):
         out = self._model.inpaint(frames, masks)
-        return [
-            _feather_blend(f, r, m, self.config.mask_feather_px)
-            for f, r, m in zip(frames, out, masks)
-        ]
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -1225,10 +1208,8 @@ class _FloedBackend(_DiffusionBackendBase):
         )
         out = _call_floed_model(self._model, frames, masks, prompt)
         out = _coerce_adapter_frames(out, len(frames), "FloED")
-        return [
-            _feather_blend(f, r, m, self.config.mask_feather_px)
-            for f, r, m in zip(frames, out, masks)
-        ]
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 def _void_weight_paths() -> Optional[List[str]]:
@@ -1304,10 +1285,8 @@ class _VoidBackend(_DiffusionBackendBase):
             out = module.run(frames, masks, **kwargs)
         else:
             raise RuntimeError("VOID package missing `inpaint` or `run` entrypoint")
-        return [
-            _feather_blend(f, r, m, self.config.mask_feather_px)
-            for f, r, m in zip(frames, out, masks)
-        ]
+        return apply_finishing(
+            frames, list(out), masks, self.config, edge_ring=False)
 
 
 # Map an env var to (mode-name, builder).
