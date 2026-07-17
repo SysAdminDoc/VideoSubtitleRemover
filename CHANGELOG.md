@@ -6,12 +6,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
-- **Extracted time-range and quality-report stages from `process_video`.** The
-  time-window-to-frame math now lives in a standalone, unit-tested
-  `_resolve_frame_range` helper (returning a `_FrameRange` bundle), and the
-  PSNR/SSIM reporting in `_emit_quality_report`. Pure relocations with no
-  behavior change; the frame loop remains inline pending a
-  hardware-verifiable refactor.
+- **Extracted the encode/mux and time-range/quality-report stages from
+  `process_video`.** The final-output assembly (frame-sequence, checkpoint,
+  VFR, and default container-mux branches plus matte finalize and
+  SRT/translation/NLE sidecars) now lives in `_finalize_and_mux`, which returns
+  the resolved output path and the post-finalize matte-writer state so the
+  caller's cleanup is unchanged. The time-window-to-frame math lives in a
+  standalone, unit-tested `_resolve_frame_range` helper (returning a
+  `_FrameRange` bundle), and the PSNR/SSIM reporting in `_emit_quality_report`.
+  Pure relocations with no behavior change, each verified against the
+  real-ffmpeg reference-clip, VFR, and checkpoint/resume suites; the per-frame
+  inpaint loop remains inline pending a hardware-verifiable refactor.
 - **Split the `test_hardening` monolith by subsystem.** The single ~8,100-line
   `tests/test_hardening.py` was divided into ten focused files
   (`test_hardening_{core,cli,config,detection,encode_io,inpaint,quality,batch,adapters,gui_i18n}.py`)

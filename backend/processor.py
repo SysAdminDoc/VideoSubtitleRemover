@@ -3252,109 +3252,27 @@ class SubtitleRemover:
                 matte_reader.close()
                 self.last_mask_import["status"] = "composed"
 
-            self._report_progress(0.9, "Preserving container streams...")
-            with self._time_stage("mux"):
-                if use_frame_output:
-                    logger.info(
-                        f"Frame-sequence output written to {frame_out_dir}"
-                    )
-                    final_output_path = frame_out_dir
-                elif checkpoint_active:
-                    assert checkpoint_frame_dir is not None
-                    processed_video = self._encode_frame_sequence(
-                        checkpoint_frame_dir,
-                        fps,
-                        output_path,
-                        frame_durations=(
-                            selected_frame_durations
-                            if frame_timing is not None and frame_timing.is_vfr
-                            else None
-                        ),
-                        source_time_base=(
-                            frame_timing.time_base
-                            if frame_timing is not None else None
-                        ),
-                    )
-                    final_output_path = processed_video
-                    is_frame_sequence_input = Path(input_path).is_dir()
-                    if not is_frame_sequence_input and not Path(processed_video).is_dir():
-                        final_output_path = self._merge_audio(
-                            input_path,
-                            processed_video,
-                            output_path,
-                            start_seconds=processed_time_start,
-                            end_seconds=processed_time_end,
-                        )
-                elif vfr_frame_dir is not None:
-                    processed_video = self._encode_frame_sequence(
-                        vfr_frame_dir,
-                        fps,
-                        output_path,
-                        frame_durations=selected_frame_durations,
-                        source_time_base=frame_timing.time_base,
-                    )
-                    final_output_path = processed_video
-                    final_output_path = self._merge_audio(
-                        input_path,
-                        processed_video,
-                        output_path,
-                        start_seconds=processed_time_start,
-                        end_seconds=processed_time_end,
-                    )
-                else:
-                    final_output_path = output_path
-                    is_frame_sequence_input = Path(input_path).is_dir()
-                    if not is_frame_sequence_input:
-                        final_output_path = self._merge_audio(
-                            input_path,
-                            temp_video,
-                            output_path,
-                            start_seconds=processed_time_start,
-                            end_seconds=processed_time_end,
-                        )
-                    else:
-                        final_output_path = self._reencode_or_copy(
-                            temp_video, output_path)
-                if matte_writer is not None:
-                    with self._time_stage("encode"):
-                        self.last_mask_export.update(matte_writer.finalize())
-                    matte_writer = None
-                    logger.info(
-                        "Lossless matte written: %s",
-                        self.last_mask_export.get("path"),
-                    )
-
-                if self.config.export_srt and self._srt_entries:
-                    srt_path = str(Path(final_output_path).with_suffix('.srt'))
-                    self._write_srt(
-                        srt_path,
-                        fps,
-                        start_frame,
-                        frame_timing=frame_timing,
-                    )
-
-                self._prepare_translation_workflow(
-                    input_path,
-                    final_output_path,
-                    fps,
-                    start_frame,
-                    frame_timing=frame_timing,
-                )
-
-                # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
-                # upscale, film-grain re-synthesis). Run after the main mux
-                # so the user-visible output is the post-processed file;
-                # each adapter degrades gracefully when its dep is missing.
-                self._run_post_restore_passes(final_output_path, temp_dir)
-                if not use_frame_output:
-                    self._validate_output_contract(final_output_path)
-
-                # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
-                self._write_nle_sidecar(input_path, final_output_path,
-                                         start_frame, end_frame, fps,
-                                         width=width, height=height,
-                                         start_seconds=processed_time_start,
-                                         end_seconds=processed_time_end)
+            final_output_path, matte_writer = self._finalize_and_mux(
+                input_path=input_path,
+                output_path=output_path,
+                temp_video=temp_video,
+                temp_dir=temp_dir,
+                fps=fps,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                width=width,
+                height=height,
+                use_frame_output=use_frame_output,
+                frame_out_dir=frame_out_dir if use_frame_output else None,
+                checkpoint_active=checkpoint_active,
+                checkpoint_frame_dir=checkpoint_frame_dir,
+                vfr_frame_dir=vfr_frame_dir,
+                frame_timing=frame_timing,
+                selected_frame_durations=selected_frame_durations,
+                processed_time_start=processed_time_start,
+                processed_time_end=processed_time_end,
+                matte_writer=matte_writer,
+            )
 
             self._emit_quality_report(
                 input_path=input_path,
@@ -3471,6 +3389,131 @@ class SubtitleRemover:
                     shutil.rmtree(whisper_audio_dir, ignore_errors=True)
             except Exception:
                 logger.warning("Whisper temp cleanup failed", exc_info=True)
+
+    def _finalize_and_mux(self, *, input_path: str, output_path: str,
+                          temp_video, temp_dir, fps: float,
+                          start_frame: int, end_frame: int,
+                          width: int, height: int,
+                          use_frame_output: bool, frame_out_dir,
+                          checkpoint_active: bool, checkpoint_frame_dir,
+                          vfr_frame_dir, frame_timing,
+                          selected_frame_durations,
+                          processed_time_start: float,
+                          processed_time_end: float, matte_writer):
+        """Encode/mux stage: assemble the final output file, finalize the
+        matte, and write SRT/translation/NLE sidecars plus post-restore passes.
+
+        Extracted verbatim from ``process_video``. Returns the resolved
+        ``final_output_path`` together with the (now possibly ``None``)
+        ``matte_writer`` so the caller's finally-block cleanup still observes
+        the correct writer state: on success the writer is finalized and
+        returned as ``None``; if any step raises, the live writer propagates
+        back unchanged for the finally block to abort.
+        """
+        self._report_progress(0.9, "Preserving container streams...")
+        with self._time_stage("mux"):
+            if use_frame_output:
+                logger.info(
+                    f"Frame-sequence output written to {frame_out_dir}"
+                )
+                final_output_path = frame_out_dir
+            elif checkpoint_active:
+                assert checkpoint_frame_dir is not None
+                processed_video = self._encode_frame_sequence(
+                    checkpoint_frame_dir,
+                    fps,
+                    output_path,
+                    frame_durations=(
+                        selected_frame_durations
+                        if frame_timing is not None and frame_timing.is_vfr
+                        else None
+                    ),
+                    source_time_base=(
+                        frame_timing.time_base
+                        if frame_timing is not None else None
+                    ),
+                )
+                final_output_path = processed_video
+                is_frame_sequence_input = Path(input_path).is_dir()
+                if not is_frame_sequence_input and not Path(processed_video).is_dir():
+                    final_output_path = self._merge_audio(
+                        input_path,
+                        processed_video,
+                        output_path,
+                        start_seconds=processed_time_start,
+                        end_seconds=processed_time_end,
+                    )
+            elif vfr_frame_dir is not None:
+                processed_video = self._encode_frame_sequence(
+                    vfr_frame_dir,
+                    fps,
+                    output_path,
+                    frame_durations=selected_frame_durations,
+                    source_time_base=frame_timing.time_base,
+                )
+                final_output_path = processed_video
+                final_output_path = self._merge_audio(
+                    input_path,
+                    processed_video,
+                    output_path,
+                    start_seconds=processed_time_start,
+                    end_seconds=processed_time_end,
+                )
+            else:
+                final_output_path = output_path
+                is_frame_sequence_input = Path(input_path).is_dir()
+                if not is_frame_sequence_input:
+                    final_output_path = self._merge_audio(
+                        input_path,
+                        temp_video,
+                        output_path,
+                        start_seconds=processed_time_start,
+                        end_seconds=processed_time_end,
+                    )
+                else:
+                    final_output_path = self._reencode_or_copy(
+                        temp_video, output_path)
+            if matte_writer is not None:
+                with self._time_stage("encode"):
+                    self.last_mask_export.update(matte_writer.finalize())
+                matte_writer = None
+                logger.info(
+                    "Lossless matte written: %s",
+                    self.last_mask_export.get("path"),
+                )
+
+            if self.config.export_srt and self._srt_entries:
+                srt_path = str(Path(final_output_path).with_suffix('.srt'))
+                self._write_srt(
+                    srt_path,
+                    fps,
+                    start_frame,
+                    frame_timing=frame_timing,
+                )
+
+            self._prepare_translation_workflow(
+                input_path,
+                final_output_path,
+                fps,
+                start_frame,
+                frame_timing=frame_timing,
+            )
+
+            # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
+            # upscale, film-grain re-synthesis). Run after the main mux
+            # so the user-visible output is the post-processed file;
+            # each adapter degrades gracefully when its dep is missing.
+            self._run_post_restore_passes(final_output_path, temp_dir)
+            if not use_frame_output:
+                self._validate_output_contract(final_output_path)
+
+            # RM-76: optional NLE round-trip sidecar (EDL / FCPXML).
+            self._write_nle_sidecar(input_path, final_output_path,
+                                     start_frame, end_frame, fps,
+                                     width=width, height=height,
+                                     start_seconds=processed_time_start,
+                                     end_seconds=processed_time_end)
+        return final_output_path, matte_writer
 
     def _emit_quality_report(self, *, input_path: str, final_output_path: str,
                              start_frame: int, end_frame: int,
