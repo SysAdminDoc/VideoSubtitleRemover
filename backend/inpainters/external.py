@@ -237,7 +237,10 @@ class ExternalInpainter(BaseInpainter):
             if os.path.isfile(out_path):
                 out_frame = safe_imread(out_path)
                 if out_frame is not None and out_frame.shape == frame.shape:
-                    blended = _feather_blend(out_frame, frame, mask)
+                    # _feather_blend(original, filled, mask): the filled
+                    # result must win inside the mask, so the external
+                    # tool's output is the second argument.
+                    blended = _feather_blend(frame, out_frame, mask)
                     results.append(blended)
                 else:
                     results.append(frame.copy())

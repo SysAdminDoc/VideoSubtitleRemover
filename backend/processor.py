@@ -879,9 +879,9 @@ class SubtitleRemover:
             video_path, self.config.decode_hw_accel,
             input_fps=self.config.input_fps,
         )
-        if not cap.isOpened():
-            return None
         try:
+            if not cap.isOpened():
+                return None
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             if h <= 0 or w <= 0:

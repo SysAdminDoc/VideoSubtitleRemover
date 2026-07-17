@@ -848,6 +848,36 @@ class ExternalInpainterCommandTests(unittest.TestCase):
         self.assertEqual(parts[0], r"C:\Tools\inpainter.exe")
         self.assertEqual(parts[-1], r"C:\Models\lama.onnx")
 
+    def test_external_output_survives_inside_mask(self):
+        """Regression: the external tool's fill -- not the still-subtitled
+        source frame -- must win inside the mask after _feather_blend."""
+        import cv2
+        from backend.inpainters import external as external_mod
+
+        frame = np.zeros((32, 32, 3), dtype=np.uint8)  # black source
+        mask = np.zeros((32, 32), dtype=np.uint8)
+        mask[8:24, 8:24] = 255
+        filled = np.full((32, 32, 3), 200, dtype=np.uint8)  # bright fill
+
+        def fake_run(command, **_kwargs):
+            out_dir = command[command.index("--output-dir") + 1]
+            cv2.imwrite(os.path.join(out_dir, "000000.png"), filled)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        inpainter = external_mod.ExternalInpainter.__new__(
+            external_mod.ExternalInpainter)
+        inpainter._cmd = ["fake-inpainter"]
+        inpainter._timeout = 60
+        inpainter._config = None
+
+        with unittest.mock.patch.object(external_mod, "run_process", fake_run):
+            result = inpainter.inpaint([frame], [mask])
+
+        center = result[0][16, 16]
+        # The fill (200) must dominate at the mask center, proving the
+        # external output is not discarded in favor of the source frame.
+        self.assertGreater(int(center.mean()), 150)
+
 
 class D3D12AccelerationTests(unittest.TestCase):
     def _remover(self):
