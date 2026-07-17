@@ -1472,7 +1472,7 @@ class GuiSmokeTests(unittest.TestCase):
                 app._command_strip.winfo_rooty(), app._preview_col.winfo_rooty())
             self.assertEqual(
                 (app._preview_photo.width(), app._preview_photo.height()),
-                (640, 360),
+                (960, 540),
             )
             self.assertEqual(Theme.BG_DARK, "#080d15")
             self.assertEqual(Theme.BLUE_PRIMARY, "#4f7cff")
@@ -1491,13 +1491,28 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app._queue_count_cluster.winfo_manager(), "")
             self.assertEqual(app.queue_canvas.cget("height"), "40")
             self.assertEqual(app._preview_primary_actions.winfo_manager(), "")
-            self.assertEqual(app._preview_tools_btn.winfo_manager(), "pack")
-            self.assertEqual(len(app._inspector_summary_rows), 3)
+            self.assertEqual(app._preview_tools_btn.winfo_manager(), "")
+            self.assertEqual(app.preview_ab_btn.winfo_manager(), "")
+            self.assertEqual(app._preview_heading_label.cget("text"), "Preview")
+            self.assertEqual(app.preview_title_label.winfo_manager(), "")
+            self.assertEqual(len(app._inspector_summary_rows), 4)
             self.assertEqual(app._inspector_profile_panel.winfo_manager(), "")
             self.assertEqual(app._inspector_workflow_panel.winfo_manager(), "")
             self.assertEqual(app._inspector_output_panel.winfo_manager(), "")
             self.assertEqual(app.adv_toggle.text, "Advanced settings")
+            self.assertEqual(app.adv_toggle.winfo_manager(), "")
+            self.assertEqual(app._inspector_advanced_chevron.cget("text"), "v")
+            self.assertEqual(app._footer_activity_btn.winfo_manager(), "")
+            self.assertEqual(app.status_dot.winfo_manager(), "")
             self.assertIs(app.queue_add_btn.master, app._queue_action_frame)
+            self.assertEqual(app.queue_remove_btn.winfo_manager(), "pack")
+            self.assertEqual(app.queue_clear_completed_btn.winfo_manager(), "pack")
+            self.assertEqual(app.queue_move_up_btn.winfo_manager(), "pack")
+            self.assertEqual(app.queue_move_down_btn.winfo_manager(), "pack")
+            self.assertEqual(
+                int(app._content.grid_columnconfigure(0)["weight"]), 17)
+            self.assertEqual(
+                int(app._content.grid_columnconfigure(1)["weight"]), 8)
         finally:
             self._destroy_app(app)
 
@@ -1513,7 +1528,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(int(app._preview_col.grid_info()["row"]), 0)
             self.assertEqual(int(app._settings_col.grid_info()["row"]), 1)
             self.assertEqual(app._queue_row.winfo_manager(), "pack")
-            self.assertEqual(app._queue_more_btn.winfo_manager(), "")
+            self.assertEqual(app._queue_more_btn.winfo_manager(), "pack")
             self.assertEqual(app.queue_add_btn.winfo_manager(), "pack")
             self.assertEqual(app.start_btn.winfo_manager(), "")
             self.assertEqual(app.inspector_start_btn.winfo_manager(), "")
@@ -1534,9 +1549,10 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app._inspector_workflow_details.winfo_manager(), "")
             self.assertFalse(app._log_visible)
             self.assertEqual(app._log_section.winfo_manager(), "")
-            self.assertEqual(app._footer_activity_btn.winfo_manager(), "pack")
+            self.assertEqual(app._footer_activity_btn.winfo_manager(), "")
 
             app._toggle_advanced()
+            self.assertEqual(app._inspector_advanced_chevron.cget("text"), "^")
             self.assertEqual(app._inspector_profile_panel.winfo_manager(), "pack")
             self.assertEqual(app._inspector_workflow_panel.winfo_manager(), "pack")
             self.assertEqual(app._inspector_output_panel.winfo_manager(), "pack")
@@ -1545,12 +1561,62 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app.adv_panel.winfo_manager(), "pack")
 
             app._toggle_advanced()
+            self.assertEqual(app._inspector_advanced_chevron.cget("text"), "v")
             self.assertEqual(app._inspector_profile_panel.winfo_manager(), "")
             self.assertEqual(app._inspector_workflow_panel.winfo_manager(), "")
             self.assertEqual(app._inspector_output_panel.winfo_manager(), "")
             self.assertEqual(app._inspector_profile_details.winfo_manager(), "")
             self.assertEqual(app._inspector_workflow_details.winfo_manager(), "")
             self.assertEqual(app.adv_panel.winfo_manager(), "")
+        finally:
+            self._destroy_app(app)
+
+    def test_reference_queue_actions_reorder_remove_and_clear_completed(self):
+        """The compact reference actions mutate queue state without touching outputs."""
+        app = self._make_app()
+        try:
+            items = []
+            for index in range(3):
+                source = Path(self._tmpdir.name) / f"queue-action-{index}.png"
+                source.write_bytes(b"source")
+                item = self._g.QueueItem(
+                    id=f"queue-action-{index}",
+                    file_path=str(source),
+                    output_path=str(source.with_name(f"output-{index}.png")),
+                    config=self._g.ProcessingConfig(),
+                )
+                items.append(item)
+            items[1].status = self._g.ProcessingStatus.COMPLETE
+            item_ids = [item.id for item in items]
+            app.queue = items
+            app._update_queue_display()
+
+            app._set_selected_queue_item(items[1].id)
+            self.assertTrue(app.queue_remove_btn.enabled)
+            self.assertTrue(app.queue_clear_completed_btn.enabled)
+            self.assertTrue(app.queue_move_up_btn.enabled)
+            self.assertTrue(app.queue_move_down_btn.enabled)
+
+            app._move_selected_queue_item(1)
+            self.assertEqual(
+                [item.id for item in app.queue],
+                [item_ids[0], item_ids[2], item_ids[1]],
+            )
+            self.assertEqual(
+                [widget.item.id for widget in app.queue_frame.pack_slaves()],
+                [item_ids[0], item_ids[2], item_ids[1]],
+            )
+
+            app._clear_completed_queue_items()
+            self.assertEqual(
+                [item.id for item in app.queue],
+                [item_ids[0], item_ids[2]],
+            )
+            self.assertFalse(app.queue_clear_completed_btn.enabled)
+
+            app._set_selected_queue_item(item_ids[2])
+            app._remove_selected_queue_item()
+            self.assertEqual([item.id for item in app.queue], [item_ids[0]])
         finally:
             self._destroy_app(app)
 

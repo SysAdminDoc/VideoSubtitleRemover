@@ -1105,6 +1105,8 @@ class VideoSubtitleRemoverApp(
             widget.set_selected(wid == item_id)
         self._update_preview_actions()
         self._update_guidance_surface()
+        if hasattr(self, "queue_remove_btn"):
+            self._refresh_action_states()
 
     def _refresh_action_states(self):
         """Enable or disable primary queue actions based on current state."""
@@ -1173,6 +1175,40 @@ class VideoSubtitleRemoverApp(
                 not batch_busy,
                 reason=tr("Wait for the current batch to finish."),
             )
+        selected = self._get_selected_queue_item()
+        selected_index = next(
+            (index for index, item in enumerate(self.queue)
+             if selected is not None and item.id == selected.id),
+            -1,
+        )
+        if hasattr(self, "queue_remove_btn"):
+            self.queue_remove_btn.set_enabled(
+                (not batch_busy) and selected is not None,
+                reason=(
+                    tr("Wait for the current batch to finish.")
+                    if batch_busy else tr("Select a queue item to remove.")
+                ),
+            )
+        if hasattr(self, "queue_clear_completed_btn"):
+            self.queue_clear_completed_btn.set_enabled(
+                (not batch_busy) and has_complete,
+                reason=(
+                    tr("Wait for the current batch to finish.")
+                    if batch_busy else tr("No completed items are in the queue.")
+                ),
+            )
+        if hasattr(self, "queue_move_up_btn"):
+            self.queue_move_up_btn.set_enabled(
+                (not batch_busy) and selected_index > 0,
+                reason=tr("Select an item below the first row to move it up."),
+            )
+        if hasattr(self, "queue_move_down_btn"):
+            self.queue_move_down_btn.set_enabled(
+                (not batch_busy)
+                and selected_index >= 0
+                and selected_index < len(self.queue) - 1,
+                reason=tr("Select an item above the last row to move it down."),
+            )
         if hasattr(self, "batch_label") and not batch_busy:
             pending = sum(1 for item in self.queue if item.status == ProcessingStatus.IDLE)
             if pending:
@@ -1196,8 +1232,22 @@ class VideoSubtitleRemoverApp(
         self._update_guidance_surface()
 
     def _bind_shortcuts(self):
-        """No app-wide keyboard accelerators -- all actions are click-only."""
-        pass
+        """Bind a small set of standard accelerators for hidden utilities."""
+        self.root.bind(
+            "<Control-o>",
+            lambda _event: self.drop_area._open_file_dialog(),
+            add="+",
+        )
+        self.root.bind(
+            "<Control-l>",
+            lambda _event: self._toggle_log_panel(),
+            add="+",
+        )
+        self.root.bind(
+            "<F1>",
+            lambda _event: self._show_about(),
+            add="+",
+        )
 
     def _open_file_picker(self):
         if hasattr(self, "drop_area"):
@@ -1336,8 +1386,10 @@ class VideoSubtitleRemoverApp(
                 anchor="w", padx=Theme.S_LG, pady=Theme.S_XS)
             self.status_hint.pack_forget()
         else:
-            self._content.columnconfigure(0, weight=7, minsize=500, uniform="")
-            self._content.columnconfigure(1, weight=4, minsize=360, uniform="")
+            self._content.columnconfigure(
+                0, weight=17, minsize=500, uniform="workbench")
+            self._content.columnconfigure(
+                1, weight=8, minsize=360, uniform="workbench")
             self._content.columnconfigure(2, weight=0, minsize=0, uniform="")
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
@@ -1409,20 +1461,31 @@ class VideoSubtitleRemoverApp(
         for button in (
             self.start_btn, self.queue_add_btn, self.open_output_btn, self.retry_btn,
             self.repeat_btn, self.clear_btn, self._queue_more_btn,
+            self.queue_remove_btn, self.queue_clear_completed_btn,
+            self.queue_move_up_btn, self.queue_move_down_btn,
         ):
             button.pack_forget()
+        for separator in getattr(self, "_queue_action_separators", ()):
+            separator.pack_forget()
 
         if hasattr(self, "inspector_start_btn"):
             self.inspector_start_btn.pack_forget()
-        self.queue_add_btn.pack(side="right")
-        if self.queue:
-            self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
-        if compact and self.queue:
-            self._queue_more_btn.pack(side="right", padx=(0, Theme.S_SM))
-        elif self.queue:
-            self.retry_btn.pack(side="left")
-            self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
-            self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        self.queue_add_btn.pack(side="left")
+        if compact or dense:
+            self._queue_more_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        else:
+            separators = getattr(self, "_queue_action_separators", ())
+            actions = (
+                self.queue_remove_btn,
+                self.queue_clear_completed_btn,
+                self.queue_move_up_btn,
+                self.queue_move_down_btn,
+            )
+            for index, button in enumerate(actions):
+                if index < len(separators) and index < 3:
+                    separators[index].pack(
+                        side="left", fill="y", padx=Theme.S_SM, pady=2)
+                button.pack(side="left")
 
         queue_empty = not self.queue and not self.is_processing
         self.queue_canvas.configure(height=40 if queue_empty else (64 if dense else 88))
@@ -1480,6 +1543,16 @@ class VideoSubtitleRemoverApp(
             bd=1, relief="solid",
         )
         for label, command, enabled in (
+            (tr("Remove"), self._remove_selected_queue_item,
+             self.queue_remove_btn.enabled),
+            (tr("Clear completed"), self._clear_completed_queue_items,
+             self.queue_clear_completed_btn.enabled),
+            (tr("Move up"), lambda: self._move_selected_queue_item(-1),
+             self.queue_move_up_btn.enabled),
+            (tr("Move down"), lambda: self._move_selected_queue_item(1),
+             self.queue_move_down_btn.enabled),
+            (tr("Open output"), self._open_output_folder,
+             self.open_output_btn.enabled),
             (tr("Retry failed"), self._retry_failed, self.retry_btn.enabled),
             (tr("Repeat last"), self._repeat_last_job, self.repeat_btn.enabled),
             (tr("Clear queue"), self._clear_queue, self.clear_btn.enabled),
@@ -1498,6 +1571,8 @@ class VideoSubtitleRemoverApp(
                 ),
                 command=self._toggle_dense_queue_list,
             )
+        menu.add_separator()
+        menu.add_command(label=tr("Activity"), command=self._toggle_log_panel)
         try:
             menu.tk_popup(
                 self._queue_more_btn.winfo_rootx(),
@@ -1665,8 +1740,10 @@ class VideoSubtitleRemoverApp(
         self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
         self._content_canvas.bind("<MouseWheel>", self._on_content_mousewheel)
         content.bind("<MouseWheel>", self._on_content_mousewheel)
-        content.columnconfigure(0, weight=7, minsize=500)
-        content.columnconfigure(1, weight=4, minsize=360)
+        content.columnconfigure(
+            0, weight=17, minsize=500, uniform="workbench")
+        content.columnconfigure(
+            1, weight=8, minsize=360, uniform="workbench")
         content.columnconfigure(2, weight=0, minsize=0)
         content.rowconfigure(0, weight=1)
         self._content = content
@@ -1753,8 +1830,8 @@ class VideoSubtitleRemoverApp(
 
         mode_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         tk.Label(
-            mode_block, text=tr("Cleanup profile"), font=f(Theme.F_META),
-            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            mode_block, text=tr("Cleanup profile"), font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_mode_combo = ttk.Combobox(
             mode_block, textvariable=self.mode_var,
@@ -1768,8 +1845,8 @@ class VideoSubtitleRemoverApp(
 
         region_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         tk.Label(
-            region_block, text=tr("Subtitle region"), font=f(Theme.F_META),
-            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            region_block, text=tr("Subtitle region"), font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_region_var = tk.StringVar()
         self._command_region_combo = ttk.Combobox(
@@ -1786,8 +1863,8 @@ class VideoSubtitleRemoverApp(
 
         output_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         tk.Label(
-            output_block, text=tr("Output"), font=f(Theme.F_META),
-            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            output_block, text=tr("Output"), font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_output_btn = ModernButton(
             output_block, text=tr("Same as source"), width=176,
@@ -3106,8 +3183,20 @@ class VideoSubtitleRemoverApp(
 
     def _open_inspector_details(self, _section: str = ""):
         """Reveal the detailed editor from a compact inspector row."""
-        if not self.adv_visible:
+        if _section == "advanced":
             self._toggle_advanced()
+        elif not self.adv_visible:
+            self._toggle_advanced()
+
+    def _sync_inspector_disclosure_state(self):
+        """Keep the flat Advanced row aligned with detailed-control state."""
+        chevron = getattr(self, "_inspector_advanced_chevron", None)
+        if chevron is not None:
+            chevron.configure(text="^" if self.adv_visible else "v")
+        button = getattr(self, "_inspector_advanced_button", None)
+        if button is not None:
+            button.configure(
+                fg=Theme.TEXT_PRIMARY if self.adv_visible else Theme.TEXT_SECONDARY)
 
     def _build_inspector_summary(self, settings):
         """Build the first-viewport inspector as separator-led disclosure rows."""
@@ -3132,20 +3221,22 @@ class VideoSubtitleRemoverApp(
         self._inspector_encoding_var = tk.StringVar(
             value=str(getattr(self.config, "output_codec", "h264")).upper())
         rows = (
-            (tr("Detection"), self._command_region_var),
-            (tr("Inpainting"), self.mode_var),
-            (tr("Encoding"), self._inspector_encoding_var),
+            ("detection", tr("Detection")),
+            ("inpainting", tr("Inpainting")),
+            ("encoding", tr("Encoding")),
+            ("advanced", tr("Advanced")),
         )
         self._inspector_summary_rows = []
-        for title, value_var in rows:
+        self._inspector_summary_chevrons = {}
+        for section_key, title in rows:
             self._divider(settings)
             row = tk.Frame(settings, bg=Theme.BG_SECONDARY)
             row.pack(fill="x")
             button = tk.Button(
                 row,
                 text=title,
-                command=lambda name=title: self._open_inspector_details(name),
-                font=f(Theme.F_BODY, "bold"),
+                command=lambda name=section_key: self._open_inspector_details(name),
+                font=f(Theme.F_BODY),
                 bg=Theme.BG_SECONDARY,
                 fg=Theme.TEXT_SECONDARY,
                 activebackground=Theme.BG_CARD_HOVER,
@@ -3157,24 +3248,30 @@ class VideoSubtitleRemoverApp(
                 takefocus=1,
                 cursor="hand2",
                 padx=0,
-                pady=Theme.S_MD,
+                pady=Theme.S_LG,
             )
             button.pack(side="left", fill="x", expand=True)
-            tk.Label(
+            chevron = tk.Label(
                 row,
-                text=">",
+                text="v",
                 font=f(Theme.F_BODY_SM, "bold"),
                 bg=Theme.BG_SECONDARY,
                 fg=Theme.TEXT_MUTED,
-            ).pack(side="right", padx=(Theme.S_SM, 0))
-            tk.Label(
-                row,
-                textvariable=value_var,
-                font=f(Theme.F_META),
-                bg=Theme.BG_SECONDARY,
-                fg=Theme.TEXT_MUTED,
-            ).pack(side="right")
+            )
+            chevron.pack(side="right", padx=(Theme.S_SM, 0))
+            row.bind(
+                "<Button-1>",
+                lambda _event, name=section_key: self._open_inspector_details(name),
+            )
+            chevron.bind(
+                "<Button-1>",
+                lambda _event, name=section_key: self._open_inspector_details(name),
+            )
             self._inspector_summary_rows.append(button)
+            self._inspector_summary_chevrons[section_key] = chevron
+            if section_key == "advanced":
+                self._inspector_advanced_button = button
+                self._inspector_advanced_chevron = chevron
         self._refresh_inspector_summary()
         self.mode_var.trace_add("write", self._refresh_inspector_summary)
 
@@ -3233,13 +3330,13 @@ class VideoSubtitleRemoverApp(
 
         # ---- Advanced toggle --------------------------------------------
         adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        adv_frame.pack(fill="x", pady=(Theme.S_SM, 0))
+        self._advanced_compat_frame = adv_frame
 
         self.adv_visible = False
         self.adv_toggle = ModernButton(adv_frame, text=tr("Advanced settings"), width=188,
                                        command=self._toggle_advanced,
                                        style="ghost", size="sm", icon="+")
-        self.adv_toggle.pack(anchor="w")
+        self._sync_inspector_disclosure_state()
 
         self.adv_panel = tk.Frame(settings, bg=Theme.BG_SECONDARY)
 
@@ -3267,12 +3364,17 @@ class VideoSubtitleRemoverApp(
 
         preview_text = tk.Frame(preview_header, bg=Theme.BG_SECONDARY)
         preview_text.pack(side="left", fill="x", expand=True)
-        self.preview_title_label = tk.Label(
+        self._preview_heading_label = tk.Label(
             preview_text, text=tr("Preview"),
             font=f(Theme.F_HEADING, "bold"),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
         )
-        self.preview_title_label.pack(anchor="w")
+        self._preview_heading_label.pack(anchor="w")
+        self.preview_title_label = tk.Label(
+            preview_text, text=tr("Preview"),
+            font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        )
         self.preview_meta_label = tk.Label(
             preview_text,
             text=tr("Select a queue item to inspect its subtitle region."),
@@ -3290,7 +3392,6 @@ class VideoSubtitleRemoverApp(
             preview_header, text=tr("Before / after"), width=118,
             command=self._open_ab_scrubber, style="ghost", size="sm",
         )
-        self.preview_ab_btn.pack(side="right", padx=(0, Theme.S_SM))
         Tooltip(
             self.preview_ab_btn,
             tr("Wipe between the source frame and cleaned output."),
@@ -3304,7 +3405,6 @@ class VideoSubtitleRemoverApp(
             style="ghost",
             size="sm",
         )
-        self._preview_tools_btn.pack(side="right", padx=(0, Theme.S_SM))
 
         media_surface = tk.Frame(
             section, bg=Theme.BG_CARD, highlightthickness=1,
@@ -3318,7 +3418,7 @@ class VideoSubtitleRemoverApp(
         self._preview_label = tk.Label(
             media_surface, bg=Theme.BG_CARD, text="",
             font=f(Theme.F_META), fg=Theme.TEXT_MUTED,
-            compound="bottom", justify="center", cursor="hand2",
+            compound="bottom", justify="center", cursor="hand2", takefocus=1,
         )
         self._preview_label.pack(fill="both", expand=True, padx=Theme.S_SM,
                                  pady=Theme.S_SM)
@@ -3330,9 +3430,15 @@ class VideoSubtitleRemoverApp(
             "<B1-Motion>", self._on_preview_region_drag, add="+")
         self._preview_label.bind(
             "<ButtonRelease-1>", self._on_preview_region_release, add="+")
+        self._preview_label.bind(
+            "<Button-3>", self._open_preview_tools_menu, add="+")
+        self._preview_label.bind(
+            "<Shift-F10>", self._open_preview_tools_menu, add="+")
+        self._preview_label.bind(
+            "<Menu>", self._open_preview_tools_menu, add="+")
         Tooltip(
             self._preview_label,
-            tr("Double-click for full size, or draw the subtitle region directly."),
+            tr("Double-click for full size, draw a region, or right-click for preview tools."),
         )
 
         self.preview_action_hint = tk.Label(
@@ -3433,7 +3539,7 @@ class VideoSubtitleRemoverApp(
             "Select a queue item to inspect its subtitle region before cleanup.",
         )
 
-    def _open_preview_tools_menu(self):
+    def _open_preview_tools_menu(self, event=None):
         """Group secondary preview commands into one contextual menu."""
         menu = tk.Menu(
             self.root,
@@ -3446,6 +3552,7 @@ class VideoSubtitleRemoverApp(
             relief="solid",
         )
         entries = (
+            (tr("Before / after"), self.preview_ab_btn, self._open_ab_scrubber),
             (tr("Set region"), self.preview_region_btn, self._open_region_selector),
             (tr("Review mask"), self.preview_mask_btn, self._open_selected_mask_preview),
             (tr("Test cleanup"), self.preview_inpaint_btn, self._open_selected_inpaint_preview),
@@ -3459,11 +3566,17 @@ class VideoSubtitleRemoverApp(
                 command=command,
                 state="normal" if button.enabled else "disabled",
             )
+        menu.add_separator()
+        menu.add_command(label=tr("Activity"), command=self._toggle_log_panel)
         try:
+            x = getattr(event, "x_root", None)
+            y = getattr(event, "y_root", None)
+            if x is None or y is None:
+                x = self._preview_label.winfo_rootx() + Theme.S_MD
+                y = self._preview_label.winfo_rooty() + Theme.S_MD
             menu.tk_popup(
-                self._preview_tools_btn.winfo_rootx(),
-                self._preview_tools_btn.winfo_rooty()
-                + self._preview_tools_btn.winfo_height(),
+                x,
+                y,
             )
         finally:
             menu.grab_release()
@@ -3646,6 +3759,50 @@ class VideoSubtitleRemoverApp(
         )
         self.queue_add_btn.pack(side="right")
 
+        self.queue_remove_btn = ModernButton(
+            btn_frame,
+            text=tr("Remove"),
+            width=92,
+            command=self._remove_selected_queue_item,
+            style="toolbar",
+            size="sm",
+        )
+        self.queue_clear_completed_btn = ModernButton(
+            btn_frame,
+            text=tr("Clear completed"),
+            width=132,
+            command=self._clear_completed_queue_items,
+            style="toolbar",
+            size="sm",
+        )
+        self.queue_move_up_btn = ModernButton(
+            btn_frame,
+            text="^",
+            width=40,
+            command=lambda: self._move_selected_queue_item(-1),
+            style="toolbar",
+            size="sm",
+        )
+        self.queue_move_down_btn = ModernButton(
+            btn_frame,
+            text="v",
+            width=40,
+            command=lambda: self._move_selected_queue_item(1),
+            style="toolbar",
+            size="sm",
+        )
+        self._queue_action_separators = tuple(
+            tk.Frame(btn_frame, bg=Theme.BORDER_SUBTLE, width=1)
+            for _index in range(3)
+        )
+        Tooltip(self.queue_remove_btn, tr("Remove the selected item from the queue."))
+        Tooltip(
+            self.queue_clear_completed_btn,
+            tr("Remove completed items without deleting their output files."),
+        )
+        Tooltip(self.queue_move_up_btn, tr("Move the selected item up."))
+        Tooltip(self.queue_move_down_btn, tr("Move the selected item down."))
+
         self.start_btn = ModernButton(btn_frame, text=tr("Start batch"), width=180,
                                      height=44,
                                      command=self._start_processing,
@@ -3794,12 +3951,12 @@ class VideoSubtitleRemoverApp(
         left.pack(side="left", padx=Theme.S_LG, pady=Theme.S_XS)
         self._footer_left = left
 
-        # Status dot
+        # Keep the status canvas for color/state updates and accessibility,
+        # but the footer itself follows the reference's single quiet label.
         self.status_dot = tk.Canvas(left, width=10, height=10, bg=Theme.BG_DARK,
                                     highlightthickness=0)
         self._status_dot_item = self.status_dot.create_oval(
             1, 1, 9, 9, fill=Theme.TEXT_SECONDARY, outline="")
-        self.status_dot.pack(side="left", padx=(0, Theme.S_SM), pady=2)
 
         self.status_label = tk.Label(left, text=tr("Ready"),
                                      font=f(Theme.F_BODY_SM),
@@ -3829,8 +3986,6 @@ class VideoSubtitleRemoverApp(
             command=self._toggle_log_panel,
             style="ghost", size="sm",
         )
-        self._footer_activity_btn.pack(
-            side="right", padx=(0, Theme.S_LG), pady=Theme.S_XS)
 
 
 
@@ -4821,6 +4976,73 @@ class VideoSubtitleRemoverApp(
             self._update_status(f"Removed {Path(item.file_path).name} from the queue")
         save_queue_state(self.queue)
 
+    def _remove_selected_queue_item(self):
+        """Remove the selected inactive queue item."""
+        item = self._get_selected_queue_item()
+        if item is None:
+            self._update_status("Select a queue item to remove", "warning")
+            return
+        self._remove_from_queue(item.id)
+
+    def _clear_completed_queue_items(self):
+        """Remove completed queue records while preserving output files."""
+        if self.is_processing or self._has_active_processing_thread():
+            self._update_status(
+                "Wait for the active batch to finish before clearing completed items",
+                "warning",
+            )
+            return
+        with self.queue_lock:
+            completed_ids = {
+                item.id for item in self.queue
+                if item.status == ProcessingStatus.COMPLETE
+            }
+            self.queue = [
+                item for item in self.queue if item.id not in completed_ids
+            ]
+        if not completed_ids:
+            self._update_status("No completed items to clear")
+            return
+        if self._selected_queue_item_id in completed_ids:
+            self._selected_queue_item_id = None
+        self._update_queue_display()
+        if self.queue:
+            save_queue_state(self.queue)
+        else:
+            clear_queue_state()
+        count = len(completed_ids)
+        self._update_status(
+            f"Cleared {count} completed item{'s' if count != 1 else ''}")
+
+    def _move_selected_queue_item(self, direction: int):
+        """Move the selected inactive queue item one position."""
+        if self.is_processing or self._has_active_processing_thread():
+            self._update_status(
+                "Wait for the active batch to finish before reordering the queue",
+                "warning",
+            )
+            return
+        item = self._get_selected_queue_item()
+        if item is None:
+            self._update_status("Select a queue item to move", "warning")
+            return
+        step = -1 if direction < 0 else 1
+        with self.queue_lock:
+            index = next(
+                (i for i, queued in enumerate(self.queue) if queued.id == item.id),
+                -1,
+            )
+            target = index + step
+            if index < 0 or target < 0 or target >= len(self.queue):
+                return
+            self.queue[index], self.queue[target] = (
+                self.queue[target], self.queue[index])
+        self._update_queue_display()
+        save_queue_state(self.queue)
+        self._update_status(
+            f"Moved {Path(item.file_path).name} "
+            f"{'up' if step < 0 else 'down'}")
+
     def _clear_queue(self):
         """Clear all items from the queue."""
         if self.is_processing:
@@ -4946,6 +5168,14 @@ class VideoSubtitleRemoverApp(
                             subchild.bind("<MouseWheel>", self._on_mousewheel)
                 else:
                     self.queue_widgets[item.id].update_item(item)
+
+            # Existing Tk children retain their original pack order. Repack
+            # them after a queue move so the visible order follows the model.
+            for item in self.queue:
+                widget = self.queue_widgets.get(item.id)
+                if widget is not None:
+                    widget.pack_forget()
+                    widget.pack(fill="x")
 
         if self._selected_queue_item_id and self._selected_queue_item_id in self.queue_widgets:
             self._set_selected_queue_item(self._selected_queue_item_id)

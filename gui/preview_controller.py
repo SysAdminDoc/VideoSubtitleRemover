@@ -175,7 +175,7 @@ class PreviewControllerMixin:
         # next action, so decorative illustrations only add visual noise.
         if PIL_AVAILABLE:
             try:
-                w, h = 640, 360
+                w, h = 960, 540
                 base = Image.new("RGB", (w, h), self._hex_to_rgb(Theme.BG_TERTIARY))
                 self._preview_photo = ImageTk.PhotoImage(base)
                 self._preview_label.config(image=self._preview_photo, text="")
@@ -185,6 +185,20 @@ class PreviewControllerMixin:
         else:
             self._preview_label.config(text="", image="")
             self._preview_photo = None
+
+    def _preview_display_bounds(self) -> tuple[int, int]:
+        """Return media-first preview bounds for the current workbench size."""
+        try:
+            max_w = max(320, self._preview_frame.winfo_width() - 36)
+        except Exception:
+            max_w = 960
+        try:
+            available_h = self._preview_frame.winfo_height() - 72
+        except Exception:
+            available_h = 540
+        if available_h < 240:
+            available_h = 540
+        return max_w, max(320, min(540, available_h))
 
     def _set_preview_unavailable(
         self,
@@ -757,8 +771,7 @@ class PreviewControllerMixin:
             return
         try:
             self._stop_throbber()
-            max_w = max(220, self._preview_frame.winfo_width() - 36)
-            max_h = 158
+            max_w, max_h = self._preview_display_bounds()
             pil_img.thumbnail((max_w, max_h), Image.LANCZOS)
             self._preview_photo = ImageTk.PhotoImage(pil_img)
             self._preview_label.config(image=self._preview_photo, text="")
@@ -1157,11 +1170,7 @@ class PreviewControllerMixin:
                 text=badge["label"], fg=badge["color"],
                 bg=Theme.BG_SECONDARY)
 
-            try:
-                max_w = max(220, self._preview_frame.winfo_width() - 36)
-            except Exception:
-                max_w = 390
-            max_h = 320
+            max_w, max_h = self._preview_display_bounds()
 
             self.preview_title_label.config(
                 text=f"Loading {Path(item.file_path).name}...")

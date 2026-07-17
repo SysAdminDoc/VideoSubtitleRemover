@@ -106,6 +106,8 @@ class AdvancedSettingsControllerMixin:
             ):
                 panel.pack_forget()
             self.adv_panel.pack_forget()
+        if hasattr(self, "_sync_inspector_disclosure_state"):
+            self._sync_inspector_disclosure_state()
 
     def _get_algo_description(self) -> str:
         """Get description for current algorithm."""

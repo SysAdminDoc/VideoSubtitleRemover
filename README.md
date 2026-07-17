@@ -60,7 +60,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
 - **Pause/Resume Checkpointing** -- SHA-256 input fingerprint per file; finished files are skipped and paused videos resume from durable checkpoint frames
 - **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
-- **Premium Dark UI** -- Flat command-first workbench with readable typography, separator-led hierarchy, compact queue states, responsive scrolling, taskbar progress, and onboarding
+- **Premium Dark UI** -- Media-first preview, flat four-row inspector, readable typography, quiet queue actions, responsive scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
 - **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, support bundles, and winget-ready installer metadata
 
@@ -230,20 +230,22 @@ processes a generated tiny image through the CLI with a fixed mask.
 
 1. **Launch** via `Run_VSR_Pro.bat`, `Run_VSR_Pro_Debug.bat`, or
    `Run_VSR_Pro.ps1`
-2. **Import** -- Use the compact drop target to browse for files or folders,
-   or drag media directly into the window
-3. **Configure** -- Choose Auto, STTN, LAMA, or ProPainter in the right-side
-   inspector; set a subtitle region and confirm the output location
-4. **Open Advanced** when you need preset management, compute-device and
-   language selection, workflow toggles, or expert tuning
-5. **Inspect** -- Select a queue item to preview it, use **Review mask** to
-   confirm detection, or draw a fixed subtitle band directly on the preview.
+2. **Import** -- Use **Add media** in the top command bar, press Ctrl+O, or
+   drag media directly into the window
+3. **Configure** -- Choose the cleanup profile, subtitle region, and output
+   location from the top command bar
+4. **Open Advanced** in the right inspector when you need preset management,
+   compute-device and language selection, workflow toggles, or expert tuning
+5. **Inspect** -- Select a queue item to preview it. Right-click the preview,
+   or press **Menu / Shift+F10** while it is focused, to review the mask, test
+   cleanup, compare before/after, or open the full-size view. You can also draw
+   a fixed subtitle band directly on the preview.
    The full selector supports exact rectangle or polygon coordinates,
    second/frame timing, arrow-key nudging, Ctrl+arrow resizing, and
    Ctrl+Z/Ctrl+Y history
-6. **Process** -- Use **Start batch** at the lower right of the persistent
-   queue and monitor per-file status and progress in place. Right-click a queue
-   card, or press **Menu / Shift+F10** while it is focused, for per-item actions
+6. **Process** -- Use **Start cleanup** in the top command bar and monitor
+   per-file status in the persistent queue. Remove, clear completed, and reorder
+   controls stay in the queue header; Ctrl+L opens the detailed activity log
 
 ### Algorithm Comparison
 

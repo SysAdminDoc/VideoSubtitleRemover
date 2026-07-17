@@ -4,6 +4,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **The native workbench now follows the approved mockup more closely.** The
+  preview takes a 17:8 share of the desktop workspace and uses a larger 16:9
+  media stage with a static heading. Preview utilities move to its mouse and
+  keyboard context menu, the inspector becomes four consistent disclosure
+  rows, and the footer contracts to one status line.
+- **Queue commands now match the reference while staying functional.** Add,
+  remove, clear-completed, and move-up/down controls share the queue header;
+  compact layouts consolidate them into one menu. Reordering is persisted,
+  clearing completed records never deletes output files, and Activity remains
+  available from the context menu or Ctrl+L.
+
 ## [3.21.0] - 2026-07-17
 
 ### Changed
