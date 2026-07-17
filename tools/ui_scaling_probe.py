@@ -131,7 +131,7 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                 app.command_start_btn.winfo_reqheight(),
             ) < expected_height:
                 failures.append("button height did not scale with its text")
-            header_font = tkfont.Font(font=app._header_left.winfo_children()[0].cget("font"))
+            header_font = tkfont.Font(font=app._header_title_label.cget("font"))
             if abs(int(header_font.cget("size"))) < round(
                 Theme.F_DISPLAY * scale / 100
             ):

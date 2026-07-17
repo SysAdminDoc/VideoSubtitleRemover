@@ -4,6 +4,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **The desktop shell now uses one calm, command-first hierarchy.** Primary
+  setup stays in the top toolbar while the inspector becomes a concise summary
+  with separator-led disclosure rows instead of repeated controls. Larger body
+  and metadata type, grouped preview tools, a plain media stage, borderless
+  slider values, a compact status bar, and an empty queue that contracts to one
+  row bring the native application in line with the new premium visual target.
+
 ## [3.20.0] - 2026-07-17
 
 ### Changed

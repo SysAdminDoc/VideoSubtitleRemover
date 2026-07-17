@@ -85,12 +85,12 @@ class Theme:
     F_DISPLAY = 17
     F_HEADING = 15
     F_TITLE = 13
-    F_BODY = 12
-    F_BODY_SM = 11
-    F_LABEL = 11
-    F_META = 10
-    F_EYEBROW = 9
-    F_MICRO = 9
+    F_BODY = 13
+    F_BODY_SM = 12
+    F_LABEL = 12
+    F_META = 11
+    F_EYEBROW = 10
+    F_MICRO = 10
 
     # Spacing rhythm (4pt baseline)
     S_XS = 4
@@ -102,10 +102,10 @@ class Theme:
     S_3XL = 32
 
     # Radii
-    R_SM = 4
-    R_MD = 5
-    R_LG = 6
-    R_XL = 8
+    R_SM = 3
+    R_MD = 4
+    R_LG = 5
+    R_XL = 6
 
 
 def apply_high_contrast_theme():

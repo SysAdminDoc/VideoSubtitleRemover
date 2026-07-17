@@ -171,44 +171,12 @@ class PreviewControllerMixin:
         self._stop_throbber()
         self.preview_title_label.config(text=tr(title))
         self.preview_meta_label.config(text=tr(body))
-        # Render a minimalist placeholder card via PIL (if available) so the
-        # preview never collapses to empty space.
+        # Keep the empty media stage calm; the header already explains the
+        # next action, so decorative illustrations only add visual noise.
         if PIL_AVAILABLE:
             try:
-                w, h = 400, 225
+                w, h = 640, 360
                 base = Image.new("RGB", (w, h), self._hex_to_rgb(Theme.BG_TERTIARY))
-                draw = ImageDraw.Draw(base)
-                # 16:9 media stage with a restrained dashed focus boundary.
-                border = self._hex_to_rgb(Theme.BORDER)
-                dash = 12
-                for x in range(0, w, dash * 2):
-                    draw.line((x, 0, min(w - 1, x + dash), 0), fill=border, width=2)
-                    draw.line((x, h - 1, min(w - 1, x + dash), h - 1),
-                              fill=border, width=2)
-                for y in range(0, h, dash * 2):
-                    draw.line((0, y, 0, min(h - 1, y + dash)), fill=border, width=2)
-                    draw.line((w - 1, y, w - 1, min(h - 1, y + dash)),
-                              fill=border, width=2)
-
-                # Film frame and subtitle band, echoing the generated mockup.
-                cx, cy = w // 2, h // 2
-                draw.rounded_rectangle(
-                    (cx - 64, cy - 54, cx + 64, cy + 42), radius=8,
-                    outline=self._hex_to_rgb(Theme.BORDER_STRONG), width=2,
-                    fill=self._hex_to_rgb(Theme.BG_CARD_HOVER),
-                )
-                for x in range(cx - 52, cx + 53, 26):
-                    draw.rectangle((x, cy - 43, x + 10, cy - 34),
-                                   fill=self._hex_to_rgb(Theme.BORDER_STRONG))
-                draw.rounded_rectangle(
-                    (cx - 44, cy + 6, cx + 44, cy + 24), radius=5,
-                    fill=self._hex_to_rgb(Theme.BLUE_MUTED),
-                    outline=self._hex_to_rgb(Theme.BLUE_PRIMARY), width=1,
-                )
-                draw.line((cx - 30, cy + 13, cx + 30, cy + 13),
-                          fill=self._hex_to_rgb(Theme.TEXT_SECONDARY), width=2)
-                draw.line((cx - 20, cy + 19, cx + 20, cy + 19),
-                          fill=self._hex_to_rgb(Theme.TEXT_MUTED), width=1)
                 self._preview_photo = ImageTk.PhotoImage(base)
                 self._preview_label.config(image=self._preview_photo, text="")
             except Exception:

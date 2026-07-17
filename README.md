@@ -60,7 +60,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
 - **Pause/Resume Checkpointing** -- SHA-256 input fingerprint per file; finished files are skipped and paused videos resume from durable checkpoint frames
 - **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
-- **Premium Dark UI** -- Cohesive design system with custom controls, rectangular status tiles, responsive workbench scrolling, taskbar progress, and onboarding
+- **Premium Dark UI** -- Flat command-first workbench with readable typography, separator-led hierarchy, compact queue states, responsive scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
 - **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, support bundles, and winget-ready installer metadata
 

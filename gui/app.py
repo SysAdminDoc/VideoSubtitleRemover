@@ -160,6 +160,9 @@ class VideoSubtitleRemoverApp(
                         if icon_img.width > 128:
                             icon_img.thumbnail((128, 128), Image.LANCZOS)
                         self._app_icon_photo = ImageTk.PhotoImage(icon_img)
+                        header_icon = icon_img.copy()
+                        header_icon.thumbnail((24, 24), Image.LANCZOS)
+                        self._header_icon_photo = ImageTk.PhotoImage(header_icon)
                         self.root.iconphoto(True, self._app_icon_photo)
                         break
             except Exception:
@@ -940,10 +943,10 @@ class VideoSubtitleRemoverApp(
             state_fg = Theme.SUCCESS if ready else Theme.WARNING
             summary = f"{gpu_short}  /  {det_short}  /  {audio_short}"
 
-        ready_group = tk.Frame(self._header_chips, bg=Theme.BG_SECONDARY)
+        ready_group = tk.Frame(self._header_chips, bg=Theme.BG_DARK)
         ready_dot = tk.Canvas(
             ready_group, width=10, height=10,
-            bg=Theme.BG_SECONDARY, highlightthickness=0,
+            bg=Theme.BG_DARK, highlightthickness=0,
         )
         ready_dot.create_oval(1, 1, 9, 9, fill=state_fg, outline="")
         ready_dot.pack(side="left", padx=(0, Theme.S_XS))
@@ -951,7 +954,7 @@ class VideoSubtitleRemoverApp(
             ready_group,
             text=state_text,
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_SECONDARY,
+            bg=Theme.BG_DARK,
             fg=state_fg,
         )
         self._header_ready_label.pack(side="left")
@@ -960,14 +963,12 @@ class VideoSubtitleRemoverApp(
             self._header_chips,
             text=summary,
             font=f(Theme.F_META),
-            bg=Theme.BG_SECONDARY,
+            bg=Theme.BG_DARK,
             fg=Theme.TEXT_MUTED,
             wraplength=420,
             justify="left",
         )
-        if getattr(self, "_layout_mode", "wide") == "wide":
-            self._header_capability_label.pack(
-                side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self._header_ready_label, summary)
 
     def _section_title(self, parent, eyebrow: str, title: str, hint: str,
                        pad_x: int = 16, pad_top: int = 12):
@@ -1167,6 +1168,11 @@ class VideoSubtitleRemoverApp(
                     if batch_busy else tr("Run a batch first to repeat its settings.")
                 ),
             )
+        if hasattr(self, "queue_add_btn"):
+            self.queue_add_btn.set_enabled(
+                not batch_busy,
+                reason=tr("Wait for the current batch to finish."),
+            )
         if hasattr(self, "batch_label") and not batch_busy:
             pending = sum(1 for item in self.queue if item.status == ProcessingStatus.IDLE)
             if pending:
@@ -1326,10 +1332,9 @@ class VideoSubtitleRemoverApp(
                     side="right", padx=(Theme.S_SM, Theme.S_LG))
 
             self._footer_left.pack_forget()
-            self._footer_left.pack(anchor="w")
+            self._footer_left.pack(
+                anchor="w", padx=Theme.S_LG, pady=Theme.S_XS)
             self.status_hint.pack_forget()
-            if width >= 1180:
-                self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
         else:
             self._content.columnconfigure(0, weight=7, minsize=500, uniform="")
             self._content.columnconfigure(1, weight=4, minsize=360, uniform="")
@@ -1348,9 +1353,9 @@ class VideoSubtitleRemoverApp(
                                         padx=(Theme.S_XL, Theme.S_LG))
 
             self._footer_left.pack_forget()
-            self._footer_left.pack(side="left")
+            self._footer_left.pack(
+                side="left", padx=Theme.S_LG, pady=Theme.S_XS)
             self.status_hint.pack_forget()
-            self.status_hint.pack(side="right")
 
         self.preview_meta_label.config(wraplength=720 if stacked else 520)
         if hasattr(self, "preview_action_hint"):
@@ -1400,27 +1405,35 @@ class VideoSubtitleRemoverApp(
                 self._queue_row.pack_forget()
             elif not self._queue_row.winfo_manager():
                 self._queue_row.pack(
-                    side="bottom", fill="x", pady=(Theme.S_MD, 0))
+                    side="bottom", fill="x")
         for button in (
-            self.start_btn, self.open_output_btn, self.retry_btn,
+            self.start_btn, self.queue_add_btn, self.open_output_btn, self.retry_btn,
             self.repeat_btn, self.clear_btn, self._queue_more_btn,
         ):
             button.pack_forget()
 
         if hasattr(self, "inspector_start_btn"):
             self.inspector_start_btn.pack_forget()
-        self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
-        if compact:
-            self._queue_more_btn.pack(side="left")
-        else:
+        self.queue_add_btn.pack(side="right")
+        if self.queue:
+            self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
+        if compact and self.queue:
+            self._queue_more_btn.pack(side="right", padx=(0, Theme.S_SM))
+        elif self.queue:
             self.retry_btn.pack(side="left")
             self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
             self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.queue_canvas.configure(height=64 if dense else 88)
+        queue_empty = not self.queue and not self.is_processing
+        self.queue_canvas.configure(height=40 if queue_empty else (64 if dense else 88))
         self._queue_dense_mode = dense
         self._queue_subtitle_label.pack_forget()
-        if dense:
+        if hasattr(self, "_queue_count_cluster"):
+            if queue_empty:
+                self._queue_count_cluster.pack_forget()
+            elif not self._queue_count_cluster.winfo_manager():
+                self._queue_count_cluster.pack(side="right", padx=(0, Theme.S_MD))
+        if dense or queue_empty:
             self._queue_batch_frame.pack_forget()
             self._queue_batch_bar_frame.pack_forget()
             if hasattr(self, "_queue_table_header"):
@@ -1613,8 +1626,7 @@ class VideoSubtitleRemoverApp(
     def _build_ui(self):
         """Build a preview-first workbench with a dedicated inspector and queue."""
         main_container = tk.Frame(self.root, bg=Theme.BG_DARK)
-        main_container.pack(fill="both", expand=True,
-                            padx=Theme.S_LG, pady=(Theme.S_MD, Theme.S_SM))
+        main_container.pack(fill="both", expand=True)
 
         # Header
         self._build_header(main_container)
@@ -1628,14 +1640,14 @@ class VideoSubtitleRemoverApp(
         # Keep the operational queue and primary action visible while the
         # preview/inspector workbench scrolls independently above it.
         queue_row = tk.Frame(main_container, bg=Theme.BG_DARK)
-        queue_row.pack(side="bottom", fill="x", pady=(Theme.S_MD, 0))
+        queue_row.pack(side="bottom", fill="x")
         self._queue_row = queue_row
         self._build_queue_section(queue_row)
 
         # A single scroll surface keeps the three-part workbench usable at the
         # 980x720 minimum without compromising the desktop hierarchy.
         content_shell = tk.Frame(main_container, bg=Theme.BG_DARK)
-        content_shell.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
+        content_shell.pack(fill="both", expand=True)
         self._content_canvas = tk.Canvas(
             content_shell, bg=Theme.BG_DARK, highlightthickness=0)
         content_scroll = ttk.Scrollbar(
@@ -1794,27 +1806,36 @@ class VideoSubtitleRemoverApp(
             import_block, mode_block, region_block, output_block, start_block,
         )
         self._layout_command_strip(compact=False)
+        self._divider(strip)
 
     def _build_header(self, parent):
         """Compact command bar with product identity and live readiness signals."""
-        header = self._create_surface(parent)
+        header = self._create_surface(parent, bg=Theme.BG_DARK)
         header.pack(fill="x")
 
-        inner = tk.Frame(header, bg=Theme.BG_SECONDARY)
-        inner.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_SM)
+        inner = tk.Frame(header, bg=Theme.BG_DARK)
+        inner.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_SM))
 
-        header_top = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        header_top = tk.Frame(inner, bg=Theme.BG_DARK)
         header_top.pack(fill="x")
 
-        left = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
+        left = tk.Frame(header_top, bg=Theme.BG_DARK)
         left.pack(side="left", fill="y")
         self._header_left = left
+
+        if getattr(self, "_header_icon_photo", None) is not None:
+            self._header_icon_label = tk.Label(
+                left,
+                image=self._header_icon_photo,
+                bg=Theme.BG_DARK,
+            )
+            self._header_icon_label.pack(side="left", padx=(0, Theme.S_SM))
 
         self._header_title_label = tk.Label(
             left,
             text=tr("Video Subtitle Remover Pro"),
             font=f(Theme.F_DISPLAY, "bold"),
-            bg=Theme.BG_SECONDARY,
+            bg=Theme.BG_DARK,
             fg=Theme.TEXT_PRIMARY,
         )
         self._header_title_label.pack(side="left", anchor="w")
@@ -1823,7 +1844,7 @@ class VideoSubtitleRemoverApp(
             left,
             text=f"v{APP_VERSION}",
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_TERTIARY,
+            bg=Theme.BG_DARK,
             fg=Theme.TEXT_SECONDARY,
             padx=8,
             pady=3,
@@ -1832,32 +1853,33 @@ class VideoSubtitleRemoverApp(
             left,
             text=tr("Private, local cleanup"),
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_SECONDARY,
+            bg=Theme.BG_DARK,
             fg=Theme.GREEN_PRIMARY,
         )
 
-        right = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
+        right = tk.Frame(header_top, bg=Theme.BG_DARK)
         right.pack(side="right", anchor="n")
         self._header_right = right
 
         settings_btn = ModernButton(
             right, text=tr("Settings"), width=92,
-            command=self._focus_settings_panel, style="ghost",
+            command=self._focus_settings_panel, style="toolbar",
             size="sm",
         )
         settings_btn.pack(side="left")
         self._header_settings_btn = settings_btn
 
         help_btn = ModernButton(right, text=tr("Help"), width=80,
-                                command=self._show_about, style="ghost",
+                                command=self._show_about, style="toolbar",
                                 size="sm")
         help_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self._header_help_btn = help_btn
 
-        chips = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
+        chips = tk.Frame(header_top, bg=Theme.BG_DARK)
         chips.pack(side="right", padx=(Theme.S_XL, Theme.S_LG))
         self._header_chips = chips
         self._render_header_chips()
+        self._divider(header)
 
     def _focus_settings_panel(self):
         """Bring the inspector into view without activating another window."""
@@ -2002,6 +2024,7 @@ class VideoSubtitleRemoverApp(
         reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         self._update_output_label()
+        return out_surface
 
     def _build_inspector_primary_action(self, parent):
         """Keep a compatibility action instance; the command bar owns layout."""
@@ -2146,7 +2169,7 @@ class VideoSubtitleRemoverApp(
         Tooltip(self._lang_detect_btn,
                 tr("Auto-detect the subtitle language from a sample frame."))
 
-        return profile_details
+        return profile_panel, profile_details
 
     def _build_workflow_settings_group(self, settings):
         # ---- Workflow card ----------------------------------------------
@@ -2228,7 +2251,7 @@ class VideoSubtitleRemoverApp(
                                              command=self._reset_region, style="ghost",
                                              size="sm")
         self.region_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        return workflow_details, region_surface
+        return workflow_panel, workflow_details, region_surface
 
     def _build_sttn_settings_group(self):
         # STTN Motion card
@@ -3067,6 +3090,130 @@ class VideoSubtitleRemoverApp(
         self._work_directory_buttons = (work_browse_btn, work_reset_btn)
 
 
+    def _refresh_inspector_summary(self, *_args):
+        """Keep the quiet inspector overview aligned with live controls."""
+        if not hasattr(self, "_inspector_profile_summary_var"):
+            return
+        profile_names = {
+            "Auto": tr("Balanced"),
+            "STTN": tr("Motion"),
+            "LAMA": tr("Detail"),
+            "ProPainter": tr("Temporal"),
+        }
+        mode = self.mode_var.get()
+        self._inspector_profile_summary_var.set(
+            profile_names.get(mode, mode))
+
+    def _open_inspector_details(self, _section: str = ""):
+        """Reveal the detailed editor from a compact inspector row."""
+        if not self.adv_visible:
+            self._toggle_advanced()
+
+    def _build_inspector_summary(self, settings):
+        """Build the first-viewport inspector as separator-led disclosure rows."""
+        header = tk.Frame(settings, bg=Theme.BG_SECONDARY)
+        header.pack(fill="x", pady=(Theme.S_XS, Theme.S_SM))
+        tk.Label(
+            header,
+            text=tr("Cleanup settings"),
+            font=f(Theme.F_HEADING, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(anchor="w")
+        self._inspector_profile_summary_var = tk.StringVar()
+        tk.Label(
+            header,
+            textvariable=self._inspector_profile_summary_var,
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", pady=(Theme.S_XS, 0))
+
+        self._inspector_encoding_var = tk.StringVar(
+            value=str(getattr(self.config, "output_codec", "h264")).upper())
+        rows = (
+            (tr("Detection"), self._command_region_var),
+            (tr("Inpainting"), self.mode_var),
+            (tr("Encoding"), self._inspector_encoding_var),
+        )
+        self._inspector_summary_rows = []
+        for title, value_var in rows:
+            self._divider(settings)
+            row = tk.Frame(settings, bg=Theme.BG_SECONDARY)
+            row.pack(fill="x")
+            button = tk.Button(
+                row,
+                text=title,
+                command=lambda name=title: self._open_inspector_details(name),
+                font=f(Theme.F_BODY, "bold"),
+                bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_SECONDARY,
+                activebackground=Theme.BG_CARD_HOVER,
+                activeforeground=Theme.TEXT_PRIMARY,
+                anchor="w",
+                relief="flat",
+                bd=0,
+                highlightthickness=0,
+                takefocus=1,
+                cursor="hand2",
+                padx=0,
+                pady=Theme.S_MD,
+            )
+            button.pack(side="left", fill="x", expand=True)
+            tk.Label(
+                row,
+                text=">",
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED,
+            ).pack(side="right", padx=(Theme.S_SM, 0))
+            tk.Label(
+                row,
+                textvariable=value_var,
+                font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED,
+            ).pack(side="right")
+            self._inspector_summary_rows.append(button)
+        self._refresh_inspector_summary()
+        self.mode_var.trace_add("write", self._refresh_inspector_summary)
+
+    def _sync_inspector_encoding(self, *_args):
+        if hasattr(self, "_inspector_encoding_var"):
+            self.config.output_codec = self.output_codec_var.get()
+            self._inspector_encoding_var.set(
+                str(self.output_codec_var.get()).upper())
+
+    def _build_inspector_detail_surfaces(self, settings):
+        """Construct the hidden detailed controls behind the flat summary."""
+        profile_panel, profile_details = (
+            self._build_profile_settings_group(settings)
+        )
+        workflow_panel, workflow_details, region_surface = (
+            self._build_workflow_settings_group(settings)
+        )
+        output_panel = self._build_output_card(settings)
+        self._build_inspector_primary_action(settings)
+
+        profile_panel.pack_forget()
+        workflow_panel.pack_forget()
+        output_panel.pack_forget()
+        self._inspector_profile_panel = profile_panel
+        self._inspector_workflow_panel = workflow_panel
+        self._inspector_output_panel = output_panel
+        self._inspector_detail_panels = (
+            (profile_panel, {"fill": "x"}),
+            (profile_details, {
+                "fill": "x", "padx": Theme.S_MD,
+                "pady": (Theme.S_SM, Theme.S_MD),
+            }),
+            (workflow_panel, {"fill": "x"}),
+            (workflow_details, {
+                "fill": "x", "before": region_surface,
+            }),
+            (output_panel, {"fill": "x"}),
+        )
+
     def _build_settings_section(self, parent):
         """Flat inspector grouped by separators and progressive disclosure."""
         section = self._create_surface(parent)
@@ -3081,31 +3228,15 @@ class VideoSubtitleRemoverApp(
             padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD),
         )
 
-        profile_details = self._build_profile_settings_group(settings)
-        self._divider(settings)
-        workflow_details, region_surface = (
-            self._build_workflow_settings_group(settings)
-        )
-        self._divider(settings)
-        self._build_output_card(settings)
-        self._build_inspector_primary_action(settings)
-
-        self._inspector_detail_panels = (
-            (profile_details, {
-                "fill": "x", "padx": Theme.S_MD,
-                "pady": (Theme.S_SM, Theme.S_MD),
-            }),
-            (workflow_details, {
-                "fill": "x", "before": region_surface,
-            }),
-        )
+        self._build_inspector_summary(settings)
+        self._build_inspector_detail_surfaces(settings)
 
         # ---- Advanced toggle --------------------------------------------
         adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
         adv_frame.pack(fill="x", pady=(Theme.S_SM, 0))
 
         self.adv_visible = False
-        self.adv_toggle = ModernButton(adv_frame, text=tr("Show detailed controls"), width=188,
+        self.adv_toggle = ModernButton(adv_frame, text=tr("Advanced settings"), width=188,
                                        command=self._toggle_advanced,
                                        style="ghost", size="sm", icon="+")
         self.adv_toggle.pack(anchor="w")
@@ -3119,13 +3250,15 @@ class VideoSubtitleRemoverApp(
         self._build_performance_settings_groups()
         self._build_accessibility_storage_settings(quality_frame)
 
+        self.output_codec_var.trace_add("write", self._sync_inspector_encoding)
+
         self._update_region_label_display()
         self._update_mode_options()
 
     def _build_preview_section(self, parent):
         """Build the central 16:9 preview and its contextual tools."""
         section = self._create_surface(parent)
-        section.pack(fill="both", expand=True, pady=(Theme.S_SM, 0))
+        section.pack(fill="both", expand=True)
         self._preview_frame = section
 
         preview_header = tk.Frame(section, bg=Theme.BG_SECONDARY)
@@ -3163,11 +3296,23 @@ class VideoSubtitleRemoverApp(
             tr("Wipe between the source frame and cleaned output."),
         )
 
+        self._preview_tools_btn = ModernButton(
+            preview_header,
+            text=tr("Preview tools"),
+            width=112,
+            command=self._open_preview_tools_menu,
+            style="ghost",
+            size="sm",
+        )
+        self._preview_tools_btn.pack(side="right", padx=(0, Theme.S_SM))
+
         media_surface = tk.Frame(
             section, bg=Theme.BG_CARD, highlightthickness=1,
             highlightbackground=Theme.BORDER_SUBTLE,
         )
-        media_surface.pack(fill="x", padx=Theme.S_MD)
+        media_surface.pack(
+            fill="both", expand=True, padx=Theme.S_MD,
+            pady=(0, Theme.S_MD))
         self._preview_media_surface = media_surface
 
         self._preview_label = tk.Label(
@@ -3200,8 +3345,6 @@ class VideoSubtitleRemoverApp(
         # controls. Keep this label for accessibility/status updates, not layout.
 
         preview_actions = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        preview_actions.pack(fill="x", padx=Theme.S_MD,
-                             pady=(0, Theme.S_SM), before=media_surface)
         self._preview_primary_actions = preview_actions
 
         self.preview_region_btn = ModernButton(
@@ -3290,13 +3433,53 @@ class VideoSubtitleRemoverApp(
             "Select a queue item to inspect its subtitle region before cleanup.",
         )
 
+    def _open_preview_tools_menu(self):
+        """Group secondary preview commands into one contextual menu."""
+        menu = tk.Menu(
+            self.root,
+            tearoff=False,
+            bg=Theme.BG_RAISED,
+            fg=Theme.TEXT_PRIMARY,
+            activebackground=Theme.BLUE_MUTED,
+            activeforeground=Theme.TEXT_PRIMARY,
+            bd=1,
+            relief="solid",
+        )
+        entries = (
+            (tr("Set region"), self.preview_region_btn, self._open_region_selector),
+            (tr("Review mask"), self.preview_mask_btn, self._open_selected_mask_preview),
+            (tr("Test cleanup"), self.preview_inpaint_btn, self._open_selected_inpaint_preview),
+            (tr("Full size"), self.preview_zoom_btn, self._open_preview_zoom),
+            (tr("Correct mask"), self.preview_correction_btn,
+             self._open_selected_mask_correction),
+        )
+        for label, button, command in entries:
+            menu.add_command(
+                label=label,
+                command=command,
+                state="normal" if button.enabled else "disabled",
+            )
+        try:
+            menu.tk_popup(
+                self._preview_tools_btn.winfo_rootx(),
+                self._preview_tools_btn.winfo_rooty()
+                + self._preview_tools_btn.winfo_height(),
+            )
+        finally:
+            menu.grab_release()
+
     def _build_queue_section(self, parent):
         """Build the full-width processing queue and batch controls."""
         section = self._create_surface(parent)
         section.pack(fill="both", expand=True)
+        self._divider(section)
 
         header = tk.Frame(section, bg=Theme.BG_SECONDARY)
         header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_XS))
+
+        btn_frame = tk.Frame(header, bg=Theme.BG_SECONDARY)
+        btn_frame.pack(side="right")
+        self._queue_action_frame = btn_frame
 
         heading = tk.Frame(header, bg=Theme.BG_SECONDARY)
         heading.pack(side="left", fill="x", expand=True)
@@ -3313,7 +3496,8 @@ class VideoSubtitleRemoverApp(
 
         # One inline summary replaces a cluster of decorative status pills.
         count_cluster = tk.Frame(header, bg=Theme.BG_SECONDARY)
-        count_cluster.pack(side="right", anchor="n")
+        count_cluster.pack(side="right", anchor="n", padx=(0, Theme.S_MD))
+        self._queue_count_cluster = count_cluster
 
         def _mk_stat_pill(fg=Theme.TEXT_SECONDARY, bg=Theme.BG_SECONDARY):
             pill = tk.Frame(count_cluster, bg=Theme.BG_SECONDARY)
@@ -3451,13 +3635,16 @@ class VideoSubtitleRemoverApp(
 
         self._build_queue_empty_state()
 
-        # One quiet command row with the dominant action anchored at right.
-        btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        btn_frame.pack(
-            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM),
-            before=self._queue_table_header,
+        # One quiet command cluster shares the queue header.
+        self.queue_add_btn = ModernButton(
+            btn_frame,
+            text=tr("Add media"),
+            width=104,
+            command=self.drop_area._open_file_dialog,
+            style="secondary",
+            size="sm",
         )
-        self._queue_action_frame = btn_frame
+        self.queue_add_btn.pack(side="right")
 
         self.start_btn = ModernButton(btn_frame, text=tr("Start batch"), width=180,
                                      height=44,
@@ -3467,34 +3654,35 @@ class VideoSubtitleRemoverApp(
 
         self.open_output_btn = ModernButton(btn_frame, text=tr("Open output"), width=132,
                                             command=self._open_output_folder,
-                                            style="ghost", size="lg", icon="^")
+                                            style="ghost", size="sm", icon="^")
         self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
 
         self.retry_btn = ModernButton(btn_frame, text=tr("Retry failed"), width=124,
                                       command=self._retry_failed,
-                                      style="ghost", size="lg")
+                                      style="ghost", size="sm")
         self.retry_btn.pack(side="left")
 
         self.repeat_btn = ModernButton(btn_frame, text=tr("Repeat last"), width=120,
                                       command=self._repeat_last_job,
-                                      style="ghost", size="lg")
+                                      style="ghost", size="sm")
         self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         self.clear_btn = ModernButton(btn_frame, text=tr("Clear queue"), width=120,
                                      command=self._clear_queue,
-                                     style="ghost", size="lg")
+                                     style="ghost", size="sm")
         self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         self._queue_more_btn = ModernButton(
             btn_frame, text=tr("Queue actions"), width=124,
             command=self._open_queue_actions_menu,
-            style="ghost", size="lg", icon="...",
+            style="ghost", size="sm", icon="...",
         )
 
         self._refresh_action_states()
-        if not self.queue:
-            self._queue_batch_frame.pack_forget()
-            self._queue_batch_bar_frame.pack_forget()
+        self._layout_queue_actions(
+            compact=self._layout_mode == "stacked",
+            dense=self._text_scale_percent >= 150,
+        )
 
     def _build_queue_empty_state(self):
         """Render an empty queue as one quiet table row."""
@@ -3598,11 +3786,12 @@ class VideoSubtitleRemoverApp(
     def _build_footer(self, parent):
         """Footer status bar with a colored dot + message and a right-side hint."""
         footer = tk.Frame(parent, bg=Theme.BG_DARK)
-        footer.pack(side="bottom", fill="x", pady=(Theme.S_SM, 0))
+        footer.pack(side="bottom", fill="x")
         self._footer = footer
+        self._divider(footer)
 
         left = tk.Frame(footer, bg=Theme.BG_DARK)
-        left.pack(side="left")
+        left.pack(side="left", padx=Theme.S_LG, pady=Theme.S_XS)
         self._footer_left = left
 
         # Status dot
@@ -3612,8 +3801,8 @@ class VideoSubtitleRemoverApp(
             1, 1, 9, 9, fill=Theme.TEXT_SECONDARY, outline="")
         self.status_dot.pack(side="left", padx=(0, Theme.S_SM), pady=2)
 
-        self.status_label = tk.Label(left, text=tr("Ready to process"),
-                                     font=f(Theme.F_BODY_SM, "bold"),
+        self.status_label = tk.Label(left, text=tr("Ready"),
+                                     font=f(Theme.F_BODY_SM),
                                      bg=Theme.BG_DARK, fg=Theme.TEXT_SECONDARY, anchor="w")
         self.status_label.pack(side="left")
         try:
@@ -3623,7 +3812,7 @@ class VideoSubtitleRemoverApp(
                 role="status",
                 label=tr("Application status"),
                 state="neutral",
-                value=tr("Ready to process"),
+                value=tr("Ready"),
             )
         except Exception:
             pass
@@ -3635,14 +3824,13 @@ class VideoSubtitleRemoverApp(
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_MUTED,
         )
-        self.status_hint.pack(side="right")
-
         self._footer_activity_btn = ModernButton(
             footer, text=tr("Activity"), width=92,
             command=self._toggle_log_panel,
             style="ghost", size="sm",
         )
-        self._footer_activity_btn.pack(side="right", padx=(0, Theme.S_MD))
+        self._footer_activity_btn.pack(
+            side="right", padx=(0, Theme.S_LG), pady=Theme.S_XS)
 
 
 

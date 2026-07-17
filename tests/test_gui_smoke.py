@@ -1472,21 +1472,32 @@ class GuiSmokeTests(unittest.TestCase):
                 app._command_strip.winfo_rooty(), app._preview_col.winfo_rooty())
             self.assertEqual(
                 (app._preview_photo.width(), app._preview_photo.height()),
-                (400, 225),
+                (640, 360),
             )
             self.assertEqual(Theme.BG_DARK, "#080d15")
             self.assertEqual(Theme.BLUE_PRIMARY, "#4f7cff")
             self.assertEqual(Theme.TEXT_PRIMARY, "#f5f7fb")
             self.assertEqual(Theme.BG_CARD, Theme.BG_SECONDARY)
-            self.assertGreaterEqual(Theme.F_BODY_SM, 11)
-            self.assertGreaterEqual(Theme.F_META, 10)
+            self.assertGreaterEqual(Theme.F_BODY_SM, 12)
+            self.assertGreaterEqual(Theme.F_META, 11)
             self.assertEqual(int(app._preview_frame.cget("highlightthickness")), 0)
             self.assertEqual(int(app._settings_col.winfo_children()[0].cget(
                 "highlightthickness")), 0)
             self.assertEqual(len(app._header_chips.winfo_children()), 2)
+            self.assertEqual(app._header_capability_label.winfo_manager(), "")
             self.assertEqual(app.mode_picker.winfo_manager(), "")
-            self.assertEqual(app._queue_table_header.winfo_manager(), "pack")
+            self.assertEqual(app._queue_table_header.winfo_manager(), "")
             self.assertEqual(len(app.empty_container.winfo_children()), 1)
+            self.assertEqual(app._queue_count_cluster.winfo_manager(), "")
+            self.assertEqual(app.queue_canvas.cget("height"), "40")
+            self.assertEqual(app._preview_primary_actions.winfo_manager(), "")
+            self.assertEqual(app._preview_tools_btn.winfo_manager(), "pack")
+            self.assertEqual(len(app._inspector_summary_rows), 3)
+            self.assertEqual(app._inspector_profile_panel.winfo_manager(), "")
+            self.assertEqual(app._inspector_workflow_panel.winfo_manager(), "")
+            self.assertEqual(app._inspector_output_panel.winfo_manager(), "")
+            self.assertEqual(app.adv_toggle.text, "Advanced settings")
+            self.assertIs(app.queue_add_btn.master, app._queue_action_frame)
         finally:
             self._destroy_app(app)
 
@@ -1502,7 +1513,8 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(int(app._preview_col.grid_info()["row"]), 0)
             self.assertEqual(int(app._settings_col.grid_info()["row"]), 1)
             self.assertEqual(app._queue_row.winfo_manager(), "pack")
-            self.assertEqual(app._queue_more_btn.winfo_manager(), "pack")
+            self.assertEqual(app._queue_more_btn.winfo_manager(), "")
+            self.assertEqual(app.queue_add_btn.winfo_manager(), "pack")
             self.assertEqual(app.start_btn.winfo_manager(), "")
             self.assertEqual(app.inspector_start_btn.winfo_manager(), "")
             self.assertEqual(app.command_start_btn.master.winfo_manager(), "grid")
@@ -1525,11 +1537,17 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app._footer_activity_btn.winfo_manager(), "pack")
 
             app._toggle_advanced()
+            self.assertEqual(app._inspector_profile_panel.winfo_manager(), "pack")
+            self.assertEqual(app._inspector_workflow_panel.winfo_manager(), "pack")
+            self.assertEqual(app._inspector_output_panel.winfo_manager(), "pack")
             self.assertEqual(app._inspector_profile_details.winfo_manager(), "pack")
             self.assertEqual(app._inspector_workflow_details.winfo_manager(), "pack")
             self.assertEqual(app.adv_panel.winfo_manager(), "pack")
 
             app._toggle_advanced()
+            self.assertEqual(app._inspector_profile_panel.winfo_manager(), "")
+            self.assertEqual(app._inspector_workflow_panel.winfo_manager(), "")
+            self.assertEqual(app._inspector_output_panel.winfo_manager(), "")
             self.assertEqual(app._inspector_profile_details.winfo_manager(), "")
             self.assertEqual(app._inspector_workflow_details.winfo_manager(), "")
             self.assertEqual(app.adv_panel.winfo_manager(), "")
@@ -1555,6 +1573,10 @@ class GuiSmokeTests(unittest.TestCase):
             item = app.queue[0]
             app._set_selected_queue_item(item.id)
             app.root.update_idletasks()
+
+            self.assertEqual(app._queue_table_header.winfo_manager(), "pack")
+            self.assertEqual(app._queue_count_cluster.winfo_manager(), "pack")
+            self.assertEqual(app.queue_canvas.cget("height"), "88")
 
             row = app.queue_widgets[item.id]
             self.assertNotIn(str(source.parent), row.info_label.cget("text"))

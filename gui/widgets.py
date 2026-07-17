@@ -475,6 +475,12 @@ class ModernButton(tk.Canvas):
             self.press_color = Theme.BG_CARD_SELECTED
             self.fg_color = Theme.TEXT_SECONDARY
             self.border_color = Theme.BORDER_SUBTLE
+        elif style == "toolbar":
+            self.bg_color = self.cget("bg")
+            self.hover_color = Theme.BG_CARD_HOVER
+            self.press_color = Theme.BG_CARD_SELECTED
+            self.fg_color = Theme.TEXT_SECONDARY
+            self.border_color = self.bg_color
         elif style == "danger":
             self.bg_color = Theme.DANGER
             self.hover_color = Theme.DANGER_HOVER
@@ -557,7 +563,7 @@ class ModernButton(tk.Canvas):
         # For filled CTAs, border should match the fill for a flat look
         if self.style in ("primary", "danger"):
             return self.bg_color
-        if self.style == "ghost":
+        if self.style in ("ghost", "toolbar"):
             return self.bg_color
         return Theme.BORDER_SUBTLE
 

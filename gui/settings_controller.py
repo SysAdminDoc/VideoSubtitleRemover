@@ -47,8 +47,7 @@ class AdvancedSettingsControllerMixin:
 
     def _create_slider(self, parent, label, min_val, max_val, default, attr_name,
                        hint: str = ""):
-        """Create a labeled row with a ModernSlider and a value pill. Optional
-        helper hint below."""
+        """Create a labeled slider row with a quiet inline value readout."""
         parent_bg = parent.cget("bg") if hasattr(parent, "cget") else Theme.BG_CARD
         row = tk.Frame(parent, bg=parent_bg)
         row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 2))
@@ -57,14 +56,17 @@ class AdvancedSettingsControllerMixin:
                  bg=parent_bg, fg=Theme.TEXT_SECONDARY,
                  width=16, anchor="w").pack(side="left")
 
-        # Value pill on the right
-        pill = tk.Frame(row, bg=Theme.BG_TERTIARY, highlightthickness=1,
-                        highlightbackground=Theme.BORDER_SUBTLE)
-        pill.pack(side="right", padx=(Theme.S_MD, 0))
-        value_label = tk.Label(pill, text=str(default), font=f(Theme.F_BODY_SM, "bold"),
-                               bg=Theme.BG_TERTIARY, fg=Theme.GREEN_PRIMARY,
-                               padx=8, pady=1, width=4)
-        value_label.pack()
+        value_label = tk.Label(
+            row,
+            text=str(default),
+            font=f(Theme.F_BODY_SM, "bold"),
+            bg=parent_bg,
+            fg=Theme.TEXT_PRIMARY,
+            padx=4,
+            width=4,
+            anchor="e",
+        )
+        value_label.pack(side="right", padx=(Theme.S_MD, 0))
 
         slider = ModernSlider(row, from_=min_val, to=max_val, value=default,
                               bg=parent_bg, accessible_label=tr(label))
@@ -90,7 +92,7 @@ class AdvancedSettingsControllerMixin:
         self.adv_visible = not self.adv_visible
         if self.adv_visible:
             self.adv_toggle.icon = "-"
-            self.adv_toggle.set_text(tr("Hide detailed controls"))
+            self.adv_toggle.set_text(tr("Hide advanced settings"))
             for panel, pack_options in getattr(
                 self, "_inspector_detail_panels", ()
             ):
@@ -98,7 +100,7 @@ class AdvancedSettingsControllerMixin:
             self.adv_panel.pack(fill="x")
         else:
             self.adv_toggle.icon = "+"
-            self.adv_toggle.set_text(tr("Show detailed controls"))
+            self.adv_toggle.set_text(tr("Advanced settings"))
             for panel, _pack_options in getattr(
                 self, "_inspector_detail_panels", ()
             ):
