@@ -1143,6 +1143,13 @@ def _prepare_cli_args(args, parser, argv=None):
             "kalman_tracking": "no_kalman",
             "phash_skip_enable": "no_phash",
         }
+        # Preset fields with no CLI flag but that name a real backend config
+        # field are applied to the built config later (via apply_backend_payload
+        # in _apply_cli_config_overlays) so user presets round-trip losslessly
+        # instead of silently dropping unmapped fields.
+        from backend.config_schema import processing_field_names as _pfn
+        backend_fields = set(_pfn())
+        preset_backend_overrides: dict = {}
         for fname, value in fields.items():
             if fname == "mode":
                 if "mode" not in explicit_dests:
@@ -1154,10 +1161,19 @@ def _prepare_cli_args(args, parser, argv=None):
                     setattr(args, neg, not bool(value))
                 continue
             attr = field_to_attr.get(fname, fname)
-            if attr is None or not hasattr(args, attr):
+            if attr is None:
+                continue
+            if not hasattr(args, attr):
+                if fname in backend_fields:
+                    preset_backend_overrides[fname] = value
+                else:
+                    logger.warning(
+                        "Preset %r field %r has no CLI mapping and is not a "
+                        "known config field; ignoring", args.preset, fname)
                 continue
             if attr not in explicit_dests:
                 setattr(args, attr, value)
+        args._preset_backend_overrides = preset_backend_overrides
         logger.info(f"Applied preset: {args.preset}")
 
     if not args.validate_config:
@@ -1333,6 +1349,15 @@ def _apply_cli_config_overlays(args, parser, config):
     )
 
     ffmpeg_ready = shutil.which("ffmpeg") is not None
+
+    # Preset fields that have no dedicated CLI flag are applied first, so an
+    # explicit --config file or --set override still wins over the preset.
+    preset_overrides = getattr(args, "_preset_backend_overrides", None)
+    if preset_overrides:
+        try:
+            config = apply_backend_payload(config, preset_overrides)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     if args.config:
         try:

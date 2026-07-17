@@ -62,6 +62,3 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-17 deep audit, second pass)
 
-- [ ] P3 — User-preset fields without a matching CLI dest are silently dropped
-  Why: The CLI `--preset` merge resolves each field via `field_to_attr.get(fname, fname)` then requires `hasattr(args, attr)`; a user preset saved with a field that has no CLI flag (e.g. `sttn_max_load_num`, `temporal_smooth_radius`) is silently skipped rather than applied or reported. Built-in presets only use mappable fields today, so this is latent. Consider routing CLI preset application through `apply_backend_payload` so every schema field round-trips.
-  Where: `backend/cli.py` (`_prepare_cli_args` preset merge ~1125-1139).

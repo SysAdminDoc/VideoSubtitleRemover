@@ -92,6 +92,25 @@ class CliPresetMergeTests(unittest.TestCase):
                          "--preset", "TikTok / Vertical short"])
         self.assertEqual(args.threshold, 0.5)
 
+    def test_unmapped_valid_backend_field_is_stashed(self):
+        # A preset field with no CLI flag but a real backend field name must be
+        # stashed for post-build application, not silently dropped.
+        from backend import presets
+
+        original = dict(presets.BUILTIN_PRESETS)
+        presets.BUILTIN_PRESETS["__audit_test__"] = {
+            "description": "test",
+            "fields": {"temporal_smooth_radius": 3, "not_a_real_field": 9},
+        }
+        try:
+            args = _prepare(["--validate-config", "--preset", "__audit_test__"])
+        finally:
+            presets.BUILTIN_PRESETS.clear()
+            presets.BUILTIN_PRESETS.update(original)
+        self.assertEqual(
+            getattr(args, "_preset_backend_overrides"),
+            {"temporal_smooth_radius": 3})
+
     def test_explicit_no_kalman_overrides_preset(self):
         from backend import presets
 
@@ -107,6 +126,61 @@ class CliPresetMergeTests(unittest.TestCase):
             presets.BUILTIN_PRESETS.clear()
             presets.BUILTIN_PRESETS.update(original)
         self.assertTrue(args.no_kalman)
+
+
+class PresetBackendFieldRoundTripTests(unittest.TestCase):
+    def test_unmapped_preset_field_reaches_resolved_config(self):
+        import io as _io
+        import json
+        import sys
+        import unittest.mock
+        from backend import presets, cli as _cli
+
+        original = dict(presets.BUILTIN_PRESETS)
+        presets.BUILTIN_PRESETS["__audit_test__"] = {
+            "description": "test",
+            "fields": {"temporal_smooth_radius": 3},
+        }
+        out = _io.StringIO()
+        try:
+            with unittest.mock.patch.object(
+                    sys, "argv",
+                    ["vsr", "--validate-config", "--preset", "__audit_test__"]):
+                with unittest.mock.patch("sys.stdout", out):
+                    with self.assertRaises(SystemExit):
+                        _cli.main()
+        finally:
+            presets.BUILTIN_PRESETS.clear()
+            presets.BUILTIN_PRESETS.update(original)
+        data = json.loads(out.getvalue())
+        self.assertEqual(data["resolved_config"]["temporal_smooth_radius"], 3)
+
+    def test_set_override_beats_preset_backend_field(self):
+        import io as _io
+        import json
+        import sys
+        import unittest.mock
+        from backend import presets, cli as _cli
+
+        original = dict(presets.BUILTIN_PRESETS)
+        presets.BUILTIN_PRESETS["__audit_test__"] = {
+            "description": "test",
+            "fields": {"temporal_smooth_radius": 4},
+        }
+        out = _io.StringIO()
+        try:
+            with unittest.mock.patch.object(
+                    sys, "argv",
+                    ["vsr", "--validate-config", "--preset", "__audit_test__",
+                     "--set", "temporal_smooth_radius=2"]):
+                with unittest.mock.patch("sys.stdout", out):
+                    with self.assertRaises(SystemExit):
+                        _cli.main()
+        finally:
+            presets.BUILTIN_PRESETS.clear()
+            presets.BUILTIN_PRESETS.update(original)
+        data = json.loads(out.getvalue())
+        self.assertEqual(data["resolved_config"]["temporal_smooth_radius"], 2)
 
 
 class CrashReporterRedactionTests(unittest.TestCase):

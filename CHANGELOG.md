@@ -31,6 +31,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   the preset's value because argparse cannot tell an omitted flag from one typed
   with the default. Preset merging now inspects the raw argv tokens, so any flag
   the user actually typed wins over the preset regardless of its value.
+- **CLI `--preset` now applies preset fields that have no dedicated flag.** A
+  user preset carrying a backend field without a CLI option (e.g.
+  `temporal_smooth_radius`) was silently dropped; such fields now apply to the
+  resolved config, while an explicit `--config`/`--set` override still wins and
+  a genuinely unknown field is reported rather than ignored.
 
 ## [3.24.0] - 2026-07-17
 
