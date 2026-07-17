@@ -33,6 +33,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   probing, registry-backed inpainter construction, OOM classification, and
   inference-memory cleanup can be replaced in tests, so CUDA/DirectML
   selection and OOM-to-CPU fallback are covered without accelerator hardware.
+- **The `process_video` frame loop is now a staged pipeline.** A frozen
+  read-only context, a five-field mutable state, and a batch object replace
+  30-plus threaded locals and four parallel lists. Decode/mask construction,
+  mask refinement, inpainting, writing, and checkpoint persistence are
+  isolated methods; the outer loop is a short stage orchestrator with the
+  existing cleanup and encode/mux boundaries unchanged.
 
 ## [3.18.1] - 2026-07-17
 

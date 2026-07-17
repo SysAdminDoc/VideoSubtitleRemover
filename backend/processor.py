@@ -35,7 +35,7 @@ import traceback
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional, Tuple, List, Callable
 
 logger = logging.getLogger(__name__)
@@ -360,6 +360,72 @@ class _FrameRange:
     matte_timestamps: List[float]
     matte_durations: List[float]
     matte_time_base: float
+
+
+@dataclass(frozen=True)
+class _FrameLoopCheckpoint:
+    active: bool
+    root: Optional[Path]
+    key: Optional[str]
+    state_path: Optional[Path]
+    config_hash: str
+    frame_dir: Optional[Path]
+    timing_manifest_path: Optional[Path]
+    input_path: str
+    output_path: str
+    pause_check: Optional[Callable[[], bool]]
+
+
+@dataclass(frozen=True)
+class _FrameLoopContext:
+    start_frame: int
+    end_frame: int
+    frames_to_process: int
+    fps: float
+    width: int
+    height: int
+    total_frames: int
+    frame_timing: Optional[VideoFrameTiming]
+    high_bit_depth_surface: Any
+    batch_size: int
+    frame_skip: int
+    rife_stride: int
+    keyframe_set: Optional[set]
+    whisper_spans: List[Tuple[int, int]]
+    timed_region_spans: bool
+    static_fixed_shapes: Any
+    selective_ranges: List[Tuple[int, int]]
+    reader: Any
+    selective_cap: Any
+    matte_reader: Any
+    writer: Any
+    matte_writer: Any
+    checkpoint: _FrameLoopCheckpoint
+
+
+@dataclass
+class _FrameLoopState:
+    frame_idx: int
+    last_mask: Optional[np.ndarray]
+    last_hash: Any
+    tracker: Optional[SubtitleTracker]
+    fixed_mask_cache: dict
+
+
+@dataclass
+class _FrameBatch:
+    frames: List[np.ndarray] = field(default_factory=list)
+    masks: List[np.ndarray] = field(default_factory=list)
+    source_frames: List[Optional[np.ndarray]] = field(default_factory=list)
+    passthrough_flags: List[bool] = field(default_factory=list)
+    active_segments: List[Tuple[int, int]] = field(default_factory=list)
+
+    def add(self, frame: np.ndarray, mask: np.ndarray,
+            source_frame: Optional[np.ndarray], *, passthrough: bool) -> None:
+        self.frames.append(frame)
+        self.masks.append(mask)
+        self.source_frames.append(source_frame)
+        self.passthrough_flags.append(bool(passthrough))
 
 
 def _frame_seconds(index: int, fps: float,
@@ -2159,6 +2225,446 @@ class SubtitleRemover:
             results.append(self._valid_output_frame(filled, frame))
         return results
 
+    def _decode_and_build_batch(self, ctx: _FrameLoopContext,
+                                state: _FrameLoopState) -> _FrameBatch:
+        """Decode frames and build masks until one processing batch is full."""
+        batch = _FrameBatch()
+        for _ in range(ctx.batch_size):
+            if ctx.start_frame + state.frame_idx >= ctx.end_frame:
+                break
+            with self._time_stage("decode"):
+                ret, raw_frame = ctx.reader.read()
+                if not ret:
+                    break
+                source_frame = (
+                    raw_frame
+                    if ctx.high_bit_depth_surface
+                    and self._is_high_bit_frame(raw_frame)
+                    else None
+                )
+                frame = self._processing_frame(raw_frame)
+
+            absolute_idx = ctx.start_frame + state.frame_idx
+            frame_seconds = _frame_seconds(
+                absolute_idx, ctx.fps, ctx.frame_timing)
+            if ctx.selective_cap is not None:
+                prior_ok, prior_raw = ctx.selective_cap.read()
+                if not prior_ok or prior_raw is None:
+                    raise ValueError(
+                        "Previous cleaned output ended during selective rerun"
+                    )
+                if not frame_is_in_ranges(
+                    absolute_idx, ctx.selective_ranges
+                ):
+                    prior_frame = self._processing_frame(prior_raw)
+                    batch.add(
+                        prior_frame,
+                        np.zeros(prior_frame.shape[:2], dtype=np.uint8),
+                        None,
+                        passthrough=True,
+                    )
+                    state.frame_idx += 1
+                    continue
+                if any(
+                    absolute_idx == range_start
+                    for range_start, _range_end in ctx.selective_ranges
+                ):
+                    state.last_mask = None
+                    state.last_hash = None
+                    if state.tracker is not None:
+                        state.tracker = SubtitleTracker(
+                            self.config.kalman_iou_threshold,
+                            self.config.kalman_max_age,
+                        )
+            fixed_shapes = (
+                self._fixed_region_shapes(frame_seconds)
+                if ctx.timed_region_spans else ctx.static_fixed_shapes
+            )
+            fixed_boxes = (
+                [tuple(shape["rect"]) for shape in fixed_shapes or []
+                 if "rect" in shape]
+                or None
+            )
+
+            if self.config.sttn_skip_detection and (
+                    fixed_shapes or ctx.timed_region_spans):
+                if fixed_shapes:
+                    has_polygon = any(
+                        "polygon" in shape for shape in fixed_shapes)
+                    dynamic_shape = ctx.timed_region_spans or has_polygon
+                    mask_key = tuple(tuple(r) for r in (fixed_boxes or []))
+                    fixed_mask = (
+                        None if dynamic_shape
+                        else state.fixed_mask_cache.get(mask_key)
+                    )
+                    if fixed_mask is None:
+                        with self._time_stage("mask"):
+                            fixed_mask = self._create_mask(
+                                frame.shape, fixed_boxes or [])
+                            fixed_mask = self._apply_polygon_region_shapes(
+                                fixed_mask, fixed_shapes)
+                        if not dynamic_shape:
+                            state.fixed_mask_cache[mask_key] = fixed_mask
+                else:
+                    with self._time_stage("mask"):
+                        fixed_mask = np.zeros(
+                            frame.shape[:2], dtype=np.uint8)
+                corrected = self._apply_manual_mask_corrections(
+                    fixed_mask.copy(), frame_seconds, absolute_idx)
+                batch.add(
+                    frame, corrected, source_frame, passthrough=False)
+                state.frame_idx += 1
+                continue
+
+            reuse_by_phash = False
+            cur_hash = None
+            if (not ctx.timed_region_spans
+                    and self.config.phash_skip_enable
+                    and state.last_mask is not None
+                    and state.last_hash is not None):
+                cur_hash = _phash(frame)
+                if _phash_distance(
+                    cur_hash, state.last_hash
+                ) <= self.config.phash_skip_distance:
+                    reuse_by_phash = True
+
+            reuse_by_keyframe = False
+            if (not ctx.timed_region_spans
+                    and ctx.keyframe_set
+                    and state.last_mask is not None):
+                if absolute_idx not in ctx.keyframe_set:
+                    reuse_by_keyframe = True
+
+            if reuse_by_phash or reuse_by_keyframe:
+                batch.add(
+                    frame, state.last_mask, source_frame, passthrough=False)
+                state.frame_idx += 1
+                continue
+            if (not ctx.timed_region_spans
+                    and ctx.frame_skip > 0
+                    and state.last_mask is not None
+                    and state.frame_idx % (ctx.frame_skip + 1) != 0):
+                batch.add(
+                    frame, state.last_mask, source_frame, passthrough=False)
+                state.frame_idx += 1
+                continue
+
+            with self._time_stage("ocr"):
+                if self.config.detection_denoise:
+                    try:
+                        from backend.preprocess import fastdvdnet_denoise_frame
+                        det_frame = fastdvdnet_denoise_frame(frame)
+                    except Exception as exc:
+                        logger.warning(
+                            f"Detection denoise fell back: {exc}",
+                            exc_info=True,
+                        )
+                        det_frame = frame
+                else:
+                    det_frame = frame
+                det_confs = None
+                collect_confidence = bool(
+                    self.config.confidence_weighted_dilation
+                    or self.config.quality_report
+                )
+                if collect_confidence:
+                    det_results = self.detector.detect_with_confidence(
+                        det_frame, self.config.detection_threshold)
+                    detected_boxes = [
+                        (x1, y1, x2, y2)
+                        for x1, y1, x2, y2, _ in det_results
+                    ]
+                    det_confs = [c for _, _, _, _, c in det_results]
+                    if self.config.quality_report and det_confs:
+                        review_floor = min(
+                            0.9,
+                            max(
+                                0.6,
+                                self.config.detection_threshold + 0.15,
+                            ),
+                        )
+                        low_confidence = min(det_confs)
+                        if low_confidence < review_floor:
+                            self._mask_review_signals.append(
+                                make_review_span(
+                                    "low-confidence",
+                                    absolute_idx,
+                                    absolute_idx + 1,
+                                    fps=ctx.fps,
+                                    score=low_confidence,
+                                    threshold=review_floor,
+                                    reason=(
+                                        "OCR confidence was below "
+                                        "the review floor"
+                                    ),
+                                )
+                            )
+                    if not self.config.confidence_weighted_dilation:
+                        det_confs = None
+                else:
+                    detected_boxes = self.detector.detect(
+                        det_frame, self.config.detection_threshold)
+                if self.config.karaoke_grouping and detected_boxes:
+                    detected_boxes = _group_horizontal_line(
+                        detected_boxes,
+                        x_gap_px=self.config.karaoke_x_gap_px,
+                        y_overlap_ratio=self.config.karaoke_y_overlap,
+                    )
+                    det_confs = None
+                if state.tracker is not None:
+                    smoothed = state.tracker.update(list(detected_boxes))
+                    det_confs = None
+                else:
+                    smoothed = list(detected_boxes)
+                if (state.tracker is not None
+                        and (not self.config.remove_chyrons
+                             or not self.config.remove_subtitles)):
+                    cats = state.tracker.categorize(
+                        self.config.chyron_min_hits)
+                    smoothed = [
+                        box for box, category in zip(smoothed, cats)
+                        if (
+                            category == "chyron"
+                            and self.config.remove_chyrons
+                        ) or (
+                            category == "subtitle"
+                            and self.config.remove_subtitles
+                        )
+                    ]
+                    det_confs = None
+                if fixed_boxes:
+                    boxes = list(fixed_boxes) + smoothed
+                    det_confs = None
+                else:
+                    boxes = smoothed
+                if (
+                    self.config.export_srt
+                    or (
+                        self.config.translation_enabled
+                        and not self.config.translation_srt
+                        and not self.config.translation_source_srt
+                    )
+                ):
+                    self._collect_srt_entry(
+                        frame, state.frame_idx, detected_boxes)
+
+            if (not boxes and ctx.whisper_spans
+                    and self.config.whisper_fallback):
+                absolute = ctx.start_frame + state.frame_idx
+                for span_start, span_end in ctx.whisper_spans:
+                    if span_start <= absolute < span_end:
+                        height, width = frame.shape[:2]
+                        band_top = int(height * 0.80)
+                        boxes = [(
+                            int(width * 0.05),
+                            band_top,
+                            int(width * 0.95),
+                            height - 4,
+                        )]
+                        break
+
+            with self._time_stage("mask"):
+                mask = self._create_mask(
+                    frame.shape,
+                    boxes,
+                    frame=frame,
+                    confidences=det_confs,
+                )
+                mask = self._apply_polygon_region_shapes(mask, fixed_shapes)
+                if self.config.colour_tune_enable and boxes:
+                    mask = _expand_mask_by_color(
+                        frame,
+                        mask,
+                        boxes,
+                        tolerance=self.config.colour_tune_tolerance,
+                        padding=4,
+                    )
+                mask = self._apply_manual_mask_corrections(
+                    mask, frame_seconds, absolute_idx)
+            state.last_mask = mask
+            if self.config.phash_skip_enable:
+                state.last_hash = (
+                    cur_hash if cur_hash is not None else _phash(frame)
+                )
+            batch.add(frame, mask, source_frame, passthrough=False)
+            state.frame_idx += 1
+        return batch
+
+    def _refine_batch_masks(self, ctx: _FrameLoopContext,
+                            state: _FrameLoopState,
+                            batch: _FrameBatch) -> None:
+        """Apply temporal/refiner/imported-matte passes to one batch."""
+        with self._time_stage("mask"):
+            segment_start = None
+            for index, passthrough in enumerate(
+                    batch.passthrough_flags + [True]):
+                if not passthrough and segment_start is None:
+                    segment_start = index
+                elif passthrough and segment_start is not None:
+                    batch.active_segments.append((segment_start, index))
+                    segment_start = None
+            for segment_start, segment_end in batch.active_segments:
+                segment_frames = batch.frames[segment_start:segment_end]
+                segment_masks = batch.masks[segment_start:segment_end]
+                segment_masks = self._propagate_masks_with_cotracker(
+                    segment_frames, segment_masks)
+                segment_masks = self._refine_masks_with_matanyone(
+                    segment_frames, segment_masks)
+                if (self.config.temporal_mask_union
+                        and not ctx.timed_region_spans
+                        and not self.config.sttn_skip_detection
+                        and len(segment_masks) > 1):
+                    scene_starts = _detect_scene_cuts(segment_frames)
+                    segment_masks = stabilize_masks_rolling_union(
+                        segment_masks,
+                        scene_starts,
+                        self.config.temporal_mask_window,
+                    )
+                batch.masks[segment_start:segment_end] = segment_masks
+            if ctx.matte_reader is not None:
+                batch_start = state.frame_idx - len(batch.frames)
+                for offset, passthrough in enumerate(
+                        batch.passthrough_flags):
+                    if passthrough:
+                        continue
+                    imported_matte = ctx.matte_reader.read(
+                        batch_start + offset)
+                    batch.masks[offset] = compose_imported_matte(
+                        batch.masks[offset],
+                        imported_matte,
+                        ctx.matte_reader.mode,
+                    )
+            if self.config.quality_report:
+                for index, mask in enumerate(batch.masks):
+                    if not batch.passthrough_flags[index]:
+                        self._accumulate_quality_bbox(mask)
+        active_masks = [
+            mask for index, mask in enumerate(batch.masks)
+            if not batch.passthrough_flags[index]
+        ]
+        if active_masks:
+            state.last_mask = active_masks[-1]
+        progress = min(
+            0.9,
+            state.frame_idx / max(1, ctx.frames_to_process) * 0.8 + 0.1,
+        )
+        self._report_progress(
+            progress,
+            f"Processing frame {state.frame_idx}/{ctx.frames_to_process}...",
+        )
+
+    def _inpaint_batch(self, ctx: _FrameLoopContext,
+                       state: _FrameLoopState,
+                       batch: _FrameBatch) -> List[np.ndarray]:
+        """Apply clean-reference overrides and inpaint active segments."""
+        with self._time_stage("inpaint"):
+            reference_frames = [frame.copy() for frame in batch.frames]
+            fallback_masks = [mask.copy() for mask in batch.masks]
+            if self._clean_reference_cache:
+                batch_start = (
+                    ctx.start_frame + state.frame_idx - len(batch.frames)
+                )
+                for offset, (frame, mask) in enumerate(zip(
+                        batch.frames, batch.masks)):
+                    if batch.passthrough_flags[offset]:
+                        continue
+                    absolute = batch_start + offset
+                    seconds = _frame_seconds(
+                        absolute, ctx.fps, ctx.frame_timing)
+                    reference_frames[offset], fallback_masks[offset] = (
+                        self._apply_clean_reference_overrides(
+                            frame, mask, seconds)
+                    )
+            results = [frame.copy() for frame in reference_frames]
+            for segment_start, segment_end in batch.active_segments:
+                segment_masks = fallback_masks[segment_start:segment_end]
+                if (
+                    self._clean_reference_cache
+                    and not any(np.any(mask > 0) for mask in segment_masks)
+                ):
+                    continue
+                results[segment_start:segment_end] = (
+                    self._inpaint_batch_resilient(
+                        reference_frames[segment_start:segment_end],
+                        segment_masks,
+                    )
+                )
+            return results
+
+    def _write_batch(self, ctx: _FrameLoopContext,
+                     state: _FrameLoopState,
+                     batch: _FrameBatch,
+                     results: List[np.ndarray]) -> None:
+        """Write cleaned frames, preview callbacks, and lossless mattes."""
+        if self.config.quality_report and results:
+            self._accumulate_seam_scores(
+                batch.frames, results, batch.masks)
+        stride = max(1, self.live_preview_stride)
+        with self._time_stage("encode"):
+            for offset, result in enumerate(results):
+                write_frame = self._merge_high_bit_output(
+                    batch.source_frames[offset]
+                    if offset < len(batch.source_frames) else None,
+                    result,
+                    batch.masks[offset]
+                    if offset < len(batch.masks) else None,
+                )
+                ctx.writer.write(write_frame)
+        for offset, result in enumerate(results):
+            frame_index = state.frame_idx - len(results) + offset
+            if (self.on_preview_frame is not None
+                    and frame_index % stride == 0):
+                try:
+                    self.on_preview_frame(
+                        result,
+                        frame_index + 1,
+                        ctx.frames_to_process,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"on_preview_frame hook raised: {exc}",
+                        exc_info=True,
+                    )
+        if ctx.matte_writer is not None:
+            with self._time_stage("encode"):
+                for mask in batch.masks:
+                    ctx.matte_writer.write(mask)
+
+    def _checkpoint_after_batch(self, ctx: _FrameLoopContext,
+                                state: _FrameLoopState) -> None:
+        """Persist running/paused state after one fully-written batch."""
+        checkpoint = ctx.checkpoint
+        if not checkpoint.active or checkpoint.root is None or not checkpoint.key:
+            return
+        should_pause = bool(
+            checkpoint.pause_check and checkpoint.pause_check())
+        payload = write_pause_checkpoint(
+            checkpoint.root,
+            checkpoint.key,
+            input_path=checkpoint.input_path,
+            output_path=checkpoint.output_path,
+            config_hash=checkpoint.config_hash,
+            frame_dir=checkpoint.frame_dir or pause_frame_dir(
+                checkpoint.root, checkpoint.key),
+            next_frame=state.frame_idx,
+            total_frames=ctx.frames_to_process,
+            width=ctx.width,
+            height=ctx.height,
+            fps=ctx.fps,
+            status="paused" if should_pause else "running",
+            timing_manifest_path=checkpoint.timing_manifest_path,
+        )
+        self.last_pause_checkpoint = payload
+        if checkpoint.state_path is not None:
+            self.last_pause_checkpoint_path = str(checkpoint.state_path)
+        if should_pause:
+            message = (
+                f"Processing paused at frame "
+                f"{state.frame_idx}/{ctx.frames_to_process}"
+            )
+            logger.info(message)
+            raise ProcessingPaused(message, checkpoint.state_path)
+
     def process_video(self, input_path: str, output_path: str, *,
                       checkpoint_dir: Optional[str | Path] = None,
                       checkpoint_key: Optional[str] = None,
@@ -2795,435 +3301,58 @@ class SubtitleRemover:
             static_fixed_shapes = (
                 None if timed_region_spans else self._fixed_region_shapes())
 
+            loop_ctx = _FrameLoopContext(
+                start_frame=start_frame,
+                end_frame=end_frame,
+                frames_to_process=frames_to_process,
+                fps=fps,
+                width=width,
+                height=height,
+                total_frames=total_frames,
+                frame_timing=frame_timing,
+                high_bit_depth_surface=high_bit_depth_surface,
+                batch_size=batch_size,
+                frame_skip=frame_skip,
+                rife_stride=rife_stride,
+                keyframe_set=keyframe_set,
+                whisper_spans=whisper_spans,
+                timed_region_spans=timed_region_spans,
+                static_fixed_shapes=static_fixed_shapes,
+                selective_ranges=selective_ranges,
+                reader=reader,
+                selective_cap=selective_cap,
+                matte_reader=matte_reader,
+                writer=writer,
+                matte_writer=matte_writer,
+                checkpoint=_FrameLoopCheckpoint(
+                    active=checkpoint_active,
+                    root=checkpoint_root,
+                    key=checkpoint_key,
+                    state_path=checkpoint_state_path,
+                    config_hash=checkpoint_config_hash,
+                    frame_dir=checkpoint_frame_dir,
+                    timing_manifest_path=timing_manifest_path,
+                    input_path=input_path,
+                    output_path=output_path,
+                    pause_check=pause_check,
+                ),
+            )
+            loop_state = _FrameLoopState(
+                frame_idx=frame_idx,
+                last_mask=last_mask,
+                last_hash=last_hash,
+                tracker=tracker,
+                fixed_mask_cache=fixed_mask_cache,
+            )
             while True:
-                frames = []
-                masks = []
-                source_frames = []
-                passthrough_flags = []
-
-                for _ in range(batch_size):
-                    if start_frame + frame_idx >= end_frame:
-                        break
-                    with self._time_stage("decode"):
-                        ret, raw_frame = reader.read()
-                        if not ret:
-                            break
-                        source_frame = (
-                            raw_frame
-                            if high_bit_depth_surface
-                            and self._is_high_bit_frame(raw_frame)
-                            else None
-                        )
-                        frame = self._processing_frame(raw_frame)
-
-                    absolute_idx = start_frame + frame_idx
-                    frame_seconds = _frame_seconds(
-                        absolute_idx, fps, frame_timing)
-                    if selective_cap is not None:
-                        prior_ok, prior_raw = selective_cap.read()
-                        if not prior_ok or prior_raw is None:
-                            raise ValueError(
-                                "Previous cleaned output ended during selective rerun"
-                            )
-                        if not frame_is_in_ranges(absolute_idx, selective_ranges):
-                            prior_frame = self._processing_frame(prior_raw)
-                            frames.append(prior_frame)
-                            masks.append(np.zeros(prior_frame.shape[:2], dtype=np.uint8))
-                            source_frames.append(None)
-                            passthrough_flags.append(True)
-                            frame_idx += 1
-                            continue
-                        if any(
-                            absolute_idx == range_start
-                            for range_start, _range_end in selective_ranges
-                        ):
-                            last_mask = None
-                            last_hash = None
-                            if tracker is not None:
-                                tracker = SubtitleTracker(
-                                    self.config.kalman_iou_threshold,
-                                    self.config.kalman_max_age,
-                                )
-                    fixed_shapes = (
-                        self._fixed_region_shapes(frame_seconds)
-                        if timed_region_spans else static_fixed_shapes
-                    )
-                    fixed_boxes = (
-                        [tuple(shape["rect"]) for shape in fixed_shapes or []
-                         if "rect" in shape]
-                        or None
-                    )
-
-                    if self.config.sttn_skip_detection and (
-                            fixed_shapes or timed_region_spans):
-                        # Fixed region: cache one mask per active rect set. With
-                        # timed spans, inactive frames get an explicit empty
-                        # mask so stale masks cannot leak across boundaries.
-                        if fixed_shapes:
-                            has_polygon = any(
-                                "polygon" in shape for shape in fixed_shapes)
-                            dynamic_shape = timed_region_spans or has_polygon
-                            mask_key = tuple(tuple(r) for r in (fixed_boxes or []))
-                            fixed_mask = (
-                                None if dynamic_shape
-                                else fixed_mask_cache.get(mask_key)
-                            )
-                            if fixed_mask is None:
-                                with self._time_stage("mask"):
-                                    fixed_mask = self._create_mask(
-                                        frame.shape, fixed_boxes or [])
-                                    fixed_mask = self._apply_polygon_region_shapes(
-                                        fixed_mask, fixed_shapes)
-                                if not dynamic_shape:
-                                    fixed_mask_cache[mask_key] = fixed_mask
-                        else:
-                            with self._time_stage("mask"):
-                                fixed_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-                        frame_s = frame_seconds
-                        corrected = self._apply_manual_mask_corrections(
-                            fixed_mask.copy(), frame_s, absolute_idx)
-                        frames.append(frame)
-                        masks.append(corrected)
-                        source_frames.append(source_frame)
-                        passthrough_flags.append(False)
-                        frame_idx += 1
-                        continue
-
-                    # Perceptual-hash adaptive mask reuse: skip detection when
-                    # the frame is near-identical to the last detected one.
-                    reuse_by_phash = False
-                    cur_hash = None  # may be set below; reused to avoid double-compute
-                    if (not timed_region_spans
-                            and self.config.phash_skip_enable
-                            and last_mask is not None
-                            and last_hash is not None):
-                        cur_hash = _phash(frame)
-                        if _phash_distance(cur_hash, last_hash) <= self.config.phash_skip_distance:
-                            reuse_by_phash = True
-
-                    # Keyframe-driven detection: if we have a keyframe index
-                    # set, OCR only at I-frames, reuse last mask between.
-                    reuse_by_keyframe = False
-                    if (not timed_region_spans
-                            and keyframe_set and last_mask is not None):
-                        if absolute_idx not in keyframe_set:
-                            reuse_by_keyframe = True
-
-                    if reuse_by_phash or reuse_by_keyframe:
-                        frames.append(frame)
-                        masks.append(last_mask)
-                        source_frames.append(source_frame)
-                        passthrough_flags.append(False)
-                        frame_idx += 1
-                        continue
-                    elif (not timed_region_spans
-                          and frame_skip > 0
-                          and last_mask is not None
-                          and frame_idx % (frame_skip + 1) != 0):
-                        # Reuse cached mask for intermediate frames
-                        frames.append(frame)
-                        masks.append(last_mask)
-                        source_frames.append(source_frame)
-                        passthrough_flags.append(False)
-                        frame_idx += 1
-                        continue
-                    else:
-                        # RM-33: optionally denoise the detection-side
-                        # frame copy before OCR. Output pixels stay
-                        # unchanged because the inpainter still runs
-                        # against `frame`, not `det_frame`.
-                        with self._time_stage("ocr"):
-                            if self.config.detection_denoise:
-                                try:
-                                    from backend.preprocess import fastdvdnet_denoise_frame
-                                    det_frame = fastdvdnet_denoise_frame(frame)
-                                except Exception as exc:
-                                    logger.warning(
-                                        f"Detection denoise fell back: {exc}",
-                                        exc_info=True,
-                                    )
-                                    det_frame = frame
-                            else:
-                                det_frame = frame
-                            det_confs = None
-                            collect_confidence = bool(
-                                self.config.confidence_weighted_dilation
-                                or self.config.quality_report
-                            )
-                            if collect_confidence:
-                                det_results = self.detector.detect_with_confidence(
-                                    det_frame, self.config.detection_threshold)
-                                detected_boxes = [
-                                    (x1, y1, x2, y2)
-                                    for x1, y1, x2, y2, _ in det_results
-                                ]
-                                det_confs = [c for _, _, _, _, c in det_results]
-                                if self.config.quality_report and det_confs:
-                                    review_floor = min(
-                                        0.9,
-                                        max(
-                                            0.6,
-                                            self.config.detection_threshold + 0.15,
-                                        ),
-                                    )
-                                    low_confidence = min(det_confs)
-                                    if low_confidence < review_floor:
-                                        self._mask_review_signals.append(
-                                            make_review_span(
-                                                "low-confidence",
-                                                absolute_idx,
-                                                absolute_idx + 1,
-                                                fps=fps,
-                                                score=low_confidence,
-                                                threshold=review_floor,
-                                                reason=(
-                                                    "OCR confidence was below "
-                                                    "the review floor"
-                                                ),
-                                            )
-                                        )
-                                if not self.config.confidence_weighted_dilation:
-                                    det_confs = None
-                            else:
-                                detected_boxes = self.detector.detect(
-                                    det_frame, self.config.detection_threshold)
-                            # Karaoke grouping: fuse per-syllable boxes on the
-                            # same line before tracking so Kalman sees one
-                            # composite per line, not one per syllable.
-                            if self.config.karaoke_grouping and detected_boxes:
-                                detected_boxes = _group_horizontal_line(
-                                    detected_boxes,
-                                    x_gap_px=self.config.karaoke_x_gap_px,
-                                    y_overlap_ratio=self.config.karaoke_y_overlap,
-                                )
-                                det_confs = None
-                            # Smooth jitter + fill single-frame misses via Kalman
-                            if tracker is not None:
-                                smoothed = tracker.update(list(detected_boxes))
-                                det_confs = None
-                            else:
-                                smoothed = list(detected_boxes)
-                            # Chyron / subtitle filter: when either remove flag is
-                            # off we drop the matching tracks before mask creation.
-                            # No-op when both are True (default v3.12 behaviour).
-                            if (tracker is not None
-                                    and (not self.config.remove_chyrons
-                                         or not self.config.remove_subtitles)):
-                                cats = tracker.categorize(self.config.chyron_min_hits)
-                                smoothed = [
-                                    b for b, c in zip(smoothed, cats)
-                                    if (c == "chyron" and self.config.remove_chyrons)
-                                    or (c == "subtitle" and self.config.remove_subtitles)
-                                ]
-                                det_confs = None
-                            # If fixed boxes are set without skip_detection, union them
-                            # with per-frame detections so users can pin a region AND
-                            # still clean incidental text elsewhere.
-                            if fixed_boxes:
-                                boxes = list(fixed_boxes) + smoothed
-                                det_confs = None
-                            else:
-                                boxes = smoothed
-                            if (
-                                self.config.export_srt
-                                or (
-                                    self.config.translation_enabled
-                                    and not self.config.translation_srt
-                                    and not self.config.translation_source_srt
-                                )
-                            ):
-                                self._collect_srt_entry(frame, frame_idx, detected_boxes)
-
-                    # RM-27: when OCR returned no boxes for this frame
-                    # AND Whisper found speech in this timecode, mask a
-                    # default bottom band so the inpaint pass still
-                    # cleans the subtitle position. Catches frames the
-                    # OCR cascade missed but the audio confirms have
-                    # dialogue.
-                    if (not boxes and whisper_spans
-                            and self.config.whisper_fallback):
-                        absolute = start_frame + frame_idx
-                        for span_s, span_e in whisper_spans:
-                            if span_s <= absolute < span_e:
-                                h_full, w_full = frame.shape[:2]
-                                band_top = int(h_full * 0.80)
-                                boxes = [(int(w_full * 0.05), band_top,
-                                          int(w_full * 0.95), h_full - 4)]
-                                break
-
-                    with self._time_stage("mask"):
-                        mask = self._create_mask(frame.shape, boxes, frame=frame,
-                                                 confidences=det_confs)
-                        mask = self._apply_polygon_region_shapes(
-                            mask, fixed_shapes)
-                        if self.config.colour_tune_enable and boxes:
-                            mask = _expand_mask_by_color(
-                                frame, mask, boxes,
-                                tolerance=self.config.colour_tune_tolerance,
-                                padding=4,
-                            )
-                        frame_s = frame_seconds
-                        mask = self._apply_manual_mask_corrections(
-                            mask, frame_s, absolute_idx)
-                    last_mask = mask
-                    if self.config.phash_skip_enable:
-                        # Reuse the hash computed above for the skip-check if
-                        # available; otherwise compute it now for the first time.
-                        last_hash = cur_hash if cur_hash is not None else _phash(frame)
-                    frames.append(frame)
-                    masks.append(mask)
-                    source_frames.append(source_frame)
-                    passthrough_flags.append(False)
-                    frame_idx += 1
-
-                if not frames:
+                batch = self._decode_and_build_batch(loop_ctx, loop_state)
+                if not batch.frames:
                     break
-
-                with self._time_stage("mask"):
-                    active_segments = []
-                    segment_start = None
-                    for index, passthrough in enumerate(passthrough_flags + [True]):
-                        if not passthrough and segment_start is None:
-                            segment_start = index
-                        elif passthrough and segment_start is not None:
-                            active_segments.append((segment_start, index))
-                            segment_start = None
-                    for segment_start, segment_end in active_segments:
-                        segment_frames = frames[segment_start:segment_end]
-                        segment_masks = masks[segment_start:segment_end]
-                        segment_masks = self._propagate_masks_with_cotracker(
-                            segment_frames, segment_masks)
-                        segment_masks = self._refine_masks_with_matanyone(
-                            segment_frames, segment_masks)
-                        # Scene-cut-safe temporal mask stabilization. Only in
-                        # automatic full-frame detection -- user-fixed regions
-                        # are already stable and must not be widened.
-                        if (self.config.temporal_mask_union
-                                and not timed_region_spans
-                                and not self.config.sttn_skip_detection
-                                and len(segment_masks) > 1):
-                            scene_starts = _detect_scene_cuts(segment_frames)
-                            segment_masks = stabilize_masks_rolling_union(
-                                segment_masks, scene_starts,
-                                self.config.temporal_mask_window)
-                        masks[segment_start:segment_end] = segment_masks
-                    if matte_reader is not None:
-                        batch_start = frame_idx - len(frames)
-                        for offset, passthrough in enumerate(passthrough_flags):
-                            if passthrough:
-                                continue
-                            imported_matte = matte_reader.read(
-                                batch_start + offset)
-                            masks[offset] = compose_imported_matte(
-                                masks[offset],
-                                imported_matte,
-                                matte_reader.mode,
-                            )
-                    # B-3: accumulate the union-mask bbox for the quality report
-                    # ROI after optional mask refiners have finalized the mask.
-                    if self.config.quality_report:
-                        for index, mask in enumerate(masks):
-                            if not passthrough_flags[index]:
-                                self._accumulate_quality_bbox(mask)
-                active_masks = [
-                    mask for index, mask in enumerate(masks)
-                    if not passthrough_flags[index]
-                ]
-                if active_masks:
-                    last_mask = active_masks[-1]
-
-                progress = min(0.9, frame_idx / max(1, frames_to_process) * 0.8 + 0.1)
-                self._report_progress(progress, f"Processing frame {frame_idx}/{frames_to_process}...")
-
-                with self._time_stage("inpaint"):
-                    reference_frames = [frame.copy() for frame in frames]
-                    fallback_masks = [mask.copy() for mask in masks]
-                    if self._clean_reference_cache:
-                        batch_start = start_frame + frame_idx - len(frames)
-                        for offset, (frame, mask) in enumerate(zip(frames, masks)):
-                            if passthrough_flags[offset]:
-                                continue
-                            absolute = batch_start + offset
-                            seconds = _frame_seconds(
-                                absolute, fps, frame_timing)
-                            reference_frames[offset], fallback_masks[offset] = (
-                                self._apply_clean_reference_overrides(
-                                    frame, mask, seconds)
-                            )
-                    results = [frame.copy() for frame in reference_frames]
-                    for segment_start, segment_end in active_segments:
-                        segment_masks = fallback_masks[
-                            segment_start:segment_end]
-                        if (
-                            self._clean_reference_cache
-                            and not any(np.any(mask > 0) for mask in segment_masks)
-                        ):
-                            continue
-                        results[segment_start:segment_end] = (
-                            self._inpaint_batch_resilient(
-                                reference_frames[segment_start:segment_end],
-                                segment_masks,
-                            )
-                        )
-                if self.config.quality_report and results:
-                    self._accumulate_seam_scores(frames, results, masks)
-                stride = max(1, self.live_preview_stride)
-                with self._time_stage("encode"):
-                    for offset, result in enumerate(results):
-                        write_frame = self._merge_high_bit_output(
-                            source_frames[offset] if offset < len(source_frames) else None,
-                            result,
-                            masks[offset] if offset < len(masks) else None,
-                        )
-                        writer.write(write_frame)
-                for offset, result in enumerate(results):
-                    if (self.on_preview_frame is not None and
-                            (frame_idx - len(results) + offset) % stride == 0):
-                        try:
-                            self.on_preview_frame(
-                                result,
-                                frame_idx - len(results) + offset + 1,
-                                frames_to_process)
-                        except Exception as exc:
-                            # Never let a flaky preview hook break processing,
-                            # but leave a breadcrumb so a broken UI is debuggable.
-                            logger.warning(
-                                f"on_preview_frame hook raised: {exc}",
-                                exc_info=True,
-                            )
-                if matte_writer is not None:
-                    with self._time_stage("encode"):
-                        for m in masks:
-                            matte_writer.write(m)
-
-                if checkpoint_active and checkpoint_root is not None and checkpoint_key:
-                    should_pause = bool(pause_check and pause_check())
-                    payload = write_pause_checkpoint(
-                        checkpoint_root,
-                        checkpoint_key,
-                        input_path=input_path,
-                        output_path=output_path,
-                        config_hash=checkpoint_config_hash,
-                        frame_dir=checkpoint_frame_dir or pause_frame_dir(
-                            checkpoint_root, checkpoint_key),
-                        next_frame=frame_idx,
-                        total_frames=frames_to_process,
-                        width=width,
-                        height=height,
-                        fps=fps,
-                        status="paused" if should_pause else "running",
-                        timing_manifest_path=timing_manifest_path,
-                    )
-                    self.last_pause_checkpoint = payload
-                    if checkpoint_state_path is not None:
-                        self.last_pause_checkpoint_path = str(checkpoint_state_path)
-                    if should_pause:
-                        message = (
-                            f"Processing paused at frame "
-                            f"{frame_idx}/{frames_to_process}"
-                        )
-                        logger.info(message)
-                        raise ProcessingPaused(message, checkpoint_state_path)
+                self._refine_batch_masks(loop_ctx, loop_state, batch)
+                results = self._inpaint_batch(loop_ctx, loop_state, batch)
+                self._write_batch(loop_ctx, loop_state, batch, results)
+                self._checkpoint_after_batch(loop_ctx, loop_state)
+            frame_idx = loop_state.frame_idx
 
             if frame_idx < frames_to_process:
                 raise _video_decode_error(
