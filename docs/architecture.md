@@ -5,7 +5,7 @@ module it touches, and points new contributors at the right file for a
 given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 [CHANGELOG.md](../CHANGELOG.md).
 
-> Concrete and up to date as of the v3.22.0 workbench refinement.
+> Concrete and up to date as of the v3.23.0 audit pass.
 > Keep this in sync when modules move.
 
 ---

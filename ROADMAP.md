@@ -65,3 +65,25 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 - [ ] P3 — First-run-friendly copy for advanced-setting tooltips
   Why: Several advanced toggles surface backend jargon without explaining the tradeoff (e.g. "Kalman box tracking", "Flow-warped temporal exposure (motion-heavy)", "remuxing"); a copy pass would help first-time users choose settings with confidence.
   Where: `gui/app.py` advanced-settings tooltips; `gui/processing_controller.py` status strings.
+
+## Audit Findings (2026-07-17 deep audit)
+
+- [ ] P3 — CLI `--preset` cannot express store_true fields a preset sets to False
+  Why: `field_to_attr` maps `tbe_scene_cut_split`, `kalman_tracking`, `phash_skip_enable`, and `auto_band` to `None`, so a preset that sets any of them (e.g. the shipped "TikTok / Vertical short" and "News / Chyron" presets set `auto_band: True`) has no effect via `--preset` on the CLI, while the GUI honors it. Give these tri-state flags (`--auto-band`/`--no-auto-band`, etc.) or route CLI preset application through `apply_backend_payload`.
+  Where: `backend/cli.py` (`field_to_attr`, preset merge ~1104-1129).
+
+- [ ] P3 — Explicit CLI value equal to the parser default is overridden by a preset
+  Why: Preset-vs-CLI precedence compares `getattr(args, attr) == default`, and argparse cannot distinguish an omitted flag from one typed with the default value, so `--preset X --threshold 0.5` silently discards the user's explicit 0.5 for the preset's value. Set the affected argument defaults to `None` and treat `None` as "unset" when merging presets.
+  Where: `backend/cli.py` ~1122-1128.
+
+- [ ] P3 — GUI silently downgrades backend-only inpaint modes to STTN
+  Why: The GUI `InpaintMode` enum omits `MIGAN` (and registry modes), so a settings.json or imported preset carrying `"mode": "migan"` (e.g. saved from a `--mode migan` CLI run) resolves through `_coerce_gui_mode` to STTN with no notice. Either widen the GUI mapping or emit a load notice when a recognized backend mode is downgraded.
+  Where: `gui/config.py` (`_coerce_gui_mode` ~304-318, GUI `InpaintMode` ~101-106).
+
+- [ ] P3 — `migrate_gui_settings` documents versioned transforms it does not perform
+  Why: The function stamps settings to the current schema version and does no per-version key transformation; the surrounding comments assert semantic upgrades (format 5/6/10) the code never implements. Safe today because every historical bump only added defaulted fields, but a future breaking rename will be silently skipped. Either delete the misleading comments or add explicit `if version < N:` transform blocks.
+  Where: `backend/config_schema.py:87-111`.
+
+- [ ] P3 — Weak disabled affordance on secondary/ghost ModernButtons
+  Why: Disabled buttons reuse `BG_TERTIARY`, the same fill as enabled `secondary`/default buttons, so disabled state reads only via dimmed text; a distinct disabled fill would be clearer, but naively using `BG_SECONDARY` risks buttons vanishing against card surfaces. Needs a dedicated `BG_DISABLED` token chosen to stay distinct from both enabled fills and the card background.
+  Where: `gui/widgets.py` ModernButton `_draw` disabled branch (~517-520) and style table (~466-501); `gui/theme.py` tokens.

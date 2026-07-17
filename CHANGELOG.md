@@ -4,6 +4,33 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.23.0] - 2026-07-17
+
+### Fixed
+
+- **External inpainter kept the subtitle instead of the removal.** The
+  `VSR_EXTERNAL_INPAINTER` adapter passed its arguments to the feather-blend
+  in the wrong order, so inside the mask the original (still-subtitled) frame
+  won over the external tool's output -- the whole path was a near no-op in
+  the region that matters. The external fill now wins inside the mask, matching
+  every other inpainter backend.
+- **`detect_subtitle_band` leaked a VideoCapture** when the source failed to
+  open; the `isOpened()` early return now runs inside the release scope.
+- **ModernToggle checkmark rendered off-center at larger text scales.** The
+  tick used vertex offsets hardcoded for the unscaled box, so at 125-200% text
+  scaling it shrank into the top-left corner of the enlarged box. Offsets and
+  stroke width now scale with the box.
+- **Queue rows could leave a pending pulse animation scheduled after teardown.**
+  The row now cancels any pending pulse callback on `<Destroy>`.
+- **OCR replace-list keys now apply longest-first.** User OCR-fix JSON files
+  with overlapping literal keys applied in insertion order, letting a short
+  general key pre-empt a longer, more specific one; keys are now sorted
+  longest-first for a deterministic, order-independent result.
+- **Plural agreement in batch-status copy.** Fixed "N needs review",
+  "N needs attention", "N item remains paused", and three "(s)" placeholders to
+  agree with their counts, and aligned the per-item interrupt wording on
+  "Stopping" to match the "Stopped" terminal state.
+
 ## [3.22.0] - 2026-07-17
 
 ### Changed
