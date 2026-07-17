@@ -25,6 +25,7 @@ import numpy as np
 from backend.import_safety import module_can_import as _module_can_import
 from backend.inpainters._common import (
     BaseInpainter,
+    _binarize_mask,
     _cv2_inpaint,
     _edge_ring_color_correct,
     _feather_blend,
@@ -352,14 +353,20 @@ class LAMAInpainter(BaseInpainter):
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         feather = self.config.mask_feather_px
         ring = self.config.edge_ring_px
+        # Neural models treat the mask as a strict binary indicator; a soft
+        # alpha matte (MatAnyone refinement) must be thresholded before the
+        # model input. The original soft masks are kept for the feather blend
+        # and temporal smoothing below so edges stay seamless.
+        model_masks = [_binarize_mask(m) for m in masks]
         if self._onnx_session is not None:
-            raw = self._inpaint_onnx(frames, masks)
+            raw = self._inpaint_onnx(frames, model_masks)
         elif self._dnn_net is not None:
-            raw = self._inpaint_cv2dnn(frames, masks)
+            raw = self._inpaint_cv2dnn(frames, model_masks)
         elif self._lama is not None:
-            raw = self._inpaint_pytorch(frames, masks)
+            raw = self._inpaint_pytorch(frames, model_masks)
         else:
-            raw = [_cv2_inpaint(f, m, 7, cv2.INPAINT_NS) for f, m in zip(frames, masks)]
+            raw = [_cv2_inpaint(f, m, 7, cv2.INPAINT_NS)
+                   for f, m in zip(frames, model_masks)]
         out = []
         for f, r, m in zip(frames, raw, masks):
             if ring > 0 and m.max() > 0:

@@ -83,7 +83,7 @@ def ffmpeg_whisper_available(ffmpeg: str = "ffmpeg") -> bool:
 def _escape_filter_value(value: str) -> str:
     """Escape a string for use as an FFmpeg filter option value."""
     escaped = str(value).replace("\\", "\\\\")
-    for char in (":", "'", ",", "[", "]"):
+    for char in (":", "'", ",", ";", "[", "]"):
         escaped = escaped.replace(char, f"\\{char}")
     return escaped
 

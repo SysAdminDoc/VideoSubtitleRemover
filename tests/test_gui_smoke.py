@@ -1483,8 +1483,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(int(app._preview_frame.cget("highlightthickness")), 0)
             self.assertEqual(int(app._settings_col.winfo_children()[0].cget(
                 "highlightthickness")), 0)
-            self.assertEqual(len(app._header_chips.winfo_children()), 2)
-            self.assertEqual(app._header_capability_label.winfo_manager(), "")
+            self.assertEqual(len(app._header_chips.winfo_children()), 1)
             self.assertEqual(app.mode_picker.winfo_manager(), "")
             self.assertEqual(app._queue_table_header.winfo_manager(), "")
             self.assertEqual(len(app.empty_container.winfo_children()), 1)

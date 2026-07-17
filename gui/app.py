@@ -856,7 +856,7 @@ class VideoSubtitleRemoverApp(
         self._refresh_ffmpeg_warning()
         self._refresh_action_states()
 
-        gpu_label = self.gpus[0]["name"] if self.gpus else "CPU mode"
+        gpu_label = self.gpus[0]["name"] if self.gpus else tr("CPU mode")
         audio_label = "FFmpeg ready" if self.ffmpeg_ready else "FFmpeg missing"
         self._update_status(f"Hardware detected: {gpu_label}; {audio_label}", "info")
         logger.info(
@@ -870,7 +870,7 @@ class VideoSubtitleRemoverApp(
     def _apply_gpu_selection_from_config(self):
         """Restore the saved GPU choice after async hardware detection."""
         if not self.gpus:
-            self.gpu_var.set("CPU Mode")
+            self.gpu_var.set(tr("CPU mode"))
             self.config.use_gpu = False
             return
         selected = None
@@ -896,8 +896,8 @@ class VideoSubtitleRemoverApp(
             options = [f"{g['name']} ({g['memory']})" for g in self.gpus]
             self.gpu_combo.configure(values=options, state="readonly")
         else:
-            self.gpu_combo.configure(values=["CPU Mode"], state="disabled")
-            self.gpu_var.set("CPU Mode")
+            self.gpu_combo.configure(values=[tr("CPU mode")], state="disabled")
+            self.gpu_var.set(tr("CPU mode"))
 
     def _refresh_ffmpeg_warning(self):
         """Show FFmpeg pending/missing state without rebuilding the settings card."""
@@ -959,15 +959,8 @@ class VideoSubtitleRemoverApp(
         )
         self._header_ready_label.pack(side="left")
         ready_group.pack(side="left")
-        self._header_capability_label = tk.Label(
-            self._header_chips,
-            text=summary,
-            font=f(Theme.F_META),
-            bg=Theme.BG_DARK,
-            fg=Theme.TEXT_MUTED,
-            wraplength=420,
-            justify="left",
-        )
+        # The capability summary (GPU / detector / audio) is surfaced as a
+        # tooltip on the ready indicator rather than an inline label.
         Tooltip(self._header_ready_label, summary)
 
     def _section_title(self, parent, eyebrow: str, title: str, hint: str,

@@ -170,7 +170,18 @@ class AdvancedSettingsControllerMixin:
         for field, (slider, value_label) in getattr(
             self, "_settings_slider_by_attr", {}
         ).items():
-            value = int(getattr(self.config, field))
+            if field == "_detection_threshold_pct":
+                # Runtime-only mirror of the dataclass detection_threshold;
+                # presets update the float field, so derive the percent and
+                # keep the mirror in sync (the attribute may not exist yet on
+                # a fresh session where this slider was never dragged).
+                value = int(round(self.config.detection_threshold * 100))
+                setattr(self.config, field, value)
+            else:
+                raw = getattr(self.config, field, None)
+                if raw is None:
+                    continue
+                value = int(raw)
             slider.set_value(value)
             value_label.config(text=str(value))
         if hasattr(self, "mask_import_label_var"):

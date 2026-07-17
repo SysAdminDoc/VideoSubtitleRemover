@@ -80,6 +80,21 @@ def free_inference_memory() -> None:
         pass
 
 
+def _binarize_mask(mask: np.ndarray) -> np.ndarray:
+    """Return a strict {0, 255} uint8 mask for neural inpaint model input.
+
+    LaMa / MI-GAN models consume ``mask / 255.0`` as a binary inpaint
+    indicator; feathering is applied *after* inpainting. A soft alpha
+    matte (e.g. from MatAnyone refinement) carries intermediate values
+    1-254 that would feed partial-strength hints and silently degrade the
+    fill, so threshold at the midpoint. A properly dilated binary mask is
+    left unchanged.
+    """
+    if mask.ndim == 3:
+        mask = mask[..., 0]
+    return np.where(mask >= 128, np.uint8(255), np.uint8(0))
+
+
 def _feather_blend(original: np.ndarray, filled: np.ndarray,
                    mask: np.ndarray, feather_px: int = 4) -> np.ndarray:
     """Alpha-blend the inpainted `filled` result back onto `original`

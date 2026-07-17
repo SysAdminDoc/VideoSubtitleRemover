@@ -110,7 +110,7 @@ class StartupHardwareProbeTests(unittest.TestCase):
 
         app._apply_gpu_selection_from_config()
 
-        self.assertEqual(app.gpu_var.get(), "CPU Mode")
+        self.assertEqual(app.gpu_var.get(), "CPU mode")
         self.assertFalse(app.config.use_gpu)
 
 

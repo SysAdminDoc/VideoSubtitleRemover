@@ -1108,19 +1108,29 @@ def _prepare_cli_args(args, parser):
             "mask_feather_px": "mask_feather",
             "edge_ring_px": "edge_ring",
             "tbe_flow_warp": "flow_warp",
-            "tbe_scene_cut_split": None,
             "colour_tune_enable": "colour_tune",
             "colour_tune_tolerance": "colour_tolerance",
-            "kalman_tracking": None,
-            "phash_skip_enable": None,
             "phash_skip_distance": "phash_distance",
-            "auto_band": None,
+            "auto_band": "auto_band",
             "detection_frame_skip": "frame_skip",
+        }
+        # Preset booleans exposed only as inverted "--no-*" store_true flags.
+        # A preset value of True means "enabled" (the parser default), so map
+        # it back onto the negative flag; the user's explicit --no-* wins.
+        inverted_flags = {
+            "tbe_scene_cut_split": "no_scene_split",
+            "kalman_tracking": "no_kalman",
+            "phash_skip_enable": "no_phash",
         }
         for fname, value in fields.items():
             if fname == "mode":
                 if getattr(args, "mode", None) == attr_to_default.get("mode"):
                     args.mode = str(value).lower().replace(" ", "")
+                continue
+            if fname in inverted_flags:
+                neg = inverted_flags[fname]
+                if hasattr(args, neg) and getattr(args, neg) == attr_to_default.get(neg):
+                    setattr(args, neg, not bool(value))
                 continue
             attr = field_to_attr.get(fname, fname)
             if attr is None or not hasattr(args, attr):

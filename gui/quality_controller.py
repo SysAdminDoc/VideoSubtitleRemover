@@ -181,8 +181,9 @@ class QualityReviewControllerMixin:
         if paused:
             stat(stats, tr("PAUSED"), paused, Theme.WARNING, Theme.WARNING_BG).pack(
                 side="left", padx=(Theme.S_SM, 0))
-        stat(stats, tr("STOPPED"), cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
-            side="left", padx=(Theme.S_SM, 0))
+        if cancelled:
+            stat(stats, tr("STOPPED"), cancelled, Theme.WARNING, Theme.WARNING_BG).pack(
+                side="left", padx=(Theme.S_SM, 0))
         if review_count:
             stat(stats, tr("REVIEW"), review_count, Theme.WARNING, Theme.WARNING_BG).pack(
                 side="left", padx=(Theme.S_SM, 0))

@@ -75,9 +75,12 @@ OPENCV_REMEDIATION_COMMANDS = (
 )
 
 
-def _version_key(value: str) -> Tuple[int, int, int]:
-    numbers = [int(part) for part in re.findall(r"\d+", value)[:3]]
-    while len(numbers) < 3:
+def _version_key(value: str) -> Tuple[int, int, int, int]:
+    # Keep four components so four-part minimums (e.g. opencv-python
+    # 5.0.0.93) compare on their build segment rather than being
+    # truncated to (5, 0, 0) and reported as satisfied by 5.0.0.x < .93.
+    numbers = [int(part) for part in re.findall(r"\d+", value)[:4]]
+    while len(numbers) < 4:
         numbers.append(0)
     return tuple(numbers)  # type: ignore[return-value]
 

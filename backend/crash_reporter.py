@@ -47,7 +47,7 @@ def _path_scrub(text: str) -> str:
     `/home/xxx/...` with `<path>/...`."""
     text = re.sub(r"[A-Za-z]:\\(?:[^\\:]+\\)*", "<path>\\\\", text)
     text = re.sub(r"[A-Za-z]:/(?:[^/:]+/)*", "<path>/", text)
-    text = re.sub(r"\\\\\\\\[^\\:]+\\\\(?:[^\\:]+\\\\)*", "<path>\\\\", text)
+    text = re.sub(r"\\\\[^\\:]+\\(?:[^\\:]+\\)*", "<path>\\\\", text)
     text = re.sub(r"/(?:home|Users|var|tmp)/(?:[^/]+/)+", "<path>/", text)
     return text
 
