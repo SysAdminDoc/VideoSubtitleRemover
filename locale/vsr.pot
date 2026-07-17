@@ -16,15 +16,15 @@ msgstr ""
 msgid "0 uses the full clip"
 msgstr ""
 
-#: gui/region_controller.py:1275
+#: gui/region_controller.py:1277
 msgid "; color delta BGR {delta}"
 msgstr ""
 
-#: gui/region_controller.py:1281
+#: gui/region_controller.py:1283
 msgid "; would fall back to normal inpainting"
 msgstr ""
 
-#: gui/region_controller.py:1419
+#: gui/region_controller.py:1421
 msgid "A motion keyframe uses one frame, not an end frame"
 msgstr ""
 
@@ -56,7 +56,7 @@ msgstr ""
 msgid "Add a file to the queue first"
 msgstr ""
 
-#: gui/widgets.py:1752 gui/widgets.py:1843
+#: gui/widgets.py:1756 gui/widgets.py:1847
 msgid "Add files to the queue"
 msgstr ""
 
@@ -68,7 +68,7 @@ msgstr ""
 msgid "Add keyframe"
 msgstr ""
 
-#: gui/app.py:3754 gui/widgets.py:1751
+#: gui/app.py:3754 gui/widgets.py:1755
 msgid "Add media"
 msgstr ""
 
@@ -128,15 +128,15 @@ msgstr ""
 msgid "Alignment"
 msgstr ""
 
-#: gui/widgets.py:1881
+#: gui/widgets.py:1885
 msgid "All Files"
 msgstr ""
 
-#: gui/widgets.py:1878
+#: gui/widgets.py:1882
 msgid "All Supported"
 msgstr ""
 
-#: gui/region_controller.py:1209 gui/settings_controller.py:191 gui/settings_controller.py:226 gui/settings_controller.py:251 gui/support_controller.py:234 gui/support_controller.py:294 gui/support_controller.py:327
+#: gui/region_controller.py:1211 gui/settings_controller.py:191 gui/settings_controller.py:226 gui/settings_controller.py:251 gui/support_controller.py:234 gui/support_controller.py:294 gui/support_controller.py:327
 msgid "All files"
 msgstr ""
 
@@ -144,11 +144,11 @@ msgstr ""
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr ""
 
-#: gui/app.py:3970 gui/app.py:5271
+#: gui/app.py:3970 gui/app.py:5272
 msgid "Application status"
 msgstr ""
 
-#: gui/region_controller.py:1455
+#: gui/region_controller.py:1457
 msgid "Applied precise region edit"
 msgstr ""
 
@@ -160,7 +160,7 @@ msgstr ""
 msgid "Arrow keys nudge; Shift moves 10 px; Ctrl+arrows resize; Ctrl+Z/Y undo or redo."
 msgstr ""
 
-#: gui/region_controller.py:1148 gui/region_controller.py:1153 gui/region_controller.py:1167 gui/region_controller.py:523
+#: gui/region_controller.py:1150 gui/region_controller.py:1155 gui/region_controller.py:1169 gui/region_controller.py:523
 msgid "Auto"
 msgstr ""
 
@@ -260,7 +260,7 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: gui/widgets.py:2116
+#: gui/widgets.py:2123
 msgid "Cancel this item"
 msgstr ""
 
@@ -300,11 +300,11 @@ msgstr ""
 msgid "Choose FFV1 video or an ordered PNG sequence."
 msgstr ""
 
-#: gui/region_controller.py:1255
+#: gui/region_controller.py:1257
 msgid "Choose a clean reference for the selected timed region"
 msgstr ""
 
-#: gui/widgets.py:1890
+#: gui/widgets.py:1894
 msgid "Choose a folder to clean"
 msgstr ""
 
@@ -316,7 +316,7 @@ msgstr ""
 msgid "Choose a residual, flicker, or low-confidence span."
 msgstr ""
 
-#: gui/region_controller.py:1159
+#: gui/region_controller.py:1161
 msgid "Choose a same-size clean image for this timed region."
 msgstr ""
 
@@ -324,7 +324,7 @@ msgstr ""
 msgid "Choose a starting profile"
 msgstr ""
 
-#: gui/region_controller.py:1205
+#: gui/region_controller.py:1207
 msgid "Choose clean reference image"
 msgstr ""
 
@@ -332,19 +332,19 @@ msgstr ""
 msgid "Choose cleanup and region"
 msgstr ""
 
-#: gui/widgets.py:1773
+#: gui/widgets.py:1777
 msgid "Choose files"
 msgstr ""
 
-#: gui/widgets.py:1814
+#: gui/widgets.py:1818
 msgid "Choose files or a folder below. Originals are never modified."
 msgstr ""
 
-#: gui/widgets.py:1876
+#: gui/widgets.py:1880
 msgid "Choose files to clean"
 msgstr ""
 
-#: gui/app.py:2093 gui/app.py:3151 gui/widgets.py:1778
+#: gui/app.py:2093 gui/app.py:3151 gui/widgets.py:1782
 msgid "Choose folder"
 msgstr ""
 
@@ -368,11 +368,11 @@ msgstr ""
 msgid "Clean reference alignment mode"
 msgstr ""
 
-#: gui/region_controller.py:1238
+#: gui/region_controller.py:1240
 msgid "Clean reference attached to the timed region"
 msgstr ""
 
-#: gui/region_controller.py:1249
+#: gui/region_controller.py:1251
 msgid "Clean reference cleared"
 msgstr ""
 
@@ -380,15 +380,15 @@ msgstr ""
 msgid "Clean reference minimum confidence"
 msgstr ""
 
-#: gui/region_controller.py:1223
+#: gui/region_controller.py:1225
 msgid "Clean reference must be {width}x{height}"
 msgstr ""
 
-#: gui/region_controller.py:1278
+#: gui/region_controller.py:1280
 msgid "Clean reference preview ready"
 msgstr ""
 
-#: gui/region_controller.py:1120
+#: gui/region_controller.py:1122
 msgid "Clean references attach only to timed regions"
 msgstr ""
 
@@ -476,7 +476,7 @@ msgstr ""
 msgid "Confidence floor"
 msgstr ""
 
-#: gui/region_controller.py:1177
+#: gui/region_controller.py:1179
 msgid "Confidence must be between 0.05 and 0.99"
 msgstr ""
 
@@ -484,11 +484,11 @@ msgstr ""
 msgid "Configure"
 msgstr ""
 
-#: gui/widgets.py:2103
+#: gui/widgets.py:2110
 msgid "Copy CLI command"
 msgstr ""
 
-#: gui/widgets.py:2101
+#: gui/widgets.py:2108
 msgid "Copy source path"
 msgstr ""
 
@@ -604,7 +604,7 @@ msgstr ""
 msgid "Drag a rectangle, or choose Polygon and click vertices."
 msgstr ""
 
-#: gui/widgets.py:1762
+#: gui/widgets.py:1766
 msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
 msgstr ""
 
@@ -736,11 +736,11 @@ msgstr ""
 msgid "Fast LaMa cleanup"
 msgstr ""
 
-#: gui/widgets.py:2133
+#: gui/widgets.py:2140
 msgid "Fast remux and keep embedded subtitles"
 msgstr ""
 
-#: gui/widgets.py:2129
+#: gui/widgets.py:2136
 msgid "Fast strip embedded subtitles"
 msgstr ""
 
@@ -876,15 +876,15 @@ msgstr ""
 msgid "High-quality temporal fill for motion-heavy footage and thick text."
 msgstr ""
 
-#: gui/region_controller.py:1150 gui/region_controller.py:1169 gui/region_controller.py:523
+#: gui/region_controller.py:1152 gui/region_controller.py:1171 gui/region_controller.py:523
 msgid "Homography"
 msgstr ""
 
-#: gui/widgets.py:1880
+#: gui/widgets.py:1884
 msgid "Image Files"
 msgstr ""
 
-#: gui/region_controller.py:1207
+#: gui/region_controller.py:1209
 msgid "Image files"
 msgstr ""
 
@@ -1108,11 +1108,11 @@ msgstr ""
 msgid "Motion"
 msgstr ""
 
-#: gui/region_controller.py:1430
+#: gui/region_controller.py:1432
 msgid "Motion keyframes must use distinct frames"
 msgstr ""
 
-#: gui/region_controller.py:1041
+#: gui/region_controller.py:1043
 msgid "Motion {track}, keyframe {frame}"
 msgstr ""
 
@@ -1188,15 +1188,15 @@ msgstr ""
 msgid "No queued items match this search"
 msgstr ""
 
-#: gui/region_controller.py:1093
+#: gui/region_controller.py:1095
 msgid "No region edit to redo"
 msgstr ""
 
-#: gui/region_controller.py:1090
+#: gui/region_controller.py:1092
 msgid "No region edit to undo"
 msgstr ""
 
-#: gui/region_controller.py:970
+#: gui/region_controller.py:972
 msgid "No text found in this rectangle yet."
 msgstr ""
 
@@ -1208,7 +1208,7 @@ msgstr ""
 msgid "No valid correction frame ranges are available"
 msgstr ""
 
-#: gui/region_controller.py:1146 gui/support_controller.py:544 gui/support_controller.py:545
+#: gui/region_controller.py:1148 gui/support_controller.py:544 gui/support_controller.py:545
 msgid "None"
 msgstr ""
 
@@ -1221,7 +1221,7 @@ msgid "OCR engine"
 msgstr ""
 
 #: gui/region_controller.py:966
-msgid "OCR found {count} region(s); average confidence {confidence:.0%}."
+msgid "OCR found {count} region{suffix}; average confidence {confidence:.0%}."
 msgstr ""
 
 #: gui/region_controller.py:962
@@ -1244,7 +1244,7 @@ msgstr ""
 msgid "Open output"
 msgstr ""
 
-#: gui/widgets.py:2081
+#: gui/widgets.py:2088
 msgid "Open quality sheet"
 msgstr ""
 
@@ -1252,7 +1252,7 @@ msgstr ""
 msgid "Open report"
 msgstr ""
 
-#: gui/widgets.py:2018 gui/widgets.py:2078
+#: gui/widgets.py:2022 gui/widgets.py:2085
 msgid "Open result"
 msgstr ""
 
@@ -1272,7 +1272,7 @@ msgstr ""
 msgid "Opened the settings folder"
 msgstr ""
 
-#: gui/region_controller.py:1517 gui/region_controller.py:355
+#: gui/region_controller.py:1519 gui/region_controller.py:355
 msgid "Optional"
 msgstr ""
 
@@ -1296,7 +1296,7 @@ msgstr ""
 msgid "Outputs are ready to review."
 msgstr ""
 
-#: gui/widgets.py:2122
+#: gui/widgets.py:2129
 msgid "Override settings for this file..."
 msgstr ""
 
@@ -1336,7 +1336,7 @@ msgstr ""
 msgid "Pausing..."
 msgstr ""
 
-#: gui/region_controller.py:1031
+#: gui/region_controller.py:1033
 msgid "Pending keyframe {index}"
 msgstr ""
 
@@ -1352,7 +1352,7 @@ msgstr ""
 msgid "Polygon vertex coordinates"
 msgstr ""
 
-#: gui/region_controller.py:1023
+#: gui/region_controller.py:1025
 msgid "Polygon {index}"
 msgstr ""
 
@@ -1361,7 +1361,7 @@ msgid "Prepare selective rerun"
 msgstr ""
 
 #: gui/mask_correction_controller.py:605
-msgid "Prepared mask-correction rerun for {count} frame range(s)"
+msgid "Prepared mask-correction rerun for {count} frame range{suffix}"
 msgstr ""
 
 #: gui/app.py:2283
@@ -1372,7 +1372,7 @@ msgstr ""
 msgid "Preset"
 msgstr ""
 
-#: gui/widgets.py:2322
+#: gui/widgets.py:2329
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr ""
 
@@ -1384,7 +1384,7 @@ msgstr ""
 msgid "Preview mask dilation"
 msgstr ""
 
-#: gui/widgets.py:2073
+#: gui/widgets.py:2080
 msgid "Preview source frame"
 msgstr ""
 
@@ -1468,11 +1468,11 @@ msgstr ""
 msgid "Ready for a full rerun with mask corrections"
 msgstr ""
 
-#: gui/region_controller.py:1159
+#: gui/region_controller.py:1161
 msgid "Ready to preview alignment."
 msgstr ""
 
-#: gui/widgets.py:2001 gui/widgets.py:2321 gui/widgets.py:2337
+#: gui/widgets.py:2005 gui/widgets.py:2328 gui/widgets.py:2344
 msgid "Ready to process"
 msgstr ""
 
@@ -1488,7 +1488,7 @@ msgstr ""
 msgid "Rectangle"
 msgstr ""
 
-#: gui/region_controller.py:1006
+#: gui/region_controller.py:1008
 msgid "Rectangle {index}"
 msgstr ""
 
@@ -1496,7 +1496,7 @@ msgstr ""
 msgid "Redid mask correction"
 msgstr ""
 
-#: gui/region_controller.py:1506
+#: gui/region_controller.py:1508
 msgid "Redid region edit"
 msgstr ""
 
@@ -1508,7 +1508,7 @@ msgstr ""
 msgid "Region end frame"
 msgstr ""
 
-#: gui/region_controller.py:1417
+#: gui/region_controller.py:1419
 msgid "Region end must be after its start"
 msgstr ""
 
@@ -1532,7 +1532,7 @@ msgstr ""
 msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
 msgstr ""
 
-#: gui/app.py:1546 gui/app.py:3764 gui/widgets.py:2013
+#: gui/app.py:1546 gui/app.py:3764 gui/widgets.py:2017
 msgid "Remove"
 msgstr ""
 
@@ -1544,7 +1544,7 @@ msgstr ""
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr ""
 
-#: gui/widgets.py:2141
+#: gui/widgets.py:2148
 msgid "Remove from queue"
 msgstr ""
 
@@ -1564,7 +1564,7 @@ msgstr ""
 msgid "Remove the selected item from the queue."
 msgstr ""
 
-#: gui/widgets.py:2098
+#: gui/widgets.py:2105
 msgid "Rename output..."
 msgstr ""
 
@@ -1572,7 +1572,7 @@ msgstr ""
 msgid "Repeat last"
 msgstr ""
 
-#: gui/widgets.py:2110
+#: gui/widgets.py:2117
 msgid "Repeat with these settings"
 msgstr ""
 
@@ -1592,7 +1592,7 @@ msgstr ""
 msgid "Retry suggested"
 msgstr ""
 
-#: gui/widgets.py:2084
+#: gui/widgets.py:2091
 msgid "Retry with suggested settings"
 msgstr ""
 
@@ -1600,7 +1600,7 @@ msgstr ""
 msgid "Reuse masks on unchanged frames"
 msgstr ""
 
-#: gui/widgets.py:2092
+#: gui/widgets.py:2099
 msgid "Reveal output folder"
 msgstr ""
 
@@ -1620,7 +1620,7 @@ msgstr ""
 msgid "Review mask"
 msgstr ""
 
-#: gui/widgets.py:2075
+#: gui/widgets.py:2082
 msgid "Review subtitle mask"
 msgstr ""
 
@@ -1632,7 +1632,7 @@ msgstr ""
 msgid "Run and monitor the batch"
 msgstr ""
 
-#: gui/widgets.py:2137
+#: gui/widgets.py:2144
 msgid "Run burned-in cleanup instead"
 msgstr ""
 
@@ -1736,11 +1736,11 @@ msgstr ""
 msgid "Select a queued item to enable preview tools."
 msgstr ""
 
-#: gui/region_controller.py:1199
+#: gui/region_controller.py:1201
 msgid "Select a timed region before choosing a clean reference"
 msgstr ""
 
-#: gui/region_controller.py:1139 gui/region_controller.py:481
+#: gui/region_controller.py:1141 gui/region_controller.py:481
 msgid "Select a timed region to attach a clean reference."
 msgstr ""
 
@@ -1752,7 +1752,7 @@ msgstr ""
 msgid "Select an item below the first row to move it up."
 msgstr ""
 
-#: gui/region_controller.py:1401
+#: gui/region_controller.py:1403
 msgid "Select or draw a region before editing it"
 msgstr ""
 
@@ -1940,7 +1940,7 @@ msgstr ""
 msgid "The batch is already running."
 msgstr ""
 
-#: gui/region_controller.py:1217
+#: gui/region_controller.py:1219
 msgid "The clean reference image could not be read"
 msgstr ""
 
@@ -1988,11 +1988,11 @@ msgstr ""
 msgid "Three things that make batch cleanup painless."
 msgstr ""
 
-#: gui/region_controller.py:1383
+#: gui/region_controller.py:1385
 msgid "Time must be a number"
 msgstr ""
 
-#: gui/region_controller.py:1385
+#: gui/region_controller.py:1387
 msgid "Time must be zero or greater"
 msgstr ""
 
@@ -2004,7 +2004,7 @@ msgstr ""
 msgid "Timed manual regions: {count} rectangle{suffix}"
 msgstr ""
 
-#: gui/region_controller.py:1013
+#: gui/region_controller.py:1015
 msgid "Timed region {index}"
 msgstr ""
 
@@ -2020,7 +2020,7 @@ msgstr ""
 msgid "Translated SRT ready to re-embed."
 msgstr ""
 
-#: gui/region_controller.py:1149 gui/region_controller.py:1168 gui/region_controller.py:523
+#: gui/region_controller.py:1151 gui/region_controller.py:1170 gui/region_controller.py:523
 msgid "Translation"
 msgstr ""
 
@@ -2044,7 +2044,7 @@ msgstr ""
 msgid "Undid mask correction"
 msgstr ""
 
-#: gui/region_controller.py:1496
+#: gui/region_controller.py:1498
 msgid "Undid region edit"
 msgstr ""
 
@@ -2068,7 +2068,7 @@ msgstr ""
 msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
 msgstr ""
 
-#: gui/region_controller.py:1434
+#: gui/region_controller.py:1436
 msgid "Use motion keyframes to time polygon regions"
 msgstr ""
 
@@ -2112,7 +2112,7 @@ msgstr ""
 msgid "Vertices"
 msgstr ""
 
-#: gui/widgets.py:1879
+#: gui/widgets.py:1883
 msgid "Video Files"
 msgstr ""
 
@@ -2120,7 +2120,7 @@ msgstr ""
 msgid "Video Subtitle Remover Pro"
 msgstr ""
 
-#: gui/widgets.py:1784
+#: gui/widgets.py:1788
 msgid "Videos and images supported"
 msgstr ""
 
@@ -2196,23 +2196,23 @@ msgstr ""
 msgid "You can change every setting later."
 msgstr ""
 
-#: gui/widgets.py:1845
+#: gui/widgets.py:1849
 msgid "disabled"
 msgstr ""
 
-#: gui/widgets.py:1847
+#: gui/widgets.py:1851
 msgid "drag and drop available"
 msgstr ""
 
-#: gui/widgets.py:1845
+#: gui/widgets.py:1849
 msgid "enabled"
 msgstr ""
 
-#: gui/widgets.py:1846 gui/widgets.py:2317
+#: gui/widgets.py:1850 gui/widgets.py:2324
 msgid "focused"
 msgstr ""
 
-#: gui/widgets.py:2316
+#: gui/widgets.py:2323
 msgid "not selected"
 msgstr ""
 
@@ -2220,7 +2220,7 @@ msgstr ""
 msgid "ready"
 msgstr ""
 
-#: gui/widgets.py:2316
+#: gui/widgets.py:2323
 msgid "selected"
 msgstr ""
 
@@ -2252,7 +2252,7 @@ msgstr ""
 msgid "{kind}: frames {start}-{end}"
 msgstr ""
 
-#: gui/region_controller.py:1269
+#: gui/region_controller.py:1271
 msgid "{method} alignment: {confidence:.1%}"
 msgstr ""
 

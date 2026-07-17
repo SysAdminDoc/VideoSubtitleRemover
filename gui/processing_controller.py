@@ -1032,7 +1032,7 @@ class ProcessingControllerMixin:
 
         summary = f"Batch finished: {complete} completed, {errors} failed"
         if review_count:
-            summary += f", {review_count} needs review"
+            summary += f", {review_count} to review"
         if paused:
             summary += f", {paused} paused"
         if cancelled:
@@ -1094,8 +1094,10 @@ class ProcessingControllerMixin:
         try:
             from backend.a11y import announce
             if paused:
+                _item = "item" if paused == 1 else "items"
+                _remain = "remains" if paused == 1 else "remain"
                 announce(
-                    f"Batch paused. {paused} item remains paused. "
+                    f"Batch paused. {paused} {_item} {_remain} paused. "
                     f"{complete} items processed.",
                     importance="high",
                 )

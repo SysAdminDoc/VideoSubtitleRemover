@@ -4856,7 +4856,7 @@ class VideoSubtitleRemoverApp(
             return
         item.cancel_requested = True
         self._update_status(
-            f"Cancelling {Path(item.file_path).name}", "warning", toast=True,
+            f"Stopping {Path(item.file_path).name}", "warning", toast=True,
         )
 
     def _repeat_item_with_settings(self, item_id: str):
@@ -5117,7 +5117,8 @@ class VideoSubtitleRemoverApp(
         else:
             self.queue_done_pill.pack_forget()
         if attention > 0:
-            self.queue_err_lbl.config(text=f" / {attention} needs attention")
+            _need = "needs" if attention == 1 else "need"
+            self.queue_err_lbl.config(text=f" / {attention} {_need} attention")
             self.queue_err_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_err_pill.pack_forget()

@@ -602,8 +602,8 @@ class MaskCorrectionWindow:
             self.queue_widgets[self.item.id].update_item(self.item)
         save_queue_state(self.queue)
         self._update_status(
-            tr("Prepared mask-correction rerun for {count} frame range(s)").format(
-                count=len(ranges)),
+            tr("Prepared mask-correction rerun for {count} frame range{suffix}").format(
+                count=len(ranges), suffix="" if len(ranges) == 1 else "s"),
             "success", toast=True)
         self.win.destroy()
         return True

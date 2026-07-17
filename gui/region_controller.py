@@ -963,8 +963,10 @@ class RegionSelectorWindow:
             elif confidences:
                 average = sum(confidences) / len(confidences)
                 self.ocr_feedback_var.set(
-                    tr("OCR found {count} region(s); average confidence {confidence:.0%}.").format(
-                        count=len(confidences), confidence=average))
+                    tr("OCR found {count} region{suffix}; average confidence {confidence:.0%}.").format(
+                        count=len(confidences),
+                        suffix="" if len(confidences) == 1 else "s",
+                        confidence=average))
             else:
                 self.ocr_feedback_var.set(
                     tr("No text found in this rectangle yet."))

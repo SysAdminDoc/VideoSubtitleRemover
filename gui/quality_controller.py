@@ -385,8 +385,9 @@ class QualityReviewControllerMixin:
         count = len(warning_items)
         first_name, first_messages = warning_items[0]
         first = first_messages[0] if first_messages else "review output settings"
+        item_word = "item" if count == 1 else "items"
         self._update_status(
-            f"Output quality preflight warning for {count} item(s): {first_name} - {first}",
+            f"Output quality preflight warning for {count} {item_word}: {first_name} - {first}",
             "warning",
             toast=True,
         )
