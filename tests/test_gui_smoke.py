@@ -83,6 +83,9 @@ class GuiSmokeTests(unittest.TestCase):
                     side_effect=lambda: tk.Toplevel(self._shared_root),
                 ):
                     app = self._g.VideoSubtitleRemoverApp()
+        # Synthetic drag tests should not initialize a real OCR backend.
+        # The dedicated live-overlay test invokes the probe seam directly.
+        app._live_region_ocr_enabled = False
         if withdraw:
             app.root.withdraw()
         return app
@@ -659,6 +662,30 @@ class GuiSmokeTests(unittest.TestCase):
 
             self._drag_canvas(canvas, (40, 124), (280, 154))
             app.root.update()
+
+            crop_shapes = []
+
+            class _LiveDetector:
+                def detect_with_confidence(self, crop, _threshold):
+                    crop_shapes.append(crop.shape[:2])
+                    return [(8, 5, 90, 22, 0.87)]
+
+            app._preview_detector = _LiveDetector()
+            app._preview_detector_lang = app.lang_var.get()
+
+            def immediate_thread(*_args, **kwargs):
+                return SimpleNamespace(start=kwargs["target"])
+
+            with mock.patch(
+                "gui.region_controller.threading.Thread",
+                side_effect=immediate_thread,
+            ):
+                selector._vsr_run_live_ocr((40, 124, 280, 154))
+            app.root.update()
+
+            self.assertEqual(crop_shapes, [(30, 240)])
+            self.assertIn("87%", selector._vsr_ocr_feedback.get())
+            self.assertEqual(len(selector._vsr_ocr_overlay_ids), 2)
 
             save_button = next(
                 widget for widget in self._walk_widgets(selector)

@@ -33,6 +33,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **Mask review now tunes dilation in real time.** A preview-pane slider
   updates the selected item and recomposes the mask from cached boxes, manual
   corrections, and imported mattes without running OCR again.
+- **Region drawing now provides live OCR feedback.** Rectangle drags launch a
+  throttled background probe that overlays detected text boxes and per-box
+  confidence, while preserving manual region editing when OCR is unavailable.
 
 - **Opt-in frozen build smoke for the committed spec.**
   `python -m scripts.frozen_build_smoke` builds the default-profile spec in an

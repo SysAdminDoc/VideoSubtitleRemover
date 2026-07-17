@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import logging
+import threading
+from functools import partial
 from pathlib import Path
 from typing import Any, List, Protocol, Tuple
 
@@ -203,6 +205,11 @@ class RegionSelectorWindow:
             self.rect_ids: List[int] = []
             self.drag_id = [None]
             self.drag_start = [0, 0]
+            self.ocr_overlay_ids: List[int] = []
+            self.ocr_probe_after_id = None
+            self.ocr_probe_inflight = False
+            self.ocr_pending_rect = None
+            self.ocr_probe_generation = 0
             self.shape_mode_var = tk.StringVar(value=tr("Rectangle"))
 
 
@@ -245,6 +252,16 @@ class RegionSelectorWindow:
                 shape_row, text=tr("Finish polygon"), command=self._finish_polygon,
                 style="secondary", size="sm", width=112)
             finish_polygon_btn.pack(side="right")
+
+            self.ocr_feedback_var = tk.StringVar(
+                value=tr("Drag a rectangle to preview OCR boxes and confidence."))
+            tk.Label(
+                self.win,
+                textvariable=self.ocr_feedback_var,
+                font=f(Theme.F_META),
+                bg=Theme.BG_OVERLAY,
+                fg=Theme.INFO,
+            ).pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, 0))
 
             # Frame slider for videos.
             if self.is_video and self.frame_count > 1:
@@ -615,6 +632,9 @@ class RegionSelectorWindow:
             self.win._vsr_clear_clean_reference = self._clear_clean_reference
             self.win._vsr_preview_clean_reference = self._preview_clean_reference
             self.win._vsr_clean_reference_status = self.reference_status_var
+            self.win._vsr_ocr_feedback = self.ocr_feedback_var
+            self.win._vsr_ocr_overlay_ids = self.ocr_overlay_ids
+            self.win._vsr_run_live_ocr = self._run_live_ocr_probe
 
             # Action row: Add another, Clear all, Save.
             actions = tk.Frame(self.win, bg=Theme.BG_OVERLAY)
@@ -751,6 +771,8 @@ class RegionSelectorWindow:
         self.cap.set(self._cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ok, f = self.cap.read()
         if ok:
+            self.ocr_probe_generation += 1
+            self._clear_live_ocr_overlay()
             self.current_frame[0] = f
             self._draw_image(f)
             self._draw_saved_rects()
@@ -763,6 +785,7 @@ class RegionSelectorWindow:
             self.polygon_points.append((px, py))
             self._draw_saved_rects()
             return
+        self._clear_live_ocr_overlay()
         self.drag_start[0], self.drag_start[1] = event.x, event.y
         if self.drag_id[0]:
             self.canvas.delete(self.drag_id[0])
@@ -777,24 +800,168 @@ class RegionSelectorWindow:
             return
         if self.drag_id[0]:
             self.canvas.coords(self.drag_id[0], self.drag_start[0], self.drag_start[1], event.x, event.y)
+            rect = self._drag_rect(event.x, event.y)
+            if rect is not None:
+                self._schedule_live_ocr_probe(rect)
 
     def on_release(self, event):
         if self.shape_mode_var.get() == tr("Polygon"):
             return
-        x1 = int(min(self.drag_start[0], event.x) / self.scale)
-        y1 = int(min(self.drag_start[1], event.y) / self.scale)
-        x2 = int(max(self.drag_start[0], event.x) / self.scale)
-        y2 = int(max(self.drag_start[1], event.y) / self.scale)
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(self.orig_w, x2), min(self.orig_h, y2)
-        if (x2 - x1) > 10 and (y2 - y1) > 5:
+        rect = self._drag_rect(event.x, event.y)
+        if rect is not None:
             self._record_history()
-            self.rects.append((x1, y1, x2, y2))
+            self.rects.append(rect)
             self._refresh_region_editor(f"rect:{len(self.rects) - 1}")
+            self._schedule_live_ocr_probe(rect)
         if self.drag_id[0] is not None:
             self.canvas.delete(self.drag_id[0])
             self.drag_id[0] = None
         self._draw_saved_rects()
+
+    def _drag_rect(self, x: int, y: int):
+        x1 = int(min(self.drag_start[0], x) / self.scale)
+        y1 = int(min(self.drag_start[1], y) / self.scale)
+        x2 = int(max(self.drag_start[0], x) / self.scale)
+        y2 = int(max(self.drag_start[1], y) / self.scale)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(self.orig_w, x2), min(self.orig_h, y2)
+        if (x2 - x1) <= 10 or (y2 - y1) <= 5:
+            return None
+        return (x1, y1, x2, y2)
+
+    def _clear_live_ocr_overlay(self):
+        for item_id in getattr(self, "ocr_overlay_ids", []):
+            try:
+                self.canvas.delete(item_id)
+            except tk.TclError:
+                pass
+        if hasattr(self, "ocr_overlay_ids"):
+            self.ocr_overlay_ids.clear()
+
+    def _schedule_live_ocr_probe(self, rect):
+        if getattr(self, "_live_region_ocr_enabled", True) is False:
+            return
+        self.ocr_pending_rect = tuple(rect)
+        if self.ocr_probe_inflight or self.ocr_probe_after_id is not None:
+            return
+        self.ocr_probe_after_id = self.win.after(
+            140, self._start_live_ocr_probe)
+
+    def _run_live_ocr_probe(self, rect):
+        """Test seam and explicit final-probe entry point."""
+        if self.ocr_probe_after_id is not None:
+            try:
+                self.win.after_cancel(self.ocr_probe_after_id)
+            except tk.TclError:
+                pass
+            self.ocr_probe_after_id = None
+        self.ocr_pending_rect = tuple(rect)
+        self._start_live_ocr_probe()
+
+    def _start_live_ocr_probe(self):
+        self.ocr_probe_after_id = None
+        if self.ocr_probe_inflight or self.ocr_pending_rect is None:
+            return
+        rect = self.ocr_pending_rect
+        self.ocr_pending_rect = None
+        x1, y1, x2, y2 = rect
+        frame = self.current_frame[0]
+        crop = frame[y1:y2, x1:x2].copy()
+        if crop.size == 0:
+            return
+        generation = self.ocr_probe_generation
+        lang = (
+            self.lang_var.get()
+            if hasattr(self, "lang_var")
+            else getattr(self.config, "detection_lang", "en")
+        )
+        threshold = getattr(self.config, "detection_threshold", 0.5)
+        self.ocr_probe_inflight = True
+        self.ocr_feedback_var.set(tr("Scanning this region for text..."))
+        worker = partial(
+            self._live_ocr_worker,
+            crop,
+            threshold,
+            lang,
+            rect,
+            generation,
+        )
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _live_ocr_worker(self, crop, threshold, lang, rect, generation):
+        error = None
+        results = []
+        try:
+            from backend.detection import SubtitleDetector
+            with self._detector_lock:
+                if (
+                    self._preview_detector is None
+                    or self._preview_detector_lang != lang
+                ):
+                    self._preview_detector = SubtitleDetector(lang=lang)
+                    self._preview_detector_lang = lang
+                results = self._preview_detector.detect_with_confidence(
+                    crop, threshold)
+        except Exception as exc:
+            logger.debug("Live region OCR preview failed", exc_info=True)
+            error = str(exc)
+        try:
+            self.root.after(
+                0,
+                self._apply_live_ocr_probe,
+                rect,
+                generation,
+                results,
+                error,
+            )
+        except (RuntimeError, tk.TclError):
+            pass
+
+    def _apply_live_ocr_probe(self, rect, generation, results, error=None):
+        self.ocr_probe_inflight = False
+        try:
+            alive = bool(self.win.winfo_exists())
+        except tk.TclError:
+            alive = False
+        if not alive:
+            return
+        if generation == self.ocr_probe_generation:
+            self._clear_live_ocr_overlay()
+            x1, y1, _x2, _y2 = rect
+            confidences = []
+            for bx1, by1, bx2, by2, confidence in results:
+                confidence = max(0.0, min(1.0, float(confidence)))
+                confidences.append(confidence)
+                sx1 = (x1 + bx1) * self.scale
+                sy1 = (y1 + by1) * self.scale
+                sx2 = (x1 + bx2) * self.scale
+                sy2 = (y1 + by2) * self.scale
+                self.ocr_overlay_ids.append(self.canvas.create_rectangle(
+                    sx1, sy1, sx2, sy2,
+                    outline=Theme.WARNING,
+                    width=2,
+                ))
+                self.ocr_overlay_ids.append(self.canvas.create_text(
+                    sx1 + 3,
+                    max(8, sy1 - 7),
+                    anchor="w",
+                    text=f"{confidence:.0%}",
+                    fill=Theme.WARNING,
+                    font=f(Theme.F_META, "bold"),
+                ))
+            if error:
+                self.ocr_feedback_var.set(
+                    tr("OCR preview unavailable; the region can still be saved."))
+            elif confidences:
+                average = sum(confidences) / len(confidences)
+                self.ocr_feedback_var.set(
+                    tr("OCR found {count} region(s); average confidence {confidence:.0%}.").format(
+                        count=len(confidences), confidence=average))
+            else:
+                self.ocr_feedback_var.set(
+                    tr("No text found in this rectangle yet."))
+        if self.ocr_pending_rect is not None:
+            self._schedule_live_ocr_probe(self.ocr_pending_rect)
 
     def _finish_polygon(self) -> bool:
         if len(self.polygon_points) < 3:
