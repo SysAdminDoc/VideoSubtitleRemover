@@ -469,6 +469,7 @@ class QualityReviewControllerMixin:
                 ),
                 stage_timings=item.stage_timings,
                 detection_stats=getattr(item, "detection_stats", {}),
+                output_contract=getattr(item, "output_contract_report", {}),
             )
             finished.append(record)
         return finished

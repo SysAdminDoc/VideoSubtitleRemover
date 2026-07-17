@@ -1344,6 +1344,10 @@ class GuiSmokeTests(unittest.TestCase):
             "unique_regions_detected": 2,
             "skip_reasons": {"frame_skip": 18},
         }
+        item.output_contract_report = {
+            "status": "preserved",
+            "color_preserved": True,
+        }
         item.started_at = self._g.datetime.now()
         item.completed_at = self._g.datetime.now()
 
@@ -1362,6 +1366,7 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(payload["stage_summary"]["slowest_stage"]["name"], "inpaint")
         self.assertEqual(payload["files"][0]["detection_stats"]["frames_ocr"], 6)
         self.assertEqual(payload["detection_summary"]["frames_skipped"], 18)
+        self.assertTrue(payload["files"][0]["color_preserved"])
 
     def test_soft_subtitle_action_remuxes_without_backend_remover(self):
         app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)

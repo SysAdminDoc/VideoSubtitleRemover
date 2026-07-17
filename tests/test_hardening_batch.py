@@ -201,6 +201,10 @@ class BatchReportTests(unittest.TestCase):
                     "unique_regions_detected": 4,
                     "skip_reasons": {"frame_skip": 60, "phash": 30},
                 },
+                output_contract={
+                    "status": "preserved",
+                    "color_preserved": True,
+                },
                 quality_report={
                     "tag": "Review",
                     "samples": 3,
@@ -233,6 +237,7 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["stage_timings"]["ocr"], 1.25)
         self.assertEqual(payload["detection_summary"]["frames_ocr"], 30)
         self.assertEqual(payload["detection_summary"]["frames_skipped"], 90)
+        self.assertTrue(payload["files"][0]["color_preserved"])
         self.assertEqual(
             payload["files"][0]["detection_stats"]["skip_reasons"]["phash"],
             30,
@@ -247,6 +252,7 @@ class BatchReportTests(unittest.TestCase):
         self.assertIn("slowest inpaint 2.0s", markdown)
         self.assertIn("Frames OCR'd: 30; skipped: 90; unique regions: 4", markdown)
         self.assertIn("Detection efficiency", markdown)
+        self.assertIn("| preserved |", markdown)
         self.assertEqual(payload["files"][0]["quality_gate"]["status"], "review")
         self.assertEqual(
             payload["files"][0]["quality_gate"]["ladderStep"],

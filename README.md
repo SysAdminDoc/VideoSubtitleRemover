@@ -49,6 +49,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
 - **Quality Self-Test** -- PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, and an optional side-by-side comparison PNG
 - **Detection Efficiency Reports** -- Batch summaries show frames OCR'd versus skipped, skip reasons, unique regions, stage timings, and an optimization hint when OCR dominates
+- **HDR Color Validation** -- Post-encode ffprobe checks record whether BT.2020/PQ/HLG and related color metadata were preserved in batch reports and output sidecars
 - **CLI + Presets** -- `python -m backend.processor --pattern ... --preset "YouTube (default)"`; nine built-in presets + user presets persisted to `%APPDATA%`
 - **Chyron vs Subtitle Filter** -- Keep persistent text (logos, lower-thirds) and remove dialogue, or vice versa
 - **Karaoke Grouping** -- Per-syllable boxes fuse into a single line mask so highlighted lyrics do not leak through the gaps

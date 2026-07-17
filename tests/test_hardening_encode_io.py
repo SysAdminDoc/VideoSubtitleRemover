@@ -976,9 +976,15 @@ class HdrPipelineTests(unittest.TestCase):
             )
         report = contract.report()
         self.assertEqual(report["container"], "mkv")
+        self.assertIsNone(report["color_preserved"])
         self.assertEqual(report["color"]["max_cll"], 1000)
         self.assertEqual(len(report["warnings"]), 2)
         self.assertTrue(all("Dropped stale" in item for item in report["warnings"]))
+        self.assertTrue(contract.color_preserved([]))
+        self.assertTrue(contract.color_preserved(["source audio is missing"]))
+        self.assertFalse(contract.color_preserved([
+            "color transfer is not preserved",
+        ]))
 
     def test_deinterlace_uses_lossless_contract_intermediate(self):
         from backend.io import _deinterlace_to_temp

@@ -95,6 +95,7 @@ class OutputContract:
             "preserve_audio": self.preserve_audio,
             "source_has_audio": self.source_has_audio,
             "hardware_requested": self.hardware_requested,
+            "color_preserved": None,
             "color": {
                 "primaries": getattr(meta, "color_primaries", ""),
                 "transfer": getattr(meta, "color_transfer", ""),
@@ -106,6 +107,29 @@ class OutputContract:
             },
             "warnings": list(self.warnings),
         }
+
+    def color_preserved(self, issues: List[str]) -> Optional[bool]:
+        """Return explicit color-validation status from the existing probe."""
+        if not self.preserve_color_metadata or self.color_metadata is None:
+            return None
+        if shutil.which("ffprobe") is None or any(
+            "output contract probe failed" in issue for issue in issues
+        ):
+            return None
+        color_markers = (
+            "HDR pixel format",
+            "color primaries",
+            "color transfer",
+            "color matrix",
+            "color range",
+            "mastering-display metadata",
+            "content-light metadata",
+            "dynamic HDR metadata",
+        )
+        return not any(
+            any(marker in issue for marker in color_markers)
+            for issue in issues
+        )
 
     def validate(self, path: str) -> Tuple[bool, List[str]]:
         if shutil.which("ffprobe") is None:

@@ -3956,6 +3956,17 @@ class SubtitleRemover:
         )
         self.last_output_contract["status"] = "preserved" if ok else "failed"
         self.last_output_contract["issues"] = list(issues)
+        color_preserved = contract.color_preserved(issues)
+        self.last_output_contract["color_preserved"] = (
+            color_preserved
+            if isinstance(color_preserved, bool) or color_preserved is None
+            else None
+        )
+        if color_preserved is False:
+            logger.warning(
+                "Output color metadata was not preserved: %s",
+                "; ".join(issues),
+            )
         if not ok:
             raise OutputIntegrityError(
                 "output contract mismatch: " + "; ".join(issues),

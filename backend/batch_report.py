@@ -185,6 +185,7 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "retry_errors": [],
         "source_timing": {"mode": "unknown"},
         "output_contract": {"status": "unknown"},
+        "color_preserved": None,
         "mask_export": {
             "requested": bool(_config_value(config, "export_mask_video", False)),
             "status": (
@@ -257,7 +258,8 @@ def finish_batch_item(record: dict, status: str, *,
                       elapsed_seconds: Optional[float] = None,
                       quality_report: Optional[dict] = None,
                       stage_timings: Optional[dict] = None,
-                      detection_stats: Optional[dict] = None) -> dict:
+                      detection_stats: Optional[dict] = None,
+                      output_contract: Optional[dict] = None) -> dict:
     record["status"] = status
     record["message"] = message
     if elapsed_seconds is not None:
@@ -274,6 +276,14 @@ def finish_batch_item(record: dict, status: str, *,
     )
     record["optimization_hint"] = _optimization_hint(
         record["stage_timings"], record["detection_stats"])
+    if isinstance(output_contract, dict):
+        record["output_contract"] = dict(output_contract)
+    contract_record = record.get("output_contract")
+    record["color_preserved"] = (
+        contract_record.get("color_preserved")
+        if isinstance(contract_record, dict)
+        else None
+    )
     if quality_report is not None:
         record["quality_report"] = _quality_report_record(quality_report)
         gate = _quality_gate_record(quality_report)
@@ -570,8 +580,8 @@ def _markdown_summary(payload: dict) -> str:
         lines.append(f"- Optimization: {_escape_md(optimization_hint)}")
     lines.extend([
         "",
-        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Message |",
-        "|---|---|---|---|---:|---|---:|---:|---|---|---|",
+        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Color | Message |",
+        "|---|---|---|---|---:|---|---:|---:|---|---|---|---|",
     ])
     review_notes: List[str] = []
     preflight_notes: List[str] = []
@@ -591,6 +601,7 @@ def _markdown_summary(payload: dict) -> str:
                 _format_seconds(record.get("elapsed_seconds")),
                 _format_quality_preflight(record.get("output_quality_preflight")),
                 _format_quality_gate(record.get("quality_gate")),
+                _format_color_preserved(record.get("color_preserved")),
                 _escape_md(record.get("message", "")),
             ])
             + " |"
@@ -759,6 +770,14 @@ def _format_quality_preflight(value: Any) -> str:
     if messages:
         return _escape_md("warning")
     return _escape_md(status)
+
+
+def _format_color_preserved(value: Any) -> str:
+    if value is True:
+        return "preserved"
+    if value is False:
+        return "not preserved"
+    return "n/a"
 
 
 _sidecar_logger = logging.getLogger(__name__ + ".sidecar")

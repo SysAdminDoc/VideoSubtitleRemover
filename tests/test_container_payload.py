@@ -121,6 +121,28 @@ class ContainerPayloadPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(processor.OutputIntegrityError, "container payload"):
             remover._validate_output_contract("output.mp4")
 
+    def test_output_contract_records_color_loss_before_failing(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._output_contract = mock.Mock()
+        remover._output_contract.validate.return_value = (
+            False,
+            ["color transfer is not preserved"],
+        )
+        remover._output_contract.report.return_value = {
+            "codec": "h265",
+            "color_preserved": None,
+        }
+        remover._output_contract.color_preserved.return_value = False
+        remover.last_container_payload = {"status": "preserved", "issues": []}
+
+        with self.assertLogs("backend.processor", level="WARNING"):
+            with self.assertRaisesRegex(
+                processor.OutputIntegrityError, "color transfer"
+            ):
+                remover._validate_output_contract("output.mp4")
+
+        self.assertFalse(remover.last_output_contract["color_preserved"])
+
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "ffmpeg/ffprobe required")
 class ContainerPayloadIntegrationTests(unittest.TestCase):

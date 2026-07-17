@@ -1322,6 +1322,7 @@ class EndToEndPipelineTests(unittest.TestCase):
             self.assertEqual(contract["codec"], "h265")
             self.assertEqual(contract["pixel_format"], "10-bit")
             self.assertTrue(contract["preserve_audio"])
+            self.assertTrue(contract["color_preserved"])
             self.assertEqual(contract["color"]["mastering_display"], mastering)
             self.assertEqual(contract["color"]["max_cll"], 1000)
             self.assertEqual(processor._probe_audio_stream_count(str(output)), 1)
@@ -1329,6 +1330,7 @@ class EndToEndPipelineTests(unittest.TestCase):
                 Path(str(output) + ".vsr.json").read_text(encoding="utf-8")
             )
             self.assertEqual(sidecar["outputContract"]["status"], "preserved")
+            self.assertTrue(sidecar["outputContract"]["color_preserved"])
 
     def test_av1_and_vp9_decode_serial_and_prefetch_paths(self):
         if shutil.which("ffmpeg") is None:
