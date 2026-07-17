@@ -282,7 +282,14 @@ def build_cyclonedx_sbom(
             if kind in {"PYMODULE", "PYSOURCE"}:
                 top_levels.add(name.split(".")[0])
             source_top = _site_package_top_level(source)
-            if source_top:
+            # Analysis-00.toc is written before a spec can post-filter native
+            # payloads. Count binary/data ownership only when that destination
+            # actually survived into the frozen artifact. Python modules live
+            # in PYZ and therefore remain analysis-derived.
+            if source_top and (
+                kind in {"PYMODULE", "PYSOURCE"}
+                or (dist is not None and _packaged_file(dist, name) is not None)
+            ):
                 top_levels.add(source_top)
 
         distribution_names = set()

@@ -218,6 +218,11 @@ class ReleaseVerificationTests(unittest.TestCase):
                         str(root / "site-packages" / "bundled_pkg" / "native.dll"),
                         "BINARY",
                     ),
+                    (
+                        "excluded.dll",
+                        str(root / "site-packages" / "excluded_pkg" / "excluded.dll"),
+                        "BINARY",
+                    ),
                 ],)),
                 encoding="utf-8",
             )
