@@ -70,6 +70,15 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 
 ## Installation
 
+### Prebuilt Download (no setup)
+
+Grab the latest standalone Windows x64 build from the
+[Releases page](https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/latest):
+download `VideoSubtitleRemoverPro-vX.Y.Z-win-x64.zip`, extract anywhere, and run
+`VideoSubtitleRemoverPro.exe` (or `Run_VSR_Pro.bat`). The build is unsigned, so
+Windows SmartScreen may prompt -- choose **More info -> Run anyway**, and verify
+the download against the published `.sha256` sidecar.
+
 ### Quick Install
 
 1. **Download** or clone this repository
