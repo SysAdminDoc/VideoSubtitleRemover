@@ -2,6 +2,17 @@
 
 All notable changes to VideoSubtitleRemover will be documented in this file.
 
+## [3.19.1] - 2026-07-17
+
+### Changed
+
+- **The desktop workbench now uses a quieter premium visual system.** The
+  preview and inspector form the primary two-column workspace, the onboarding
+  rail and redundant helper copy no longer consume the first viewport, and
+  borders, status pills, queue chrome, and typography follow a flatter,
+  more readable hierarchy. The primary cleanup action moves into the inspector
+  on desktop while remaining persistent with the queue at compact widths.
+
 ## [3.19.0] - 2026-07-17
 
 ### Fixed
