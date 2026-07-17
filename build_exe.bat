@@ -68,6 +68,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Opt-in proof for the committed spec itself. The normal release build below
+:: has its own frozen smoke; this slower lane catches spec-only drift too.
+if /I "%VSR_VERIFY_SPEC_BUILD%"=="1" (
+    "%PYTHON%" -m scripts.frozen_build_smoke
+    if errorlevel 1 (
+        echo Committed PyInstaller spec smoke failed.
+        exit /b 1
+    )
+)
+
 set "ICON_ARG="
 if exist "icon.ico" set "ICON_ARG=--icon icon.ico"
 set "RUNTIME_HOOKS=--runtime-hook assets\runtime_hook_mp.py"

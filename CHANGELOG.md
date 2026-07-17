@@ -4,6 +4,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Committed PyInstaller spec is now a real release input.** The default
+  `VideoSubtitleRemoverPro.spec` is explicitly tracked despite the general
+  generated-spec ignore rule, collects all NumPy 2.x data, binaries, and
+  submodules, and disables UPX for both the executable and collection.
+
+### Added
+
+- **Opt-in frozen build smoke for the committed spec.**
+  `python -m scripts.frozen_build_smoke` builds the default-profile spec in an
+  isolated work directory, launches the windowed executable without creating
+  GUI state, and requires a JSON marker proving NumPy and OpenCV imported and
+  the versioned startup path ran. `VSR_VERIFY_SPEC_BUILD=1` adds the same slow
+  gate to `build_exe.bat`; the normal frozen GUI smoke also imports NumPy and
+  OpenCV explicitly.
+
 ## [3.18.1] - 2026-07-17
 
 ### Fixed

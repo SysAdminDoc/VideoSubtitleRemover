@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 *.spec
+!VideoSubtitleRemoverPro.spec
 
 # Virtual environment
 venv/

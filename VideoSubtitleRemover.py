@@ -12,6 +12,7 @@ a hardcoded number so there is a single source of truth.
 import multiprocessing
 multiprocessing.freeze_support()
 
+import json
 import logging
 import logging.handlers
 import os
@@ -155,6 +156,14 @@ def _run_smoke_test() -> int:
 
         app = None
         try:
+            import cv2 as _cv2
+            import numpy as _np
+
+            logger.info(
+                "Smoke imports passed: numpy %s, cv2 %s",
+                _np.__version__,
+                _cv2.__version__,
+            )
             app = VideoSubtitleRemoverApp()
             app.root.withdraw()
             app.root.update_idletasks()
@@ -187,8 +196,57 @@ def _run_smoke_test() -> int:
                     pass
 
 
+def _run_frozen_import_smoke(result_path: str) -> int:
+    """Prove frozen core imports without constructing any visible UI."""
+    path = os.path.abspath(result_path)
+    payload = {
+        "schema": "vsr.frozen_import_smoke.v1",
+        "appName": APP_NAME,
+        "appVersion": APP_VERSION,
+        "startedMessage": f"{APP_NAME} v{APP_VERSION} started",
+        "imports": {},
+        "passed": False,
+        "error": "",
+    }
+    try:
+        import cv2 as _cv2
+        import numpy as _np
+
+        payload["imports"] = {
+            "cv2": str(_cv2.__version__),
+            "numpy": str(_np.__version__),
+        }
+        payload["passed"] = True
+        logger.info(payload["startedMessage"])
+    except Exception:
+        payload["error"] = traceback.format_exc()
+        logger.critical("Frozen import smoke failed:\n%s", payload["error"])
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    except Exception:
+        logger.critical(
+            "Frozen import smoke could not write %s:\n%s",
+            path,
+            traceback.format_exc(),
+        )
+        return 1
+    return 0 if payload["passed"] else 1
+
+
 def main():
     """Main entry point."""
+    if "--frozen-import-smoke" in sys.argv[1:]:
+        try:
+            result_index = sys.argv.index("--frozen-import-smoke") + 1
+            result_path = sys.argv[result_index]
+        except (IndexError, ValueError):
+            logger.error("--frozen-import-smoke requires a result path")
+            sys.exit(2)
+        sys.exit(_run_frozen_import_smoke(result_path))
+
     # RM-106: headless self-test for release verification. Must run before
     # the DPI/mainloop path so it can exit cleanly on a CI runner.
     if "--smoke-test" in sys.argv[1:]:
