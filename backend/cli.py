@@ -1075,7 +1075,29 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
     return False
 
 
-def _prepare_cli_args(args, parser):
+def _explicitly_provided_dests(parser, argv):
+    """Return the set of argument dests the user actually typed on the CLI.
+
+    argparse cannot distinguish an omitted flag from one passed with a value
+    that happens to equal the parser default, so preset merging must not rely
+    on ``value == default``. Inspecting the raw tokens recovers intent:
+    ``--threshold 0.5`` and ``--threshold=0.5`` both mark ``threshold`` as
+    explicit, so a preset can no longer silently discard it.
+    """
+    tokens = list(argv or [])
+    provided = set()
+    for action in parser._actions:
+        for opt in action.option_strings:
+            if any(tok == opt or tok.startswith(opt + "=") for tok in tokens):
+                provided.add(action.dest)
+                break
+    return provided
+
+
+def _prepare_cli_args(args, parser, argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    explicit_dests = _explicitly_provided_dests(parser, argv)
     soft_mode_count = sum(
         1 for enabled in (
             args.strip_soft_subtitles,
@@ -1100,7 +1122,6 @@ def _prepare_cli_args(args, parser):
             parser.error(
                 f"unknown preset {args.preset!r}; run --list-presets to see options"
             )
-        attr_to_default = {a.dest: a.default for a in parser._actions}
         field_to_attr = {
             "mode": "mode",
             "detection_threshold": "threshold",
@@ -1124,18 +1145,18 @@ def _prepare_cli_args(args, parser):
         }
         for fname, value in fields.items():
             if fname == "mode":
-                if getattr(args, "mode", None) == attr_to_default.get("mode"):
+                if "mode" not in explicit_dests:
                     args.mode = str(value).lower().replace(" ", "")
                 continue
             if fname in inverted_flags:
                 neg = inverted_flags[fname]
-                if hasattr(args, neg) and getattr(args, neg) == attr_to_default.get(neg):
+                if hasattr(args, neg) and neg not in explicit_dests:
                     setattr(args, neg, not bool(value))
                 continue
             attr = field_to_attr.get(fname, fname)
             if attr is None or not hasattr(args, attr):
                 continue
-            if getattr(args, attr) == attr_to_default.get(attr):
+            if attr not in explicit_dests:
                 setattr(args, attr, value)
         logger.info(f"Applied preset: {args.preset}")
 

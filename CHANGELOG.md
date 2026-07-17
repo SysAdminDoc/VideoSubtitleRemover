@@ -4,6 +4,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI `--preset` no longer discards an explicit flag that equals the parser
+  default.** `--preset X --threshold 0.5` previously dropped the user's 0.5 for
+  the preset's value because argparse cannot tell an omitted flag from one typed
+  with the default. Preset merging now inspects the raw argv tokens, so any flag
+  the user actually typed wins over the preset regardless of its value.
+
 ## [3.24.0] - 2026-07-17
 
 ### Fixed

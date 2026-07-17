@@ -50,14 +50,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-14 deep audit)
 
-- [ ] P2 — Confine VapourSynth `.vpy` execution to an allowlisted script directory
-  Why: `try_open_vpy` runs `exec()` on any `.vpy` reached by extension when `VSR_VAPOURSYNTH=1`; a batch/folder sweep could pull in an untrusted script and execute arbitrary code.
-  Where: `backend/vapoursynth_bridge.py` (exec of script), `backend/io.py` (`_open_capture` dispatch by extension).
-
-- [ ] P2 — Require a pinned commit SHA for CoTracker `torch.hub.load(trust_repo=True)`
-  Why: `trust_repo=True` executes the remote repo's `hubconf.py`; if the resolved revision is a mutable branch/tag rather than a pinned SHA, a moved/compromised upstream can run code (gated behind `VSR_COTRACKER`).
-  Where: `backend/segmentation.py` lines ~679-690; `resolve_remote_model_source` revision handling.
-
 - [ ] P3 — Stabilize GUI tests under a full-suite run
   Why: A couple of Tk tests pass in isolation but fail with "Tcl wasn't installed properly" when the whole suite creates many Tk roots in one process; this is test-harness resource exhaustion, not a product bug, but it makes the suite flaky.
   Where: `tests/test_gui_smoke.py`, `tests/test_hardening.py` (GUI test roots); needs per-test Tk teardown or subprocess isolation.
@@ -67,10 +59,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
   Where: `gui/app.py` advanced-settings tooltips; `gui/processing_controller.py` status strings.
 
 ## Audit Findings (2026-07-17 deep audit)
-
-- [ ] P3 — Explicit CLI value equal to the parser default is overridden by a preset
-  Why: Preset-vs-CLI precedence compares `getattr(args, attr) == default`, and argparse cannot distinguish an omitted flag from one typed with the default value, so `--preset X --threshold 0.5` silently discards the user's explicit 0.5 for the preset's value. Set the affected argument defaults to `None` and treat `None` as "unset" when merging presets.
-  Where: `backend/cli.py` ~1122-1128.
 
 - [ ] P3 — GUI silently downgrades backend-only inpaint modes to STTN
   Why: The GUI `InpaintMode` enum omits `MIGAN` (and registry modes), so a settings.json or imported preset carrying `"mode": "migan"` (e.g. saved from a `--mode migan` CLI run) resolves through `_coerce_gui_mode` to STTN with no notice. Either widen the GUI mapping or emit a load notice when a recognized backend mode is downgraded.

@@ -31,7 +31,7 @@ def _prepare(argv):
 
     parser = _cli._build_parser(list(_MODE_CHOICES))
     args = parser.parse_args(argv)
-    _cli._prepare_cli_args(args, parser)
+    _cli._prepare_cli_args(args, parser, argv)
     return args
 
 
@@ -74,6 +74,23 @@ class CliPresetMergeTests(unittest.TestCase):
         self.assertFalse(args.no_kalman)
         self.assertFalse(args.no_phash)
         self.assertFalse(args.no_scene_split)
+
+    def test_explicit_threshold_equal_to_default_beats_preset(self):
+        # TikTok preset sets detection_threshold 0.4; an explicit --threshold
+        # 0.5 (which equals the parser default) must survive the preset merge.
+        args = _prepare(["--validate-config", "--threshold", "0.5",
+                         "--preset", "TikTok / Vertical short"])
+        self.assertEqual(args.threshold, 0.5)
+
+    def test_omitted_threshold_takes_preset_value(self):
+        args = _prepare(["--validate-config",
+                         "--preset", "TikTok / Vertical short"])
+        self.assertEqual(args.threshold, 0.4)
+
+    def test_explicit_threshold_equals_form_beats_preset(self):
+        args = _prepare(["--validate-config", "--threshold=0.5",
+                         "--preset", "TikTok / Vertical short"])
+        self.assertEqual(args.threshold, 0.5)
 
     def test_explicit_no_kalman_overrides_preset(self):
         from backend import presets
