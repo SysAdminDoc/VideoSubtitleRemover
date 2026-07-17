@@ -25,6 +25,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **First-run setup has visible progress.** `Run_VSR_Pro.bat` launches a small
+  dependency-free Tk splash before the virtual environment exists. `setup.py`
+  publishes bounded, atomic stage updates in the system temp directory, the
+  splash reports hardware/runtime/OCR/video-tool progress, and both success
+  and failure paths clean up the status file. Console output remains available
+  for detailed troubleshooting.
 - **Masks can target the selected subtitle language.** An opt-in Advanced
   toggle and `--language-filter` keep OCR boxes whose recognized script does
   not match the configured subtitle language. RapidOCR, PaddleOCR, and EasyOCR

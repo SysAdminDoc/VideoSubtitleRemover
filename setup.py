@@ -13,6 +13,7 @@ import subprocess
 import platform
 import shutil
 import stat
+import tempfile
 from pathlib import Path
 
 from backend.dependency_profiles import (
@@ -31,6 +32,47 @@ PIP_INSTALL_TIMEOUT_SECONDS = 1800
 MINIMUM_PYTHON = (3, 11)
 DIRECTML_PACKAGE_VERSION = "1.24.4"
 DIRECTML_PACKAGE_SPEC = f"onnxruntime-directml=={DIRECTML_PACKAGE_VERSION}"
+SETUP_PROGRESS_ENV = "VSR_SETUP_PROGRESS_FILE"
+
+
+def _setup_progress_path():
+    """Return a launcher-owned temp status path, rejecting broader writes."""
+    raw = os.environ.get(SETUP_PROGRESS_ENV, "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    try:
+        resolved = path.resolve()
+        temp_root = Path(tempfile.gettempdir()).resolve()
+    except OSError:
+        return None
+    if resolved.parent != temp_root:
+        return None
+    if not resolved.name.startswith("vsr-pro-setup-"):
+        return None
+    if resolved.suffix.lower() != ".status":
+        return None
+    return resolved
+
+
+def write_setup_progress(message, percent, state="RUNNING"):
+    """Atomically publish one bounded setup status for the optional splash."""
+    path = _setup_progress_path()
+    if path is None:
+        return False
+    safe_state = str(state).strip().upper()
+    if safe_state not in {"RUNNING", "DONE", "ERROR"}:
+        safe_state = "RUNNING"
+    safe_message = " ".join(str(message).replace("|", " ").split())[:240]
+    safe_percent = max(0, min(100, int(percent)))
+    temporary = path.with_suffix(".tmp")
+    try:
+        temporary.write_text(
+            f"{safe_state}|{safe_message}|{safe_percent}", encoding="utf-8")
+        temporary.replace(path)
+        return True
+    except OSError:
+        return False
 
 
 def _dependency_profile_name(gpu_info=None):
@@ -622,13 +664,24 @@ if "%VSR_SETUP_REPAIR%"=="1" (
         echo  Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup.
         echo.
     )
+    set "VSR_SETUP_PROGRESS_FILE=%TEMP%\\vsr-pro-setup-!RANDOM!-!RANDOM!.status"
+    >"!VSR_SETUP_PROGRESS_FILE!" echo RUNNING^|Preparing the local runtime...^|2
+    where pythonw.exe >nul 2>nul
+    if not errorlevel 1 (
+        start "" /b pythonw.exe "scripts\\setup_splash.py" --progress-file "!VSR_SETUP_PROGRESS_FILE!"
+    )
     python setup.py --repair
     if errorlevel 1 (
+        >"!VSR_SETUP_PROGRESS_FILE!" echo ERROR^|Setup failed. Review the console details.^|100
         echo.
         echo  Setup did not complete. Review the messages above, then try again.
         pause
+        del /q "!VSR_SETUP_PROGRESS_FILE!" >nul 2>nul
         exit /b 1
     )
+    timeout /t 1 /nobreak >nul
+    del /q "!VSR_SETUP_PROGRESS_FILE!" >nul 2>nul
+    set "VSR_SETUP_PROGRESS_FILE="
 )
 
 echo Launching Video Subtitle Remover Pro...
@@ -788,6 +841,7 @@ def parse_setup_args(argv=None):
 def main(argv=None):
     """Main setup function."""
     args = parse_setup_args(argv)
+    write_setup_progress("Checking Python runtime...", 8)
     print_banner()
     
     if platform.system() != "Windows":
@@ -799,6 +853,7 @@ def main(argv=None):
         sys.exit(1)
     
     # Step 2: Detect GPU
+    write_setup_progress("Detecting graphics hardware...", 20)
     gpu_info = _apply_profile_override(detect_gpu(), args.profile)
     profile_name = _dependency_profile_name(gpu_info)
     try:
@@ -809,24 +864,29 @@ def main(argv=None):
     print(f"  Dependency profile: {profile_name}")
     
     # Step 3: Create virtual environment
+    write_setup_progress("Creating the isolated runtime...", 35)
     if not create_virtual_env(repair=args.repair):
         sys.exit(1)
     
     # Step 4: Install PyTorch
+    write_setup_progress("Installing the compute runtime...", 50)
     if not install_pytorch(gpu_info):
         sys.exit(1)
     
     # Step 5: Install the default RapidOCR/ONNX dependency set. PaddleOCR and
     # its PaddlePaddle runtime remain isolated opt-ins because they install a
     # competing OpenCV wheel into the environment.
+    write_setup_progress("Installing OCR and application dependencies...", 72)
     if not install_dependencies(gpu_info):
         sys.exit(1)
     
     # Check FFmpeg
+    write_setup_progress("Checking video tools...", 92)
     ffmpeg_ok = check_ffmpeg()
     
     # Create launcher
     create_launcher()
+    write_setup_progress("Setup complete. Starting the application...", 100, "DONE")
     
     # Done!
     print(f"\n{Colors.GREEN}{'='*60}{Colors.END}")
@@ -855,8 +915,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        write_setup_progress("Setup was cancelled.", 100, "ERROR")
         print(f"\n{Colors.YELLOW}Setup cancelled.{Colors.END}")
         sys.exit(1)
     except Exception as e:
+        write_setup_progress("Setup failed. Review the console details.", 100, "ERROR")
         print(f"\n{Colors.RED}Setup failed: {e}{Colors.END}")
         sys.exit(1)

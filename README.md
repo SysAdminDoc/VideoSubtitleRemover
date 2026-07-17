@@ -90,6 +90,7 @@ the download against the published `.sha256` sidecar.
 2. **Double-click** `Run_VSR_Pro.bat` — first run automatically:
    - Creates a virtual environment
    - Detects your GPU and installs appropriate packages
+   - Shows a compact six-stage setup splash while the runtime is prepared
    - Installs the reviewed RapidOCR/ONNX runtime for the detected hardware
    - Launches the application
    - On later launches, verifies core packages and repairs a broken `venv`

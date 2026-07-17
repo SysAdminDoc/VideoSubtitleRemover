@@ -31,13 +31,24 @@ if "%VSR_SETUP_REPAIR%"=="1" (
         echo  Set VSR_ALLOW_PY314_CPU=1 before launch only for CPU-only setup.
         echo.
     )
+    set "VSR_SETUP_PROGRESS_FILE=%TEMP%\vsr-pro-setup-!RANDOM!-!RANDOM!.status"
+    >"!VSR_SETUP_PROGRESS_FILE!" echo RUNNING^|Preparing the local runtime...^|2
+    where pythonw.exe >nul 2>nul
+    if not errorlevel 1 (
+        start "" /b pythonw.exe "scripts\setup_splash.py" --progress-file "!VSR_SETUP_PROGRESS_FILE!"
+    )
     python setup.py --repair
     if errorlevel 1 (
+        >"!VSR_SETUP_PROGRESS_FILE!" echo ERROR^|Setup failed. Review the console details.^|100
         echo.
         echo  Setup did not complete. Review the messages above, then try again.
         pause
+        del /q "!VSR_SETUP_PROGRESS_FILE!" >nul 2>nul
         exit /b 1
     )
+    timeout /t 1 /nobreak >nul
+    del /q "!VSR_SETUP_PROGRESS_FILE!" >nul 2>nul
+    set "VSR_SETUP_PROGRESS_FILE="
 )
 
 echo Launching Video Subtitle Remover Pro...

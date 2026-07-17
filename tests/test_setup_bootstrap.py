@@ -334,6 +334,39 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertFalse(self.setup_mod.parse_setup_args([]).repair)
         self.assertTrue(self.setup_mod.parse_setup_args(["--repair"]).repair)
 
+    def test_setup_progress_is_atomic_and_temp_directory_bound(self):
+        progress = Path(tempfile.gettempdir()) / (
+            f"vsr-pro-setup-test-{os.getpid()}.status")
+        progress.unlink(missing_ok=True)
+        temporary = progress.with_suffix(".tmp")
+        temporary.unlink(missing_ok=True)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                {self.setup_mod.SETUP_PROGRESS_ENV: str(progress)},
+            ):
+                self.assertTrue(
+                    self.setup_mod.write_setup_progress(
+                        "Installing | OCR\npackages", 72))
+            self.assertEqual(
+                progress.read_text(encoding="utf-8"),
+                "RUNNING|Installing OCR packages|72",
+            )
+            self.assertFalse(temporary.exists())
+        finally:
+            progress.unlink(missing_ok=True)
+            temporary.unlink(missing_ok=True)
+
+    def test_setup_progress_rejects_non_temp_target(self):
+        target = Path(__file__).with_name("vsr-pro-setup-test.status")
+        with mock.patch.dict(
+            os.environ,
+            {self.setup_mod.SETUP_PROGRESS_ENV: str(target)},
+        ):
+            self.assertFalse(
+                self.setup_mod.write_setup_progress("blocked", 10))
+        self.assertFalse(target.exists())
+
     def test_generated_launchers_match_tracked_files(self):
         root = Path(__file__).resolve().parents[1]
         launchers = [
@@ -361,6 +394,8 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
             self.assertIn("setup.py --repair", content, name)
             self.assertIn("import cv2, PIL, numpy", content, name)
             self.assertNotIn("setup.py\n", content, name)
+        self.assertIn("scripts\\setup_splash.py", tracked["Run_VSR_Pro.bat"])
+        self.assertIn("VSR_SETUP_PROGRESS_FILE", tracked["Run_VSR_Pro.bat"])
 
     def test_setup_script_has_no_stdin_prompt(self):
         root = Path(__file__).resolve().parents[1]
