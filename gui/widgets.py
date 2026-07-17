@@ -67,6 +67,9 @@ def _build_cli_command(item: QueueItem) -> str:
     lang = getattr(cfg, "detection_lang", "en") or "en"
     if lang != "en":
         args.extend(["-l", lang])
+    ocr_engine = getattr(cfg, "detection_engine", "auto") or "auto"
+    if ocr_engine != "auto":
+        args.extend(["--ocr-engine", ocr_engine])
     crf = getattr(cfg, "output_quality", 23)
     if crf != 23:
         args.extend(["--crf", str(crf)])

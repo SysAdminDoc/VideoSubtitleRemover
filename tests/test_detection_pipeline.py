@@ -195,6 +195,44 @@ class DetectionCascadeTests(unittest.TestCase):
         self.assertEqual(detector._engine_name, "PaddleOCR")
         self.assertIs(detector._paddle_model, paddle_model)
 
+    def test_forced_paddle_skips_earlier_and_later_engines(self):
+        paddle_model = object()
+        paddle = types.ModuleType("backend.paddle_compat")
+        paddle.build_paddleocr = lambda lang, device: paddle_model
+
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                sys.modules,
+                {"backend.paddle_compat": paddle},
+            ):
+                with mock.patch.object(
+                    detection,
+                    "_module_can_import",
+                    side_effect=AssertionError("unexpected engine probe"),
+                ):
+                    detector = detection.SubtitleDetector(
+                        device="cpu", lang="en", engine="paddleocr")
+
+        self.assertEqual(detector.engine, "paddleocr")
+        self.assertEqual(detector._engine_name, "PaddleOCR")
+        self.assertIs(detector._paddle_model, paddle_model)
+        self.assertIsNone(detector._rapid_model)
+
+    def test_forced_opencv_uses_dependency_free_fallback(self):
+        with _fresh_detection_module() as detection:
+            with mock.patch.object(
+                detection,
+                "_module_can_import",
+                side_effect=AssertionError("unexpected engine probe"),
+            ):
+                detector = detection.SubtitleDetector(
+                    device="cpu", lang="en", engine="opencv")
+
+        self.assertEqual(detector.engine, "opencv")
+        self.assertEqual(detector._engine_name, "OpenCV fallback")
+        self.assertIsNone(detector._rapid_model)
+        self.assertIsNone(detector._paddle_model)
+
     def test_paddleocr_vl_flag_falls_back_to_paddle_when_server_absent(self):
         blocked = {"rapidocr", "rapidocr_onnxruntime"}
         real_import = builtins.__import__
@@ -408,6 +446,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         from gui.widgets import _build_cli_command
         cfg = ProcessingConfig()
         cfg.detection_lang = "ja"
+        cfg.detection_engine = "paddleocr"
         cfg.output_quality = 18
         cfg.output_codec = "h265"
         cfg.mask_dilate_px = 12
@@ -420,6 +459,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         )
         cmd = _build_cli_command(item)
         self.assertIn("-l ja", cmd)
+        self.assertIn("--ocr-engine paddleocr", cmd)
         self.assertIn("--crf 18", cmd)
         self.assertIn("--codec h265", cmd)
         self.assertIn("--mask-dilate 12", cmd)

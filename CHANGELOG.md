@@ -25,6 +25,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Advanced OCR selection is now reproducible.** Automatic detection remains
+  the default, while the GUI and `--ocr-engine` can pin RapidOCR, OpenCV 5 DNN,
+  PaddleOCR, EasyOCR, or the built-in OpenCV fallback. Preview, auto-band,
+  throughput-estimation, queue caching, saved settings, and CLI reproduction
+  all honor the same choice; missing optional engines fall back explicitly.
 - **First-run choices now perform useful setup.** The welcome flow can apply
   YouTube, Film, or Fast profiles, enable automatic subtitle-band detection,
   and launch the existing one-frame test cleanup. New Film and Fast built-ins

@@ -131,6 +131,7 @@ class ProcessingConfig:
     subtitle_area: Optional[Tuple[int, int, int, int]] = None
     detection_threshold: float = 0.5
     detection_lang: str = "en"
+    detection_engine: str = "auto"
     detection_frame_skip: int = 0  # 0=detect every frame, N=reuse mask for N frames
     # RM-24 vertical-text mode: when on, detectors that support a
     # rotation flag are told to expect top-to-bottom text columns
@@ -635,6 +636,12 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         getattr(config, "manual_mask_corrections", None))
     config.detection_threshold = _coerce_float(config.detection_threshold, 0.5, 0.1, 1.0)
     config.detection_lang = _coerce_text(config.detection_lang, "en", 24).lower()
+    config.detection_engine = _coerce_text(
+        config.detection_engine, "auto", 24).lower()
+    if config.detection_engine not in {
+        "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
+    }:
+        config.detection_engine = "auto"
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)
     config.detection_vertical = _coerce_bool(config.detection_vertical, False)
     config.whisper_fallback = _coerce_bool(config.whisper_fallback, False)

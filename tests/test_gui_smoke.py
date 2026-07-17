@@ -492,8 +492,10 @@ class GuiSmokeTests(unittest.TestCase):
             # Toggle a known field via the tk variable and confirm it
             # propagates into the persisted config.
             app.preserve_audio_var.set(False)
+            app.ocr_engine_var.set("PaddleOCR")
             app._sync_config_from_ui()
             self.assertFalse(app.config.preserve_audio)
+            self.assertEqual(app.config.detection_engine, "paddleocr")
         finally:
             self._destroy_app(app)
 
@@ -672,6 +674,7 @@ class GuiSmokeTests(unittest.TestCase):
 
             app._preview_detector = _LiveDetector()
             app._preview_detector_lang = app.lang_var.get()
+            app._preview_detector_engine = app.config.detection_engine
 
             def immediate_thread(*_args, **kwargs):
                 return SimpleNamespace(start=kwargs["target"])
@@ -892,6 +895,7 @@ class GuiSmokeTests(unittest.TestCase):
                 _engine_name="test detector",
             )
             app._preview_detector_lang = app.lang_var.get()
+            app._preview_detector_engine = app.config.detection_engine
 
             def immediate_thread(*_args, **kwargs):
                 return SimpleNamespace(start=kwargs["target"])
@@ -1212,6 +1216,7 @@ class GuiSmokeTests(unittest.TestCase):
                 app._preview_bg_mask(
                     raw_frame,
                     "en",
+                    "auto",
                     0.5,
                     app.config.subtitle_areas,
                     False,

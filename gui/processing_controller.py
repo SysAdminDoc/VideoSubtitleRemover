@@ -472,8 +472,9 @@ class ProcessingControllerMixin:
             device = self._gui_to_backend_device(
                 item.config.use_gpu, item.config.gpu_id)
             lang = getattr(item.config, 'detection_lang', 'en')
+            ocr_engine = getattr(item.config, 'detection_engine', 'auto')
             vertical = bool(getattr(item.config, 'detection_vertical', False))
-            cache_key = (backend_mode, device, lang, vertical)
+            cache_key = (backend_mode, device, lang, ocr_engine, vertical)
 
             backend_config = gui_to_backend_config(item.config)
 
@@ -491,6 +492,7 @@ class ProcessingControllerMixin:
                         mode=backend_mode,
                         device=device,
                         detection_lang=lang,
+                        detection_engine=ocr_engine,
                         detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
                     )
                     probe = BackendRemover(probe_cfg)
@@ -919,12 +921,20 @@ class ProcessingControllerMixin:
                     return 0.0
                 from backend.detection import SubtitleDetector
                 lang = first_video.config.detection_lang or "en"
+                engine = getattr(
+                    first_video.config, "detection_engine", "auto") or "auto"
                 with self._detector_lock:
                     detector = self._preview_detector
-                    if detector is None or self._preview_detector_lang != lang:
-                        detector = SubtitleDetector(lang=lang)
+                    if (
+                        detector is None
+                        or self._preview_detector_lang != lang
+                        or getattr(
+                            self, "_preview_detector_engine", None) != engine
+                    ):
+                        detector = SubtitleDetector(lang=lang, engine=engine)
                         self._preview_detector = detector
                         self._preview_detector_lang = lang
+                        self._preview_detector_engine = engine
                 threshold = getattr(first_video.config, "detection_threshold", 0.5)
                 t0 = time.monotonic()
                 frames_done = 0

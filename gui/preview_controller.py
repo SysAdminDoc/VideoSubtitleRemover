@@ -1194,6 +1194,7 @@ class PreviewControllerMixin:
             self._preview_label.config(image="", text="")
             self._preview_photo = None
             lang = self.lang_var.get()
+            ocr_engine = getattr(self.config, "detection_engine", "auto")
             threshold = getattr(self.config, 'detection_threshold', 0.5)
             timed_spans = getattr(self.config, "subtitle_region_spans", None) or []
             keyframe_tracks = (
@@ -1240,7 +1241,7 @@ class PreviewControllerMixin:
 
                     if show_mask:
                         self._preview_bg_mask(
-                            raw_frame, lang, threshold, sub_areas,
+                            raw_frame, lang, ocr_engine, threshold, sub_areas,
                             timed_regions_configured, manual_shapes,
                             item_file, item_id, preview_request_id,
                             max_w, max_h, _cv2, to_pil,
@@ -1277,7 +1278,7 @@ class PreviewControllerMixin:
                 tone="error",
             )
 
-    def _preview_bg_mask(self, raw_frame, lang, threshold, sub_areas,
+    def _preview_bg_mask(self, raw_frame, lang, ocr_engine, threshold, sub_areas,
                           timed_regions_configured, manual_shapes,
                           item_file, item_id, preview_request_id,
                           max_w, max_h, _cv2, to_pil,
@@ -1286,9 +1287,16 @@ class PreviewControllerMixin:
         try:
             from backend.detection import SubtitleDetector
             with self._detector_lock:
-                if self._preview_detector is None or self._preview_detector_lang != lang:
-                    self._preview_detector = SubtitleDetector(lang=lang)
+                if (
+                    self._preview_detector is None
+                    or self._preview_detector_lang != lang
+                    or getattr(
+                        self, "_preview_detector_engine", None) != ocr_engine
+                ):
+                    self._preview_detector = SubtitleDetector(
+                        lang=lang, engine=ocr_engine)
                     self._preview_detector_lang = lang
+                    self._preview_detector_engine = ocr_engine
                 det = self._preview_detector
             frame_copy = raw_frame.copy()
             if sub_areas or manual_shapes:

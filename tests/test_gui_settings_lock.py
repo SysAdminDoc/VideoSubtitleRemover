@@ -37,6 +37,7 @@ class GuiSettingsLockTests(unittest.TestCase):
         app.region_reset_btn = _SetEnabledStub()
         app.adv_toggle = _SetEnabledStub()
         app.lang_combo = _ConfigStub()
+        app.ocr_engine_combo = _ConfigStub()
         app.gpu_combo = _ConfigStub()
         app.time_start_entry = _ConfigStub()
         app.time_end_entry = _ConfigStub()
@@ -58,6 +59,7 @@ class GuiSettingsLockTests(unittest.TestCase):
 
         self.assertEqual([slider.calls for slider in app._settings_sliders], [[False], [False]])
         self.assertEqual(app.lang_combo.calls[-1]["state"], "disabled")
+        self.assertEqual(app.ocr_engine_combo.calls[-1]["state"], "disabled")
         self.assertEqual(app.gpu_combo.calls[-1]["state"], "disabled")
         self.assertEqual(app.time_start_entry.calls[-1]["state"], "disabled")
         self.assertEqual(app.time_end_entry.calls[-1]["state"], "disabled")
@@ -72,6 +74,7 @@ class GuiSettingsLockTests(unittest.TestCase):
 
         self.assertEqual([slider.calls for slider in app._settings_sliders], [[True], [True]])
         self.assertEqual(app.lang_combo.calls[-1]["state"], "readonly")
+        self.assertEqual(app.ocr_engine_combo.calls[-1]["state"], "readonly")
         self.assertEqual(app.gpu_combo.calls[-1]["state"], "readonly")
         self.assertEqual(app.region_reset_btn.calls[-1], True)
         self.assertEqual(app.mode_picker._segments["lama"].calls[-1]["state"], "normal")

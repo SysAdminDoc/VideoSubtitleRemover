@@ -612,6 +612,7 @@ class SubtitleRemover:
             self.config.device,
             lang=self.config.detection_lang,
             vertical=self.config.detection_vertical,
+            engine=self.config.detection_engine,
         )
         self.inpainter = self._create_inpainter()
         self.on_progress: Optional[Callable[[float, str], None]] = None

@@ -876,6 +876,7 @@ class RegionSelectorWindow:
             else getattr(self.config, "detection_lang", "en")
         )
         threshold = getattr(self.config, "detection_threshold", 0.5)
+        engine = getattr(self.config, "detection_engine", "auto")
         self.ocr_probe_inflight = True
         self.ocr_feedback_var.set(tr("Scanning this region for text..."))
         worker = partial(
@@ -883,12 +884,15 @@ class RegionSelectorWindow:
             crop,
             threshold,
             lang,
+            engine,
             rect,
             generation,
         )
         threading.Thread(target=worker, daemon=True).start()
 
-    def _live_ocr_worker(self, crop, threshold, lang, rect, generation):
+    def _live_ocr_worker(
+        self, crop, threshold, lang, engine, rect, generation
+    ):
         error = None
         results = []
         try:
@@ -897,9 +901,13 @@ class RegionSelectorWindow:
                 if (
                     self._preview_detector is None
                     or self._preview_detector_lang != lang
+                    or getattr(
+                        self, "_preview_detector_engine", None) != engine
                 ):
-                    self._preview_detector = SubtitleDetector(lang=lang)
+                    self._preview_detector = SubtitleDetector(
+                        lang=lang, engine=engine)
                     self._preview_detector_lang = lang
+                    self._preview_detector_engine = engine
                 results = self._preview_detector.detect_with_confidence(
                     crop, threshold)
         except Exception as exc:

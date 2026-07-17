@@ -337,6 +337,7 @@ class ProcessingConfig:
 
     subtitle_area: Optional[Tuple[int, int, int, int]] = None
     detection_lang: str = "en"
+    detection_engine: str = "auto"
     detection_threshold: float = 0.5
     detection_vertical: bool = False
     whisper_fallback: bool = False
@@ -489,6 +490,12 @@ class ProcessingConfig:
         self.manual_mask_corrections = normalize_mask_correction_list(
             self.manual_mask_corrections)
         self.detection_lang = _coerce_text(self.detection_lang, "en", 24).lower()
+        self.detection_engine = _coerce_text(
+            self.detection_engine, "auto", 24).lower()
+        if self.detection_engine not in {
+            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
+        }:
+            self.detection_engine = "auto"
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
         self.detection_vertical = _coerce_bool(self.detection_vertical, False)
         self.whisper_fallback = _coerce_bool(self.whisper_fallback, False)

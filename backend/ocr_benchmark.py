@@ -258,21 +258,25 @@ def run_default_detector_benchmark(*, device: str = "cpu", lang: str = "en",
     """Build the default detector cascade and benchmark it."""
     from backend.detection import SubtitleDetector
     preferences = {
-        "auto": None,
-        "opencv-dnn": "opencv",
-        "rapidocr": "onnxruntime",
+        "auto": (None, "auto"),
+        "opencv-dnn": ("opencv", "opencv-dnn"),
+        "rapidocr": ("onnxruntime", "rapidocr"),
+        "paddleocr": (None, "paddleocr"),
+        "easyocr": (None, "easyocr"),
+        "opencv": (None, "opencv"),
     }
     if engine not in preferences:
         raise ValueError(f"Unsupported OCR benchmark engine: {engine}")
     before_load = _process_memory()
     old_preference = os.environ.get("VSR_RAPIDOCR_ENGINE")
     try:
-        preference = preferences[engine]
+        preference, detector_engine = preferences[engine]
         if preference is None:
             os.environ.pop("VSR_RAPIDOCR_ENGINE", None)
         else:
             os.environ["VSR_RAPIDOCR_ENGINE"] = preference
-        detector = SubtitleDetector(device=device, lang=lang)
+        detector = SubtitleDetector(
+            device=device, lang=lang, engine=detector_engine)
     finally:
         if old_preference is None:
             os.environ.pop("VSR_RAPIDOCR_ENGINE", None)

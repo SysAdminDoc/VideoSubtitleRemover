@@ -83,7 +83,7 @@ def test_subtitle_remover_uses_injected_provider_for_selection_and_factory():
     assert remover.config.device == "cpu"
     assert provider.created == [("sttn", "cpu", "cpu")]
     detector_factory.assert_called_once_with(
-        "cpu", lang="en", vertical=False
+        "cpu", lang="en", vertical=False, engine="auto"
     )
 
 

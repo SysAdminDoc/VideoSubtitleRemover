@@ -867,9 +867,12 @@ def _build_parser(mode_choices):
                             "the meets_floors verdict.")
     parser.add_argument(
         "--ocr-engine",
-        choices=("auto", "opencv-dnn", "rapidocr"),
+        choices=(
+            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
+        ),
         default="auto",
-        help="Select the provider used by --ocr-benchmark.",
+        help=("Select the OCR detector for processing or --ocr-benchmark; "
+              "auto uses the best available engine."),
     )
     parser.add_argument("--dry-run", action="store_true",
                        help="Validate the run without encoding: probe each input, "
@@ -1187,6 +1190,7 @@ def _build_processing_config(
         lama_super_fast=args.fast,
         preserve_audio=not args.no_audio,
         detection_lang=args.lang,
+        detection_engine=args.ocr_engine,
         detection_threshold=args.threshold,
         detection_vertical=args.vertical,
         whisper_fallback=args.whisper_fallback,

@@ -484,14 +484,19 @@ class MaskCorrectionWindow:
             with lock:
                 detector = getattr(self, "_preview_detector", None)
                 lang = getattr(self.item.config, "detection_lang", "en")
+                engine = getattr(
+                    self.item.config, "detection_engine", "auto")
                 if (
                     detector is None
                     or getattr(
                         self, "_preview_detector_lang", None) != lang
+                    or getattr(
+                        self, "_preview_detector_engine", None) != engine
                 ):
-                    detector = SubtitleDetector(lang=lang)
+                    detector = SubtitleDetector(lang=lang, engine=engine)
                     self._preview_detector = detector
                     self._preview_detector_lang = lang
+                    self._preview_detector_engine = engine
             boxes = detector.detect(
                 frame, getattr(self.item.config, "detection_threshold", 0.5))
             for x1, y1, x2, y2 in boxes:

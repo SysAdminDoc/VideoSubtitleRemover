@@ -205,6 +205,7 @@ class VideoSubtitleRemoverApp(
         self._output_dir: Optional[Path] = None  # None = use input_dir/output/
         self._preview_detector = None  # cached SubtitleDetector for mask preview
         self._preview_detector_lang = None  # lang the cached detector was created with
+        self._preview_detector_engine = None
         self._detector_lock = threading.Lock()  # serializes _preview_detector access
         self._preview_mask_cache = None
         self._preview_mask_render_after_id = None
@@ -241,6 +242,21 @@ class VideoSubtitleRemoverApp(
         self.lama_fast_var = tk.BooleanVar(value=self.config.lama_super_fast)
         self.preserve_audio_var = tk.BooleanVar(value=self.config.preserve_audio)
         self.lang_var = tk.StringVar(value=self.config.detection_lang)
+        self._ocr_engine_by_label = {
+            "Automatic (recommended)": "auto",
+            "RapidOCR": "rapidocr",
+            "OpenCV 5 DNN": "opencv-dnn",
+            "PaddleOCR": "paddleocr",
+            "EasyOCR": "easyocr",
+            "OpenCV fallback": "opencv",
+        }
+        current_engine = getattr(self.config, "detection_engine", "auto")
+        current_label = next(
+            (label for label, value in self._ocr_engine_by_label.items()
+             if value == current_engine),
+            "Automatic (recommended)",
+        )
+        self.ocr_engine_var = tk.StringVar(value=current_label)
 
         # Build UI
         self._setup_styles()
@@ -433,6 +449,8 @@ class VideoSubtitleRemoverApp(
         self.config.lama_super_fast = self.lama_fast_var.get()
         self.config.preserve_audio = self.preserve_audio_var.get()
         self.config.detection_lang = self.lang_var.get()
+        self.config.detection_engine = self._ocr_engine_by_label.get(
+            self.ocr_engine_var.get(), "auto")
         # Threshold slider stores as int percent, convert to float
         pct = getattr(self.config, '_detection_threshold_pct', 50)
         self.config.detection_threshold = pct / 100.0
@@ -2097,6 +2115,32 @@ class VideoSubtitleRemoverApp(
                             int(self.config.detection_threshold * 100),
                             "_detection_threshold_pct",
                             hint="Higher catches more text (lower confidence floor). Lower is stricter.")
+        engine_row = tk.Frame(det_frame, bg=Theme.BG_CARD)
+        engine_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(
+            engine_row,
+            text=tr("OCR engine"),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        self.ocr_engine_combo = ttk.Combobox(
+            engine_row,
+            textvariable=self.ocr_engine_var,
+            values=tuple(self._ocr_engine_by_label),
+            width=24,
+            state="readonly",
+            style="Dark.TCombobox",
+            font=f(Theme.F_BODY_SM),
+        )
+        self.ocr_engine_combo.pack(side="right")
+        self.ocr_engine_combo.bind(
+            "<<ComboboxSelected>>", self._on_ocr_engine_changed)
+        Tooltip(
+            self.ocr_engine_combo,
+            tr("Automatic uses the best installed detector. Select an engine "
+               "to compare results or reproduce a run."),
+        )
         self._create_slider(det_frame, "Frame skip", 0, 10,
                             self.config.detection_frame_skip, "detection_frame_skip",
                             hint="Reuse the last mask for N frames. At 5, scheduled OCR drops by up to about 83% on stable footage.")
@@ -4776,6 +4820,8 @@ class VideoSubtitleRemoverApp(
             self.hw_encode_check.set_enabled(not locked)
 
             self.lang_combo.config(state=combo_state)
+            if hasattr(self, "ocr_engine_combo"):
+                self.ocr_engine_combo.config(state=combo_state)
             if hasattr(self, 'gpu_combo'):
                 self.gpu_combo.config(state=combo_state)
             self.time_start_entry.config(state=entry_state)

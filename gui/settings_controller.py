@@ -505,6 +505,15 @@ class AdvancedSettingsControllerMixin:
             self.lang_var.set(code)
             self.config.detection_lang = code
 
+    def _on_ocr_engine_changed(self, event=None):
+        """Persist the selected detector and invalidate preview model caches."""
+        del event
+        self.config.detection_engine = self._ocr_engine_by_label.get(
+            self.ocr_engine_var.get(), "auto")
+        self._preview_detector = None
+        self._preview_detector_lang = None
+        self._preview_detector_engine = None
+
     def _on_gpu_changed(self, event=None):
         """Handle GPU device selection change."""
         selection = self.gpu_var.get()

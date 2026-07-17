@@ -253,7 +253,11 @@ processes a generated tiny image through the CLI with a fixed mask.
 
 ### Detection Engines
 
-The app automatically selects the best available engine:
+The app automatically selects the best available engine. Advanced > Detection
+can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, EasyOCR, or the dependency-free
+OpenCV fallback for comparison and reproducible runs; unavailable pinned
+engines fall back safely instead of silently switching to another OCR model.
+The same selector is available as `--ocr-engine` on the CLI:
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
@@ -684,7 +688,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--self-test` | Probe OCR engines, inpaint backends, GPU providers, and codecs, then print results and exit. | Off | - | Public |
 | `--inference-smoke` | Run a generated text image and masked frame through the OCR and inpaint backends to prove they actually execute (records provider/timing), then exit. No model downloads. Uses --gpu to pick the device. | Off | - | Public |
 | `--ocr-benchmark` | Benchmark the active OCR detector on synthetic ground-truth subtitle fixtures (recall, latency, and memory) and print JSON evidence, then exit. Use --gpu to pick the device. Gate any default-detector swap on the meets_floors verdict. | Off | - | Public |
-| `--ocr-engine` | Select the provider used by --ocr-benchmark. | auto | auto \| opencv-dnn \| rapidocr | Public |
+| `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| easyocr \| opencv | Public |
 | `--dry-run` | Validate the run without encoding: probe each input, run detection on a few sampled frames, check the requested codec is available, and print a per-file plan, then exit. Combine with --json for machine output. | Off | - | Public |
 | `--json` | Emit a machine-readable JSON result to stdout (the --dry-run plan, or the batch/file result). | Off | - | Public |
 | `--auto-lang-probe` | Probe the first frame for script/language and print a suggestion, then exit. Requires -i. | Off | - | Public |
@@ -757,6 +761,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `subtitle_area` | `Optional[Tuple[int, int, int, int]]` | `-` |
 | `detection_threshold` | `float` | `0.5` |
 | `detection_lang` | `str` | `en` |
+| `detection_engine` | `str` | `auto` |
 | `detection_frame_skip` | `int` | `0` |
 | `detection_vertical` | `bool` | `Off` |
 | `whisper_fallback` | `bool` | `Off` |

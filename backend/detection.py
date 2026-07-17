@@ -24,6 +24,28 @@ from backend.import_safety import module_can_import as _module_can_import
 
 logger = logging.getLogger(__name__)
 
+OCR_ENGINE_CHOICES = (
+    "auto",
+    "rapidocr",
+    "opencv-dnn",
+    "paddleocr",
+    "easyocr",
+    "opencv",
+)
+
+
+def normalize_ocr_engine(value: object) -> str:
+    """Return a supported detector selector, defaulting invalid values to auto."""
+    normalized = str(value or "auto").strip().lower()
+    aliases = {
+        "paddle": "paddleocr",
+        "easy": "easyocr",
+        "cv2": "opencv",
+        "fallback": "opencv",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in OCR_ENGINE_CHOICES else "auto"
+
 
 def _surya_allowed() -> bool:
     """Return True when the user has explicitly opted into the GPL Surya
@@ -175,10 +197,11 @@ class SubtitleDetector:
     """Detects subtitle regions in video frames using text detection models."""
 
     def __init__(self, device: str = "cuda:0", lang: str = "en",
-                 vertical: bool = False):
+                 vertical: bool = False, engine: str = "auto"):
         self.device = device
         self.lang = lang
         self.vertical = bool(vertical)
+        self.engine = normalize_ocr_engine(engine)
         self._engine_name = "none"
         self._rapid_model = None
         self._paddle_model = None
@@ -194,23 +217,29 @@ class SubtitleDetector:
     def _load_model(self):
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
         EasyOCR > OpenCV fallback."""
-        try:
-            from backend.ocr_vlm import maybe_build_vlm_detector
-            vlm = maybe_build_vlm_detector(self.device, self.lang)
-            if vlm is not None:
-                self._vlm_detector = vlm
-                self._engine_name = f"VLM ({vlm.name})"
-                logger.info(f"VLM OCR detector active: {vlm.name}")
-                return
-        except Exception as exc:
-            logger.debug(f"VLM detector probe failed: {exc}")
+        self.engine = normalize_ocr_engine(getattr(self, "engine", "auto"))
+        if self.engine == "auto":
+            try:
+                from backend.ocr_vlm import maybe_build_vlm_detector
+                vlm = maybe_build_vlm_detector(self.device, self.lang)
+                if vlm is not None:
+                    self._vlm_detector = vlm
+                    self._engine_name = f"VLM ({vlm.name})"
+                    logger.info(f"VLM OCR detector active: {vlm.name}")
+                    return
+            except Exception as exc:
+                logger.debug(f"VLM detector probe failed: {exc}")
         self._vlm_detector = None
 
-        # OpenCV 5 can execute RapidOCR's bundled PP-OCRv6 detection and
-        # recognition models without ONNX Runtime. Keep accelerated
-        # OpenVINO/CUDA/DirectML providers and the regular RapidOCR path as
-        # fallbacks.
-        if _should_try_opencv_dnn_ocr(self.device):
+        if self.engine == "opencv":
+            self._engine_name = "OpenCV fallback"
+            logger.info("OpenCV fallback detection selected")
+            return
+
+        if self.engine == "opencv-dnn" or (
+            self.engine in {"auto", "rapidocr"}
+            and _should_try_opencv_dnn_ocr(self.device)
+        ):
             try:
                 from backend.opencv_ocr import build_opencv_dnn_rapidocr
                 self._rapid_model = build_opencv_dnn_rapidocr()
@@ -227,59 +256,62 @@ class SubtitleDetector:
                 )
 
         # RapidOCR (ONNX/OpenVINO provider fallback)
-        try:
-            rapid_obj = None
-            if _module_can_import("rapidocr"):
-                import rapidocr as _rapidocr_module
-                rapid_obj, rapid_provider = _build_rapidocr(
-                    _rapidocr_module.RapidOCR,
-                    self.device,
-                    _rapidocr_module,
-                )
-            elif _module_can_import("rapidocr_onnxruntime"):
-                import rapidocr_onnxruntime as _rapidocr_module
-                rapid_obj, rapid_provider = _build_rapidocr(
-                    _rapidocr_module.RapidOCR,
-                    self.device,
-                    _rapidocr_module,
-                )
-            else:
-                raise ImportError("RapidOCR unavailable or failed import probe")
-            if rapid_obj is not None:
-                self._rapid_model = rapid_obj
-                self._engine_name = {
-                    "DirectML": "RapidOCR (DirectML)",
-                    "OpenVINO": "RapidOCR (OpenVINO)",
-                }.get(rapid_provider, "RapidOCR")
-                if rapid_provider == "OpenVINO":
-                    logger.info(
-                        f"RapidOCR loaded via OpenVINO engine (lang={self.lang})"
+        if self.engine in {"auto", "rapidocr"}:
+            try:
+                rapid_obj = None
+                if _module_can_import("rapidocr"):
+                    import rapidocr as _rapidocr_module
+                    rapid_obj, rapid_provider = _build_rapidocr(
+                        _rapidocr_module.RapidOCR,
+                        self.device,
+                        _rapidocr_module,
+                    )
+                elif _module_can_import("rapidocr_onnxruntime"):
+                    import rapidocr_onnxruntime as _rapidocr_module
+                    rapid_obj, rapid_provider = _build_rapidocr(
+                        _rapidocr_module.RapidOCR,
+                        self.device,
+                        _rapidocr_module,
                     )
                 else:
-                    logger.info(
-                        f"RapidOCR loaded via ONNX Runtime {rapid_provider} "
-                        f"provider (lang={self.lang})"
-                    )
-                return
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.warning(f"RapidOCR init failed: {e}")
+                    raise ImportError("RapidOCR unavailable or failed import probe")
+                if rapid_obj is not None:
+                    self._rapid_model = rapid_obj
+                    self._engine_name = {
+                        "DirectML": "RapidOCR (DirectML)",
+                        "OpenVINO": "RapidOCR (OpenVINO)",
+                    }.get(rapid_provider, "RapidOCR")
+                    if rapid_provider == "OpenVINO":
+                        logger.info(
+                            f"RapidOCR loaded via OpenVINO engine (lang={self.lang})"
+                        )
+                    else:
+                        logger.info(
+                            f"RapidOCR loaded via ONNX Runtime {rapid_provider} "
+                            f"provider (lang={self.lang})"
+                        )
+                    return
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"RapidOCR init failed: {e}")
 
         # PaddleOCR PP-OCRv6/3.x (2.x compatibility handled by paddle_compat)
-        try:
-            from backend.paddle_compat import build_paddleocr
-            self._paddle_model = build_paddleocr(self.lang, self.device)
-            self._engine_name = "PaddleOCR"
-            logger.info(f"PaddleOCR loaded (lang={self.lang})")
-            return
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.warning(f"PaddleOCR init failed: {e}")
+        if self.engine in {"auto", "paddleocr"}:
+            try:
+                from backend.paddle_compat import build_paddleocr
+                self._paddle_model = build_paddleocr(self.lang, self.device)
+                self._engine_name = "PaddleOCR"
+                logger.info(f"PaddleOCR loaded (lang={self.lang})")
+                return
+            except ImportError:
+                pass
+            except Exception as e:
+                logger.warning(f"PaddleOCR init failed: {e}")
 
-        # Surya (GPL, opt-in via VSR_ALLOW_GPL)
-        if _surya_allowed():
+        # Surya (GPL, opt-in via VSR_ALLOW_GPL) remains auto-only because it
+        # cannot be offered as a bundled MIT-clean selector.
+        if self.engine == "auto" and _surya_allowed():
             try:
                 from surya.detection import DetectionPredictor
                 self._surya_det = DetectionPredictor()
@@ -290,7 +322,7 @@ class SubtitleDetector:
                 pass
             except Exception as e:
                 logger.warning(f"Surya init failed: {e}")
-        else:
+        elif self.engine == "auto":
             try:
                 import surya.detection  # noqa: F401
                 logger.warning(
@@ -303,6 +335,13 @@ class SubtitleDetector:
                 pass
 
         # EasyOCR
+        if self.engine not in {"auto", "easyocr"}:
+            self._engine_name = "OpenCV fallback"
+            logger.warning(
+                "%s was selected but is unavailable; using OpenCV fallback",
+                self.engine,
+            )
+            return
         if not _module_can_import("easyocr"):
             self._engine_name = "OpenCV fallback"
             logger.warning(
