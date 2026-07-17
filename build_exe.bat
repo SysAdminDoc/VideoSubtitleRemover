@@ -26,9 +26,9 @@ call venv\Scripts\activate.bat
 :: (writable-CWD bootstrap local privilege escalation); older bootloaders let
 :: an attacker inject Python via sys.path beside the frozen exe.
 echo Ensuring release tooling...
-"%PYTHON%" -m pip install "pyinstaller>=6.10.0" "pip-audit>=2.10.0" "ruff==0.15.20"
+"%PYTHON%" -m pip install "pyinstaller>=6.10.0" "pip-audit>=2.10.0" "pytest>=9.0.0" "ruff==0.15.20"
 if errorlevel 1 (
-    echo Failed to install PyInstaller, pip-audit, or Ruff.
+    echo Failed to install PyInstaller, pip-audit, pytest, or Ruff.
     exit /b 1
 )
 

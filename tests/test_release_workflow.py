@@ -847,6 +847,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("--run-dependency-audit", self.bat)
         self.assertIn("--quality strict", self.bat)
         self.assertIn("-m unittest discover -s tests -q", self.bat)
+        self.assertIn('"pytest>=9.0.0"', self.bat)
         self.assertIn(
             "-m PyInstaller --noconfirm --clean VideoSubtitleRemoverPro.spec",
             self.bat,

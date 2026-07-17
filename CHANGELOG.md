@@ -11,6 +11,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   instead of duplicating its PyInstaller graph in command-line flags. The spec
   retains the default RapidOCR profile and the existing full-OCR/PyTorch opt-in
   environment gates, while NumPy collection and UPX policy have one authority.
+- **Release-test bootstrap installs pytest.** The isolated build environment
+  now installs pytest before unittest discovery, matching test modules that use
+  pytest fixtures/imports and preventing a clean release host from failing
+  before PyInstaller runs.
 - **Best-effort diagnostics no longer fail silently.** Host-memory probes,
   seam-score sampling, quality-capture cleanup, and reproducibility sidecars
   now leave bounded log breadcrumbs on failure. JSON-line write failures and
