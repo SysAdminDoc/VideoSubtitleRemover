@@ -47,6 +47,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   settings builder is now a 52-line orchestrator over profile, workflow, STTN,
   detection, output, range, performance, and accessibility/storage groups,
   preserving widget creation order and bound configuration variables.
+- **Mask correction is an explicit window controller.** The former 534-line
+  editor closure is split into `MaskCorrectionWindow` callback methods,
+  including named background detection/apply boundaries; the GUI mixin now
+  retains only the launch adapter.
 - **Frame timing and Whisper span conversion now share one clock.** CFR/VFR
   frame-to-seconds conversion is centralized and reused by the mask/inpaint
   loop, clean-reference overrides, VMAF sampling, checkpoint-frame encoding,

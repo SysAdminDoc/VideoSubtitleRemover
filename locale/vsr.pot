@@ -80,7 +80,7 @@ msgstr ""
 msgid "Add media, then select a queue item to enable preview tools."
 msgstr ""
 
-#: gui/mask_correction_controller.py:194
+#: gui/mask_correction_controller.py:178
 msgid "Add missing pixels or subtract over-masked pixels."
 msgstr ""
 
@@ -92,7 +92,7 @@ msgstr ""
 msgid "Add timed"
 msgstr ""
 
-#: gui/mask_correction_controller.py:184
+#: gui/mask_correction_controller.py:168
 msgid "Add to mask"
 msgstr ""
 
@@ -212,11 +212,11 @@ msgstr ""
 msgid "Browse"
 msgstr ""
 
-#: gui/mask_correction_controller.py:225
+#: gui/mask_correction_controller.py:209
 msgid "Brush"
 msgstr ""
 
-#: gui/mask_correction_controller.py:236
+#: gui/mask_correction_controller.py:220
 msgid "Brush radius in source pixels."
 msgstr ""
 
@@ -240,7 +240,7 @@ msgstr ""
 msgid "CPU only"
 msgstr ""
 
-#: gui/app.py:4135 gui/mask_correction_controller.py:577 gui/region_controller.py:646 gui/settings_controller.py:417
+#: gui/app.py:4135 gui/mask_correction_controller.py:282 gui/region_controller.py:646 gui/settings_controller.py:417
 msgid "Cancel"
 msgstr ""
 
@@ -292,7 +292,7 @@ msgstr ""
 msgid "Choose a rectangle, polygon, timed region, or keyframe to edit."
 msgstr ""
 
-#: gui/mask_correction_controller.py:181
+#: gui/mask_correction_controller.py:165
 msgid "Choose a residual, flicker, or low-confidence span."
 msgstr ""
 
@@ -388,7 +388,7 @@ msgstr ""
 msgid "Clear all"
 msgstr ""
 
-#: gui/mask_correction_controller.py:570
+#: gui/mask_correction_controller.py:275
 msgid "Clear corrections"
 msgstr ""
 
@@ -412,7 +412,7 @@ msgstr ""
 msgid "Cleared imported matte"
 msgstr ""
 
-#: gui/mask_correction_controller.py:408
+#: gui/mask_correction_controller.py:465
 msgid "Cleared mask corrections"
 msgstr ""
 
@@ -464,23 +464,23 @@ msgstr ""
 msgid "Correct mask"
 msgstr ""
 
-#: gui/mask_correction_controller.py:159
+#: gui/mask_correction_controller.py:143
 msgid "Correct subtitle mask"
 msgstr ""
 
-#: gui/mask_correction_controller.py:235
+#: gui/mask_correction_controller.py:219
 msgid "Correction brush radius"
 msgstr ""
 
-#: gui/mask_correction_controller.py:286
+#: gui/mask_correction_controller.py:343
 msgid "Correction frames must form a non-empty in-bounds range"
 msgstr ""
 
-#: gui/mask_correction_controller.py:193
+#: gui/mask_correction_controller.py:177
 msgid "Correction paint mode"
 msgstr ""
 
-#: gui/mask_correction_controller.py:400
+#: gui/mask_correction_controller.py:457
 msgid "Correction stroke added; undo is available"
 msgstr ""
 
@@ -488,7 +488,7 @@ msgstr ""
 msgid "Could not detect language from this frame"
 msgstr ""
 
-#: gui/mask_correction_controller.py:460
+#: gui/mask_correction_controller.py:517
 msgid "Could not read the selected review frame"
 msgstr ""
 
@@ -576,7 +576,7 @@ msgstr ""
 msgid "Drag to add; choose a region for exact coordinates and timing."
 msgstr ""
 
-#: gui/mask_correction_controller.py:257
+#: gui/mask_correction_controller.py:241
 msgid "Drag to paint with the selected mode."
 msgstr ""
 
@@ -604,11 +604,11 @@ msgstr ""
 msgid "End (s)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:209 gui/region_controller.py:321
+#: gui/mask_correction_controller.py:193 gui/region_controller.py:321
 msgid "End frame"
 msgstr ""
 
-#: gui/mask_correction_controller.py:222
+#: gui/mask_correction_controller.py:206
 msgid "End frame is exclusive and must be in bounds."
 msgstr ""
 
@@ -764,11 +764,11 @@ msgstr ""
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:481
+#: gui/mask_correction_controller.py:625
 msgid "Frame {frame}; base mask from {source}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:256
+#: gui/mask_correction_controller.py:240
 msgid "Frame-local mask correction canvas"
 msgstr ""
 
@@ -900,7 +900,7 @@ msgstr ""
 msgid "Install Pillow to enable image preview tools."
 msgstr ""
 
-#: gui/mask_correction_controller.py:94
+#: gui/mask_correction_controller.py:77
 msgid "Install Pillow to enable mask correction"
 msgstr ""
 
@@ -972,11 +972,11 @@ msgstr ""
 msgid "Load a preset JSON file into the user library."
 msgstr ""
 
-#: gui/mask_correction_controller.py:470
+#: gui/mask_correction_controller.py:527
 msgid "Loading detected mask for frame {frame}..."
 msgstr ""
 
-#: gui/mask_correction_controller.py:238
+#: gui/mask_correction_controller.py:222
 msgid "Loading review frame..."
 msgstr ""
 
@@ -992,7 +992,7 @@ msgstr ""
 msgid "Lossless matte format"
 msgstr ""
 
-#: gui/mask_correction_controller.py:122
+#: gui/mask_correction_controller.py:106
 msgid "Manual mask review"
 msgstr ""
 
@@ -1004,11 +1004,11 @@ msgstr ""
 msgid "Manual regions: {count} fixed rectangles"
 msgstr ""
 
-#: gui/mask_correction_controller.py:614
+#: gui/mask_correction_controller.py:316
 msgid "Mask correction editor could not open: {error}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:244
+#: gui/mask_correction_controller.py:228
 msgid "Mask correction status"
 msgstr ""
 
@@ -1088,11 +1088,11 @@ msgstr ""
 msgid "No action needed."
 msgstr ""
 
-#: gui/mask_correction_controller.py:317
+#: gui/mask_correction_controller.py:374
 msgid "No correction to redo"
 msgstr ""
 
-#: gui/mask_correction_controller.py:315
+#: gui/mask_correction_controller.py:372
 msgid "No correction to undo"
 msgstr ""
 
@@ -1120,7 +1120,7 @@ msgstr ""
 msgid "No translated SRT selected"
 msgstr ""
 
-#: gui/mask_correction_controller.py:519
+#: gui/mask_correction_controller.py:565
 msgid "No valid correction frame ranges are available"
 msgstr ""
 
@@ -1212,11 +1212,11 @@ msgstr ""
 msgid "Paint frame-local mask corrections for a selective rerun."
 msgstr ""
 
-#: gui/mask_correction_controller.py:505
+#: gui/mask_correction_controller.py:551
 msgid "Paint or clear a correction before preparing a rerun"
 msgstr ""
 
-#: gui/mask_correction_controller.py:381
+#: gui/mask_correction_controller.py:438
 msgid "Painting mask correction"
 msgstr ""
 
@@ -1256,11 +1256,11 @@ msgstr ""
 msgid "Polygon {index}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:574
+#: gui/mask_correction_controller.py:279
 msgid "Prepare selective rerun"
 msgstr ""
 
-#: gui/mask_correction_controller.py:554
+#: gui/mask_correction_controller.py:600
 msgid "Prepared mask-correction rerun for {count} frame range(s)"
 msgstr ""
 
@@ -1316,7 +1316,7 @@ msgstr ""
 msgid "Processing queue"
 msgstr ""
 
-#: gui/mask_correction_controller.py:200
+#: gui/mask_correction_controller.py:184
 msgid "Propagate through review span"
 msgstr ""
 
@@ -1328,7 +1328,7 @@ msgstr ""
 msgid "Quality report sheet (side-by-side PNG comparison)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:180
+#: gui/mask_correction_controller.py:164
 msgid "Quality review span"
 msgstr ""
 
@@ -1356,7 +1356,7 @@ msgstr ""
 msgid "Ready"
 msgstr ""
 
-#: gui/mask_correction_controller.py:543
+#: gui/mask_correction_controller.py:589
 msgid "Ready for a full rerun with mask corrections"
 msgstr ""
 
@@ -1368,7 +1368,7 @@ msgstr ""
 msgid "Ready to process"
 msgstr ""
 
-#: gui/mask_correction_controller.py:541
+#: gui/mask_correction_controller.py:587
 msgid "Ready to rerun corrected frames"
 msgstr ""
 
@@ -1384,7 +1384,7 @@ msgstr ""
 msgid "Rectangle {index}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:341
+#: gui/mask_correction_controller.py:398
 msgid "Redid mask correction"
 msgstr ""
 
@@ -1392,7 +1392,7 @@ msgstr ""
 msgid "Redid region edit"
 msgstr ""
 
-#: gui/mask_correction_controller.py:565 gui/region_controller.py:578
+#: gui/mask_correction_controller.py:270 gui/region_controller.py:578
 msgid "Redo"
 msgstr ""
 
@@ -1600,7 +1600,7 @@ msgstr ""
 msgid "Select a completed queue item to compare source and output."
 msgstr ""
 
-#: gui/mask_correction_controller.py:79
+#: gui/mask_correction_controller.py:654
 msgid "Select a queue item before correcting its mask"
 msgstr ""
 
@@ -1712,7 +1712,7 @@ msgstr ""
 msgid "Start (s)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:283
+#: gui/mask_correction_controller.py:340
 msgid "Start and end frames must be whole numbers"
 msgstr ""
 
@@ -1720,7 +1720,7 @@ msgstr ""
 msgid "Start batch"
 msgstr ""
 
-#: gui/mask_correction_controller.py:208 gui/region_controller.py:311
+#: gui/mask_correction_controller.py:192 gui/region_controller.py:311
 msgid "Start frame"
 msgstr ""
 
@@ -1736,7 +1736,7 @@ msgstr ""
 msgid "Stop is already in progress."
 msgstr ""
 
-#: gui/mask_correction_controller.py:90
+#: gui/mask_correction_controller.py:73
 msgid "Stop the active batch before correcting a mask"
 msgstr ""
 
@@ -1764,7 +1764,7 @@ msgstr ""
 msgid "Subtitle region preview"
 msgstr ""
 
-#: gui/mask_correction_controller.py:185
+#: gui/mask_correction_controller.py:169
 msgid "Subtract from mask"
 msgstr ""
 
@@ -1824,11 +1824,11 @@ msgstr ""
 msgid "The settings folder could not be opened"
 msgstr ""
 
-#: gui/mask_correction_controller.py:114
+#: gui/mask_correction_controller.py:98
 msgid "The source image could not be opened"
 msgstr ""
 
-#: gui/mask_correction_controller.py:104
+#: gui/mask_correction_controller.py:88
 msgid "The source video could not be opened"
 msgstr ""
 
@@ -1892,7 +1892,7 @@ msgstr ""
 msgid "Try hardware video decoding for faster input. The app falls back to software decoding if needed."
 msgstr ""
 
-#: gui/mask_correction_controller.py:330
+#: gui/mask_correction_controller.py:387
 msgid "Undid mask correction"
 msgstr ""
 
@@ -1900,7 +1900,7 @@ msgstr ""
 msgid "Undid region edit"
 msgstr ""
 
-#: gui/mask_correction_controller.py:561 gui/region_controller.py:582
+#: gui/mask_correction_controller.py:266 gui/region_controller.py:582
 msgid "Undo"
 msgstr ""
 
@@ -2092,7 +2092,7 @@ msgstr ""
 msgid "{count} warning{suffix}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:167
+#: gui/mask_correction_controller.py:151
 msgid "{kind}: frames {start}-{end}"
 msgstr ""
 

@@ -9,6 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from gui.mask_correction_controller import (
+    MaskCorrectionControllerMixin,
+    MaskCorrectionWindow,
+)
 from gui.preview_controller import PreviewControllerMixin
 from gui.region_controller import (
     RegionEditorControllerMixin,
@@ -124,6 +128,53 @@ class ControllerBoundaryTests(unittest.TestCase):
             and node.name == "_open_region_selector_modal"
         )
         self.assertLessEqual(entry.end_lineno - entry.lineno + 1, 5)
+
+    def test_mask_correction_callbacks_are_explicit_window_methods(self):
+        tree = ast.parse(
+            (ROOT / "gui" / "mask_correction_controller.py").read_text(
+                encoding="utf-8"
+            )
+        )
+        window = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == MaskCorrectionWindow.__name__
+        )
+        methods = {
+            node.name: node for node in window.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        for name in (
+            "render",
+            "paint_press",
+            "paint_drag",
+            "paint_release",
+            "detect_mask",
+            "load_frame",
+            "_load_frame_worker",
+            "_apply_frame_mask",
+            "prepare_rerun",
+            "release_capture",
+        ):
+            self.assertIn(name, methods)
+        for method in methods.values():
+            nested = [
+                node for node in ast.walk(method)
+                if isinstance(node, ast.FunctionDef) and node is not method
+            ]
+            self.assertEqual(nested, [], method.name)
+
+        mixin = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == MaskCorrectionControllerMixin.__name__
+        )
+        entry = next(
+            node for node in mixin.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_open_mask_correction_editor"
+        )
+        self.assertLessEqual(entry.end_lineno - entry.lineno + 1, 8)
 
     def test_settings_visibility_toggles_without_app_construction(self):
         controller = AdvancedSettingsControllerMixin()
