@@ -60,10 +60,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-17 deep audit)
 
-- [ ] P3 — `migrate_gui_settings` documents versioned transforms it does not perform
-  Why: The function stamps settings to the current schema version and does no per-version key transformation; the surrounding comments assert semantic upgrades (format 5/6/10) the code never implements. Safe today because every historical bump only added defaulted fields, but a future breaking rename will be silently skipped. Either delete the misleading comments or add explicit `if version < N:` transform blocks.
-  Where: `backend/config_schema.py:87-111`.
-
 - [ ] P3 — Weak disabled affordance on secondary/ghost ModernButtons
   Why: Disabled buttons reuse `BG_TERTIARY`, the same fill as enabled `secondary`/default buttons, so disabled state reads only via dimmed text; a distinct disabled fill would be clearer, but naively using `BG_SECONDARY` risks buttons vanishing against card surfaces. Needs a dedicated `BG_DISABLED` token chosen to stay distinct from both enabled fills and the card background.
   Where: `gui/widgets.py` ModernButton `_draw` disabled branch (~517-520) and style table (~466-501); `gui/theme.py` tokens.

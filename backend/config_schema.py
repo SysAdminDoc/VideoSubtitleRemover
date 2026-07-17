@@ -92,20 +92,17 @@ def migrate_gui_settings(data: Any) -> dict[str, Any]:
     version = _coerce_schema_version(result.get(GUI_SETTINGS_VERSION_KEY))
     if version > GUI_SETTINGS_FORMAT:
         return result
-    # Formats 1-4 added fields with backward-compatible defaults.  Format 5
-    # binds settings to the canonical schema; format 6 adds work-directory
-    # policy with an empty/system-default migration value. Format 7 adds
-    # moving-region keyframes while preserving legacy timed rectangles.
-    # Format 8 adds a persisted UI text scale with a 100 percent default.
-    # Format 9 adds the persisted System/English/catalog locale preference.
-    # Format 10 adds ordered add/subtract mask-correction semantics while
-    # legacy correction entries continue to mean additive polygons.
-    # Format 11 adds manifest-backed lossless matte export and import fields.
-    # Format 12 adds the opt-in FFmpeg D3D12 acceleration policy.
-    # Format 13 adds local-first subtitle translation and re-embedding.
-    # Format 14 allows a confidence-gated clean plate on each timed region.
-    # Format 15 persists the Advanced OCR-engine selector.
-    # Format 16 persists the selected-language-only mask filter.
+    # Every historical format bump (1..GUI_SETTINGS_FORMAT) only ADDED fields
+    # with backward-compatible defaults, so no per-version key transform is
+    # required here: any field absent from an older payload falls back to its
+    # dataclass/registry default in `from_dict`. This function therefore only
+    # re-stamps the payload to the current schema version.
+    #
+    # A FUTURE breaking change (a renamed, removed, or re-typed key) MUST add
+    # an explicit guarded block before the re-stamp, e.g.:
+    #     if version < 17:
+    #         result["new_key"] = result.pop("old_key", <default>)
+    # Otherwise the rename is silently skipped and the old key is dropped.
     result[GUI_SETTINGS_VERSION_KEY] = GUI_SETTINGS_FORMAT
     result[CONFIG_SCHEMA_VERSION_KEY] = CONFIG_SCHEMA_VERSION
     return result
