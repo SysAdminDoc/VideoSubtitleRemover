@@ -14,6 +14,8 @@ class FrozenBuildSmokeTests(unittest.TestCase):
         self.assertIn("collect_all('numpy')", spec)
         self.assertIn("binaries=np_binaries", spec)
         self.assertIn("np_hiddenimports", spec)
+        self.assertIn("VSR_ENABLE_FULL_OCR", spec)
+        self.assertIn("VSR_ENABLE_PYTORCH_LAMA", spec)
         self.assertGreaterEqual(spec.count("upx=False"), 2)
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("!VideoSubtitleRemoverPro.spec", ignore)

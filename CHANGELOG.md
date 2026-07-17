@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The production build now consumes the committed spec.** `build_exe.bat`
+  builds the release artifact directly from `VideoSubtitleRemoverPro.spec`
+  instead of duplicating its PyInstaller graph in command-line flags. The spec
+  retains the default RapidOCR profile and the existing full-OCR/PyTorch opt-in
+  environment gates, while NumPy collection and UPX policy have one authority.
 - **Best-effort diagnostics no longer fail silently.** Host-memory probes,
   seam-score sampling, quality-capture cleanup, and reproducibility sidecars
   now leave bounded log breadcrumbs on failure. JSON-line write failures and

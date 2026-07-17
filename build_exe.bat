@@ -123,19 +123,9 @@ echo.
 echo Building EXE (this may take several minutes)...
 echo.
 
-:: Build with PyInstaller
-"%PYTHON%" -m PyInstaller --noconfirm ^
-    --onedir ^
-    --noupx ^
-    --windowed ^
-    %ICON_ARG% ^
-    --name "VideoSubtitleRemoverPro" ^
-    !RUNTIME_HOOKS! ^
-    %DATA_ARGS% ^
-    !HIDDEN_IMPORTS! ^
-    !EXCLUDES! ^
-    !COLLECT_DATA! ^
-    VideoSubtitleRemover.py
+:: Build the production artifact from the reviewed, tracked spec. The spec
+:: reads the same optional-profile environment gates used above.
+"%PYTHON%" -m PyInstaller --noconfirm --clean VideoSubtitleRemoverPro.spec
 
 if errorlevel 1 (
     echo.
