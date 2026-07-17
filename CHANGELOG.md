@@ -2,7 +2,7 @@
 
 All notable changes to VideoSubtitleRemover will be documented in this file.
 
-## [Unreleased]
+## [3.19.0] - 2026-07-17
 
 ### Fixed
 
