@@ -10,7 +10,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 from gui.preview_controller import PreviewControllerMixin
-from gui.region_controller import RegionEditorControllerMixin
+from gui.region_controller import (
+    RegionEditorControllerMixin,
+    RegionSelectorWindow,
+)
 from gui.settings_controller import AdvancedSettingsControllerMixin
 
 
@@ -78,6 +81,49 @@ class ControllerBoundaryTests(unittest.TestCase):
         self.assertIsNone(controller.config.subtitle_region_keyframes)
         controller._apply_region_settings_to_idle_items.assert_called_once_with()
         controller._update_region_label_display.assert_called_once_with()
+
+    def test_region_selector_callbacks_are_explicit_window_methods(self):
+        tree = ast.parse(
+            (ROOT / "gui" / "region_controller.py").read_text(encoding="utf-8")
+        )
+        window = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == RegionSelectorWindow.__name__
+        )
+        methods = {
+            node.name: node for node in window.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        for name in (
+            "on_press",
+            "on_drag",
+            "on_release",
+            "_draw_saved_rects",
+            "_apply_numeric_region_edit",
+            "_add_region_keyframe",
+            "_save_and_close",
+            "_release_cap",
+        ):
+            self.assertIn(name, methods)
+        for method in methods.values():
+            nested = [
+                node for node in ast.walk(method)
+                if isinstance(node, ast.FunctionDef) and node is not method
+            ]
+            self.assertEqual(nested, [], method.name)
+
+        mixin = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == RegionEditorControllerMixin.__name__
+        )
+        entry = next(
+            node for node in mixin.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_open_region_selector_modal"
+        )
+        self.assertLessEqual(entry.end_lineno - entry.lineno + 1, 5)
 
     def test_settings_visibility_toggles_without_app_construction(self):
         controller = AdvancedSettingsControllerMixin()
