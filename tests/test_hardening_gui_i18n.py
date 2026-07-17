@@ -122,6 +122,20 @@ class JsonLineLogHandlerTests(unittest.TestCase):
         self.assertIn("RuntimeError", payload["exc"])
         self.assertIn("kaboom", payload["exc"])
 
+    def test_emit_failure_uses_logging_error_handler(self):
+        class BrokenSink(io.StringIO):
+            def write(self, _value):
+                raise OSError("disk full")
+
+        handler = processor.JsonLineLogHandler(BrokenSink())
+        record = logging.LogRecord(
+            "vsr_test", logging.ERROR, __file__, 42,
+            "could not persist", (), None,
+        )
+        with unittest.mock.patch.object(handler, "handleError") as handle_error:
+            handler.emit(record)
+        handle_error.assert_called_once_with(record)
+
 
 class LanguagePickerTests(unittest.TestCase):
     """F-5: lang picker must expose more than the legacy 12 languages

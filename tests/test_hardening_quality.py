@@ -700,6 +700,27 @@ class SeamQualityTests(unittest.TestCase):
         self.assertLessEqual(len(remover._seam_scores), 32)
         self.assertTrue(remover._seam_scores)
 
+    def test_accumulator_logs_seam_failure_once(self):
+        from backend import processor
+        from backend.config import ProcessingConfig
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = ProcessingConfig()
+        remover._seam_scores = []
+        frame = self._smooth_bg()
+        mask = self._mask()
+
+        with unittest.mock.patch.object(
+            processor, "mask_boundary_seam_score",
+            side_effect=RuntimeError("bad mask"),
+        ):
+            with self.assertLogs("backend.processor", level="WARNING") as logs:
+                remover._accumulate_seam_scores([frame], [frame], [mask])
+                remover._accumulate_seam_scores([frame], [frame], [mask])
+
+        warnings = [line for line in logs.output if "Seam-score" in line]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("omit boundary-seam evidence", warnings[0])
+
 
 
 if __name__ == "__main__":

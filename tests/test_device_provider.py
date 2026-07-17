@@ -113,3 +113,38 @@ def test_oom_recovery_uses_injected_memory_hooks_without_gpu():
 
     assert len(output) == 1
     assert remover.device_provider.freed == 1
+
+
+def test_adaptive_vram_probe_and_shutdown_failures_leave_warnings(caplog):
+    inpainter = SimpleNamespace(inpaint=lambda frames, masks: frames)
+
+    class Provider:
+        def probe_available(self):
+            return "cuda:0"
+
+        def create_inpainter(self, _name, _device, _config):
+            return inpainter
+
+    fake_nvml = SimpleNamespace(
+        nvmlInit=mock.Mock(),
+        nvmlDeviceGetHandleByIndex=mock.Mock(return_value=object()),
+        nvmlDeviceGetMemoryInfo=mock.Mock(
+            side_effect=RuntimeError("probe failed")),
+        nvmlShutdown=mock.Mock(side_effect=RuntimeError("shutdown failed")),
+    )
+    detector = SimpleNamespace(_engine_name="test")
+    config = ProcessingConfig(device="cuda:0", adaptive_batch=True)
+
+    with mock.patch.object(
+        SubtitleRemover, "_resolve_work_directory"
+    ), mock.patch.object(
+        SubtitleRemover, "_select_hw_encoder"
+    ), mock.patch(
+        "backend.processor.SubtitleDetector", return_value=detector
+    ), mock.patch.dict("sys.modules", {"pynvml": fake_nvml}):
+        with caplog.at_level("WARNING", logger="backend.processor"):
+            SubtitleRemover(config, device_provider=Provider())
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "Adaptive batch VRAM probe failed" in messages
+    assert "NVML shutdown failed" in messages

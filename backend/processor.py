@@ -272,7 +272,7 @@ def _available_host_ram_gb() -> Optional[float]:
         import psutil  # type: ignore
         return psutil.virtual_memory().available / (1024 ** 3)
     except Exception:
-        pass
+        logger.debug("psutil host-memory probe failed", exc_info=True)
     try:
         if os.name == "nt":
             import ctypes
@@ -299,7 +299,7 @@ def _available_host_ram_gb() -> Optional[float]:
             avail = os.sysconf("SC_AVPHYS_PAGES")
             return page * avail / (1024 ** 3)
     except Exception:
-        pass
+        logger.debug("platform host-memory probe failed", exc_info=True)
     return None
 
 
@@ -683,6 +683,7 @@ class SubtitleRemover:
         # Mask-boundary seam scores accumulated during inpainting (the report
         # pass no longer has per-frame masks). Sampled to keep cost flat.
         self._seam_scores: List[float] = []
+        self._seam_score_failure_logged = False
         # RM-73 partial: source color signalling, populated lazily inside
         # process_video once we know the input path. Used by _get_encode_args
         # to preserve HDR / BT.2020 tagging on the output.
@@ -1203,6 +1204,13 @@ class SubtitleRemover:
             try:
                 score = mask_boundary_seam_score(frames[i], results[i], masks[i])
             except Exception:
+                if not getattr(self, "_seam_score_failure_logged", False):
+                    logger.warning(
+                        "Seam-score sampling failed; the quality report may "
+                        "omit boundary-seam evidence",
+                        exc_info=True,
+                    )
+                    self._seam_score_failure_logged = True
                 score = None
             if score is not None:
                 self._seam_scores.append(score)
@@ -1238,11 +1246,11 @@ class SubtitleRemover:
             try:
                 cap_in.release()
             except Exception:
-                pass
+                logger.debug("Quality source capture release failed", exc_info=True)
             try:
                 cap_out.release()
             except Exception:
-                pass
+                logger.debug("Quality output capture release failed", exc_info=True)
             return None
         try:
             span = max(1, end_frame - start_frame)
@@ -2677,6 +2685,7 @@ class SubtitleRemover:
         self._ocr_fix_replacements = None
         self._quality_mask_bbox = None
         self._seam_scores = []
+        self._seam_score_failure_logged = False
         self._mask_review_signals = []
         self.last_selective_rerun = None
         temp_dir = None
@@ -3767,6 +3776,10 @@ class SubtitleRemover:
             from backend.batch_report import write_output_sidecar
             from gui.config import APP_VERSION
         except Exception:
+            logger.debug(
+                "Reproducibility sidecar dependencies unavailable",
+                exc_info=True,
+            )
             return
         try:
             quality_report = self.last_quality_report
@@ -3800,7 +3813,10 @@ class SubtitleRemover:
                 app_version=APP_VERSION,
             )
         except Exception as exc:
-            logger.debug("Reproducibility sidecar write failed: %s", exc)
+            logger.warning(
+                "Reproducibility sidecar write failed: %s", exc,
+                exc_info=True,
+            )
 
     def _prepare_output_contract(self, input_path: str, output_path: str) -> None:
         """Probe source media once and freeze the policy used by every pass."""

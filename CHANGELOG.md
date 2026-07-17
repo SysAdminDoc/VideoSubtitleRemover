@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Best-effort diagnostics no longer fail silently.** Host-memory probes,
+  seam-score sampling, quality-capture cleanup, and reproducibility sidecars
+  now leave bounded log breadcrumbs on failure. JSON-line write failures and
+  VRAM/NVML fallbacks have regression coverage for their existing error paths.
 - **Batch-queue mutation is atomic under concurrent imports.** Capacity and
   duplicate checks now share the append critical section, while inactive-item
   dequeue has one locked decision path. A producer/consumer/pause stress test
