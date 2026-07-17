@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Application branding now matches the premium workbench.** The previous
+  text-heavy eraser illustration has been replaced by a compact restoration
+  frame mark with transparent corners, a 512 px PNG, and a seven-size Windows
+  ICO. The same mark now appears in the README, window chrome, packaged EXE,
+  and About dialog.
 - **The workbench now prioritizes the controls used for every cleanup.** A
   compact command bar keeps media import, cleanup profile, subtitle region,
   output, and Start cleanup above the preview. The preview and inspector share

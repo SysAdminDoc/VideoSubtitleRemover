@@ -1,6 +1,8 @@
+<p align="center">
+  <img src="icon.png" alt="Video Subtitle Remover Pro restoration-frame logo" width="144" height="144">
+</p>
 
-
-# Video Subtitle Remover Pro
+<h1 align="center">Video Subtitle Remover Pro</h1>
 
 <div align="center">
 

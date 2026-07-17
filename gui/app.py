@@ -215,7 +215,7 @@ class VideoSubtitleRemoverApp(
         self._active_remover = None
         self._active_subprocess: Optional[subprocess.Popen] = None
         self._selected_queue_item_id: Optional[str] = None
-        self._brand_photo = None
+        self._brand_photo = getattr(self, "_app_icon_photo", None)
         self._status_tone = "neutral"
         self._shutdown_started = False
         self._taskbar = None  # created after the root is fully realized

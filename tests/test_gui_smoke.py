@@ -161,6 +161,8 @@ class GuiSmokeTests(unittest.TestCase):
         app = self._make_app()
         try:
             self.assertEqual(app.root.title()[:23], "Video Subtitle Remover ")
+            self.assertIsNotNone(app._brand_photo)
+            self.assertIs(app._brand_photo, app._app_icon_photo)
             app.root.update_idletasks()
         finally:
             self._destroy_app(app)
