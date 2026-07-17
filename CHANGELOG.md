@@ -11,6 +11,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   represent now surfaces a startup notice explaining it is using STTN this
   session, instead of silently downgrading.
 
+### Changed
+
+- **Disabled buttons now read as disabled.** They previously reused the same
+  fill as enabled secondary/default buttons, so the only cue was dimmed text. A
+  dedicated recessed `BG_DISABLED` token (in both the default and AMOLED
+  palettes) makes the inert state legible without vanishing against cards.
+
 ### Fixed
 
 - **CLI `--preset` no longer discards an explicit flag that equals the parser

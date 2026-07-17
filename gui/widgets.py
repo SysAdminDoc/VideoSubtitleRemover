@@ -515,7 +515,7 @@ class ModernButton(tk.Canvas):
             pad = 0
 
         if not self.enabled:
-            fill = Theme.BG_TERTIARY
+            fill = Theme.BG_DISABLED
             border = Theme.BORDER_SUBTLE
             text_color = Theme.TEXT_DISABLED
         else:

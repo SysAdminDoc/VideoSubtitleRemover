@@ -24,6 +24,10 @@ class Theme:
     BG_CARD_HOVER = "#192231"
     BG_CARD_SELECTED = "#1c2940"
     BG_TERTIARY = "#121d2b"
+    # Disabled controls: a recessed, desaturated grey that reads as "inert"
+    # against the blue-tinted card (#0c1420) and enabled tertiary (#121d2b)
+    # fills without vanishing into either.
+    BG_DISABLED = "#14171d"
     BG_RAISED = "#1a283a"
     BG_LOG = "#070b12"
     BG_OVERLAY = "#080c14"
@@ -121,6 +125,7 @@ def apply_high_contrast_theme():
     Theme.BG_CARD_HOVER = "#1a1a1a"
     Theme.BG_CARD_SELECTED = "#1f1f1f"
     Theme.BG_TERTIARY = "#1a1a1a"
+    Theme.BG_DISABLED = "#141414"
     Theme.BG_RAISED = "#262626"
     Theme.BG_LOG = "#000000"
     Theme.BG_OVERLAY = "#000000"

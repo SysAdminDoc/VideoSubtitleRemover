@@ -60,10 +60,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-17 deep audit)
 
-- [ ] P3 — Weak disabled affordance on secondary/ghost ModernButtons
-  Why: Disabled buttons reuse `BG_TERTIARY`, the same fill as enabled `secondary`/default buttons, so disabled state reads only via dimmed text; a distinct disabled fill would be clearer, but naively using `BG_SECONDARY` risks buttons vanishing against card surfaces. Needs a dedicated `BG_DISABLED` token chosen to stay distinct from both enabled fills and the card background.
-  Where: `gui/widgets.py` ModernButton `_draw` disabled branch (~517-520) and style table (~466-501); `gui/theme.py` tokens.
-
 ## Audit Findings (2026-07-17 deep audit, second pass)
 
 - [ ] P3 — Memoize `opencv_libpng_status()` for PNG frame-sequence input
