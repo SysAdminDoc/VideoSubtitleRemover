@@ -4,6 +4,57 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.24.0] - 2026-07-17
+
+### Fixed
+
+- **Applying a preset could crash before any changes were saved.** The
+  Sensitivity slider is registered under the runtime-only
+  `_detection_threshold_pct` attribute, which does not exist on a fresh config
+  until the slider is dragged. Selecting a preset before touching that slider
+  raised `AttributeError` mid-apply -- the mode was already changed, remaining
+  widgets were not synced, and settings were never saved, with no user
+  feedback. The slider now derives its value from the preset's
+  `detection_threshold` and no longer depends on the transient attribute.
+- **CLI `--preset` now honors `auto_band` and the inverted feature flags.**
+  `auto_band` was mapped to `None` and silently dropped, so the shipped
+  "TikTok / Vertical short" and "News / Chyron" presets had no auto-band effect
+  from the CLI (the GUI honored it). It now maps directly. The tri-state
+  `kalman_tracking` / `phash_skip_enable` / `tbe_scene_cut_split` fields route
+  onto their `--no-*` flags, so a preset can disable them; an explicit
+  `--no-kalman` etc. still wins.
+- **Crash reports and support bundles leaked UNC paths.** The path-redaction
+  regex required four leading backslashes, so a real `\\server\share\...`
+  network path was never scrubbed and could ship inside a shared bug report.
+  The directory tree is now stripped like drive-letter paths.
+- **Below-floor OpenCV wheels reported as satisfied.** The dependency drift
+  report truncated versions to three components, so `opencv-python` builds
+  below the four-part `5.0.0.93` floor (e.g. `5.0.0.80`) compared as OK. The
+  comparison now keeps the build segment.
+- **LaMa neural inpainters degraded on soft alpha mattes.** The ONNX / DNN /
+  PyTorch LaMa paths fed the mask straight to the model without binarizing, so
+  a MatAnyone-refined grayscale matte passed partial-strength hints (matching
+  the guard the sibling `inpainters_onnx` backend already documents). The
+  mask is now thresholded for the model input while the soft matte is retained
+  for the feather blend.
+- **Whisper `ffmpeg` filtergraph did not escape `;`.** A model path or
+  language containing a semicolon would break out of the `whisper=...` filter
+  and corrupt the `-af` chain (confined to the local filtergraph, not a shell).
+- **Installer version drifted.** `installer/vsr.nsi` was still stamped 3.22.0
+  while the app was 3.23.0; the installer version now tracks `APP_VERSION`, and
+  a test guards against future drift.
+
+### Changed
+
+- Manual subtitle-region save/reset now persists settings immediately, matching
+  the other settings mutators, so a crash after editing a region no longer
+  loses it while keeping other same-session changes.
+- The batch-completion summary hides the "STOPPED" pill when nothing was
+  stopped, matching the conditional PAUSED and REVIEW pills.
+- Compute-device labels use consistent sentence-case "CPU mode" and are
+  localized; removed an orphaned header capability label that was constructed
+  but never displayed.
+
 ## [3.23.0] - 2026-07-17
 
 ### Fixed

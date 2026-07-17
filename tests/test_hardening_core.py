@@ -723,6 +723,24 @@ class NsisInstallerArtefactTests(unittest.TestCase):
         self.assertIn("${NSIS_PACKEDVERSION} < 0x0300C000", text)
         self.assertNotIn("0x030B0000", text)
 
+    def test_nsi_version_matches_app_version(self):
+        """The installer version defines must track gui.config.APP_VERSION so
+        the packaged installer never drifts behind the application."""
+        import re
+        from pathlib import Path
+        from gui.config import APP_VERSION
+
+        text = (Path(__file__).resolve().parent.parent
+                / "installer" / "vsr.nsi").read_text(encoding="utf-8")
+        parts = {}
+        for key in ("VERSIONMAJOR", "VERSIONMINOR", "VERSIONPATCH"):
+            match = re.search(rf"!define {key}\s+(\d+)", text)
+            self.assertIsNotNone(match, f"{key} missing from vsr.nsi")
+            parts[key] = match.group(1)
+        nsi_version = ".".join(
+            (parts["VERSIONMAJOR"], parts["VERSIONMINOR"], parts["VERSIONPATCH"]))
+        self.assertEqual(nsi_version, APP_VERSION)
+
 
 class ProxyWorkflowTests(unittest.TestCase):
     """RM-34: ensure_proxy must return None when ffmpeg is absent and
