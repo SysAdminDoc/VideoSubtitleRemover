@@ -20,10 +20,11 @@
 ; while elevated, enabling a possible privilege escalation for installers
 ; running as SYSTEM. The compile-time guard fails older toolchains.
 
-; NSIS_PACKEDVERSION stores major/minor/revision/build as four bytes.
-; 3.12 packs to 0x030C0000. Fail compilation on anything older.
+; NSIS_PACKEDVERSION allocates 8 bits to major, 12 bits to minor, 8 bits to
+; revision, and 4 bits to build. 3.12 therefore packs to 0x0300C000.
+; Fail compilation on anything older.
 !ifdef NSIS_PACKEDVERSION
-  !if ${NSIS_PACKEDVERSION} < 0x030C0000
+  !if ${NSIS_PACKEDVERSION} < 0x0300C000
     !error "NSIS >= 3.12 required (elevated Low IL temp hardening). Upgrade makensis."
   !endif
 !else

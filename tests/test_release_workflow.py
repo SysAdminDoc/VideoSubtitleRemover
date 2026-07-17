@@ -899,7 +899,7 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertNotIn("torch-directml", self.bat)
 
     def test_nsis_floor_and_running_app_guard_use_bundled_capabilities(self):
-        self.assertIn("0x030C0000", self.nsi)
+        self.assertIn("${NSIS_PACKEDVERSION} < 0x0300C000", self.nsi)
         self.assertIn("OpenMutexW", self.nsi)
         self.assertNotIn("FindProcDLL::FindProc", self.nsi)
         self.assertIn("VSR_SMOKE_BUILD", self.nsi)
