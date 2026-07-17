@@ -859,8 +859,9 @@ class GuiSmokeTests(unittest.TestCase):
             item = app.queue[0]
             item.config.mask_import_path = matte_evidence["manifest"]
             item.config.mask_import_mode = "replace"
+            detect = mock.Mock(return_value=[])
             app._preview_detector = SimpleNamespace(
-                detect=lambda *_args, **_kwargs: [],
+                detect=detect,
                 _engine_name="test detector",
             )
             app._preview_detector_lang = app.lang_var.get()
@@ -878,6 +879,33 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIn("Composed mask", app.preview_title_label.cget("text"))
             self.assertIn(
                 "Imported PNG matte composed in replace mode",
+                app.preview_meta_label.cget("text"),
+            )
+            self.assertEqual(app.preview_mask_tuning.winfo_manager(), "pack")
+
+            def immediate_after(_delay, callback, *args):
+                callback(*args)
+                return "after-id"
+
+            with mock.patch.object(
+                app.root, "after", side_effect=immediate_after,
+            ), mock.patch.object(
+                app.root, "after_cancel",
+            ), mock.patch(
+                "gui.preview_controller.threading.Thread",
+                side_effect=immediate_thread,
+            ), mock.patch(
+                "gui.preview_controller.save_settings",
+            ), mock.patch(
+                "gui.preview_controller.save_queue_state",
+            ):
+                app._on_preview_mask_dilate_changed(11)
+
+            detect.assert_called_once()
+            self.assertEqual(item.config.mask_dilate_px, 11)
+            self.assertEqual(app.config.mask_dilate_px, 11)
+            self.assertIn(
+                "Dilation: 11 px; detection cached",
                 app.preview_meta_label.cget("text"),
             )
         finally:
@@ -1186,7 +1214,8 @@ class GuiSmokeTests(unittest.TestCase):
             )
             self.assertEqual(
                 app.preview_meta_label.cget("text"),
-                "Manual region applied. Detection used your saved subtitle band.",
+                "Manual region applied. Detection used your saved subtitle band. "
+                "Dilation: 0 px; detection cached.",
             )
         finally:
             self._destroy_app(app)

@@ -206,6 +206,9 @@ class VideoSubtitleRemoverApp(
         self._preview_detector = None  # cached SubtitleDetector for mask preview
         self._preview_detector_lang = None  # lang the cached detector was created with
         self._detector_lock = threading.Lock()  # serializes _preview_detector access
+        self._preview_mask_cache = None
+        self._preview_mask_render_after_id = None
+        self._preview_mask_save_after_id = None
         self._cached_remover = None  # cached BackendRemover for batch reuse
         self._cached_remover_key = None  # (mode, device, lang) key for cache invalidation
         self._active_remover = None
@@ -3044,6 +3047,48 @@ class VideoSubtitleRemoverApp(
             self.preview_correction_btn,
             tr("Paint frame-local mask corrections for a selective rerun."),
         )
+
+        self.preview_mask_tuning = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        tuning_label = tk.Frame(
+            self.preview_mask_tuning, bg=Theme.BG_SECONDARY)
+        tuning_label.pack(side="left")
+        tk.Label(
+            tuning_label,
+            text=tr("Mask dilation"),
+            font=f(Theme.F_BODY_SM, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(anchor="w")
+        tk.Label(
+            tuning_label,
+            text=tr("Adjust the cached detection without running OCR again."),
+            font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w")
+        self.preview_mask_dilate_slider = ModernSlider(
+            self.preview_mask_tuning,
+            from_=0,
+            to=20,
+            value=self.config.mask_dilate_px,
+            command=self._on_preview_mask_dilate_changed,
+            bg=Theme.BG_SECONDARY,
+            width=190,
+            accessible_label=tr("Preview mask dilation"),
+        )
+        self.preview_mask_dilate_slider.pack(
+            side="left", fill="x", expand=True, padx=(Theme.S_LG, Theme.S_SM))
+        self.preview_mask_dilate_value_var = tk.StringVar(
+            value=f"{self.config.mask_dilate_px} px")
+        tk.Label(
+            self.preview_mask_tuning,
+            textvariable=self.preview_mask_dilate_value_var,
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY,
+            padx=Theme.S_SM,
+            pady=3,
+        ).pack(side="right")
         self._set_preview_placeholder(
             "Preview",
             "Select a queue item to inspect its subtitle region before cleanup.",

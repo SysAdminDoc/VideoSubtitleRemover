@@ -30,6 +30,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   and launch the existing one-frame test cleanup. New Film and Fast built-ins
   complement the existing watermark profile, while advanced settings expose
   pHash distance and temporal mask carry controls with concrete speed hints.
+- **Mask review now tunes dilation in real time.** A preview-pane slider
+  updates the selected item and recomposes the mask from cached boxes, manual
+  corrections, and imported mattes without running OCR again.
 
 - **Opt-in frozen build smoke for the committed spec.**
   `python -m scripts.frozen_build_smoke` builds the default-profile spec in an

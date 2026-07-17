@@ -2,7 +2,11 @@ import unittest
 import unittest.mock
 from types import SimpleNamespace
 
+import numpy as np
+from PIL import Image
+
 from gui.app import VideoSubtitleRemoverApp
+from gui.preview_controller import PreviewControllerMixin
 from gui.widgets import ModernSlider
 
 
@@ -158,6 +162,30 @@ class OnboardingActionTests(unittest.TestCase):
         save_mock.assert_called_once_with(app.config)
         app._update_status.assert_called_once_with(
             "Automatic subtitle-band detection enabled", "success"
+        )
+
+
+class CachedMaskPreviewTests(unittest.TestCase):
+    def test_dilation_recomposition_expands_cached_mask(self):
+        base_mask = np.zeros((21, 21), dtype=np.uint8)
+        base_mask[10, 10] = 255
+        cache = {
+            "base_mask": base_mask,
+            "base_vis": np.zeros((21, 21, 3), dtype=np.uint8),
+            "mask_corrections": None,
+            "imported": None,
+            "color": np.asarray([0, 0, 255], dtype=np.float32),
+            "to_pil": lambda bgr: Image.fromarray(bgr[:, :, ::-1]),
+            "max_w": 100,
+            "max_h": 100,
+        }
+
+        narrow = PreviewControllerMixin._render_cached_preview_mask(cache, 0)
+        wide = PreviewControllerMixin._render_cached_preview_mask(cache, 4)
+
+        self.assertGreater(
+            np.count_nonzero(np.asarray(wide)),
+            np.count_nonzero(np.asarray(narrow)),
         )
 
 

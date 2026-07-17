@@ -21,7 +21,7 @@ except ImportError:  # pragma: no cover - preview features degrade without Pillo
 from gui.theme import Theme, f, prefers_reduced_motion
 from gui.config import (
     ProcessingConfig, ProcessingStatus, QueueItem,
-    status_ui,
+    save_queue_state, save_settings, status_ui,
 )
 from gui.utils import (
     _format_soft_subtitle_summary, format_quality_report, is_image_file, is_video_file,
@@ -346,6 +346,87 @@ class PreviewControllerMixin:
         item = self._get_selected_queue_item(fallback_to_first=True)
         if item:
             self._show_preview(item, show_mask=True)
+
+    def _set_preview_mask_tuning_visible(self, visible: bool, value: int = 0):
+        panel = getattr(self, "preview_mask_tuning", None)
+        if panel is None:
+            return
+        if visible:
+            self.preview_mask_dilate_slider.set_value(value)
+            self.preview_mask_dilate_value_var.set(f"{int(value)} px")
+            if not panel.winfo_manager():
+                panel.pack(
+                    fill="x",
+                    padx=Theme.S_XL,
+                    pady=(0, Theme.S_LG),
+                )
+        elif panel.winfo_manager():
+            panel.pack_forget()
+
+    def _on_preview_mask_dilate_changed(self, value):
+        """Persist and rerender mask dilation without another OCR pass."""
+        dilation = max(0, min(20, int(round(float(value)))))
+        self.preview_mask_dilate_value_var.set(f"{dilation} px")
+        item = self._get_selected_queue_item(fallback_to_first=True)
+        if item is None:
+            return
+        item.config.mask_dilate_px = dilation
+        self.config.mask_dilate_px = dilation
+        tracked = getattr(self, "_settings_slider_by_attr", {}).get(
+            "mask_dilate_px")
+        if tracked:
+            slider, value_label = tracked
+            slider.set_value(dilation)
+            value_label.config(text=str(dilation))
+
+        render_after = getattr(self, "_preview_mask_render_after_id", None)
+        if render_after is not None:
+            try:
+                self.root.after_cancel(render_after)
+            except tk.TclError:
+                pass
+        self._preview_mask_render_after_id = self.root.after(
+            45,
+            lambda: self._rerender_preview_mask_from_cache(dilation),
+        )
+
+        save_after = getattr(self, "_preview_mask_save_after_id", None)
+        if save_after is not None:
+            try:
+                self.root.after_cancel(save_after)
+            except tk.TclError:
+                pass
+        self._preview_mask_save_after_id = self.root.after(
+            300,
+            self._persist_preview_mask_dilate,
+        )
+
+    def _persist_preview_mask_dilate(self):
+        self._preview_mask_save_after_id = None
+        save_settings(self.config)
+        save_queue_state(self.queue)
+
+    def _rerender_preview_mask_from_cache(self, dilation: int):
+        self._preview_mask_render_after_id = None
+        cache = getattr(self, "_preview_mask_cache", None)
+        if not cache:
+            return
+        if (
+            cache["request_id"] != self._preview_request_id
+            or cache["item_id"] != self._selected_queue_item_id
+        ):
+            return
+
+        def _worker():
+            try:
+                img = self._render_cached_preview_mask(cache, dilation)
+                self._dispatch_preview_ui(
+                    lambda: self._apply_cached_preview_mask(
+                        cache, img, dilation))
+            except Exception:
+                logger.warning("Cached mask preview rerender failed", exc_info=True)
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _probe_language_from_preview(self):
         """Auto-detect subtitle language from the selected queue item."""
@@ -1060,6 +1141,13 @@ class PreviewControllerMixin:
         self._preview_request_id += 1
         preview_request_id = self._preview_request_id
         self._clear_preview_region_editor()
+        item_config = getattr(item, "config", self.config)
+        if show_mask:
+            self._set_preview_mask_tuning_visible(
+                True, getattr(item_config, "mask_dilate_px", 0))
+        else:
+            self._preview_mask_cache = None
+            self._set_preview_mask_tuning_visible(False)
         # Any switch cancels a running throbber so it can't overwrite later UI
         if not show_mask:
             self._stop_throbber()
@@ -1128,7 +1216,6 @@ class PreviewControllerMixin:
             item_output = item.output_path
             item_quality = item.quality_report
             item_soft = getattr(item, "soft_subtitle_streams", [])
-            item_config = getattr(item, "config", self.config)
             mask_corrections = getattr(
                 item_config, "manual_mask_corrections", None)
             mask_import_path = getattr(item_config, "mask_import_path", "")
@@ -1226,32 +1313,21 @@ class PreviewControllerMixin:
                 _cv2.polylines(vis, [points], True, (_db, _dg, _dr), 2)
             import cv2 as _mask_cv2
 
-            composed_mask = np.zeros(frame_copy.shape[:2], dtype=np.uint8)
+            base_mask = np.zeros(frame_copy.shape[:2], dtype=np.uint8)
             for bx1, by1, bx2, by2 in boxes:
                 _mask_cv2.rectangle(
-                    composed_mask, (bx1, by1), (bx2, by2), 255, -1)
+                    base_mask, (bx1, by1), (bx2, by2), 255, -1)
             for shape in manual_shapes or []:
                 coords = shape.get("polygon")
                 if not coords:
                     continue
                 points = np.asarray(
                     list(zip(coords[::2], coords[1::2])), dtype=np.int32)
-                _mask_cv2.fillPoly(composed_mask, [points], 255)
-            dilation = max(0, int(mask_dilate_px or 0))
-            if dilation and np.any(composed_mask):
-                kernel = _mask_cv2.getStructuringElement(
-                    _mask_cv2.MORPH_ELLIPSE,
-                    (dilation * 2 + 1, dilation * 2 + 1),
-                )
-                composed_mask = _mask_cv2.dilate(composed_mask, kernel)
-            from backend.mask_corrections import apply_mask_corrections
-
-            composed_mask = apply_mask_corrections(
-                composed_mask, mask_corrections, 0.0, 0)
+                _mask_cv2.fillPoly(base_mask, [points], 255)
+            imported = None
             imported_note = ""
             if mask_import_path:
                 from backend.matte_interchange import (
-                    compose_imported_matte,
                     load_matte_preview_frame,
                 )
 
@@ -1261,50 +1337,50 @@ class PreviewControllerMixin:
                     width=frame_copy.shape[1],
                     height=frame_copy.shape[0],
                 )
-                composed_mask = compose_imported_matte(
-                    composed_mask, imported, mask_import_mode)
                 imported_note = (
                     f" Imported {imported_info['format'].upper()} matte "
                     f"composed in {mask_import_mode} mode."
                 )
-            overlay = composed_mask.astype(np.float32) / 255.0 * 0.42
-            color = np.asarray([_db, _dg, _dr], dtype=np.float32)
-            vis = np.clip(
-                vis.astype(np.float32) * (1.0 - overlay[..., None])
-                + color * overlay[..., None],
-                0,
-                255,
-            ).astype(np.uint8)
-            img = to_pil(vis)
-            img.thumbnail((max_w, max_h), Image.LANCZOS)
             engine = det._engine_name
             n = len(boxes) + sum(
                 1 for shape in manual_shapes or [] if "polygon" in shape)
-            def _update_mask():
-                if (preview_request_id != self._preview_request_id
-                        or self._selected_queue_item_id != item_id):
-                    return
-                self._stop_throbber()
-                self._preview_photo = ImageTk.PhotoImage(img)
-                self.preview_title_label.config(
-                    text=f"Composed mask for {Path(item_file).name}")
-                if (sub_areas or manual_shapes) and timed_regions_configured:
-                    meta = "Timed manual region is active on the first frame."
-                elif sub_areas:
-                    meta = "Manual region applied. Detection used your saved subtitle band."
-                elif timed_regions_configured:
-                    meta = "Timed manual regions are configured but inactive on the first frame."
-                elif n:
-                    meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
-                else:
-                    meta = ("No regions were found on the first frame. Try Set region, or lower the "
-                            "Threshold in detailed controls.")
-                meta += imported_note
-                self.preview_meta_label.config(text=meta)
-                self._preview_label.config(
-                    image=self._preview_photo,
-                    text=f"{engine}: {n} detected" if n else "No text detected")
-            self._dispatch_preview_ui(_update_mask)
+            if (sub_areas or manual_shapes) and timed_regions_configured:
+                meta = "Timed manual region is active on the first frame."
+            elif sub_areas:
+                meta = "Manual region applied. Detection used your saved subtitle band."
+            elif timed_regions_configured:
+                meta = "Timed manual regions are configured but inactive on the first frame."
+            elif n:
+                meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
+            else:
+                meta = ("No regions were found on the first frame. Try Set region, or lower the "
+                        "Threshold in detailed controls.")
+            cache = {
+                "request_id": preview_request_id,
+                "item_id": item_id,
+                "item_file": item_file,
+                "base_vis": vis,
+                "base_mask": base_mask,
+                "mask_corrections": mask_corrections,
+                "imported": imported,
+                "import_mode": mask_import_mode,
+                "imported_note": imported_note,
+                "color": np.asarray([_db, _dg, _dr], dtype=np.float32),
+                "max_w": max_w,
+                "max_h": max_h,
+                "to_pil": to_pil,
+                "engine": engine,
+                "region_count": n,
+                "meta": meta,
+            }
+            if preview_request_id != self._preview_request_id:
+                return
+            self._preview_mask_cache = cache
+            dilation = max(0, int(mask_dilate_px or 0))
+            img = self._render_cached_preview_mask(cache, dilation)
+            self._dispatch_preview_ui(
+                lambda: self._apply_cached_preview_mask(
+                    cache, img, dilation))
         except Exception:
             logger.warning("Detection preview failed", exc_info=True)
             def _show_mask_error():
@@ -1318,6 +1394,59 @@ class PreviewControllerMixin:
                     tone="error",
                 )
             self._dispatch_preview_ui(_show_mask_error)
+
+    @staticmethod
+    def _render_cached_preview_mask(cache: dict, dilation: int):
+        """Compose a cached base mask for display without invoking OCR."""
+        import cv2 as _mask_cv2
+        from backend.mask_corrections import apply_mask_corrections
+
+        composed_mask = cache["base_mask"].copy()
+        dilation = max(0, int(dilation or 0))
+        if dilation and np.any(composed_mask):
+            kernel = _mask_cv2.getStructuringElement(
+                _mask_cv2.MORPH_ELLIPSE,
+                (dilation * 2 + 1, dilation * 2 + 1),
+            )
+            composed_mask = _mask_cv2.dilate(composed_mask, kernel)
+        composed_mask = apply_mask_corrections(
+            composed_mask, cache.get("mask_corrections"), 0.0, 0)
+        imported = cache.get("imported")
+        if imported is not None:
+            from backend.matte_interchange import compose_imported_matte
+            composed_mask = compose_imported_matte(
+                composed_mask, imported, cache["import_mode"])
+
+        overlay = composed_mask.astype(np.float32) / 255.0 * 0.42
+        vis = np.clip(
+            cache["base_vis"].astype(np.float32)
+            * (1.0 - overlay[..., None])
+            + cache["color"] * overlay[..., None],
+            0,
+            255,
+        ).astype(np.uint8)
+        img = cache["to_pil"](vis)
+        img.thumbnail((cache["max_w"], cache["max_h"]), Image.LANCZOS)
+        return img
+
+    def _apply_cached_preview_mask(self, cache: dict, img, dilation: int):
+        if (
+            cache["request_id"] != self._preview_request_id
+            or self._selected_queue_item_id != cache["item_id"]
+        ):
+            return
+        self._stop_throbber()
+        self._preview_photo = ImageTk.PhotoImage(img)
+        self.preview_title_label.config(
+            text=f"Composed mask for {Path(cache['item_file']).name}")
+        meta = cache["meta"] + cache["imported_note"]
+        meta += f" Dilation: {dilation} px; detection cached."
+        self.preview_meta_label.config(text=meta)
+        n = cache["region_count"]
+        engine = cache["engine"]
+        self._preview_label.config(
+            image=self._preview_photo,
+            text=f"{engine}: {n} detected" if n else "No text detected")
 
     def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,
                             item_output, item_quality, item_soft,
