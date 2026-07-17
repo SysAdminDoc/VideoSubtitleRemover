@@ -47,6 +47,15 @@ def test_malformed_user_file_falls_back_to_builtin(tmp_path):
     assert reps.get("l") == "I"
 
 
+def test_longer_keys_apply_before_shorter_overlapping_keys():
+    # Insertion order puts the short, general key first; the longer, more
+    # specific key must still win so "rnm" is not pre-empted by "rn".
+    reps = {"rn": "m", "rnm": "X"}
+    assert apply_ocr_fixes("rnm", reps) == "X"
+    # Determinism does not depend on dict order.
+    assert apply_ocr_fixes("rnm", {"rnm": "X", "rn": "m"}) == "X"
+
+
 def test_locale_variant_normalization(tmp_path):
     (tmp_path / "ch.json").write_text(json.dumps({"x": "y"}), encoding="utf-8")
     reps = load_ocr_fix_replacements("ch_sim", base_dir=tmp_path)

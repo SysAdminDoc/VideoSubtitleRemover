@@ -80,12 +80,14 @@ def apply_ocr_fixes(text: str, replacements: Mapping[str, str]) -> str:
     """Apply the replace map to ``text``.
 
     Whole-word (``\\w+``) keys are replaced on word boundaries; every other key
-    is a literal substring replacement. Order is stable to keep the result
-    deterministic.
+    is a literal substring replacement. Keys are applied longest-first (then
+    alphabetically) so a shorter, more general key cannot pre-empt a longer,
+    more specific one, and the result stays deterministic regardless of the
+    source dict's insertion order.
     """
     if not text or not replacements:
         return text
-    for src, dst in replacements.items():
+    for src, dst in sorted(replacements.items(), key=lambda kv: (-len(kv[0]), kv[0])):
         if not src:
             continue
         if re.fullmatch(r"\w+", src, flags=re.UNICODE):
