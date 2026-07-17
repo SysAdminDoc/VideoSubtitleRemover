@@ -6,6 +6,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [3.18.1] - 2026-07-17
 
+### Fixed
+
+- **Frozen build now launches instead of crashing on a numpy import.**
+  `build_exe.bat` now packages numpy with `--collect-all numpy` and passes
+  `--noupx`. numpy 2.x splits its C core into submodules (`numpy._core._exceptions`,
+  ...) that a bare `--hidden-import numpy` does not gather, so the previous
+  default-profile exe died at launch with
+  `ModuleNotFoundError: No module named 'numpy._core._exceptions'`; UPX
+  additionally corrupts numpy's compiled extension binaries on Windows. The
+  packaged RapidOCR/ONNX build now starts cleanly.
+
 ### Changed
 
 - **Extracted the encode/mux and time-range/quality-report stages from
