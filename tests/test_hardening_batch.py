@@ -194,6 +194,13 @@ class BatchReportTests(unittest.TestCase):
                     "mux": 0.4,
                     "quality": 0.2,
                 },
+                detection_stats={
+                    "frames_total": 120,
+                    "frames_ocr": 30,
+                    "frames_skipped": 90,
+                    "unique_regions_detected": 4,
+                    "skip_reasons": {"frame_skip": 60, "phash": 30},
+                },
                 quality_report={
                     "tag": "Review",
                     "samples": 3,
@@ -224,6 +231,12 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(payload["stage_summary"]["slowest_stage"]["name"], "inpaint")
         self.assertEqual(payload["files"][0]["dominant_stage"]["name"], "inpaint")
         self.assertEqual(payload["files"][0]["stage_timings"]["ocr"], 1.25)
+        self.assertEqual(payload["detection_summary"]["frames_ocr"], 30)
+        self.assertEqual(payload["detection_summary"]["frames_skipped"], 90)
+        self.assertEqual(
+            payload["files"][0]["detection_stats"]["skip_reasons"]["phash"],
+            30,
+        )
         self.assertEqual(
             payload["files"][0]["output_quality_preflight"]["status"],
             "warning",
@@ -232,6 +245,8 @@ class BatchReportTests(unittest.TestCase):
         self.assertIn("Stage timing summary", markdown)
         self.assertIn("Per-item stage timings", markdown)
         self.assertIn("slowest inpaint 2.0s", markdown)
+        self.assertIn("Frames OCR'd: 30; skipped: 90; unique regions: 4", markdown)
+        self.assertIn("Detection efficiency", markdown)
         self.assertEqual(payload["files"][0]["quality_gate"]["status"], "review")
         self.assertEqual(
             payload["files"][0]["quality_gate"]["ladderStep"],
@@ -250,6 +265,19 @@ class BatchReportTests(unittest.TestCase):
         self.assertIn("Suggested safer output setting", markdown)
         self.assertIn("review (manual-review)", markdown)
         self.assertIn("Quality review notes", markdown)
+
+    def test_ocr_dominant_run_gets_actionable_optimization_hint(self):
+        from backend import batch_report as _br
+
+        hint = _br._optimization_hint(
+            {"decode": 1.0, "ocr": 8.0, "inpaint": 3.0},
+            {"frames_total": 12, "frames_ocr": 12, "frames_skipped": 0},
+        )
+
+        self.assertEqual(
+            hint,
+            "OCR dominated; try --frame-skip 3 or the Fast preset.",
+        )
 
 
 class NleSidecarTests(unittest.TestCase):

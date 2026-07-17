@@ -36,6 +36,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - **Region drawing now provides live OCR feedback.** Rectangle drags launch a
   throttled background probe that overlays detected text boxes and per-box
   confidence, while preserving manual region editing when OCR is unavailable.
+- **Batch reports explain detection efficiency.** Processor-owned counters now
+  report frames sent to OCR versus skipped, skip reasons, IoU-clustered unique
+  regions, and an actionable frame-skip hint when OCR dominates runtime. The
+  same evidence is available in GUI/CLI summaries and output sidecars.
 
 - **Opt-in frozen build smoke for the committed spec.**
   `python -m scripts.frozen_build_smoke` builds the default-profile spec in an

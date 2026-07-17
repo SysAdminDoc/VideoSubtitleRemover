@@ -1337,6 +1337,13 @@ class GuiSmokeTests(unittest.TestCase):
             "mux": 0.2,
             "quality": 0.0,
         }
+        item.detection_stats = {
+            "frames_total": 24,
+            "frames_ocr": 6,
+            "frames_skipped": 18,
+            "unique_regions_detected": 2,
+            "skip_reasons": {"frame_skip": 18},
+        }
         item.started_at = self._g.datetime.now()
         item.completed_at = self._g.datetime.now()
 
@@ -1353,6 +1360,8 @@ class GuiSmokeTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["quality_gate"]["status"], "passed")
         self.assertEqual(payload["files"][0]["dominant_stage"]["name"], "inpaint")
         self.assertEqual(payload["stage_summary"]["slowest_stage"]["name"], "inpaint")
+        self.assertEqual(payload["files"][0]["detection_stats"]["frames_ocr"], 6)
+        self.assertEqual(payload["detection_summary"]["frames_skipped"], 18)
 
     def test_soft_subtitle_action_remuxes_without_backend_remover(self):
         app = self._g.VideoSubtitleRemoverApp.__new__(self._g.VideoSubtitleRemoverApp)

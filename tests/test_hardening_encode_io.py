@@ -234,6 +234,29 @@ class MediaInputFailureTests(unittest.TestCase):
         for stage in ("decode", "ocr", "mask", "inpaint", "encode"):
             self.assertIn(stage, remover.last_stage_timings)
             self.assertGreaterEqual(remover.last_stage_timings[stage], 0.0)
+        self.assertEqual(remover.last_detection_stats["frames_total"], 1)
+        self.assertEqual(remover.last_detection_stats["frames_ocr"], 1)
+        self.assertEqual(remover.last_detection_stats["frames_skipped"], 0)
+        self.assertEqual(
+            remover.last_detection_stats["unique_regions_detected"], 1)
+
+    def test_detection_stats_cluster_stable_boxes_and_count_skip_reasons(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._reset_detection_stats()
+
+        remover._record_ocr_detection([(10, 10, 110, 40)])
+        remover._record_ocr_detection([(12, 11, 112, 41), (200, 20, 260, 50)])
+        remover._record_detection_skip("phash")
+        remover._record_detection_skip("frame_skip")
+
+        self.assertEqual(remover.last_detection_stats["frames_ocr"], 2)
+        self.assertEqual(remover.last_detection_stats["frames_skipped"], 2)
+        self.assertEqual(
+            remover.last_detection_stats["unique_regions_detected"], 2)
+        self.assertEqual(
+            remover.last_detection_stats["skip_reasons"],
+            {"phash": 1, "frame_skip": 1},
+        )
 
     def test_gui_failed_queue_item_uses_media_input_message(self):
         from unittest import mock
@@ -1337,6 +1360,12 @@ class OutputSidecarTests(unittest.TestCase):
                 status="processed",
                 elapsed_seconds=12.345,
                 stage_timings={"decode": 1.0, "ocr": 2.5, "inpaint": 5.0, "encode": 3.0},
+                detection_stats={
+                    "frames_total": 10,
+                    "frames_ocr": 4,
+                    "frames_skipped": 6,
+                    "unique_regions_detected": 2,
+                },
                 quality_report={"psnr": 25.0, "ssim": 0.95, "samples": 10, "tag": "Good"},
                 quality_gate={"status": "passed"},
                 checkpoint_resumed=False,
@@ -1356,6 +1385,7 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertEqual(sidecar["config"]["output_quality"], 20)
         self.assertIn("engine", sidecar)
         self.assertEqual(sidecar["stageTimings"]["ocr"], 2.5)
+        self.assertEqual(sidecar["detectionStats"]["frames_skipped"], 6)
         self.assertEqual(sidecar["qualityReport"]["psnr"], 25.0)
         self.assertEqual(sidecar["qualityGate"]["status"], "passed")
 

@@ -628,6 +628,8 @@ class SubtitleRemover:
         # config.quality_report is on. None until the first run completes.
         self.last_quality_report: Optional[dict] = None
         self.last_stage_timings: dict[str, float] = self._empty_stage_timings()
+        self.last_detection_stats: dict = self._empty_detection_stats()
+        self._unique_detected_regions: List[Tuple[int, int, int, int]] = []
         # Actual user-visible output path for the last run. This may differ
         # from the requested path when FFmpeg cannot encode the requested
         # container and the lossless intermediate is salvaged as .mkv.
@@ -763,6 +765,52 @@ class SubtitleRemover:
 
     def _reset_stage_timings(self) -> None:
         self.last_stage_timings = self._empty_stage_timings()
+
+    @staticmethod
+    def _empty_detection_stats() -> dict:
+        return {
+            "frames_total": 0,
+            "frames_ocr": 0,
+            "frames_skipped": 0,
+            "unique_regions_detected": 0,
+            "skip_reasons": {},
+        }
+
+    def _reset_detection_stats(self) -> None:
+        self.last_detection_stats = self._empty_detection_stats()
+        self._unique_detected_regions = []
+
+    def _record_detection_skip(self, reason: str) -> None:
+        self.last_detection_stats["frames_skipped"] += 1
+        reasons = self.last_detection_stats["skip_reasons"]
+        reasons[reason] = reasons.get(reason, 0) + 1
+
+    @staticmethod
+    def _detection_box_iou(a, b) -> float:
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+        if intersection <= 0:
+            return 0.0
+        area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+        area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
+        union = area_a + area_b - intersection
+        return intersection / union if union > 0 else 0.0
+
+    def _record_ocr_detection(self, boxes) -> None:
+        self.last_detection_stats["frames_ocr"] += 1
+        for raw_box in boxes or []:
+            box = tuple(int(value) for value in raw_box[:4])
+            if any(
+                self._detection_box_iou(box, known) >= 0.7
+                for known in self._unique_detected_regions
+            ):
+                continue
+            self._unique_detected_regions.append(box)
+        self.last_detection_stats["unique_regions_detected"] = len(
+            self._unique_detected_regions)
 
     @contextmanager
     def _time_stage(self, stage: str):
@@ -1919,6 +1967,7 @@ class SubtitleRemover:
         self._teardown_requested = False
         self.last_output_path = None
         self._reset_stage_timings()
+        self._reset_detection_stats()
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
@@ -1931,18 +1980,23 @@ class SubtitleRemover:
             fixed_shapes = self._fixed_region_shapes(0.0) or []
             fixed = self._fixed_region_boxes(0.0)
             confidences = None
+            self.last_detection_stats["frames_total"] = 1
             with self._time_stage("ocr"):
                 if fixed:
                     boxes = fixed
+                    self._record_detection_skip("manual_region")
                 elif fixed_shapes and self.config.sttn_skip_detection:
                     boxes = []
+                    self._record_detection_skip("manual_region")
                 elif self.config.confidence_weighted_dilation:
                     results = self.detector.detect_with_confidence(
                         image, self.config.detection_threshold)
                     boxes = [(x1, y1, x2, y2) for x1, y1, x2, y2, _ in results]
                     confidences = [c for _, _, _, _, c in results]
+                    self._record_ocr_detection(boxes)
                 else:
                     boxes = self.detector.detect(image, self.config.detection_threshold)
+                    self._record_ocr_detection(boxes)
 
             if not boxes and not fixed_shapes:
                 logger.info("No text detected, copying original")
@@ -2245,6 +2299,7 @@ class SubtitleRemover:
                 )
                 frame = self._processing_frame(raw_frame)
 
+            self.last_detection_stats["frames_total"] += 1
             absolute_idx = ctx.start_frame + state.frame_idx
             frame_seconds = _frame_seconds(
                 absolute_idx, ctx.fps, ctx.frame_timing)
@@ -2257,6 +2312,7 @@ class SubtitleRemover:
                 if not frame_is_in_ranges(
                     absolute_idx, ctx.selective_ranges
                 ):
+                    self._record_detection_skip("selective_rerun")
                     prior_frame = self._processing_frame(prior_raw)
                     batch.add(
                         prior_frame,
@@ -2289,6 +2345,7 @@ class SubtitleRemover:
 
             if self.config.sttn_skip_detection and (
                     fixed_shapes or ctx.timed_region_spans):
+                self._record_detection_skip("manual_region")
                 if fixed_shapes:
                     has_polygon = any(
                         "polygon" in shape for shape in fixed_shapes)
@@ -2337,6 +2394,8 @@ class SubtitleRemover:
                     reuse_by_keyframe = True
 
             if reuse_by_phash or reuse_by_keyframe:
+                self._record_detection_skip(
+                    "phash" if reuse_by_phash else "keyframe")
                 batch.add(
                     frame, state.last_mask, source_frame, passthrough=False)
                 state.frame_idx += 1
@@ -2345,6 +2404,7 @@ class SubtitleRemover:
                     and ctx.frame_skip > 0
                     and state.last_mask is not None
                     and state.frame_idx % (ctx.frame_skip + 1) != 0):
+                self._record_detection_skip("frame_skip")
                 batch.add(
                     frame, state.last_mask, source_frame, passthrough=False)
                 state.frame_idx += 1
@@ -2405,6 +2465,7 @@ class SubtitleRemover:
                 else:
                     detected_boxes = self.detector.detect(
                         det_frame, self.config.detection_threshold)
+                self._record_ocr_detection(detected_boxes)
                 if self.config.karaoke_grouping and detected_boxes:
                     detected_boxes = _group_horizontal_line(
                         detected_boxes,
@@ -2681,6 +2742,7 @@ class SubtitleRemover:
         self.last_pause_checkpoint = None
         self.last_pause_checkpoint_path = None
         self._reset_stage_timings()
+        self._reset_detection_stats()
         self._srt_entries = []
         self._ocr_fix_replacements = None
         self._quality_mask_bbox = None
@@ -3792,6 +3854,7 @@ class SubtitleRemover:
                 config=self.config,
                 status="processed",
                 stage_timings=self.last_stage_timings,
+                detection_stats=getattr(self, "last_detection_stats", None),
                 quality_report=quality_report,
                 quality_gate=quality_gate,
                 output_contract=self.last_output_contract,

@@ -1760,7 +1760,7 @@ msgstr "[!! Šţåŕţ (š) ! !!]"
 msgid "Start and end frames must be whole numbers"
 msgstr "[!! Šţåŕţ åńð éńð ƒŕåḿéš ḿûšţ ƀé ŵħöŀé ńûḿƀéŕš ! ! ! !!]"
 
-#: gui/app.py:3242 gui/processing_controller.py:1003
+#: gui/app.py:3242 gui/processing_controller.py:1007
 msgid "Start batch"
 msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
 

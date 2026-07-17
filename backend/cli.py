@@ -1713,6 +1713,7 @@ def _run_processing(
                         message=str(exc),
                         elapsed_seconds=time.monotonic() - started,
                         stage_timings=getattr(remover, "last_stage_timings", None),
+                        detection_stats=getattr(remover, "last_detection_stats", None),
                     )
                     _cancel_pending_records(records)
                     paused = True
@@ -1727,6 +1728,7 @@ def _run_processing(
                         message=str(exc),
                         elapsed_seconds=time.monotonic() - started,
                         stage_timings=getattr(remover, "last_stage_timings", None),
+                        detection_stats=getattr(remover, "last_detection_stats", None),
                     )
                 else:
                     quality_report = (
@@ -1747,6 +1749,7 @@ def _run_processing(
                         elapsed_seconds=time.monotonic() - started,
                         quality_report=quality_report,
                         stage_timings=getattr(remover, "last_stage_timings", None),
+                        detection_stats=getattr(remover, "last_detection_stats", None),
                     )
         except KeyboardInterrupt:
             print("\n[batch] Interrupted by user -- partial results kept on disk.")
@@ -1880,6 +1883,7 @@ def _run_processing(
             "error": (None if success
                       else getattr(remover, "last_error_message", None)),
             "stage_timings": getattr(remover, "last_stage_timings", None),
+            "detection_stats": getattr(remover, "last_detection_stats", None),
             "quality_report": getattr(remover, "last_quality_report", None),
             "source_timing": getattr(remover, "last_timing_report", None),
             "output_contract": getattr(remover, "last_output_contract", None),

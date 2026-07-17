@@ -156,6 +156,8 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "elapsed_seconds": None,
         "stage_timings": _empty_stage_timings(),
         "dominant_stage": None,
+        "detection_stats": _empty_detection_stats(),
+        "optimization_hint": "",
         "mode": str(_config_value(config, "mode", "")),
         "device": str(_config_value(config, "device", "")),
         "output_codec": str(_config_value(config, "output_codec", "")),
@@ -254,7 +256,8 @@ def finish_batch_item(record: dict, status: str, *,
                       message: str = "",
                       elapsed_seconds: Optional[float] = None,
                       quality_report: Optional[dict] = None,
-                      stage_timings: Optional[dict] = None) -> dict:
+                      stage_timings: Optional[dict] = None,
+                      detection_stats: Optional[dict] = None) -> dict:
     record["status"] = status
     record["message"] = message
     if elapsed_seconds is not None:
@@ -264,6 +267,13 @@ def finish_batch_item(record: dict, status: str, *,
     else:
         record["stage_timings"] = _stage_timings_record(record.get("stage_timings"))
     record["dominant_stage"] = _dominant_stage(record["stage_timings"])
+    record["detection_stats"] = _detection_stats_record(
+        detection_stats
+        if detection_stats is not None
+        else record.get("detection_stats")
+    )
+    record["optimization_hint"] = _optimization_hint(
+        record["stage_timings"], record["detection_stats"])
     if quality_report is not None:
         record["quality_report"] = _quality_report_record(quality_report)
         gate = _quality_gate_record(quality_report)
@@ -311,6 +321,8 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
     started = _as_utc(started_at)
     completed = _as_utc(completed_at or _dt.datetime.now(_dt.timezone.utc))
     files = [_redact_record(r) for r in records] if redact_paths else records
+    stage_summary = summarize_stage_timings(records)
+    detection_summary = summarize_detection_stats(records)
     payload = {
         "schema": "vsr.batch_summary.v1",
         "kind": kind,
@@ -319,7 +331,10 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
         "elapsed_seconds": round(max(0.0, (completed - started).total_seconds()), 3),
         "count": len(records),
         "counts": _counts(records),
-        "stage_summary": summarize_stage_timings(records),
+        "stage_summary": stage_summary,
+        "detection_summary": detection_summary,
+        "optimization_hint": _optimization_hint(
+            stage_summary.get("stage_totals"), detection_summary),
         "files": files,
     }
     out = Path(out_dir)
@@ -414,6 +429,49 @@ def _empty_stage_timings() -> dict:
     return {stage: 0.0 for stage in STAGE_TIMING_KEYS}
 
 
+def _empty_detection_stats() -> dict:
+    return {
+        "frames_total": 0,
+        "frames_ocr": 0,
+        "frames_skipped": 0,
+        "unique_regions_detected": 0,
+        "skip_reasons": {},
+    }
+
+
+def _detection_stats_record(value: Any) -> dict:
+    stats = _empty_detection_stats()
+    if not isinstance(value, dict):
+        return stats
+    for key in (
+        "frames_total",
+        "frames_ocr",
+        "frames_skipped",
+        "unique_regions_detected",
+    ):
+        stats[key] = _safe_int(value.get(key, 0))
+    reasons = value.get("skip_reasons")
+    if isinstance(reasons, dict):
+        stats["skip_reasons"] = {
+            str(reason): _safe_int(count)
+            for reason, count in reasons.items()
+            if _safe_int(count) > 0
+        }
+    return stats
+
+
+def _optimization_hint(stage_timings: Any, detection_stats: Any) -> str:
+    dominant = _dominant_stage(stage_timings)
+    stats = _detection_stats_record(detection_stats)
+    if (
+        isinstance(dominant, dict)
+        and dominant.get("name") == "ocr"
+        and stats["frames_ocr"] >= 3
+    ):
+        return "OCR dominated; try --frame-skip 3 or the Fast preset."
+    return ""
+
+
 def _stage_timings_record(value: Any) -> dict:
     timings = _empty_stage_timings()
     if not isinstance(value, dict):
@@ -453,6 +511,23 @@ def summarize_stage_timings(records: list[dict]) -> dict:
     }
 
 
+def summarize_detection_stats(records: list[dict]) -> dict:
+    totals = _empty_detection_stats()
+    for record in records:
+        stats = _detection_stats_record(record.get("detection_stats"))
+        for key in (
+            "frames_total",
+            "frames_ocr",
+            "frames_skipped",
+            "unique_regions_detected",
+        ):
+            totals[key] += stats[key]
+        for reason, count in stats["skip_reasons"].items():
+            totals["skip_reasons"][reason] = (
+                totals["skip_reasons"].get(reason, 0) + count)
+    return totals
+
+
 def _iso(value: _dt.datetime) -> str:
     value = _as_utc(value)
     return value.isoformat(timespec="seconds")
@@ -481,6 +556,18 @@ def _markdown_summary(payload: dict) -> str:
                 f"- Slowest stage: {_escape_md(_stage_label(slowest.get('name')))} "
                 f"({_format_seconds(slowest.get('seconds'))})"
             )
+    detection_summary = payload.get("detection_summary")
+    if isinstance(detection_summary, dict):
+        stats = _detection_stats_record(detection_summary)
+        if stats["frames_total"]:
+            lines.append(
+                f"- Frames OCR'd: {stats['frames_ocr']}; "
+                f"skipped: {stats['frames_skipped']}; "
+                f"unique regions: {stats['unique_regions_detected']}"
+            )
+    optimization_hint = str(payload.get("optimization_hint") or "")
+    if optimization_hint:
+        lines.append(f"- Optimization: {_escape_md(optimization_hint)}")
     lines.extend([
         "",
         "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Message |",
@@ -489,6 +576,7 @@ def _markdown_summary(payload: dict) -> str:
     review_notes: List[str] = []
     preflight_notes: List[str] = []
     stage_notes: List[str] = []
+    detection_notes: List[str] = []
     for record in payload.get("files", []):
         lines.append(
             "| "
@@ -536,6 +624,20 @@ def _markdown_summary(payload: dict) -> str:
                 f"- **{_escape_md(record.get('input_name', '?'))}**: "
                 + _escape_md(stage_note + suffix)
             )
+        stats = _detection_stats_record(record.get("detection_stats"))
+        if stats["frames_total"]:
+            note = (
+                f"OCR'd {stats['frames_ocr']}/{stats['frames_total']} frames; "
+                f"skipped {stats['frames_skipped']}; "
+                f"unique regions {stats['unique_regions_detected']}"
+            )
+            hint = str(record.get("optimization_hint") or "")
+            if hint:
+                note += f". {hint}"
+            detection_notes.append(
+                f"- **{_escape_md(record.get('input_name', '?'))}**: "
+                + _escape_md(note)
+            )
     if isinstance(stage_summary, dict):
         totals = _format_stage_timings(stage_summary.get("stage_totals"))
         if totals:
@@ -548,6 +650,11 @@ def _markdown_summary(payload: dict) -> str:
         lines.append("### Per-item stage timings")
         lines.append("")
         lines.extend(stage_notes)
+    if detection_notes:
+        lines.append("")
+        lines.append("### Detection efficiency")
+        lines.append("")
+        lines.extend(detection_notes)
     if preflight_notes:
         lines.append("")
         lines.append("### Output quality preflight notes")
@@ -703,6 +810,7 @@ def build_output_sidecar(
     status: str,
     elapsed_seconds: Optional[float] = None,
     stage_timings: Optional[dict] = None,
+    detection_stats: Optional[dict] = None,
     quality_report: Optional[dict] = None,
     quality_gate: Optional[dict] = None,
     output_contract: Optional[dict] = None,
@@ -758,6 +866,8 @@ def build_output_sidecar(
         payload["elapsedSeconds"] = round(max(0.0, float(elapsed_seconds)), 3)
     if stage_timings is not None:
         payload["stageTimings"] = _stage_timings_record(stage_timings)
+    if detection_stats is not None:
+        payload["detectionStats"] = _detection_stats_record(detection_stats)
     if quality_report is not None:
         payload["qualityReport"] = _quality_report_record(quality_report)
     if quality_gate is not None:
@@ -785,6 +895,7 @@ def write_output_sidecar(
     status: str,
     elapsed_seconds: Optional[float] = None,
     stage_timings: Optional[dict] = None,
+    detection_stats: Optional[dict] = None,
     quality_report: Optional[dict] = None,
     quality_gate: Optional[dict] = None,
     output_contract: Optional[dict] = None,
@@ -805,6 +916,7 @@ def write_output_sidecar(
             status=status,
             elapsed_seconds=elapsed_seconds,
             stage_timings=stage_timings,
+            detection_stats=detection_stats,
             quality_report=quality_report,
             quality_gate=quality_gate,
             output_contract=output_contract,

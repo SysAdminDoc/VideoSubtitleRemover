@@ -743,6 +743,7 @@ class QueueItem:
     error: Optional[str] = None
     quality_report: Optional[dict] = None
     stage_timings: dict = field(default_factory=dict)
+    detection_stats: dict = field(default_factory=dict)
     pause_checkpoint_path: str = ""
     soft_subtitle_streams: List[dict] = field(default_factory=list)
     soft_subtitle_probe_done: bool = False
@@ -947,6 +948,8 @@ def save_queue_state(queue_items):
                         str(item.error) if item.error is not None else None),
                     "stage_timings": dict(
                         getattr(item, "stage_timings", {}) or {}),
+                    "detection_stats": dict(
+                        getattr(item, "detection_stats", {}) or {}),
                     "pause_checkpoint_path": getattr(
                         item, "pause_checkpoint_path", ""),
                     "soft_subtitle_streams": list(

@@ -468,6 +468,7 @@ class QualityReviewControllerMixin:
                     else None
                 ),
                 stage_timings=item.stage_timings,
+                detection_stats=getattr(item, "detection_stats", {}),
             )
             finished.append(record)
         return finished

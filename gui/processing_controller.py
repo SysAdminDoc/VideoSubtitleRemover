@@ -836,6 +836,10 @@ class ProcessingControllerMixin:
             self._update_item_display(item)
             logger.error(f"Processing error for {item.file_path}: {e}", exc_info=True)
         finally:
+            remover_obj = locals().get("remover")
+            if remover_obj is not None:
+                item.detection_stats = dict(
+                    getattr(remover_obj, "last_detection_stats", {}) or {})
             if self._active_remover is locals().get("remover"):
                 self._active_remover = None
             if hasattr(self, "queue"):
