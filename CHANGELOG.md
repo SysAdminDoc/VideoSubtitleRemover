@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.21.0] - 2026-07-17
+
 ### Changed
 
 - **The desktop shell now uses one calm, command-first hierarchy.** Primary

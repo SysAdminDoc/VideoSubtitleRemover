@@ -37,7 +37,7 @@ class FrozenBuildSmokeTests(unittest.TestCase):
             "schema": "vsr.frozen_import_smoke.v1",
             "passed": True,
             "imports": {"numpy": "2.4.0", "cv2": "5.0.0"},
-            "startedMessage": "Video Subtitle Remover Pro v3.20.0 started",
+            "startedMessage": "Video Subtitle Remover Pro v3.21.0 started",
         })
         self.assertTrue(payload["passed"])
         with self.assertRaisesRegex(RuntimeError, "missing cv2"):
@@ -45,7 +45,7 @@ class FrozenBuildSmokeTests(unittest.TestCase):
                 "schema": "vsr.frozen_import_smoke.v1",
                 "passed": True,
                 "imports": {"numpy": "2.4.0"},
-                "startedMessage": "Video Subtitle Remover Pro v3.20.0 started",
+                "startedMessage": "Video Subtitle Remover Pro v3.21.0 started",
             })
 
     @unittest.skipUnless(

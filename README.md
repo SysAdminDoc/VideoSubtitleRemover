@@ -6,7 +6,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.20.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.21.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
@@ -81,10 +81,10 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 
 Grab the latest standalone Windows x64 build from the
 [Releases page](https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/latest):
-download `VideoSubtitleRemoverPro-vX.Y.Z-win-x64.zip`, extract anywhere, and run
+download `VideoSubtitleRemoverPro-X.Y.Z-Windows-x64.zip`, extract anywhere, and run
 `VideoSubtitleRemoverPro.exe` (or `Run_VSR_Pro.bat`). The build is unsigned, so
 Windows SmartScreen may prompt -- choose **More info -> Run anyway**, and verify
-the download against the published `.sha256` sidecar.
+the download against the published `SHA256SUMS.txt` file.
 
 ### Quick Install
 
