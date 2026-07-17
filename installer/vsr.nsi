@@ -44,8 +44,8 @@
 !endif
 
 !define VERSIONMAJOR 3
-!define VERSIONMINOR 19
-!define VERSIONPATCH 1
+!define VERSIONMINOR 20
+!define VERSIONPATCH 0
 
 Name "${APPNAME}"
 !ifdef VSR_SMOKE_BUILD
