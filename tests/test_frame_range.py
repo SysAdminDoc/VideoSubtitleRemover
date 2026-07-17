@@ -8,7 +8,7 @@ import math
 import cv2
 import pytest
 
-from backend.processor import _resolve_frame_range
+from backend.processor import _frame_seconds, _resolve_frame_range
 
 
 class _FakeCap:
@@ -93,3 +93,9 @@ def test_vfr_path_uses_frame_timing():
     assert r.selected_frame_durations == [0.04] * 100
     assert math.isclose(r.processed_time_end, 4.0)
     assert math.isclose(r.matte_time_base, 0.001)
+
+
+def test_frame_seconds_uses_one_safe_cfr_vfr_clock():
+    assert math.isclose(_frame_seconds(15, 30.0), 0.5)
+    assert math.isclose(_frame_seconds(15, 0.0), 15.0)
+    assert math.isclose(_frame_seconds(15, 30.0, _FakeTiming()), 0.6)

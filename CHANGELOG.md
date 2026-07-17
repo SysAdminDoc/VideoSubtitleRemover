@@ -21,6 +21,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   gate to `build_exe.bat`; the normal frozen GUI smoke also imports NumPy and
   OpenCV explicitly.
 
+### Changed
+
+- **Frame timing and Whisper span conversion now share one clock.** CFR/VFR
+  frame-to-seconds conversion is centralized and reused by the mask/inpaint
+  loop, clean-reference overrides, VMAF sampling, checkpoint-frame encoding,
+  matte timestamps, and time-range reporting. Both Whisper backends now use
+  the same segment-to-frame helper, removing two copies that could drift on
+  variable-frame-rate input.
+
 ## [3.18.1] - 2026-07-17
 
 ### Fixed

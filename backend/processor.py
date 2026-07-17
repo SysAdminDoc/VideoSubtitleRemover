@@ -361,6 +361,33 @@ class _FrameRange:
     matte_time_base: float
 
 
+def _frame_seconds(index: int, fps: float,
+                   frame_timing: Optional[VideoFrameTiming] = None) -> float:
+    """Return one frame index on the shared VFR/CFR processing clock."""
+    if frame_timing is not None:
+        return frame_timing.frame_time(index, fps)
+    return float(index) / max(float(fps), 1.0)
+
+
+def _spans_from_segments(segments, *, fps: float, total_frames: int,
+                         frame_timing: Optional[VideoFrameTiming] = None
+                         ) -> List[Tuple[int, int]]:
+    """Convert Whisper time segments to frame spans on the shared clock."""
+    valid_segments = [segment for segment in (segments or [])
+                      if len(segment) >= 2]
+    if frame_timing is not None:
+        return [
+            frame_timing.frame_range(
+                float(segment[0]),
+                float(segment[1]),
+                total_frames,
+            )
+            for segment in valid_segments
+        ]
+    from backend.whisper_fallback import segments_to_frame_spans
+    return segments_to_frame_spans(valid_segments, fps)
+
+
 def _resolve_frame_range(cap, total_frames: int, fps: float,
                          frame_timing, time_start: Any,
                          time_end: Any) -> _FrameRange:
@@ -405,20 +432,15 @@ def _resolve_frame_range(cap, total_frames: int, fps: float,
         frame_timing.range_durations(start_frame, end_frame, fps)
         if frame_timing is not None else None
     )
-    processed_time_start = (
-        frame_timing.frame_time(start_frame, fps)
-        if frame_timing is not None else start_frame / fps
-    )
+    processed_time_start = _frame_seconds(
+        start_frame, fps, frame_timing)
     processed_time_end = (
         processed_time_start + sum(selected_frame_durations or [])
         if selected_frame_durations is not None
-        else end_frame / fps
+        else _frame_seconds(end_frame, fps)
     )
     matte_timestamps = [
-        (
-            frame_timing.frame_time(index, fps)
-            if frame_timing is not None else index / fps
-        )
+        _frame_seconds(index, fps, frame_timing)
         for index in range(start_frame, end_frame)
     ]
     matte_durations = list(selected_frame_durations or (
@@ -1266,8 +1288,8 @@ class SubtitleRemover:
             residual_mean_score = (
                 float(np.mean(residual_scores)) if residual_scores else None
             )
-            segment_duration = max(0.1, min(30.0, span / max(fps, 1.0)))
-            segment_start = start_frame / max(fps, 1.0)
+            segment_duration = max(0.1, min(30.0, _frame_seconds(span, fps)))
+            segment_start = _frame_seconds(start_frame, fps)
             vmaf = compute_vmaf(
                 input_path,
                 output_path,
@@ -2666,20 +2688,12 @@ class SubtitleRemover:
                             min_speech_duration=self.config.whisper_min_speech_duration,
                         )
                         if segments:
-                            if frame_timing is not None:
-                                whisper_spans = [
-                                    frame_timing.frame_range(
-                                        float(segment[0]),
-                                        float(segment[1]),
-                                        total_frames,
-                                    )
-                                    for segment in segments
-                                    if len(segment) >= 2
-                                ]
-                            else:
-                                whisper_spans = _wf.segments_to_frame_spans(
-                                    segments, fps
-                                )
+                            whisper_spans = _spans_from_segments(
+                                segments,
+                                fps=fps,
+                                total_frames=total_frames,
+                                frame_timing=frame_timing,
+                            )
                             logger.info(
                                 f"FFmpeg Whisper fallback active: "
                                 f"{len(whisper_spans)} speech spans"
@@ -2697,20 +2711,12 @@ class SubtitleRemover:
                                 language=(self.config.detection_lang or None),
                             )
                             if segments:
-                                if frame_timing is not None:
-                                    whisper_spans = [
-                                        frame_timing.frame_range(
-                                            float(segment[0]),
-                                            float(segment[1]),
-                                            total_frames,
-                                        )
-                                        for segment in segments
-                                        if len(segment) >= 2
-                                    ]
-                                else:
-                                    whisper_spans = _wf.segments_to_frame_spans(
-                                        segments, fps
-                                    )
+                                whisper_spans = _spans_from_segments(
+                                    segments,
+                                    fps=fps,
+                                    total_frames=total_frames,
+                                    frame_timing=frame_timing,
+                                )
                                 logger.info(
                                     f"Whisper fallback active: "
                                     f"{len(whisper_spans)} speech spans"
@@ -2793,11 +2799,8 @@ class SubtitleRemover:
                         frame = self._processing_frame(raw_frame)
 
                     absolute_idx = start_frame + frame_idx
-                    frame_seconds = (
-                        frame_timing.frame_time(absolute_idx, fps)
-                        if frame_timing is not None
-                        else absolute_idx / max(fps, 1.0)
-                    )
+                    frame_seconds = _frame_seconds(
+                        absolute_idx, fps, frame_timing)
                     if selective_cap is not None:
                         prior_ok, prior_raw = selective_cap.read()
                         if not prior_ok or prior_raw is None:
@@ -3123,11 +3126,8 @@ class SubtitleRemover:
                             if passthrough_flags[offset]:
                                 continue
                             absolute = batch_start + offset
-                            seconds = (
-                                frame_timing.frame_time(absolute, fps)
-                                if frame_timing is not None
-                                else absolute / max(fps, 1.0)
-                            )
+                            seconds = _frame_seconds(
+                                absolute, fps, frame_timing)
                             reference_frames[offset], fallback_masks[offset] = (
                                 self._apply_clean_reference_overrides(
                                     frame, mask, seconds)
@@ -4344,7 +4344,7 @@ class SubtitleRemover:
                     1.0,
                     sum(normalized_durations)
                     if normalized_durations
-                    else frame_total / max(fps, 1.0),
+                    else _frame_seconds(frame_total, fps),
                 )
             )
             self._run_checked_ffmpeg(cmd, timeout)
