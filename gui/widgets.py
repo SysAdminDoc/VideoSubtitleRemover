@@ -889,13 +889,17 @@ class ModernToggle(tk.Canvas):
         self._rounded(x0, y0, x0 + self.BOX, y0 + self.BOX, Theme.R_SM,
                       fill=box_fill, outline=box_border, width=1)
 
-        # Checkmark
+        # Checkmark. The vertex offsets are authored for the unscaled
+        # 18px box, so scale them with the box so the tick stays centered
+        # and proportional at larger text-scale settings.
         if checked:
-            stroke = Theme.INK_ON_GREEN if self.enabled else Theme.TEXT_DISABLED
-            self.create_line(x0 + 4, y0 + 9, x0 + 8, y0 + 13,
-                             fill=stroke, width=2, capstyle="round")
-            self.create_line(x0 + 8, y0 + 13, x0 + 14, y0 + 5,
-                             fill=stroke, width=2, capstyle="round")
+            stroke = Theme.INK_ON_BLUE if self.enabled else Theme.TEXT_DISABLED
+            u = self.BOX / float(type(self).BOX)
+            width = max(2, round(2 * u))
+            self.create_line(x0 + 4 * u, y0 + 9 * u, x0 + 8 * u, y0 + 13 * u,
+                             fill=stroke, width=width, capstyle="round")
+            self.create_line(x0 + 8 * u, y0 + 13 * u, x0 + 14 * u, y0 + 5 * u,
+                             fill=stroke, width=width, capstyle="round")
 
         # Label
         text_color = self.fg_color if self.enabled else Theme.TEXT_DISABLED
@@ -2045,6 +2049,9 @@ class QueueItemWidget(tk.Frame):
             lambda _event: self._on_context_menu(None),
             add="+",
         )
+        # Cancel any pending pulse animation when the row is destroyed so a
+        # queued .after callback cannot fire against a torn-down widget.
+        self.bind("<Destroy>", self._on_destroy, add="+")
 
         self._sync_a11y()
         self.update_item(item)
@@ -2412,6 +2419,19 @@ class QueueItemWidget(tk.Frame):
             return
         self._pulse_phase = 0
         self._pulse_tick()
+
+    def _on_destroy(self, event=None):
+        # Only react to this widget's own destruction, not a child's, and
+        # only cancel the timer -- reconfiguring during teardown raises.
+        if event is not None and event.widget is not self:
+            return
+        tid = getattr(self, "_pulse_id", None)
+        if tid:
+            try:
+                self.after_cancel(tid)
+            except tk.TclError:
+                pass
+        self._pulse_id = None
 
     def _stop_pulse(self):
         tid = getattr(self, "_pulse_id", None)
