@@ -55,7 +55,8 @@ _CLI_CATEGORY_OPTIONS = (
     (
         "Removal, detection, and masks",
         (
-            "--mode", "--gpu", "--lang", "--skip-detection", "--fast",
+            "--mode", "--gpu", "--lang", "--language-filter",
+            "--skip-detection", "--fast",
             "--threshold", "--vertical", "--frame-skip", "--mask-dilate",
             "--confidence-dilate", "--mask-feather", "--temporal-smooth",
             "--edge-ring", "--flow-warp", "--no-scene-split", "--pyscenedetect",
@@ -595,6 +596,11 @@ def _build_parser(mode_choices):
                        help="Inpainting algorithm.")
     parser.add_argument("--gpu", "-g", type=int, default=0, help="GPU device ID (-1 for CPU)")
     parser.add_argument("--lang", "-l", default="en", help="Detection language")
+    parser.add_argument(
+        "--language-filter",
+        action="store_true",
+        help="Only mask OCR text matching the selected language's script.",
+    )
     parser.add_argument("--skip-detection", action="store_true",
                        help="Skip automatic detection (STTN only)")
     parser.add_argument("--fast", action="store_true", help="Fast mode (LAMA only)")
@@ -1191,6 +1197,7 @@ def _build_processing_config(
         preserve_audio=not args.no_audio,
         detection_lang=args.lang,
         detection_engine=args.ocr_engine,
+        language_mask_filter=args.language_filter,
         detection_threshold=args.threshold,
         detection_vertical=args.vertical,
         whisper_fallback=args.whisper_fallback,

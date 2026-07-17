@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from backend.paddle_compat import extract_paddle_boxes
+from backend.paddle_compat import extract_paddle_boxes, extract_paddle_text_boxes
 
 
 class _JsonMethodResult:
@@ -39,6 +39,11 @@ class PaddleCompatTests(unittest.TestCase):
 
         self.assertEqual(boxes, [(10, 20, 40, 32)])
 
+        text_boxes = extract_paddle_text_boxes(
+            Model(), np.zeros((4, 4, 3)), 0.5)
+        self.assertEqual(
+            text_boxes, [(10, 20, 40, 32, 0.91, "subtitle")])
+
     def test_ppocrv6_predict_payload_extracts_rec_boxes_fallback(self):
         class Model:
             def predict(self, frame):
@@ -55,6 +60,11 @@ class PaddleCompatTests(unittest.TestCase):
         boxes = extract_paddle_boxes(Model(), np.zeros((4, 4, 3)), 0.5)
 
         self.assertEqual(boxes, [(5, 7, 55, 18)])
+
+        text_boxes = extract_paddle_text_boxes(
+            Model(), np.zeros((4, 4, 3)), 0.5)
+        self.assertEqual(
+            text_boxes, [(5, 7, 55, 18, 0.88, "subtitle")])
 
 
     def test_v3_dt_polys_key(self):

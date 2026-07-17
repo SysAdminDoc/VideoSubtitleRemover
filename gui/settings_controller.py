@@ -159,6 +159,7 @@ class AdvancedSettingsControllerMixin:
             ("export_mask_var", "export_mask_video"),
             ("mask_export_format_var", "mask_export_format"),
             ("mask_import_mode_var", "mask_import_mode"),
+            ("language_filter_var", "language_mask_filter"),
         ):
             if hasattr(self, attr):
                 getattr(self, attr).set(getattr(self.config, field))

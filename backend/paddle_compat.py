@@ -22,6 +22,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 Box = Tuple[int, int, int, int]
+TextBox = Tuple[int, int, int, int, float, str]
 
 
 def build_paddleocr(lang: str, device: str, **extra):
@@ -76,6 +77,98 @@ def extract_paddle_boxes(model, frame: np.ndarray,
     if hasattr(model, "predict"):
         return _extract_v3(model, frame, threshold)
     return _extract_v2(model, frame, threshold)
+
+
+def extract_paddle_text_boxes(
+    model, frame: np.ndarray, threshold: float
+) -> List[TextBox]:
+    """Run PaddleOCR and retain aligned confidence/text for each box."""
+    if hasattr(model, "predict"):
+        results = model.predict(frame)
+        output: List[TextBox] = []
+        for result in results or []:
+            data = _result_payload(result)
+            if not isinstance(data, dict):
+                continue
+            data = data.get("res", data)
+            boxes = data.get("rec_polys")
+            if boxes is None:
+                boxes = data.get("dt_polys")
+            rectangular = False
+            if boxes is None:
+                boxes = data.get("rec_boxes")
+                rectangular = True
+            scores = data.get("rec_scores")
+            if scores is None:
+                scores = []
+            texts = data.get("rec_texts")
+            if texts is None:
+                texts = []
+            if boxes is None:
+                boxes = []
+            for index, raw_box in enumerate(boxes):
+                score = _sequence_float(scores, index, 1.0)
+                if score < threshold:
+                    continue
+                box = (
+                    _rect_to_box(raw_box)
+                    if rectangular else _poly_to_box(raw_box)
+                )
+                if box is None:
+                    continue
+                text = str(texts[index]) if index < len(texts) else ""
+                output.append(box + (score, text))
+        return output
+
+    try:
+        results = model.ocr(frame, cls=False)
+    except TypeError:
+        results = model.ocr(frame)
+    output = []
+    for line in (results[0] if results and results[0] else []):
+        try:
+            text = str(line[1][0])
+            score = float(line[1][1])
+        except (IndexError, TypeError, ValueError):
+            continue
+        box = _poly_to_box(line[0])
+        if box is not None and score >= threshold:
+            output.append(box + (score, text))
+    return output
+
+
+def _sequence_float(values, index: int, default: float) -> float:
+    try:
+        return float(values[index])
+    except (IndexError, TypeError, ValueError):
+        return default
+
+
+def _poly_to_box(poly) -> Box | None:
+    try:
+        points = np.array(poly, dtype=np.float32)
+    except (TypeError, ValueError):
+        return None
+    if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] < 2:
+        return None
+    x1, y1 = points[:, 0].min(), points[:, 1].min()
+    x2, y2 = points[:, 0].max(), points[:, 1].max()
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return int(x1), int(y1), int(x2), int(y2)
+
+
+def _rect_to_box(rect) -> Box | None:
+    try:
+        values = np.array(rect, dtype=np.float32).reshape(-1)
+    except (TypeError, ValueError):
+        return None
+    if values.size < 4:
+        return None
+    x1, y1, x2, y2 = values[:4]
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return int(x1), int(y1), int(x2), int(y2)
 
 
 def _extract_v3(model, frame: np.ndarray, threshold: float) -> List[Box]:

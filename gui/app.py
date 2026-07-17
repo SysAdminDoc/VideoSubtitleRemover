@@ -451,6 +451,8 @@ class VideoSubtitleRemoverApp(
         self.config.detection_lang = self.lang_var.get()
         self.config.detection_engine = self._ocr_engine_by_label.get(
             self.ocr_engine_var.get(), "auto")
+        if hasattr(self, "language_filter_var"):
+            self.config.language_mask_filter = self.language_filter_var.get()
         # Threshold slider stores as int percent, convert to float
         pct = getattr(self.config, '_detection_threshold_pct', 50)
         self.config.detection_threshold = pct / 100.0
@@ -2140,6 +2142,20 @@ class VideoSubtitleRemoverApp(
             self.ocr_engine_combo,
             tr("Automatic uses the best installed detector. Select an engine "
                "to compare results or reproduce a run."),
+        )
+        self.language_filter_var = tk.BooleanVar(
+            value=self.config.language_mask_filter)
+        self.language_filter_toggle = ModernToggle(
+            det_frame,
+            text=tr("Only remove the selected language"),
+            variable=self.language_filter_var,
+        )
+        self.language_filter_toggle.pack(
+            anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(
+            self.language_filter_toggle,
+            tr("Keep OCR boxes whose recognized script does not match the "
+               "subtitle language. Latin-script languages share one family."),
         )
         self._create_slider(det_frame, "Frame skip", 0, 10,
                             self.config.detection_frame_skip, "detection_frame_skip",
@@ -4822,6 +4838,8 @@ class VideoSubtitleRemoverApp(
             self.lang_combo.config(state=combo_state)
             if hasattr(self, "ocr_engine_combo"):
                 self.ocr_engine_combo.config(state=combo_state)
+            if hasattr(self, "language_filter_toggle"):
+                self.language_filter_toggle.set_enabled(not locked)
             if hasattr(self, 'gpu_combo'):
                 self.gpu_combo.config(state=combo_state)
             self.time_start_entry.config(state=entry_state)

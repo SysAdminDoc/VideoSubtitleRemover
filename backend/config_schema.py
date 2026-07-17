@@ -14,8 +14,8 @@ from enum import Enum
 from typing import Any, Iterable, Mapping
 
 
-CONFIG_SCHEMA_VERSION = 9
-GUI_SETTINGS_FORMAT = 15
+CONFIG_SCHEMA_VERSION = 10
+GUI_SETTINGS_FORMAT = 16
 CONFIG_SCHEMA_VERSION_KEY = "config_schema_version"
 GUI_SETTINGS_VERSION_KEY = "vsr_settings_format"
 
@@ -105,6 +105,7 @@ def migrate_gui_settings(data: Any) -> dict[str, Any]:
     # Format 13 adds local-first subtitle translation and re-embedding.
     # Format 14 allows a confidence-gated clean plate on each timed region.
     # Format 15 persists the Advanced OCR-engine selector.
+    # Format 16 persists the selected-language-only mask filter.
     result[GUI_SETTINGS_VERSION_KEY] = GUI_SETTINGS_FORMAT
     result[CONFIG_SCHEMA_VERSION_KEY] = CONFIG_SCHEMA_VERSION
     return result

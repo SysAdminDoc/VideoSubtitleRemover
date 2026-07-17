@@ -240,6 +240,48 @@ class MediaInputFailureTests(unittest.TestCase):
         self.assertEqual(
             remover.last_detection_stats["unique_regions_detected"], 1)
 
+    def test_process_image_filters_masks_by_selected_language_script(self):
+        class FakeDetector:
+            def detect_with_text(self, *_args, **_kwargs):
+                return [
+                    (4, 4, 16, 16, 0.95, "English"),
+                    (28, 4, 44, 16, 0.93, chr(0x5B57) + chr(0x5E55)),
+                ]
+
+        class CapturingInpainter:
+            def __init__(self):
+                self.mask = None
+
+            def inpaint(self, frames, masks):
+                self.mask = masks[0].copy()
+                return frames
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "mixed.png"
+            output = work / "mixed_clean.png"
+            image = np.full((24, 52, 3), 128, dtype=np.uint8)
+            self.assertTrue(processor.cv2.imwrite(str(source), image))
+
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = processor.ProcessingConfig(
+                detection_lang="ja",
+                language_mask_filter=True,
+                mask_dilate_px=0,
+            )
+            remover.detector = FakeDetector()
+            inpainter = CapturingInpainter()
+            remover.inpainter = inpainter
+            remover.on_progress = None
+            remover.last_stage_timings = remover._empty_stage_timings()
+
+            ok = remover.process_image(str(source), str(output))
+
+        self.assertTrue(ok)
+        self.assertEqual(int(inpainter.mask[10, 10]), 0)
+        self.assertEqual(int(inpainter.mask[10, 34]), 255)
+
     def test_detection_stats_cluster_stable_boxes_and_count_skip_reasons(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover._reset_detection_stats()

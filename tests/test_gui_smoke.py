@@ -493,9 +493,11 @@ class GuiSmokeTests(unittest.TestCase):
             # propagates into the persisted config.
             app.preserve_audio_var.set(False)
             app.ocr_engine_var.set("PaddleOCR")
+            app.language_filter_var.set(True)
             app._sync_config_from_ui()
             self.assertFalse(app.config.preserve_audio)
             self.assertEqual(app.config.detection_engine, "paddleocr")
+            self.assertTrue(app.config.language_mask_filter)
         finally:
             self._destroy_app(app)
 

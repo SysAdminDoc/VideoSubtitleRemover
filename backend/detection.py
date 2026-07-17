@@ -413,6 +413,29 @@ class SubtitleDetector:
             return out
         return self._detect_axis_aligned_conf(frame, threshold)
 
+    def detect_with_text(
+        self, frame: np.ndarray, threshold: float = 0.5
+    ) -> List[Tuple[int, int, int, int, float, str]]:
+        """Return recognized text aligned with each detectable OCR box.
+
+        Dependency-free and detection-only engines return no entries because
+        they cannot prove which language a box contains.
+        """
+        if self.vertical:
+            h, w = frame.shape[:2]
+            rotated_frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            rotated = self._detect_axis_aligned_text(rotated_frame, threshold)
+            output: List[Tuple[int, int, int, int, float, str]] = []
+            for rx1, ry1, rx2, ry2, conf, text in rotated:
+                ox1 = max(0, w - ry2)
+                oy1 = max(0, rx1)
+                ox2 = min(w, w - ry1)
+                oy2 = min(h, rx2)
+                if ox2 > ox1 and oy2 > oy1:
+                    output.append((ox1, oy1, ox2, oy2, conf, text))
+            return output
+        return self._detect_axis_aligned_text(frame, threshold)
+
     def benchmark_detect(
         self,
         frame: np.ndarray,
@@ -448,6 +471,94 @@ class SubtitleDetector:
             return self._detect_rapid_conf(frame, threshold)
         boxes = self._detect_axis_aligned(frame, threshold)
         return [(x1, y1, x2, y2, 1.0) for (x1, y1, x2, y2) in boxes]
+
+    def _detect_axis_aligned_text(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int, float, str]]:
+        if self._rapid_model is not None:
+            try:
+                return self._rapid_output_to_text_boxes(
+                    self._rapid_model(frame), threshold)
+            except Exception as exc:
+                logger.error(f"RapidOCR text detection error: {exc}")
+                return []
+        if self._paddle_model is not None:
+            try:
+                from backend.paddle_compat import extract_paddle_text_boxes
+                return extract_paddle_text_boxes(
+                    self._paddle_model, frame, threshold)
+            except Exception as exc:
+                logger.error(f"PaddleOCR text detection error: {exc}")
+                return []
+        if self._easyocr_reader is not None:
+            try:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                output = []
+                for bbox, text, confidence in self._easyocr_reader.readtext(
+                    frame_rgb
+                ):
+                    if float(confidence) < threshold:
+                        continue
+                    box = self._poly_to_box(bbox)
+                    if box is not None:
+                        output.append(box + (float(confidence), str(text)))
+                return output
+            except Exception as exc:
+                logger.error(f"EasyOCR text detection error: {exc}")
+        return []
+
+    @classmethod
+    def _rapid_output_to_text_boxes(
+        cls, output, threshold: float
+    ) -> List[Tuple[int, int, int, int, float, str]]:
+        if output is None:
+            return []
+        results = output[0] if isinstance(output, tuple) and output else output
+        if results is None:
+            return []
+        polys = cls._rapid_field(
+            results, "boxes", "dt_polys", "dt_boxes", "polys", "det_polys")
+        if polys is not None:
+            scores = cls._rapid_field(
+                results, "scores", "rec_scores", "text_scores", "cls_scores")
+            texts = cls._rapid_field(
+                results, "txts", "texts", "rec_texts", "text")
+            if isinstance(texts, str):
+                texts = [texts]
+            output_boxes = []
+            for index, poly in enumerate(polys):
+                confidence = cls._rapid_score_at(scores, index)
+                box = cls._poly_to_box(poly)
+                if box is None or confidence < threshold:
+                    continue
+                try:
+                    text = str(texts[index]) if texts is not None else ""
+                except (IndexError, KeyError, TypeError):
+                    text = ""
+                output_boxes.append(box + (confidence, text))
+            return output_boxes
+        output_boxes = []
+        for entry in results:
+            parsed = cls._rapid_entry_to_box(entry, threshold)
+            if parsed is None:
+                continue
+            if isinstance(entry, dict):
+                raw_text = cls._rapid_field(
+                    entry, "text", "txt", "rec_text", "label")
+                confidence = cls._rapid_score_at(
+                    [cls._rapid_field(
+                        entry, "score", "confidence", "conf", "rec_score")],
+                    0,
+                )
+            else:
+                try:
+                    raw_text = entry[1] if len(entry) >= 2 else ""
+                    confidence = float(entry[2]) if len(entry) >= 3 else 1.0
+                except (TypeError, ValueError):
+                    raw_text = ""
+                    confidence = 1.0
+            output_boxes.append(parsed + (confidence, str(raw_text or "")))
+        return output_boxes
 
     def _detect_rapid_conf(
         self, frame: np.ndarray, threshold: float
@@ -778,6 +889,31 @@ def _classify_script(text: str) -> str:
     if counts[best] == 0:
         return "unknown"
     return best
+
+
+def text_matches_detection_language(text: str, language: str) -> bool:
+    """Match recognized text to the configured language's script family.
+
+    This intentionally makes no unsupported claim that Latin text can be
+    distinguished as English versus French (or another Latin language).
+    """
+    tag = str(language or "en").strip().lower().replace("_", "-")
+    primary = tag.split("-", 1)[0]
+    if tag in {"chinese-cht", "manga"} or primary in {"ch", "zh", "ja"}:
+        expected = "cjk"
+    elif primary == "ko":
+        expected = "hangul"
+    elif primary in {"ru", "uk", "be", "bg", "mk", "sr"}:
+        expected = "cyrillic"
+    elif primary in {"ar", "fa", "ur", "ug"}:
+        expected = "arabic"
+    elif primary in {"hi", "mr", "ne"}:
+        expected = "devanagari"
+    elif primary == "th":
+        expected = "thai"
+    else:
+        expected = "latin"
+    return _classify_script(str(text or "")) == expected
 
 
 _SCRIPT_TO_LANG = {

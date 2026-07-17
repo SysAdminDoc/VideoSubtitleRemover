@@ -45,6 +45,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
 - **Live Region OCR Feedback** -- While drawing a rectangle, inspect detected text boxes and confidence before saving the region
+- **Selected-Language Masks** -- Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
 - **Quality Self-Test** -- PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, and an optional side-by-side comparison PNG
@@ -259,6 +260,12 @@ can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, EasyOCR, or the dependency-free
 OpenCV fallback for comparison and reproducible runs; unavailable pinned
 engines fall back safely instead of silently switching to another OCR model.
 The same selector is available as `--ocr-engine` on the CLI:
+
+Advanced > Detection also offers **Only remove the selected language**. It is
+opt-in and requires recognized text from RapidOCR, PaddleOCR, or EasyOCR;
+detection-only boxes are kept. Matching is by script family, so it can separate
+Japanese/Cyrillic/Arabic/etc. overlays from Latin text, while Latin-script
+languages such as English and French intentionally share one family.
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
@@ -564,6 +571,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--mode`, `-m` | Inpainting algorithm. | sttn | sttn \| lama \| propainter \| auto \| migan | Public |
 | `--gpu`, `-g` | GPU device ID (-1 for CPU) | 0 | -1 or >=0 | Public |
 | `--lang`, `-l` | Detection language | en | - | Public |
+| `--language-filter` | Only mask OCR text matching the selected language's script. | Off | - | Public |
 | `--skip-detection` | Skip automatic detection (STTN only) | Off | - | Public |
 | `--fast` | Fast mode (LAMA only) | Off | - | Public |
 | `--threshold` | Detection threshold (0.1-1.0) | 0.5 | 0.1..1.0 | Public |
@@ -763,6 +771,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `detection_threshold` | `float` | `0.5` |
 | `detection_lang` | `str` | `en` |
 | `detection_engine` | `str` | `auto` |
+| `language_mask_filter` | `bool` | `Off` |
 | `detection_frame_skip` | `int` | `0` |
 | `detection_vertical` | `bool` | `Off` |
 | `whisper_fallback` | `bool` | `Off` |

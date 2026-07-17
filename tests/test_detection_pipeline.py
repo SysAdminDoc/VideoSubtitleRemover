@@ -342,6 +342,9 @@ class RapidOCROutputParsingTests(unittest.TestCase):
         boxes = cls._rapid_output_to_boxes(output, 0.5)
         self.assertEqual(len(boxes), 1)
         self.assertEqual(boxes[0], (10, 20, 100, 40))
+        text_boxes = cls._rapid_output_to_text_boxes(output, 0.5)
+        self.assertEqual(
+            text_boxes, [(10, 20, 100, 40, 0.95, "hello")])
 
     def test_v2_structured_object(self):
         cls = self._get_detector_cls()
@@ -447,6 +450,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg = ProcessingConfig()
         cfg.detection_lang = "ja"
         cfg.detection_engine = "paddleocr"
+        cfg.language_mask_filter = True
         cfg.output_quality = 18
         cfg.output_codec = "h265"
         cfg.mask_dilate_px = 12
@@ -460,6 +464,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         cmd = _build_cli_command(item)
         self.assertIn("-l ja", cmd)
         self.assertIn("--ocr-engine paddleocr", cmd)
+        self.assertIn("--language-filter", cmd)
         self.assertIn("--crf 18", cmd)
         self.assertIn("--codec h265", cmd)
         self.assertIn("--mask-dilate 12", cmd)
@@ -555,7 +560,7 @@ class CliCommandBuilderTests(unittest.TestCase):
                      "--keep-subtitles", "--keep-chyrons", "--karaoke",
                      "--export-srt", "--export-mask", "--nle-sidecar",
                      "--quality-sheet", "--output-frames", "--d3d12-accel",
-                     "--translate", "--translated-srt"):
+                     "--translate", "--translated-srt", "--language-filter"):
             self.assertNotIn(flag, cmd, f"Default config should not emit {flag}")
 
 
@@ -589,6 +594,22 @@ class ScriptClassificationTests(unittest.TestCase):
         with _fresh_detection_module() as detection:
             self.assertEqual(
                 detection._classify_script(chr(0x4F60) + chr(0x597D) + "Hi"), "cjk")
+
+    def test_language_filter_matches_script_without_claiming_latin_locale(self):
+        with _fresh_detection_module() as detection:
+            self.assertTrue(
+                detection.text_matches_detection_language("Hello", "fr"))
+            self.assertTrue(
+                detection.text_matches_detection_language(
+                    "".join(chr(cp) for cp in (
+                        0x41F, 0x440, 0x438, 0x432, 0x435, 0x442)),
+                    "ru",
+                ))
+            self.assertFalse(
+                detection.text_matches_detection_language("Hello", "ru"))
+            self.assertTrue(
+                detection.text_matches_detection_language(
+                    chr(0x5B57) + chr(0x5E55), "ja"))
 
 
 class OcrBenchmarkHarnessTests(unittest.TestCase):

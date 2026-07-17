@@ -614,6 +614,15 @@ class SubtitleRemover:
             vertical=self.config.detection_vertical,
             engine=self.config.detection_engine,
         )
+        if self.config.language_mask_filter and not any(
+            name in self.detector._engine_name
+            for name in ("RapidOCR", "PaddleOCR", "EasyOCR")
+        ):
+            logger.warning(
+                "Selected-language mask filtering needs recognized OCR text; "
+                "%s cannot classify boxes, so unmatched regions will be kept.",
+                self.detector._engine_name,
+            )
         self.inpainter = self._create_inpainter()
         self.on_progress: Optional[Callable[[float, str], None]] = None
         # Live-preview callback: invoked with a BGR numpy frame roughly every
@@ -1989,6 +1998,19 @@ class SubtitleRemover:
                 elif fixed_shapes and self.config.sttn_skip_detection:
                     boxes = []
                     self._record_detection_skip("manual_region")
+                elif self.config.language_mask_filter:
+                    from backend.detection import text_matches_detection_language
+                    results = self.detector.detect_with_text(
+                        image, self.config.detection_threshold)
+                    matched = [
+                        result for result in results
+                        if text_matches_detection_language(
+                            result[5], self.config.detection_lang)
+                    ]
+                    boxes = [result[:4] for result in matched]
+                    if self.config.confidence_weighted_dilation:
+                        confidences = [result[4] for result in matched]
+                    self._record_ocr_detection(boxes)
                 elif self.config.confidence_weighted_dilation:
                     results = self.detector.detect_with_confidence(
                         image, self.config.detection_threshold)
@@ -2429,7 +2451,44 @@ class SubtitleRemover:
                     self.config.confidence_weighted_dilation
                     or self.config.quality_report
                 )
-                if collect_confidence:
+                if self.config.language_mask_filter:
+                    from backend.detection import text_matches_detection_language
+                    text_results = self.detector.detect_with_text(
+                        det_frame, self.config.detection_threshold)
+                    matched = [
+                        result for result in text_results
+                        if text_matches_detection_language(
+                            result[5], self.config.detection_lang)
+                    ]
+                    detected_boxes = [result[:4] for result in matched]
+                    det_confs = [result[4] for result in matched]
+                    if self.config.quality_report and det_confs:
+                        review_floor = min(
+                            0.9,
+                            max(
+                                0.6,
+                                self.config.detection_threshold + 0.15,
+                            ),
+                        )
+                        low_confidence = min(det_confs)
+                        if low_confidence < review_floor:
+                            self._mask_review_signals.append(
+                                make_review_span(
+                                    "low-confidence",
+                                    absolute_idx,
+                                    absolute_idx + 1,
+                                    fps=ctx.fps,
+                                    score=low_confidence,
+                                    threshold=review_floor,
+                                    reason=(
+                                        "OCR confidence was below "
+                                        "the review floor"
+                                    ),
+                                )
+                            )
+                    if not self.config.confidence_weighted_dilation:
+                        det_confs = None
+                elif collect_confidence:
                     det_results = self.detector.detect_with_confidence(
                         det_frame, self.config.detection_threshold)
                     detected_boxes = [

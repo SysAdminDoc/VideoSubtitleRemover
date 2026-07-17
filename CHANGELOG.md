@@ -25,6 +25,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Masks can target the selected subtitle language.** An opt-in Advanced
+  toggle and `--language-filter` keep OCR boxes whose recognized script does
+  not match the configured subtitle language. RapidOCR, PaddleOCR, and EasyOCR
+  retain aligned text/confidence for the filter; detection-only or unrecognized
+  boxes are conservatively left untouched, and Latin languages share a script
+  family rather than claiming unsupported locale-level identification.
 - **Advanced OCR selection is now reproducible.** Automatic detection remains
   the default, while the GUI and `--ocr-engine` can pin RapidOCR, OpenCV 5 DNN,
   PaddleOCR, EasyOCR, or the built-in OpenCV fallback. Preview, auto-band,
