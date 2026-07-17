@@ -136,7 +136,7 @@ msgstr ""
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr ""
 
-#: gui/app.py:3345 gui/app.py:4453
+#: gui/app.py:3345 gui/app.py:4476
 msgid "Application status"
 msgstr ""
 
@@ -240,7 +240,7 @@ msgstr ""
 msgid "CPU only"
 msgstr ""
 
-#: gui/app.py:4098 gui/mask_correction_controller.py:577 gui/region_controller.py:1457 gui/settings_controller.py:417
+#: gui/app.py:4104 gui/mask_correction_controller.py:577 gui/region_controller.py:1457 gui/settings_controller.py:417
 msgid "Cancel"
 msgstr ""
 
@@ -252,7 +252,7 @@ msgstr ""
 msgid "Carry masks across missed detections"
 msgstr ""
 
-#: gui/app.py:3975
+#: gui/app.py:3981
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr ""
 
@@ -708,19 +708,19 @@ msgstr ""
 msgid "Faster keyframe-only detection"
 msgstr ""
 
-#: gui/app.py:3887
+#: gui/app.py:3893
 msgid "File size (largest first)"
 msgstr ""
 
-#: gui/app.py:3889
+#: gui/app.py:3895
 msgid "File size (smallest first)"
 msgstr ""
 
-#: gui/app.py:3882
+#: gui/app.py:3888
 msgid "Filename (A -> Z)"
 msgstr ""
 
-#: gui/app.py:3884
+#: gui/app.py:3890
 msgid "Filename (Z -> A)"
 msgstr ""
 
@@ -1032,7 +1032,7 @@ msgstr ""
 msgid "Missing"
 msgstr ""
 
-#: gui/app.py:4002
+#: gui/app.py:4008
 msgid "Mode"
 msgstr ""
 
@@ -1184,7 +1184,7 @@ msgstr ""
 msgid "Optional FFmpeg force_style text, for example FontSize=24."
 msgstr ""
 
-#: gui/app.py:2255 gui/app.py:4063
+#: gui/app.py:2255 gui/app.py:4069
 msgid "Output codec"
 msgstr ""
 
@@ -1200,7 +1200,7 @@ msgstr ""
 msgid "Override settings for this file..."
 msgstr ""
 
-#: gui/app.py:3963
+#: gui/app.py:3969
 msgid "Override settings: {name}"
 msgstr ""
 
@@ -1240,7 +1240,7 @@ msgstr ""
 msgid "Pending keyframe {index}"
 msgstr ""
 
-#: gui/app.py:3973 gui/app.py:3991
+#: gui/app.py:3979 gui/app.py:3997
 msgid "Per-file overrides"
 msgstr ""
 
@@ -1492,7 +1492,7 @@ msgstr ""
 msgid "Reveal output folder"
 msgstr ""
 
-#: gui/app.py:3894
+#: gui/app.py:3900
 msgid "Reverse current order"
 msgstr ""
 
@@ -1548,7 +1548,7 @@ msgstr ""
 msgid "Sampled quality check"
 msgstr ""
 
-#: gui/app.py:4100 gui/region_controller.py:1454
+#: gui/app.py:4106 gui/region_controller.py:1454
 msgid "Save"
 msgstr ""
 
@@ -1636,7 +1636,7 @@ msgstr ""
 msgid "Selected manual region"
 msgstr ""
 
-#: gui/app.py:4035
+#: gui/app.py:4041
 msgid "Sensitivity"
 msgstr ""
 
@@ -1728,7 +1728,7 @@ msgstr ""
 msgid "Start sec"
 msgstr ""
 
-#: gui/app.py:3892
+#: gui/app.py:3898
 msgid "Status (pending first)"
 msgstr ""
 
@@ -1756,7 +1756,7 @@ msgstr ""
 msgid "SubRip subtitles"
 msgstr ""
 
-#: gui/app.py:1968 gui/app.py:4016
+#: gui/app.py:1968 gui/app.py:4022
 msgid "Subtitle language"
 msgstr ""
 
@@ -1832,7 +1832,7 @@ msgstr ""
 msgid "The source video could not be opened"
 msgstr ""
 
-#: gui/app.py:3995
+#: gui/app.py:4001
 msgid "These apply to this queued item only and survive a global settings change."
 msgstr ""
 

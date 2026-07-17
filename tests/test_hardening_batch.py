@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import queue as thread_queue
 import sys
 import tempfile
 import threading
@@ -672,6 +673,116 @@ class QueueAutosaveRoundTripTests(unittest.TestCase):
         self.assertEqual(second_app.queue[0].config.output_codec, "h265")
         self.assertEqual(second_app.queue[1].status, gui_config.ProcessingStatus.PAUSED)
         self.assertEqual(second_app.queue[1].config.detection_lang, "ja")
+
+
+class QueueConcurrencyTests(unittest.TestCase):
+    """R5: queue mutations remain lossless under lock contention."""
+
+    def test_concurrent_enqueue_dequeue_and_pause_preserve_all_state(self):
+        app = gui.VideoSubtitleRemoverApp.__new__(gui.VideoSubtitleRemoverApp)
+        app.queue = []
+        app.queue_lock = threading.Lock()
+        app.pause_event = threading.Event()
+
+        work: thread_queue.Queue[object] = thread_queue.Queue()
+        producer_count = 4
+        consumer_count = 4
+        start = threading.Barrier(producer_count + consumer_count + 1)
+        added_ids: set[str] = set()
+        removed_ids: set[str] = set()
+        errors: list[str] = []
+        evidence_lock = threading.Lock()
+        stop = object()
+
+        def producer(worker: int) -> None:
+            try:
+                start.wait(timeout=5)
+                for index in range(200):
+                    item_id = f"{worker}-{index}"
+                    item = gui.QueueItem(
+                        id=item_id,
+                        file_path=f"C:/stress/{index}.mp4",
+                        output_path=f"C:/stress/out/{item_id}.mp4",
+                        config=gui.ProcessingConfig(),
+                    )
+                    result, size = app._try_enqueue_queue_item(item)
+                    if size > 500:
+                        raise AssertionError(f"queue exceeded capacity: {size}")
+                    if result == "added":
+                        with evidence_lock:
+                            added_ids.add(item_id)
+                        work.put(item_id)
+                    elif result not in {"duplicate", "queue_full"}:
+                        raise AssertionError(f"unexpected enqueue result: {result}")
+                    with app.queue_lock:
+                        paths = [app._normalized_path_key(i.file_path)
+                                 for i in app.queue]
+                    if len(paths) != len(set(paths)):
+                        raise AssertionError("duplicate paths coexisted in queue")
+            except BaseException as exc:
+                with evidence_lock:
+                    errors.append(f"producer {worker}: {exc!r}")
+
+        def consumer(worker: int) -> None:
+            try:
+                start.wait(timeout=5)
+                while True:
+                    item_id = work.get(timeout=10)
+                    if item_id is stop:
+                        return
+                    item, result = app._try_dequeue_queue_item(str(item_id))
+                    if result != "removed" or item is None:
+                        raise AssertionError(
+                            f"dequeue {item_id} returned {result}")
+                    with evidence_lock:
+                        removed_ids.add(str(item_id))
+            except BaseException as exc:
+                with evidence_lock:
+                    errors.append(f"consumer {worker}: {exc!r}")
+
+        def pause_worker() -> None:
+            try:
+                start.wait(timeout=5)
+                for index in range(400):
+                    with app.queue_lock:
+                        if index % 2:
+                            app.pause_event.set()
+                        else:
+                            app.pause_event.clear()
+                with app.queue_lock:
+                    app.pause_event.set()
+            except BaseException as exc:
+                with evidence_lock:
+                    errors.append(f"pause worker: {exc!r}")
+
+        producers = [
+            threading.Thread(target=producer, args=(index,))
+            for index in range(producer_count)
+        ]
+        consumers = [
+            threading.Thread(target=consumer, args=(index,))
+            for index in range(consumer_count)
+        ]
+        pauser = threading.Thread(target=pause_worker)
+        for thread in [*producers, *consumers, pauser]:
+            thread.start()
+        for thread in producers:
+            thread.join(timeout=15)
+        for _ in consumers:
+            work.put(stop)
+        for thread in [*consumers, pauser]:
+            thread.join(timeout=15)
+
+        alive = [
+            thread.name for thread in [*producers, *consumers, pauser]
+            if thread.is_alive()
+        ]
+        self.assertEqual(alive, [], f"stress threads did not finish: {alive}")
+        self.assertEqual(errors, [])
+        self.assertGreater(len(added_ids), 0)
+        self.assertEqual(removed_ids, added_ids)
+        self.assertEqual(app.queue, [])
+        self.assertTrue(app.pause_event.is_set())
 
 
 class BatchRetryTests(unittest.TestCase):

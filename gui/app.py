@@ -3813,6 +3813,20 @@ class VideoSubtitleRemoverApp(
                     break
         return stats
 
+    def _try_enqueue_queue_item(self, item: QueueItem) -> tuple[str, int]:
+        """Atomically enforce queue capacity/deduplication and append *item*."""
+        normalized = self._normalized_path_key(item.file_path)
+        with self.queue_lock:
+            if len(self.queue) >= 500:
+                return "queue_full", len(self.queue)
+            if any(
+                self._normalized_path_key(existing.file_path) == normalized
+                for existing in self.queue
+            ):
+                return "duplicate", len(self.queue)
+            self.queue.append(item)
+            return "added", len(self.queue)
+
     def _add_to_queue(self, file_path: str):
         """Add a file to the processing queue."""
         # Check file exists and is valid
@@ -3822,19 +3836,6 @@ class VideoSubtitleRemoverApp(
         if not (is_video_file(file_path) or is_image_file(file_path)):
             logger.warning(f"Unsupported file type: {file_path}")
             return "unsupported"
-
-        # Queue size limit
-        if len(self.queue) >= 500:
-            logger.warning("Queue full (500 items max)")
-            return "queue_full"
-
-        # Prevent duplicate files in queue
-        normalized = self._normalized_path_key(file_path)
-        with self.queue_lock:
-            for existing in self.queue:
-                if self._normalized_path_key(existing.file_path) == normalized:
-                    logger.info(f"Already in queue: {Path(file_path).name}")
-                    return "duplicate"
 
         # Generate a collision-proof unique ID for this queue slot
         item_id = uuid.uuid4().hex
@@ -3861,12 +3862,17 @@ class VideoSubtitleRemoverApp(
             message=initial_message
         )
 
-        with self.queue_lock:
-            self.queue.append(item)
+        result, queue_size = self._try_enqueue_queue_item(item)
+        if result == "queue_full":
+            logger.warning("Queue full (500 items max)")
+            return result
+        if result == "duplicate":
+            logger.info(f"Already in queue: {Path(file_path).name}")
+            return result
         self._update_queue_display()
         if is_video_file(file_path):
             self._start_soft_subtitle_probe(item)
-        if len(self.queue) == 1 and not self.is_processing:
+        if queue_size == 1 and not self.is_processing:
             self._show_preview(item)
         logger.info(f"Queued: {Path(file_path).name} ({get_file_info(file_path)})")
         save_queue_state(self.queue)
@@ -4220,16 +4226,33 @@ class VideoSubtitleRemoverApp(
             self._update_status(
                 f"Output renamed to {resolved_path.name}", "success")
 
+    def _try_dequeue_queue_item(
+        self, item_id: str,
+    ) -> tuple[Optional[QueueItem], str]:
+        """Atomically remove an inactive item, returning its decision state."""
+        with self.queue_lock:
+            item = next((i for i in self.queue if i.id == item_id), None)
+            if item is None:
+                return None, "missing"
+            if item.status in (
+                ProcessingStatus.LOADING,
+                ProcessingStatus.DETECTING,
+                ProcessingStatus.PROCESSING,
+                ProcessingStatus.MERGING,
+            ):
+                return item, "busy"
+            self.queue = [i for i in self.queue if i.id != item_id]
+            return item, "removed"
+
     def _remove_from_queue(self, item_id: str):
         """Remove an item from the queue."""
-        with self.queue_lock:
-            # Don't remove items that are currently being processed
-            item = next((i for i in self.queue if i.id == item_id), None)
-            if item and item.status in (ProcessingStatus.LOADING, ProcessingStatus.DETECTING,
-                                         ProcessingStatus.PROCESSING, ProcessingStatus.MERGING):
-                self._update_status("Wait for the active item to finish before removing it", "warning")
-                return
-            self.queue = [i for i in self.queue if i.id != item_id]
+        item, result = self._try_dequeue_queue_item(item_id)
+        if result == "busy":
+            self._update_status(
+                "Wait for the active item to finish before removing it",
+                "warning",
+            )
+            return
         if self._selected_queue_item_id == item_id:
             self._selected_queue_item_id = None
         self._update_queue_display()

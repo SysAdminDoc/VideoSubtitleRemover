@@ -136,7 +136,7 @@ msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr "[!! Åŀţéŕńåţîṽé ƥåŀéţţé ţûńéð ƒöŕ ŀöŵ-ṽîšîöń ûšéŕš. Ƥéŕšîšţš åçŕöšš šéššîöńš. ! ! ! ! ! ! !!]"
 
-#: gui/app.py:3345 gui/app.py:4453
+#: gui/app.py:3345 gui/app.py:4476
 msgid "Application status"
 msgstr "[!! Åƥƥŀîçåţîöń šţåţûš ! !!]"
 
@@ -240,7 +240,7 @@ msgstr "[!! ÇƤÛ ḿöðé ! !!]"
 msgid "CPU only"
 msgstr "[!! ÇƤÛ öńŀý ! !!]"
 
-#: gui/app.py:4098 gui/mask_correction_controller.py:577 gui/region_controller.py:1457 gui/settings_controller.py:417
+#: gui/app.py:4104 gui/mask_correction_controller.py:577 gui/region_controller.py:1457 gui/settings_controller.py:417
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
@@ -252,7 +252,7 @@ msgstr "[!! Çåńçéŀ ţħîš îţéḿ ! !!]"
 msgid "Carry masks across missed detections"
 msgstr "[!! Çåŕŕý ḿåšķš åçŕöšš ḿîššéð ðéţéçţîöńš ! ! ! !!]"
 
-#: gui/app.py:3975
+#: gui/app.py:3981
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr "[!! Çħåńĝé çŀéåńûƥ šéţţîńĝš ƒöŕ ţħîš ɋûéûé îţéḿ öńŀý. Ƥŕéšš Çöńţŕöŀ+Éńţéŕ ţö šåṽé öŕ Éšçåƥé ţö çåńçéŀ. ! ! ! ! ! ! ! ! !!]"
 
@@ -708,19 +708,19 @@ msgstr "[!! Ƒåšţ ţéḿƥöŕåŀ ŕéçöṽéŕý ƒöŕ ŀîṽé åçţ
 msgid "Faster keyframe-only detection"
 msgstr "[!! Ƒåšţéŕ ķéýƒŕåḿé-öńŀý ðéţéçţîöń ! ! !!]"
 
-#: gui/app.py:3887
+#: gui/app.py:3893
 msgid "File size (largest first)"
 msgstr "[!! Ƒîŀé šîžé (ŀåŕĝéšţ ƒîŕšţ) ! ! !!]"
 
-#: gui/app.py:3889
+#: gui/app.py:3895
 msgid "File size (smallest first)"
 msgstr "[!! Ƒîŀé šîžé (šḿåŀŀéšţ ƒîŕšţ) ! ! !!]"
 
-#: gui/app.py:3882
+#: gui/app.py:3888
 msgid "Filename (A -> Z)"
 msgstr "[!! Ƒîŀéńåḿé (Å -> Ž) ! !!]"
 
-#: gui/app.py:3884
+#: gui/app.py:3890
 msgid "Filename (Z -> A)"
 msgstr "[!! Ƒîŀéńåḿé (Ž -> Å) ! !!]"
 
@@ -1032,7 +1032,7 @@ msgstr "[!! Ḿéåšûŕéð {items} çöḿƥŀéţéð îţéḿ{item_suffix}
 msgid "Missing"
 msgstr "[!! Ḿîššîńĝ ! !!]"
 
-#: gui/app.py:4002
+#: gui/app.py:4008
 msgid "Mode"
 msgstr "[!! Ḿöðé ! !!]"
 
@@ -1184,7 +1184,7 @@ msgstr "[!! Öƥţîöńåŀ ! !!]"
 msgid "Optional FFmpeg force_style text, for example FontSize=24."
 msgstr "[!! Öƥţîöńåŀ ƑƑḿƥéĝ ƒöŕçé_šţýŀé ţéẋţ, ƒöŕ éẋåḿƥŀé ƑöńţŠîžé=24. ! ! ! ! !!]"
 
-#: gui/app.py:2255 gui/app.py:4063
+#: gui/app.py:2255 gui/app.py:4069
 msgid "Output codec"
 msgstr "[!! Öûţƥûţ çöðéç ! !!]"
 
@@ -1200,7 +1200,7 @@ msgstr "[!! Öûţƥûţš åŕé ŕéåðý ţö ŕéṽîéŵ. ! ! !!]"
 msgid "Override settings for this file..."
 msgstr "[!! Öṽéŕŕîðé šéţţîńĝš ƒöŕ ţħîš ƒîŀé... ! ! !!]"
 
-#: gui/app.py:3963
+#: gui/app.py:3969
 msgid "Override settings: {name}"
 msgstr "[!! Öṽéŕŕîðé šéţţîńĝš: {name} ! ! !!]"
 
@@ -1240,7 +1240,7 @@ msgstr "[!! Ƥåûšîńĝ... ! !!]"
 msgid "Pending keyframe {index}"
 msgstr "[!! Ƥéńðîńĝ ķéýƒŕåḿé {index} ! ! !!]"
 
-#: gui/app.py:3973 gui/app.py:3991
+#: gui/app.py:3979 gui/app.py:3997
 msgid "Per-file overrides"
 msgstr "[!! Ƥéŕ-ƒîŀé öṽéŕŕîðéš ! !!]"
 
@@ -1492,7 +1492,7 @@ msgstr "[!! Ŕéûšé ḿåšķš öń ûńçħåńĝéð ƒŕåḿéš ! ! !!]
 msgid "Reveal output folder"
 msgstr "[!! Ŕéṽéåŀ öûţƥûţ ƒöŀðéŕ ! !!]"
 
-#: gui/app.py:3894
+#: gui/app.py:3900
 msgid "Reverse current order"
 msgstr "[!! Ŕéṽéŕšé çûŕŕéńţ öŕðéŕ ! !!]"
 
@@ -1548,7 +1548,7 @@ msgstr "[!! Šåḿƥŀé ţħé ƒîńîšħéð ṽîðéö ƒöŕ ṽîšûå
 msgid "Sampled quality check"
 msgstr "[!! Šåḿƥŀéð ɋûåŀîţý çħéçķ ! !!]"
 
-#: gui/app.py:4100 gui/region_controller.py:1454
+#: gui/app.py:4106 gui/region_controller.py:1454
 msgid "Save"
 msgstr "[!! Šåṽé ! !!]"
 
@@ -1636,7 +1636,7 @@ msgstr "[!! Šéŀéçţéð ! !!]"
 msgid "Selected manual region"
 msgstr "[!! Šéŀéçţéð ḿåńûåŀ ŕéĝîöń ! !!]"
 
-#: gui/app.py:4035
+#: gui/app.py:4041
 msgid "Sensitivity"
 msgstr "[!! Šéńšîţîṽîţý ! !!]"
 
@@ -1728,7 +1728,7 @@ msgstr "[!! Šţåŕţ ƒŕåḿé ! !!]"
 msgid "Start sec"
 msgstr "[!! Šţåŕţ šéç ! !!]"
 
-#: gui/app.py:3892
+#: gui/app.py:3898
 msgid "Status (pending first)"
 msgstr "[!! Šţåţûš (ƥéńðîńĝ ƒîŕšţ) ! !!]"
 
@@ -1756,7 +1756,7 @@ msgstr "[!! Šţŕûçţûŕéð ĴŠÖŃ ŀöĝ ! !!]"
 msgid "SubRip subtitles"
 msgstr "[!! ŠûƀŔîƥ šûƀţîţŀéš ! !!]"
 
-#: gui/app.py:1968 gui/app.py:4016
+#: gui/app.py:1968 gui/app.py:4022
 msgid "Subtitle language"
 msgstr "[!! Šûƀţîţŀé ŀåńĝûåĝé ! !!]"
 
@@ -1832,7 +1832,7 @@ msgstr "[!! Ţħé šöûŕçé îḿåĝé çöûŀð ńöţ ƀé öƥéńéð 
 msgid "The source video could not be opened"
 msgstr "[!! Ţħé šöûŕçé ṽîðéö çöûŀð ńöţ ƀé öƥéńéð ! ! ! !!]"
 
-#: gui/app.py:3995
+#: gui/app.py:4001
 msgid "These apply to this queued item only and survive a global settings change."
 msgstr "[!! Ţħéšé åƥƥŀý ţö ţħîš ɋûéûéð îţéḿ öńŀý åńð šûŕṽîṽé å ĝŀöƀåŀ šéţţîńĝš çħåńĝé. ! ! ! ! ! ! !!]"
 

@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Batch-queue mutation is atomic under concurrent imports.** Capacity and
+  duplicate checks now share the append critical section, while inactive-item
+  dequeue has one locked decision path. A producer/consumer/pause stress test
+  verifies the queue cap, path uniqueness, and exact added/removed accounting.
 - **Pause/resume checkpoints now expose frame-sequence gaps.** Resume scans
   detect later orphaned frame files after the first missing frame, reset to
   that safe boundary, and surface an explicit warning instead of presenting
