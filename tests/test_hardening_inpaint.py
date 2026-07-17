@@ -22,53 +22,74 @@ def _has_display() -> bool:
 
 
 class AutoInpainterUnloadTests(unittest.TestCase):
-    """B-5: AutoInpainter must drop the lazily-loaded LaMa after enough
-    consecutive TBE batches to reclaim VRAM on long, mostly-easy videos."""
+    """AUTO routes scenes and drops idle ProPainter model memory."""
 
     def _auto_inpainter(self):
         cfg = processor.ProcessingConfig(mode=processor.InpaintMode.AUTO)
         cfg = processor.normalize_processing_config(cfg)
         return processor.AutoInpainter(device="cpu", config=cfg)
 
-    def test_streak_resets_on_lama_route(self):
+    def test_streak_resets_on_propainter_route(self):
         auto = self._auto_inpainter()
-        auto._tbe_streak = 5
-        # Stub _lama and STTN inpaint to avoid heavy model loads.
-        auto._lama = object()
+        auto._sttn_streak = 5
         auto._sttn.inpaint = lambda f, m: f  # type: ignore[assignment]
-        # Force LaMa route by feeding a fully-covered mask (zero exposure).
         import numpy as _np
         frame = _np.zeros((4, 4, 3), dtype=_np.uint8)
         mask = _np.full((4, 4), 255, dtype=_np.uint8)
-        # Patch _ensure_lama to return a stub that returns frames as-is
-        class _StubLama:
+        class _StubProPainter:
             def inpaint(self, frames, masks):
                 return frames
-        auto._lama = _StubLama()
+        auto._propainter = _StubProPainter()
         _ = auto.inpaint([frame, frame], [mask, mask])
-        self.assertEqual(auto._tbe_streak, 0)
+        self.assertEqual(auto._sttn_streak, 0)
 
-    def test_lama_unloaded_after_streak_threshold(self):
+    def test_propainter_unloaded_after_sttn_streak_threshold(self):
         auto = self._auto_inpainter()
-        # Shorten the threshold for the test so we don't synthesise 50
-        # batches; we mutate the class constant directly.
-        auto.LAMA_IDLE_UNLOAD_AFTER = 3
-        class _StubLama:
+        auto.PROPAINTER_IDLE_UNLOAD_AFTER = 3
+        class _StubProPainter:
             def inpaint(self, frames, masks):
                 return frames
-        auto._lama = _StubLama()
-        # Force TBE path: fully exposed (no overlap between masked frames).
+        auto._propainter = _StubProPainter()
         import numpy as _np
         frame = _np.zeros((4, 4, 3), dtype=_np.uint8)
         m1 = _np.zeros((4, 4), dtype=_np.uint8)
         m1[0, 0] = 255
         m2 = _np.zeros((4, 4), dtype=_np.uint8)
         m2[3, 3] = 255
-        # Stub STTN inpaint to skip the heavy TBE path.
         auto._sttn.inpaint = lambda f, m: f  # type: ignore[assignment]
         for _ in range(3):
             _ = auto.inpaint([frame, frame], [m1, m2])
-        self.assertIsNone(auto._lama, "LaMa must be released after streak hits the threshold")
+        self.assertIsNone(auto._propainter)
+
+    def test_routes_each_scene_by_exposure_and_motion(self):
+        auto = self._auto_inpainter()
+        import numpy as _np
+        still = _np.zeros((4, 4, 3), dtype=_np.uint8)
+        changed = _np.full((4, 4, 3), 255, dtype=_np.uint8)
+        frames = [still, still, still, changed]
+        m1 = _np.zeros((4, 4), dtype=_np.uint8)
+        m1[0, 0] = 255
+        m2 = _np.zeros((4, 4), dtype=_np.uint8)
+        m2[3, 3] = 255
+        masks = [m1, m2, m1, m2]
+        sttn_calls = []
+        propainter_calls = []
+        auto._sttn.inpaint = lambda f, m: sttn_calls.append(len(f)) or f
+
+        class _StubProPainter:
+            def inpaint(self, scene_frames, scene_masks):
+                propainter_calls.append(len(scene_frames))
+                return scene_frames
+
+        auto._propainter = _StubProPainter()
+        with unittest.mock.patch(
+            "backend.inpainters.auto._detect_scene_cuts", return_value=[0, 2]
+        ):
+            result = auto.inpaint(frames, masks)
+
+        self.assertEqual(len(result), 4)
+        self.assertEqual(sttn_calls, [2])
+        self.assertEqual(propainter_calls, [2])
 
 
 class TensorrtCompileTests(unittest.TestCase):

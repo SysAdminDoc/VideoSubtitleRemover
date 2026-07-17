@@ -80,7 +80,7 @@ class InpaintMode(Enum):
     STTN = "sttn"
     LAMA = "lama"
     PROPAINTER = "propainter"
-    AUTO = "auto"   # per-batch routing between TBE (easy) and LaMa (hard)
+    AUTO = "auto"   # per-scene routing between STTN and ProPainter mode
     MIGAN = "migan"  # opt-in ONNX backend (RM-26)
 
 
@@ -296,8 +296,9 @@ class ProcessingConfig:
     temporal_mask_window: int = 3
 
     # v3.12 AUTO mode routing
-    # Fraction of masked pixels that must be exposed in >=1 batch frame
-    # to send the batch through TBE. Below threshold, route to LaMa.
+    # Fraction of masked pixels that must be exposed in >=1 scene frame
+    # before low-motion AUTO scenes route to STTN. Persistently covered or
+    # high-motion scenes use ProPainter mode.
     auto_exposure_threshold: float = 0.55
 
     # v3.12 preprocessing

@@ -46,8 +46,8 @@ class ProcessingExceptionLoggingTests(unittest.TestCase):
     def test_inpainter_fallbacks_keep_tracebacks(self):
         targets = {
             "backend/inpainters/auto.py": (
-                "AUTO LaMa idle GC cleanup failed",
-                "AUTO LaMa idle CUDA cleanup failed",
+                "AUTO ProPainter idle GC cleanup failed",
+                "AUTO ProPainter idle CUDA cleanup failed",
             ),
             "backend/inpainters/propainter.py": (
                 "ProPainter LaMa residual refinement failed",

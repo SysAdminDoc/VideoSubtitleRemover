@@ -60,6 +60,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **AUTO routing is scene- and motion-aware.** The existing scene-cut cascade
+  now partitions each batch before routing. Low-motion scenes with sufficient
+  temporal exposure use STTN; fast-motion or persistently covered scenes use
+  the ProPainter-mode hybrid, which remains lazily loaded and is released
+  after a long STTN-only streak.
 - **The region selector is now an explicit window controller.** Its former
   1,430-line modal function and 39 state-sharing closures are split into a
   `RegionSelectorWindow` with named callback methods and instance-owned editor
