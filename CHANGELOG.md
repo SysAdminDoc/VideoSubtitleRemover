@@ -29,6 +29,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   matte timestamps, and time-range reporting. Both Whisper backends now use
   the same segment-to-frame helper, removing two copies that could drift on
   variable-frame-rate input.
+- **GPU dispatch now has an injectable device-provider seam.** Runtime device
+  probing, registry-backed inpainter construction, OOM classification, and
+  inference-memory cleanup can be replaced in tests, so CUDA/DirectML
+  selection and OOM-to-CPU fallback are covered without accelerator hardware.
 
 ## [3.18.1] - 2026-07-17
 

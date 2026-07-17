@@ -79,6 +79,7 @@ from backend.io import (
     _terminate_subprocess,
 )
 from backend.encoder import _detect_hw_encoder, probe_d3d12_encoder
+from backend.device_provider import DeviceProvider, RuntimeDeviceProvider
 from backend.container_payload import (
     build_container_mux_args,
     build_container_mux_plan,
@@ -530,13 +531,24 @@ class SubtitleRemover:
         "quality",
     )
 
-    def __init__(self, config: ProcessingConfig = None):
+    def __init__(self, config: ProcessingConfig = None, *,
+                 device_provider: Optional[DeviceProvider] = None):
         self.config = normalize_processing_config(config or ProcessingConfig())
         from backend.subtitle_translation import validate_translation_config
         validate_translation_config(self.config)
         self._work_directory_resolution = None
         self.last_work_directory_warning: Optional[str] = None
         self._resolve_work_directory()
+        self.device_provider = device_provider or RuntimeDeviceProvider(
+            self.config.device)
+        requested_device = self.config.device
+        self.config.device = self.device_provider.probe_available()
+        if self.config.device != requested_device:
+            logger.warning(
+                "Inference device fallback: %s -> %s",
+                requested_device,
+                self.config.device,
+            )
         self.detector = SubtitleDetector(
             self.config.device,
             lang=self.config.detection_lang,
@@ -789,19 +801,25 @@ class SubtitleRemover:
             cap.release()
 
     def _create_inpainter(self) -> BaseInpainter:
-        """RFP-L-2: dispatch through the plugin registry. A new backend
-        becomes available as soon as it registers itself; we no longer
-        need to edit this dispatch to add an InpaintMode value (though
-        the enum still gates the GUI / CLI for safety)."""
-        try:
-            builder = _inpainter_registry.resolve(self.config.mode.value)
-        except KeyError:
-            logger.warning(
-                f"No inpainter registered for {self.config.mode.value!r}; "
-                f"falling back to STTN"
-            )
-            builder = _inpainter_registry.resolve("sttn")
-        return builder(self.config.device, self.config)
+        """Construct the configured backend through the device strategy."""
+        return self.device_provider.create_inpainter(
+            self.config.mode.value,
+            self.config.device,
+            self.config,
+        )
+
+    def _is_inference_oom(self, exc: BaseException) -> bool:
+        provider = getattr(self, "device_provider", None)
+        check = getattr(provider, "is_oom_error", None)
+        return bool(check(exc)) if callable(check) else is_oom_error(exc)
+
+    def _free_inference_memory(self) -> None:
+        provider = getattr(self, "device_provider", None)
+        release = getattr(provider, "free_inference_memory", None)
+        if callable(release):
+            release()
+        else:
+            free_inference_memory()
 
     def _report_progress(self, progress: float, message: str):
         if self.on_progress:
@@ -2111,9 +2129,9 @@ class SubtitleRemover:
         try:
             return self._inpaint_with_optional_rife_fast(frames, masks)
         except Exception as exc:  # noqa: BLE001 - re-raised unless it is OOM
-            if not is_oom_error(exc):
+            if not self._is_inference_oom(exc):
                 raise
-            free_inference_memory()
+            self._free_inference_memory()
             if len(frames) <= 1:
                 logger.warning(
                     "GPU out of memory on a single frame; using CPU inpainting "
