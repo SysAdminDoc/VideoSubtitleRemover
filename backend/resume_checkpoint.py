@@ -6,6 +6,8 @@ import dataclasses
 import datetime as _dt
 import hashlib
 import json
+import logging
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,48 @@ from backend.io import _write_text_atomic
 
 
 SCHEMA = "vsr.pause_checkpoint.v1"
+logger = logging.getLogger(__name__)
+
+
+def _default_checkpoint_dir(work_directory: str = "") -> Path:
+    """Store resume artifacts under the selected work-directory policy."""
+    from backend.work_directory import checkpoint_directory
+
+    legacy = (
+        Path(os.environ.get("APPDATA", Path.home() / ".config"))
+        / "VideoSubtitleRemoverPro"
+        / "checkpoints"
+    )
+    path, resolution = checkpoint_directory(work_directory, default=legacy)
+    if resolution is not None and resolution.warning:
+        logger.warning(resolution.warning)
+    return path
+
+
+def _checkpoint_key(input_path: str, output_path: str) -> str:
+    """Return a stable input/output fingerprint for completion markers."""
+    try:
+        stat = os.stat(input_path)
+        fingerprint = (
+            f"{input_path}|{output_path}|{stat.st_size}|{int(stat.st_mtime)}"
+        )
+    except OSError:
+        fingerprint = f"{input_path}|{output_path}"
+    return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+
+
+def _checkpoint_is_done(ckpt_dir: Path, key: str,
+                        output_path: str) -> bool:
+    marker = Path(ckpt_dir) / f"{key}.done"
+    return marker.exists() and Path(output_path).exists()
+
+
+def _checkpoint_mark_done(ckpt_dir: Path, key: str) -> None:
+    marker = Path(ckpt_dir) / f"{key}.done"
+    try:
+        _write_text_atomic(marker, "ok")
+    except Exception as exc:
+        logger.warning(f"Could not write checkpoint {marker}: {exc}")
 
 
 class ProcessingPaused(InterruptedError):

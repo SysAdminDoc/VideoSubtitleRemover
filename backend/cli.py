@@ -1,19 +1,15 @@
-"""CLI entrypoint, checkpointing, and JSON config overlay loader.
+"""CLI parser, configuration assembly, and batch dispatch.
 
 Extracted from processor.py as part of RFP-L-1. Provides:
 
 - ``main()``: the ``python -m backend.processor`` argparse + dispatch.
-- ``_default_checkpoint_dir`` / ``_checkpoint_key`` /
-  ``_checkpoint_is_done`` / ``_checkpoint_mark_done``: crash-resume
-  marker bookkeeping under ``%APPDATA%/VSR/checkpoints/``.
-- ``_load_json_config``: JSON config overlay loader.
-- ``_apply_auto_band_override``: per-file region reset + auto-band probe.
+Checkpoint and configuration helpers live in their focused modules so importing
+the processing orchestrator never imports this CLI module.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import datetime
 import json
 import logging
@@ -23,6 +19,14 @@ import shutil
 import sys
 import time
 from pathlib import Path
+
+from backend.config import _apply_auto_band_override, _load_json_config
+from backend.resume_checkpoint import (
+    _checkpoint_is_done,
+    _checkpoint_key,
+    _checkpoint_mark_done,
+    _default_checkpoint_dir,
+)
 
 logger = logging.getLogger(__name__)
 _RUNTIME_HELPERS_LOADED = False
@@ -298,82 +302,6 @@ def _app_version() -> str:
         return APP_VERSION
     except Exception:
         return ""
-
-
-def _default_checkpoint_dir(work_directory: str = "") -> Path:
-    """Store resume artifacts under the work policy when one is selected."""
-    from backend.work_directory import checkpoint_directory
-
-    legacy = (
-        Path(os.environ.get("APPDATA", Path.home() / ".config"))
-        / "VideoSubtitleRemoverPro"
-        / "checkpoints"
-    )
-    path, resolution = checkpoint_directory(work_directory, default=legacy)
-    if resolution is not None and resolution.warning:
-        logger.warning(resolution.warning)
-    return path
-
-
-def _checkpoint_key(input_path: str, output_path: str) -> str:
-    """Stable identifier for a (input, output, size, mtime) pair. A
-    size/mtime change on the input invalidates the checkpoint so users
-    do not skip a freshly re-downloaded file by accident."""
-    try:
-        stat = os.stat(input_path)
-        fingerprint = f"{input_path}|{output_path}|{stat.st_size}|{int(stat.st_mtime)}"
-    except OSError:
-        fingerprint = f"{input_path}|{output_path}"
-    return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
-
-
-def _checkpoint_is_done(ckpt_dir: Path, key: str, output_path: str) -> bool:
-    marker = ckpt_dir / f"{key}.done"
-    return marker.exists() and Path(output_path).exists()
-
-
-def _checkpoint_mark_done(ckpt_dir: Path, key: str):
-    _ensure_runtime_helpers()
-    marker = ckpt_dir / f"{key}.done"
-    try:
-        _write_text_atomic(marker, "ok")
-    except Exception as exc:
-        logger.warning(f"Could not write checkpoint {marker}: {exc}")
-
-
-def _load_json_config(path: str) -> dict:
-    """Load a JSON config file of {field: value} pairs for ProcessingConfig."""
-    size = os.path.getsize(path)
-    if size > 1 * 1024 * 1024:
-        raise ValueError(f"config file is too large ({size:,} bytes); expected a small JSON object")
-    with open(path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-    if not isinstance(payload, dict):
-        raise ValueError("config file must contain a top-level JSON object")
-    return payload
-
-
-def _apply_auto_band_override(remover, input_path: str, *, auto_band: bool,
-                              base_subtitle_area, base_subtitle_areas,
-                              base_subtitle_region_spans=None,
-                              base_subtitle_region_keyframes=None):
-    """Reset per-file region overrides before optionally probing a fresh band."""
-    remover.config.subtitle_area = base_subtitle_area
-    remover.config.subtitle_areas = list(base_subtitle_areas) if base_subtitle_areas else None
-    remover.config.subtitle_region_spans = (
-        list(base_subtitle_region_spans)
-        if base_subtitle_region_spans else None
-    )
-    remover.config.subtitle_region_keyframes = (
-        list(base_subtitle_region_keyframes)
-        if base_subtitle_region_keyframes else None
-    )
-    if (not auto_band or base_subtitle_area or base_subtitle_areas
-            or base_subtitle_region_spans or base_subtitle_region_keyframes):
-        return base_subtitle_area
-    band = remover.detect_subtitle_band(input_path)
-    remover.config.subtitle_area = band
-    return band
 
 
 def _soft_subtitle_action(args):

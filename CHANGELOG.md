@@ -39,6 +39,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   mask refinement, inpainting, writing, and checkpoint persistence are
   isolated methods; the outer loop is a short stage orchestrator with the
   existing cleanup and encode/mux boundaries unchanged.
+- **Processor and CLI imports are acyclic.** Completion-marker helpers now
+  live with pause/resume checkpoints, while bounded JSON overlays and
+  auto-band reset logic live with processing configuration. The CLI and
+  processor import those focused modules directly; legacy processor re-exports
+  remain available without importing the 1,900-line CLI module.
+- **GUI controllers import focused backend modules.** Detection, processing
+  configuration, mode enums, normalization, and checkpoint helpers no longer
+  reach through the processor compatibility facade, reducing unnecessary
+  processor/OpenCV/NumPy import coupling in preview and settings paths.
 
 ## [3.18.1] - 2026-07-17
 

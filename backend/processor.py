@@ -116,6 +116,10 @@ from backend.matte_interchange import (
 )
 from backend.resume_checkpoint import (
     ProcessingPaused,
+    _checkpoint_key,
+    _checkpoint_is_done as _checkpoint_is_done,
+    _checkpoint_mark_done as _checkpoint_mark_done,
+    _default_checkpoint_dir as _default_checkpoint_dir,
     cleanup_pause_checkpoint,
     config_fingerprint,
     load_pause_checkpoint,
@@ -162,19 +166,6 @@ from backend.inpainters import (
     _tbe_single_segment as _tbe_single_segment,
     _temporal_background_expose as _temporal_background_expose,
 )
-# CLI helpers moved to backend.cli during RFP-L-1; re-export so existing
-# callers (e.g. `processor._load_json_config`,
-# `processor._apply_auto_band_override`) keep resolving.
-from backend.cli import (
-    _default_checkpoint_dir as _default_checkpoint_dir,
-    _checkpoint_key,
-    _checkpoint_is_done as _checkpoint_is_done,
-    _checkpoint_mark_done as _checkpoint_mark_done,
-    _load_json_config as _load_json_config,
-    _apply_auto_band_override as _apply_auto_band_override,
-)
-
-
 class JsonLineLogHandler(logging.Handler):
     """One JSON record per line, structured for jq / grep across long
     batch runs.
@@ -267,6 +258,8 @@ from backend.config import (
     _coerce_rect_list as _coerce_rect_list,
     _coerce_backend_mode as _coerce_backend_mode,
     _coerce_backend_device as _coerce_backend_device,
+    _load_json_config as _load_json_config,
+    _apply_auto_band_override as _apply_auto_band_override,
     is_known_backend_mode as is_known_backend_mode,
     normalize_processing_config,
 )

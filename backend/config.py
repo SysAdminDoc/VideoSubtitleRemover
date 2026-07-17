@@ -13,7 +13,9 @@ working unchanged.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
@@ -25,6 +27,52 @@ from backend.mask_corrections import (
 from backend.region_keyframes import normalize_region_keyframe_tracks
 
 logger = logging.getLogger(__name__)
+
+
+def _load_json_config(path: str) -> dict:
+    """Load a bounded JSON object of ProcessingConfig field overrides."""
+    size = os.path.getsize(path)
+    if size > 1 * 1024 * 1024:
+        raise ValueError(
+            f"config file is too large ({size:,} bytes); "
+            "expected a small JSON object"
+        )
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError("config file must contain a top-level JSON object")
+    return payload
+
+
+def _apply_auto_band_override(
+    remover,
+    input_path: str,
+    *,
+    auto_band: bool,
+    base_subtitle_area,
+    base_subtitle_areas,
+    base_subtitle_region_spans=None,
+    base_subtitle_region_keyframes=None,
+):
+    """Reset per-file regions before optionally probing a fresh band."""
+    remover.config.subtitle_area = base_subtitle_area
+    remover.config.subtitle_areas = (
+        list(base_subtitle_areas) if base_subtitle_areas else None
+    )
+    remover.config.subtitle_region_spans = (
+        list(base_subtitle_region_spans)
+        if base_subtitle_region_spans else None
+    )
+    remover.config.subtitle_region_keyframes = (
+        list(base_subtitle_region_keyframes)
+        if base_subtitle_region_keyframes else None
+    )
+    if (not auto_band or base_subtitle_area or base_subtitle_areas
+            or base_subtitle_region_spans or base_subtitle_region_keyframes):
+        return base_subtitle_area
+    band = remover.detect_subtitle_band(input_path)
+    remover.config.subtitle_area = band
+    return band
 
 
 class InpaintMode(Enum):

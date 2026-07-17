@@ -421,7 +421,7 @@ class MaskCorrectionControllerMixin:
                         gray = cv2.cvtColor(mask_frame, cv2.COLOR_BGR2GRAY)
                         return np.where(gray > 127, 255, 0).astype(np.uint8), "exported mask"
                 try:
-                    from backend.processor import SubtitleDetector
+                    from backend.detection import SubtitleDetector
 
                     lock = getattr(self, "_detector_lock", threading.Lock())
                     with lock:

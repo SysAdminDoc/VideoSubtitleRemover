@@ -3547,7 +3547,7 @@ class VideoSubtitleRemoverApp(
         """Map a GUI InpaintMode value onto the backend enum. The two
         enums are deliberately separate -- this mapping
         is the single place they meet."""
-        from backend.processor import InpaintMode as _BM
+        from backend.config import InpaintMode as _BM
         return {
             "Auto": _BM.AUTO,
             "STTN": _BM.STTN,

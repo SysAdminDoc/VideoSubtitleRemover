@@ -420,7 +420,7 @@ msgstr ""
 msgid "Click Import or drag files onto the queue"
 msgstr ""
 
-#: gui/preview_controller.py:779 gui/quality_controller.py:345 gui/support_controller.py:591
+#: gui/preview_controller.py:777 gui/quality_controller.py:345 gui/support_controller.py:591
 msgid "Close"
 msgstr ""
 
@@ -556,7 +556,7 @@ msgstr ""
 msgid "Double-click for full size, or draw the subtitle region directly."
 msgstr ""
 
-#: gui/preview_controller.py:1028
+#: gui/preview_controller.py:1026
 msgid "Drag a larger subtitle region before releasing."
 msgstr ""
 
@@ -568,7 +568,7 @@ msgstr ""
 msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
 msgstr ""
 
-#: gui/preview_controller.py:878
+#: gui/preview_controller.py:876
 msgid "Drag over the subtitle text. Release to save and refresh the mask."
 msgstr ""
 
@@ -580,7 +580,7 @@ msgstr ""
 msgid "Drag to paint with the selected mode."
 msgstr ""
 
-#: gui/preview_controller.py:874
+#: gui/preview_controller.py:872
 msgid "Draw subtitle region for {name}"
 msgstr ""
 
@@ -1420,7 +1420,7 @@ msgstr ""
 msgid "Region {field} in pixels"
 msgstr ""
 
-#: gui/preview_controller.py:1009
+#: gui/preview_controller.py:1007
 msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
 msgstr ""
 

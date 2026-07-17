@@ -460,9 +460,9 @@ class ProcessingControllerMixin:
 
             self._announce_model_download_guidance(item)
 
-            from backend.processor import (
-                SubtitleRemover as BackendRemover,
-                ProcessingConfig as BackendConfig,
+            from backend.processor import SubtitleRemover as BackendRemover
+            from backend.config import ProcessingConfig as BackendConfig
+            from backend.resume_checkpoint import (
                 _checkpoint_key,
                 _default_checkpoint_dir,
             )
@@ -509,7 +509,7 @@ class ProcessingControllerMixin:
             cached = self._cached_remover
             if cached is not None and self._cached_remover_key == cache_key:
                 remover = cached
-                from backend.processor import normalize_processing_config as _normalize_backend_config
+                from backend.config import normalize_processing_config as _normalize_backend_config
                 remover.config = _normalize_backend_config(backend_config)
             else:
                 remover = BackendRemover(backend_config)
@@ -913,7 +913,7 @@ class ProcessingControllerMixin:
                 probe_frames = min(30, total_frames)
                 if probe_frames <= 0:
                     return 0.0
-                from backend.processor import SubtitleDetector
+                from backend.detection import SubtitleDetector
                 lang = first_video.config.detection_lang or "en"
                 with self._detector_lock:
                     detector = self._preview_detector

@@ -609,10 +609,8 @@ class PreviewControllerMixin:
         def _worker():
             import cv2 as _cv2
             try:
-                from backend.processor import (
-                    SubtitleRemover as _Remover,
-                    ProcessingConfig as _BackendCfg,
-                )
+                from backend.processor import SubtitleRemover as _Remover
+                from backend.config import ProcessingConfig as _BackendCfg
                 if is_image_file(source_path):
                     frame = safe_imread(source_path)
                 elif is_video_file(source_path):
@@ -1199,7 +1197,7 @@ class PreviewControllerMixin:
                           mask_corrections=None, mask_import_path="",
                           mask_import_mode="replace", mask_dilate_px=0):
         try:
-            from backend.processor import SubtitleDetector
+            from backend.detection import SubtitleDetector
             with self._detector_lock:
                 if self._preview_detector is None or self._preview_detector_lang != lang:
                     self._preview_detector = SubtitleDetector(lang=lang)
