@@ -70,6 +70,7 @@ class AdvancedSettingsControllerMixin:
                               bg=parent_bg, accessible_label=tr(label))
         slider.pack(side="left", fill="x", expand=True, padx=(Theme.S_SM, 0))
         self._settings_sliders.append(slider)
+        self._settings_slider_by_attr[attr_name] = (slider, value_label)
 
         def on_change(val):
             value_label.config(text=str(int(val)))
@@ -161,6 +162,12 @@ class AdvancedSettingsControllerMixin:
         ):
             if hasattr(self, attr):
                 getattr(self, attr).set(getattr(self.config, field))
+        for field, (slider, value_label) in getattr(
+            self, "_settings_slider_by_attr", {}
+        ).items():
+            value = int(getattr(self.config, field))
+            slider.set_value(value)
+            value_label.config(text=str(value))
         if hasattr(self, "mask_import_label_var"):
             self.mask_import_label_var.set(
                 Path(self.config.mask_import_path).name

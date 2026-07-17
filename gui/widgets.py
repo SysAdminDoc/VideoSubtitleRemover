@@ -1128,6 +1128,15 @@ class ModernSlider(tk.Frame):
         if self.command:
             self.command(v)
 
+    def set_value(self, value, *, notify: bool = False):
+        """Set the slider programmatically, optionally invoking its callback."""
+        value = max(self.from_, min(self.to, value))
+        self.value = value
+        self._sync_a11y()
+        self._draw()
+        if notify and self.command:
+            self.command(value)
+
     def set(self, v):
         self._set_value(int(v))
 

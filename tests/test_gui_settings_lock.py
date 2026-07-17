@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 from types import SimpleNamespace
 
 from gui.app import VideoSubtitleRemoverApp
@@ -74,6 +75,22 @@ class GuiSettingsLockTests(unittest.TestCase):
 
 
 class ModernSliderStateTests(unittest.TestCase):
+    def test_programmatic_value_update_clamps_without_notifying_by_default(self):
+        slider = object.__new__(ModernSlider)
+        slider.from_ = 0
+        slider.to = 10
+        slider.value = 3
+        slider.command = unittest.mock.Mock()
+        slider._sync_a11y = unittest.mock.Mock()
+        slider._draw = unittest.mock.Mock()
+
+        ModernSlider.set_value(slider, 99)
+
+        self.assertEqual(slider.value, 10)
+        slider.command.assert_not_called()
+        slider._sync_a11y.assert_called_once_with()
+        slider._draw.assert_called_once_with()
+
     def test_disabled_slider_ignores_keyboard_steps(self):
         slider = object.__new__(ModernSlider)
         slider.from_ = 0
@@ -114,6 +131,34 @@ class ModernSliderStateTests(unittest.TestCase):
         self.assertIn("disabled", slider.accessibility_snapshot()["state"])
         self.assertIn("50", slider.accessibility_snapshot()["value"])
         self.assertEqual(slider.draws, 1)
+
+
+class OnboardingActionTests(unittest.TestCase):
+    def test_preset_choice_uses_regular_application_path(self):
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        app.preset_var = unittest.mock.Mock()
+        app._on_preset_applied = unittest.mock.Mock()
+
+        app._apply_onboarding_preset("Fast")
+
+        app.preset_var.set.assert_called_once_with("Fast")
+        app._on_preset_applied.assert_called_once_with()
+
+    @unittest.mock.patch("gui.app.save_settings")
+    def test_auto_band_action_updates_ui_and_persists(self, save_mock):
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        app.config = SimpleNamespace(auto_band=False)
+        app.auto_band_var = unittest.mock.Mock()
+        app._update_status = unittest.mock.Mock()
+
+        app._enable_onboarding_auto_band()
+
+        self.assertTrue(app.config.auto_band)
+        app.auto_band_var.set.assert_called_once_with(True)
+        save_mock.assert_called_once_with(app.config)
+        app._update_status.assert_called_once_with(
+            "Automatic subtitle-band detection enabled", "success"
+        )
 
 
 if __name__ == "__main__":

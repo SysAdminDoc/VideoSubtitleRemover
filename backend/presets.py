@@ -34,6 +34,33 @@ BUILTIN_PRESETS: Dict[str, Dict[str, object]] = {
             "phash_skip_enable": True,
         },
     },
+    "Film / Live action": {
+        "description": "Quality-first automatic routing for film and live action.",
+        "fields": {
+            "mode": "Auto",
+            "detection_threshold": 0.5,
+            "mask_dilate_px": 8,
+            "mask_feather_px": 5,
+            "edge_ring_px": 2,
+            "tbe_flow_warp": True,
+            "tbe_scene_cut_split": True,
+            "kalman_tracking": True,
+            "phash_skip_enable": True,
+        },
+    },
+    "Fast": {
+        "description": "Fast STTN pass with bounded OCR and light edge blending.",
+        "fields": {
+            "mode": "STTN",
+            "detection_frame_skip": 5,
+            "phash_skip_enable": True,
+            "phash_skip_distance": 4,
+            "mask_dilate_px": 6,
+            "mask_feather_px": 2,
+            "edge_ring_px": 1,
+            "tbe_flow_warp": False,
+        },
+    },
     "Anime / Animation": {
         "description": "Flat backgrounds benefit from LAMA + tight feather.",
         "fields": {

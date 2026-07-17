@@ -25,6 +25,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **First-run choices now perform useful setup.** The welcome flow can apply
+  YouTube, Film, or Fast profiles, enable automatic subtitle-band detection,
+  and launch the existing one-frame test cleanup. New Film and Fast built-ins
+  complement the existing watermark profile, while advanced settings expose
+  pHash distance and temporal mask carry controls with concrete speed hints.
+
 - **Opt-in frozen build smoke for the committed spec.**
   `python -m scripts.frozen_build_smoke` builds the default-profile spec in an
   isolated work directory, launches the windowed executable without creating

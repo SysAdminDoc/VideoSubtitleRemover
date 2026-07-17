@@ -438,6 +438,25 @@ class PresetLibraryTests(unittest.TestCase):
         from backend import presets
         self.assertIn("YouTube (default)", presets.BUILTIN_PRESETS)
         self.assertIn("Anime / Animation", presets.BUILTIN_PRESETS)
+        self.assertIn("Film / Live action", presets.BUILTIN_PRESETS)
+        self.assertIn("Fast", presets.BUILTIN_PRESETS)
+        self.assertIn("Logo / Watermark removal", presets.BUILTIN_PRESETS)
+
+    def test_fast_preset_bounds_expensive_work(self):
+        from backend import presets
+        fields = presets.preset_fields("Fast")
+        self.assertEqual(fields["mode"], "STTN")
+        self.assertEqual(fields["detection_frame_skip"], 5)
+        self.assertTrue(fields["phash_skip_enable"])
+        self.assertEqual(fields["phash_skip_distance"], 4)
+        self.assertFalse(fields["tbe_flow_warp"])
+
+    def test_film_preset_uses_quality_first_auto_routing(self):
+        from backend import presets
+        fields = presets.preset_fields("Film / Live action")
+        self.assertEqual(fields["mode"], "Auto")
+        self.assertTrue(fields["tbe_flow_warp"])
+        self.assertTrue(fields["tbe_scene_cut_split"])
 
     def test_preset_fields_returns_dict_or_none(self):
         from backend import presets

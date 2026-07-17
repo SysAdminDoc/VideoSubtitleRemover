@@ -229,6 +229,7 @@ class VideoSubtitleRemoverApp(
         self._layout_mode = "wide"
         self._workflow_pills = []
         self._settings_sliders: List[ModernSlider] = []
+        self._settings_slider_by_attr: dict[str, tuple[ModernSlider, object]] = {}
 
         # Variables
         self.mode_var = tk.StringVar(value=self.config.mode.value)
@@ -2095,7 +2096,7 @@ class VideoSubtitleRemoverApp(
                             hint="Higher catches more text (lower confidence floor). Lower is stricter.")
         self._create_slider(det_frame, "Frame skip", 0, 10,
                             self.config.detection_frame_skip, "detection_frame_skip",
-                            hint="Reuse the last mask for N frames to speed up long videos.")
+                            hint="Reuse the last mask for N frames. At 5, scheduled OCR drops by up to about 83% on stable footage.")
         self._create_slider(det_frame, "Mask dilate", 0, 20,
                             self.config.mask_dilate_px, "mask_dilate_px",
                             hint="Expand detected regions for cleaner fill edges.")
@@ -2162,7 +2163,12 @@ class VideoSubtitleRemoverApp(
             variable=self.phash_var,
         )
         phash_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(phash_toggle, tr("Skip OCR on frames nearly identical to the last detected one. Speeds up long static shots."))
+        Tooltip(phash_toggle, tr("Skip OCR on frames nearly identical to the last detected one. Static shots can avoid most OCR calls."))
+        self._create_slider(
+            det_frame, "pHash distance", 0, 16,
+            self.config.phash_skip_distance, "phash_skip_distance",
+            hint="Higher values reuse masks across more near-identical frames; 4 is conservative.",
+        )
 
         self.colour_tune_var = tk.BooleanVar(value=self.config.colour_tune_enable)
         colour_toggle = ModernToggle(
@@ -2257,6 +2263,11 @@ class VideoSubtitleRemoverApp(
         Tooltip(temporal_mask_toggle, tr(
             "Automatic detection only. Carry recent text masks forward for a "
             "few frames so a single missed detection does not leave a flash."))
+        self._create_slider(
+            quality_frame, "Mask carry window", 1, 15,
+            self.config.temporal_mask_window, "temporal_mask_window",
+            hint="Number of recent masks available to repair a missed detection.",
+        )
 
         self.export_srt_var = tk.BooleanVar(value=self.config.export_srt)
         srt_toggle = ModernToggle(
@@ -2676,7 +2687,8 @@ class VideoSubtitleRemoverApp(
             relief="flat", bd=6, textvariable=self.rife_stride_var)
         rife_entry.pack(side="right")
         Tooltip(rife_entry, tr("0 cleans every frame. Values above 1 clean fewer "
-                               "frames and recreate the gaps when Practical-RIFE is installed."))
+                               "frames and recreate the gaps when Practical-RIFE is installed. "
+                               "Stride 3 can reduce inpaint calls by up to about 67%."))
 
         self.prefetch_var = tk.BooleanVar(value=self.config.prefetch_decode)
         prefetch_toggle = ModernToggle(
@@ -3427,6 +3439,26 @@ class VideoSubtitleRemoverApp(
         except tk.TclError:
             self._onboarding_scheduled = False
 
+    def _apply_onboarding_preset(self, name: str):
+        """Apply a first-run preset through the regular settings path."""
+        self.preset_var.set(name)
+        self._on_preset_applied()
+
+    def _enable_onboarding_auto_band(self):
+        """Enable automatic subtitle-band detection and persist it."""
+        self.config.auto_band = True
+        if hasattr(self, "auto_band_var"):
+            self.auto_band_var.set(True)
+        save_settings(self.config)
+        self._update_status("Automatic subtitle-band detection enabled", "success")
+
+    def _schedule_onboarding_test_cleanup(self):
+        """Open the ordinary one-frame cleanup flow after the modal closes."""
+        try:
+            self.root.after_idle(self._open_selected_inpaint_preview)
+        except tk.TclError:
+            pass
+
     def _show_onboarding(self):
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
@@ -3515,16 +3547,89 @@ class VideoSubtitleRemoverApp(
              "and completion summary are all live.",
              "success").pack(side="left", fill="both", expand=True)
 
+        # First-run profile chooser. These use the normal preset application
+        # path so every dependent toggle and slider refreshes immediately.
+        starter = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        starter.pack(fill="x", pady=(Theme.S_LG, 0))
+        tk.Label(
+            starter,
+            text=tr("Choose a starting profile"),
+            font=f(Theme.F_BODY, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(anchor="w")
+        tk.Label(
+            starter,
+            text=tr("You can change every setting later."),
+            font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", pady=(2, Theme.S_SM))
+        starter_buttons = tk.Frame(starter, bg=Theme.BG_SECONDARY)
+        starter_buttons.pack(anchor="w")
+        onboarding_choice_var = tk.StringVar(value="")
+
+        def _choose_preset(name: str):
+            self._apply_onboarding_preset(name)
+            onboarding_choice_var.set(
+                tr("Selected: {profile}").format(profile=name)
+            )
+
+        for index, (label, preset_name) in enumerate((
+            ("YouTube", "YouTube (default)"),
+            ("Film", "Film / Live action"),
+            ("Fast", "Fast"),
+        )):
+            ModernButton(
+                starter_buttons,
+                text=tr(label),
+                width=104,
+                command=lambda name=preset_name: _choose_preset(name),
+                style="ghost",
+                size="sm",
+            ).pack(side="left", padx=(0 if index == 0 else Theme.S_SM, 0))
+        tk.Label(
+            starter_buttons,
+            textvariable=onboarding_choice_var,
+            font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.SUCCESS,
+        ).pack(side="left", padx=(Theme.S_MD, 0))
+
         # Action row
         actions = tk.Frame(body, bg=Theme.BG_CARD)
         actions.pack(fill="x")
+        quick_actions = tk.Frame(actions, bg=Theme.BG_CARD)
+        quick_actions.pack(side="left", padx=16, pady=14)
         actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
         actions_inner.pack(side="right", padx=16, pady=14)
 
         def _close():
+            self.config.onboarding_seen = True
+            save_settings(self.config)
             dialog.grab_release()
             dialog.destroy()
 
+        def _try_cleanup():
+            _close()
+            self._schedule_onboarding_test_cleanup()
+
+        ModernButton(
+            quick_actions,
+            text=tr("Enable auto-detect"),
+            width=156,
+            command=self._enable_onboarding_auto_band,
+            style="ghost",
+            size="sm",
+        ).pack(side="left")
+        ModernButton(
+            quick_actions,
+            text=tr("Try test cleanup"),
+            width=142,
+            command=_try_cleanup,
+            style="ghost",
+            size="sm",
+        ).pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text=tr("Got it"), width=118,
                      command=_close, style="primary", size="md").pack(
                          side="left")
@@ -3543,8 +3648,9 @@ class VideoSubtitleRemoverApp(
             pass
         dialog.deiconify()
         dialog.grab_set()
-        # The dialog is now on screen; only now persist the "seen" flag so an
-        # earlier failure would have re-tried on the next launch.
+        # The dialog is now on screen; mark it seen in memory. The close path
+        # persists the flag so a background-scheduled dialog cannot write
+        # unrelated in-progress settings before the user dismisses it.
         self.config.onboarding_seen = True
 
 
