@@ -68,10 +68,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-17 deep audit)
 
-- [ ] P3 — CLI `--preset` cannot express store_true fields a preset sets to False
-  Why: `field_to_attr` maps `tbe_scene_cut_split`, `kalman_tracking`, `phash_skip_enable`, and `auto_band` to `None`, so a preset that sets any of them (e.g. the shipped "TikTok / Vertical short" and "News / Chyron" presets set `auto_band: True`) has no effect via `--preset` on the CLI, while the GUI honors it. Give these tri-state flags (`--auto-band`/`--no-auto-band`, etc.) or route CLI preset application through `apply_backend_payload`.
-  Where: `backend/cli.py` (`field_to_attr`, preset merge ~1104-1129).
-
 - [ ] P3 — Explicit CLI value equal to the parser default is overridden by a preset
   Why: Preset-vs-CLI precedence compares `getattr(args, attr) == default`, and argparse cannot distinguish an omitted flag from one typed with the default value, so `--preset X --threshold 0.5` silently discards the user's explicit 0.5 for the preset's value. Set the affected argument defaults to `None` and treat `None` as "unset" when merging presets.
   Where: `backend/cli.py` ~1122-1128.
@@ -87,3 +83,13 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 - [ ] P3 — Weak disabled affordance on secondary/ghost ModernButtons
   Why: Disabled buttons reuse `BG_TERTIARY`, the same fill as enabled `secondary`/default buttons, so disabled state reads only via dimmed text; a distinct disabled fill would be clearer, but naively using `BG_SECONDARY` risks buttons vanishing against card surfaces. Needs a dedicated `BG_DISABLED` token chosen to stay distinct from both enabled fills and the card background.
   Where: `gui/widgets.py` ModernButton `_draw` disabled branch (~517-520) and style table (~466-501); `gui/theme.py` tokens.
+
+## Audit Findings (2026-07-17 deep audit, second pass)
+
+- [ ] P3 — Memoize `opencv_libpng_status()` for PNG frame-sequence input
+  Why: `safe_imread` evaluates `opencv_libpng_status()` for every PNG, and each call runs `cv2.getBuildInformation()` (multi-KB string) plus a regex; a directory-of-PNGs input pays this process-static cost per frame. Cannot naively `lru_cache` the public function because the security-check tests monkeypatch `sys.modules["cv2"]` and call it repeatedly expecting fresh results — a fix must cache at the `safe_image` layer (or via an internal helper the tests do not patch) without breaking the vuln-diversion tests.
+  Where: `backend/safe_image.py:59`, `backend/security_checks.py:45-91`, `backend/io.py` `_FrameSequenceCapture.read`.
+
+- [ ] P3 — User-preset fields without a matching CLI dest are silently dropped
+  Why: The CLI `--preset` merge resolves each field via `field_to_attr.get(fname, fname)` then requires `hasattr(args, attr)`; a user preset saved with a field that has no CLI flag (e.g. `sttn_max_load_num`, `temporal_smooth_radius`) is silently skipped rather than applied or reported. Built-in presets only use mappable fields today, so this is latent. Consider routing CLI preset application through `apply_backend_payload` so every schema field round-trips.
+  Where: `backend/cli.py` (`_prepare_cli_args` preset merge ~1125-1139).
