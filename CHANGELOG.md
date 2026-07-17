@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Pause/resume checkpoints now expose frame-sequence gaps.** Resume scans
+  detect later orphaned frame files after the first missing frame, reset to
+  that safe boundary, and surface an explicit warning instead of presenting
+  the interruption as an ordinary short checkpoint.
 - **Committed PyInstaller spec is now a real release input.** The default
   `VideoSubtitleRemoverPro.spec` is explicitly tracked despite the general
   generated-spec ignore rule, collects all NumPy 2.x data, binaries, and

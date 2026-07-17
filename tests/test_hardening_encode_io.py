@@ -1688,6 +1688,53 @@ class EncodeStageCheckpointTests(unittest.TestCase):
             self.assertEqual(state.next_frame, 3)
             self.assertFalse(state.inpaint_complete)
 
+    def test_resume_reports_mid_sequence_gap_and_orphaned_frames(self):
+        from backend import resume_checkpoint as rc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "in.mp4").write_bytes(b"x")
+            frame_dir = tmp / "job.frames"
+            self._write_frames(frame_dir, 5)
+            (frame_dir / "frame_000002.png").unlink()
+            args = self._args(tmp, frame_dir)
+            rc.write_pause_checkpoint(
+                tmp, "job", next_frame=5, status="paused",
+                stage="inpainting", inpaint_complete=False, **args)
+
+            state = rc.load_pause_checkpoint(
+                tmp, "job",
+                input_path=args["input_path"], output_path=args["output_path"],
+                config_hash="abc", total_frames=5, width=8, height=8,
+                fps=24.0)
+
+            self.assertEqual(state.next_frame, 2)
+            self.assertIn("gap at frame 2", state.warning)
+            self.assertIn("2 later orphaned frame file(s)", state.warning)
+            self.assertIn("reset to the first gap", state.warning)
+
+    def test_resume_reports_gap_before_first_frame(self):
+        from backend import resume_checkpoint as rc
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "in.mp4").write_bytes(b"x")
+            frame_dir = tmp / "job.frames"
+            self._write_frames(frame_dir, 3)
+            (frame_dir / "frame_000000.png").unlink()
+            args = self._args(tmp, frame_dir)
+            rc.write_pause_checkpoint(
+                tmp, "job", next_frame=3, status="paused",
+                stage="inpainting", inpaint_complete=False, **args)
+
+            state = rc.load_pause_checkpoint(
+                tmp, "job",
+                input_path=args["input_path"], output_path=args["output_path"],
+                config_hash="abc", total_frames=5, width=8, height=8,
+                fps=24.0)
+
+            self.assertEqual(state.next_frame, 0)
+            self.assertIn("gap starts at frame 0", state.warning)
+            self.assertIn("2 later orphaned frame file(s)", state.warning)
+
 
 class OutputIntegrityValidationTests(unittest.TestCase):
     """P0: validate final video integrity before destination promotion."""

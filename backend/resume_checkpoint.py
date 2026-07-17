@@ -147,9 +147,15 @@ def load_pause_checkpoint(
         return CheckpointState(ckpt_path, default_frames, 0, {}, warning=warning)
     frame_dir = Path(payload.get("frame_dir") or default_frames)
     expected = _safe_int(payload.get("next_frame"), 0)
-    contiguous = count_contiguous_frames(frame_dir)
+    contiguous, orphaned = _scan_frame_sequence(frame_dir)
     next_frame = max(0, min(total_frames, min(expected, contiguous)))
     if next_frame <= 0:
+        gap_detail = ""
+        if orphaned:
+            gap_detail = (
+                f" A gap starts at frame 0, with {len(orphaned)} later "
+                "orphaned frame file(s); resume was reset to the first gap."
+            )
         return CheckpointState(
             ckpt_path,
             frame_dir,
@@ -157,10 +163,16 @@ def load_pause_checkpoint(
             payload,
             warning=(
                 f"Ignoring empty pause checkpoint {ckpt_path}; "
-                "no contiguous processed frames were found."
+                f"no contiguous processed frames were found.{gap_detail}"
             ),
         )
-    if next_frame != expected:
+    if orphaned:
+        warning = (
+            f"Pause checkpoint {ckpt_path} has a frame-sequence gap at "
+            f"frame {contiguous}, with {len(orphaned)} later orphaned frame "
+            "file(s); resume was reset to the first gap."
+        )
+    elif next_frame != expected:
         warning = (
             f"Pause checkpoint {ckpt_path} expected frame {expected}, "
             f"but only {next_frame} contiguous frame files were present."
@@ -239,6 +251,32 @@ def count_contiguous_frames(frame_dir: Path, *, prefix: str = "frame",
     while (frame_dir / f"{prefix}_{idx:06d}{ext}").is_file():
         idx += 1
     return idx
+
+
+def _scan_frame_sequence(frame_dir: Path, *, prefix: str = "frame",
+                         ext: str = ".png") -> tuple[int, tuple[int, ...]]:
+    """Return the contiguous prefix length and indices after its first gap."""
+    frame_dir = Path(frame_dir)
+    idx = count_contiguous_frames(frame_dir, prefix=prefix, ext=ext)
+    orphaned: list[int] = []
+    name_prefix = f"{prefix}_"
+    try:
+        entries = frame_dir.iterdir()
+        for path in entries:
+            name = path.name
+            if not path.is_file() or not name.startswith(name_prefix):
+                continue
+            if ext and not name.endswith(ext):
+                continue
+            suffix_end = -len(ext) if ext else None
+            token = name[len(name_prefix):suffix_end]
+            if len(token) == 6 and token.isdigit():
+                frame_index = int(token)
+                if frame_index >= idx:
+                    orphaned.append(frame_index)
+    except OSError:
+        return idx, ()
+    return idx, tuple(sorted(orphaned))
 
 
 def _validation_warning(payload: dict, *, input_path: str, output_path: str,
