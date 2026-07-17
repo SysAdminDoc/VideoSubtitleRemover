@@ -1862,21 +1862,7 @@ class VideoSubtitleRemoverApp(
 
         self._update_output_label()
 
-    def _build_settings_section(self, parent):
-        """Settings section: profile + workflow + collapsible advanced controls."""
-        section = self._create_surface(parent)
-        section.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
-
-        self._section_title(
-            section,
-            eyebrow="",
-            title="Configure",
-            hint="",
-        )
-
-        settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        settings.pack(fill="both", expand=True, padx=Theme.S_XL, pady=(0, Theme.S_LG))
-
+    def _build_profile_settings_group(self, settings):
         # ---- Profile card -----------------------------------------------
         profile_panel = self._create_card(settings)
         profile_panel.pack(fill="x")
@@ -1994,6 +1980,9 @@ class VideoSubtitleRemoverApp(
         Tooltip(self._lang_detect_btn,
                 tr("Auto-detect the subtitle language from a sample frame."))
 
+        return profile_details
+
+    def _build_workflow_settings_group(self, settings):
         # ---- Workflow card ----------------------------------------------
         workflow_panel = self._create_card(settings)
         workflow_panel.pack(fill="x", pady=(Theme.S_MD, 0))
@@ -2077,31 +2066,9 @@ class VideoSubtitleRemoverApp(
                                              command=self._reset_region, style="ghost",
                                              size="sm")
         self.region_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        return workflow_details, region_surface
 
-        self._build_output_card(settings)
-
-        self._inspector_detail_panels = (
-            (profile_details, {
-                "fill": "x", "padx": Theme.S_LG,
-                "pady": (Theme.S_SM, Theme.S_MD),
-            }),
-            (workflow_details, {
-                "fill": "x", "before": region_surface,
-            }),
-        )
-
-        # ---- Advanced toggle --------------------------------------------
-        adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        adv_frame.pack(fill="x", pady=(Theme.S_MD, 0))
-
-        self.adv_visible = False
-        self.adv_toggle = ModernButton(adv_frame, text=tr("Show detailed controls"), width=188,
-                                       command=self._toggle_advanced,
-                                       style="ghost", size="sm", icon="+")
-        self.adv_toggle.pack(anchor="w")
-
-        self.adv_panel = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-
+    def _build_sttn_settings_group(self):
         # STTN Motion card
         sttn_frame = self._create_card(self.adv_panel)
         sttn_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
@@ -2115,6 +2082,8 @@ class VideoSubtitleRemoverApp(
                             self.config.sttn_max_load_num, "sttn_max_load_num")
         tk.Frame(sttn_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
+
+    def _build_detection_settings_group(self):
         # Detection Precision card
         det_frame = self._create_card(self.adv_panel)
         det_frame.pack(fill="x", pady=(0, Theme.S_SM))
@@ -2217,6 +2186,8 @@ class VideoSubtitleRemoverApp(
 
         tk.Frame(det_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
+
+    def _build_output_settings_group(self):
         # Output Quality card
         quality_frame = self._create_card(self.adv_panel)
         quality_frame.pack(fill="x", pady=(0, Theme.S_SM))
@@ -2559,6 +2530,9 @@ class VideoSubtitleRemoverApp(
         Tooltip(style_entry, tr(
             "Optional FFmpeg force_style text, for example FontSize=24."))
 
+        return quality_frame
+
+    def _build_range_settings_group(self):
         # Video Range card
         time_frame = self._create_card(self.adv_panel)
         time_frame.pack(fill="x")
@@ -2596,6 +2570,8 @@ class VideoSubtitleRemoverApp(
         tk.Label(time_inner, text=tr("0 uses the full clip"), font=f(Theme.F_META),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left", padx=(Theme.S_MD, 0))
 
+
+    def _build_performance_settings_groups(self):
         # ---- v3.13 GUI-exposed knobs ------------------------------------
         # Editorial: chyron vs subtitle filter + karaoke grouping
         editorial_frame = self._create_card(self.adv_panel)
@@ -2712,6 +2688,10 @@ class VideoSubtitleRemoverApp(
         Tooltip(prefetch_toggle, tr("Read upcoming frames in the background so "
                                     "cleanup spends less time waiting on the source file."))
 
+
+    def _build_accessibility_storage_settings(
+        self, quality_frame,
+    ):
         # Quality sheet toggle (lives under Output but kept separate so we
         # don't disturb the existing Output card layout)
         self.quality_sheet_var = tk.BooleanVar(value=self.config.quality_report_sheet)
@@ -2872,6 +2852,57 @@ class VideoSubtitleRemoverApp(
         )
         work_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self._work_directory_buttons = (work_browse_btn, work_reset_btn)
+
+
+    def _build_settings_section(self, parent):
+        """Settings section: profile + workflow + collapsible advanced controls."""
+        section = self._create_surface(parent)
+        section.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
+
+        self._section_title(
+            section,
+            eyebrow="",
+            title="Configure",
+            hint="",
+        )
+
+        settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        settings.pack(fill="both", expand=True, padx=Theme.S_XL, pady=(0, Theme.S_LG))
+
+        profile_details = self._build_profile_settings_group(settings)
+        workflow_details, region_surface = (
+            self._build_workflow_settings_group(settings)
+        )
+        self._build_output_card(settings)
+
+        self._inspector_detail_panels = (
+            (profile_details, {
+                "fill": "x", "padx": Theme.S_LG,
+                "pady": (Theme.S_SM, Theme.S_MD),
+            }),
+            (workflow_details, {
+                "fill": "x", "before": region_surface,
+            }),
+        )
+
+        # ---- Advanced toggle --------------------------------------------
+        adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
+        adv_frame.pack(fill="x", pady=(Theme.S_MD, 0))
+
+        self.adv_visible = False
+        self.adv_toggle = ModernButton(adv_frame, text=tr("Show detailed controls"), width=188,
+                                       command=self._toggle_advanced,
+                                       style="ghost", size="sm", icon="+")
+        self.adv_toggle.pack(anchor="w")
+
+        self.adv_panel = tk.Frame(settings, bg=Theme.BG_SECONDARY)
+
+        self._build_sttn_settings_group()
+        self._build_detection_settings_group()
+        quality_frame = self._build_output_settings_group()
+        self._build_range_settings_group()
+        self._build_performance_settings_groups()
+        self._build_accessibility_storage_settings(quality_frame)
 
         self._update_region_label_display()
         self._update_mode_options()

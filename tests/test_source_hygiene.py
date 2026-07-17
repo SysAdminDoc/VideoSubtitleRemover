@@ -71,6 +71,33 @@ class SourceHygieneTests(unittest.TestCase):
         ]
         self.assertEqual(nested, [])
 
+    def test_settings_builder_delegates_to_named_groups(self):
+        tree = ast.parse(
+            (ROOT / "gui" / "app.py").read_text(encoding="utf-8")
+        )
+        app = next(
+            node for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == "VideoSubtitleRemoverApp"
+        )
+        methods = {
+            node.name: node for node in app.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        for name in (
+            "_build_profile_settings_group",
+            "_build_workflow_settings_group",
+            "_build_sttn_settings_group",
+            "_build_detection_settings_group",
+            "_build_output_settings_group",
+            "_build_range_settings_group",
+            "_build_performance_settings_groups",
+            "_build_accessibility_storage_settings",
+        ):
+            self.assertIn(name, methods)
+        entry = methods["_build_settings_section"]
+        self.assertLessEqual(entry.end_lineno - entry.lineno + 1, 60)
+
     def test_ruff_baseline_and_release_gate_are_explicit(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         lint = config["tool"]["ruff"]["lint"]

@@ -43,6 +43,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   now a 60-line orchestrator over parser construction, utility actions,
   argument validation, config assembly/overlays, soft-subtitle handling, and
   the processing runner, preserving command output and exit behavior.
+- **Settings construction follows explicit UI groups.** The former 1,013-line
+  settings builder is now a 52-line orchestrator over profile, workflow, STTN,
+  detection, output, range, performance, and accessibility/storage groups,
+  preserving widget creation order and bound configuration variables.
 - **Frame timing and Whisper span conversion now share one clock.** CFR/VFR
   frame-to-seconds conversion is centralized and reused by the mask/inpaint
   loop, clean-reference overrides, VMAF sampling, checkpoint-frame encoding,
