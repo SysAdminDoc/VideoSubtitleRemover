@@ -47,17 +47,30 @@ def _pillow_read_png(path: PathLike, flags: Optional[int]) -> Optional[np.ndarra
         return None
 
 
-def safe_imread(path: PathLike, flags: Optional[int] = None) -> Optional[np.ndarray]:
+def libpng_vulnerable() -> bool:
+    """Whether OpenCV's bundled libpng is the CVE-affected version."""
+    return opencv_libpng_status().get("vulnerable") is True
+
+
+def safe_imread(path: PathLike, flags: Optional[int] = None, *,
+                png_vulnerable: Optional[bool] = None) -> Optional[np.ndarray]:
     """Read an image as OpenCV would, diverting vulnerable PNG paths to Pillow.
 
     User-controlled PNG input must not touch OpenCV's bundled libpng when
     `opencv_libpng_status().vulnerable` is true. Non-PNG files and fixed
     OpenCV builds keep the normal `cv2.imread` behavior.
+
+    `png_vulnerable` lets a caller reading many frames (e.g. a PNG frame
+    sequence) resolve the process-static libpng status once and pass it in,
+    avoiding a `cv2.getBuildInformation()` parse on every frame. When omitted
+    the status is resolved per call, preserving the original behavior.
     """
     import cv2
 
-    if _is_png(path) and opencv_libpng_status().get("vulnerable") is True:
-        return _pillow_read_png(path, flags)
+    if _is_png(path):
+        vulnerable = libpng_vulnerable() if png_vulnerable is None else png_vulnerable
+        if vulnerable:
+            return _pillow_read_png(path, flags)
     if flags is None:
         return cv2.imread(str(path))
     return cv2.imread(str(path), flags)

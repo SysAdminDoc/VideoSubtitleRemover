@@ -18,6 +18,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   dedicated recessed `BG_DISABLED` token (in both the default and AMOLED
   palettes) makes the inert state legible without vanishing against cards.
 
+### Performance
+
+- **PNG frame-sequence input no longer re-parses the libpng build string per
+  frame.** The process-static OpenCV libpng status is resolved once when a
+  frame-sequence capture opens and reused for every frame.
+
 ### Fixed
 
 - **CLI `--preset` no longer discards an explicit flag that equals the parser

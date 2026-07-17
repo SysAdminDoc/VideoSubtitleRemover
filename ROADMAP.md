@@ -62,10 +62,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-17 deep audit, second pass)
 
-- [ ] P3 — Memoize `opencv_libpng_status()` for PNG frame-sequence input
-  Why: `safe_imread` evaluates `opencv_libpng_status()` for every PNG, and each call runs `cv2.getBuildInformation()` (multi-KB string) plus a regex; a directory-of-PNGs input pays this process-static cost per frame. Cannot naively `lru_cache` the public function because the security-check tests monkeypatch `sys.modules["cv2"]` and call it repeatedly expecting fresh results — a fix must cache at the `safe_image` layer (or via an internal helper the tests do not patch) without breaking the vuln-diversion tests.
-  Where: `backend/safe_image.py:59`, `backend/security_checks.py:45-91`, `backend/io.py` `_FrameSequenceCapture.read`.
-
 - [ ] P3 — User-preset fields without a matching CLI dest are silently dropped
   Why: The CLI `--preset` merge resolves each field via `field_to_attr.get(fname, fname)` then requires `hasattr(args, attr)`; a user preset saved with a field that has no CLI flag (e.g. `sttn_max_load_num`, `temporal_smooth_radius`) is silently skipped rather than applied or reported. Built-in presets only use mappable fields today, so this is latent. Consider routing CLI preset application through `apply_backend_payload` so every schema field round-trips.
   Where: `backend/cli.py` (`_prepare_cli_args` preset merge ~1125-1139).
