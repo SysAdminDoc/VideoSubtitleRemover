@@ -49,9 +49,13 @@ class GuiSmokeTests(unittest.TestCase):
         # clobber the developer's real %APPDATA%/VSR config.
         cls._tmpdir = tempfile.TemporaryDirectory()
         import VideoSubtitleRemover as g
+        from gui import app as gui_app_module
         from gui import config as gui_config
         cls._g = g
+        cls._gui_app_module = gui_app_module
         cls._gui_config = gui_config
+        cls._shared_root = tk.Tk()
+        cls._shared_root.withdraw()
         cls._orig_settings = g.SETTINGS_FILE
         cls._orig_queue_state = gui_config.QUEUE_STATE_FILE
         g.SETTINGS_FILE = Path(cls._tmpdir.name) / "settings.json"
@@ -61,6 +65,7 @@ class GuiSmokeTests(unittest.TestCase):
     def tearDownClass(cls):
         cls._g.SETTINGS_FILE = cls._orig_settings
         cls._gui_config.QUEUE_STATE_FILE = cls._orig_queue_state
+        cls._shared_root.destroy()
         cls._tmpdir.cleanup()
 
     def _make_app(self, *, withdraw: bool = True):
@@ -72,7 +77,12 @@ class GuiSmokeTests(unittest.TestCase):
                 self._g.VideoSubtitleRemoverApp,
                 "_maybe_restore_queue",
             ):
-                app = self._g.VideoSubtitleRemoverApp()
+                with mock.patch.object(
+                    self._gui_app_module.tk,
+                    "Tk",
+                    side_effect=lambda: tk.Toplevel(self._shared_root),
+                ):
+                    app = self._g.VideoSubtitleRemoverApp()
         if withdraw:
             app.root.withdraw()
         return app

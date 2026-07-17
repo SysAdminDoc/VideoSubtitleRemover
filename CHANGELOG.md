@@ -48,6 +48,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   configuration, mode enums, normalization, and checkpoint helpers no longer
   reach through the processor compatibility facade, reducing unnecessary
   processor/OpenCV/NumPy import coupling in preview and settings paths.
+- **GUI smoke tests reuse one Tcl interpreter.** Each application instance is
+  now hosted in a destroyed-after-test `Toplevel` under one withdrawn class
+  root, eliminating the repeated `tk.tcl` / `tcl_findLibrary` exhaustion that
+  appeared only after dozens of roots were created in one Python process.
 
 ## [3.18.1] - 2026-07-17
 
