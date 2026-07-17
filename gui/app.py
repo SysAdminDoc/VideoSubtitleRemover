@@ -731,32 +731,29 @@ class VideoSubtitleRemoverApp(
                  arrowcolor=[('active', Theme.TEXT_SECONDARY)])
 
     def _create_surface(self, parent, bg: str = Theme.BG_SECONDARY) -> tk.Frame:
-        """Create a bordered surface panel."""
-        return tk.Frame(parent, bg=bg, highlightthickness=1,
-                        highlightbackground=Theme.BORDER_SUBTLE)
+        """Create a quiet tonal surface without an ornamental outline."""
+        return tk.Frame(parent, bg=bg, highlightthickness=0)
 
     def _create_status_tile(self, parent, label: str, value: str, fg: str,
                             bg: str) -> tk.Frame:
-        """Compact rectangular status tile for live environment signals."""
-        tile = tk.Frame(parent, bg=bg, highlightthickness=1,
-                        highlightbackground=Theme.BORDER_SUBTLE)
+        """Create an inline status summary for compatibility surfaces."""
+        tile = tk.Frame(parent, bg=bg, highlightthickness=0)
         inner = tk.Frame(tile, bg=bg)
-        inner.pack(fill="x", padx=12, pady=8)
+        inner.pack(fill="x")
         tk.Label(
             inner,
-            text=label.upper(),
-            font=f(Theme.F_MICRO, "bold"),
-            bg=bg,
-            fg=Theme.TEXT_MUTED,
-        ).pack(anchor="w")
-        tk.Label(
-            inner,
-            text=value,
+            text=label,
             font=f(Theme.F_META, "bold"),
             bg=bg,
             fg=fg,
-            anchor="w",
-        ).pack(anchor="w", pady=(2, 0))
+        ).pack(side="left")
+        tk.Label(
+            inner,
+            text=f"  {value}",
+            font=f(Theme.F_META),
+            bg=bg,
+            fg=Theme.TEXT_MUTED,
+        ).pack(side="left")
         return tile
 
     @staticmethod
@@ -921,62 +918,56 @@ class VideoSubtitleRemoverApp(
             self.ffmpeg_warning_label.pack_forget()
 
     def _render_header_chips(self):
-        """Render or refresh the live header chips."""
+        """Render one readiness state and one quiet capability summary."""
         if not hasattr(self, "_header_chips"):
             return
         for child in self._header_chips.winfo_children():
             child.destroy()
-        for idx in range(3):
-            self._header_chips.columnconfigure(
-                idx, weight=0, uniform="")
         if self._hardware_probe_pending:
-            chip_data = [
-                (tr("Device"), tr("Detecting..."), Theme.INFO),
-                (tr("Detection"), tr("Detecting..."), Theme.INFO),
-                (tr("Audio"), tr("Detecting..."), Theme.INFO),
-            ]
+            state_text = tr("Checking")
+            state_fg = Theme.INFO
+            state_bg = Theme.INFO_BG
+            summary = tr("Detecting hardware and media support")
         else:
-            gpu_short = truncate_middle(self.gpus[0]["name"], 26) if self.gpus else tr("CPU mode")
-            gpu_fg = Theme.SUCCESS if self.gpus else Theme.WARNING
+            gpu_short = (
+                truncate_middle(self.gpus[0]["name"], 24)
+                if self.gpus else tr("CPU mode")
+            )
             detection = self.ai_engines.get("detection", [])
             det_short = detection[0] if detection else tr("OpenCV fallback")
-            audio_short = tr("FFmpeg ready") if self.ffmpeg_ready else tr("No FFmpeg")
-            audio_fg = Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING
-            chip_data = [
-                (tr("Device"), gpu_short, gpu_fg),
-                (tr("Detection"), det_short, Theme.INFO),
-                (tr("Audio"), audio_short, audio_fg),
-            ]
-        compact = (
-            getattr(self, "_layout_mode", "wide") == "stacked"
-            or self.root.winfo_width() < 1100
+            audio_short = tr("FFmpeg") if self.ffmpeg_ready else tr("No FFmpeg")
+            ready = bool(detection) and self.ffmpeg_ready
+            state_text = tr("Ready") if ready else tr("Limited")
+            state_fg = Theme.SUCCESS if ready else Theme.WARNING
+            state_bg = Theme.SUCCESS_BG if ready else Theme.WARNING_BG
+            summary = f"{gpu_short}  /  {det_short}  /  {audio_short}"
+
+        self._header_ready_label = tk.Label(
+            self._header_chips,
+            text=state_text,
+            font=f(Theme.F_META, "bold"),
+            bg=state_bg,
+            fg=state_fg,
+            padx=Theme.S_SM,
+            pady=2,
         )
-        if compact:
-            for idx in range(2):
-                self._header_chips.columnconfigure(
-                    idx, weight=1, uniform="header_status_compact")
-            positions = [(0, 0, 1), (0, 1, 1), (1, 0, 2)]
-            for idx, (label, value, fg) in enumerate(chip_data):
-                row, col, span = positions[idx]
-                padx = (Theme.S_SM, 0) if col else 0
-                pady = (Theme.S_SM, 0) if row else 0
-                self._create_status_tile(
-                    self._header_chips, label, value, fg, Theme.BG_CARD
-                ).grid(row=row, column=col, columnspan=span, sticky="ew",
-                       padx=padx, pady=pady)
-        else:
-            for idx in range(3):
-                self._header_chips.columnconfigure(
-                    idx, weight=1, uniform="header_status")
-            for idx, (label, value, fg) in enumerate(chip_data):
-                padx = (Theme.S_SM, 0) if idx else 0
-                self._create_status_tile(
-                    self._header_chips, label, value, fg, Theme.BG_CARD
-                ).grid(row=0, column=idx, sticky="ew", padx=padx)
+        self._header_ready_label.pack(side="left")
+        self._header_capability_label = tk.Label(
+            self._header_chips,
+            text=summary,
+            font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+            wraplength=420,
+            justify="left",
+        )
+        if getattr(self, "_layout_mode", "wide") == "wide":
+            self._header_capability_label.pack(
+                side="left", padx=(Theme.S_SM, 0))
 
     def _section_title(self, parent, eyebrow: str, title: str, hint: str,
-                       pad_x: int = 20, pad_top: int = 16):
-        """Consistent section header: eyebrow label + title + hint line."""
+                       pad_x: int = 16, pad_top: int = 12):
+        """Compact section header with optional supporting copy."""
         bg = parent.cget("bg")
         if eyebrow:
             tk.Label(parent, text=tr(eyebrow).upper(), font=f(Theme.F_EYEBROW, "bold"),
@@ -992,15 +983,15 @@ class VideoSubtitleRemoverApp(
                      justify="left").pack(anchor="w", padx=pad_x, pady=(4, Theme.S_MD))
 
     def _create_card(self, parent, bg=Theme.BG_CARD) -> tk.Frame:
-        """Bordered card container with consistent style."""
-        return tk.Frame(parent, bg=bg, highlightthickness=1,
-                        highlightbackground=Theme.BORDER_SUBTLE)
+        """Create a borderless tonal group."""
+        return tk.Frame(parent, bg=bg, highlightthickness=0)
 
     def _card_header(self, parent, eyebrow: str, title: str, bg=Theme.BG_CARD,
-                     pad_x: int = 16, pad_top: int = 14):
+                     pad_x: int = 12, pad_top: int = 10):
         """Card-internal section header with a single clear title."""
         tk.Label(parent, text=tr(title), font=f(Theme.F_TITLE, "bold"),
-                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(anchor="w", padx=pad_x, pady=(pad_top, 10))
+                 bg=bg, fg=Theme.TEXT_PRIMARY).pack(
+                     anchor="w", padx=pad_x, pady=(pad_top, Theme.S_SM))
 
     def _divider(self, parent, pad: int = 0):
         tk.Frame(parent, bg=Theme.BORDER_SUBTLE, height=1).pack(
@@ -1132,7 +1123,11 @@ class VideoSubtitleRemoverApp(
                 start_reason = tr("Stop is already in progress.")
             else:
                 start_reason = tr("The batch is already running.")
-            self.start_btn.set_enabled(can_pause or can_start, reason=start_reason)
+            for button_name in ("start_btn", "inspector_start_btn"):
+                button = getattr(self, button_name, None)
+                if button is not None:
+                    button.set_enabled(
+                        can_pause or can_start, reason=start_reason)
         if hasattr(self, "open_output_btn"):
             self.open_output_btn.set_enabled(
                 has_complete,
@@ -1201,7 +1196,7 @@ class VideoSubtitleRemoverApp(
             return "break"
         try:
             self._queue_filter_frame.pack(
-                fill="x", padx=Theme.S_XL, pady=(0, Theme.S_SM),
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM),
                 before=self._queue_container)
             self._queue_filter_entry.focus_set()
             self._queue_filter_entry.selection_range(0, "end")
@@ -1252,16 +1247,8 @@ class VideoSubtitleRemoverApp(
                 else (520 if compact else 760)
             )
             self._header_title_label.configure(wraplength=title_wrap)
-            if compact:
-                self._header_version_label.pack_forget()
-                self._header_intro_label.pack_forget()
-            else:
-                if not self._header_version_label.winfo_manager():
-                    self._header_version_label.pack(
-                        side="left", padx=(Theme.S_SM, 0))
-                if not self._header_intro_label.winfo_manager():
-                    self._header_intro_label.pack(
-                        side="left", padx=(Theme.S_MD, 0))
+            self._header_version_label.pack_forget()
+            self._header_intro_label.pack_forget()
         if hasattr(self, "_log_title_cluster"):
             self._log_title_cluster.pack_forget()
             self._badge_row.pack_forget()
@@ -1289,9 +1276,6 @@ class VideoSubtitleRemoverApp(
             if hasattr(self, "preview_action_hint"):
                 self.preview_action_hint.config(
                     wraplength=720 if mode == "stacked" else 520)
-            if hasattr(self, "header_guidance_body"):
-                self.header_guidance_body.config(
-                    wraplength=720 if mode == "stacked" else 124)
             if hasattr(self, "status_hint"):
                 self.status_hint.config(
                     wraplength=520 if mode == "stacked" else 360)
@@ -1316,21 +1300,19 @@ class VideoSubtitleRemoverApp(
             self._content.columnconfigure(0, weight=1, minsize=0, uniform="")
             self._content.columnconfigure(1, weight=0, minsize=0, uniform="")
             self._content.columnconfigure(2, weight=0, minsize=0, uniform="")
-            for row in range(3):
+            for row in range(2):
                 self._content.rowconfigure(row, weight=0)
-            self._content.rowconfigure(1, weight=1)
-            self._workflow_col.grid(row=0, column=0, sticky="nsew",
-                                    pady=(0, Theme.S_MD))
-            self._preview_col.grid(row=1, column=0, sticky="nsew",
+            self._content.rowconfigure(0, weight=1)
+            self._preview_col.grid(row=0, column=0, sticky="nsew",
                                    pady=(0, Theme.S_MD))
-            self._settings_col.grid(row=2, column=0, sticky="nsew",
+            self._settings_col.grid(row=1, column=0, sticky="nsew",
                                     pady=(0, Theme.S_MD))
 
-            self._header_left.pack(fill="x")
-            self._header_right.pack(anchor="w", pady=(Theme.S_MD, 0))
-            if width >= 1180 and self._text_scale_percent < 150:
-                self._header_chips.pack(fill="x", pady=(Theme.S_MD, 0))
-            self._layout_workflow_rail(compact=True)
+            self._header_left.pack(side="left", fill="y")
+            self._header_right.pack(side="right", anchor="n")
+            if self._text_scale_percent < 150:
+                self._header_chips.pack(
+                    side="right", padx=(Theme.S_SM, Theme.S_LG))
 
             self._footer_left.pack_forget()
             self._footer_left.pack(anchor="w")
@@ -1338,24 +1320,21 @@ class VideoSubtitleRemoverApp(
             if width >= 1180:
                 self.status_hint.pack(fill="x", pady=(Theme.S_XS, 0))
         else:
-            self._content.columnconfigure(0, weight=0, minsize=176, uniform="")
-            self._content.columnconfigure(1, weight=7, minsize=440, uniform="")
-            self._content.columnconfigure(2, weight=4, minsize=380, uniform="")
+            self._content.columnconfigure(0, weight=7, minsize=500, uniform="")
+            self._content.columnconfigure(1, weight=4, minsize=360, uniform="")
+            self._content.columnconfigure(2, weight=0, minsize=0, uniform="")
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
             self._content.rowconfigure(2, weight=0)
-            self._workflow_col.grid(row=0, column=0, sticky="nsew",
-                                    padx=(0, Theme.S_MD))
-            self._preview_col.grid(row=0, column=1, sticky="nsew",
+            self._preview_col.grid(row=0, column=0, sticky="nsew",
                                    padx=(0, Theme.S_MD))
-            self._settings_col.grid(row=0, column=2, sticky="nsew")
+            self._settings_col.grid(row=0, column=1, sticky="nsew")
 
             self._header_left.pack(side="left", fill="y")
             self._header_right.pack(side="right", anchor="n")
             if width >= 1180 and self._text_scale_percent < 150:
                 self._header_chips.pack(side="right",
                                         padx=(Theme.S_XL, Theme.S_LG))
-            self._layout_workflow_rail(compact=False)
 
             self._footer_left.pack_forget()
             self._footer_left.pack(side="left")
@@ -1365,7 +1344,6 @@ class VideoSubtitleRemoverApp(
         self.preview_meta_label.config(wraplength=720 if stacked else 520)
         if hasattr(self, "preview_action_hint"):
             self.preview_action_hint.config(wraplength=720 if stacked else 520)
-        self.header_guidance_body.config(wraplength=720 if stacked else 124)
         self.status_hint.config(wraplength=520 if stacked else 360)
         self._render_header_chips()
 
@@ -1412,7 +1390,12 @@ class VideoSubtitleRemoverApp(
         ):
             button.pack_forget()
 
-        self.start_btn.pack(side="right")
+        if compact or not hasattr(self, "inspector_start_btn"):
+            self.start_btn.pack(side="right")
+        if hasattr(self, "inspector_start_btn"):
+            self.inspector_start_btn.pack_forget()
+            if not compact:
+                self.inspector_start_btn.pack(fill="x")
         self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
         if compact:
             self._queue_more_btn.pack(side="left")
@@ -1421,31 +1404,33 @@ class VideoSubtitleRemoverApp(
             self.repeat_btn.pack(side="left", padx=(Theme.S_SM, 0))
             self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
-        self.queue_canvas.configure(height=64 if dense else 112)
+        self.queue_canvas.configure(height=64 if dense else 88)
         self._queue_dense_mode = dense
+        self._queue_subtitle_label.pack_forget()
         if dense:
-            self._queue_subtitle_label.pack_forget()
             self._queue_batch_frame.pack_forget()
             self._queue_batch_bar_frame.pack_forget()
-        elif not self._queue_subtitle_label.winfo_manager():
-            self._queue_subtitle_label.pack(anchor="w", pady=(2, 0))
-        if not dense:
+        show_batch_progress = bool(self.queue or self.is_processing)
+        if not dense and show_batch_progress:
             if not self._queue_batch_frame.winfo_manager():
                 self._queue_batch_frame.pack(
-                    fill="x", padx=Theme.S_XL, pady=(Theme.S_MD, 0),
+                    fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0),
                     before=self._queue_container,
                 )
             if not self._queue_batch_bar_frame.winfo_manager():
                 self._queue_batch_bar_frame.pack(
-                    fill="x", padx=Theme.S_XL,
+                    fill="x", padx=Theme.S_MD,
                     pady=(4, Theme.S_SM), before=self._queue_container,
                 )
+        elif not show_batch_progress:
+            self._queue_batch_frame.pack_forget()
+            self._queue_batch_bar_frame.pack_forget()
         dense_expanded = getattr(self, "_queue_dense_expanded", False)
         if dense and not dense_expanded:
             self._queue_container.pack_forget()
         elif not self._queue_container.winfo_manager():
             self._queue_container.pack(
-                fill="both", expand=True, padx=Theme.S_XL,
+                fill="both", expand=True, padx=Theme.S_MD,
                 pady=(0, Theme.S_SM), before=self._queue_action_frame,
             )
 
@@ -1644,23 +1629,22 @@ class VideoSubtitleRemoverApp(
         self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
         self._content_canvas.bind("<MouseWheel>", self._on_content_mousewheel)
         content.bind("<MouseWheel>", self._on_content_mousewheel)
-        content.columnconfigure(0, weight=0, minsize=176)
-        content.columnconfigure(1, weight=7, minsize=440)
-        content.columnconfigure(2, weight=4, minsize=380)
+        content.columnconfigure(0, weight=7, minsize=500)
+        content.columnconfigure(1, weight=4, minsize=360)
+        content.columnconfigure(2, weight=0, minsize=0)
         content.rowconfigure(0, weight=1)
         self._content = content
 
-        # Workflow rail: orientation and current stage without unrelated nav.
+        # Keep the legacy workflow state widgets alive for status/a11y updates,
+        # but do not spend viewport space on an onboarding rail.
         workflow_col = tk.Frame(content, bg=Theme.BG_DARK)
-        workflow_col.grid(row=0, column=0, sticky="nsew",
-                          padx=(0, Theme.S_MD))
         self._workflow_col = workflow_col
         self._build_workflow_rail(workflow_col)
 
         # Preview is the primary work surface. Import remains immediately
         # discoverable above it, but no longer competes with configuration.
         preview_col = tk.Frame(content, bg=Theme.BG_DARK)
-        preview_col.grid(row=0, column=1, sticky="nsew",
+        preview_col.grid(row=0, column=0, sticky="nsew",
                          padx=(0, Theme.S_MD))
         self._preview_col = preview_col
         self._build_input_section(preview_col)
@@ -1668,7 +1652,7 @@ class VideoSubtitleRemoverApp(
 
         # Focused inspector: cleanup profile, region, output, then details.
         settings_col = tk.Frame(content, bg=Theme.BG_DARK)
-        settings_col.grid(row=0, column=2, sticky="nsew")
+        settings_col.grid(row=0, column=1, sticky="nsew")
         self._settings_col = settings_col
         self._build_settings_section(settings_col)
 
@@ -1679,7 +1663,7 @@ class VideoSubtitleRemoverApp(
         header.pack(fill="x")
 
         inner = tk.Frame(header, bg=Theme.BG_SECONDARY)
-        inner.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_MD)
+        inner.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_SM)
 
         header_top = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         header_top.pack(fill="x")
@@ -1696,6 +1680,7 @@ class VideoSubtitleRemoverApp(
             fg=Theme.TEXT_PRIMARY,
         )
         self._header_title_label.pack(side="left", anchor="w")
+        Tooltip(self._header_title_label, f"Video Subtitle Remover v{APP_VERSION}")
         self._header_version_label = tk.Label(
             left,
             text=f"v{APP_VERSION}",
@@ -1705,7 +1690,6 @@ class VideoSubtitleRemoverApp(
             padx=8,
             pady=3,
         )
-        self._header_version_label.pack(side="left", padx=(Theme.S_SM, 0))
         self._header_intro_label = tk.Label(
             left,
             text=tr("Private, local cleanup"),
@@ -1713,7 +1697,6 @@ class VideoSubtitleRemoverApp(
             bg=Theme.BG_SECONDARY,
             fg=Theme.GREEN_PRIMARY,
         )
-        self._header_intro_label.pack(side="left", padx=(Theme.S_MD, 0))
 
         right = tk.Frame(header_top, bg=Theme.BG_SECONDARY)
         right.pack(side="right", anchor="n")
@@ -1722,14 +1705,14 @@ class VideoSubtitleRemoverApp(
         settings_btn = ModernButton(
             right, text=tr("Settings"), width=92,
             command=self._focus_settings_panel, style="ghost",
-            size="sm", icon="*",
+            size="sm",
         )
         settings_btn.pack(side="left")
         self._header_settings_btn = settings_btn
 
         help_btn = ModernButton(right, text=tr("Help"), width=80,
                                 command=self._show_about, style="ghost",
-                                size="sm", icon="?")
+                                size="sm")
         help_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self._header_help_btn = help_btn
 
@@ -1844,35 +1827,31 @@ class VideoSubtitleRemoverApp(
         self._import_section = section
 
         self.drop_area = DragDropFrame(
-            section, self._on_files_dropped, height=92, compact=True)
-        self.drop_area.pack(fill="x", padx=Theme.S_XL,
-                            pady=Theme.S_MD)
+            section, self._on_files_dropped, height=52, compact=True)
+        self.drop_area.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_SM)
 
     def _build_output_card(self, parent):
         """Build the output destination card inside the inspector."""
         out_surface = self._create_card(parent)
-        out_surface.pack(fill="x", pady=(Theme.S_MD, 0))
+        out_surface.pack(fill="x", pady=(Theme.S_SM, 0))
         self._card_header(out_surface, "Output", "Output")
 
         out_row = tk.Frame(out_surface, bg=Theme.BG_CARD)
-        out_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
+        out_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         label_col = tk.Frame(out_row, bg=Theme.BG_CARD)
         label_col.pack(fill="x")
 
-        tk.Label(label_col, text=tr("OUTPUT LOCATION"), font=f(Theme.F_EYEBROW, "bold"),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(anchor="w")
-
         self.output_dir_label = tk.Label(label_col, text="", font=f(Theme.F_BODY, "bold"),
                                          bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY, anchor="w")
-        self.output_dir_label.pack(anchor="w", pady=(4, 0))
+        self.output_dir_label.pack(anchor="w")
 
         self.output_dir_meta = tk.Label(label_col, text="", font=f(Theme.F_META),
                                         bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED, anchor="w")
         self.output_dir_meta.pack(anchor="w", pady=(2, 0))
 
         actions = tk.Frame(out_row, bg=Theme.BG_CARD)
-        actions.pack(fill="x", pady=(Theme.S_MD, 0))
+        actions.pack(fill="x", pady=(Theme.S_SM, 0))
 
         choose_btn = ModernButton(actions, text=tr("Choose folder"), width=120,
                                   command=self._choose_output_dir, style="accent",
@@ -1886,6 +1865,25 @@ class VideoSubtitleRemoverApp(
 
         self._update_output_label()
 
+    def _build_inspector_primary_action(self, parent):
+        """Place the dominant action beside the primary configuration."""
+        self._inspector_primary_frame = tk.Frame(
+            parent, bg=Theme.BG_SECONDARY)
+        self._inspector_primary_frame.pack(fill="x", pady=(Theme.S_MD, 0))
+        self.inspector_start_btn = ModernButton(
+            self._inspector_primary_frame,
+            text=tr("Start cleanup"),
+            width=320,
+            height=44,
+            command=self._start_processing,
+            style="primary",
+            size="lg",
+            icon=">",
+        )
+        self.inspector_start_btn.pack(fill="x")
+        self._refresh_action_states()
+        self._layout_queue_actions(compact=False, dense=False)
+
     def _build_profile_settings_group(self, settings):
         # ---- Profile card -----------------------------------------------
         profile_panel = self._create_card(settings)
@@ -1898,7 +1896,7 @@ class VideoSubtitleRemoverApp(
 
         # Preset picker -- one-click recipe application. Built-ins + user-saved.
         preset_row = tk.Frame(profile_details, bg=Theme.BG_CARD)
-        preset_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, Theme.S_SM))
+        preset_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
 
         tk.Label(preset_row, text=tr("Preset"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
@@ -1938,8 +1936,8 @@ class VideoSubtitleRemoverApp(
 
         # Algorithm -- segmented picker replaces the Combobox for speed + clarity
         tk.Label(profile_panel, text=tr("Algorithm"), font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(
-                     anchor="w", padx=Theme.S_LG)
+                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(
+                     anchor="w", padx=Theme.S_MD)
 
         self.mode_picker = SegmentedPicker(
             profile_panel,
@@ -1950,16 +1948,16 @@ class VideoSubtitleRemoverApp(
             group_label=tr("Cleanup algorithm"),
             columns=2,
         )
-        self.mode_picker.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
+        self.mode_picker.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_MD))
 
         self.algo_desc = tk.Label(profile_panel, text=self._get_algo_description(),
                                   font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
                                   fg=Theme.TEXT_SECONDARY, justify="left", anchor="w",
                                   wraplength=320)
-        self.algo_desc.pack(fill="x", padx=Theme.S_LG, pady=(2, Theme.S_MD))
+        Tooltip(self.mode_picker, self._get_algo_description())
 
         row2 = tk.Frame(profile_details, bg=Theme.BG_CARD)
-        row2.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
+        row2.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
 
         tk.Label(row2, text=tr("Compute device"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
@@ -1973,7 +1971,7 @@ class VideoSubtitleRemoverApp(
         self._refresh_gpu_selector()
 
         lang_row = tk.Frame(profile_details, bg=Theme.BG_CARD)
-        lang_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
+        lang_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         tk.Label(lang_row, text=tr("Subtitle language"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
@@ -2009,18 +2007,18 @@ class VideoSubtitleRemoverApp(
     def _build_workflow_settings_group(self, settings):
         # ---- Workflow card ----------------------------------------------
         workflow_panel = self._create_card(settings)
-        workflow_panel.pack(fill="x", pady=(Theme.S_MD, 0))
+        workflow_panel.pack(fill="x", pady=(Theme.S_SM, 0))
 
-        self._card_header(workflow_panel, "Workflow", "Detection and output")
+        self._card_header(workflow_panel, "Workflow", "Region and audio")
 
         workflow_details = tk.Frame(workflow_panel, bg=Theme.BG_CARD)
         self._inspector_workflow_details = workflow_details
         checks_frame = tk.Frame(workflow_details, bg=Theme.BG_CARD)
-        checks_frame.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        checks_frame.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         self.skip_check = ModernToggle(
             checks_frame,
-            text=tr("Reuse a fixed subtitle region (skip per-frame scanning)"),
+            text=tr("Use a fixed subtitle region"),
             variable=self.skip_detection_var,
             wraplength=300,
         )
@@ -2029,7 +2027,7 @@ class VideoSubtitleRemoverApp(
 
         self.lama_check = ModernToggle(
             checks_frame,
-            text=tr("LaMa fast mode - favor speed over fill detail"),
+            text=tr("Fast LaMa cleanup"),
             variable=self.lama_fast_var,
             wraplength=300,
         )
@@ -2038,7 +2036,7 @@ class VideoSubtitleRemoverApp(
 
         self.preserve_audio_check = ModernToggle(
             checks_frame,
-            text=tr("Preserve the source audio track"),
+            text=tr("Preserve source audio"),
             variable=self.preserve_audio_var,
             wraplength=300,
         )
@@ -2054,32 +2052,31 @@ class VideoSubtitleRemoverApp(
         )
         self._refresh_ffmpeg_warning()
 
-        # Region surface -- raised card-within-card
-        region_surface = tk.Frame(workflow_panel, bg=Theme.BG_TERTIARY,
-                                  highlightthickness=1,
-                                  highlightbackground=Theme.BORDER_SUBTLE)
+        # The region reads as a control group, not a card nested in a card.
+        region_surface = tk.Frame(workflow_panel, bg=Theme.BG_CARD,
+                                  highlightthickness=0)
         self._inspector_region_surface = region_surface
-        region_surface.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, Theme.S_LG))
+        region_surface.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
-        region_text = tk.Frame(region_surface, bg=Theme.BG_TERTIARY)
+        region_text = tk.Frame(region_surface, bg=Theme.BG_CARD)
         region_text.pack(side="left", fill="x", expand=True,
-                         padx=(Theme.S_MD, 0), pady=Theme.S_MD)
+                         pady=Theme.S_XS)
 
-        tk.Label(region_text, text=tr("SUBTITLE REGION"), font=f(Theme.F_EYEBROW, "bold"),
-                 bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED).pack(anchor="w")
+        tk.Label(region_text, text=tr("Subtitle region"), font=f(Theme.F_BODY_SM),
+                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
 
         self.region_label = tk.Label(region_text, text="", font=f(Theme.F_BODY, "bold"),
-                                     bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                                     bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY,
                                      anchor="w")
-        self.region_label.pack(anchor="w", pady=(4, 0))
+        self.region_label.pack(anchor="w", pady=(2, 0))
 
         self.region_meta = tk.Label(region_text, text="", font=f(Theme.F_META),
-                                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
+                                    bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED,
                                     anchor="w")
         self.region_meta.pack(anchor="w", pady=(2, 0))
 
-        region_actions = tk.Frame(region_surface, bg=Theme.BG_TERTIARY)
-        region_actions.pack(side="right", padx=Theme.S_MD, pady=Theme.S_MD)
+        region_actions = tk.Frame(region_surface, bg=Theme.BG_CARD)
+        region_actions.pack(side="right", pady=Theme.S_XS)
 
         self.region_btn = ModernButton(region_actions, text=tr("Set region"), width=88,
                                        command=self._open_region_selector_modal, style="accent",
@@ -2932,7 +2929,7 @@ class VideoSubtitleRemoverApp(
     def _build_settings_section(self, parent):
         """Settings section: profile + workflow + collapsible advanced controls."""
         section = self._create_surface(parent)
-        section.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
+        section.pack(fill="both", expand=True)
 
         self._section_title(
             section,
@@ -2942,13 +2939,14 @@ class VideoSubtitleRemoverApp(
         )
 
         settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        settings.pack(fill="both", expand=True, padx=Theme.S_XL, pady=(0, Theme.S_LG))
+        settings.pack(fill="both", expand=True, padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         profile_details = self._build_profile_settings_group(settings)
         workflow_details, region_surface = (
             self._build_workflow_settings_group(settings)
         )
         self._build_output_card(settings)
+        self._build_inspector_primary_action(settings)
 
         self._inspector_detail_panels = (
             (profile_details, {
@@ -2962,7 +2960,7 @@ class VideoSubtitleRemoverApp(
 
         # ---- Advanced toggle --------------------------------------------
         adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
-        adv_frame.pack(fill="x", pady=(Theme.S_MD, 0))
+        adv_frame.pack(fill="x", pady=(Theme.S_SM, 0))
 
         self.adv_visible = False
         self.adv_toggle = ModernButton(adv_frame, text=tr("Show detailed controls"), width=188,
@@ -2985,12 +2983,12 @@ class VideoSubtitleRemoverApp(
     def _build_preview_section(self, parent):
         """Build the central 16:9 preview and its contextual tools."""
         section = self._create_surface(parent)
-        section.pack(fill="both", expand=True, pady=(Theme.S_MD, 0))
+        section.pack(fill="both", expand=True, pady=(Theme.S_SM, 0))
         self._preview_frame = section
 
         preview_header = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        preview_header.pack(fill="x", padx=Theme.S_XL,
-                            pady=(Theme.S_LG, Theme.S_SM))
+        preview_header.pack(fill="x", padx=Theme.S_MD,
+                            pady=(Theme.S_MD, Theme.S_SM))
 
         preview_text = tk.Frame(preview_header, bg=Theme.BG_SECONDARY)
         preview_text.pack(side="left", fill="x", expand=True)
@@ -3011,8 +3009,7 @@ class VideoSubtitleRemoverApp(
         self.preview_status_chip = tk.Label(
             preview_header, text=tr("Waiting"),
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
-            padx=10, pady=4,
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
         )
         self.preview_status_chip.pack(side="right", anchor="ne")
         self.preview_ab_btn = ModernButton(
@@ -3027,9 +3024,9 @@ class VideoSubtitleRemoverApp(
 
         media_surface = tk.Frame(
             section, bg=Theme.BG_CARD, highlightthickness=1,
-            highlightbackground=Theme.BORDER,
+            highlightbackground=Theme.BORDER_SUBTLE,
         )
-        media_surface.pack(fill="x", padx=Theme.S_XL)
+        media_surface.pack(fill="x", padx=Theme.S_MD)
         self._preview_media_surface = media_surface
 
         self._preview_label = tk.Label(
@@ -3058,12 +3055,12 @@ class VideoSubtitleRemoverApp(
             font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED, wraplength=520, justify="left", anchor="w",
         )
-        self.preview_action_hint.pack(fill="x", padx=Theme.S_XL,
-                                      pady=(Theme.S_SM, 0))
+        # State is already expressed in the preview title, status, and disabled
+        # controls. Keep this label for accessibility/status updates, not layout.
 
         preview_actions = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        preview_actions.pack(fill="x", padx=Theme.S_XL,
-                             pady=(Theme.S_SM, Theme.S_LG))
+        preview_actions.pack(fill="x", padx=Theme.S_MD,
+                             pady=(Theme.S_SM, Theme.S_MD))
         self._preview_primary_actions = preview_actions
 
         self.preview_region_btn = ModernButton(
@@ -3125,7 +3122,7 @@ class VideoSubtitleRemoverApp(
             font=f(Theme.F_META),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED,
-        ).pack(anchor="w")
+        )
         self.preview_mask_dilate_slider = ModernSlider(
             self.preview_mask_tuning,
             from_=0,
@@ -3144,10 +3141,8 @@ class VideoSubtitleRemoverApp(
             self.preview_mask_tuning,
             textvariable=self.preview_mask_dilate_value_var,
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_TERTIARY,
+            bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_PRIMARY,
-            padx=Theme.S_SM,
-            pady=3,
         ).pack(side="right")
         self._set_preview_placeholder(
             "Preview",
@@ -3160,7 +3155,7 @@ class VideoSubtitleRemoverApp(
         section.pack(fill="both", expand=True)
 
         header = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        header.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_LG, Theme.S_XS))
+        header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_XS))
 
         heading = tk.Frame(header, bg=Theme.BG_SECONDARY)
         heading.pack(side="left", fill="x", expand=True)
@@ -3174,25 +3169,24 @@ class VideoSubtitleRemoverApp(
             font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED, wraplength=360, justify="left",
         )
-        self._queue_subtitle_label.pack(anchor="w", pady=(2, 0))
 
-        # Count + status chip cluster (right-aligned)
+        # One inline summary replaces a cluster of decorative status pills.
         count_cluster = tk.Frame(header, bg=Theme.BG_SECONDARY)
         count_cluster.pack(side="right", anchor="n")
 
-        def _mk_stat_pill(fg=Theme.TEXT_SECONDARY, bg=Theme.BG_TERTIARY):
+        def _mk_stat_pill(fg=Theme.TEXT_SECONDARY, bg=Theme.BG_SECONDARY):
             pill = tk.Frame(count_cluster, bg=Theme.BG_SECONDARY)
-            lbl = tk.Label(pill, text="", font=f(Theme.F_META, "bold"),
-                           bg=bg, fg=fg, padx=8, pady=2)
+            lbl = tk.Label(pill, text="", font=f(Theme.F_META),
+                           bg=Theme.BG_SECONDARY, fg=fg)
             lbl.pack()
             return pill, lbl
 
         self.queue_total_pill, self.queue_count = _mk_stat_pill(
-            fg=Theme.TEXT_PRIMARY, bg=Theme.BG_TERTIARY)
+            fg=Theme.TEXT_SECONDARY)
         self.queue_done_pill, self.queue_done_lbl = _mk_stat_pill(
-            fg=Theme.SUCCESS, bg=Theme.SUCCESS_BG)
+            fg=Theme.SUCCESS)
         self.queue_err_pill, self.queue_err_lbl = _mk_stat_pill(
-            fg=Theme.WARNING, bg=Theme.WARNING_BG)
+            fg=Theme.WARNING)
 
         self.queue_total_pill.pack(side="left")
         # done/err pills get shown conditionally in _update_queue_display
@@ -3206,7 +3200,7 @@ class VideoSubtitleRemoverApp(
 
         # Batch progress -- labels row above the bar
         batch_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        batch_frame.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_MD, 0))
+        batch_frame.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
         self._queue_batch_frame = batch_frame
 
         meta_row = tk.Frame(batch_frame, bg=Theme.BG_SECONDARY)
@@ -3223,7 +3217,7 @@ class VideoSubtitleRemoverApp(
         self.batch_percent_label.pack(side="right")
 
         batch_bar_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        batch_bar_frame.pack(fill="x", padx=Theme.S_XL, pady=(4, Theme.S_SM))
+        batch_bar_frame.pack(fill="x", padx=Theme.S_MD, pady=(4, Theme.S_SM))
         self._queue_batch_bar_frame = batch_bar_frame
 
         self.batch_progress = ModernProgressBar(batch_bar_frame, width=300, height=5,
@@ -3267,11 +3261,11 @@ class VideoSubtitleRemoverApp(
 
         self._queue_container = tk.Frame(section, bg=Theme.BG_SECONDARY)
         self._queue_container.pack(fill="both", expand=True,
-                                   padx=Theme.S_XL, pady=(0, Theme.S_SM))
+                                   padx=Theme.S_MD, pady=(0, Theme.S_SM))
         queue_container = self._queue_container
 
         self.queue_canvas = tk.Canvas(queue_container, bg=Theme.BG_SECONDARY,
-                                     highlightthickness=0, height=112)
+                                     highlightthickness=0, height=88)
         scrollbar = ttk.Scrollbar(queue_container, orient="vertical",
                                  command=self.queue_canvas.yview,
                                  style="Dark.Vertical.TScrollbar")
@@ -3296,7 +3290,7 @@ class VideoSubtitleRemoverApp(
 
         # One quiet command row with the dominant action anchored at right.
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        btn_frame.pack(fill="x", padx=Theme.S_XL, pady=(0, Theme.S_LG))
+        btn_frame.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
         self._queue_action_frame = btn_frame
 
         self.start_btn = ModernButton(btn_frame, text=tr("Start batch"), width=180,
@@ -3332,11 +3326,14 @@ class VideoSubtitleRemoverApp(
         )
 
         self._refresh_action_states()
+        if not self.queue:
+            self._queue_batch_frame.pack_forget()
+            self._queue_batch_bar_frame.pack_forget()
 
     def _build_queue_empty_state(self):
         """Compact empty state that fits the persistent queue surface."""
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
-        self.empty_container.pack(pady=Theme.S_LG, fill="x")
+        self.empty_container.pack(pady=Theme.S_MD, fill="x")
 
         copy = tk.Frame(self.empty_container, bg=Theme.BG_SECONDARY)
         copy.pack(side="left", fill="x", expand=True)
@@ -4565,18 +4562,18 @@ class VideoSubtitleRemoverApp(
             self.queue_widgets[wid].destroy()
             del self.queue_widgets[wid]
 
-        # Update count + stat chips
+        # Update the inline queue summary.
         total = len(self.queue)
         self.queue_count.config(text=f"{total} item{'s' if total != 1 else ''}")
         done = sum(1 for i in self.queue if i.status == ProcessingStatus.COMPLETE)
         attention = self._queue_attention_count(self.queue)
         if done > 0:
-            self.queue_done_lbl.config(text=f"{done} done")
+            self.queue_done_lbl.config(text=f" / {done} done")
             self.queue_done_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_done_pill.pack_forget()
         if attention > 0:
-            self.queue_err_lbl.config(text=f"{attention} needs attention")
+            self.queue_err_lbl.config(text=f" / {attention} needs attention")
             self.queue_err_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_err_pill.pack_forget()
@@ -4635,11 +4632,15 @@ class VideoSubtitleRemoverApp(
         else:
             self._set_selected_queue_item(None)
         self._refresh_action_states()
+        self._layout_queue_actions(
+            compact=self._layout_mode == "stacked",
+            dense=self._text_scale_percent >= 150,
+        )
         # Show filter only when the queue is long enough to justify it
         try:
             if len(self.queue) >= 6:
                 self._queue_filter_frame.pack(
-                    fill="x", padx=Theme.S_XL, pady=(0, Theme.S_SM),
+                    fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM),
                     before=self._queue_container)
             else:
                 self._queue_filter_frame.pack_forget()

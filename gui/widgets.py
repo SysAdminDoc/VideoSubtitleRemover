@@ -375,10 +375,10 @@ class ModernButton(tk.Canvas):
     crisply regardless of ttk theme.
 
     Style variants: primary, accent, secondary, ghost, danger, success
-    Size variants: sm (28), md (32), lg (36)
+    Size variants: sm (30), md (34), lg (38)
     """
 
-    SIZES = {"sm": (28, Theme.F_META), "md": (32, Theme.F_LABEL), "lg": (36, Theme.F_BODY_SM)}
+    SIZES = {"sm": (30, Theme.F_META), "md": (34, Theme.F_LABEL), "lg": (38, Theme.F_BODY_SM)}
 
     def __init__(self, parent, text="Button", command=None, width=120, height=None,
                  bg=None, hover_bg=None, fg=Theme.TEXT_PRIMARY,
@@ -1738,11 +1738,14 @@ class DragDropFrame(tk.Frame):
         # Main text
         main_text = tk.Label(
             inner,
-            text=tr("Drop a video or image here") if compact
+            text=tr("Add media") if compact
             else tr("Add files to the queue"),
                             font=f(Theme.F_TITLE, "bold"), bg=self.normal_bg,
                             fg=Theme.TEXT_PRIMARY)
-        main_text.pack(pady=(2, 0))
+        if compact:
+            main_text.pack(side="left")
+        else:
+            main_text.pack(pady=(2, 0))
 
         # Sub text -- updated after DnD setup to reflect actual capabilities
         self._sub_text = tk.Label(inner,
@@ -1754,7 +1757,10 @@ class DragDropFrame(tk.Frame):
         sub_text = self._sub_text
 
         actions = tk.Frame(inner, bg=self.normal_bg)
-        actions.pack()
+        if compact:
+            actions.pack(side="left", padx=(Theme.S_LG, 0))
+        else:
+            actions.pack()
 
         self.add_files_btn = ModernButton(actions, text=tr("Choose files"), width=124,
                                           command=self._open_file_dialog,
@@ -1957,12 +1963,11 @@ class QueueItemWidget(tk.Frame):
         self.name_label.pack(side="left")
         Tooltip(self.name_label, item.file_path)
 
-        # Status pill (rounded by adding generous padx)
+        # Status is plain inline text; the selected stripe carries row emphasis.
         badge = status_ui(item.status)
         self.status_badge = tk.Label(self.top_row, text=badge["label"],
                                      font=f(Theme.F_META, "bold"),
-                                     bg=badge["bg"], fg=badge["color"],
-                                     padx=Theme.S_SM, pady=Theme.S_XS)
+                                     bg=self._surface_bg, fg=badge["color"])
         self.status_badge.pack(side="right")
 
         # File info row (meta caption)
@@ -2314,7 +2319,8 @@ class QueueItemWidget(tk.Frame):
     def update_item(self, item: QueueItem):
         self.item = item
         badge = status_ui(item.status)
-        self.status_badge.config(text=badge["label"], fg=badge["color"], bg=badge["bg"])
+        self.status_badge.config(
+            text=badge["label"], fg=badge["color"], bg=self._surface_bg)
         self.info_label.config(text=_queue_item_info_text(item))
         self.progress_bar.set_progress(item.progress)
         self.progress_bar.set_color(self._get_status_color())

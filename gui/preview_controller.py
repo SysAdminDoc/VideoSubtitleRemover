@@ -234,16 +234,17 @@ class PreviewControllerMixin:
         self._preview_label.config(text=tr(label), image="")
 
         tone_map = {
-            "error": (tr("Needs attention"), Theme.ERROR, Theme.ERROR_BG),
-            "warning": (tr("Needs attention"), Theme.WARNING, Theme.WARNING_BG),
-            "info": (tr("Info"), Theme.INFO, Theme.INFO_BG),
+            "error": (tr("Needs attention"), Theme.ERROR),
+            "warning": (tr("Needs attention"), Theme.WARNING),
+            "info": (tr("Info"), Theme.INFO),
         }
-        chip_text, chip_fg, chip_bg = tone_map.get(
+        chip_text, chip_fg = tone_map.get(
             tone,
-            (tr("Waiting"), Theme.TEXT_MUTED, Theme.BG_TERTIARY),
+            (tr("Waiting"), Theme.TEXT_MUTED),
         )
         try:
-            self.preview_status_chip.config(text=chip_text, fg=chip_fg, bg=chip_bg)
+            self.preview_status_chip.config(
+                text=chip_text, fg=chip_fg, bg=Theme.BG_SECONDARY)
         except Exception:
             pass
 
@@ -333,13 +334,13 @@ class PreviewControllerMixin:
             self.preview_status_chip.config(
                 text=badge["label"],
                 fg=badge["color"],
-                bg=badge["bg"],
+                bg=Theme.BG_SECONDARY,
             )
         else:
             self.preview_status_chip.config(
                 text=tr("Waiting"),
                 fg=Theme.TEXT_MUTED,
-                bg=Theme.BG_TERTIARY,
+                bg=Theme.BG_SECONDARY,
             )
 
     def _open_selected_mask_preview(self):
@@ -1180,7 +1181,9 @@ class PreviewControllerMixin:
                 return Image.fromarray(_cv2.cvtColor(bgr_frame, _cv2.COLOR_BGR2RGB))
 
             badge = status_ui(item.status)
-            self.preview_status_chip.config(text=badge["label"], fg=badge["color"], bg=badge["bg"])
+            self.preview_status_chip.config(
+                text=badge["label"], fg=badge["color"],
+                bg=Theme.BG_SECONDARY)
 
             try:
                 max_w = max(220, self._preview_frame.winfo_width() - 36)

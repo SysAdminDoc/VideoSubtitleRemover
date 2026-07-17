@@ -16,15 +16,15 @@ class Theme:
     """Design system. Dark-first, refined tonal layering, calm accents."""
 
     # Surfaces
-    BG_DARK = "#0b1020"
-    BG_SECONDARY = "#10182a"
-    BG_CARD = "#121a2b"
-    BG_CARD_HOVER = "#182238"
-    BG_CARD_SELECTED = "#1d2b48"
-    BG_TERTIARY = "#182238"
-    BG_RAISED = "#202c45"
-    BG_LOG = "#080d19"
-    BG_OVERLAY = "#090e1b"
+    BG_DARK = "#090d16"
+    BG_SECONDARY = "#0f1520"
+    BG_CARD = "#131a25"
+    BG_CARD_HOVER = "#192231"
+    BG_CARD_SELECTED = "#1c2940"
+    BG_TERTIARY = "#18212f"
+    BG_RAISED = "#202c3d"
+    BG_LOG = "#070b12"
+    BG_OVERLAY = "#080c14"
 
     # Accents
     GREEN_PRIMARY = "#38d9a9"
@@ -65,9 +65,9 @@ class Theme:
     INFO_BG = "#102f42"
 
     # Borders
-    BORDER = "#28344d"
-    BORDER_STRONG = "#3c4a68"
-    BORDER_SUBTLE = "#202b40"
+    BORDER = "#2a3548"
+    BORDER_STRONG = "#3a4962"
+    BORDER_SUBTLE = "#1c2635"
     BORDER_FOCUS = "#4f7cff"
 
     # Progress
@@ -81,14 +81,14 @@ class Theme:
 
     # Size tokens
     F_DISPLAY = 22
-    F_HEADING = 16
+    F_HEADING = 15
     F_TITLE = 12
-    F_BODY = 10
-    F_BODY_SM = 9
-    F_LABEL = 9
-    F_META = 8
-    F_EYEBROW = 8
-    F_MICRO = 7
+    F_BODY = 11
+    F_BODY_SM = 10
+    F_LABEL = 10
+    F_META = 9
+    F_EYEBROW = 9
+    F_MICRO = 8
 
     # Spacing rhythm (4pt baseline)
     S_XS = 4

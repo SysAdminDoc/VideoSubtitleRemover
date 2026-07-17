@@ -29,7 +29,7 @@ class TextScaleConfigTests(unittest.TestCase):
 
     def test_scaled_font_tuple_preserves_weight(self):
         set_text_scale_percent(200)
-        self.assertEqual(f(Theme.F_BODY, "bold"), (Theme.FONT_FAMILY, 20, "bold"))
+        self.assertEqual(f(Theme.F_BODY, "bold"), (Theme.FONT_FAMILY, 22, "bold"))
 
     def test_gui_setting_persists_and_migrates(self):
         config = ProcessingConfig(text_scale_percent=176).normalized()

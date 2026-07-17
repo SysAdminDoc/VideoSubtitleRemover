@@ -1408,7 +1408,7 @@ class GuiSmokeTests(unittest.TestCase):
 
     def test_visual_regression_empty_queue_critical_controls_visible(self):
         """Critical controls must be visible and not clipped in the empty
-        queue state: start button, queue area, settings, preview hint."""
+        queue state: start button, queue area, settings, and preview tools."""
         app = self._make_app()
         try:
             app.root.geometry("1024x768")
@@ -1417,7 +1417,8 @@ class GuiSmokeTests(unittest.TestCase):
             controls = {
                 "start_btn": app.start_btn,
                 "open_output_btn": app.open_output_btn,
-                "preview_action_hint": app.preview_action_hint,
+                "preview_region_btn": app.preview_region_btn,
+                "settings_toggle": app.adv_toggle,
             }
             for name, widget in controls.items():
                 try:
@@ -1449,39 +1450,49 @@ class GuiSmokeTests(unittest.TestCase):
             app.root.update_idletasks()
 
             self.assertEqual(app._layout_mode, "wide")
-            self.assertEqual(int(app._workflow_col.grid_info()["column"]), 0)
-            self.assertEqual(int(app._preview_col.grid_info()["column"]), 1)
-            self.assertEqual(int(app._settings_col.grid_info()["column"]), 2)
+            self.assertEqual(app._workflow_col.winfo_manager(), "")
+            self.assertEqual(int(app._preview_col.grid_info()["column"]), 0)
+            self.assertEqual(int(app._settings_col.grid_info()["column"]), 1)
             self.assertLess(app._preview_col.winfo_x(), app._settings_col.winfo_x())
             self.assertEqual(app._queue_row.winfo_manager(), "pack")
             self.assertEqual(app._queue_row.pack_info()["side"], "bottom")
             self.assertIsNot(app._queue_row.master, app._content)
-            self.assertEqual(app.start_btn.pack_info()["side"], "right")
+            self.assertEqual(app.start_btn.winfo_manager(), "")
+            self.assertEqual(app.inspector_start_btn.winfo_manager(), "pack")
+            self.assertGreaterEqual(app.inspector_start_btn.winfo_reqheight(), 44)
             self.assertGreaterEqual(app.start_btn.winfo_reqheight(), 44)
             self.assertEqual(app._queue_more_btn.winfo_manager(), "")
             self.assertEqual(
                 (app._preview_photo.width(), app._preview_photo.height()),
                 (400, 225),
             )
-            self.assertEqual(Theme.BG_DARK, "#0b1020")
+            self.assertEqual(Theme.BG_DARK, "#090d16")
             self.assertEqual(Theme.BLUE_PRIMARY, "#4f7cff")
             self.assertEqual(Theme.TEXT_PRIMARY, "#f5f7fb")
+            self.assertGreaterEqual(Theme.F_BODY_SM, 10)
+            self.assertGreaterEqual(Theme.F_META, 9)
+            self.assertEqual(int(app._preview_frame.cget("highlightthickness")), 0)
+            self.assertEqual(int(app._settings_col.winfo_children()[0].cget(
+                "highlightthickness")), 0)
+            self.assertEqual(len(app._header_chips.winfo_children()), 2)
         finally:
             self._destroy_app(app)
 
-    def test_redesign_compact_layout_preserves_workflow_and_actions(self):
-        """Minimum width stacks work in order and consolidates queue actions."""
+    def test_redesign_compact_layout_preserves_workbench_and_actions(self):
+        """Minimum width stacks the workbench and consolidates queue actions."""
         app = self._make_app()
         try:
             app._apply_responsive_layout(980)
             app.root.update_idletasks()
 
             self.assertEqual(app._layout_mode, "stacked")
-            self.assertEqual(int(app._workflow_col.grid_info()["row"]), 0)
-            self.assertEqual(int(app._preview_col.grid_info()["row"]), 1)
-            self.assertEqual(int(app._settings_col.grid_info()["row"]), 2)
+            self.assertEqual(app._workflow_col.winfo_manager(), "")
+            self.assertEqual(int(app._preview_col.grid_info()["row"]), 0)
+            self.assertEqual(int(app._settings_col.grid_info()["row"]), 1)
             self.assertEqual(app._queue_row.winfo_manager(), "pack")
             self.assertEqual(app._queue_more_btn.winfo_manager(), "pack")
+            self.assertEqual(app.start_btn.winfo_manager(), "pack")
+            self.assertEqual(app.inspector_start_btn.winfo_manager(), "")
             self.assertEqual(app.retry_btn.winfo_manager(), "")
             self.assertEqual(app.repeat_btn.winfo_manager(), "")
             self.assertEqual(app.clear_btn.winfo_manager(), "")
