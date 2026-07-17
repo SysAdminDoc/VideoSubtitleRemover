@@ -720,7 +720,7 @@ class NsisInstallerArtefactTests(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         text = (root / "installer" / "vsr.nsi").read_text(encoding="utf-8")
         self.assertIn("NSIS >= 3.12 required", text)
-        self.assertIn("0x030C0000", text)
+        self.assertIn("${NSIS_PACKEDVERSION} < 0x0300C000", text)
         self.assertNotIn("0x030B0000", text)
 
 
