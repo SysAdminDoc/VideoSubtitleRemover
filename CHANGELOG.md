@@ -46,9 +46,6 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
-- Manual subtitle-region save/reset now persists settings immediately, matching
-  the other settings mutators, so a crash after editing a region no longer
-  loses it while keeping other same-session changes.
 - The batch-completion summary hides the "STOPPED" pill when nothing was
   stopped, matching the conditional PAUSED and REVIEW pills.
 - Compute-device labels use consistent sentence-case "CPU mode" and are

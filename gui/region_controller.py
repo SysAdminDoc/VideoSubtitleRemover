@@ -38,7 +38,6 @@ from backend.safe_image import safe_imread
 from gui.config import (
     ProcessingConfig,
     _coerce_region_span_list,
-    save_settings,
 )
 from gui.theme import Theme, f
 from gui.utils import SUPPORTED_EXTENSIONS, filepicker_pattern, is_video_file
@@ -1704,7 +1703,6 @@ class RegionSelectorWindow:
             self.config.subtitle_region_keyframes = None
             self._update_status("Cleared manual subtitle regions", "info")
         self._apply_region_settings_to_idle_items()
-        save_settings(self.config)
         self._update_region_label_display()
         self.win.destroy()
 
@@ -1744,6 +1742,5 @@ class RegionEditorControllerMixin:
         self.config.subtitle_region_spans = None
         self.config.subtitle_region_keyframes = None
         self._apply_region_settings_to_idle_items()
-        save_settings(self.config)
         self._update_region_label_display()
         self._update_status("Subtitle detection returned to automatic mode")
