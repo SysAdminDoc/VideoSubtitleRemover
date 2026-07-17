@@ -351,5 +351,4 @@ def _queue_item_info_text(item) -> str:
     elif (is_video_file(item.file_path)
           and not getattr(item, "soft_subtitle_probe_done", False)):
         parts.append("checking embedded subtitle tracks")
-    parts.append(truncate_middle(item.file_path, 68))
     return "   -   ".join(part for part in parts if part)

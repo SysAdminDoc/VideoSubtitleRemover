@@ -16,13 +16,15 @@ class Theme:
     """Design system. Dark-first, refined tonal layering, calm accents."""
 
     # Surfaces
-    BG_DARK = "#090d16"
-    BG_SECONDARY = "#0f1520"
-    BG_CARD = "#131a25"
+    BG_DARK = "#080d15"
+    BG_SECONDARY = "#0c1420"
+    # Cards intentionally share the workbench tone. Hierarchy comes from
+    # spacing and separators instead of stacked outlined rectangles.
+    BG_CARD = BG_SECONDARY
     BG_CARD_HOVER = "#192231"
     BG_CARD_SELECTED = "#1c2940"
-    BG_TERTIARY = "#18212f"
-    BG_RAISED = "#202c3d"
+    BG_TERTIARY = "#121d2b"
+    BG_RAISED = "#1a283a"
     BG_LOG = "#070b12"
     BG_OVERLAY = "#080c14"
 
@@ -80,15 +82,15 @@ class Theme:
     RTL_LAYOUT = False
 
     # Size tokens
-    F_DISPLAY = 22
+    F_DISPLAY = 17
     F_HEADING = 15
-    F_TITLE = 12
-    F_BODY = 11
-    F_BODY_SM = 10
-    F_LABEL = 10
-    F_META = 9
+    F_TITLE = 13
+    F_BODY = 12
+    F_BODY_SM = 11
+    F_LABEL = 11
+    F_META = 10
     F_EYEBROW = 9
-    F_MICRO = 8
+    F_MICRO = 9
 
     # Spacing rhythm (4pt baseline)
     S_XS = 4
@@ -101,9 +103,9 @@ class Theme:
 
     # Radii
     R_SM = 4
-    R_MD = 6
-    R_LG = 8
-    R_XL = 12
+    R_MD = 5
+    R_LG = 6
+    R_XL = 8
 
 
 def apply_high_contrast_theme():

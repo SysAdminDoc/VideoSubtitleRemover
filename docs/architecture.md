@@ -116,6 +116,10 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 
 - **`gui/app.py`** owns the Tk shell, shared state, layout, settings
   variables, queue model, and public `VideoSubtitleRemoverApp` surface.
+  The default shell is a command-first workbench: one compact command strip
+  sits above the preview/inspector split, and the persistent queue is rendered
+  as a dense table below it. Advanced controls remain progressively disclosed
+  in the inspector rather than competing with the primary workflow.
 - **`gui/processing_controller.py`** owns queue processing, pause/stop
   orchestration, per-item backend dispatch, progress/taskbar updates,
   report preparation, and completion notifications.

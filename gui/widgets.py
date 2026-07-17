@@ -412,7 +412,7 @@ class ModernButton(tk.Canvas):
         height = max(height, line_count * line_height + scaled_control_size(8))
         if corner_radius is None:
             corner_radius = scaled_control_size(
-                Theme.R_MD if base_height <= 30 else Theme.R_LG)
+                Theme.R_SM if base_height <= 34 else Theme.R_MD)
 
         parent_bg = parent.cget('bg') if hasattr(parent, 'cget') else Theme.BG_DARK
         super().__init__(parent, width=width, height=height, highlightthickness=0,
@@ -556,6 +556,8 @@ class ModernButton(tk.Canvas):
     def _subtle_border(self):
         # For filled CTAs, border should match the fill for a flat look
         if self.style in ("primary", "danger"):
+            return self.bg_color
+        if self.style == "ghost":
             return self.bg_color
         return Theme.BORDER_SUBTLE
 
@@ -1709,12 +1711,14 @@ class DragDropFrame(tk.Frame):
 
     def __init__(self, parent, on_drop: Callable[[List[str]], None],
                  width=400, height=200, compact=False, **kwargs):
-        super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
+        surface_bg = Theme.BG_TERTIARY if compact else Theme.BG_CARD
+        super().__init__(parent, bg=surface_bg,
+                        highlightthickness=1,
                         highlightbackground=Theme.BORDER, highlightcolor=Theme.BLUE_PRIMARY,
                         takefocus=1)
 
         self.on_drop = on_drop
-        self.normal_bg = Theme.BG_CARD
+        self.normal_bg = surface_bg
         self.hover_bg = Theme.BG_CARD_HOVER
         self.hovered = False
         self.focused = False
@@ -1757,9 +1761,7 @@ class DragDropFrame(tk.Frame):
         sub_text = self._sub_text
 
         actions = tk.Frame(inner, bg=self.normal_bg)
-        if compact:
-            actions.pack(side="left", padx=(Theme.S_LG, 0))
-        else:
+        if not compact:
             actions.pack()
 
         self.add_files_btn = ModernButton(actions, text=tr("Choose files"), width=124,
@@ -1913,9 +1915,7 @@ class DragDropFrame(tk.Frame):
 
 
 class QueueItemWidget(tk.Frame):
-    """A single queue item card. Clear hierarchy: filename + status pill,
-    compact meta row, progress bar, and row of actions. Selected state
-    shows a left-edge accent stripe."""
+    """A dense queue row with inline status and contextual actions."""
 
     def __init__(self, parent, item: QueueItem, on_remove: Callable,
                  on_select: Callable = None, on_rename: Callable = None,
@@ -1924,8 +1924,8 @@ class QueueItemWidget(tk.Frame):
                  on_soft_action: Callable = None,
                  on_retry_suggested: Callable = None,
                  **kwargs):
-        super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=1,
-                        highlightbackground=Theme.BORDER, takefocus=1)
+        super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=0,
+                        takefocus=1)
 
         self.item = item
         self.on_remove = on_remove
@@ -1949,7 +1949,7 @@ class QueueItemWidget(tk.Frame):
 
         # Main container with padding
         self.container = tk.Frame(self, bg=self._surface_bg)
-        self.container.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_MD)
+        self.container.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_SM)
 
         # Top row: filename and status
         self.top_row = tk.Frame(self.container, bg=self._surface_bg)
@@ -1980,7 +1980,7 @@ class QueueItemWidget(tk.Frame):
         # Progress bar (resizes with container)
         self.progress_bar = ModernProgressBar(self.container, width=300, height=5,
                                               fill=self._get_status_color())
-        self.progress_bar.pack(fill="x", pady=(Theme.S_MD, Theme.S_XS))
+        self.progress_bar.pack(fill="x", pady=(Theme.S_SM, Theme.S_XS))
         self.progress_bar.set_progress(item.progress)
         def _resize_bar(event):
             bar_w = event.width - 4
@@ -2003,7 +2003,6 @@ class QueueItemWidget(tk.Frame):
         self.time_label.pack(side="right")
 
         self.actions_row = tk.Frame(self.container, bg=self._surface_bg)
-        self.actions_row.pack(fill="x", pady=(Theme.S_MD, 0))
 
         self.remove_btn = ModernButton(self.actions_row, text=tr("Remove"), width=78,
                                        command=lambda: self.on_remove(self.item.id),
@@ -2043,6 +2042,9 @@ class QueueItemWidget(tk.Frame):
 
         self._sync_a11y()
         self.update_item(item)
+
+        self.separator = tk.Frame(self, bg=Theme.BORDER_SUBTLE, height=1)
+        self.separator.pack(side="bottom", fill="x")
 
     def _on_context_menu(self, event=None):
         """Show the shared pointer/keyboard action menu for this item."""
@@ -2229,8 +2231,10 @@ class QueueItemWidget(tk.Frame):
     def _apply_surface_state(self, bg: str, border: str, accent: str = None):
         self._surface_bg = bg
         self.config(bg=bg, highlightbackground=border)
-        for widget in (self.container, self.name_label, self.info_label, self.message_label,
-                       self.time_label):
+        for widget in (
+            self.container, self.name_label, self.info_label,
+            self.message_label, self.time_label, self.status_badge,
+        ):
             widget.config(bg=bg)
         for widget in (self.top_row, self.bottom_row, self.actions_row):
             widget.config(bg=bg)
@@ -2252,7 +2256,7 @@ class QueueItemWidget(tk.Frame):
                 accent=Theme.BORDER_FOCUS,
             )
         else:
-            self._apply_surface_state(Theme.BG_CARD, Theme.BORDER)
+            self._apply_surface_state(Theme.BG_CARD, Theme.BORDER_SUBTLE)
         self._sync_a11y()
 
     def _open_output(self):
@@ -2336,6 +2340,21 @@ class QueueItemWidget(tk.Frame):
             ProcessingStatus.MERGING: Theme.WARNING,
         }.get(item.status, Theme.TEXT_SECONDARY)
         self.message_label.config(text=status_message, fg=message_color)
+        show_progress = (
+            item.status != ProcessingStatus.IDLE
+            or float(item.progress or 0.0) > 0.0
+        )
+        if show_progress:
+            if not self.bottom_row.winfo_manager():
+                self.bottom_row.pack(fill="x")
+            if not self.progress_bar.winfo_manager():
+                self.progress_bar.pack(
+                    fill="x", pady=(Theme.S_SM, Theme.S_XS),
+                    before=self.bottom_row,
+                )
+        else:
+            self.progress_bar.pack_forget()
+            self.bottom_row.pack_forget()
         can_open = item.status == ProcessingStatus.COMPLETE and Path(item.output_path).exists()
         self.open_btn.set_enabled(can_open)
         if can_open:

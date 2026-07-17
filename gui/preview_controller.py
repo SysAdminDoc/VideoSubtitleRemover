@@ -922,7 +922,11 @@ class PreviewControllerMixin:
                 max_w = max(220, self._preview_frame.winfo_width() - 36)
             except Exception:
                 max_w = 390
-            max_h = 320
+            try:
+                max_h = max(
+                    180, min(280, self._preview_frame.winfo_height() - 110))
+            except Exception:
+                max_h = 240
             display_img = source_img.copy()
             display_img.thumbnail((max_w, max_h), Image.LANCZOS)
 

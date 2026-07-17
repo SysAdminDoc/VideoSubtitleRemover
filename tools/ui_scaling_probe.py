@@ -87,7 +87,7 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
             toggles = [widget for widget in widgets if isinstance(widget, ModernToggle)]
             labels = [widget for widget in widgets if isinstance(widget, tk.Label)]
             major_buttons = [
-                app.start_btn,
+                app.command_start_btn,
                 app.open_output_btn,
                 app.preview_region_btn,
                 app.preview_mask_btn,
@@ -127,12 +127,14 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
 
             expected_height = round(36 * scale / 100)
             if max(
-                app.start_btn.winfo_height(),
-                app.start_btn.winfo_reqheight(),
+                app.command_start_btn.winfo_height(),
+                app.command_start_btn.winfo_reqheight(),
             ) < expected_height:
                 failures.append("button height did not scale with its text")
             header_font = tkfont.Font(font=app._header_left.winfo_children()[0].cget("font"))
-            if abs(int(header_font.cget("size"))) < round(22 * scale / 100):
+            if abs(int(header_font.cget("size"))) < round(
+                Theme.F_DISPLAY * scale / 100
+            ):
                 failures.append("display font did not reach the requested scale")
 
             verbose_labels = [

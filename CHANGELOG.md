@@ -2,6 +2,18 @@
 
 All notable changes to VideoSubtitleRemover will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **The workbench now prioritizes the controls used for every cleanup.** A
+  compact command bar keeps media import, cleanup profile, subtitle region,
+  output, and Start cleanup above the preview. The preview and inspector share
+  one flat workspace separated by a rule, while the queue uses a dense table
+  header and a single-row empty state instead of nested cards and status pills.
+  Larger body and metadata type, tighter group spacing, and functional-only
+  borders improve readability without increasing the first-viewport height.
+
 ## [3.19.1] - 2026-07-17
 
 ### Changed

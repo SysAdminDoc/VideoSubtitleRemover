@@ -926,7 +926,6 @@ class VideoSubtitleRemoverApp(
         if self._hardware_probe_pending:
             state_text = tr("Checking")
             state_fg = Theme.INFO
-            state_bg = Theme.INFO_BG
             summary = tr("Detecting hardware and media support")
         else:
             gpu_short = (
@@ -939,19 +938,24 @@ class VideoSubtitleRemoverApp(
             ready = bool(detection) and self.ffmpeg_ready
             state_text = tr("Ready") if ready else tr("Limited")
             state_fg = Theme.SUCCESS if ready else Theme.WARNING
-            state_bg = Theme.SUCCESS_BG if ready else Theme.WARNING_BG
             summary = f"{gpu_short}  /  {det_short}  /  {audio_short}"
 
+        ready_group = tk.Frame(self._header_chips, bg=Theme.BG_SECONDARY)
+        ready_dot = tk.Canvas(
+            ready_group, width=10, height=10,
+            bg=Theme.BG_SECONDARY, highlightthickness=0,
+        )
+        ready_dot.create_oval(1, 1, 9, 9, fill=state_fg, outline="")
+        ready_dot.pack(side="left", padx=(0, Theme.S_XS))
         self._header_ready_label = tk.Label(
-            self._header_chips,
+            ready_group,
             text=state_text,
             font=f(Theme.F_META, "bold"),
-            bg=state_bg,
+            bg=Theme.BG_SECONDARY,
             fg=state_fg,
-            padx=Theme.S_SM,
-            pady=2,
         )
         self._header_ready_label.pack(side="left")
+        ready_group.pack(side="left")
         self._header_capability_label = tk.Label(
             self._header_chips,
             text=summary,
@@ -1003,10 +1007,14 @@ class VideoSubtitleRemoverApp(
             display = truncate_middle(str(self._output_dir), 54)
             self.output_dir_label.config(text=display, fg=Theme.TEXT_PRIMARY)
             self.output_dir_meta.config(text=tr("Custom location"))
+            command_text = tr("Custom folder")
         else:
             self.output_dir_label.config(text=tr("Auto-create an output folder beside each source"),
                                          fg=Theme.TEXT_PRIMARY)
             self.output_dir_meta.config(text=tr("Default workflow"))
+            command_text = tr("Same as source")
+        if hasattr(self, "_command_output_btn"):
+            self._command_output_btn.set_text(command_text)
 
     def _update_region_label_display(self):
         """Refresh the region summary line."""
@@ -1123,7 +1131,9 @@ class VideoSubtitleRemoverApp(
                 start_reason = tr("Stop is already in progress.")
             else:
                 start_reason = tr("The batch is already running.")
-            for button_name in ("start_btn", "inspector_start_btn"):
+            for button_name in (
+                "start_btn", "inspector_start_btn", "command_start_btn",
+            ):
                 button = getattr(self, button_name, None)
                 if button is not None:
                     button.set_enabled(
@@ -1241,6 +1251,7 @@ class VideoSubtitleRemoverApp(
         if width < 1180 and getattr(self, "_log_visible", False):
             self._toggle_log_panel()
         compact = width < 1180 or self._text_scale_percent >= 150
+        self._layout_command_strip(compact=compact)
         if hasattr(self, "_header_title_label"):
             title_wrap = (
                 1200 if self._text_scale_percent >= 150
@@ -1327,7 +1338,7 @@ class VideoSubtitleRemoverApp(
             self._content.rowconfigure(1, weight=0)
             self._content.rowconfigure(2, weight=0)
             self._preview_col.grid(row=0, column=0, sticky="nsew",
-                                   padx=(0, Theme.S_MD))
+                                   padx=(0, 0))
             self._settings_col.grid(row=0, column=1, sticky="nsew")
 
             self._header_left.pack(side="left", fill="y")
@@ -1384,18 +1395,20 @@ class VideoSubtitleRemoverApp(
         """Keep primary queue controls visible at narrow or scaled layouts."""
         if not hasattr(self, "_queue_action_frame"):
             return
+        if hasattr(self, "_queue_row"):
+            if dense and not self.queue:
+                self._queue_row.pack_forget()
+            elif not self._queue_row.winfo_manager():
+                self._queue_row.pack(
+                    side="bottom", fill="x", pady=(Theme.S_MD, 0))
         for button in (
             self.start_btn, self.open_output_btn, self.retry_btn,
             self.repeat_btn, self.clear_btn, self._queue_more_btn,
         ):
             button.pack_forget()
 
-        if compact or not hasattr(self, "inspector_start_btn"):
-            self.start_btn.pack(side="right")
         if hasattr(self, "inspector_start_btn"):
             self.inspector_start_btn.pack_forget()
-            if not compact:
-                self.inspector_start_btn.pack(fill="x")
         self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
         if compact:
             self._queue_more_btn.pack(side="left")
@@ -1410,6 +1423,16 @@ class VideoSubtitleRemoverApp(
         if dense:
             self._queue_batch_frame.pack_forget()
             self._queue_batch_bar_frame.pack_forget()
+            if hasattr(self, "_queue_table_header"):
+                self._queue_table_header.pack_forget()
+        elif (
+            hasattr(self, "_queue_table_header")
+            and not self._queue_table_header.winfo_manager()
+        ):
+            self._queue_table_header.pack(
+                fill="x", padx=Theme.S_MD, pady=(0, 1),
+                before=self._queue_container,
+            )
         show_batch_progress = bool(self.queue or self.is_processing)
         if not dense and show_batch_progress:
             if not self._queue_batch_frame.winfo_manager():
@@ -1595,6 +1618,7 @@ class VideoSubtitleRemoverApp(
 
         # Header
         self._build_header(main_container)
+        self._build_command_strip(main_container)
 
         # Reserve persistent bottom surfaces before the expanding workbench so
         # they cannot be clipped at the minimum 980x720 viewport.
@@ -1641,13 +1665,11 @@ class VideoSubtitleRemoverApp(
         self._workflow_col = workflow_col
         self._build_workflow_rail(workflow_col)
 
-        # Preview is the primary work surface. Import remains immediately
-        # discoverable above it, but no longer competes with configuration.
+        # Preview is the primary work surface.
         preview_col = tk.Frame(content, bg=Theme.BG_DARK)
         preview_col.grid(row=0, column=0, sticky="nsew",
-                         padx=(0, Theme.S_MD))
+                         padx=(0, 0))
         self._preview_col = preview_col
-        self._build_input_section(preview_col)
         self._build_preview_section(preview_col)
 
         # Focused inspector: cleanup profile, region, output, then details.
@@ -1656,6 +1678,122 @@ class VideoSubtitleRemoverApp(
         self._settings_col = settings_col
         self._build_settings_section(settings_col)
 
+
+    def _layout_command_strip(self, *, compact: bool):
+        """Keep the primary workflow controls high and usable at every width."""
+        blocks = getattr(self, "_command_blocks", ())
+        if not blocks:
+            return
+        for block in blocks:
+            block.grid_forget()
+        for column in range(5):
+            self._command_inner.columnconfigure(
+                column, weight=0, uniform="", minsize=0)
+        if compact:
+            for column in range(3):
+                self._command_inner.columnconfigure(
+                    column, weight=1, uniform="command_compact")
+            positions = (
+                (0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 2), (0, 2, 1),
+            )
+        else:
+            self._command_inner.columnconfigure(0, minsize=176)
+            self._command_inner.columnconfigure(4, minsize=188)
+            for column in (1, 2, 3):
+                self._command_inner.columnconfigure(
+                    column, weight=1, uniform="command_fields")
+            positions = ((0, 0, 1), (0, 1, 1), (0, 2, 1), (0, 3, 1), (0, 4, 1))
+        for block, (row, column, span) in zip(blocks, positions):
+            block.grid(
+                row=row, column=column, columnspan=span, sticky="ew",
+                padx=(0, Theme.S_MD), pady=(0, Theme.S_SM) if compact else 0,
+            )
+
+    def _sync_command_region(self, *_args):
+        """Reflect the current automatic/manual region mode in the command bar."""
+        if not hasattr(self, "_command_region_var"):
+            return
+        label = tr("Manual region") if self.skip_detection_var.get() else tr("Automatic")
+        self._command_region_var.set(label)
+
+    def _on_command_region_changed(self, _event=None):
+        """Route the compact region selector to the existing editor."""
+        choice = self._command_region_var.get()
+        if choice == tr("Set region..."):
+            self._open_region_selector()
+        self._sync_command_region()
+
+    def _build_command_strip(self, parent):
+        """Build the high-priority command row from the v3 visual target."""
+        strip = self._create_surface(parent)
+        strip.pack(fill="x", pady=(1, 0))
+        self._command_strip = strip
+
+        inner = tk.Frame(strip, bg=Theme.BG_SECONDARY)
+        inner.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_SM)
+        self._command_inner = inner
+
+        import_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        self.drop_area = DragDropFrame(
+            import_block, self._on_files_dropped, height=38, compact=True)
+        self.drop_area.pack(fill="x")
+        self._import_section = import_block
+
+        mode_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        tk.Label(
+            mode_block, text=tr("Cleanup profile"), font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", pady=(0, Theme.S_XS))
+        self._command_mode_combo = ttk.Combobox(
+            mode_block, textvariable=self.mode_var,
+            values=[mode.value for mode in InpaintMode], state="readonly",
+            style="Dark.TCombobox", font=f(Theme.F_BODY_SM), width=18,
+        )
+        self._command_mode_combo.pack(fill="x")
+        self._command_mode_combo.bind(
+            "<<ComboboxSelected>>", lambda _event: self._on_mode_picker_changed(
+                self.mode_var.get()))
+
+        region_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        tk.Label(
+            region_block, text=tr("Subtitle region"), font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", pady=(0, Theme.S_XS))
+        self._command_region_var = tk.StringVar()
+        self._command_region_combo = ttk.Combobox(
+            region_block, textvariable=self._command_region_var,
+            values=(tr("Automatic"), tr("Manual region"), tr("Set region...")),
+            state="readonly", style="Dark.TCombobox",
+            font=f(Theme.F_BODY_SM), width=18,
+        )
+        self._command_region_combo.pack(fill="x")
+        self._command_region_combo.bind(
+            "<<ComboboxSelected>>", self._on_command_region_changed)
+        self.skip_detection_var.trace_add("write", self._sync_command_region)
+        self._sync_command_region()
+
+        output_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        tk.Label(
+            output_block, text=tr("Output"), font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", pady=(0, Theme.S_XS))
+        self._command_output_btn = ModernButton(
+            output_block, text=tr("Same as source"), width=176,
+            command=self._choose_output_dir, style="secondary", size="md",
+        )
+        self._command_output_btn.pack(fill="x")
+
+        start_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        self.command_start_btn = ModernButton(
+            start_block, text=tr("Start cleanup"), width=176,
+            command=self._start_processing, style="primary", size="lg", icon=">",
+        )
+        self.command_start_btn.pack(fill="x", pady=(Theme.S_LG, 0))
+
+        self._command_blocks = (
+            import_block, mode_block, region_block, output_block, start_block,
+        )
+        self._layout_command_strip(compact=False)
 
     def _build_header(self, parent):
         """Compact command bar with product identity and live readiness signals."""
@@ -1674,7 +1812,7 @@ class VideoSubtitleRemoverApp(
 
         self._header_title_label = tk.Label(
             left,
-            text=tr("Video Subtitle Remover"),
+            text=tr("Video Subtitle Remover Pro"),
             font=f(Theme.F_DISPLAY, "bold"),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_PRIMARY,
@@ -1831,9 +1969,9 @@ class VideoSubtitleRemoverApp(
         self.drop_area.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_SM)
 
     def _build_output_card(self, parent):
-        """Build the output destination card inside the inspector."""
+        """Build the output destination group inside the inspector."""
         out_surface = self._create_card(parent)
-        out_surface.pack(fill="x", pady=(Theme.S_SM, 0))
+        out_surface.pack(fill="x")
         self._card_header(out_surface, "Output", "Output")
 
         out_row = tk.Frame(out_surface, bg=Theme.BG_CARD)
@@ -1866,10 +2004,9 @@ class VideoSubtitleRemoverApp(
         self._update_output_label()
 
     def _build_inspector_primary_action(self, parent):
-        """Place the dominant action beside the primary configuration."""
+        """Keep a compatibility action instance; the command bar owns layout."""
         self._inspector_primary_frame = tk.Frame(
             parent, bg=Theme.BG_SECONDARY)
-        self._inspector_primary_frame.pack(fill="x", pady=(Theme.S_MD, 0))
         self.inspector_start_btn = ModernButton(
             self._inspector_primary_frame,
             text=tr("Start cleanup"),
@@ -1880,7 +2017,6 @@ class VideoSubtitleRemoverApp(
             size="lg",
             icon=">",
         )
-        self.inspector_start_btn.pack(fill="x")
         self._refresh_action_states()
         self._layout_queue_actions(compact=False, dense=False)
 
@@ -1889,7 +2025,15 @@ class VideoSubtitleRemoverApp(
         profile_panel = self._create_card(settings)
         profile_panel.pack(fill="x")
 
-        self._card_header(profile_panel, "Cleanup method", "Cleanup method")
+        self._card_header(profile_panel, "Cleanup profile", "Cleanup profile")
+
+        self.inspector_mode_value = tk.Label(
+            profile_panel, textvariable=self.mode_var,
+            font=f(Theme.F_BODY, "bold"), bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        )
+        self.inspector_mode_value.pack(
+            anchor="w", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         profile_details = tk.Frame(profile_panel, bg=Theme.BG_CARD)
         self._inspector_profile_details = profile_details
@@ -1935,9 +2079,10 @@ class VideoSubtitleRemoverApp(
         Tooltip(import_preset_btn, tr("Load a preset JSON file into the user library."))
 
         # Algorithm -- segmented picker replaces the Combobox for speed + clarity
-        tk.Label(profile_panel, text=tr("Algorithm"), font=f(Theme.F_BODY_SM),
-                  bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(
-                     anchor="w", padx=Theme.S_MD)
+        self._legacy_mode_label = tk.Label(
+            profile_panel, text=tr("Algorithm"), font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY,
+        )
 
         self.mode_picker = SegmentedPicker(
             profile_panel,
@@ -1948,7 +2093,6 @@ class VideoSubtitleRemoverApp(
             group_label=tr("Cleanup algorithm"),
             columns=2,
         )
-        self.mode_picker.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_MD))
 
         self.algo_desc = tk.Label(profile_panel, text=self._get_algo_description(),
                                   font=f(Theme.F_BODY_SM), bg=Theme.BG_CARD,
@@ -2007,9 +2151,9 @@ class VideoSubtitleRemoverApp(
     def _build_workflow_settings_group(self, settings):
         # ---- Workflow card ----------------------------------------------
         workflow_panel = self._create_card(settings)
-        workflow_panel.pack(fill="x", pady=(Theme.S_SM, 0))
+        workflow_panel.pack(fill="x")
 
-        self._card_header(workflow_panel, "Workflow", "Region and audio")
+        self._card_header(workflow_panel, "Subtitle region", "Subtitle region")
 
         workflow_details = tk.Frame(workflow_panel, bg=Theme.BG_CARD)
         self._inspector_workflow_details = workflow_details
@@ -2061,9 +2205,6 @@ class VideoSubtitleRemoverApp(
         region_text = tk.Frame(region_surface, bg=Theme.BG_CARD)
         region_text.pack(side="left", fill="x", expand=True,
                          pady=Theme.S_XS)
-
-        tk.Label(region_text, text=tr("Subtitle region"), font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY).pack(anchor="w")
 
         self.region_label = tk.Label(region_text, text="", font=f(Theme.F_BODY, "bold"),
                                      bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY,
@@ -2927,30 +3068,31 @@ class VideoSubtitleRemoverApp(
 
 
     def _build_settings_section(self, parent):
-        """Settings section: profile + workflow + collapsible advanced controls."""
+        """Flat inspector grouped by separators and progressive disclosure."""
         section = self._create_surface(parent)
         section.pack(fill="both", expand=True)
 
-        self._section_title(
-            section,
-            eyebrow="",
-            title="Configure",
-            hint="",
+        tk.Frame(
+            section, bg=Theme.BORDER_SUBTLE, width=1,
+        ).pack(side="left", fill="y")
+        settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        settings.pack(
+            side="left", fill="both", expand=True,
+            padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD),
         )
 
-        settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        settings.pack(fill="both", expand=True, padx=Theme.S_MD, pady=(0, Theme.S_MD))
-
         profile_details = self._build_profile_settings_group(settings)
+        self._divider(settings)
         workflow_details, region_surface = (
             self._build_workflow_settings_group(settings)
         )
+        self._divider(settings)
         self._build_output_card(settings)
         self._build_inspector_primary_action(settings)
 
         self._inspector_detail_panels = (
             (profile_details, {
-                "fill": "x", "padx": Theme.S_LG,
+                "fill": "x", "padx": Theme.S_MD,
                 "pady": (Theme.S_SM, Theme.S_MD),
             }),
             (workflow_details, {
@@ -3004,14 +3146,13 @@ class VideoSubtitleRemoverApp(
             font=f(Theme.F_META), wraplength=520, justify="left",
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
         )
-        self.preview_meta_label.pack(anchor="w", pady=(3, 0))
+        # Kept for live status and accessibility; the visual header stays terse.
 
         self.preview_status_chip = tk.Label(
             preview_header, text=tr("Waiting"),
             font=f(Theme.F_META, "bold"),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
         )
-        self.preview_status_chip.pack(side="right", anchor="ne")
         self.preview_ab_btn = ModernButton(
             preview_header, text=tr("Before / after"), width=118,
             command=self._open_ab_scrubber, style="ghost", size="sm",
@@ -3060,7 +3201,7 @@ class VideoSubtitleRemoverApp(
 
         preview_actions = tk.Frame(section, bg=Theme.BG_SECONDARY)
         preview_actions.pack(fill="x", padx=Theme.S_MD,
-                             pady=(Theme.S_SM, Theme.S_MD))
+                             pady=(0, Theme.S_SM), before=media_surface)
         self._preview_primary_actions = preview_actions
 
         self.preview_region_btn = ModernButton(
@@ -3264,6 +3405,28 @@ class VideoSubtitleRemoverApp(
                                    padx=Theme.S_MD, pady=(0, Theme.S_SM))
         queue_container = self._queue_container
 
+        table_header = tk.Frame(
+            section, bg=Theme.BG_TERTIARY,
+            highlightthickness=0,
+        )
+        table_header.pack(
+            fill="x", padx=Theme.S_MD, pady=(0, 1),
+            before=self._queue_container,
+        )
+        table_header.columnconfigure(0, weight=5, uniform="queue_columns")
+        table_header.columnconfigure(1, weight=3, uniform="queue_columns")
+        table_header.columnconfigure(2, weight=2, uniform="queue_columns")
+        for column, label in enumerate(("File name", "Details", "Status")):
+            tk.Label(
+                table_header, text=tr(label), font=f(Theme.F_META),
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
+                anchor="w",
+            ).grid(
+                row=0, column=column, sticky="ew",
+                padx=Theme.S_MD, pady=Theme.S_SM,
+            )
+        self._queue_table_header = table_header
+
         self.queue_canvas = tk.Canvas(queue_container, bg=Theme.BG_SECONDARY,
                                      highlightthickness=0, height=88)
         scrollbar = ttk.Scrollbar(queue_container, orient="vertical",
@@ -3290,7 +3453,10 @@ class VideoSubtitleRemoverApp(
 
         # One quiet command row with the dominant action anchored at right.
         btn_frame = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        btn_frame.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
+        btn_frame.pack(
+            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM),
+            before=self._queue_table_header,
+        )
         self._queue_action_frame = btn_frame
 
         self.start_btn = ModernButton(btn_frame, text=tr("Start batch"), width=180,
@@ -3331,46 +3497,14 @@ class VideoSubtitleRemoverApp(
             self._queue_batch_bar_frame.pack_forget()
 
     def _build_queue_empty_state(self):
-        """Compact empty state that fits the persistent queue surface."""
+        """Render an empty queue as one quiet table row."""
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
-        self.empty_container.pack(pady=Theme.S_MD, fill="x")
-
-        copy = tk.Frame(self.empty_container, bg=Theme.BG_SECONDARY)
-        copy.pack(side="left", fill="x", expand=True)
+        self.empty_container.pack(fill="x")
         tk.Label(
-            copy, text=tr("No media queued"),
-            font=f(Theme.F_TITLE, "bold"),
-            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
-        ).pack(anchor="w")
-        tk.Label(
-            copy,
-            text=tr("Add videos or images. Originals are never modified."),
+            self.empty_container, text=tr("No media queued"),
             font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_MUTED, wraplength=460, justify="left",
-        ).pack(anchor="w", pady=(Theme.S_XS, 0))
-
-        actions = tk.Frame(self.empty_container, bg=Theme.BG_SECONDARY)
-        actions.pack(side="right", padx=(Theme.S_LG, 0))
-        choose_files = ModernButton(
-            actions,
-            text=tr("Choose files"),
-            width=116,
-            command=self._open_file_picker,
-            style="accent",
-            size="sm",
-        )
-        choose_files.pack(side="left")
-        Tooltip(choose_files, tr("Choose one or more videos or images to add to the queue."))
-        choose_folder = ModernButton(
-            actions,
-            text=tr("Choose folder"),
-            width=122,
-            command=self._open_folder_picker,
-            style="ghost",
-            size="sm",
-        )
-        choose_folder.pack(side="left", padx=(Theme.S_SM, 0))
-        Tooltip(choose_folder, tr("Add every supported media file from a folder."))
+            fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", padx=Theme.S_MD, pady=Theme.S_MD)
 
     def _ensure_filter_empty_state(self):
         """Create the queue filter empty state on demand."""
@@ -4614,7 +4748,7 @@ class VideoSubtitleRemoverApp(
                                              on_override=self._open_per_file_overrides,
                                              on_soft_action=self._set_soft_subtitle_action,
                                              on_retry_suggested=self._retry_review_item_with_suggested_settings)
-                    widget.pack(fill="x", pady=(0, 8))
+                    widget.pack(fill="x")
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas
                     widget.bind("<MouseWheel>", self._on_mousewheel)
@@ -4665,7 +4799,7 @@ class VideoSubtitleRemoverApp(
             match = (query in fname) or (query in item.file_path.lower())
             if not query or match:
                 if not widget.winfo_ismapped():
-                    widget.pack(fill="x", pady=(0, Theme.S_SM))
+                    widget.pack(fill="x")
                 visible += 1
             else:
                 widget.pack_forget()
@@ -4843,6 +4977,12 @@ class VideoSubtitleRemoverApp(
                 self.language_filter_toggle.set_enabled(not locked)
             if hasattr(self, 'gpu_combo'):
                 self.gpu_combo.config(state=combo_state)
+            if hasattr(self, "_command_mode_combo"):
+                self._command_mode_combo.config(state=combo_state)
+            if hasattr(self, "_command_region_combo"):
+                self._command_region_combo.config(state=combo_state)
+            if hasattr(self, "_command_output_btn"):
+                self._command_output_btn.set_enabled(not locked)
             self.time_start_entry.config(state=entry_state)
             self.time_end_entry.config(state=entry_state)
             if hasattr(self, "work_dir_entry"):

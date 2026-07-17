@@ -1415,7 +1415,7 @@ class GuiSmokeTests(unittest.TestCase):
             app.root.update_idletasks()
 
             controls = {
-                "start_btn": app.start_btn,
+                "command_start_btn": app.command_start_btn,
                 "open_output_btn": app.open_output_btn,
                 "preview_region_btn": app.preview_region_btn,
                 "settings_toggle": app.adv_toggle,
@@ -1458,23 +1458,33 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app._queue_row.pack_info()["side"], "bottom")
             self.assertIsNot(app._queue_row.master, app._content)
             self.assertEqual(app.start_btn.winfo_manager(), "")
-            self.assertEqual(app.inspector_start_btn.winfo_manager(), "pack")
-            self.assertGreaterEqual(app.inspector_start_btn.winfo_reqheight(), 44)
+            self.assertEqual(app.inspector_start_btn.winfo_manager(), "")
+            self.assertEqual(app.command_start_btn.winfo_manager(), "pack")
+            self.assertEqual(app.command_start_btn.master.winfo_manager(), "grid")
+            self.assertGreaterEqual(app.command_start_btn.winfo_reqheight(), 38)
             self.assertGreaterEqual(app.start_btn.winfo_reqheight(), 44)
             self.assertEqual(app._queue_more_btn.winfo_manager(), "")
+            self.assertEqual(app._command_strip.winfo_manager(), "pack")
+            self.assertEqual(len(app._command_blocks), 5)
+            self.assertLess(
+                app._command_strip.winfo_rooty(), app._preview_col.winfo_rooty())
             self.assertEqual(
                 (app._preview_photo.width(), app._preview_photo.height()),
                 (400, 225),
             )
-            self.assertEqual(Theme.BG_DARK, "#090d16")
+            self.assertEqual(Theme.BG_DARK, "#080d15")
             self.assertEqual(Theme.BLUE_PRIMARY, "#4f7cff")
             self.assertEqual(Theme.TEXT_PRIMARY, "#f5f7fb")
-            self.assertGreaterEqual(Theme.F_BODY_SM, 10)
-            self.assertGreaterEqual(Theme.F_META, 9)
+            self.assertEqual(Theme.BG_CARD, Theme.BG_SECONDARY)
+            self.assertGreaterEqual(Theme.F_BODY_SM, 11)
+            self.assertGreaterEqual(Theme.F_META, 10)
             self.assertEqual(int(app._preview_frame.cget("highlightthickness")), 0)
             self.assertEqual(int(app._settings_col.winfo_children()[0].cget(
                 "highlightthickness")), 0)
             self.assertEqual(len(app._header_chips.winfo_children()), 2)
+            self.assertEqual(app.mode_picker.winfo_manager(), "")
+            self.assertEqual(app._queue_table_header.winfo_manager(), "pack")
+            self.assertEqual(len(app.empty_container.winfo_children()), 1)
         finally:
             self._destroy_app(app)
 
@@ -1491,8 +1501,9 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(int(app._settings_col.grid_info()["row"]), 1)
             self.assertEqual(app._queue_row.winfo_manager(), "pack")
             self.assertEqual(app._queue_more_btn.winfo_manager(), "pack")
-            self.assertEqual(app.start_btn.winfo_manager(), "pack")
+            self.assertEqual(app.start_btn.winfo_manager(), "")
             self.assertEqual(app.inspector_start_btn.winfo_manager(), "")
+            self.assertEqual(app.command_start_btn.master.winfo_manager(), "grid")
             self.assertEqual(app.retry_btn.winfo_manager(), "")
             self.assertEqual(app.repeat_btn.winfo_manager(), "")
             self.assertEqual(app.clear_btn.winfo_manager(), "")
@@ -1543,6 +1554,11 @@ class GuiSmokeTests(unittest.TestCase):
             app._set_selected_queue_item(item.id)
             app.root.update_idletasks()
 
+            row = app.queue_widgets[item.id]
+            self.assertNotIn(str(source.parent), row.info_label.cget("text"))
+            self.assertEqual(
+                row.status_badge.cget("bg"), row.container.cget("bg"))
+
             for name in ("preview_mask_btn", "preview_inpaint_btn"):
                 btn = getattr(app, name, None)
                 if btn is None:
@@ -1566,7 +1582,7 @@ class GuiSmokeTests(unittest.TestCase):
             app.root.geometry("640x600")
             app.root.update_idletasks()
 
-            for name in ("start_btn", "clear_btn"):
+            for name in ("command_start_btn", "clear_btn"):
                 widget = getattr(app, name, None)
                 if widget is None:
                     continue
