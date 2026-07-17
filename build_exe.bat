@@ -183,7 +183,8 @@ echo Compiling and extracting the non-elevated installer smoke harness...
 "!MAKENSIS!" /DVSR_SMOKE_BUILD=1 "/DOUTPUT_DIR=!RELEASE_DIR!" "/DDIST_DIR=!CD!\!DIST_DIR!" installer\vsr.nsi
 if errorlevel 1 exit /b 1
 if exist "!SMOKE_INSTALL_DIR!" rmdir /s /q "!SMOKE_INSTALL_DIR!"
-"!SMOKE_INSTALLER!" /S "/D=!SMOKE_INSTALL_DIR!"
+powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command ^
+    "$p = Start-Process -FilePath '!SMOKE_INSTALLER!' -ArgumentList '/S','/D=!SMOKE_INSTALL_DIR!' -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode"
 if errorlevel 1 (
     echo ERROR: Installer smoke extraction failed.
     exit /b 1

@@ -259,6 +259,10 @@ class ReleaseVerificationTests(unittest.TestCase):
                     "version": "1.2.3", "scope": "required",
                 },
                 {
+                    "type": "library", "name": "torch",
+                    "version": "2.11.0+cu128", "scope": "required",
+                },
+                {
                     "type": "library", "name": "build-tool",
                     "version": "4.5.6", "scope": "excluded",
                 },
@@ -280,7 +284,10 @@ class ReleaseVerificationTests(unittest.TestCase):
             result = release_verification._audit_frozen_dependencies(sbom)
 
         self.assertTrue(result["passed"])
-        self.assertEqual(result["requirements"], ["runtime-lib==1.2.3"])
+        self.assertEqual(
+            result["requirements"],
+            ["runtime-lib==1.2.3", "torch==2.11.0"],
+        )
         command = run.call_args.args[0]
         self.assertIn("--strict", command)
         self.assertIn("--no-deps", command)
@@ -854,6 +861,8 @@ class LocalBuildScriptTests(unittest.TestCase):
         )
         self.assertIn("installer\\vsr.nsi", self.bat)
         self.assertIn("/DVSR_SMOKE_BUILD=1", self.bat)
+        self.assertIn("Start-Process -FilePath '!SMOKE_INSTALLER!'", self.bat)
+        self.assertIn("-WindowStyle Hidden -Wait -PassThru", self.bat)
         self.assertIn("--installer-smoke-executable", self.bat)
         self.assertIn("--runtime-hook assets\\runtime_hook_mp.py", self.bat)
         self.assertNotIn("pause", self.bat.lower())

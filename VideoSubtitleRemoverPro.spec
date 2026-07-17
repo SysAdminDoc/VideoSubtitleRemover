@@ -16,6 +16,19 @@ def _available(name):
         return False
 
 
+def _package_payload(entry, package):
+    """Return whether a TOC entry physically belongs to an excluded package."""
+    destination, source, _kind = entry
+    package = package.lower()
+    destination = destination.replace('/', '\\').lower()
+    source = source.replace('/', '\\').lower()
+    return (
+        destination == package
+        or destination.startswith(package + '\\')
+        or ('\\site-packages\\' + package + '\\') in source
+    )
+
+
 datas = [('backend', 'backend'), ('assets', 'assets'), ('locale', 'locale'), ('icon.png', '.'), ('icon.ico', '.')]
 hiddenimports = [
     'PIL._tkinter_finder', 'cv2', 'numpy', 'backend.opencv_ocr',
@@ -66,6 +79,13 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+if not full_ocr and not pytorch_lama:
+    # Hooks for other GPU providers can discover CUDA DLLs inside torch even
+    # when the torch module is excluded. Keep the default RapidOCR artifact
+    # physically free of PyTorch so its SBOM and dependency audit match the
+    # selected release profile.
+    a.binaries = [entry for entry in a.binaries if not _package_payload(entry, 'torch')]
+    a.datas = [entry for entry in a.datas if not _package_payload(entry, 'torch')]
 pyz = PYZ(a.pure)
 
 exe = EXE(

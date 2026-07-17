@@ -23,6 +23,9 @@
 numpy>=1.21.0
 opencv-python>=5.0.0.93
 Pillow>=12.3.0
+# idna 3.15 fixes CVE-2026-45409/PYSEC-2026-215 resource exhaustion in
+# alternate per-label and codec APIs; requests and Hugging Face use it.
+idna>=3.15
 
 # AI/ML Frameworks (choose based on your GPU)
 # ------------------------------------------

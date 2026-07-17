@@ -3,7 +3,7 @@
 # Profile: directml
 # Provider: DmlExecutionProvider
 # Reviewed: 2026-07-14
-# Manifest-SHA256: f4ae8c91476e90574c5f6e4e5ea3199408675bb680904c2ada5ae0fd872596a8
+# Manifest-SHA256: 819679170b0e0a3082aeb0d63735591fa0208cd01a1843b05af589a1cd58abd1
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
@@ -15,6 +15,7 @@ numpy==2.2.6
 opencv-python==5.0.0.93
 opencv-python-headless==5.0.0.93
 Pillow==12.3.0
+idna==3.15
 rapidocr==3.9.1
 paddleocr==3.6.0
 easyocr==1.7.2

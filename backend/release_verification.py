@@ -1076,7 +1076,13 @@ def _audit_frozen_dependencies(sbom: Mapping[str, object], timeout: float = 300.
         name = str(component.get("name") or "").strip()
         version = str(component.get("version") or "").strip()
         if name and version:
-            requirements.append(f"{name}=={version}")
+            # CUDA/CPU wheels commonly carry a PEP 440 local version such as
+            # ``2.11.0+cu128``. PyPI's audit resolver indexes the public
+            # release (``2.11.0``), while vulnerability matching applies to
+            # that same public version. Keep the SBOM's exact wheel version,
+            # but audit the resolvable public identifier.
+            audit_version = version.split("+", 1)[0]
+            requirements.append(f"{name}=={audit_version}")
     requirements = sorted(set(requirements), key=str.lower)
     payload = {
         "schema": "vsr.pip_audit.v1",
