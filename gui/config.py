@@ -301,21 +301,44 @@ def _coerce_region_span_list(value, *, label: Optional[str] = None,
     return spans or None
 
 
+_GUI_MODE_MAP = {
+    "auto": InpaintMode.AUTO,
+    "sttn": InpaintMode.STTN,
+    "lama": InpaintMode.LAMA,
+    "propainter": InpaintMode.PROPAINTER,
+    "pro painter": InpaintMode.PROPAINTER,
+}
+
+
 def _coerce_gui_mode(value) -> InpaintMode:
     if isinstance(value, InpaintMode):
         return value
     if isinstance(value, str):
         normalized = value.strip().casefold()
-        mode_map = {
-            "auto": InpaintMode.AUTO,
-            "sttn": InpaintMode.STTN,
-            "lama": InpaintMode.LAMA,
-            "propainter": InpaintMode.PROPAINTER,
-            "pro painter": InpaintMode.PROPAINTER,
-        }
-        if normalized in mode_map:
-            return mode_map[normalized]
+        if normalized in _GUI_MODE_MAP:
+            return _GUI_MODE_MAP[normalized]
     return InpaintMode.STTN
+
+
+def _notice_if_backend_only_mode(value) -> None:
+    """Warn once when settings name a backend-only inpaint mode the GUI cannot
+    represent (e.g. ``migan`` saved from a ``--mode migan`` CLI run). Such a
+    mode coerces to STTN for this session, so surface it instead of silently
+    downgrading."""
+    if not isinstance(value, str):
+        return
+    normalized = value.strip().casefold()
+    if not normalized or normalized in _GUI_MODE_MAP:
+        return
+    try:
+        from backend.config import is_known_backend_mode
+    except Exception:
+        return
+    if is_known_backend_mode(value):
+        _set_settings_load_notice(
+            f"Inpaint mode '{value}' runs only from the command line; the app "
+            "is using STTN this session. Run it with --mode to keep that mode."
+        )
 
 
 # -- ProcessingConfig -------------------------------------------------------
@@ -882,6 +905,7 @@ def load_settings() -> ProcessingConfig:
                 )
                 return ProcessingConfig()
             data = _migrate_settings(data)
+            _notice_if_backend_only_mode(data.get("mode"))
             logger.info(f"Settings loaded from {settings_file}")
             return ProcessingConfig.from_dict(data)
     except Exception as e:

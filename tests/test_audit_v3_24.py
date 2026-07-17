@@ -221,5 +221,41 @@ class PresetApplySliderSyncTests(unittest.TestCase):
         self.assertEqual(slider_calls, [55])
 
 
+class BackendOnlyModeNoticeTests(unittest.TestCase):
+    """A settings.json carrying a backend-only inpaint mode (e.g. migan) must
+    surface a load notice instead of silently downgrading to STTN."""
+
+    def _clear(self):
+        from gui import config as gcfg
+        gcfg.consume_settings_load_notice()
+
+    def test_backend_only_mode_emits_notice(self):
+        from gui import config as gcfg
+        self._clear()
+        gcfg._notice_if_backend_only_mode("migan")
+        notice = gcfg.consume_settings_load_notice()
+        self.assertIsNotNone(notice)
+        self.assertIn("migan", notice)
+
+    def test_gui_mode_emits_no_notice(self):
+        from gui import config as gcfg
+        self._clear()
+        gcfg._notice_if_backend_only_mode("lama")
+        self.assertIsNone(gcfg.consume_settings_load_notice())
+
+    def test_unknown_mode_emits_no_notice(self):
+        from gui import config as gcfg
+        self._clear()
+        gcfg._notice_if_backend_only_mode("banana")
+        self.assertIsNone(gcfg.consume_settings_load_notice())
+
+    def test_blank_and_nonstring_are_ignored(self):
+        from gui import config as gcfg
+        self._clear()
+        gcfg._notice_if_backend_only_mode("")
+        gcfg._notice_if_backend_only_mode(None)
+        self.assertIsNone(gcfg.consume_settings_load_notice())
+
+
 if __name__ == "__main__":
     unittest.main()

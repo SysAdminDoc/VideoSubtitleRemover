@@ -60,10 +60,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ## Audit Findings (2026-07-17 deep audit)
 
-- [ ] P3 — GUI silently downgrades backend-only inpaint modes to STTN
-  Why: The GUI `InpaintMode` enum omits `MIGAN` (and registry modes), so a settings.json or imported preset carrying `"mode": "migan"` (e.g. saved from a `--mode migan` CLI run) resolves through `_coerce_gui_mode` to STTN with no notice. Either widen the GUI mapping or emit a load notice when a recognized backend mode is downgraded.
-  Where: `gui/config.py` (`_coerce_gui_mode` ~304-318, GUI `InpaintMode` ~101-106).
-
 - [ ] P3 — `migrate_gui_settings` documents versioned transforms it does not perform
   Why: The function stamps settings to the current schema version and does no per-version key transformation; the surrounding comments assert semantic upgrades (format 5/6/10) the code never implements. Safe today because every historical bump only added defaulted fields, but a future breaking rename will be silently skipped. Either delete the misleading comments or add explicit `if version < N:` transform blocks.
   Where: `backend/config_schema.py:87-111`.

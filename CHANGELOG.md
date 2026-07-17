@@ -4,6 +4,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Load notice for command-line-only inpaint modes.** A settings.json (or a
+  run saved from `--mode migan`) that names a backend-only mode the GUI cannot
+  represent now surfaces a startup notice explaining it is using STTN this
+  session, instead of silently downgrading.
+
 ### Fixed
 
 - **CLI `--preset` no longer discards an explicit flag that equals the parser
