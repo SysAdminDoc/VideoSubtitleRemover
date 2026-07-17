@@ -39,6 +39,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   1,430-line modal function and 39 state-sharing closures are split into a
   `RegionSelectorWindow` with named callback methods and instance-owned editor
   state, while the GUI mixin retains a three-line launch boundary.
+- **CLI startup is split into named phases.** The former 1,352-line `main()` is
+  now a 60-line orchestrator over parser construction, utility actions,
+  argument validation, config assembly/overlays, soft-subtitle handling, and
+  the processing runner, preserving command output and exit behavior.
 - **Frame timing and Whisper span conversion now share one clock.** CFR/VFR
   frame-to-seconds conversion is centralized and reused by the mask/inpaint
   loop, clean-reference overrides, VMAF sampling, checkpoint-frame encoding,

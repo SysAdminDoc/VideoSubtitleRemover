@@ -44,6 +44,33 @@ def _doc_files():
 
 
 class SourceHygieneTests(unittest.TestCase):
+    def test_cli_main_is_a_small_orchestrator_with_named_phases(self):
+        tree = ast.parse(
+            (ROOT / "backend" / "cli.py").read_text(encoding="utf-8")
+        )
+        functions = {
+            node.name: node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        for name in (
+            "_build_parser",
+            "_handle_utility_actions",
+            "_prepare_cli_args",
+            "_build_processing_config",
+            "_apply_cli_config_overlays",
+            "_run_soft_subtitle_modes",
+            "_run_processing",
+        ):
+            self.assertIn(name, functions)
+
+        main = functions["main"]
+        self.assertLessEqual(main.end_lineno - main.lineno + 1, 80)
+        nested = [
+            node for node in ast.walk(main)
+            if isinstance(node, ast.FunctionDef) and node is not main
+        ]
+        self.assertEqual(nested, [])
+
     def test_ruff_baseline_and_release_gate_are_explicit(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         lint = config["tool"]["ruff"]["lint"]

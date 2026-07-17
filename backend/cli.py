@@ -545,40 +545,7 @@ def _run_dry_run_and_exit(remover, config, args, video_exts) -> None:
     sys.exit(1 if (not plans or any_codec_missing) else 0)
 
 
-def main():
-    """CLI entry point."""
-    early_parser = argparse.ArgumentParser(add_help=False)
-    early_parser.add_argument("--support-bundle", metavar="PATH")
-    early_args, _remaining = early_parser.parse_known_args()
-    if early_args.support_bundle:
-        from backend.support_bundle import create_support_bundle
-        bundle = create_support_bundle(
-            early_args.support_bundle,
-            app_version=os.environ.get("VSR_APP_VERSION", ""),
-            extra_facts={"surface": "cli"},
-        )
-        print(f"[support] wrote {bundle}")
-        sys.exit(0)
-
-    # Import here so the heavy backend (SubtitleRemover + cv2 + numpy)
-    # loads only when the CLI actually runs.
-    _load_runtime_helpers()
-    from backend.processor import (
-        ProcessingConfig, SubtitleRemover,
-        attach_json_log, normalize_processing_config, _coerce_backend_mode,
-    )
-    from backend.resume_checkpoint import ProcessingPaused
-    from backend import inpainter_registry
-
-    # Built-in modes first, then whatever opt-in backends registered at
-    # import time (ONNX / diffusion scaffolds gated by env vars).
-    mode_choices = ["sttn", "lama", "propainter", "auto", "migan"]
-    for _name, _builder in inpainter_registry.list_modes():
-        if _name not in mode_choices:
-            mode_choices.append(_name)
-    if "--dump-cli-reference" in sys.argv:
-        mode_choices = ["sttn", "lama", "propainter", "auto", "migan"]
-
+def _build_parser(mode_choices):
     parser = argparse.ArgumentParser(
         description="Video Subtitle Remover Pro CLI",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -928,11 +895,13 @@ def main():
     )
 
     _apply_cli_option_metadata(parser)
-    args = parser.parse_args()
+    return parser
 
+
+def _handle_utility_actions(args, parser, attach_json_log) -> bool:
     if args.dump_cli_reference:
         print(json.dumps(_cli_reference_payload(parser), ensure_ascii=True, sort_keys=True))
-        return
+        return True
 
     if args.json_log:
         attach_json_log(args.json_log)
@@ -1094,7 +1063,10 @@ def main():
         print(f"Suggested language: {lang}")
         print(f"Confidence: {conf:.2f}")
         sys.exit(0)
+    return False
 
+
+def _prepare_cli_args(args, parser):
     soft_mode_count = sum(
         1 for enabled in (
             args.strip_soft_subtitles,
@@ -1200,7 +1172,13 @@ def main():
         if args.translation_provider == "command" and not args.translation_command:
             parser.error(
                 "--translation-command is required for the command provider")
+    return soft_action, dry_run_only, translation_enabled
 
+
+def _build_processing_config(
+    args, translation_enabled, ProcessingConfig, _coerce_backend_mode,
+    normalize_processing_config,
+):
     config = ProcessingConfig(
         mode=_coerce_backend_mode(args.mode),
         device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
@@ -1299,7 +1277,10 @@ def main():
         karaoke_y_overlap=args.karaoke_y_overlap,
     )
     config = normalize_processing_config(config)
+    return config
 
+
+def _apply_cli_config_overlays(args, parser, config):
     from backend.config_schema import (
         CONFIG_SCHEMA_VERSION_KEY,
         apply_backend_payload,
@@ -1341,9 +1322,10 @@ def main():
         resolved = serialize_backend_config(config)
         print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
         sys.exit(0)
+    return config, ffmpeg_ready
 
-    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
 
+def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
     if args.soft_subtitle_dry_run:
         planned = (
             soft_action.value if soft_action is not None
@@ -1469,7 +1451,13 @@ def main():
         except Exception as exc:
             logger.error(f"Soft-subtitle remux failed: {exc}")
             sys.exit(1)
+    return False
 
+
+def _run_processing(
+    args, parser, config, SubtitleRemover, ProcessingPaused,
+    ffmpeg_ready, video_exts,
+):
     remover = SubtitleRemover(config)
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
 
@@ -1897,6 +1885,68 @@ def main():
             "output_contract": getattr(remover, "last_output_contract", None),
         }, indent=2))
     sys.exit(0 if success else 1)
+
+
+def main():
+    """CLI entry point."""
+    early_parser = argparse.ArgumentParser(add_help=False)
+    early_parser.add_argument("--support-bundle", metavar="PATH")
+    early_args, _remaining = early_parser.parse_known_args()
+    if early_args.support_bundle:
+        from backend.support_bundle import create_support_bundle
+        bundle = create_support_bundle(
+            early_args.support_bundle,
+            app_version=os.environ.get("VSR_APP_VERSION", ""),
+            extra_facts={"surface": "cli"},
+        )
+        print(f"[support] wrote {bundle}")
+        sys.exit(0)
+
+    # Import here so the heavy backend (SubtitleRemover + cv2 + numpy)
+    # loads only when the CLI actually runs.
+    _load_runtime_helpers()
+    from backend.processor import (
+        ProcessingConfig, SubtitleRemover,
+        attach_json_log, normalize_processing_config, _coerce_backend_mode,
+    )
+    from backend.resume_checkpoint import ProcessingPaused
+    from backend import inpainter_registry
+
+    # Built-in modes first, then whatever opt-in backends registered at
+    # import time (ONNX / diffusion scaffolds gated by env vars).
+    mode_choices = ["sttn", "lama", "propainter", "auto", "migan"]
+    for _name, _builder in inpainter_registry.list_modes():
+        if _name not in mode_choices:
+            mode_choices.append(_name)
+    if "--dump-cli-reference" in sys.argv:
+        mode_choices = ["sttn", "lama", "propainter", "auto", "migan"]
+
+    parser = _build_parser(mode_choices)
+    args = parser.parse_args()
+
+    if _handle_utility_actions(args, parser, attach_json_log):
+        return
+
+    soft_action, dry_run_only, translation_enabled = _prepare_cli_args(args, parser)
+
+    config = _build_processing_config(
+        args, translation_enabled, ProcessingConfig, _coerce_backend_mode,
+        normalize_processing_config,
+    )
+
+    config, ffmpeg_ready = _apply_cli_config_overlays(
+        args, parser, config,
+    )
+
+    video_exts = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
+
+    if _run_soft_subtitle_modes(args, parser, config, soft_action):
+        return
+
+    _run_processing(
+        args, parser, config, SubtitleRemover, ProcessingPaused,
+        ffmpeg_ready, video_exts,
+    )
 
 
 if __name__ == "__main__":
