@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.18.1] - 2026-07-17
+
 ### Changed
 
 - **Extracted the encode/mux and time-range/quality-report stages from
