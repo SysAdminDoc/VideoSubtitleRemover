@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.22.0] - 2026-07-17
+
 ### Changed
 
 - **The native workbench now follows the approved mockup more closely.** The
