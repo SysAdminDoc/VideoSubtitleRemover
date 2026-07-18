@@ -39,7 +39,7 @@ from typing import List
 import cv2
 import numpy as np
 
-from backend.inpainters._common import apply_finishing
+from backend.inpainters._common import _binarize_mask, apply_finishing
 
 logger = logging.getLogger(__name__)
 
@@ -149,22 +149,6 @@ def _ensure_multiple_of(value: int, multiple: int) -> int:
         return value
     return ((value // multiple) + 1) * multiple
 
-
-def _binarize_mask(mask: np.ndarray) -> np.ndarray:
-    """Return a strict {0, 255} uint8 mask.
-
-    The ONNX LaMa / MI-GAN sessions consume ``mask / 255.0`` as an
-    inpaint indicator that the models treat as binary. Feathering is
-    applied *after* inpainting (see ``_apply_feather_blend``), so any
-    anti-aliased or greyscale mask that reaches an inpainter must be
-    thresholded here -- otherwise intermediate values (1-254) would feed
-    partial-strength hints and silently degrade the fill. A midpoint
-    threshold keeps a properly dilated binary mask unchanged while
-    resolving soft edges deterministically.
-    """
-    if mask.ndim == 3:
-        mask = mask[..., 0]
-    return np.where(mask >= 128, np.uint8(255), np.uint8(0))
 
 
 class LamaOnnxInpainter:
