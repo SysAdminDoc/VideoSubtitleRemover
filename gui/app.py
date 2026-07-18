@@ -289,7 +289,7 @@ class VideoSubtitleRemoverApp(
             if not self.config.log_panel_open and self._log_visible:
                 self._toggle_log_panel()
         except Exception:
-            pass
+            logger.debug("panel visibility restore failed", exc_info=True)
 
         # Save settings on close
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -5128,7 +5128,7 @@ class VideoSubtitleRemoverApp(
             else:
                 self._sort_btn.pack_forget()
         except Exception:
-            pass
+            logger.debug("sort button visibility update failed", exc_info=True)
 
         if not self.queue:
             # Clear any remaining children and show empty state
@@ -5199,7 +5199,7 @@ class VideoSubtitleRemoverApp(
                 if self._queue_filter_var.get():
                     self._queue_filter_var.set("")
         except Exception:
-            pass
+            logger.debug("filter visibility update failed", exc_info=True)
         # Re-apply any active filter so newly added items get filtered too
         if self._queue_filter_var.get():
             self._apply_queue_filter()
@@ -5433,16 +5433,16 @@ class VideoSubtitleRemoverApp(
                     else:
                         seg.config(state="disabled" if locked else "normal")
             except Exception:
-                pass
+                logger.debug("segmented picker lock failed", exc_info=True)
         except Exception:
-            pass
+            logger.debug("settings lock/unlock failed", exc_info=True)
 
         # Re-apply mode-specific toggle availability
         if not locked:
             try:
                 self._update_mode_options()
             except Exception:
-                pass
+                logger.debug("mode options update failed", exc_info=True)
 
     def _preflight_free_space_check(self):
         """Validate work storage and estimate every affected batch volume."""
