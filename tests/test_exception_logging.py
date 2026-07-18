@@ -22,6 +22,9 @@ class ProcessingExceptionLoggingTests(unittest.TestCase):
             _read("backend/processor.py")
             + _read("backend/_encode_mixin.py")
             + _read("backend/_quality_mixin.py")
+            + _read("backend/_finalize_mixin.py")
+            + _read("backend/_srt_mixin.py")
+            + _read("backend/_clean_ref_mixin.py")
         )
         for phrase in (
             "RapidOCR SRT extraction failed",
