@@ -841,8 +841,8 @@ def _probe_is_interlaced(video_path: str) -> bool:
         if m:
             tff, bff, prog = int(m.group(1)), int(m.group(2)), int(m.group(3))
             return (tff + bff) > prog
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("interlace detection failed for %s: %s", video_path, exc)
     return False
 
 
