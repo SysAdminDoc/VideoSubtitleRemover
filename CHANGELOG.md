@@ -4,6 +4,52 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.26.0] - 2026-07-18
+
+### Fixed
+
+- **Quality report sampled wrong frames on long-GOP sources.** The PSNR/SSIM
+  quality report used raw `cap.set(CAP_PROP_POS_FRAMES)` instead of the safe
+  `_seek_capture_to_frame` wrapper, causing the input and output frame pairs to
+  land on the nearest keyframe instead of the exact requested frame. A
+  source-level guard now forbids raw seeks outside the wrapper.
+- **CPU OOM-fallback inpainter skipped edge-ring color correction.** The
+  guaranteed-CPU fallback path called `_feather_blend` directly instead of
+  `apply_finishing`, producing visible color seams on gradient backgrounds
+  during OOM recovery.
+- **ONNX finishing silently degraded every frame on import failure.** The
+  `_apply_feather_blend` wrapper caught `Exception` on `apply_finishing` import
+  and returned raw unfinished frames with no logging; moved to a module-level
+  import so broken installs fail loudly.
+- **Interlace detection failures returned False silently.** A failed ffprobe
+  idet probe now logs a warning instead of silently misclassifying interlaced
+  content as progressive.
+- **Swallowed exceptions in GUI settings/queue controls.** Five bare
+  `except: pass` blocks in panel restore, settings lock, segmented picker,
+  sort button, and filter visibility now log at debug level.
+
+### Security
+
+- **ONNX Runtime floor bumped to >= 1.26.0 for CPU/CUDA.** ORT 1.26.0 adds
+  OOB/overflow hardening (unrestricted setattr allowlist, MaxPoolGrad bounds,
+  sparse tensor conversion). Updated across setup.py, Dockerfile, dependency
+  profiles, and release validation. onnxruntime-directml stays at 1.24.4
+  (latest available).
+- **CPython CVE-2026-6100 warning in self-test.** The decompressor
+  use-after-free (CRITICAL 9.1, fixed 3.13.14/3.14.5) is flagged in self-test
+  diagnostics and support bundles.
+
+### Changed
+
+- **Built-in inpainters consolidated onto apply_finishing.** STTN, LaMa,
+  ProPainter, and ExternalInpainter now route through the same centralized
+  edge-ring + feather finishing step as the ONNX and diffusion backends.
+- **_binarize_mask deduplicated.** The ONNX file's local copy now imports from
+  the canonical `_common.py` definition.
+- **DirectML to Windows ML migration documented.** Architecture docs now
+  describe the forward path, prerequisites, and the new `windowsml_status()`
+  probe surfaced in support bundles.
+
 ## [3.25.0] - 2026-07-17
 
 ### Added
