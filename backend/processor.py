@@ -1342,9 +1342,9 @@ class SubtitleRemover:
             # (frame_idx, original_bgr, cleaned_bgr, psnr, ssim)
             pairs: List[Tuple[int, np.ndarray, np.ndarray, float, float]] = []
             for idx in flicker_indices:
-                cap_in.set(cv2.CAP_PROP_POS_FRAMES, start_frame + idx)
+                _seek_capture_to_frame(cap_in, start_frame + idx)
                 ok_in, a = cap_in.read()
-                cap_out.set(cv2.CAP_PROP_POS_FRAMES, min(out_total - 1, idx))
+                _seek_capture_to_frame(cap_out, min(out_total - 1, idx))
                 ok_out, b = cap_out.read()
                 if not (ok_in and ok_out):
                     continue

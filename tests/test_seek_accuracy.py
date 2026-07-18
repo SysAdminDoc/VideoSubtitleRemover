@@ -87,6 +87,35 @@ def test_seek_to_zero_is_noop_position():
     assert cap.grabs == 0
 
 
+def test_no_raw_seek_outside_wrapper():
+    """Every cap.set(CAP_PROP_POS_FRAMES) in processor.py must live inside
+    _seek_capture_to_frame so long-GOP sources always land on the right
+    frame.  This is a source-level guard against regressions like the
+    quality-report seek bug fixed in v3.26."""
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent
+           / "backend" / "processor.py").read_text(encoding="utf-8")
+    pattern = re.compile(
+        r"\.set\(\s*cv2\.CAP_PROP_POS_FRAMES\b",
+    )
+    inside_wrapper = False
+    violations = []
+    for lineno, line in enumerate(src.splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith("def _seek_capture_to_frame("):
+            inside_wrapper = True
+        elif inside_wrapper and stripped.startswith("def "):
+            inside_wrapper = False
+        if pattern.search(line) and not inside_wrapper:
+            violations.append(f"line {lineno}: {stripped}")
+    assert violations == [], (
+        "raw cap.set(CAP_PROP_POS_FRAMES) found outside "
+        "_seek_capture_to_frame:\n" + "\n".join(violations)
+    )
+
+
 def test_overshoot_backend_rescans_from_start():
     class _Overshoot(_AccurateCapture):
         def get(self, prop):
