@@ -208,8 +208,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    - `AutoInpainter`: per-batch routing on the exposure score;
      idle-LaMa is unloaded after `LAMA_IDLE_UNLOAD_AFTER` TBE
      batches.
-   All paths terminate in `_edge_ring_color_correct` then
-   `_feather_blend`.
+   All paths terminate in `apply_finishing` (edge-ring colour match
+   then feather blend).
 8. **Intermediate write.** `_LosslessIntermediateWriter` pipes raw
    BGR frames through `ffmpeg -c:v ffv1` so the final encode is the
    only lossy step. Falls back to legacy `mp4v` when ffmpeg is
@@ -309,6 +309,38 @@ For a new OCR detector:
 3. Register the engine name in `detect_ai_engines()` for the About
    dialog.
 4. If GPL-licensed, gate behind `VSR_ALLOW_GPL` like Surya.
+
+---
+
+## DirectML to Windows ML migration
+
+Microsoft has placed DirectML in maintenance mode (explicit README
+banner on github.com/microsoft/DirectML as of 2026). New ONNX Runtime
+GPU development for AMD/Intel targets is moving to Windows ML.
+
+Current VSR state:
+- AMD/Intel GPU inference uses `onnxruntime-directml==1.24.4`
+  (latest published, March 2026). It receives security patches
+  but no new features.
+- `onnxruntime-windowsml` 1.27.1 is available on PyPI (Python
+  3.11-3.14) and provides automatic execution-provider selection.
+- `--audit-windows-ml` probes the Windows ML Python path.
+- `backend/device_provider.py:windowsml_status()` reports
+  whether `onnxruntime-windowsml` is installed (surfaced in the
+  support bundle).
+
+Migration prerequisites:
+1. Confirm `onnxruntime-windowsml` provides equivalent EP selection
+   for the OCR and inpaint ONNX models on AMD/Intel GPUs.
+2. Benchmark latency versus the current DirectML path.
+3. Update `dependency_profiles/directml.txt` to pin
+   `onnxruntime-windowsml` instead of `onnxruntime-directml`.
+4. Update `setup.py` to install the new package on AMD/Intel
+   hardware.
+
+No urgent action is needed: DirectML continues to receive security
+patches and functions correctly. Track `onnxruntime-windowsml`
+releases and confirm inference parity before switching the default.
 
 ---
 

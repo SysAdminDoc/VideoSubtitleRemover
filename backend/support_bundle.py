@@ -552,6 +552,22 @@ def run_self_test() -> dict:
             "reason": str(exc)[:200],
         })
 
+    try:
+        from backend.device_provider import windowsml_status
+        wml = windowsml_status()
+        results["security"].append({
+            "name": "Windows ML forward path",
+            "available": wml["available"],
+            "reason": (
+                f"onnxruntime-windowsml {wml['version']}"
+                if wml["available"]
+                else "onnxruntime-windowsml not installed; DirectML "
+                     "is in maintenance mode"
+            ),
+        })
+    except Exception:
+        pass
+
     return results
 
 

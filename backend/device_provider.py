@@ -43,6 +43,23 @@ def _directml_available() -> bool:
         return False
 
 
+def windowsml_status() -> dict:
+    """Probe whether onnxruntime-windowsml is installed and report its
+    version and providers.  DirectML is in maintenance mode; Windows ML
+    is the forward path for AMD/Intel GPU inference."""
+    try:
+        import importlib.metadata as _md
+        version = _md.version("onnxruntime-windowsml")
+    except Exception:
+        return {"available": False, "version": None, "providers": None}
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+    except Exception:
+        providers = None
+    return {"available": True, "version": version, "providers": providers}
+
+
 class RuntimeDeviceProvider:
     """Default device probe, registry factory, and memory-recovery hooks."""
 
