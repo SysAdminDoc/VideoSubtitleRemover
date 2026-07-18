@@ -154,8 +154,9 @@ from backend.inpainters import (
     is_oom_error,
     free_inference_memory,
     _cv2_inpaint,
-    _feather_blend,
+    _feather_blend as _feather_blend,
     _edge_ring_color_correct as _edge_ring_color_correct,
+    apply_finishing,
     _expand_mask_by_color,
     _detect_scene_cuts,
     _detect_scene_cuts_pyscenedetect as _detect_scene_cuts_pyscenedetect,
@@ -2294,14 +2295,11 @@ class SubtitleRemover:
     def _inpaint_cpu_fallback(self, frames: List[np.ndarray],
                               masks: List[np.ndarray]) -> List[np.ndarray]:
         """Guaranteed-CPU inpaint of a (usually single-frame) batch."""
-        results: List[np.ndarray] = []
-        for frame, mask in zip(frames, masks):
-            filled = _cv2_inpaint(frame, mask, 5, cv2.INPAINT_TELEA)
-            feather = getattr(self.config, "mask_feather_px", 0) or 0
-            if feather > 0:
-                filled = _feather_blend(frame, filled, mask, feather)
-            results.append(self._valid_output_frame(filled, frame))
-        return results
+        filled = [_cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
+                  for f, m in zip(frames, masks)]
+        finished = apply_finishing(frames, filled, masks, self.config)
+        return [self._valid_output_frame(r, f)
+                for r, f in zip(finished, frames)]
 
     def _decode_and_build_batch(self, ctx: _FrameLoopContext,
                                 state: _FrameLoopState) -> _FrameBatch:
