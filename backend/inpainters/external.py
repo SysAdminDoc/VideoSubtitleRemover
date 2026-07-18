@@ -33,7 +33,7 @@ from typing import List, Optional, Sequence
 import cv2
 import numpy as np
 
-from backend.inpainters._common import BaseInpainter, _cv2_inpaint, _feather_blend
+from backend.inpainters._common import BaseInpainter, _cv2_inpaint, apply_finishing
 from backend.safe_image import safe_imread
 from backend.subprocess_policy import run_process
 
@@ -105,19 +105,24 @@ def deterministic_static_logo_cleanup(
     else:
         stable = None
 
-    outputs: List[np.ndarray] = []
+    candidates: List[np.ndarray] = []
+    norm_masks: List[np.ndarray] = []
     for original, mask, filled in zip(frames, masks, filled_frames):
         frame_mask = np.asarray(mask)
         if frame_mask.ndim == 3:
             frame_mask = cv2.cvtColor(frame_mask, cv2.COLOR_BGR2GRAY)
+        norm_masks.append(frame_mask)
         if int(frame_mask.max()) == 0:
-            outputs.append(original.copy())
+            candidates.append(original.copy())
             continue
         candidate = filled.copy()
         if stable is not None:
             candidate[frame_mask > 0] = stable[frame_mask > 0]
-        outputs.append(_feather_blend(original, candidate, frame_mask, feather_px))
-    return outputs
+        candidates.append(candidate)
+    return apply_finishing(
+        frames, candidates, norm_masks,
+        feather_px=feather_px, edge_ring_px=0,
+    )
 
 
 def _strip_wrapping_quotes(value: str) -> str:
@@ -231,19 +236,21 @@ class ExternalInpainter(BaseInpainter):
                 f"External inpainter exit {result.returncode}: {stderr}")
             return list(frames)
 
-        results = []
+        originals = []
+        filled = []
+        result_masks = []
         for i, (frame, mask) in enumerate(zip(frames, masks)):
             out_path = os.path.join(out_dir, f"{i:06d}.png")
             if os.path.isfile(out_path):
                 out_frame = safe_imread(out_path)
                 if out_frame is not None and out_frame.shape == frame.shape:
-                    # _feather_blend(original, filled, mask): the filled
-                    # result must win inside the mask, so the external
-                    # tool's output is the second argument.
-                    blended = _feather_blend(frame, out_frame, mask)
-                    results.append(blended)
-                else:
-                    results.append(frame.copy())
-            else:
-                results.append(frame.copy())
-        return results
+                    originals.append(frame)
+                    filled.append(out_frame)
+                    result_masks.append(mask)
+                    continue
+            originals.append(frame)
+            filled.append(frame.copy())
+            result_masks.append(np.zeros_like(mask))
+        return apply_finishing(
+            originals, filled, result_masks, self._config,
+        )

@@ -10,8 +10,7 @@ import numpy as np
 from backend.inpainters._common import (
     BaseInpainter,
     _cv2_inpaint,
-    _edge_ring_color_correct,
-    _feather_blend,
+    apply_finishing,
     _temporal_background_expose,
 )
 
@@ -41,10 +40,6 @@ class STTNInpainter(BaseInpainter):
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
                 scene_cut_use_transnetv2=self.config.tbe_scene_cut_use_transnetv2,
             )
-        out = []
-        for f, m in zip(frames, masks):
-            filled = _cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
-            if self.config.edge_ring_px > 0:
-                filled = _edge_ring_color_correct(f, filled, m, self.config.edge_ring_px)
-            out.append(_feather_blend(f, filled, m, self.config.mask_feather_px))
-        return out
+        filled = [_cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
+                  for f, m in zip(frames, masks)]
+        return apply_finishing(frames, filled, masks, self.config)

@@ -15,7 +15,7 @@ from backend.inpainters.lama import (
 from backend.inpainters._common import (
     BaseInpainter,
     _cv2_inpaint,
-    _feather_blend,
+    apply_finishing,
     _temporal_background_expose,
 )
 
@@ -82,7 +82,11 @@ class ProPainterInpainter(BaseInpainter):
                         # TBE 65 / LaMa 35 -- TBE carries the accurate
                         # background; LaMa kills ringing.
                         blend = cv2.addWeighted(inpainted, 0.65, bgr, 0.35, 0)
-                        refined.append(_feather_blend(frame, blend, mask, feather))
+                        refined.append(
+                            apply_finishing(
+                                [frame], [blend], [mask], self.config,
+                            )[0]
+                        )
                     except Exception:
                         logger.warning(
                             "ProPainter LaMa residual refinement failed",
@@ -91,8 +95,6 @@ class ProPainterInpainter(BaseInpainter):
                         refined.append(inpainted)
                 return refined
             return results
-        out = []
-        for f, m in zip(frames, masks):
-            filled = _cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
-            out.append(_feather_blend(f, filled, m, feather))
-        return out
+        filled = [_cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
+                  for f, m in zip(frames, masks)]
+        return apply_finishing(frames, filled, masks, self.config)

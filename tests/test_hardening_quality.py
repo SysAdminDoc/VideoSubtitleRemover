@@ -198,13 +198,21 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         class FakeCapture:
             def __init__(self, frame):
                 self.frame = frame
+                self._pos = 0
             def isOpened(self):
                 return True
             def get(self, prop):
                 if prop == processor.cv2.CAP_PROP_FRAME_COUNT:
                     return 4
+                if prop == processor.cv2.CAP_PROP_POS_FRAMES:
+                    return float(self._pos)
                 return 0
             def set(self, prop, value):
+                if prop == processor.cv2.CAP_PROP_POS_FRAMES:
+                    self._pos = int(value)
+                return True
+            def grab(self):
+                self._pos += 1
                 return True
             def read(self):
                 return True, self.frame.copy()
