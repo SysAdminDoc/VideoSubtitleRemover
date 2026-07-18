@@ -519,20 +519,20 @@ def run_self_test() -> dict:
         ort_status = collect_onnxruntime_provider_status()
         floor = [
             a for a in onnxruntime_release_advisories(ort_status)
-            if a.get("id") == "ORT-PARSER-OOB-1.25.0"
+            if a.get("id") == "ORT-OOB-OVERFLOW-1.26.0"
         ]
         if floor:
             results["security"].append({
                 "name": "ONNX Runtime CVE floor",
                 "available": False,
                 "reason": floor[0].get("mitigation")
-                or "onnxruntime below the 1.25.0 security floor",
+                or "onnxruntime below the 1.26.0 security floor",
             })
         else:
             results["security"].append({
                 "name": "ONNX Runtime CVE floor",
                 "available": True,
-                "reason": "onnxruntime >= 1.25.0 or not installed",
+                "reason": "onnxruntime >= 1.26.0 or not installed",
             })
     except Exception as exc:
         results["security"].append({

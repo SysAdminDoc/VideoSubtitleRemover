@@ -181,22 +181,22 @@ class DependencyCapTests(unittest.TestCase):
             preload_dlls_available=True,
         )
         advisories = dependency_caps.onnxruntime_release_advisories(status)
-        floor = [a for a in advisories if a["id"] == "ORT-PARSER-OOB-1.25.0"]
-        self.assertTrue(floor, "expected a security-floor advisory below 1.25.0")
+        floor = [a for a in advisories if a["id"] == "ORT-OOB-OVERFLOW-1.26.0"]
+        self.assertTrue(floor, "expected a security-floor advisory below 1.26.0")
         self.assertTrue(floor[0]["blocking"])
         self.assertEqual(floor[0]["severity"], "high")
         self.assertFalse(floor[0]["allowed"])
 
     def test_onnxruntime_security_floor_passes_current_runtime(self):
         status = dependency_caps.collect_onnxruntime_provider_status(
-            package_versions={"onnxruntime-gpu": "1.25.0"},
+            package_versions={"onnxruntime-gpu": "1.26.0"},
             providers=["CUDAExecutionProvider"],
-            runtime_version="1.25.0",
+            runtime_version="1.26.0",
             preload_dlls_available=True,
         )
         advisories = dependency_caps.onnxruntime_release_advisories(status)
         self.assertFalse(
-            [a for a in advisories if a["id"] == "ORT-PARSER-OOB-1.25.0"]
+            [a for a in advisories if a["id"] == "ORT-OOB-OVERFLOW-1.26.0"]
         )
 
     def test_directml_uses_separate_reviewed_version_policy(self):
@@ -208,7 +208,7 @@ class DependencyCapTests(unittest.TestCase):
         )
         advisories = dependency_caps.onnxruntime_release_advisories(status)
         ids = {item["id"]: item for item in advisories}
-        self.assertNotIn("ORT-PARSER-OOB-1.25.0", ids)
+        self.assertNotIn("ORT-OOB-OVERFLOW-1.26.0", ids)
         lifecycle = ids["ORT-DIRECTML-SUSTAINED-ENGINEERING"]
         self.assertTrue(lifecycle["allowed"])
         self.assertFalse(lifecycle["blocking"])

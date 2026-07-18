@@ -41,12 +41,14 @@ RAPIDOCR_ENGINE_PACKAGES = (
 ONNXRUNTIME_PROVIDER_STATUS_SCHEMA = "vsr.onnxruntime_providers.v1"
 ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.25.0"
 ONNXRUNTIME_GPU_STABLE_CUDA12_MIN = "1.19.0"
-# Security floor: ONNX Runtime < 1.25.0 predates parser integer-truncation
-# heap out-of-bounds hardening. VSR runs untrusted OCR/inpaint ONNX models
-# through this runtime, so an older build is a blocking release advisory.
-ONNXRUNTIME_SECURITY_MIN = "1.25.0"
+# Security floor: ONNX Runtime < 1.26.0 predates OOB/overflow hardening
+# in 1.26.0 (unrestricted setattr allowlist, MaxPoolGrad indices bounds,
+# sparse tensor conversion checks) and parser integer-truncation fixes
+# from 1.25.0. VSR runs untrusted OCR/inpaint ONNX models through this
+# runtime, so an older build is a blocking release advisory.
+ONNXRUNTIME_SECURITY_MIN = "1.26.0"
 ONNXRUNTIME_SECURITY_SOURCE = (
-    "https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0"
+    "https://github.com/microsoft/onnxruntime/releases/tag/v1.26.0"
 )
 ONNXRUNTIME_DIRECTML_VERSION = "1.24.4"
 ONNXRUNTIME_DIRECTML_MAX_EXCLUSIVE = "1.24.5"
@@ -672,7 +674,7 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
             version = info.get("version") if isinstance(info, Mapping) else None
             if version and not _version_gte(str(version), ONNXRUNTIME_SECURITY_MIN):
                 advisories.append({
-                    "id": "ORT-PARSER-OOB-1.25.0",
+                    "id": "ORT-OOB-OVERFLOW-1.26.0",
                     "package": package,
                     "installedVersion": str(version),
                     "affected": f"<{ONNXRUNTIME_SECURITY_MIN}",
@@ -683,7 +685,7 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
                     "allowReason": "",
                     "mitigation": (
                         f"Upgrade {package} to >={ONNXRUNTIME_SECURITY_MIN}; "
-                        "older builds predate parser heap-OOB hardening and VSR "
+                        "older builds predate OOB/overflow hardening and VSR "
                         "runs untrusted ONNX models through this runtime."
                     ),
                     "blocking": True,
@@ -727,8 +729,8 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
     ("paddleocr", "3.0.0", "4.0.0"),
     ("easyocr", "1.7.0", ""),
-    ("onnxruntime", "1.25.0", ""),
-    ("onnxruntime-gpu", "1.25.0", ""),
+    ("onnxruntime", "1.26.0", ""),
+    ("onnxruntime-gpu", "1.26.0", ""),
     (
         "onnxruntime-directml",
         ONNXRUNTIME_DIRECTML_VERSION,

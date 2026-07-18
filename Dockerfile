@@ -22,7 +22,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
         "numpy>=1.26" \
         "opencv-python-headless>=5.0.0.93" \
         "Pillow>=12.3.0" \
-        "onnxruntime>=1.25.0"
+        "onnxruntime>=1.26.0"
 
 COPY . .
 

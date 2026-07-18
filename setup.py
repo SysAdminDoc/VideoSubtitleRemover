@@ -582,7 +582,7 @@ def install_dependencies(gpu_info=None):
             print("  Stable PyPI onnxruntime-gpu is the CUDA 12.x path; CUDA 13 uses ONNX Runtime nightly/custom wheels.")
             try:
                 _run_pip_install(
-                    [pip, 'install', 'onnxruntime-gpu>=1.25.0', *profile_args],
+                    [pip, 'install', 'onnxruntime-gpu>=1.26.0', *profile_args],
                     "installing ONNX Runtime CUDA",
                 )
                 print(f"  [OK] ONNX Runtime CUDA provider installed")
@@ -592,7 +592,7 @@ def install_dependencies(gpu_info=None):
         else:
             print("  Installing ONNX Runtime CPU provider...")
             _run_pip_install(
-                [pip, 'install', 'onnxruntime>=1.25.0', *profile_args],
+                [pip, 'install', 'onnxruntime>=1.26.0', *profile_args],
                 "installing ONNX Runtime CPU",
             )
             print("  [OK] ONNX Runtime CPU provider installed")
