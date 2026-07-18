@@ -220,11 +220,11 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
                 return None
 
         with mock.patch(
-            "backend.processor._open_capture",
+            "backend._quality_mixin._open_capture",
             side_effect=[FakeCapture(frame_in), FakeCapture(frame_out)],
         ):
             with mock.patch(
-                "backend.processor.compute_vmaf",
+                "backend._quality_mixin.compute_vmaf",
                 side_effect=[95.0, 93.0],
             ):
                 metrics = r._compute_quality_report(
@@ -717,11 +717,12 @@ class SeamQualityTests(unittest.TestCase):
         frame = self._smooth_bg()
         mask = self._mask()
 
+        import backend._quality_mixin as _qm
         with unittest.mock.patch.object(
-            processor, "mask_boundary_seam_score",
+            _qm, "mask_boundary_seam_score",
             side_effect=RuntimeError("bad mask"),
         ):
-            with self.assertLogs("backend.processor", level="WARNING") as logs:
+            with self.assertLogs("backend._quality_mixin", level="WARNING") as logs:
                 remover._accumulate_seam_scores([frame], [frame], [mask])
                 remover._accumulate_seam_scores([frame], [frame], [mask])
 
