@@ -4,6 +4,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.27.0] - 2026-07-18
+
+### Changed
+
+- **processor.py split into focused mixin modules.** SubtitleRemover methods
+  extracted into five mixin files: `_encode_mixin.py` (encode/mux/audio, ~690
+  lines), `_quality_mixin.py` (quality report/sheet/seam, ~345 lines),
+  `_finalize_mixin.py` (finalize/output-contract/post-restore, ~613 lines),
+  `_srt_mixin.py` (SRT export/translation, ~233 lines), and
+  `_clean_ref_mixin.py` (clean references/regions, ~256 lines). processor.py
+  drops from 4,977 to 2,848 lines. All 886 tests pass unchanged through the
+  mixin inheritance. The remaining ~850-line frame loop requires GPU-equipped
+  verification for safe extraction.
+
 ## [3.26.0] - 2026-07-18
 
 ### Fixed

@@ -44,7 +44,7 @@
 !endif
 
 !define VERSIONMAJOR 3
-!define VERSIONMINOR 26
+!define VERSIONMINOR 27
 !define VERSIONPATCH 0
 
 Name "${APPNAME}"
