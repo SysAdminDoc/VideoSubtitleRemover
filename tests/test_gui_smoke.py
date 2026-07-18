@@ -66,6 +66,15 @@ class GuiSmokeTests(unittest.TestCase):
         cls._g.SETTINGS_FILE = cls._orig_settings
         cls._gui_config.QUEUE_STATE_FILE = cls._orig_queue_state
         cls._shared_root.destroy()
+        # Clear the stale default-root pointer left behind by destroying the
+        # shared root, so a later test file that creates its own Tk root does
+        # not inherit a reference to the finalized interpreter (a known cause
+        # of intermittent "Tcl wasn't installed properly" failures under a
+        # full-suite run).
+        try:
+            tk._default_root = None
+        except Exception:
+            pass
         cls._tmpdir.cleanup()
 
     def _make_app(self, *, withdraw: bool = True):
@@ -1294,7 +1303,7 @@ class GuiSmokeTests(unittest.TestCase):
             app._set_soft_subtitle_action(item.id, "strip")
 
             self.assertEqual(item.soft_subtitle_action, "strip")
-            self.assertIn("Fast strip", item.message)
+            self.assertIn("Remove embedded subtitles", item.message)
 
         finally:
             self._destroy_app(app)
@@ -1404,7 +1413,7 @@ class GuiSmokeTests(unittest.TestCase):
 
         self.assertEqual(item.status, self._g.ProcessingStatus.COMPLETE)
         self.assertEqual(item.progress, 1.0)
-        self.assertIn("stripped", item.message)
+        self.assertIn("removed", item.message)
         remux.assert_called_once()
 
 
