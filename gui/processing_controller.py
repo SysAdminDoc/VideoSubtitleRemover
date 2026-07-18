@@ -398,9 +398,9 @@ class ProcessingControllerMixin:
         item.status = ProcessingStatus.MERGING
         item.progress = 0.2
         item.message = (
-            "Stripping embedded subtitle tracks..."
+            "Removing embedded subtitle tracks..."
             if action == SoftSubtitleAction.STRIP else
-            "Remuxing embedded subtitle tracks..."
+            "Copying embedded subtitle tracks..."
         )
         self._update_item_display(item)
 
@@ -421,9 +421,9 @@ class ProcessingControllerMixin:
         elapsed = (item.completed_at - item.started_at).total_seconds()
         item.stage_timings = {"mux": elapsed}
         item.message = (
-            "Embedded subtitles stripped"
+            "Embedded subtitles removed"
             if action == SoftSubtitleAction.STRIP else
-            "Embedded subtitles remuxed"
+            "Embedded subtitles copied"
         )
         self._batch_times.append(elapsed)
         logger.info(

@@ -13,6 +13,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Plainer copy for advanced settings.** The STTN motion sliders (Neighbor
+  stride, Reference length, Max load frames) gained plain-language hints
+  explaining their tradeoff, the "Temporal coherence" label became "Motion
+  smoothing", and the embedded-subtitle status/labels now say "copy"/"remove"
+  instead of "remux"/"strip".
 - **Disabled buttons now read as disabled.** They previously reused the same
   fill as enabled secondary/default buttons, so the only cue was dimmed text. A
   dedicated recessed `BG_DISABLED` token (in both the default and AMOLED

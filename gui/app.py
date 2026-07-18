@@ -2327,14 +2327,20 @@ class VideoSubtitleRemoverApp(
         # STTN Motion card
         sttn_frame = self._create_card(self.adv_panel)
         sttn_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
-        self._card_header(sttn_frame, "STTN motion", "Temporal coherence")
+        self._card_header(sttn_frame, "STTN motion", "Motion smoothing")
 
         self._create_slider(sttn_frame, "Neighbor stride", 5, 30,
-                            self.config.sttn_neighbor_stride, "sttn_neighbor_stride")
+                            self.config.sttn_neighbor_stride, "sttn_neighbor_stride",
+                            hint="How far apart nearby frames are sampled for motion "
+                                 "context. Lower is more thorough but slower.")
         self._create_slider(sttn_frame, "Reference length", 5, 30,
-                            self.config.sttn_reference_length, "sttn_reference_length")
+                            self.config.sttn_reference_length, "sttn_reference_length",
+                            hint="How many reference frames are kept in view. More "
+                                 "references steady long, slow-moving shots.")
         self._create_slider(sttn_frame, "Max load frames", 10, 100,
-                            self.config.sttn_max_load_num, "sttn_max_load_num")
+                            self.config.sttn_max_load_num, "sttn_max_load_num",
+                            hint="Most frames held in memory per pass. Lower this if "
+                                 "you run out of GPU or system memory.")
         tk.Frame(sttn_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
 
@@ -4395,8 +4401,8 @@ class VideoSubtitleRemoverApp(
 
     def _set_soft_subtitle_action(self, item_id: str, action: str) -> None:
         labels = {
-            "strip": "Fast strip embedded subtitles",
-            "keep_all": "Fast remux and keep embedded subtitles",
+            "strip": "Remove embedded subtitles (fast)",
+            "keep_all": "Keep embedded subtitles (fast, no re-encode)",
             "burned_in": "Burned-in cleanup",
         }
         if action not in labels:
