@@ -135,7 +135,7 @@ class ContainerPayloadPlanTests(unittest.TestCase):
         remover._output_contract.color_preserved.return_value = False
         remover.last_container_payload = {"status": "preserved", "issues": []}
 
-        with self.assertLogs("backend.processor", level="WARNING"):
+        with self.assertLogs("backend._finalize_mixin", level="WARNING"):
             with self.assertRaisesRegex(
                 processor.OutputIntegrityError, "color transfer"
             ):
