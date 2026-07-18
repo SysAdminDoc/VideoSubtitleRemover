@@ -39,6 +39,8 @@ from typing import List
 import cv2
 import numpy as np
 
+from backend.inpainters._common import apply_finishing
+
 logger = logging.getLogger(__name__)
 
 
@@ -319,10 +321,6 @@ def _apply_feather_blend(original, filled, masks, config):
     """Delegate to the shared post-inpaint finishing step so ONNX backends
     use identical edge-ring + feather boundary handling as every other
     inpainter family."""
-    try:
-        from backend.inpainters import apply_finishing
-    except Exception:
-        return list(filled)
     return apply_finishing(original, filled, masks, config)
 
 
