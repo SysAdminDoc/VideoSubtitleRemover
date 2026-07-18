@@ -1651,7 +1651,7 @@ class DiskSpaceAndLogRotationTests(unittest.TestCase):
             purposes=("temporary processing files",),
         )]
         with unittest.mock.patch(
-            "backend.processor.assess_storage_volumes",
+            "backend._encode_mixin.assess_storage_volumes",
             return_value=statuses,
         ) as assess:
             remover._check_encode_disk_space(

@@ -18,7 +18,10 @@ def _assert_exc_info(testcase: unittest.TestCase, text: str, phrase: str):
 
 class ProcessingExceptionLoggingTests(unittest.TestCase):
     def test_processor_processing_fallbacks_keep_tracebacks(self):
-        text = _read("backend/processor.py")
+        text = (
+            _read("backend/processor.py")
+            + _read("backend/_encode_mixin.py")
+        )
         for phrase in (
             "RapidOCR SRT extraction failed",
             "PaddleOCR SRT extraction failed",
