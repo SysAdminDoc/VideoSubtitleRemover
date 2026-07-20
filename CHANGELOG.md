@@ -4,6 +4,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **gui/app.py builder methods split into focused layout mixins.** The UI
+  builder, responsive-layout, queue-view, header/card helpers, and first-run
+  onboarding methods were extracted into five mixin modules:
+  `gui/layout_build.py` (all `_build_*` builders, ~2,097 lines),
+  `gui/layout_responsive.py` (responsive layout + content-scroll handlers,
+  ~339 lines), `gui/queue_view.py` (queue list rendering/sort/filter/per-file
+  overrides, ~414 lines), `gui/layout_helpers.py` (header/card/label helpers,
+  ~164 lines), and `gui/onboarding.py` (onboarding modal, ~221 lines).
+  `gui/app.py` drops from 5,852 to 2,807 lines. No behavioral changes; the
+  mixins compose onto `VideoSubtitleRemoverApp` exactly like the existing
+  controller mixins, and the full GUI test suite passes unchanged.
+
 ## [3.27.0] - 2026-07-18
 
 ### Changed
