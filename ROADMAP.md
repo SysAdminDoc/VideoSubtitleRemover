@@ -7,13 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P3 — Under Consideration
 
-- [ ] P3 — Import SubtitleEdit OCR fix dictionaries
-  Why: SubtitleEdit ships per-language `{lang}_OCRFixReplaceList.xml` dictionaries with hundreds of correction entries. VSR already has `backend/ocr_fix.py` with JSON-based replace lists. Importing SE's XML dictionaries would significantly expand SRT export accuracy across languages.
-  Evidence: Competitor research — subtitleedit.github.io, SE repo ocrfixreplacelistdata.
-  Touches: `backend/ocr_fix.py` (XML import function), `scripts/` (conversion script)
-  Acceptance: A script converts SubtitleEdit XML to VSR JSON format. At least 5 languages imported. OCR fix accuracy improves measurably on SRT exports.
-  Complexity: M
-
 - [ ] P3 — Community translation enablement guide
   Why: The gettext i18n infrastructure is complete (POT template, pseudo-locale, check/update tooling, coverage reporting) but no community translations exist. A contributor guide would enable crowdsourced translations.
   Evidence: Only `locale/qps-Ploc/` exists. The tooling (`scripts/i18n_catalogs.py`) is ready.

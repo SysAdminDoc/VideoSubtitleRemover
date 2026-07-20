@@ -4,6 +4,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Bundled OCR-fix lists + Subtitle Edit import tooling.** The SRT OCR-fix
+  engine now layers clean-room, conservative per-language correction lists from
+  `backend/ocr_fix_data/{lang}.json` (English, Spanish, French, German,
+  Portuguese) between the built-in defaults and the user's own file, so exported
+  SRT text automatically repairs common hardsub OCR artifacts (e.g. the
+  "h read as b" class: `tbe` -> `the`, `otber` -> `other`). Every bundled source
+  key is a non-word in its language, so a whole-word replacement can only repair
+  a garbled token, never corrupt correct text. `scripts/import_se_ocrfix.py`
+  converts Subtitle Edit `{lang}_OCRFixReplaceList.xml` WholeWords dictionaries
+  into the same VSR JSON format for users who want to extend the lists locally
+  (Subtitle Edit's GPL data is not bundled).
+
 ### Changed
 
 - **gui/app.py builder methods split into focused layout mixins.** The UI

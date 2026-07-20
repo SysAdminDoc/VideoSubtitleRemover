@@ -45,6 +45,27 @@ def ocr_fix_dir(env: Optional[Mapping[str, str]] = None) -> Path:
     return _appdata_root(env) / "ocr_fix"
 
 
+# Clean-room, conservative replace lists shipped with VSR. Populated by
+# scripts/import_se_ocrfix.py or hand-authored; layered under the user's own
+# files so a user override always wins.
+_BUNDLED_DIR = Path(__file__).resolve().parent / "ocr_fix_data"
+
+
+def _read_json_map(path: Path) -> Dict[str, str]:
+    """Return a flat {from: to} string map from ``path`` (empty on any error)."""
+    result: Dict[str, str] = {}
+    try:
+        if path.is_file():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                for src, dst in raw.items():
+                    result[str(src)] = str(dst)
+    except (OSError, ValueError):
+        # A malformed file must never break SRT export.
+        pass
+    return result
+
+
 def _normalize_lang(lang: Optional[str]) -> str:
     lang = (lang or "en").strip().lower()
     # Map detector locale variants onto a base list key.
@@ -58,21 +79,21 @@ def load_ocr_fix_replacements(
     *,
     env: Optional[Mapping[str, str]] = None,
     base_dir: Optional[Path] = None,
+    bundled_dir: Optional[Path] = None,
 ) -> Dict[str, str]:
-    """Return the merged replace map for ``lang`` (built-in then user file)."""
+    """Return the merged replace map for ``lang``.
+
+    Layered lowest-to-highest precedence: the small built-in default dict, then
+    the clean-room bundled list at ``backend/ocr_fix_data/{lang}.json``, then the
+    user file at ``%APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json``. Later
+    layers override earlier ones, so a user edit always wins.
+    """
     key = _normalize_lang(lang)
     result: Dict[str, str] = dict(_BUILTIN_REPLACEMENTS.get(key, {}))
+    bdir = bundled_dir if bundled_dir is not None else _BUNDLED_DIR
+    result.update(_read_json_map(bdir / f"{key}.json"))
     directory = base_dir if base_dir is not None else ocr_fix_dir(env)
-    path = directory / f"{key}.json"
-    try:
-        if path.is_file():
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict):
-                for src, dst in raw.items():
-                    result[str(src)] = str(dst)
-    except (OSError, ValueError):
-        # A malformed user file must never break SRT export.
-        pass
+    result.update(_read_json_map(directory / f"{key}.json"))
     return result
 
 
