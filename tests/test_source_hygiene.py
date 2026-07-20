@@ -72,16 +72,18 @@ class SourceHygieneTests(unittest.TestCase):
         self.assertEqual(nested, [])
 
     def test_settings_builder_delegates_to_named_groups(self):
+        # The UI builder methods were extracted from app.py into the
+        # LayoutBuildMixin module; they compose onto VideoSubtitleRemoverApp.
         tree = ast.parse(
-            (ROOT / "gui" / "app.py").read_text(encoding="utf-8")
+            (ROOT / "gui" / "layout_build.py").read_text(encoding="utf-8")
         )
-        app = next(
+        mixin = next(
             node for node in tree.body
             if isinstance(node, ast.ClassDef)
-            and node.name == "VideoSubtitleRemoverApp"
+            and node.name == "LayoutBuildMixin"
         )
         methods = {
-            node.name: node for node in app.body
+            node.name: node for node in mixin.body
             if isinstance(node, ast.FunctionDef)
         }
         for name in (
