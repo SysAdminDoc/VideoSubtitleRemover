@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.28.0] - 2026-07-19
+
 ### Added
 
 - **Community translation guide.** README now documents the full gettext
