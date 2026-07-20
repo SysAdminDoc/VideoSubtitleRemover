@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Community translation guide.** README now documents the full gettext
+  translation workflow -- how to create a new `locale/<tag>/LC_MESSAGES/vsr.po`
+  catalog, run the `update` / `check` / `coverage` commands in
+  `scripts/i18n_catalogs.py`, preserve placeholders, and submit a translation
+  contribution -- so crowdsourced locales beyond the built-in pseudo-locale can
+  be started.
 - **Bundled OCR-fix lists + Subtitle Edit import tooling.** The SRT OCR-fix
   engine now layers clean-room, conservative per-language correction lists from
   `backend/ocr_fix_data/{lang}.json` (English, Spanish, French, German,

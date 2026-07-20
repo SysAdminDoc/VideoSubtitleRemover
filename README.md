@@ -1115,6 +1115,46 @@ Planning entry points:
 [RESEARCH.md](RESEARCH.md) for current research synthesis. Retired audits
 and completed checklists live under [docs/archive/](docs/archive/).
 
+## Translating VSR
+
+The GUI is fully internationalized with gettext. Message strings are extracted
+into `locale/vsr.pot`, translated per language in
+`locale/<BCP-47 tag>/LC_MESSAGES/vsr.po`, compiled to `vsr.mo`, and loaded at
+runtime following the Windows interface locale (with script/territory
+fallback). A pseudo-locale (`qps-Ploc`) is generated automatically to flush out
+untranslated or layout-breaking strings; you do not edit it by hand.
+
+Community translations are welcome. All catalog work is driven by one script,
+`scripts/i18n_catalogs.py`, with no external gettext tools required:
+
+| Command | What it does |
+| --- | --- |
+| `python scripts/i18n_catalogs.py update` | Re-extracts strings, refreshes `vsr.pot`, merges new keys into every existing `.po` (keeping your translations), regenerates the pseudo-locale, compiles all `.mo`, and prints coverage. |
+| `python scripts/i18n_catalogs.py check` | Verifies the POT and every catalog are in sync, placeholders/plural forms are valid, and the compiled `.mo` files are current. This is the CI-equivalent gate. |
+| `python scripts/i18n_catalogs.py coverage` | Prints the translated / total string count per locale. |
+
+To add a new language:
+
+1. Pick the BCP-47 tag (e.g. `es`, `pt-BR`, `zh-Hans`) and create the catalog
+   file `locale/<tag>/LC_MESSAGES/vsr.po` by copying `locale/vsr.pot` to that
+   path. Fill in the `Language:` header (e.g. `Language: es\n`) and the plural
+   form for your language.
+2. Run `python scripts/i18n_catalogs.py update`. This merges the current keys
+   into your new catalog and compiles it, so you always translate against the
+   latest strings.
+3. Translate each `msgstr` in your `.po`. Keep every `{placeholder}` and
+   `%s`-style token from the `msgid` exactly as written -- the `check` gate
+   rejects catalogs that drop or add placeholders, and preserves ASCII-glyph
+   accelerators as-is.
+4. Run `python scripts/i18n_catalogs.py check` until it passes, then
+   `coverage` to confirm your locale is at (or near) 100%.
+5. Commit the `.po` and generated `.mo`, and open a pull request. Only the
+   files under `locale/<your tag>/` should change.
+
+Set the interface language at runtime in the GUI (Settings) or override with
+`VSR_UI_LOCALE=<tag>`; `VSR_UI_LOCALE=qps-Ploc` forces the pseudo-locale for
+testing.
+
 ## Credits
 
 - Original project: [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover)
