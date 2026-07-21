@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.29.0] - 2026-07-20
+
 ### Added
 
 - **Module-boundary unit tests for `batch_report` and `adapter_manifest`.** Both
