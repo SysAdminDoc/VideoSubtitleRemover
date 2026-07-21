@@ -4,6 +4,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Module-boundary unit tests for `batch_report` and `adapter_manifest`.** Both
+  are deterministic, GPU-free modules that were only exercised indirectly through
+  the release-workflow / hardening suites. `tests/test_batch_report.py` locks the
+  batch-summary schema, status counts, path-redaction default, planned-status
+  decision table, retriable-error classification, and the review-gate promotion;
+  `tests/test_adapter_manifest.py` locks the license/hash trust gate (verified vs
+  mismatch vs hashless-legacy vs remote-code-required, the unsafe override, and
+  unknown-adapter handling).
+
 ### Fixed
 
 - **NLE (`--nle-input`) frame rate is now probed, not silently assumed 24 fps.**
