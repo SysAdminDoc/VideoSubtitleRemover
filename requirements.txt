@@ -49,17 +49,18 @@ idna>=3.15
 # For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada):
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
-# pip install onnxruntime-gpu>=1.26.0
+# pip install "onnxruntime-gpu>=1.26.0,<1.27.0"
 
 # For NVIDIA RTX 50-series (Blackwell, sm_120 -- e.g. RTX 5070/5080/5090):
 # Blackwell needs CUDA 12.8 wheels. The cu118/cu121 builds have no Blackwell
 # kernels and do not carry the current torch security floor.
 # pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
-# pip install onnxruntime-gpu>=1.26.0
+# pip install "onnxruntime-gpu>=1.26.0,<1.27.0"
 # (Run_VSR_Pro.bat / setup.py use cu128 for NVIDIA PyTorch wheels.)
-# CUDA 13 ONNX Runtime wheels are currently a nightly/custom-channel path,
-# not the stable PyPI default.
+# ONNX Runtime 1.27+ dropped CUDA 12 (CUDA 13 only), so the pin caps below
+# 1.27.0 to keep the CUDA 12 wheel. On a CUDA 13 host install the cuda13
+# wheel manually per onnxruntime.ai/docs/install.
 
 # For AMD/Intel (DirectML via ONNX Runtime):
 # pip install onnxruntime-directml==1.24.4

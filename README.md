@@ -289,12 +289,14 @@ GGUF model, then set `VSR_PADDLEOCR_VL=1`; use
 `http://127.0.0.1:8080/v1`. If the server or PaddleOCRVL entrypoint is not
 available, detection falls back to the normal cascade.
 
-On NVIDIA systems, setup installs `onnxruntime-gpu>=1.25.0` for the tested
-CUDA 12.x ONNX Runtime path; CUDA 13.x currently requires ONNX Runtime
-nightly/custom wheels rather than the stable PyPI default. ONNX Runtime
-`>=1.25.0` is required for the CPU and CUDA packages -- VSR runs untrusted
-OCR/inpaint ONNX models through the runtime, and the self-test and strict
-release validation flag older CPU/CUDA builds as a blocking security advisory.
+On NVIDIA systems, setup installs `onnxruntime-gpu>=1.26.0,<1.27.0` for the
+tested CUDA 12.x ONNX Runtime path. ONNX Runtime 1.27 dropped CUDA 12 (its
+default GPU wheel is now CUDA 13 only), so the pin caps below 1.27.0 to keep a
+working CUDA 12 provider on a fresh install; CUDA 13 hosts install the cuda13
+wheel manually per the ONNX Runtime install docs. ONNX Runtime `>=1.26.0` is
+required for the CPU and CUDA packages -- VSR runs untrusted OCR/inpaint ONNX
+models through the runtime, and the self-test and strict release validation
+flag older CPU/CUDA builds as a blocking security advisory.
 Backend status and
 release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
 channel, `onnxruntime-directml`, and the providers reported at runtime. On

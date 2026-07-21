@@ -32,6 +32,18 @@ PIP_INSTALL_TIMEOUT_SECONDS = 1800
 MINIMUM_PYTHON = (3, 11)
 DIRECTML_PACKAGE_VERSION = "1.24.4"
 DIRECTML_PACKAGE_SPEC = f"onnxruntime-directml=={DIRECTML_PACKAGE_VERSION}"
+# ONNX Runtime GPU wheels: 1.27.0 (2026-06-15) dropped CUDA 12 and switched the
+# default onnxruntime-gpu PyPI wheel to CUDA 13 only. Cap below 1.27.0 so a fresh
+# install on a CUDA 12 host (the common case) keeps a working CUDAExecutionProvider
+# instead of pulling a CUDA-13-only wheel that fails at inference. CUDA 13 users
+# install the cuda13 wheel manually (see the on-screen note in install_dependencies).
+# Ref: github.com/microsoft/onnxruntime/releases/tag/v1.27.0
+ONNXRUNTIME_GPU_MIN = "1.26.0"
+ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.27.0"
+ONNXRUNTIME_GPU_SPEC = (
+    f"onnxruntime-gpu>={ONNXRUNTIME_GPU_MIN},<{ONNXRUNTIME_GPU_MAX_EXCLUSIVE}"
+)
+ONNXRUNTIME_CPU_SPEC = f"onnxruntime>={ONNXRUNTIME_GPU_MIN}"
 SETUP_PROGRESS_ENV = "VSR_SETUP_PROGRESS_FILE"
 
 
@@ -579,10 +591,12 @@ def install_dependencies(gpu_info=None):
                     print("  RapidOCR will use ONNX Runtime unless OpenVINO is installed manually.")
         elif gpu_info and gpu_info.get("nvidia") and not gpu_info.get("cuda_disabled_by_python"):
             print("  Installing ONNX Runtime CUDA provider...")
-            print("  Stable PyPI onnxruntime-gpu is the CUDA 12.x path; CUDA 13 uses ONNX Runtime nightly/custom wheels.")
+            print(f"  Installing {ONNXRUNTIME_GPU_SPEC} (CUDA 12.x line).")
+            print("  ONNX Runtime 1.27+ is CUDA 13 only; on a CUDA 13 host install")
+            print("  the cuda13 wheel manually per onnxruntime.ai/docs/install.")
             try:
                 _run_pip_install(
-                    [pip, 'install', 'onnxruntime-gpu>=1.26.0', *profile_args],
+                    [pip, 'install', ONNXRUNTIME_GPU_SPEC, *profile_args],
                     "installing ONNX Runtime CUDA",
                 )
                 print(f"  [OK] ONNX Runtime CUDA provider installed")
@@ -592,7 +606,7 @@ def install_dependencies(gpu_info=None):
         else:
             print("  Installing ONNX Runtime CPU provider...")
             _run_pip_install(
-                [pip, 'install', 'onnxruntime>=1.26.0', *profile_args],
+                [pip, 'install', ONNXRUNTIME_CPU_SPEC, *profile_args],
                 "installing ONNX Runtime CPU",
             )
             print("  [OK] ONNX Runtime CPU provider installed")

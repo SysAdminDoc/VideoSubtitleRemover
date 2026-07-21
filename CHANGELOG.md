@@ -4,6 +4,25 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **ONNX Runtime CUDA 12 install no longer breaks on 1.27.** ONNX Runtime 1.27.0
+  (2026-06-15) dropped CUDA 12 -- its default `onnxruntime-gpu` PyPI wheel is now
+  CUDA 13 only. The NVIDIA install path pinned `onnxruntime-gpu>=1.26.0` with no
+  ceiling, so a fresh install on a CUDA 12 host silently pulled the CUDA-13-only
+  wheel and failed at inference. `setup.py` now installs
+  `onnxruntime-gpu>=1.26.0,<1.27.0` for the CUDA 12 line (with an on-screen note
+  for CUDA 13 hosts to install the cuda13 wheel manually), and the requirements
+  hints and README were corrected to match.
+
+### Changed
+
+- **ORT-GPU recommendation guidance now reports the tested 1.26.0 floor and the
+  CUDA-12 ceiling.** `ONNXRUNTIME_GPU_RECOMMENDED_MIN` moved from 1.25.0 to
+  1.26.0 (matching the shipped security floor), and the legacy-package /
+  preload-DLL warnings, `recommendedPackage`, and advisory `fixedIn` now cite
+  `onnxruntime-gpu>=1.26.0,<1.27.0` instead of the stale unbounded/1.25.0 text.
+
 ## [3.28.0] - 2026-07-19
 
 ### Added

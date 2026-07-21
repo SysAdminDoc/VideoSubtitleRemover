@@ -39,7 +39,15 @@ RAPIDOCR_ENGINE_PACKAGES = (
 )
 
 ONNXRUNTIME_PROVIDER_STATUS_SCHEMA = "vsr.onnxruntime_providers.v1"
-ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.25.0"
+ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.26.0"
+# ONNX Runtime 1.27.0 dropped CUDA 12 (its default GPU wheel is now CUDA 13
+# only), so the CUDA 12 recommendation caps below 1.27.0. CUDA 13 hosts install
+# the cuda13 wheel manually. Ref: github.com/microsoft/onnxruntime/releases.
+ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.27.0"
+ONNXRUNTIME_GPU_RECOMMENDED_SPEC = (
+    f"onnxruntime-gpu>={ONNXRUNTIME_GPU_RECOMMENDED_MIN},"
+    f"<{ONNXRUNTIME_GPU_MAX_EXCLUSIVE}"
+)
 ONNXRUNTIME_GPU_STABLE_CUDA12_MIN = "1.19.0"
 # Security floor: ONNX Runtime < 1.26.0 predates OOB/overflow hardening
 # in 1.26.0 (unrestricted setattr allowlist, MaxPoolGrad indices bounds,
@@ -500,7 +508,7 @@ def collect_onnxruntime_provider_status(
             "severity": "medium",
             "message": (
                 "onnxruntime-gpu is older than the CUDA 12 PyPI package line; "
-                f"install onnxruntime-gpu>={ONNXRUNTIME_GPU_RECOMMENDED_MIN} "
+                f"install {ONNXRUNTIME_GPU_RECOMMENDED_SPEC} "
                 "for the tested NVIDIA ONNX path."
             ),
         })
@@ -519,7 +527,7 @@ def collect_onnxruntime_provider_status(
             "severity": "low",
             "message": (
                 "onnxruntime.preload_dlls() is unavailable; upgrade "
-                f"onnxruntime-gpu to >= {ONNXRUNTIME_GPU_RECOMMENDED_MIN} "
+                f"onnxruntime-gpu to {ONNXRUNTIME_GPU_RECOMMENDED_SPEC} "
                 "for reliable Windows CUDA DLL loading."
             ),
         })
@@ -571,10 +579,8 @@ def collect_onnxruntime_provider_status(
             "providerAvailable": cuda_provider,
             "preloadDllsAvailable": bool(preload_dlls_available),
             "preloadStatus": cuda_preload_status,
-            "recommendedPackage": (
-                f"onnxruntime-gpu>={ONNXRUNTIME_GPU_RECOMMENDED_MIN}"
-            ),
-            "cuda13Status": "nightly-or-custom-channel",
+            "recommendedPackage": ONNXRUNTIME_GPU_RECOMMENDED_SPEC,
+            "cuda13Status": "cuda13-default-since-1.27-install-manually",
         },
         "directml": {
             "packageInstalled": bool(
@@ -615,7 +621,10 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
             "package": "onnxruntime-gpu",
             "installedVersion": str(cuda.get("packageVersion") or "not installed"),
             "affected": str(cuda.get("packageChannel") or "unknown"),
-            "fixedIn": f">={ONNXRUNTIME_GPU_RECOMMENDED_MIN}",
+            "fixedIn": (
+                f">={ONNXRUNTIME_GPU_RECOMMENDED_MIN},"
+                f"<{ONNXRUNTIME_GPU_MAX_EXCLUSIVE}"
+            ),
             "severity": str(warning.get("severity") or "medium").lower(),
             "source": "https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html",
             "allowed": True,
