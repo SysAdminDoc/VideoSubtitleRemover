@@ -397,6 +397,55 @@ def _probe_codec_for_log(path: str) -> Optional[str]:
     return None
 
 
+def probe_video_fps(path: str) -> Optional[float]:
+    """Return the source video frame rate, or ``None`` when it cannot be read.
+
+    Prefers ffprobe ``avg_frame_rate`` (falling back to ``r_frame_rate``),
+    which reports the true rate for 25/30/50/60 fps and VFR sources, then
+    falls back to OpenCV ``CAP_PROP_FPS``.  Callers that need a concrete rate
+    should treat ``None`` as "probe failed" and log before substituting a
+    default -- a silently wrong fps mis-maps every timecode->frame conversion.
+    """
+    if not Path(path).is_dir() and shutil.which("ffprobe") is not None:
+        try:
+            cmd = [
+                'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                '-show_entries', 'stream=avg_frame_rate,r_frame_rate',
+                '-of', 'json', path,
+            ]
+            result = run_process(cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode == 0 and result.stdout.strip():
+                streams = (json.loads(result.stdout).get("streams") or [])
+                stream = streams[0] if streams and isinstance(streams[0], dict) else {}
+                fps = _parse_ffmpeg_ratio(stream.get("avg_frame_rate"), 0.0)
+                if fps <= 0:
+                    fps = _parse_ffmpeg_ratio(stream.get("r_frame_rate"), 0.0)
+                if fps > 0:
+                    return fps
+        except (
+            FileNotFoundError,
+            subprocess.TimeoutExpired,
+            json.JSONDecodeError,
+            OSError,
+            ValueError,
+        ) as exc:
+            logger.debug("ffprobe fps probe failed for %s: %s", path, exc)
+
+    try:
+        import cv2 as _cv2  # local import keeps ffprobe-only callers cv2-free
+        cap = _cv2.VideoCapture(path)
+        try:
+            if cap.isOpened():
+                fps = float(cap.get(_cv2.CAP_PROP_FPS) or 0.0)
+                if fps > 0 and np.isfinite(fps):
+                    return fps
+        finally:
+            cap.release()
+    except Exception as exc:  # noqa: BLE001 - cv2 decode/backend variability
+        logger.debug("OpenCV fps probe failed for %s: %s", path, exc)
+    return None
+
+
 def _probe_audio_stream_count(path: str) -> int:
     """B-4: count audio streams via ffprobe; default to 1 on failure."""
     try:

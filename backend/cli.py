@@ -1873,15 +1873,18 @@ def _run_processing(
 
     if args.nle_input:
         from backend.nle_sidecar import parse_nle_input
-        cap_fps = 24.0
-        try:
-            import cv2 as _cv2
-            _c = _cv2.VideoCapture(args.input)
-            if _c.isOpened():
-                cap_fps = _c.get(_cv2.CAP_PROP_FPS) or 24.0
-                _c.release()
-        except Exception:
-            pass
+        from backend.io import probe_video_fps
+        probed_fps = probe_video_fps(args.input)
+        if probed_fps and probed_fps > 0:
+            cap_fps = float(probed_fps)
+        else:
+            cap_fps = 24.0
+            logger.warning(
+                "Could not probe source frame rate for %s; assuming %.3f fps "
+                "for NLE timecode->frame conversion. Non-24fps sources may "
+                "misalign -- install ffmpeg/ffprobe or check the file.",
+                args.input, cap_fps,
+            )
         segments = parse_nle_input(args.nle_input, cap_fps)
         if not segments:
             parser.error(f"No time segments found in: {args.nle_input}")

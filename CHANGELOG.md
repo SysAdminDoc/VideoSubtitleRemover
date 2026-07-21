@@ -6,6 +6,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **NLE (`--nle-input`) frame rate is now probed, not silently assumed 24 fps.**
+  Timecode->frame conversion for EDL/FCPXML segment inputs previously fell back
+  to 24 fps on any probe failure with no diagnostic, mis-aligning every SMPTE
+  timecode on 25/30/50/60 fps sources. A new `backend.io.probe_video_fps` helper
+  reads the true rate via ffprobe (`avg_frame_rate`, then `r_frame_rate`) with an
+  OpenCV fallback, and the CLI logs a warning before substituting 24 fps only
+  when every probe fails.
 - **ONNX Runtime CUDA 12 install no longer breaks on 1.27.** ONNX Runtime 1.27.0
   (2026-06-15) dropped CUDA 12 -- its default `onnxruntime-gpu` PyPI wheel is now
   CUDA 13 only. The NVIDIA install path pinned `onnxruntime-gpu>=1.26.0` with no
