@@ -380,16 +380,20 @@ def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run one VSR queue job in an isolated child process.")
     parser.add_argument(
-        "--request", required=True, metavar="PATH",
+        "--request", default="", metavar="PATH",
         help="JSON job request file written by the parent.")
     parser.add_argument(
         "--protocol-version", action="store_true",
         help="Print the supported protocol version and exit.")
     args = parser.parse_args(argv)
 
+    # A version probe must not need a job: the supervisor and packaging
+    # checks use it to confirm parent and child agree before any work.
     if args.protocol_version:
         print(JOB_PROTOCOL_VERSION)
         return 0
+    if not args.request:
+        parser.error("--request is required to run a job")
 
     writer = _EventWriter()
     try:

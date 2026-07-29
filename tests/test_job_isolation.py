@@ -139,14 +139,23 @@ class RequestTests(unittest.TestCase):
         self.assertIn("backend.job_worker", command)
         self.assertIn("request.json", command)
 
-    def test_the_worker_reports_its_protocol_version_on_request(self):
+    def test_the_worker_reports_its_protocol_version_without_a_job(self):
+        # The version probe is how a parent confirms agreement before it
+        # has any work to hand over, so it must not require a request.
         result = subprocess.run(
-            [sys.executable, "-m", "backend.job_worker",
-             "--request", "unused", "--protocol-version"],
+            [sys.executable, "-m", "backend.job_worker", "--protocol-version"],
             cwd=_ROOT, capture_output=True, text=True, timeout=120,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), str(JOB_PROTOCOL_VERSION))
+
+    def test_running_a_job_without_a_request_is_a_usage_error(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "backend.job_worker"],
+            cwd=_ROOT, capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--request", result.stderr)
 
 
 class SupervisorFailureTests(unittest.TestCase):
