@@ -37,6 +37,98 @@ def _walk(widget):
         yield from _walk(child)
 
 
+def _probe_dialog_fit(app, work_area, tk) -> list[str]:
+    """RM-148: every major dialog must fit the work area or scroll inside it.
+
+    The dialogs are built for real (onboarding modal, region editor, and
+    mask-correction editor), measured against a simulated work area, then torn
+    down. A dialog taller than the work area is only acceptable when it exposes
+    an internal scroll path and a keyboard-focusable scroll surface.
+    """
+    from gui.dialog_layout import fit_dialog_to_work_area
+
+    failures: list[str] = []
+    app.root._vsr_work_area_override = work_area
+    area_w, area_h = work_area
+
+    def _check(name, dialog):
+        try:
+            dialog.update_idletasks()
+            width = max(dialog.winfo_width(), 1)
+            height = max(dialog.winfo_height(), 1)
+            if width > area_w + 2 or height > area_h + 2:
+                failures.append(f"{name} exceeds the work area")
+            canvas = getattr(dialog, "_vsr_scroll_canvas", None)
+            if canvas is None:
+                failures.append(f"{name} has no internal scroll path")
+                return
+            if int(canvas.cget("takefocus")) != 1:
+                failures.append(f"{name} scroll surface is not focusable")
+            body = getattr(dialog, "_vsr_scroll_body", None)
+            if body is None or body.winfo_reqheight() <= 1:
+                failures.append(f"{name} scroll body has no content")
+                return
+            bbox = canvas.bbox("all") or (0, 0, 0, 0)
+            if bbox[3] - bbox[1] > canvas.winfo_height() + 1:
+                # Content is taller than the viewport, so the scrollbar must be
+                # mapped and the view must actually be able to move.
+                canvas.yview_moveto(1.0)
+                canvas.update_idletasks()
+                if canvas.yview()[0] <= 0.0:
+                    failures.append(f"{name} content cannot be scrolled")
+                canvas.yview_moveto(0.0)
+        except tk.TclError as exc:
+            failures.append(f"{name} probe failed: {exc}")
+
+    # Onboarding modal.
+    dialog = None
+    try:
+        app.config.onboarding_seen = False
+        app._show_onboarding()
+        dialog = next(
+            (child for child in app.root.winfo_children()
+             if isinstance(child, tk.Toplevel)), None)
+        if dialog is None:
+            failures.append("onboarding dialog was not created")
+        else:
+            fit_dialog_to_work_area(dialog, app.root)
+            _check("onboarding", dialog)
+    except Exception as exc:  # noqa: BLE001 - the probe reports, never raises
+        failures.append(f"onboarding probe raised: {exc}")
+    finally:
+        if dialog is not None:
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
+
+    # A synthetic dialog that is deliberately taller than the work area proves
+    # the shared helper clamps and scrolls rather than overflowing.
+    tall = None
+    try:
+        from gui.dialog_layout import scrollable_dialog_body
+
+        tall = tk.Toplevel(app.root)
+        tall.withdraw()
+        body = scrollable_dialog_body(tall)
+        for index in range(80):
+            tk.Label(body, text=f"row {index}" * 6).pack(anchor="w")
+        fit_dialog_to_work_area(tall, app.root)
+        _check("oversized-dialog", tall)
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"oversized dialog probe raised: {exc}")
+    finally:
+        if tall is not None:
+            tall.destroy()
+
+    try:
+        del app.root._vsr_work_area_override
+    except AttributeError:
+        pass
+    return failures
+
+
 def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
     os.environ["VSR_UI_BACKGROUND"] = "1"
     with tempfile.TemporaryDirectory(prefix="vsr_ui_scale_") as tmpdir:
@@ -181,6 +273,13 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
             ):
                 failures.append("dynamic Canvas button text was not reflowed")
             app.adv_toggle.set_text(original_toggle_text)
+
+            # RM-148: dialogs at both the minimum and a wide work area.
+            for area in ((980, 720), (2752, 1152)):
+                failures.extend(
+                    f"{item} @ {area[0]}x{area[1]}"
+                    for item in _probe_dialog_fit(app, area, tk)
+                )
 
             return {
                 "ok": not failures,

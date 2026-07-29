@@ -45,11 +45,15 @@ class TextScaleConfigTests(unittest.TestCase):
 
 
 class TextScaleLayoutMatrixTests(unittest.TestCase):
+    # RM-148: 125 and 175 are covered too -- the dialog work-area probe runs
+    # inside every case, so each step exercises dialog reflow as well.
     CASES = (
         (100, "default", "en"),
         (100, "high-contrast", "pseudo"),
+        (125, "default", "en"),
         (150, "default", "pseudo"),
         (150, "high-contrast", "rtl"),
+        (175, "high-contrast", "en"),
         (200, "default", "rtl"),
         (200, "high-contrast", "pseudo"),
     )

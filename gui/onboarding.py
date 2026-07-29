@@ -19,6 +19,10 @@ from gui.widgets import (
     ModernButton,
 )
 from backend.i18n import tr
+from gui.dialog_layout import (
+    fit_dialog_to_work_area,
+    scrollable_dialog_body,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,9 @@ class OnboardingMixin:
         dialog.withdraw()
         dialog.title(f"Welcome to {APP_NAME}")
         dialog.configure(bg=Theme.BG_OVERLAY)
-        dialog.resizable(False, False)
+        # RM-148: sized to the work area with an internal scroll path so high
+        # text scale cannot push the actions off screen.
+        dialog.resizable(True, True)
         dialog.transient(self.root)
         try:
             from backend.a11y import set_accessible_metadata
@@ -48,7 +54,8 @@ class OnboardingMixin:
         except Exception:
             pass
 
-        outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
+        scroll_body = scrollable_dialog_body(dialog, bg=Theme.BG_OVERLAY)
+        outer = tk.Frame(scroll_body, bg=Theme.BORDER, padx=1, pady=1)
         outer.pack()
         body = tk.Frame(outer, bg=Theme.BG_SECONDARY)
         body.pack()
@@ -205,14 +212,10 @@ class OnboardingMixin:
         dialog.bind("<Return>", lambda e: _close())
         dialog.protocol("WM_DELETE_WINDOW", _close)
 
-        dialog.update_idletasks()
         try:
-            px, py = self.root.winfo_rootx(), self.root.winfo_rooty()
-            pw, ph = self.root.winfo_width(), self.root.winfo_height()
-            dw, dh = dialog.winfo_reqwidth(), dialog.winfo_reqheight()
-            dialog.geometry(f"+{px + (pw - dw) // 2}+{py + (ph - dh) // 3}")
+            fit_dialog_to_work_area(dialog, self.root)
         except Exception:
-            pass
+            logger.warning("Onboarding dialog fit failed", exc_info=True)
         dialog.deiconify()
         dialog.grab_set()
         # The dialog is now on screen; mark it seen in memory. The close path

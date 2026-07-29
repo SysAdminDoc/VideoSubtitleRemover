@@ -39,6 +39,10 @@ from gui.config import (
     ProcessingConfig,
     _coerce_region_span_list,
 )
+from gui.dialog_layout import (
+    fit_dialog_to_work_area,
+    scrollable_dialog_body,
+)
 from gui.theme import Theme, f
 from gui.utils import SUPPORTED_EXTENSIONS, filepicker_pattern, is_video_file
 from gui.widgets import (
@@ -177,10 +181,13 @@ class RegionSelectorWindow:
             self.win = tk.Toplevel(self.root)
             self.win.title("Choose subtitle region")
             self.win.configure(bg=Theme.BG_OVERLAY)
-            self.win.resizable(False, False)
+            # RM-148: the editor grows with text scale, so it builds into a
+            # scrollable body clamped to the screen work area.
+            self.win.resizable(True, True)
+            body = scrollable_dialog_body(self.win, bg=Theme.BG_OVERLAY)
 
             self.canvas = tk.Canvas(
-                self.win,
+                body,
                 width=self.disp_w,
                 height=self.disp_h,
                 highlightthickness=2,
@@ -228,7 +235,7 @@ class RegionSelectorWindow:
             self.canvas.bind("<ButtonRelease-1>", self.on_release)
             self.canvas._vsr_region_drag_handlers = (self.on_press, self.on_drag, self.on_release)
 
-            shape_row = tk.Frame(self.win, bg=Theme.BG_OVERLAY)
+            shape_row = tk.Frame(body, bg=Theme.BG_OVERLAY)
             shape_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
             tk.Label(shape_row, text=tr("Shape"), font=f(Theme.F_META),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
@@ -256,7 +263,7 @@ class RegionSelectorWindow:
             self.ocr_feedback_var = tk.StringVar(
                 value=tr("Drag a rectangle to preview OCR boxes and confidence."))
             tk.Label(
-                self.win,
+                body,
                 textvariable=self.ocr_feedback_var,
                 font=f(Theme.F_META),
                 bg=Theme.BG_OVERLAY,
@@ -265,7 +272,7 @@ class RegionSelectorWindow:
 
             # Frame slider for videos.
             if self.is_video and self.frame_count > 1:
-                slider_row = tk.Frame(self.win, bg=Theme.BG_OVERLAY)
+                slider_row = tk.Frame(body, bg=Theme.BG_OVERLAY)
                 slider_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
                 tk.Label(slider_row, text=tr("Frame"),
                          font=f(Theme.F_BODY_SM),
@@ -277,7 +284,7 @@ class RegionSelectorWindow:
 
 
                 slider = tk.Scale(
-                    self.win, from_=0, to=self.frame_count - 1, orient="horizontal",
+                    body, from_=0, to=self.frame_count - 1, orient="horizontal",
                     command=self._on_slider, length=self.disp_w - 24,
                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY,
                     troughcolor=Theme.BG_TERTIARY,
@@ -303,7 +310,7 @@ class RegionSelectorWindow:
                     self.start_var.set(f"{start_value:g}" if start_value else "")
                     self.end_var.set(f"{end_value:g}" if end_value else "")
 
-                time_row = tk.Frame(self.win, bg=Theme.BG_OVERLAY)
+                time_row = tk.Frame(body, bg=Theme.BG_OVERLAY)
                 time_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
                 tk.Label(time_row, text=tr("Start sec"),
                          font=f(Theme.F_META),
@@ -381,7 +388,7 @@ class RegionSelectorWindow:
                         description=description)
 
             precise_frame = tk.Frame(
-                self.win,
+                body,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
                 highlightbackground=Theme.BORDER_SUBTLE,
@@ -469,7 +476,7 @@ class RegionSelectorWindow:
             )
 
             reference_frame = tk.Frame(
-                self.win,
+                body,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
                 highlightbackground=Theme.BORDER_SUBTLE,
@@ -637,7 +644,7 @@ class RegionSelectorWindow:
             self.win._vsr_run_live_ocr = self._run_live_ocr_probe
 
             # Action row: Add another, Clear all, Save.
-            actions = tk.Frame(self.win, bg=Theme.BG_OVERLAY)
+            actions = tk.Frame(body, bg=Theme.BG_OVERLAY)
             actions.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_MD))
 
 
@@ -667,7 +674,7 @@ class RegionSelectorWindow:
                          style="ghost", size="sm", width=92).pack(
                              side="right", padx=(0, Theme.S_SM))
 
-            hint_frame = tk.Frame(self.win, bg=Theme.BG_OVERLAY)
+            hint_frame = tk.Frame(body, bg=Theme.BG_OVERLAY)
             hint_frame.pack(fill="x", pady=(0, Theme.S_MD))
             tk.Label(hint_frame,
                      text=tr("Drag to add; choose a region for exact coordinates and timing."),
@@ -693,6 +700,8 @@ class RegionSelectorWindow:
             self.win.bind("<Destroy>", lambda e: self._release_cap() if e.widget is self.win else None)
             self.win.bind("<Escape>", lambda e: self.win.destroy())
             self.win.transient(self.root)
+            fit_dialog_to_work_area(
+                self.win, self.root, min_width=420, min_height=320)
             self.win.grab_set()
         except Exception as e:
             logger.error(f"Region selector error: {e}")

@@ -60,20 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-148 Reflow and scroll all major dialogs at 125-200% text scale
-  Why: fixed non-resizable onboarding and editor windows can obscure actions at
-    high text scale even though the main workbench is responsive.
-  Evidence: `gui/onboarding.py:30-34`; `gui/region_controller.py:177-182`;
-    `gui/mask_correction_controller.py:142-145`; 2026-07-29 probes measured
-    1106x969 onboarding and 1192x1144 region editor at 200%.
-  Touches: those three dialog modules; shared dialog/work-area helper;
-    `tools/ui_scaling_probe.py`; scaling/accessibility tests.
-  Acceptance: at 980x720 and 2752x1152 work areas, 100/125/150/175/200% scale,
-    default/high-contrast themes, and qps-Ploc/RTL, every control is reachable by
-    keyboard and scrolling, focus is never obscured, and no dialog exceeds the
-    work area without an internal scroll path.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 -- RM-149 Contract-test selectable OpenCV 5 DNN inference engines

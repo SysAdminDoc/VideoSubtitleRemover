@@ -47,6 +47,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Every major dialog reflows and scrolls at 125-200% text scale.** The main
+  workbench was already responsive, but the first-run onboarding modal, the
+  region editor, and the mask-correction editor were fixed-size and
+  non-resizable, so at high text scale their content grew past the screen and
+  pushed the primary actions out of reach (probes measured 1106x969 and
+  1192x1144 at 200%). A shared `gui.dialog_layout` helper gives each dialog a
+  scrollable body -- keyboard-focusable, with wheel, arrow, Page, Home, and End
+  bindings and scrollbars that appear only when needed -- and clamps the window
+  to the usable screen work area with a resizable frame and a work-area
+  maximum. The UI scaling probe now opens the dialogs at 980x720 and 2752x1152
+  work areas inside every scale/theme/locale case, and the matrix covers 125%
+  and 175% as well.
 - **Cache and matte replacements are transactionally recoverable.** Replacing a
   set of files with `os.replace` is atomic per file but not across the set: a
   model-cache import interrupted mid-commit could strand a weight in `.vsrbak`

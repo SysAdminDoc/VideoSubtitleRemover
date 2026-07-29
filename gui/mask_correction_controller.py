@@ -36,6 +36,10 @@ from backend.mask_corrections import (
 from backend.region_editing import RegionEditHistory
 from backend.safe_image import safe_imread
 from gui.config import ProcessingStatus, QueueItem, save_queue_state
+from gui.dialog_layout import (
+    fit_dialog_to_work_area,
+    scrollable_dialog_body,
+)
 from gui.theme import Theme, f
 from gui.utils import is_video_file
 from gui.widgets import ModernButton
@@ -142,10 +146,13 @@ class MaskCorrectionWindow:
             self.win = tk.Toplevel(self.root)
             self.win.title(tr("Correct subtitle mask"))
             self.win.configure(bg=Theme.BG_DARK)
-            self.win.resizable(False, False)
+            # RM-148: scrollable body + work-area clamp so high text scale cannot
+            # push the review actions off screen.
+            self.win.resizable(True, True)
             self.win.transient(self.root)
+            body = scrollable_dialog_body(self.win, bg=Theme.BG_DARK)
 
-            header = tk.Frame(self.win, bg=Theme.BG_SECONDARY)
+            header = tk.Frame(body, bg=Theme.BG_SECONDARY)
             header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_SM))
             self.span_labels = [
                 tr("{kind}: frames {start}-{end}").format(
@@ -177,7 +184,7 @@ class MaskCorrectionWindow:
                 mode_picker, role="combo box", label=tr("Correction paint mode"),
                 description=tr("Add missing pixels or subtract over-masked pixels."))
 
-            controls = tk.Frame(self.win, bg=Theme.BG_DARK)
+            controls = tk.Frame(body, bg=Theme.BG_DARK)
             controls.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
             self.propagate_var = tk.BooleanVar(value=False)
             propagate = tk.Checkbutton(
@@ -221,14 +228,14 @@ class MaskCorrectionWindow:
 
             self.status_var = tk.StringVar(value=tr("Loading review frame..."))
             status = tk.Label(
-                self.win, textvariable=self.status_var, font=f(Theme.F_META),
+                body, textvariable=self.status_var, font=f(Theme.F_META),
                 bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED, anchor="w")
             status.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_XS))
             set_accessible_metadata(
                 status, role="status", label=tr("Mask correction status"))
 
             self.canvas = tk.Canvas(
-                self.win, width=self.display_w, height=self.display_h, bg=Theme.BG_TERTIARY,
+                body, width=self.display_w, height=self.display_h, bg=Theme.BG_TERTIARY,
                 cursor="crosshair", takefocus=True, highlightthickness=2,
                 highlightbackground=Theme.BORDER_SUBTLE,
                 highlightcolor=Theme.BLUE_PRIMARY)
@@ -240,7 +247,7 @@ class MaskCorrectionWindow:
                 label=tr("Frame-local mask correction canvas"),
                 description=tr("Drag to paint with the selected mode."))
 
-            actions = tk.Frame(self.win, bg=Theme.BG_DARK)
+            actions = tk.Frame(body, bg=Theme.BG_DARK)
             actions.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_MD)
             self.buttons = {"undo": None, "redo": None}
 
@@ -306,6 +313,8 @@ class MaskCorrectionWindow:
             self.win._vsr_prepare_selective_rerun = self.prepare_rerun
             self.update_history_buttons()
             self.span_changed()
+            fit_dialog_to_work_area(
+                self.win, self.root, min_width=420, min_height=320)
             self.win.grab_set()
             return True
         except Exception as exc:
