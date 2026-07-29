@@ -1190,6 +1190,22 @@ def _run_reference_corpus(timeout_note: str = "local release") -> dict:
     return payload
 
 
+def _run_temporal_profile() -> dict:
+    """RM-150: mask-aware temporal regression profile (synthetic, offline)."""
+    try:
+        from backend.temporal_profile import run_temporal_regression_profile
+
+        return run_temporal_regression_profile()
+    except Exception as exc:
+        return {
+            "schema": "vsr.temporal_profile.v1",
+            "ran": False,
+            "passed": False,
+            "cases": [],
+            "failures": [f"temporal profile raised: {exc}"],
+        }
+
+
 def build_release_evidence(
     *,
     dist_dir: str | Path,
@@ -1337,6 +1353,17 @@ def build_release_evidence(
                     "error": "reference corpus skipped",
                 }
             ),
+            "temporalProfile": (
+                _run_temporal_profile()
+                if run_reference_corpus else
+                {
+                    "schema": "vsr.temporal_profile.v1",
+                    "ran": False,
+                    "passed": None,
+                    "cases": [],
+                    "failures": [],
+                }
+            ),
             "wingetcreate": _tool_version(["wingetcreate.exe", "--version"]),
             "ffmpegSubprocessSmoke": _ffmpeg_subprocess_smoke(),
             "dependencyDrift": collect_dependency_drift_report(
@@ -1399,6 +1426,11 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     smoke = evidence.get("smokeLaunch", {})
     if isinstance(smoke, Mapping) and smoke.get("ran") and not smoke.get("passed"):
         yield "Smoke launch failed"
+    temporal = evidence.get("releaseTools", {}).get("temporalProfile", {})
+    if (isinstance(temporal, Mapping)
+            and temporal.get("ran") and not temporal.get("passed")):
+        detail = "; ".join(str(item) for item in temporal.get("failures", []))
+        yield "Mask-aware temporal profile failed" + (f": {detail}" if detail else "")
     reference = evidence.get("releaseTools", {}).get("referenceCorpus", {})
     if (isinstance(reference, Mapping)
             and reference.get("ran") and not reference.get("passed")):

@@ -38,6 +38,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   steps and restates that artifacts are intentionally unsigned. This closes the
   case where a reusable release directory paired a newer installer with an
   older portable ZIP and a checksum file describing neither.
+- **Mask-aware temporal regression profile.** Per-frame PSNR/SSIM misses the
+  failures that dominate video inpainting: a fill that is sharp in every frame
+  but pinned to the frame instead of the scene, ghosting, bleeding past its
+  mask, or flickering. New `backend.temporal_profile` adds three
+  motion-compensated, mask-aware metrics -- masked warp residual, mask edge
+  leakage, and masked flicker -- plus deterministic synthetic fixtures that
+  vary camera motion, background motion, and mask motion independently so a
+  regression is attributable to one axis. Strict release verification runs the
+  profile and fails on a seeded frozen, flickering, or leaking fill, while
+  clean fills under heavy camera panning still pass. No learned metric is
+  downloaded and no licensed real media is required.
 - **Contract test for selectable OpenCV 5 DNN inference engines.** PP-OCRv6
   and LaMa now run through OpenCV 5 DNN, whose `auto` / `classic` / `new`
   engines have different operator coverage and fallback behaviour that no test

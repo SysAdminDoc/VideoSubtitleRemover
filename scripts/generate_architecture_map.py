@@ -114,6 +114,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/subprocess_policy.py": "Hidden, bounded, cancellable child processes.",
     "backend/subtitle_translation.py": "SRT parsing, providers, translated export.",
     "backend/support_bundle.py": "Redacted diagnostics zip export.",
+    "backend/temporal_profile.py": "Mask-aware temporal regression metrics and fixtures.",
     "backend/tensorrt_compile.py": "Optional TensorRT engine compilation.",
     "backend/tracking.py": "Kalman tracking, pHash reuse, karaoke grouping.",
     "backend/update_check.py": "Startup version check (opt-in).",

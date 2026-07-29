@@ -7,19 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2
 
-- [ ] P2 -- RM-150 Add a mask-aware temporal regression profile
-  Why: per-frame image scores miss camera-motion, background-motion, mask-motion,
-    boundary leakage, and flicker failures that dominate video inpainting quality.
-  Evidence: MichiganCOG/DEVIL benchmark and CVPR 2022 paper;
-    `backend/quality.py`; `tests/test_reference_clips.py`.
-  Touches: reference-corpus/quality modules; deterministic synthetic fixtures;
-    release verification and tests.
-  Acceptance: synthetic fixtures independently vary camera, background, and mask
-    motion; lightweight masked-warp/flicker/edge thresholds fail strict release
-    verification on seeded temporal regressions; no learned metric download or
-    real-media licensing is required (the blocked real-corpus item remains separate).
-  Complexity: M
-
 - [ ] P2 -- RM-152 Complete runtime-string extraction and bidirectional layout coverage
   Why: gettext/pseudo-locale infrastructure is complete, but untranslated runtime
     strings and left/right layout assumptions still block trustworthy human catalogs.

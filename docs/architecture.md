@@ -116,6 +116,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- subprocess_policy.py        # Hidden, bounded, cancellable child processes.
 |   |-- subtitle_translation.py     # SRT parsing, providers, translated export.
 |   |-- support_bundle.py           # Redacted diagnostics zip export.
+|   |-- temporal_profile.py         # Mask-aware temporal regression metrics and fixtures.
 |   |-- tensorrt_compile.py         # Optional TensorRT engine compilation.
 |   |-- tracking.py                 # Kalman tracking, pHash reuse, karaoke grouping.
 |   |-- update_check.py             # Startup version check (opt-in).
