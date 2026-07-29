@@ -1409,6 +1409,23 @@ class LayoutBuildMixin:
             "Mirrors rows, anchors, and directional arrows for Arabic, "
             "Hebrew, Persian, and Urdu. Persists across sessions."))
 
+        # RM-155: process isolation per queue job. Off by default because
+        # it trades the in-process model cache (one load per batch) for a
+        # process start and reload per item; the reliability win is real
+        # but the cost is the user's call.
+        self.job_isolation_var = tk.BooleanVar(
+            value=getattr(self.config, "job_isolation", False))
+        isolation_toggle = ModernToggle(
+            quality_frame,
+            text=tr("Run each job in a separate process"),
+            variable=self.job_isolation_var,
+        )
+        isolation_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        Tooltip(isolation_toggle, tr(
+            "Isolates each queue item so a fatal crash in a native library "
+            "fails only that item instead of closing the app and losing the "
+            "batch. Costs a process start and a model reload per item."))
+
         self.update_check_var = tk.BooleanVar(value=getattr(self.config, "update_check", False))
         uc_toggle = ModernToggle(
             quality_frame,

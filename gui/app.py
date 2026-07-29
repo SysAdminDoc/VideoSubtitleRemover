@@ -235,6 +235,8 @@ class VideoSubtitleRemoverApp(
         self._cached_remover = None  # cached BackendRemover for batch reuse
         self._cached_remover_key = None  # (mode, device, lang) key for cache invalidation
         self._active_remover = None
+        # RM-155: the supervisor for an isolated job, when one is running.
+        self._active_supervisor = None
         self._active_subprocess: Optional[subprocess.Popen] = None
         self._selected_queue_item_id: Optional[str] = None
         self._brand_photo = getattr(self, "_app_icon_photo", None)
@@ -563,6 +565,8 @@ class VideoSubtitleRemoverApp(
             self.config.high_contrast = self.high_contrast_var.get()
         if hasattr(self, 'rtl_layout_var'):
             self.config.rtl_layout = self.rtl_layout_var.get()
+        if hasattr(self, 'job_isolation_var'):
+            self.config.job_isolation = self.job_isolation_var.get()
         if hasattr(self, 'text_scale_var'):
             self.config.text_scale_percent = _coerce_int(
                 str(self.text_scale_var.get()).replace("%", ""),

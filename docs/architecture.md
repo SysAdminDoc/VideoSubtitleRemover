@@ -30,6 +30,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- config.py                     # APP_VERSION, QueueItem, GUI ProcessingConfig, settings I/O.
 |   |-- dialog_layout.py              # Work-area fitting and scrollable dialog bodies.
 |   |-- direction.py                  # Logical-to-physical RTL mirror for Tk options.
+|   |-- job_supervisor.py             # Parent-side supervisor for isolated queue jobs.
 |   |-- layout_build.py               # Builder mixin: header, settings, queue, preview.
 |   |-- layout_helpers.py             # Shared layout primitives for the builder mixins.
 |   |-- layout_responsive.py          # Responsive / stacked layout mixin.
@@ -78,6 +79,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- inpainters_diffusion.py     # Opt-in diffusion adapter scaffolds.
 |   |-- inpainters_onnx.py          # ONNX Runtime inpaint session helpers.
 |   |-- io.py                       # Capture, ffprobe, intermediate writers, PrefetchReader.
+|   |-- job_worker.py               # Child-process entry for one isolated queue job.
 |   |-- karaoke_flow.py             # Karaoke optical-flow grouping helper.
 |   |-- language_support.py         # GUI picker scope vs. OCR engine language facts.
 |   |-- mask_corrections.py         # Ordered add/subtract mask corrections.

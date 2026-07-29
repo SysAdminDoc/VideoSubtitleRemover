@@ -26,6 +26,7 @@ from gui.widgets import (
     TaskbarProgress,
 )
 from backend.i18n import tr
+from backend.job_worker import describe_exit_code
 from backend.resume_checkpoint import ProcessingPaused
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,17 @@ class ProcessingControllerMixin:
             pass
 
     def _terminate_active_backend_work(self) -> None:
+        # RM-155: an isolated job's work lives in a child process, so app
+        # shutdown has to stop that too or the child keeps encoding after
+        # the window is gone.
+        supervisor = getattr(self, "_active_supervisor", None)
+        if supervisor is not None:
+            try:
+                supervisor.cancel()
+                supervisor.terminate()
+            except Exception:
+                logger.warning(
+                    "Isolated job termination failed", exc_info=True)
         remover = self._active_remover or self._cached_remover
         if remover is not None and hasattr(remover, "terminate_active_work"):
             try:
@@ -433,6 +445,186 @@ class ProcessingControllerMixin:
         self._update_item_display(item)
         return True
 
+    # RM-155: map the child's terminal status onto the queue model. The
+    # child reports its own outcome; only "crashed" is inferred by the
+    # parent, from a worker that stopped without publishing a result.
+    _ISOLATED_STATUS = {
+        "complete": ProcessingStatus.COMPLETE,
+        "paused": ProcessingStatus.PAUSED,
+        "cancelled": ProcessingStatus.CANCELLED,
+        "error": ProcessingStatus.ERROR,
+        "crashed": ProcessingStatus.ERROR,
+    }
+
+    def _apply_isolated_evidence(self, item: QueueItem, evidence: dict) -> None:
+        """Copy a child job's reported evidence onto the queue item."""
+        def as_dict(name):
+            value = evidence.get(name)
+            return dict(value) if isinstance(value, dict) else {}
+
+        item.mask_export = as_dict("last_mask_export")
+        item.mask_import = as_dict("last_mask_import")
+        item.timing_report = as_dict("last_timing_report")
+        item.output_contract_report = as_dict("last_output_contract")
+        item.selective_rerun = as_dict("last_selective_rerun")
+        item.stage_timings = as_dict("last_stage_timings")
+        item.detection_stats = as_dict("last_detection_stats")
+        item.execution_provenance = as_dict("execution_provenance")
+        quality = evidence.get("last_quality_report")
+        item.quality_report = quality if isinstance(quality, dict) else None
+        checkpoint_path = evidence.get("last_pause_checkpoint_path")
+        if checkpoint_path:
+            item.pause_checkpoint_path = str(checkpoint_path)
+        actual_output = str(evidence.get("last_output_path") or "")
+        if (
+            actual_output
+            and self._normalized_path_key(actual_output)
+            != self._normalized_path_key(item.output_path)
+        ):
+            logger.warning(
+                "Isolated job changed its output path: %s -> %s",
+                item.output_path, actual_output,
+            )
+            item.output_path = actual_output
+            item.output_path_locked = True
+
+    def _process_item_isolated(self, item: QueueItem) -> None:
+        """RM-155: run one item in a supervised child process.
+
+        A fatal native fault inside OpenCV, ONNX Runtime, or a model's own
+        kernels cannot be caught by Python. In-process it takes the GUI and
+        every remaining queued job with it. Here it takes only the child,
+        and the supervisor reports that as this item's failure.
+        """
+        from backend.config_schema import (
+            gui_to_backend_config,
+            serialize_dataclass_config,
+        )
+        from gui.job_supervisor import JobSupervisor, build_request
+
+        backend_config = gui_to_backend_config(item.config)
+        request = build_request(
+            input_path=item.file_path,
+            output_path=item.output_path,
+            config_payload=serialize_dataclass_config(backend_config),
+            is_image=is_image_file(item.file_path),
+            preview_dir="",
+            resume_checkpoint=True,
+        )
+
+        def on_progress(progress: float, message: str) -> None:
+            if progress < 0.3:
+                item.status = ProcessingStatus.DETECTING
+            elif progress < 0.9:
+                item.status = ProcessingStatus.PROCESSING
+            elif progress < 1.0:
+                item.status = ProcessingStatus.MERGING
+            item.progress = float(progress)
+            item.message = str(message)
+            self._update_item_display(item)
+
+        def on_warning(message: str) -> None:
+            try:
+                self.root.after(
+                    0,
+                    lambda msg=message: self._update_status(
+                        msg, "warning", toast=True),
+                )
+            except (RuntimeError, tk.TclError):
+                pass
+
+        supervisor = JobSupervisor(
+            request, on_progress=on_progress, on_warning=on_warning)
+        self._active_supervisor = supervisor
+        # Cancel and pause are polled by the child, so the existing GUI
+        # events keep working: publish the state, then let it observe it.
+        watchdog = threading.Thread(
+            target=self._watch_isolated_controls,
+            args=(supervisor, item),
+            name="vsr-job-controls",
+            daemon=True,
+        )
+        watchdog.start()
+        try:
+            outcome = supervisor.run()
+        finally:
+            self._active_supervisor = None
+
+        item.completed_at = datetime.now()
+        self._apply_isolated_evidence(item, outcome.evidence)
+        item.status = self._ISOLATED_STATUS.get(
+            outcome.status, ProcessingStatus.ERROR)
+
+        if outcome.status == "complete":
+            item.progress = 1.0
+            item.error = None
+            item.message = "Complete!"
+            note = format_quality_report(item.quality_report, compact=True)
+            if note:
+                item.message = f"Complete - {note}"
+            elapsed = (item.completed_at - item.started_at).total_seconds()
+            self._batch_times.append(elapsed)
+            logger.info(
+                "Completed (isolated): %s in %s",
+                Path(item.file_path).name, format_time(elapsed),
+            )
+        elif outcome.status == "paused":
+            item.error = None
+            item.message = outcome.error or "Paused at checkpoint"
+        elif outcome.status == "cancelled":
+            item.error = None
+            item.message = "Cancelled"
+        else:
+            item.error = outcome.error or "Processing failed"
+            item.message = item.error
+            item.quality_report = None
+            if outcome.crashed:
+                # Retain the child's diagnostics: a native fault usually
+                # prints the real cause (a CUDA error, a DLL name) right
+                # before dying, and that tail is all that survives it.
+                logger.error(
+                    "Isolated job crashed for %s (%s). Worker stderr tail:\n%s",
+                    item.file_path,
+                    describe_exit_code(outcome.exit_code or 0),
+                    outcome.stderr_tail or "(no output)",
+                )
+                if outcome.stderr_tail:
+                    item.retry_errors = list(item.retry_errors or []) + [
+                        outcome.stderr_tail]
+            else:
+                logger.error(
+                    "Isolated job failed for %s: %s",
+                    item.file_path, item.error,
+                )
+        self._update_item_display(item)
+
+    def _watch_isolated_controls(self, supervisor, item: QueueItem) -> None:
+        """Forward GUI cancel/pause requests to a running child."""
+        cancelled = False
+        paused = False
+        while supervisor.pid is None:
+            time.sleep(0.05)
+            if self.cancel_event.is_set() or getattr(
+                    item, "cancel_requested", False):
+                break
+        while True:
+            if item.status in (
+                ProcessingStatus.COMPLETE, ProcessingStatus.ERROR,
+                ProcessingStatus.CANCELLED, ProcessingStatus.PAUSED,
+            ):
+                return
+            want_cancel = bool(
+                self.cancel_event.is_set()
+                or getattr(item, "cancel_requested", False))
+            want_pause = bool(self.pause_event.is_set())
+            if want_cancel and not cancelled:
+                cancelled = True
+                supervisor.cancel()
+            elif want_pause != paused:
+                paused = want_pause
+                supervisor.pause() if want_pause else supervisor.resume()
+            time.sleep(0.1)
+
     def _process_item(self, item: QueueItem):
         """Process a single queue item using the backend processor."""
         try:
@@ -459,6 +651,13 @@ class ProcessingControllerMixin:
                 return
 
             self._announce_model_download_guidance(item)
+
+            # RM-155: opt-in process isolation. Delegated before any backend
+            # model is loaded in this process, so an isolated job shares
+            # nothing with the GUI that a native fault could corrupt.
+            if getattr(item.config, "job_isolation", False):
+                self._process_item_isolated(item)
+                return
 
             from backend.processor import SubtitleRemover as BackendRemover
             from backend.config import ProcessingConfig as BackendConfig

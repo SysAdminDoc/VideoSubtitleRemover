@@ -550,6 +550,11 @@ class ProcessingConfig:
     # Per-item by nature -- it names one source file and one frame range --
     # so it lives on the item's config snapshot, not the global defaults.
     frozen_matte: dict = field(default_factory=dict)
+    # RM-155: run each job in a child process so a fatal native fault kills
+    # only that item. Off by default: isolation costs a process start and
+    # a model reload per item, which the in-process cached remover avoids,
+    # so the trade is the user's to make rather than ours to assume.
+    job_isolation: bool = False
     adaptive_batch: bool = True
     gpu_oom_recovery: bool = True
     temporal_mask_union: bool = False
@@ -750,6 +755,7 @@ class ProcessingConfig:
         # An unreadable freeze normalizes to {}, so the job re-derives its
         # mask instead of silently trusting a half-parsed record.
         self.frozen_matte = normalize_frozen_matte(self.frozen_matte)
+        self.job_isolation = _coerce_bool(self.job_isolation, False)
         self.adaptive_batch = _coerce_bool(self.adaptive_batch, True)
         self.gpu_oom_recovery = _coerce_bool(self.gpu_oom_recovery, True)
         self.temporal_mask_union = _coerce_bool(self.temporal_mask_union, False)

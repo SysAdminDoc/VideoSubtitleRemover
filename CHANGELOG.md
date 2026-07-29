@@ -6,6 +6,27 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Each queue job can run in an isolated child process.** A fatal native
+  fault in OpenCV, ONNX Runtime, or a model's kernels cannot be caught by
+  Python: in-process it killed the interpreter, and with it the GUI and
+  every remaining queued job. Checkpoints did not help, because the process
+  that would have resumed them was gone. The new **Run each job in a
+  separate process** setting runs every item under a versioned local job
+  protocol (`backend/job_worker.py` + `gui/job_supervisor.py`); progress,
+  live preview, pause, cancel, and checkpoints keep working, and a child
+  that dies without publishing a result is reported against that one item
+  with its stderr tail retained as the item's log, its exit status decoded
+  (0xC0000005 reads as "access violation", not 3221225477), and the rest of
+  the batch untouched. Off by default: isolation trades the in-process
+  model cache for a process start and a reload per item, so the choice is
+  the user's rather than assumed.
+- Control for an isolated job travels through a polled JSON file rather
+  than the child's stdin. A reader thread parked in a blocking stdin read
+  deadlocks against C-extension module initialisation during the child's
+  own numpy/cv2 imports, and on Windows that read cannot be interrupted --
+  the worker would hang before starting work. The child now runs with
+  stdin closed, which additionally stops any grandchild it spawns (an
+  import probe, an ffmpeg call) from inheriting a live pipe.
 - **WebVTT translates as WebVTT instead of being flattened to SRT.**
   `.vtt` sources went through the SRT model, which silently discarded cue
   identifiers, per-cue positioning (`line`/`position`/`size`/`align`/

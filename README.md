@@ -567,6 +567,37 @@ TTML and IMSC are out of scope. `.ttml`, `.dfxp`, `.itt`, and `.xml` are
 rejected with a clear message rather than being parsed as SRT, which would be
 the same silent flattening one format further along.
 
+### Isolating each job in its own process
+
+A fatal native fault -- an access violation inside OpenCV, ONNX Runtime,
+or a model's own kernels -- cannot be caught by Python. In a single
+in-process worker it takes down the interpreter, which means it takes the
+app and every remaining queued job with it. Checkpoints do not help,
+because the process that would have resumed them is gone too.
+
+Enable **Run each job in a separate process** in Settings (or set
+`job_isolation` in `settings.json`) to run every queue item under a
+versioned local job protocol. Progress, live preview, pause, cancel, and
+checkpoints all keep working. When a child dies, the supervisor reports it
+against that one item, retains the worker's stderr tail as the item's log
+(a native crash usually prints the real cause -- a CUDA error, a missing
+DLL -- right before dying), decodes the exit status into something
+readable, and continues the rest of the batch.
+
+It is off by default because it is a real trade, not a free win: the
+in-process path keeps one loaded model across a whole batch, while
+isolation pays a process start and a model reload per item. Turn it on for
+long unattended batches or footage that has crashed the app before.
+
+The protocol itself is text-only and deliberately dull: the parent writes a
+JSON request file and a JSON control file, and the child streams
+newline-delimited JSON events back on stdout. Control does **not** travel
+over stdin -- a reader thread parked on a blocking stdin read deadlocks
+against C-extension module initialisation during the child's own imports,
+so the child runs with stdin closed, which also stops any grandchild
+(an import probe, an ffmpeg call) from inheriting a live pipe. Parent and
+child check the protocol version and refuse to run if they disagree.
+
 ### Freezing an approved matte
 
 A matte you have reviewed frame by frame is the most expensive artifact

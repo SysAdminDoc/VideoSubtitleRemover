@@ -238,6 +238,16 @@ def _run_frozen_import_smoke(result_path: str) -> int:
 
 def main():
     """Main entry point."""
+    # RM-155: a frozen build has no importable `-m backend.job_worker`
+    # target, so the supervisor re-executes this same exe with a marker.
+    # Must be the first branch: a job worker must never touch DPI, Tk, or
+    # the settings file.
+    if "--job-worker" in sys.argv[1:]:
+        from backend.job_worker import main as job_worker_main
+
+        argv = [arg for arg in sys.argv[1:] if arg != "--job-worker"]
+        sys.exit(job_worker_main(argv))
+
     if "--frozen-import-smoke" in sys.argv[1:]:
         try:
             result_index = sys.argv.index("--frozen-import-smoke") + 1
