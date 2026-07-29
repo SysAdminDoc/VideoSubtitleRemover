@@ -38,6 +38,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   steps and restates that artifacts are intentionally unsigned. This closes the
   case where a reusable release directory paired a newer installer with an
   older portable ZIP and a checksum file describing neither.
+- **Contract test for selectable OpenCV 5 DNN inference engines.** PP-OCRv6
+  and LaMa now run through OpenCV 5 DNN, whose `auto` / `classic` / `new`
+  engines have different operator coverage and fallback behaviour that no test
+  proved. `run_opencv_dnn_engine_contract()` runs one real inference of the
+  bundled PP-OCRv6 detection graph (and an advertised local LaMa model when one
+  is configured) under every documented engine the installed OpenCV exposes,
+  records the engine that applied, and fails on a load error, an output-shape
+  change, or output that diverges materially from the first engine. Strict
+  release verification blocks on a failed contract; a build with no engine
+  selection (OpenCV 4) is reported as not applicable rather than assumed to
+  pass, and nothing assumes an ORT-linked DNN build.
 - **Dependency-profile provider smoke.**
   `python -m backend.dependency_profiles smoke --profile <name>` builds a
   minimal ONNX identity model and creates one real inference session on the

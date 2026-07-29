@@ -7,19 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2
 
-- [ ] P2 -- RM-149 Contract-test selectable OpenCV 5 DNN inference engines
-  Why: PP-OCRv6 and LaMa now depend on OpenCV 5 DNN, whose new/classic/default
-    engines have different coverage and fallback behavior not proven by current tests.
-  Evidence: `backend/opencv_ocr.py`; `backend/inpainters/lama.py`; OpenCV 5
-    migration/status documentation.
-  Touches: OpenCV OCR/LaMa adapters; inference smoke; release verification;
-    OpenCV and release tests.
-  Acceptance: release evidence runs one real bundled PP-OCRv6 inference under
-    each applicable documented engine selection, conditionally does the same for
-    an advertised local LaMa model, records the actual engine, and fails on load,
-    shape, or materially divergent-output regressions without assuming ORT-linked DNN.
-  Complexity: M
-
 - [ ] P2 -- RM-150 Add a mask-aware temporal regression profile
   Why: per-frame image scores miss camera-motion, background-motion, mask-motion,
     boundary leakage, and flicker failures that dominate video inpainting quality.

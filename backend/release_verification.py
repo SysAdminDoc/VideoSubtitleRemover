@@ -45,7 +45,10 @@ from backend.ffmpeg_profiles import (
     probe_ffmpeg_security,
 )
 from backend.onnx_model_info import rapidocr_release_provenance
-from backend.opencv_ocr import collect_opencv_dnn_ocr_status
+from backend.opencv_ocr import (
+    collect_opencv_dnn_ocr_status,
+    run_opencv_dnn_engine_contract,
+)
 from backend.remote_model_policy import release_remote_model_status
 from backend.security_checks import (
     LIBPNG_ADVISORY_URL,
@@ -1255,6 +1258,21 @@ def build_release_evidence(
         package_versions=package_versions,
     )
     opencv_dnn_ocr = collect_opencv_dnn_ocr_status()
+    # RM-149: prove the bundled PP-OCRv6 graph (and an advertised local LaMa
+    # model) load and agree under every documented OpenCV 5 DNN engine the
+    # installed build exposes.
+    opencv_dnn_engines = (
+        run_opencv_dnn_engine_contract()
+        if run_smoke else
+        {
+            "schema": "vsr.opencv_dnn_engines.v1",
+            "ran": False,
+            "passed": None,
+            "availableEngines": [],
+            "models": [],
+            "errors": ["engine contract skipped"],
+        }
+    )
     rapidocr_engines = collect_rapidocr_engine_status(
         package_versions=package_versions,
     )
@@ -1304,6 +1322,7 @@ def build_release_evidence(
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "opencvWheels": opencv_wheels,
             "opencvDnnOcr": opencv_dnn_ocr,
+            "opencvDnnEngines": opencv_dnn_engines,
             "onnxRuntimeProviders": onnxruntime_providers,
             "rapidocrEngines": rapidocr_engines,
             "referenceCorpus": (
@@ -1388,6 +1407,11 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     if (isinstance(ffsmoke, Mapping)
             and ffsmoke.get("ran") and not ffsmoke.get("passed")):
         yield f"FFmpeg subprocess smoke failed: {ffsmoke.get('error', 'unknown')}"
+    engines = evidence.get("releaseTools", {}).get("opencvDnnEngines", {})
+    if (isinstance(engines, Mapping)
+            and engines.get("ran") and not engines.get("passed")):
+        detail = "; ".join(str(item) for item in engines.get("errors", []))
+        yield "OpenCV DNN engine contract failed" + (f": {detail}" if detail else "")
     opencv_dnn_ocr = evidence.get("releaseTools", {}).get("opencvDnnOcr", {})
     if isinstance(opencv_dnn_ocr, Mapping) and not opencv_dnn_ocr.get("eligible"):
         errors = "; ".join(
