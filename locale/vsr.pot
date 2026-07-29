@@ -144,7 +144,7 @@ msgstr ""
 msgid "All Supported"
 msgstr ""
 
-#: gui/app.py:2065 gui/region_controller.py:1221 gui/settings_controller.py:217 gui/settings_controller.py:252 gui/settings_controller.py:277 gui/settings_controller.py:309 gui/settings_controller.py:339 gui/settings_controller.py:359 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:331
+#: gui/app.py:2065 gui/region_controller.py:1221 gui/settings_controller.py:217 gui/settings_controller.py:254 gui/settings_controller.py:279 gui/settings_controller.py:311 gui/settings_controller.py:341 gui/settings_controller.py:361 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:331
 msgid "All files"
 msgstr ""
 
@@ -248,7 +248,7 @@ msgstr ""
 msgid "Build your batch"
 msgstr ""
 
-#: gui/settings_controller.py:445 gui/settings_controller.py:476 gui/settings_controller.py:480
+#: gui/settings_controller.py:447 gui/settings_controller.py:478 gui/settings_controller.py:482
 msgid "Built-in preset names are reserved."
 msgstr ""
 
@@ -264,7 +264,7 @@ msgstr ""
 msgid "CPU only"
 msgstr ""
 
-#: gui/mask_correction_controller.py:289 gui/queue_view.py:251 gui/region_controller.py:674 gui/settings_controller.py:488
+#: gui/mask_correction_controller.py:289 gui/queue_view.py:251 gui/region_controller.py:674 gui/settings_controller.py:490
 msgid "Cancel"
 msgstr ""
 
@@ -364,7 +364,7 @@ msgstr ""
 msgid "Choose folder"
 msgstr ""
 
-#: gui/settings_controller.py:274
+#: gui/settings_controller.py:276
 msgid "Choose local translation command"
 msgstr ""
 
@@ -468,7 +468,7 @@ msgstr ""
 msgid "Clear the queue?"
 msgstr ""
 
-#: gui/settings_controller.py:293
+#: gui/settings_controller.py:295
 msgid "Cleared imported matte"
 msgstr ""
 
@@ -728,7 +728,7 @@ msgstr ""
 msgid "Enter a whole number within the source-frame bounds."
 msgstr ""
 
-#: gui/settings_controller.py:276
+#: gui/settings_controller.py:278
 msgid "Executables and Python scripts"
 msgstr ""
 
@@ -752,7 +752,7 @@ msgstr ""
 msgid "Export model cache..."
 msgstr ""
 
-#: gui/settings_controller.py:336
+#: gui/settings_controller.py:338
 msgid "Export preset '{name}'"
 msgstr ""
 
@@ -760,11 +760,11 @@ msgstr ""
 msgid "Export settings"
 msgstr ""
 
-#: gui/settings_controller.py:306
+#: gui/settings_controller.py:308
 msgid "Export settings copy"
 msgstr ""
 
-#: gui/settings_controller.py:317
+#: gui/settings_controller.py:319
 msgid "Exported settings to {name}"
 msgstr ""
 
@@ -900,7 +900,7 @@ msgstr ""
 msgid "Full size"
 msgstr ""
 
-#: gui/settings_controller.py:467 gui/settings_controller.py:471
+#: gui/settings_controller.py:469 gui/settings_controller.py:473
 msgid "Give this preset a short name."
 msgstr ""
 
@@ -996,7 +996,7 @@ msgstr ""
 msgid "Import model cache..."
 msgstr ""
 
-#: gui/settings_controller.py:357
+#: gui/settings_controller.py:359
 msgid "Import preset"
 msgstr ""
 
@@ -1264,7 +1264,7 @@ msgstr ""
 msgid "Mux every audio stream from the source. Off keeps only the first track."
 msgstr ""
 
-#: gui/settings_controller.py:399
+#: gui/settings_controller.py:401
 msgid "Name the current cleanup settings and save them to the user preset library."
 msgstr ""
 
@@ -1304,7 +1304,7 @@ msgstr ""
 msgid "No frame available"
 msgstr ""
 
-#: gui/layout_build.py:905 gui/settings_controller.py:205 gui/settings_controller.py:290
+#: gui/layout_build.py:905 gui/settings_controller.py:205 gui/settings_controller.py:292
 msgid "No imported matte"
 msgstr ""
 
@@ -1336,7 +1336,7 @@ msgstr ""
 msgid "No text found in this rectangle yet."
 msgstr ""
 
-#: gui/layout_build.py:991 gui/settings_controller.py:285
+#: gui/layout_build.py:991 gui/settings_controller.py:287
 msgid "No translated SRT selected"
 msgstr ""
 
@@ -1846,7 +1846,7 @@ msgstr ""
 msgid "Save motion"
 msgstr ""
 
-#: gui/settings_controller.py:387 gui/settings_controller.py:396 gui/settings_controller.py:490
+#: gui/settings_controller.py:389 gui/settings_controller.py:398 gui/settings_controller.py:492
 msgid "Save preset"
 msgstr ""
 
@@ -1854,7 +1854,7 @@ msgstr ""
 msgid "Save support bundle"
 msgstr ""
 
-#: gui/settings_controller.py:414
+#: gui/settings_controller.py:416
 msgid "Save the current setup as a preset"
 msgstr ""
 
@@ -1874,11 +1874,11 @@ msgstr ""
 msgid "Scanning this region for text..."
 msgstr ""
 
-#: gui/settings_controller.py:595
+#: gui/settings_controller.py:597
 msgid "Select Output Directory"
 msgstr ""
 
-#: gui/settings_controller.py:613
+#: gui/settings_controller.py:615
 msgid "Select Processing Work Directory"
 msgstr ""
 
@@ -2074,7 +2074,7 @@ msgstr ""
 msgid "Structured JSON log"
 msgstr ""
 
-#: gui/settings_controller.py:251
+#: gui/settings_controller.py:252
 msgid "SubRip subtitles"
 msgstr ""
 
@@ -2088,6 +2088,10 @@ msgstr ""
 
 #: gui/region_controller.py:205
 msgid "Subtitle region preview"
+msgstr ""
+
+#: gui/settings_controller.py:251
+msgid "Subtitles"
 msgstr ""
 
 #: gui/mask_correction_controller.py:176
@@ -2198,11 +2202,11 @@ msgstr ""
 msgid "Total time {elapsed} - {count} item{suffix} processed"
 msgstr ""
 
-#: gui/settings_controller.py:262
+#: gui/settings_controller.py:264
 msgid "Translated SRT could not be used: {error}"
 msgstr ""
 
-#: gui/settings_controller.py:269
+#: gui/settings_controller.py:271
 msgid "Translated SRT ready to re-embed."
 msgstr ""
 
@@ -2258,7 +2262,7 @@ msgstr ""
 msgid "Use a provided translated SRT, or send OCR/Whisper cues to a local translation command. VSR itself does not contact a translation service; the command you choose controls text handling."
 msgstr ""
 
-#: gui/settings_controller.py:418
+#: gui/settings_controller.py:420
 msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
 msgstr ""
 
@@ -2278,7 +2282,7 @@ msgstr ""
 msgid "Use x,y pairs separated by semicolons; at least three vertices are required."
 msgstr ""
 
-#: gui/settings_controller.py:443 gui/settings_controller.py:465
+#: gui/settings_controller.py:445 gui/settings_controller.py:467
 msgid "User preset"
 msgstr ""
 
@@ -2290,11 +2294,11 @@ msgstr ""
 msgid "VSR matte manifest"
 msgstr ""
 
-#: gui/settings_controller.py:338 gui/settings_controller.py:358
+#: gui/settings_controller.py:340 gui/settings_controller.py:360
 msgid "VSR preset"
 msgstr ""
 
-#: gui/settings_controller.py:308
+#: gui/settings_controller.py:310
 msgid "VSR settings"
 msgstr ""
 
@@ -2340,6 +2344,10 @@ msgstr ""
 
 #: gui/layout_build.py:1651 gui/preview_controller.py:225 gui/preview_controller.py:323
 msgid "Waiting"
+msgstr ""
+
+#: gui/settings_controller.py:253
+msgid "WebVTT subtitles"
 msgstr ""
 
 #: gui/onboarding.py:69

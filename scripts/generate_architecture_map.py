@@ -80,6 +80,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/mask_corrections.py": "Ordered add/subtract mask corrections.",
     "backend/mask_free_benchmark.py": "Mask-free removal benchmark harness.",
     "backend/frozen_matte.py": "Freeze an approved matte as a reusable input.",
+    "backend/webvtt.py": "Loss-aware WebVTT parse / translate / serialize.",
     "backend/matte_interchange.py": "Lossless matte export / import / compose.",
     "backend/model_downloads.py": "First-run model download guidance.",
     "backend/model_hashes.py": "Vendored SHA-256 hashes and chunked verifier.",

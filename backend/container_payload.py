@@ -212,6 +212,16 @@ def _stream_action(
             return "copy", codec, "Matroska supports the source subtitle codec"
         if suffix in _MP4 and codec == "mov_text":
             return "copy", codec, "MP4/MOV supports mov_text subtitles"
+        if suffix in _MP4 and codec == "webvtt":
+            # RM-154: mov_text is 3GPP timed text. It carries no regions,
+            # no cue settings, and no CSS, so name the loss instead of
+            # reporting a neutral "conversion".
+            return (
+                "transcode",
+                "mov_text",
+                "MP4/MOV converts WebVTT to mov_text; regions, cue "
+                "settings, and STYLE rules are lost",
+            )
         if suffix in _MP4 and codec in _TEXT_SUBTITLES:
             return "transcode", "mov_text", "text subtitles require MP4/MOV conversion"
         if suffix in _WEBM and codec == "webvtt":

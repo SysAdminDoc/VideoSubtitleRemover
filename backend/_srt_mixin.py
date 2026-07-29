@@ -225,8 +225,16 @@ class _SrtMixin:
                     raise SubtitleTranslationError(
                         "translation needs --translation-source-srt, OCR text, "
                         "or an enabled Whisper transcript")
+            # RM-154: a WebVTT source stays WebVTT through translation, so
+            # the sidecar keeps the cue settings, regions, and markup the
+            # SRT model would have flattened.
+            from backend.subtitle_translation import subtitle_format
+
             translated_path = translated_srt_path(
-                output_path, self.config.translation_target_lang)
+                output_path,
+                self.config.translation_target_lang,
+                suffix=f".{subtitle_format(source_path)}",
+            )
             report = translate_srt_file(
                 source_path,
                 translated_path,

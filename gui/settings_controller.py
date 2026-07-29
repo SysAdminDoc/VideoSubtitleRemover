@@ -248,7 +248,9 @@ class AdvancedSettingsControllerMixin:
             parent=self.root,
             title=tr("Choose translated subtitle file"),
             filetypes=[
+                (tr("Subtitles"), "*.srt *.vtt"),
                 (tr("SubRip subtitles"), "*.srt"),
+                (tr("WebVTT subtitles"), "*.vtt"),
                 (tr("All files"), "*.*"),
             ],
         )

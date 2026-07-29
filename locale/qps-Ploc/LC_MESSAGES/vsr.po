@@ -144,7 +144,7 @@ msgstr "[!! Åŀŀ Ƒîŀéš ! !!]"
 msgid "All Supported"
 msgstr "[!! Åŀŀ Šûƥƥöŕţéð ! !!]"
 
-#: gui/app.py:2065 gui/region_controller.py:1221 gui/settings_controller.py:217 gui/settings_controller.py:252 gui/settings_controller.py:277 gui/settings_controller.py:309 gui/settings_controller.py:339 gui/settings_controller.py:359 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:331
+#: gui/app.py:2065 gui/region_controller.py:1221 gui/settings_controller.py:217 gui/settings_controller.py:254 gui/settings_controller.py:279 gui/settings_controller.py:311 gui/settings_controller.py:341 gui/settings_controller.py:361 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:331
 msgid "All files"
 msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
 
@@ -248,7 +248,7 @@ msgstr "[!! Ɓŕûšħ ŕåðîûš îń šöûŕçé ƥîẋéŀš. ! ! !!]"
 msgid "Build your batch"
 msgstr "[!! Ɓûîŀð ýöûŕ ƀåţçħ ! !!]"
 
-#: gui/settings_controller.py:445 gui/settings_controller.py:476 gui/settings_controller.py:480
+#: gui/settings_controller.py:447 gui/settings_controller.py:478 gui/settings_controller.py:482
 msgid "Built-in preset names are reserved."
 msgstr "[!! Ɓûîŀţ-îń ƥŕéšéţ ńåḿéš åŕé ŕéšéŕṽéð. ! ! !!]"
 
@@ -264,7 +264,7 @@ msgstr "[!! ÇƤÛ ḿöðé ! !!]"
 msgid "CPU only"
 msgstr "[!! ÇƤÛ öńŀý ! !!]"
 
-#: gui/mask_correction_controller.py:289 gui/queue_view.py:251 gui/region_controller.py:674 gui/settings_controller.py:488
+#: gui/mask_correction_controller.py:289 gui/queue_view.py:251 gui/region_controller.py:674 gui/settings_controller.py:490
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
@@ -364,7 +364,7 @@ msgstr "[!! Çħööšé ƒîŀéš ţö çŀéåń ! !!]"
 msgid "Choose folder"
 msgstr "[!! Çħööšé ƒöŀðéŕ ! !!]"
 
-#: gui/settings_controller.py:274
+#: gui/settings_controller.py:276
 msgid "Choose local translation command"
 msgstr "[!! Çħööšé ŀöçåŀ ţŕåńšŀåţîöń çöḿḿåńð ! ! !!]"
 
@@ -468,7 +468,7 @@ msgstr "[!! Çŀéåŕ ţħé ƒîŀţéŕ öŕ šéåŕçħ ƒöŕ ƥåŕţ ö�
 msgid "Clear the queue?"
 msgstr "[!! Çŀéåŕ ţħé ɋûéûé? ! !!]"
 
-#: gui/settings_controller.py:293
+#: gui/settings_controller.py:295
 msgid "Cleared imported matte"
 msgstr "[!! Çŀéåŕéð îḿƥöŕţéð ḿåţţé ! !!]"
 
@@ -728,7 +728,7 @@ msgstr "[!! Éńţéŕ å ńöńńéĝåţîṽé ƒŕåḿé ńûḿƀéŕ. ! !
 msgid "Enter a whole number within the source-frame bounds."
 msgstr "[!! Éńţéŕ å ŵħöŀé ńûḿƀéŕ ŵîţħîń ţħé šöûŕçé-ƒŕåḿé ƀöûńðš. ! ! ! ! !!]"
 
-#: gui/settings_controller.py:276
+#: gui/settings_controller.py:278
 msgid "Executables and Python scripts"
 msgstr "[!! Éẋéçûţåƀŀéš åńð Ƥýţħöń šçŕîƥţš ! ! !!]"
 
@@ -752,7 +752,7 @@ msgstr "[!! Éẋƥöŕţ ḿöðéŀ çåçħé ! !!]"
 msgid "Export model cache..."
 msgstr "[!! Éẋƥöŕţ ḿöðéŀ çåçħé... ! !!]"
 
-#: gui/settings_controller.py:336
+#: gui/settings_controller.py:338
 msgid "Export preset '{name}'"
 msgstr "[!! Éẋƥöŕţ ƥŕéšéţ '{name}' ! !!]"
 
@@ -760,11 +760,11 @@ msgstr "[!! Éẋƥöŕţ ƥŕéšéţ '{name}' ! !!]"
 msgid "Export settings"
 msgstr "[!! Éẋƥöŕţ šéţţîńĝš ! !!]"
 
-#: gui/settings_controller.py:306
+#: gui/settings_controller.py:308
 msgid "Export settings copy"
 msgstr "[!! Éẋƥöŕţ šéţţîńĝš çöƥý ! !!]"
 
-#: gui/settings_controller.py:317
+#: gui/settings_controller.py:319
 msgid "Exported settings to {name}"
 msgstr "[!! Éẋƥöŕţéð šéţţîńĝš ţö {name} ! ! !!]"
 
@@ -900,7 +900,7 @@ msgstr "[!! Ƒŕöžé ţħé åƥƥŕöṽéð ḿåţţé ({summary}); ŕéŕ�
 msgid "Full size"
 msgstr "[!! Ƒûŀŀ šîžé ! !!]"
 
-#: gui/settings_controller.py:467 gui/settings_controller.py:471
+#: gui/settings_controller.py:469 gui/settings_controller.py:473
 msgid "Give this preset a short name."
 msgstr "[!! Ĝîṽé ţħîš ƥŕéšéţ å šħöŕţ ńåḿé. ! ! !!]"
 
@@ -996,7 +996,7 @@ msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé ! !!]"
 msgid "Import model cache..."
 msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé... ! !!]"
 
-#: gui/settings_controller.py:357
+#: gui/settings_controller.py:359
 msgid "Import preset"
 msgstr "[!! Îḿƥöŕţ ƥŕéšéţ ! !!]"
 
@@ -1264,7 +1264,7 @@ msgstr "[!! Ḿöṽîńĝ ḿåńûåŀ ŕéĝîöńš: {count} ţŕåçķ{suff
 msgid "Mux every audio stream from the source. Off keeps only the first track."
 msgstr "[!! Ḿûẋ éṽéŕý åûðîö šţŕéåḿ ƒŕöḿ ţħé šöûŕçé. Öƒƒ ķééƥš öńŀý ţħé ƒîŕšţ ţŕåçķ. ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:399
+#: gui/settings_controller.py:401
 msgid "Name the current cleanup settings and save them to the user preset library."
 msgstr "[!! Ńåḿé ţħé çûŕŕéńţ çŀéåńûƥ šéţţîńĝš åńð šåṽé ţħéḿ ţö ţħé ûšéŕ ƥŕéšéţ ŀîƀŕåŕý. ! ! ! ! ! ! !!]"
 
@@ -1304,7 +1304,7 @@ msgstr "[!! Ńö éẋƥöŕţéð ḿåţţé ŵåš ƒöûńð ƀéšîðé ţ
 msgid "No frame available"
 msgstr "[!! Ńö ƒŕåḿé åṽåîŀåƀŀé ! !!]"
 
-#: gui/layout_build.py:905 gui/settings_controller.py:205 gui/settings_controller.py:290
+#: gui/layout_build.py:905 gui/settings_controller.py:205 gui/settings_controller.py:292
 msgid "No imported matte"
 msgstr "[!! Ńö îḿƥöŕţéð ḿåţţé ! !!]"
 
@@ -1336,7 +1336,7 @@ msgstr "[!! Ńö ţéẋţ ðéţéçţéð ! !!]"
 msgid "No text found in this rectangle yet."
 msgstr "[!! Ńö ţéẋţ ƒöûńð îń ţħîš ŕéçţåńĝŀé ýéţ. ! ! ! !!]"
 
-#: gui/layout_build.py:991 gui/settings_controller.py:285
+#: gui/layout_build.py:991 gui/settings_controller.py:287
 msgid "No translated SRT selected"
 msgstr "[!! Ńö ţŕåńšŀåţéð ŠŔŢ šéŀéçţéð ! ! !!]"
 
@@ -1846,7 +1846,7 @@ msgstr "[!! Šåṽé åš... ! !!]"
 msgid "Save motion"
 msgstr "[!! Šåṽé ḿöţîöń ! !!]"
 
-#: gui/settings_controller.py:387 gui/settings_controller.py:396 gui/settings_controller.py:490
+#: gui/settings_controller.py:389 gui/settings_controller.py:398 gui/settings_controller.py:492
 msgid "Save preset"
 msgstr "[!! Šåṽé ƥŕéšéţ ! !!]"
 
@@ -1854,7 +1854,7 @@ msgstr "[!! Šåṽé ƥŕéšéţ ! !!]"
 msgid "Save support bundle"
 msgstr "[!! Šåṽé šûƥƥöŕţ ƀûńðŀé ! !!]"
 
-#: gui/settings_controller.py:414
+#: gui/settings_controller.py:416
 msgid "Save the current setup as a preset"
 msgstr "[!! Šåṽé ţħé çûŕŕéńţ šéţûƥ åš å ƥŕéšéţ ! ! !!]"
 
@@ -1874,11 +1874,11 @@ msgstr "[!! Šçåń ţħé ƒîŕšţ 30 ƒŕåḿéš åńð ƥîń ţħé ð�
 msgid "Scanning this region for text..."
 msgstr "[!! Šçåńńîńĝ ţħîš ŕéĝîöń ƒöŕ ţéẋţ... ! ! !!]"
 
-#: gui/settings_controller.py:595
+#: gui/settings_controller.py:597
 msgid "Select Output Directory"
 msgstr "[!! Šéŀéçţ Öûţƥûţ Ðîŕéçţöŕý ! !!]"
 
-#: gui/settings_controller.py:613
+#: gui/settings_controller.py:615
 msgid "Select Processing Work Directory"
 msgstr "[!! Šéŀéçţ Ƥŕöçéššîńĝ Ŵöŕķ Ðîŕéçţöŕý ! ! !!]"
 
@@ -2074,7 +2074,7 @@ msgstr "[!! Šţöƥš ķåŕåöķé çåƥţîöńš ŀéåķîńĝ öŕîĝî
 msgid "Structured JSON log"
 msgstr "[!! Šţŕûçţûŕéð ĴŠÖŃ ŀöĝ ! !!]"
 
-#: gui/settings_controller.py:251
+#: gui/settings_controller.py:252
 msgid "SubRip subtitles"
 msgstr "[!! ŠûƀŔîƥ šûƀţîţŀéš ! !!]"
 
@@ -2089,6 +2089,10 @@ msgstr "[!! Šûƀţîţŀé ŕéĝîöń ! !!]"
 #: gui/region_controller.py:205
 msgid "Subtitle region preview"
 msgstr "[!! Šûƀţîţŀé ŕéĝîöń ƥŕéṽîéŵ ! !!]"
+
+#: gui/settings_controller.py:251
+msgid "Subtitles"
+msgstr "[!! Šûƀţîţŀéš ! !!]"
 
 #: gui/mask_correction_controller.py:176
 msgid "Subtract from mask"
@@ -2198,11 +2202,11 @@ msgstr "[!! Ţîḿéð ŕéĝîöń {index} ! !!]"
 msgid "Total time {elapsed} - {count} item{suffix} processed"
 msgstr "[!! Ţöţåŀ ţîḿé {elapsed} - {count} îţéḿ{suffix} ƥŕöçéššéð ! ! ! ! !!]"
 
-#: gui/settings_controller.py:262
+#: gui/settings_controller.py:264
 msgid "Translated SRT could not be used: {error}"
 msgstr "[!! Ţŕåńšŀåţéð ŠŔŢ çöûŀð ńöţ ƀé ûšéð: {error} ! ! ! !!]"
 
-#: gui/settings_controller.py:269
+#: gui/settings_controller.py:271
 msgid "Translated SRT ready to re-embed."
 msgstr "[!! Ţŕåńšŀåţéð ŠŔŢ ŕéåðý ţö ŕé-éḿƀéð. ! ! !!]"
 
@@ -2258,7 +2262,7 @@ msgstr "[!! Ûšé å ƒîẋéð šûƀţîţŀé ŕéĝîöń ! ! !!]"
 msgid "Use a provided translated SRT, or send OCR/Whisper cues to a local translation command. VSR itself does not contact a translation service; the command you choose controls text handling."
 msgstr "[!! Ûšé å ƥŕöṽîðéð ţŕåńšŀåţéð ŠŔŢ, öŕ šéńð ÖÇŔ/Ŵħîšƥéŕ çûéš ţö å ŀöçåŀ ţŕåńšŀåţîöń çöḿḿåńð. ṼŠŔ îţšéŀƒ ðöéš ńöţ çöńţåçţ å ţŕåńšŀåţîöń šéŕṽîçé; ţħé çöḿḿåńð ýöû çħööšé çöńţŕöŀš ţéẋţ ħåńðŀîńĝ. ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:418
+#: gui/settings_controller.py:420
 msgid "Use a short name you will recognize later. Saving to an existing user preset name will update it."
 msgstr "[!! Ûšé å šħöŕţ ńåḿé ýöû ŵîŀŀ ŕéçöĝńîžé ŀåţéŕ. Šåṽîńĝ ţö åń éẋîšţîńĝ ûšéŕ ƥŕéšéţ ńåḿé ŵîŀŀ ûƥðåţé îţ. ! ! ! ! ! ! ! ! !!]"
 
@@ -2278,7 +2282,7 @@ msgstr "[!! Ûšé ţħé ĜƤÛ'š ḿéðîå éńçöðéŕ ŵħéń åṽå�
 msgid "Use x,y pairs separated by semicolons; at least three vertices are required."
 msgstr "[!! Ûšé ẋ,ý ƥåîŕš šéƥåŕåţéð ƀý šéḿîçöŀöńš; åţ ŀéåšţ ţħŕéé ṽéŕţîçéš åŕé ŕéɋûîŕéð. ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:443 gui/settings_controller.py:465
+#: gui/settings_controller.py:445 gui/settings_controller.py:467
 msgid "User preset"
 msgstr "[!! Ûšéŕ ƥŕéšéţ ! !!]"
 
@@ -2290,11 +2294,11 @@ msgstr "[!! Ûšéš ţħé šýšţéḿ ŀåńĝûåĝé öŕ å çöḿƥîŀ
 msgid "VSR matte manifest"
 msgstr "[!! ṼŠŔ ḿåţţé ḿåńîƒéšţ ! !!]"
 
-#: gui/settings_controller.py:338 gui/settings_controller.py:358
+#: gui/settings_controller.py:340 gui/settings_controller.py:360
 msgid "VSR preset"
 msgstr "[!! ṼŠŔ ƥŕéšéţ ! !!]"
 
-#: gui/settings_controller.py:308
+#: gui/settings_controller.py:310
 msgid "VSR settings"
 msgstr "[!! ṼŠŔ šéţţîńĝš ! !!]"
 
@@ -2341,6 +2345,10 @@ msgstr "[!! Ŵåîţ ƒöŕ ţħé çûŕŕéńţ ƀåţçħ ţö ƒîńîšħ. 
 #: gui/layout_build.py:1651 gui/preview_controller.py:225 gui/preview_controller.py:323
 msgid "Waiting"
 msgstr "[!! Ŵåîţîńĝ ! !!]"
+
+#: gui/settings_controller.py:253
+msgid "WebVTT subtitles"
+msgstr "[!! ŴéƀṼŢŢ šûƀţîţŀéš ! !!]"
 
 #: gui/onboarding.py:69
 msgid "Welcome"

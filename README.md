@@ -530,6 +530,43 @@ The output reproducibility sidecar records the imported artifact's current
 SHA-256, whether it differs from the exported hash, and the deterministic mask
 composition order. **Review mask** shows that composed result before a run.
 
+### WebVTT translation
+
+`--translation-source-srt` and `--translated-srt` accept `.vtt` as well as
+`.srt`, and a WebVTT source stays WebVTT all the way through: the translated
+sidecar is written as `<output>.<lang>.vtt`.
+
+WebVTT carries a great deal SRT cannot express -- cue identifiers, per-cue
+positioning (`line`, `position`, `size`, `align`, `vertical`), named `REGION`
+blocks, a `STYLE` block, `NOTE` comments, `<v>` voice spans, `<lang>` and
+`<c.class>` spans, ruby annotations, and karaoke timestamp tags. Routing a
+`.vtt` file through the SRT model would flatten all of it silently, so VSR
+parses WebVTT as WebVTT. Only the visible text runs of each cue are sent to
+the translation provider; every tag, entity, setting, region, style, and
+comment is reproduced verbatim. Parsing and re-serializing an untranslated
+document returns it byte for byte.
+
+Two behaviours are worth knowing about:
+
+- **Ruby annotations are preserved untranslated.** An `<rt>` annotation is a
+  pronunciation guide for the *source* script, so translating it would produce
+  a phonetic reading of a language the viewer is no longer looking at. The
+  base text is translated and the annotation is left alone; the report states
+  this explicitly rather than leaving you to infer it.
+- **Provider output is escaped.** A provider that returns `<b>` gets literal
+  text, not new markup, so it cannot restructure the cue or inject tags.
+
+Every translation report includes a `loss` block. A WebVTT-to-WebVTT pass
+records `lossless: true` explicitly -- "no report" and "nothing was lost"
+must not look the same. Converting to SRT enumerates each dropped feature
+and how many times it occurred, and muxing WebVTT into MP4 says that
+`mov_text` loses regions, cue settings, and STYLE rules instead of reporting
+a neutral "conversion". Matroska and WebM copy WebVTT through untouched.
+
+TTML and IMSC are out of scope. `.ttml`, `.dfxp`, `.itt`, and `.xml` are
+rejected with a clear message rather than being parsed as SRT, which would be
+the same silent flattening one format further along.
+
 ### Freezing an approved matte
 
 A matte you have reviewed frame by frame is the most expensive artifact
@@ -682,9 +719,9 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--whisper-backend` | Whisper fallback backend. | faster-whisper | faster-whisper \| ffmpeg | Public |
 | `--restyle` | Re-burn an .srt or .ass subtitle file onto the cleaned output. | - | - | Public |
 | `--restyle-style` | ASS force_style override for --restyle (e.g. 'FontSize=24,PrimaryColour=&H00FFFFFF'). | - | - | Public |
-| `--translate` | Erase subtitles, translate a source SRT locally, and re-embed it. | Off | - | Public |
-| `--translated-srt` | Validated UTF-8 SRT that is already translated; bypasses a provider. | - | - | Public |
-| `--translation-source-srt` | Source-language SRT to translate; otherwise OCR/Whisper cues are used. | - | - | Public |
+| `--translate` | Erase subtitles, translate a source SRT or WebVTT file locally, and re-embed it. | Off | - | Public |
+| `--translated-srt` | Validated UTF-8 .srt or .vtt that is already translated; bypasses a provider. | - | - | Public |
+| `--translation-source-srt` | Source-language .srt or .vtt to translate; otherwise OCR/Whisper cues are used. A .vtt source keeps its cue identifiers, settings, regions, styles, and markup. | - | - | Public |
 | `--translation-provider` | Registered local translation provider name (default: command). | command | - | Public |
 | `--translation-source-lang` | Source language tag passed to the local translation provider. | auto | - | Public |
 | `--translation-target-lang` | Required target language tag when generating translated subtitles. | - | - | Public |

@@ -123,6 +123,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- tracking.py                 # Kalman tracking, pHash reuse, karaoke grouping.
 |   |-- update_check.py             # Startup version check (opt-in).
 |   |-- vapoursynth_bridge.py       # VapourSynth bridge (opt-in).
+|   |-- webvtt.py                   # Loss-aware WebVTT parse / translate / serialize.
 |   |-- whisper_fallback.py         # Whisper-based timing for OCR-empty speech.
 |   `-- work_directory.py           # End-to-end scratch / storage policy.
 |   `-- inpainters/

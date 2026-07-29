@@ -7,19 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2
 
-- [ ] P2 -- RM-154 Add loss-aware WebVTT translation and re-embed interchange
-  Why: WebVTT cue IDs, settings, regions, vertical text, ruby, voice/language
-    spans, STYLE, and NOTE cannot be safely flattened through the SRT-only model.
-  Evidence: `backend/subtitle_translation.py`; `backend/container_payload.py`;
-    W3C WebVTT and Matroska subtitle mappings.
-  Touches: subtitle parser/model/serializer; translation provider protocol; CLI
-    and GUI file filters; container mapping; fixtures/tests.
-  Acceptance: `.vtt` input/output preserves timing, cue IDs/settings, and supported
-    inline/block structure while translating only visible cue text; unsupported
-    regions/styles produce an explicit loss report; vertical, ruby, positioned,
-    NOTE, and STYLE fixtures round-trip; TTML/IMSC remains out of scope.
-  Complexity: M
-
 ### P3
 
 - [ ] P3 -- RM-155 Supervise each queue job in an isolated child process

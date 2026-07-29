@@ -91,7 +91,7 @@ def validate_translation_config(config: object) -> None:
             "translation workflow cannot be combined with restyle_subtitle")
     translated = str(getattr(config, "translation_srt", "") or "").strip()
     if translated:
-        read_srt(translated)
+        read_subtitles(translated)
         return
     target = normalize_language_tag(
         getattr(config, "translation_target_lang", ""))
@@ -106,7 +106,7 @@ def validate_translation_config(config: object) -> None:
         _resolved_command(getattr(config, "translation_command", ""))
     source = str(getattr(config, "translation_source_srt", "") or "").strip()
     if source:
-        read_srt(source)
+        read_subtitles(source)
 
 
 def _timestamp_seconds(value: str) -> float:
@@ -272,11 +272,131 @@ def _command_provider(
     return [str(value or "") for value in translations]
 
 
-def translated_srt_path(output_path: str | Path, target_language: str) -> Path:
+def translated_srt_path(
+    output_path: str | Path,
+    target_language: str,
+    *,
+    suffix: str = ".srt",
+) -> Path:
     output = Path(output_path)
     tag = normalize_language_tag(target_language, "translated")
     safe_tag = re.sub(r"[^A-Za-z0-9_.-]", "-", tag)
-    return output.with_name(f"{output.stem}.{safe_tag}.srt")
+    extension = str(suffix or ".srt")
+    if not extension.startswith("."):
+        extension = f".{extension}"
+    return output.with_name(f"{output.stem}.{safe_tag}{extension}")
+
+
+def subtitle_format(path: str | Path) -> str:
+    """Return "vtt" or "srt" for a subtitle path. Anything else is SRT.
+
+    Only these two are claimed. TTML/IMSC are a different model entirely
+    and are rejected loudly rather than silently parsed as SRT.
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix == ".vtt":
+        return "vtt"
+    if suffix in {".ttml", ".dfxp", ".xml", ".itt"}:
+        raise SubtitleTranslationError(
+            f"TTML/IMSC subtitles are not supported: {Path(path).name}")
+    return "srt"
+
+
+def read_subtitles(path: str | Path):
+    """Read a subtitle file as its native model (VttDocument or SRT cues).
+
+    WebVTT failures are re-raised as `SubtitleTranslationError` so every
+    caller of this module keeps catching one exception type; a bad `.vtt`
+    must not escape as an unrelated error nobody is handling.
+    """
+    if subtitle_format(path) == "vtt":
+        from backend.webvtt import WebVttError, read_vtt
+
+        try:
+            return read_vtt(path)
+        except WebVttError as exc:
+            raise SubtitleTranslationError(str(exc)) from exc
+    return read_srt(path)
+
+
+def _translate_webvtt(
+    source_path: Path,
+    destination: Path,
+    provider,
+    provider_key: str,
+    source: str,
+    target: str,
+    provider_options: Mapping[str, object],
+    source_kind: str,
+) -> dict:
+    """RM-154: translate a WebVTT document without flattening it.
+
+    Only the visible text runs of each cue are sent to the provider. Cue
+    identifiers, timing text, positioning settings, regions, styles,
+    comments, and inline markup are reproduced verbatim, so what comes
+    back is the same document in another language rather than a
+    downgraded one.
+    """
+    from backend.webvtt import (
+        WebVttError,
+        apply_document_runs,
+        document_runs,
+        loss_report,
+        read_vtt,
+        render_vtt,
+    )
+
+    try:
+        document = read_vtt(source_path)
+    except WebVttError as exc:
+        raise SubtitleTranslationError(str(exc)) from exc
+    runs = document_runs(document)
+    if not runs:
+        raise SubtitleTranslationError(
+            "WebVTT source has no translatable cue text")
+    if len(runs) > MAX_CUES:
+        raise SubtitleTranslationError(
+            "WebVTT translatable run count exceeds the safety limit")
+    try:
+        translations = provider(runs, source, target, dict(provider_options))
+    except SubtitleTranslationError:
+        raise
+    except Exception as exc:
+        raise SubtitleTranslationError(
+            f"translation provider {provider_key} failed: {exc}") from exc
+    try:
+        translated = apply_document_runs(
+            document, [str(value or "") for value in translations])
+    except WebVttError as exc:
+        raise SubtitleTranslationError(
+            f"translation provider {provider_key} returned unusable "
+            f"WebVTT text: {exc}"
+        ) from exc
+    _write_text_atomic(destination, render_vtt(translated))
+    report = {
+        "schema": TRANSLATION_SCHEMA,
+        "requested": True,
+        "status": "translated",
+        "provider": provider_key,
+        "providerMode": "local",
+        "sourceKind": source_kind,
+        "sourceFormat": "vtt",
+        "targetFormat": "vtt",
+        "sourceLanguage": source,
+        "targetLanguage": target,
+        "cueCount": len(document.cues),
+        "runCount": len(runs),
+        "source": {
+            "name": source_path.name,
+            "sha256": _sha256(source_path),
+        },
+        "translated": {
+            "name": destination.name,
+            "sha256": _sha256(destination),
+        },
+        "loss": loss_report(translated, target_format="vtt"),
+    }
+    return report
 
 
 def translate_srt_file(
@@ -298,6 +418,19 @@ def translate_srt_file(
     if not target:
         raise SubtitleTranslationError("translation target language is required")
     source = normalize_language_tag(source_language, "auto")
+    # RM-154: WebVTT keeps its own model. Dispatch before the SRT parser
+    # gets a chance to flatten identifiers, settings, and markup away.
+    if subtitle_format(source_path) == "vtt":
+        return _translate_webvtt(
+            Path(source_path),
+            Path(output_path),
+            provider,
+            provider_key,
+            source,
+            target,
+            dict(provider_options or {}),
+            source_kind,
+        )
     cues = read_srt(source_path)
     try:
         translations = provider(
@@ -320,6 +453,8 @@ def translate_srt_file(
         "provider": provider_key,
         "providerMode": "local",
         "sourceKind": source_kind,
+        "sourceFormat": "srt",
+        "targetFormat": "srt",
         "sourceLanguage": source,
         "targetLanguage": target,
         "cueCount": len(cues),
@@ -340,22 +475,35 @@ def provided_translation_evidence(
     target_language: str = "",
 ) -> dict:
     source = Path(path)
-    cues = read_srt(source)
-    return {
+    fmt = subtitle_format(source)
+    report = {
         "schema": TRANSLATION_SCHEMA,
         "requested": True,
         "status": "validated",
         "provider": "provided",
         "providerMode": "provided",
-        "sourceKind": "provided-translated-srt",
+        "sourceKind": f"provided-translated-{fmt}",
+        "sourceFormat": fmt,
+        "targetFormat": fmt,
         "sourceLanguage": "",
         "targetLanguage": normalize_language_tag(target_language),
-        "cueCount": len(cues),
         "translated": {
             "name": source.name,
             "sha256": _sha256(source),
         },
     }
+    if fmt == "vtt":
+        from backend.webvtt import WebVttError, loss_report, read_vtt
+
+        try:
+            document = read_vtt(source)
+        except WebVttError as exc:
+            raise SubtitleTranslationError(str(exc)) from exc
+        report["cueCount"] = len(document.cues)
+        report["loss"] = loss_report(document, target_format="vtt")
+    else:
+        report["cueCount"] = len(read_srt(source))
+    return report
 
 
 def render_segments_srt(

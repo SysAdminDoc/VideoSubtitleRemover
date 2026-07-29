@@ -6,6 +6,28 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **WebVTT translates as WebVTT instead of being flattened to SRT.**
+  `.vtt` sources went through the SRT model, which silently discarded cue
+  identifiers, per-cue positioning (`line`/`position`/`size`/`align`/
+  `vertical`), `REGION` and `STYLE` blocks, `NOTE` comments, `<v>` voice
+  spans, `<lang>` and `<c.class>` spans, ruby annotations, and karaoke
+  timestamp tags -- the file still looked like subtitles, so nobody noticed
+  until it was on screen. New `backend/webvtt.py` parses WebVTT as WebVTT:
+  only the visible text runs of each cue reach the translation provider, and
+  everything else is reproduced verbatim, so parsing and re-serializing an
+  untranslated document returns it byte for byte. A `.vtt` source now yields
+  a `<output>.<lang>.vtt` sidecar. Ruby annotations are deliberately left
+  untranslated (an `<rt>` reading guides the *source* script), and provider
+  output is escaped so a provider cannot inject markup or restructure a cue.
+- **Every translation carries an explicit loss report.** A
+  WebVTT-to-WebVTT pass records `lossless: true` rather than omitting the
+  report, because "no report" and "nothing was lost" must not look the same.
+  Converting to SRT enumerates each dropped feature with a count and a
+  reason, and muxing WebVTT into MP4 now states that `mov_text` loses
+  regions, cue settings, and STYLE rules instead of reporting a neutral
+  "text subtitles require MP4/MOV conversion". TTML/IMSC (`.ttml`, `.dfxp`,
+  `.itt`, `.xml`) are rejected with a clear message rather than parsed as
+  SRT, which would be the same silent flattening one format further along.
 - **An approved matte can be frozen as a reusable queue input.** A matte
   reviewed frame by frame is the most expensive artifact this pipeline
   produces, and a rerun threw it away to re-derive it from OCR and tracking

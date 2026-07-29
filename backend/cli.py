@@ -660,13 +660,17 @@ def _build_parser(mode_choices):
                        help="ASS force_style override for --restyle (e.g. 'FontSize=24,PrimaryColour=&H00FFFFFF').")
     parser.add_argument(
         "--translate", action="store_true",
-        help="Erase subtitles, translate a source SRT locally, and re-embed it.")
+        help=("Erase subtitles, translate a source SRT or WebVTT file "
+              "locally, and re-embed it."))
     parser.add_argument(
         "--translated-srt", default="", metavar="PATH",
-        help="Validated UTF-8 SRT that is already translated; bypasses a provider.")
+        help=("Validated UTF-8 .srt or .vtt that is already translated; "
+              "bypasses a provider."))
     parser.add_argument(
         "--translation-source-srt", default="", metavar="PATH",
-        help="Source-language SRT to translate; otherwise OCR/Whisper cues are used.")
+        help=("Source-language .srt or .vtt to translate; otherwise "
+              "OCR/Whisper cues are used. A .vtt source keeps its cue "
+              "identifiers, settings, regions, styles, and markup."))
     parser.add_argument(
         "--translation-provider", default="command", metavar="NAME",
         help="Registered local translation provider name (default: command).")

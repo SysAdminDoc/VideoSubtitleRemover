@@ -252,7 +252,7 @@ def burn_subtitles(
     video_encode_args: Optional[Sequence[str]] = None,
     preserve_audio: bool = True,
 ) -> Optional[str]:
-    """Re-burn a subtitle file (.srt or .ass) into the cleaned video.
+    """Re-burn a subtitle file (.srt, .vtt, or .ass) into the cleaned video.
 
     Uses ffmpeg's subtitles filter. An optional ASS style override string
     lets callers restyle the burned text (font, size, colour, position).
