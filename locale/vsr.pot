@@ -40,7 +40,7 @@ msgstr ""
 msgid "ASS style override"
 msgstr ""
 
-#: gui/support_controller.py:480 gui/support_controller.py:490
+#: gui/support_controller.py:495 gui/support_controller.py:505
 msgid "About {app_name}"
 msgstr ""
 
@@ -204,7 +204,7 @@ msgstr ""
 msgid "BACKEND STATUS"
 msgstr ""
 
-#: gui/support_controller.py:492
+#: gui/support_controller.py:507
 msgid "Backend status and app version."
 msgstr ""
 
@@ -256,7 +256,7 @@ msgstr ""
 msgid "CPU mode"
 msgstr ""
 
-#: gui/support_controller.py:550
+#: gui/support_controller.py:565
 msgid "CPU only"
 msgstr ""
 
@@ -452,11 +452,11 @@ msgstr ""
 msgid "Cleared mask corrections"
 msgstr ""
 
-#: gui/support_controller.py:559
+#: gui/support_controller.py:583
 msgid "Click Import or drag files onto the queue"
 msgstr ""
 
-#: gui/preview_controller.py:840 gui/quality_controller.py:346 gui/support_controller.py:591
+#: gui/preview_controller.py:840 gui/quality_controller.py:346 gui/support_controller.py:615
 msgid "Close"
 msgstr ""
 
@@ -468,7 +468,7 @@ msgstr ""
 msgid "Completed outputs are ready. Review the outliers or open the log for details."
 msgstr ""
 
-#: gui/support_controller.py:555
+#: gui/support_controller.py:570
 msgid "Compute"
 msgstr ""
 
@@ -584,11 +584,11 @@ msgstr ""
 msgid "Detection"
 msgstr ""
 
-#: gui/support_controller.py:553
+#: gui/support_controller.py:568
 msgid "Detection engines"
 msgstr ""
 
-#: gui/support_controller.py:565 gui/support_controller.py:567
+#: gui/support_controller.py:589 gui/support_controller.py:591
 msgid "Disk cache"
 msgstr ""
 
@@ -720,7 +720,7 @@ msgstr ""
 msgid "FAILED"
 msgstr ""
 
-#: gui/layout_helpers.py:46 gui/support_controller.py:557
+#: gui/layout_helpers.py:46 gui/support_controller.py:572
 msgid "FFmpeg"
 msgstr ""
 
@@ -948,11 +948,11 @@ msgstr ""
 msgid "Inpainting"
 msgstr ""
 
-#: gui/support_controller.py:554
+#: gui/support_controller.py:569
 msgid "Inpainting engines"
 msgstr ""
 
-#: gui/support_controller.py:559
+#: gui/support_controller.py:583
 msgid "Input"
 msgstr ""
 
@@ -1016,6 +1016,10 @@ msgstr ""
 msgid "Languages"
 msgstr ""
 
+#: gui/support_controller.py:579
+msgid "Last run"
+msgstr ""
+
 #: gui/region_controller.py:373 gui/region_controller.py:377
 msgid "Leave blank for the end of the video."
 msgstr ""
@@ -1048,7 +1052,7 @@ msgstr ""
 msgid "Local provider"
 msgstr ""
 
-#: gui/support_controller.py:561
+#: gui/support_controller.py:585
 msgid "Log file"
 msgstr ""
 
@@ -1100,7 +1104,7 @@ msgstr ""
 msgid "Measured {items} completed item{item_suffix} across {samples} sampled frame{sample_suffix}. Higher is generally better."
 msgstr ""
 
-#: gui/support_controller.py:557
+#: gui/support_controller.py:572
 msgid "Missing"
 msgstr ""
 
@@ -1108,7 +1112,7 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-#: gui/support_controller.py:579
+#: gui/support_controller.py:603
 msgid "Model cache"
 msgstr ""
 
@@ -1224,7 +1228,7 @@ msgstr ""
 msgid "No valid correction frame ranges are available"
 msgstr ""
 
-#: gui/region_controller.py:1148 gui/support_controller.py:544 gui/support_controller.py:545
+#: gui/region_controller.py:1148 gui/support_controller.py:559 gui/support_controller.py:560
 msgid "None"
 msgstr ""
 
@@ -1248,7 +1252,7 @@ msgstr ""
 msgid "Only remove the selected language"
 msgstr ""
 
-#: gui/quality_controller.py:329 gui/support_controller.py:577
+#: gui/quality_controller.py:329 gui/support_controller.py:601
 msgid "Open log"
 msgstr ""
 
@@ -1476,7 +1480,7 @@ msgstr ""
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr ""
 
-#: gui/app.py:1118 gui/layout_build.py:1855 gui/layout_build.py:2080 gui/layout_build.py:2091 gui/layout_helpers.py:48 gui/support_controller.py:557
+#: gui/app.py:1118 gui/layout_build.py:1855 gui/layout_build.py:2080 gui/layout_build.py:2091 gui/layout_helpers.py:48 gui/support_controller.py:572
 msgid "Ready"
 msgstr ""
 
@@ -1796,11 +1800,11 @@ msgstr ""
 msgid "Set region..."
 msgstr ""
 
-#: gui/layout_build.py:232 gui/support_controller.py:560
+#: gui/layout_build.py:232 gui/support_controller.py:584
 msgid "Settings"
 msgstr ""
 
-#: gui/support_controller.py:588
+#: gui/support_controller.py:612
 msgid "Settings folder"
 msgstr ""
 
@@ -1864,7 +1868,7 @@ msgstr ""
 msgid "Start and end frames must be whole numbers"
 msgstr ""
 
-#: gui/layout_build.py:2014 gui/processing_controller.py:1017
+#: gui/layout_build.py:2014 gui/processing_controller.py:1026
 msgid "Start batch"
 msgstr ""
 
@@ -1924,7 +1928,7 @@ msgstr ""
 msgid "Subtract from mask"
 msgstr ""
 
-#: gui/support_controller.py:234 gui/support_controller.py:585
+#: gui/support_controller.py:234 gui/support_controller.py:609
 msgid "Support bundle"
 msgstr ""
 
@@ -2116,7 +2120,7 @@ msgstr ""
 msgid "Values below this floor use normal inpainting."
 msgstr ""
 
-#: gui/support_controller.py:522
+#: gui/support_controller.py:537
 msgid "Version {version}"
 msgstr ""
 
@@ -2244,11 +2248,11 @@ msgstr ""
 msgid "selected"
 msgstr ""
 
-#: gui/support_controller.py:567
+#: gui/support_controller.py:591
 msgid "unavailable"
 msgstr ""
 
-#: gui/support_controller.py:548
+#: gui/support_controller.py:563
 msgid "{count} GPU{suffix}"
 msgstr ""
 

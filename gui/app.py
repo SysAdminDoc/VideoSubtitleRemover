@@ -2660,6 +2660,11 @@ class VideoSubtitleRemoverApp(
                     if isinstance(record.get("detection_stats"), dict)
                     else {}
                 ),
+                execution_provenance=(
+                    dict(record.get("execution_provenance"))
+                    if isinstance(record.get("execution_provenance"), dict)
+                    else {}
+                ),
                 pause_checkpoint_path=str(
                     record.get("pause_checkpoint_path") or ""),
                 soft_subtitle_streams=list(

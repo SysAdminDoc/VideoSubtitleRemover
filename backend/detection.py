@@ -209,10 +209,56 @@ class SubtitleDetector:
         self._surya_processor = None
         self._easyocr_reader = None
         self._vlm_detector = None
+        # RM-147: what ran, not just what was asked for.
+        self._provider_name = ""
+        self._effective_device = ""
+        self._provenance_reason = ""
         self._load_model()
+        self._finalize_provenance()
 
     def _is_gpu_device(self) -> bool:
         return 'cuda' in self.device
+
+    def _finalize_provenance(self) -> None:
+        """Resolve the effective compute class from the loaded engine."""
+        from backend.execution_provenance import (
+            DEVICE_CPU,
+            DEVICE_UNKNOWN,
+            device_from_provider,
+            normalize_device,
+        )
+
+        if not self._provider_name:
+            # Every remaining path (PaddleOCR CPU build, Surya, EasyOCR,
+            # OpenCV fallback) is CPU unless it announced a GPU provider.
+            self._provider_name = (
+                "cuda" if self._is_gpu_device()
+                and self._engine_name in {"PaddleOCR", "Surya", "EasyOCR"}
+                else "cpu"
+            )
+        effective = device_from_provider(self._provider_name)
+        if effective == DEVICE_UNKNOWN:
+            effective = DEVICE_CPU
+        self._effective_device = effective
+        if (normalize_device(self.device) != effective
+                and not self._provenance_reason):
+            self._provenance_reason = (
+                f"{self._engine_name} runs on {effective} in this build"
+            )
+
+    def execution_provenance(self):
+        """Return the OCR stage's requested/effective execution record."""
+        from backend.execution_provenance import StageProvenance
+
+        return StageProvenance(
+            stage="ocr",
+            requested_device=self.device,
+            effective_device=self._effective_device or "cpu",
+            engine=self._engine_name,
+            backend=self._engine_name,
+            provider=self._provider_name,
+            fallback_reason=self._provenance_reason,
+        )
 
     def _load_model(self):
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
@@ -225,6 +271,7 @@ class SubtitleDetector:
                 if vlm is not None:
                     self._vlm_detector = vlm
                     self._engine_name = f"VLM ({vlm.name})"
+                    self._provider_name = getattr(vlm, "provider", "") or self.device
                     logger.info(f"VLM OCR detector active: {vlm.name}")
                     return
             except Exception as exc:
@@ -233,6 +280,7 @@ class SubtitleDetector:
 
         if self.engine == "opencv":
             self._engine_name = "OpenCV fallback"
+            self._provider_name = "cv2"
             logger.info("OpenCV fallback detection selected")
             return
 
@@ -244,6 +292,7 @@ class SubtitleDetector:
                 from backend.opencv_ocr import build_opencv_dnn_rapidocr
                 self._rapid_model = build_opencv_dnn_rapidocr()
                 self._engine_name = "RapidOCR (OpenCV 5 DNN)"
+                self._provider_name = "cv2-dnn"
                 logger.info(
                     "RapidOCR loaded via OpenCV 5 DNN PP-OCRv6 "
                     f"(lang={self.lang})"
@@ -281,6 +330,10 @@ class SubtitleDetector:
                         "DirectML": "RapidOCR (DirectML)",
                         "OpenVINO": "RapidOCR (OpenVINO)",
                     }.get(rapid_provider, "RapidOCR")
+                    self._provider_name = {
+                        "DirectML": "DmlExecutionProvider",
+                        "OpenVINO": "OpenVINO",
+                    }.get(rapid_provider, "CPUExecutionProvider")
                     if rapid_provider == "OpenVINO":
                         logger.info(
                             f"RapidOCR loaded via OpenVINO engine (lang={self.lang})"
@@ -302,6 +355,8 @@ class SubtitleDetector:
                 from backend.paddle_compat import build_paddleocr
                 self._paddle_model = build_paddleocr(self.lang, self.device)
                 self._engine_name = "PaddleOCR"
+                self._provider_name = (
+                    "cuda" if self._is_gpu_device() else "cpu")
                 logger.info(f"PaddleOCR loaded (lang={self.lang})")
                 return
             except ImportError:
@@ -316,6 +371,8 @@ class SubtitleDetector:
                 from surya.detection import DetectionPredictor
                 self._surya_det = DetectionPredictor()
                 self._engine_name = "Surya"
+                self._provider_name = (
+                    "cuda" if self._is_gpu_device() else "cpu")
                 logger.info("Surya text detection loaded (GPL opt-in via VSR_ALLOW_GPL)")
                 return
             except ImportError:
@@ -337,6 +394,7 @@ class SubtitleDetector:
         # EasyOCR
         if self.engine not in {"auto", "easyocr"}:
             self._engine_name = "OpenCV fallback"
+            self._provider_name = "cv2"
             logger.warning(
                 "%s was selected but is unavailable; using OpenCV fallback",
                 self.engine,
@@ -344,6 +402,7 @@ class SubtitleDetector:
             return
         if not _module_can_import("easyocr"):
             self._engine_name = "OpenCV fallback"
+            self._provider_name = "cv2"
             logger.warning(
                 "EasyOCR is unavailable or failed its import probe; "
                 "using OpenCV fallback detection"
@@ -364,6 +423,7 @@ class SubtitleDetector:
                 lang_list.append("en")
             self._easyocr_reader = easyocr.Reader(lang_list, gpu=gpu, verbose=False)
             self._engine_name = "EasyOCR"
+            self._provider_name = "cuda" if gpu else "cpu"
             logger.info(f"EasyOCR loaded (lang={lang_list})")
             return
         except ImportError:
@@ -372,6 +432,7 @@ class SubtitleDetector:
             logger.warning(f"EasyOCR init failed: {e}")
 
         self._engine_name = "OpenCV fallback"
+        self._provider_name = "cv2"
         logger.warning("No OCR engine available, using OpenCV fallback detection")
 
     def detect(self, frame: np.ndarray, threshold: float = 0.5) -> List[Tuple[int, int, int, int]]:

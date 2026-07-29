@@ -904,6 +904,8 @@ class QueueItem:
     output_contract_report: dict = field(default_factory=dict)
     correction_retry: Optional[dict] = None
     selective_rerun: dict = field(default_factory=dict)
+    # RM-147: requested vs. effective device/engine/backend and throughput.
+    execution_provenance: dict = field(default_factory=dict)
 
 
 # -- Helpers ----------------------------------------------------------------
@@ -1209,6 +1211,8 @@ def save_queue_state(queue_items):
                     ),
                     "selective_rerun": dict(
                         getattr(item, "selective_rerun", {}) or {}),
+                    "execution_provenance": dict(
+                        getattr(item, "execution_provenance", {}) or {}),
                 })
             if not records:
                 if QUEUE_STATE_FILE.exists():
@@ -1290,6 +1294,8 @@ def load_queue_state():
                     or not isinstance(
                         record.get("output_contract_report", {}), dict)
                     or not isinstance(record.get("selective_rerun", {}), dict)
+                    or not isinstance(
+                        record.get("execution_provenance", {}), dict)
                     or (
                         record.get("correction_retry") is not None
                         and not isinstance(record.get("correction_retry"), dict)

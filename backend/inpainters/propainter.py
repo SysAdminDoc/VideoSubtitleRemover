@@ -27,6 +27,13 @@ class ProPainterInpainter(BaseInpainter):
     residual refinement. Designed to match ProPainter quality for
     sparse occluders without the 10+ GB VRAM footprint."""
 
+    @property
+    def backend_name(self) -> str:
+        return (
+            "TBE + LaMa refinement" if self._lama is not None
+            else "TBE (no LaMa refinement)"
+        )
+
     def __init__(self, device: str = "cuda:0", config=None):
         self.device = device
         from backend.config import ProcessingConfig

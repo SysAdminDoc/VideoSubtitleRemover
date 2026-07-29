@@ -188,6 +188,18 @@ class LamaOnnxInpainter:
             if model_path else None
         )
 
+    @property
+    def backend_name(self) -> str:
+        """RM-147: report the provider that actually loaded, or the cv2 fallback."""
+        session = getattr(self, "_session", None)
+        if session is None:
+            return "cv2"
+        try:
+            providers = list(session.get_providers())
+        except Exception:
+            providers = []
+        return f"ONNX ({providers[0]})" if providers else "ONNX"
+
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self._session is None:
             return _cv2_fallback(frames, masks, self.config)
@@ -243,6 +255,18 @@ class MiGanInpainter:
             _maybe_session(model_path, providers, "migan-onnx")
             if model_path else None
         )
+
+    @property
+    def backend_name(self) -> str:
+        """RM-147: report the provider that actually loaded, or the cv2 fallback."""
+        session = getattr(self, "_session", None)
+        if session is None:
+            return "cv2"
+        try:
+            providers = list(session.get_providers())
+        except Exception:
+            providers = []
+        return f"ONNX ({providers[0]})" if providers else "ONNX"
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self._session is None:

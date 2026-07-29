@@ -473,6 +473,21 @@ class SupportControllerMixin:
             ).grid(row=row_idx, column=1, sticky="ew",
                    pady=3, padx=(Theme.S_SM, 0))
 
+    def _last_execution_summary(self):
+        """Most recent recorded execution provenance across the queue."""
+        best = None
+        for item in reversed(list(getattr(self, "queue", []) or [])):
+            payload = getattr(item, "execution_provenance", None)
+            if isinstance(payload, dict) and payload.get("summary"):
+                best = payload
+                break
+        if best is None:
+            return None
+        return {
+            "summary": str(best.get("summary") or ""),
+            "fell_back": bool(best.get("anyFallback")),
+        }
+
     def _show_about(self):
         """Open a themed About dialog with version, credits, and quick links."""
         dialog = tk.Toplevel(self.root)
@@ -556,6 +571,15 @@ class SupportControllerMixin:
              Theme.SUCCESS if self.gpus else Theme.WARNING)
         fact(tr("FFmpeg"), tr("Ready") if self.ffmpeg_ready else tr("Missing"),
              Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING)
+        # RM-147: the last job's real execution, so a "CUDA" run that actually
+        # used CPU OCR / cv2 inpainting is visible here too.
+        last_execution = self._last_execution_summary()
+        if last_execution:
+            fact(
+                tr("Last run"),
+                last_execution["summary"],
+                Theme.WARNING if last_execution["fell_back"] else Theme.SUCCESS,
+            )
         fact(tr("Input"), tr("Click Import or drag files onto the queue"))
         fact(tr("Settings"), str(SETTINGS_FILE))
         fact(tr("Log file"), str(LOG_FILE))

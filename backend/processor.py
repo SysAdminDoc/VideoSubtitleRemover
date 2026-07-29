@@ -80,6 +80,11 @@ from backend.io import (
     _terminate_subprocess,
 )
 from backend.encoder import _detect_hw_encoder, probe_d3d12_encoder
+from backend.execution_provenance import (
+    ExecutionProvenance,
+    StageProvenance,
+    normalize_device,
+)
 from backend.device_provider import DeviceProvider, RuntimeDeviceProvider
 from backend.container_payload import (
     build_container_mux_args as build_container_mux_args,
@@ -613,7 +618,14 @@ class SubtitleRemover(
             self.config.device)
         requested_device = self.config.device
         self.config.device = self.device_provider.probe_available()
+        # RM-147: keep the raw request so reports can show requested vs.
+        # effective instead of only the resolved value.
+        self._requested_device = requested_device
+        self._device_fallback_reason = ""
         if self.config.device != requested_device:
+            self._device_fallback_reason = (
+                f"{requested_device} is unavailable; using {self.config.device}"
+            )
             logger.warning(
                 "Inference device fallback: %s -> %s",
                 requested_device,
@@ -776,10 +788,107 @@ class SubtitleRemover(
                     except Exception:
                         logger.warning("NVML shutdown failed", exc_info=True)
 
+        self._refresh_execution_provenance()
         logger.info(f"Detector: {self.detector._engine_name} | "
                     f"Inpainter: {self.config.mode.value} | "
                     f"Device: {self.config.device}"
                     f"{' | HW encode: ' + self._hw_encoder if self._hw_encoder else ''}")
+        provenance = self.execution_provenance.summary()
+        if provenance:
+            logger.info("Execution: %s", provenance)
+        if self.execution_provenance.any_fallback:
+            logger.warning(
+                "Requested %s but part of the pipeline ran elsewhere: %s",
+                self.execution_provenance.requested_device or "auto",
+                provenance,
+            )
+
+    @property
+    def execution_provenance(self) -> ExecutionProvenance:
+        """RM-147: how this job actually executed.
+
+        Lazily created so harnesses that build a remover through ``__new__``
+        (reference corpus, synthetic A/B tests) still get a valid record.
+        """
+        value = self.__dict__.get("_execution_provenance")
+        if value is None:
+            value = ExecutionProvenance()
+            self.__dict__["_execution_provenance"] = value
+        return value
+
+    @execution_provenance.setter
+    def execution_provenance(self, value: ExecutionProvenance) -> None:
+        self.__dict__["_execution_provenance"] = value
+
+    def _refresh_execution_provenance(self) -> None:
+        """Record requested vs. effective device/engine/backend for this job."""
+        provenance = ExecutionProvenance(
+            requested_device=getattr(self, "_requested_device", "")
+            or self.config.device,
+            effective_device=self.config.device,
+            device_fallback_reason=getattr(self, "_device_fallback_reason", ""),
+            inpaint_mode=self.config.mode.value,
+        )
+        detector = getattr(self, "detector", None)
+        collect = getattr(detector, "execution_provenance", None)
+        if callable(collect):
+            try:
+                stage = collect()
+                # The detector is built after the device downgrade, so report
+                # the user's original request rather than the resolved value.
+                stage.requested_device = provenance.requested_device
+                provenance.set_stage(stage)
+            except Exception:
+                logger.warning("OCR provenance probe failed", exc_info=True)
+        inpainter = getattr(self, "inpainter", None)
+        if inpainter is not None:
+            backend_name = ""
+            try:
+                backend_name = str(getattr(inpainter, "backend_name", "") or "")
+            except Exception:
+                logger.warning("Inpainter provenance probe failed", exc_info=True)
+            effective = self.config.device
+            reason = ""
+            lowered = backend_name.lower()
+            if "cv2" in lowered or "opencv" in lowered or "tbe" in lowered:
+                # These paths are CPU/OpenCV implementations regardless of the
+                # requested accelerator.
+                effective = "cpu"
+                if normalize_device(self.config.device) != "cpu":
+                    reason = (
+                        f"{backend_name} has no GPU implementation in this build"
+                    )
+            elif "cuda" in lowered:
+                effective = "cuda:0"
+            elif "dml" in lowered or "directml" in lowered:
+                effective = "directml"
+            elif "cpuexecutionprovider" in lowered:
+                effective = "cpu"
+                if normalize_device(self.config.device) != "cpu":
+                    reason = "ONNX Runtime loaded the CPU execution provider"
+            provenance.set_stage(StageProvenance(
+                stage="inpaint",
+                requested_device=provenance.requested_device,
+                effective_device=effective,
+                engine=self.config.mode.value,
+                backend=backend_name or type(inpainter).__name__,
+                provider=backend_name,
+                fallback_reason=reason,
+            ))
+        # Any stage that fell back must carry a reason; inherit the job-level
+        # device fallback when the stage itself did not record one.
+        for stage in provenance.stages.values():
+            if stage.fell_back and not stage.fallback_reason:
+                stage.fallback_reason = (
+                    provenance.device_fallback_reason
+                    or f"{stage.engine or stage.backend} ran on "
+                        f"{normalize_device(stage.effective_device)}"
+                )
+        previous = getattr(self, "execution_provenance", None)
+        if previous is not None:
+            provenance.frames_processed = previous.frames_processed
+            provenance.processing_seconds = previous.processing_seconds
+        self.execution_provenance = provenance
 
     def _empty_stage_timings(self) -> dict[str, float]:
         return {stage: 0.0 for stage in self._STAGE_TIMING_KEYS}
@@ -2728,6 +2837,15 @@ class SubtitleRemover(
             )
 
             self.last_output_path = final_output_path
+            # RM-147: throughput is part of the provenance record -- a "CUDA"
+            # run that quietly ran on CPU shows up here as well as in the
+            # engine labels.
+            self.execution_provenance.frames_processed = int(frames_to_process)
+            self.execution_provenance.processing_seconds = round(sum(
+                float(value)
+                for key, value in self.last_stage_timings.items()
+                if key in ("decode", "ocr", "mask", "inpaint", "encode")
+            ), 3)
             self._write_reproducibility_sidecar(
                 input_path, final_output_path,
                 checkpoint_resumed=resume_frame_count > 0,

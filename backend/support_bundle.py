@@ -645,6 +645,14 @@ def run_inference_smoke(*, device: str = "cpu", lang: str = "en") -> dict:
         elapsed = (perf_counter() - start) * 1000.0
         engine = getattr(detector, "_engine_name", "unknown")
         ran = engine not in ("none", "unknown", None)
+        # RM-147: record the requested vs. effective device, not just a label.
+        stage = None
+        collect = getattr(detector, "execution_provenance", None)
+        if callable(collect):
+            try:
+                stage = collect().to_dict()
+            except Exception:
+                stage = None
         results["ocr"].append({
             "name": "detector",
             "ran": ran,
@@ -653,6 +661,12 @@ def run_inference_smoke(*, device: str = "cpu", lang: str = "en") -> dict:
             "boxes": len(boxes) if boxes is not None else 0,
             "ms": round(elapsed, 1),
             "reason": "" if ran else "no OCR engine available (weights absent)",
+            "requestedDevice": device,
+            "effectiveDevice": (
+                stage.get("effectiveDevice") if isinstance(stage, dict) else ""),
+            "fellBack": (
+                stage.get("fellBack") if isinstance(stage, dict) else None),
+            "provenance": stage,
         })
     except Exception as exc:  # noqa: BLE001 - smoke must never raise
         results["ocr"].append({
@@ -689,10 +703,17 @@ def run_inference_smoke(*, device: str = "cpu", lang: str = "en") -> dict:
         backend_name = getattr(inpainter, "_backend_name", "unknown")
         ok = bool(cleaned and cleaned[0] is not None
                   and cleaned[0].shape == frame.shape)
+        from backend.execution_provenance import device_from_provider
+        effective = device_from_provider(str(backend_name))
         results["inpaint"].append({
             "name": "lama", "ran": True, "passed": ok,
             "provider": str(backend_name), "ms": round(elapsed, 1),
             "reason": "" if ok else "inpaint returned an unexpected result",
+            "requestedDevice": device,
+            "effectiveDevice": effective,
+            "fellBack": bool(
+                device_from_provider(device) != effective
+                and effective != "unknown"),
         })
     except Exception as exc:  # noqa: BLE001
         results["inpaint"].append({

@@ -308,6 +308,11 @@ class _FinalizeMixin:
                     if self.last_translation.get("requested") else None
                 ),
                 clean_reference=self._clean_reference_sidecar_evidence(),
+                execution_provenance=(
+                    self.execution_provenance.to_dict()
+                    if getattr(self, "execution_provenance", None) is not None
+                    else None
+                ),
                 checkpoint_resumed=checkpoint_resumed,
                 app_version=APP_VERSION,
             )

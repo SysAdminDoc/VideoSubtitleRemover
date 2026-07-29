@@ -24,6 +24,16 @@ class BaseInpainter(ABC):
         """Inpaint the masked regions in the frames."""
         pass
 
+    @property
+    def backend_name(self) -> str:
+        """RM-147: which implementation actually ran, not the requested mode.
+
+        Subclasses that can degrade (LaMa -> ONNX / OpenCV DNN / cv2) override
+        this; the default reports the class name so every job records
+        something concrete.
+        """
+        return type(self).__name__
+
 
 def _cv2_inpaint(frame: np.ndarray, mask: np.ndarray, radius: int = 5,
                  method: int = cv2.INPAINT_TELEA) -> np.ndarray:

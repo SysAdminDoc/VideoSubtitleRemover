@@ -37,6 +37,12 @@ class AutoInpainter(BaseInpainter):
         self._propainter: Optional[ProPainterInpainter] = None
         self._sttn_streak: int = 0
 
+    @property
+    def backend_name(self) -> str:
+        if self._propainter is not None:
+            return f"AUTO ({self._propainter.backend_name})"
+        return f"AUTO ({self._sttn.backend_name})"
+
     def _ensure_propainter(self) -> ProPainterInpainter:
         if self._propainter is None:
             self._propainter = ProPainterInpainter(self.device, self.config)

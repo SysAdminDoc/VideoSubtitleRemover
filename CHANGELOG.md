@@ -6,6 +6,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **Requested and effective execution provenance is recorded per job.** A CUDA
+  request could execute RapidOCR on CPU and LaMa on cv2 while the queue, the
+  JSON report, the sidecar, and the support bundle showed only an ambiguous
+  engine/backend label -- so two runs that executed identically looked
+  different, and two that looked identical could differ. Every job now records
+  requested vs. effective device, OCR engine + execution provider, inpaint mode
+  + backend, a fallback reason for each stage, and observed throughput
+  (`backend.execution_provenance`). The record is written to the queue item, the
+  `.vsr.json` sidecar, the batch report, and the CLI `--json` output; the queue
+  row and the Help dialog label it in plain words ("RapidOCR on CPU (CUDA
+  requested)"), the inference smoke records requested vs. effective device per
+  probe, and a fallback is logged as a warning at startup.
 - **Per-lane execution-provider support state.** `backend.dependency_caps`
   now describes four provider lanes -- CPU, CUDA 12, CUDA 13, and DirectML --
   each with its own reviewed version window, tested flag, and security floor,

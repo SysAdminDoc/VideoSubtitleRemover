@@ -343,6 +343,24 @@ def summarize_quality_reports(
     }
 
 
+def _queue_item_execution_text(item) -> str:
+    """RM-147: one line describing how the job actually executed.
+
+    A CUDA request that ran RapidOCR on CPU and LaMa on cv2 is labelled as
+    such here, not hidden behind a generic engine name.
+    """
+    payload = getattr(item, "execution_provenance", None)
+    if not isinstance(payload, dict) or not payload:
+        return ""
+    summary = str(payload.get("summary") or "")
+    if not summary:
+        return ""
+    if payload.get("anyFallback"):
+        requested = str(payload.get("requestedDevice") or "").upper()
+        return f"{summary}  [fallback from {requested or 'request'}]"
+    return summary
+
+
 def _queue_item_info_text(item) -> str:
     parts = [get_file_info(item.file_path)]
     if getattr(item, "soft_subtitle_streams", None):
@@ -351,4 +369,7 @@ def _queue_item_info_text(item) -> str:
     elif (is_video_file(item.file_path)
           and not getattr(item, "soft_subtitle_probe_done", False)):
         parts.append("checking embedded subtitle tracks")
+    execution = _queue_item_execution_text(item)
+    if execution:
+        parts.append(execution)
     return "   -   ".join(part for part in parts if part)

@@ -305,6 +305,18 @@ def _app_version() -> str:
         return ""
 
 
+def _provenance_dict(remover):
+    """RM-147: serialize how the last job actually executed, if recorded."""
+    provenance = getattr(remover, "execution_provenance", None)
+    if provenance is None:
+        return None
+    try:
+        return provenance.to_dict()
+    except Exception:
+        logger.debug("Execution provenance serialization failed", exc_info=True)
+        return None
+
+
 def _soft_subtitle_action(args):
     _ensure_runtime_helpers()
     if args.strip_soft_subtitles:
@@ -1781,6 +1793,7 @@ def _run_processing(
                         elapsed_seconds=time.monotonic() - started,
                         stage_timings=getattr(remover, "last_stage_timings", None),
                         detection_stats=getattr(remover, "last_detection_stats", None),
+                        execution_provenance=_provenance_dict(remover),
                         output_contract=getattr(remover, "last_output_contract", None),
                     )
                     _cancel_pending_records(records)
@@ -1797,6 +1810,7 @@ def _run_processing(
                         elapsed_seconds=time.monotonic() - started,
                         stage_timings=getattr(remover, "last_stage_timings", None),
                         detection_stats=getattr(remover, "last_detection_stats", None),
+                        execution_provenance=_provenance_dict(remover),
                         output_contract=getattr(remover, "last_output_contract", None),
                     )
                 else:
@@ -1819,6 +1833,7 @@ def _run_processing(
                         quality_report=quality_report,
                         stage_timings=getattr(remover, "last_stage_timings", None),
                         detection_stats=getattr(remover, "last_detection_stats", None),
+                        execution_provenance=_provenance_dict(remover),
                         output_contract=getattr(remover, "last_output_contract", None),
                     )
         except KeyboardInterrupt:
@@ -1957,6 +1972,7 @@ def _run_processing(
                       else getattr(remover, "last_error_message", None)),
             "stage_timings": getattr(remover, "last_stage_timings", None),
             "detection_stats": getattr(remover, "last_detection_stats", None),
+            "execution_provenance": _provenance_dict(remover),
             "quality_report": getattr(remover, "last_quality_report", None),
             "source_timing": getattr(remover, "last_timing_report", None),
             "output_contract": getattr(remover, "last_output_contract", None),

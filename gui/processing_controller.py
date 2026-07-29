@@ -842,6 +842,15 @@ class ProcessingControllerMixin:
             if remover_obj is not None:
                 item.detection_stats = dict(
                     getattr(remover_obj, "last_detection_stats", {}) or {})
+                # RM-147: persist how this job actually executed so the queue,
+                # report, and support bundle agree.
+                provenance = getattr(remover_obj, "execution_provenance", None)
+                if provenance is not None:
+                    try:
+                        item.execution_provenance = provenance.to_dict()
+                    except Exception:
+                        logger.warning(
+                            "Execution provenance capture failed", exc_info=True)
             if self._active_remover is locals().get("remover"):
                 self._active_remover = None
             if hasattr(self, "queue"):

@@ -157,6 +157,7 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "stage_timings": _empty_stage_timings(),
         "dominant_stage": None,
         "detection_stats": _empty_detection_stats(),
+        "execution_provenance": {},
         "optimization_hint": "",
         "mode": str(_config_value(config, "mode", "")),
         "device": str(_config_value(config, "device", "")),
@@ -259,6 +260,7 @@ def finish_batch_item(record: dict, status: str, *,
                       quality_report: Optional[dict] = None,
                       stage_timings: Optional[dict] = None,
                       detection_stats: Optional[dict] = None,
+                      execution_provenance: Optional[dict] = None,
                       output_contract: Optional[dict] = None) -> dict:
     record["status"] = status
     record["message"] = message
@@ -276,6 +278,9 @@ def finish_batch_item(record: dict, status: str, *,
     )
     record["optimization_hint"] = _optimization_hint(
         record["stage_timings"], record["detection_stats"])
+    # RM-147: requested vs. effective device/engine/backend for this item.
+    if isinstance(execution_provenance, dict):
+        record["execution_provenance"] = dict(execution_provenance)
     if isinstance(output_contract, dict):
         record["output_contract"] = dict(output_contract)
     contract_record = record.get("output_contract")
@@ -838,6 +843,7 @@ def build_output_sidecar(
     mask_import: Optional[dict] = None,
     translation: Optional[dict] = None,
     clean_reference: Optional[dict] = None,
+    execution_provenance: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> dict:
@@ -881,6 +887,9 @@ def build_output_sidecar(
         "status": status,
         "checkpointResumed": checkpoint_resumed,
     }
+    # RM-147: requested vs. effective device/engine/backend for this job.
+    if execution_provenance is not None:
+        payload["executionProvenance"] = execution_provenance
     if elapsed_seconds is not None:
         payload["elapsedSeconds"] = round(max(0.0, float(elapsed_seconds)), 3)
     if stage_timings is not None:
@@ -923,6 +932,7 @@ def write_output_sidecar(
     mask_import: Optional[dict] = None,
     translation: Optional[dict] = None,
     clean_reference: Optional[dict] = None,
+    execution_provenance: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> Optional[Path]:
@@ -944,6 +954,7 @@ def write_output_sidecar(
             mask_import=mask_import,
             translation=translation,
             clean_reference=clean_reference,
+            execution_provenance=execution_provenance,
             checkpoint_resumed=checkpoint_resumed,
             app_version=app_version,
         )

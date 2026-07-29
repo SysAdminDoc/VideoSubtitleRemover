@@ -26,6 +26,13 @@ class STTNInpainter(BaseInpainter):
         from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
 
+    @property
+    def backend_name(self) -> str:
+        return (
+            "TBE (temporal background exposure)"
+            if self.config.tbe_enable else "cv2"
+        )
+
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self.config.tbe_enable and len(frames) > 1:
             return _temporal_background_expose(

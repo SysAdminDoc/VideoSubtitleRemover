@@ -60,20 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-147 Persist requested and effective execution provenance
-  Why: CUDA/DirectML requests can execute RapidOCR or LaMa on CPU/cv2 while UI,
-    smoke, and reports expose only ambiguous engine/backend labels.
-  Evidence: `backend/detection.py:168-193,258-293`;
-    `backend/support_bundle.py:619-699`; Topaz processor preferences; HitPaw
-    hardware/output troubleshooting; RapidOCR's CPU recommendation.
-  Touches: detector/inpainter result contracts; queue item schema; batch reports;
-    output sidecars; support bundle/inference smoke; queue and Help UI.
-  Acceptance: every job records requested/effective device, OCR engine +
-    provider, inpaint mode + backend, fallback reason, and observed throughput;
-    a CUDA request that runs RapidOCR CPU and LaMa cv2 is visibly labeled as such
-    in the queue, JSON report, sidecar, and support bundle.
-  Complexity: L
-
 - [ ] P1 -- RM-148 Reflow and scroll all major dialogs at 125-200% text scale
   Why: fixed non-resizable onboarding and editor windows can obscure actions at
     high text scale even though the main workbench is responsive.
