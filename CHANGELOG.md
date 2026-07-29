@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.30.0] - 2026-07-29
+
 ### Added
 
 - **Requested and effective execution provenance is recorded per job.** A CUDA
