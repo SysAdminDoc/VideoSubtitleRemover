@@ -330,7 +330,10 @@ def _read_tail_text(path: Path, max_bytes: int) -> Optional[str]:
 
 
 def redact_text(text: str) -> str:
-    return _path_scrub(text)
+    # The support bundle strips the directory tree but keeps the leaf name --
+    # the user reads this archive before sharing it, and a log line without
+    # the filename is not actionable. Crash telemetry uses the stricter mode.
+    return _path_scrub(text, keep_basename=True)
 
 
 def _is_sensitive_key(key: str) -> bool:

@@ -90,6 +90,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Security
 
+- **Opt-in crash reporting now fails closed on privacy.** The scrubber returned
+  the *original* event whenever it raised, so a scrubbing failure would have
+  shipped unredacted data, and path scrubbing only removed the directory part
+  of a path -- leaving the processed filename in the upload despite the
+  documented contract. Reports are now rebuilt from an allowlist
+  (`build_minimal_event`): exception type/value, module, function, line number,
+  Python/OS version, and release only. Breadcrumbs, extra data, request and
+  cookie payloads, user info, tags, loaded modules, server name, frame locals,
+  filenames, and context lines are never carried, the SDK is initialised with
+  `max_breadcrumbs=0` and `include_local_variables=False`, and any failure in
+  the builder drops the report entirely. Path scrubbing now removes Windows
+  drive paths, UNC shares, `file://` URLs, POSIX home/temp paths, and bare
+  media basenames. The local support bundle keeps its previous
+  directory-only redaction (the user reviews that archive before sharing it).
 - **protobuf floor raised to 6.33.5 (CVE-2026-0994).** VSR parses ONNX model
   protos from untrusted sources, so unbounded parser recursion is a runtime
   concern. `requirements.txt` and every reviewed profile lock now require a

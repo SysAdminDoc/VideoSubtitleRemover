@@ -60,17 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-145 Make opt-in crash-report privacy fail closed
-  Why: a scrubber exception returns the original event, and path scrubbing can
-    retain the processed filename despite the documented privacy contract.
-  Evidence: `backend/crash_reporter.py:1-26,43-52,110-126`.
-  Touches: `backend/crash_reporter.py`; crash-reporter privacy tests.
-  Acceptance: telemetry is built from an allowlisted minimal event or returns
-    `None` on any scrub failure; nested Windows/POSIX/UNC/file-URL paths,
-    basenames, locals, breadcrumbs, OCR text, and request data cannot leave the
-    process in tests.
-  Complexity: S
-
 - [ ] P1 -- RM-146 Make cache and matte replacements transactionally recoverable
   Why: a cache move failure can strand the current target in `.vsrbak`, while
     matte export can delete/promote one half of the artifact/manifest pair.

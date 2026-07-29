@@ -189,11 +189,11 @@ class CrashReporterRedactionTests(unittest.TestCase):
 
         text = r"Traceback: opened \\NAS01\media\clientX\confidential.mkv here"
         scrubbed = _path_scrub(text)
-        # The directory tree (server, share, sub-dirs) is stripped; like the
-        # drive-letter branch, only the leaf filename is retained.
+        # RM-145: the whole path goes, leaf filename included.
         self.assertNotIn("NAS01", scrubbed)
         self.assertNotIn("clientX", scrubbed)
         self.assertNotIn("media", scrubbed)
+        self.assertNotIn("confidential", scrubbed)
         self.assertIn("<path>", scrubbed)
 
     def test_drive_path_still_redacted(self):
