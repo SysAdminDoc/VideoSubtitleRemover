@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 # (`from backend.processor import _open_capture`) keep working.
 from backend.io import (
     MediaInputError,
+    MediaWriteError,
     SubtitleStreamInfo as SubtitleStreamInfo,
     _validate_video_input_file,
     _video_capture_open_error,
@@ -2753,6 +2754,18 @@ class SubtitleRemover(
         except InterruptedError:
             logger.info("Video processing cancelled")
             raise
+        except MediaWriteError as e:
+            # RM-139: a truncated intermediate or an unwritten frame must never
+            # look like a completed job. The finally block below releases the
+            # writer and the temp/partial output is never promoted.
+            self.last_error_message = e.user_message
+            self.last_error_reason = e.reason
+            logger.error(
+                "Output writer failed (%s): %s",
+                e.reason,
+                e.detail or e.user_message,
+            )
+            return False
         except MediaInputError as e:
             self.last_error_message = e.user_message
             self.last_error_reason = e.reason

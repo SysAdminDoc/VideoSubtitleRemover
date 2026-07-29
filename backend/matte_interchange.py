@@ -176,8 +176,10 @@ class MaskInterchangeWriter:
                 f"Matte writer received {self._frame_count} frames; expected {expected}"
             )
         if self._video_writer is not None:
-            self._video_writer.release()
-            self._video_writer = None
+            # release() raises MediaWriteError on a truncated/failed FFV1 pass;
+            # drop the handle first so abort() cannot double-release it.
+            video_writer, self._video_writer = self._video_writer, None
+            video_writer.release()
         if self.export_format == "ffv1":
             assert self._temp_artifact is not None
             if not self._temp_artifact.is_file() or not self._temp_artifact.stat().st_size:

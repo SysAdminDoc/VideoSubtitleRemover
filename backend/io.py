@@ -152,6 +152,30 @@ class MediaInputError(ValueError):
         self.detail = detail
 
 
+class MediaWriteError(RuntimeError):
+    """Intermediate/frame-sequence writer failure that must fail closed.
+
+    A partially written intermediate (timed-out or nonzero-exit FFV1 pass) or a
+    frame image that never reached disk must never be treated as a complete
+    result. Raising a typed error here keeps the caller from advancing frame or
+    checkpoint state and from promoting the partial output.
+    """
+
+    def __init__(
+        self,
+        user_message: str,
+        *,
+        reason: str,
+        path: str,
+        detail: str = "",
+    ):
+        super().__init__(user_message)
+        self.user_message = user_message
+        self.reason = reason
+        self.path = path
+        self.detail = detail
+
+
 _CORRUPT_VIDEO_MARKERS = (
     "invalid data",
     "moov atom not found",
@@ -1679,15 +1703,26 @@ class _LosslessIntermediateWriter:
             self._fallback.write(frame)
 
     def release(self) -> None:
+        """Flush and close the writer, raising when the encode did not finish.
+
+        RM-139: a flush timeout or a nonzero ffmpeg exit means the intermediate
+        on disk is truncated. Report it as a typed ``MediaWriteError`` instead of
+        logging a warning and letting the pipeline promote a partial result. The
+        process handles are cleared before raising so a second (cleanup) release
+        is a no-op.
+        """
+        failure: Optional[MediaWriteError] = None
         if self._proc is not None:
             try:
                 if self._proc.stdin is not None:
                     self._proc.stdin.close()
             except Exception:
                 pass
+            timed_out = False
             try:
                 self._proc.wait(timeout=300)
             except subprocess.TimeoutExpired:
+                timed_out = True
                 logger.warning("FFV1 ffmpeg flush timeout; killing")
                 self._proc.kill()
                 try:
@@ -1698,18 +1733,44 @@ class _LosslessIntermediateWriter:
             if stderr_thread is not None:
                 stderr_thread.join(timeout=5.0)
                 self._stderr_thread = None
+            returncode = self._proc.returncode
             if self._proc.stderr is not None:
                 try:
                     self._proc.stderr.close()
                 except Exception:
                     pass
             self._proc = None
+            if timed_out:
+                failure = MediaWriteError(
+                    "The lossless intermediate did not finish writing in time. "
+                    "The partial file was discarded; try again, ideally on a "
+                    "faster or less busy drive.",
+                    reason="intermediate_writer_timeout",
+                    path=self._path,
+                    detail=self._stderr_tail(),
+                )
+            elif returncode not in (0, None):
+                failure = MediaWriteError(
+                    "The lossless intermediate encoder failed, so the "
+                    "processed frames are incomplete. The partial file was "
+                    "discarded.",
+                    reason="intermediate_writer_failed",
+                    path=self._path,
+                    detail=(
+                        f"ffmpeg exit code {returncode}"
+                        + (f": {self._stderr_tail()}" if self._stderr_tail() else "")
+                    ),
+                )
         if self._fallback is not None:
             try:
                 self._fallback.release()
             except Exception:
                 pass
             self._fallback = None
+        if failure is not None:
+            self._opened = False
+            logger.error("%s (%s)", failure.user_message, failure.detail)
+            raise failure
 
     def terminate(self, timeout: float = 2.0) -> None:
         """Abort the active ffmpeg writer process during app shutdown."""
@@ -1756,7 +1817,30 @@ class _FrameSequenceWriter:
 
     def write(self, frame) -> None:
         name = f"{self._prefix}_{self._idx:06d}{self._ext}"
-        cv2.imwrite(str(self._dir / name), frame)
+        target = self._dir / name
+        # RM-139: cv2.imwrite reports failure by returning False (full disk,
+        # permissions, unsupported depth). Swallowing that would advance the
+        # frame index and the resume checkpoint past a frame that is not on
+        # disk, so fail closed before the index moves.
+        try:
+            ok = cv2.imwrite(str(target), frame)
+        except cv2.error as exc:
+            raise MediaWriteError(
+                "A processed frame could not be written to disk, so the "
+                "output is incomplete.",
+                reason="frame_write_failed",
+                path=str(target),
+                detail=str(exc),
+            ) from exc
+        if not ok:
+            raise MediaWriteError(
+                "A processed frame could not be written to disk, so the "
+                "output is incomplete. Check free space and folder "
+                "permissions, then run the job again.",
+                reason="frame_write_failed",
+                path=str(target),
+                detail=f"cv2.imwrite returned False for {target}",
+            )
         self._idx += 1
 
     def release(self) -> None:

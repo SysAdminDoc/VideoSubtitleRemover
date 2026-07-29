@@ -27,18 +27,42 @@ def _fresh_io_module():
         yield importlib.import_module("backend.io")
     finally:
         sys.modules.pop("backend.io", None)
-        if old_io is not None:
-            sys.modules["backend.io"] = old_io
         if had_cv2:
             sys.modules["cv2"] = old_cv2
         else:
             sys.modules.pop("cv2", None)
+        if old_io is None:
+            # Import against the real cv2 so nothing downstream inherits the
+            # stub.
+            old_io = importlib.import_module("backend.io")
+        sys.modules["backend.io"] = old_io
+        # ``from backend import io`` reads the package attribute, which the
+        # fake-cv2 import above rebound; restore it too or the stub leaks into
+        # every later test in the session.
+        setattr(importlib.import_module("backend"), "io", old_io)
+
+
+def _bare_writer(io, process):
+    """A ``_LosslessIntermediateWriter`` with only the fields release() reads."""
+    import threading
+
+    writer = object.__new__(io._LosslessIntermediateWriter)
+    writer._proc = process
+    writer._fallback = None
+    writer._path = "temp_video.mkv"
+    writer._opened = True
+    writer._stderr_thread = None
+    writer._stderr_tail_buf = bytearray(b"ffmpeg said no")
+    writer._stderr_lock = threading.Lock()
+    return writer
 
 
 class LosslessIntermediateWriterTests(unittest.TestCase):
-    def test_release_kills_ffmpeg_when_flush_times_out(self):
+    def test_release_kills_ffmpeg_and_fails_closed_when_flush_times_out(self):
         with _fresh_io_module() as io:
             class FakeProcess:
+                returncode = None
+
                 def __init__(self):
                     self.stdin = _FakeStream()
                     self.stderr = _FakeStream()
@@ -58,17 +82,106 @@ class LosslessIntermediateWriterTests(unittest.TestCase):
                     self.killed = True
 
             process = FakeProcess()
-            writer = object.__new__(io._LosslessIntermediateWriter)
-            writer._proc = process
-            writer._fallback = None
+            writer = _bare_writer(io, process)
 
-            writer.release()
+            with self.assertRaises(io.MediaWriteError) as ctx:
+                writer.release()
 
+            self.assertEqual(ctx.exception.reason, "intermediate_writer_timeout")
             self.assertTrue(process.stdin.closed)
             self.assertTrue(process.killed)
             self.assertEqual(process.wait_timeouts, [300, 10])
             self.assertTrue(process.stderr.closed)
             self.assertIsNone(writer._proc)
+            self.assertFalse(writer.isOpened())
+            # Cleanup release() in the caller's finally must be a no-op.
+            writer.release()
+
+    def test_release_fails_closed_on_nonzero_ffmpeg_exit(self):
+        with _fresh_io_module() as io:
+            class FakeProcess:
+                def __init__(self):
+                    self.stdin = _FakeStream()
+                    self.stderr = _FakeStream()
+                    self.returncode = 1
+
+                def wait(self, timeout):
+                    return self.returncode
+
+                def kill(self):  # pragma: no cover - not reached
+                    raise AssertionError("kill should not be needed")
+
+            writer = _bare_writer(io, FakeProcess())
+
+            with self.assertRaises(io.MediaWriteError) as ctx:
+                writer.release()
+
+            self.assertEqual(ctx.exception.reason, "intermediate_writer_failed")
+            self.assertIn("exit code 1", ctx.exception.detail)
+            self.assertIsNone(writer._proc)
+
+    def test_release_succeeds_on_clean_ffmpeg_exit(self):
+        with _fresh_io_module() as io:
+            class FakeProcess:
+                def __init__(self):
+                    self.stdin = _FakeStream()
+                    self.stderr = _FakeStream()
+                    self.returncode = 0
+
+                def wait(self, timeout):
+                    return 0
+
+            writer = _bare_writer(io, FakeProcess())
+            writer.release()
+            self.assertIsNone(writer._proc)
+
+
+class FrameSequenceWriterFailureTests(unittest.TestCase):
+    def test_write_fails_closed_when_imwrite_returns_false(self):
+        import tempfile
+        from pathlib import Path
+        import numpy as np
+        from backend import io as real_io
+
+        tmp = Path(tempfile.mkdtemp())
+        writer = real_io._FrameSequenceWriter(str(tmp))
+        frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+        original = real_io.cv2.imwrite
+        real_io.cv2.imwrite = lambda *args, **kwargs: False
+        try:
+            with self.assertRaises(real_io.MediaWriteError) as ctx:
+                writer.write(frame)
+        finally:
+            real_io.cv2.imwrite = original
+
+        self.assertEqual(ctx.exception.reason, "frame_write_failed")
+        # The frame index must not advance past a frame that never landed.
+        self.assertEqual(writer._idx, 0)
+        writer.write(frame)
+        self.assertEqual(writer._idx, 1)
+        self.assertTrue((tmp / "frame_000000.png").is_file())
+
+    def test_write_wraps_cv2_error(self):
+        import tempfile
+        from pathlib import Path
+        import numpy as np
+        from backend import io as real_io
+
+        tmp = Path(tempfile.mkdtemp())
+        writer = real_io._FrameSequenceWriter(str(tmp))
+
+        def _boom(*args, **kwargs):
+            raise real_io.cv2.error("disk on fire")
+
+        original = real_io.cv2.imwrite
+        real_io.cv2.imwrite = _boom
+        try:
+            with self.assertRaises(real_io.MediaWriteError):
+                writer.write(np.zeros((4, 4, 3), dtype=np.uint8))
+        finally:
+            real_io.cv2.imwrite = original
+        self.assertEqual(writer._idx, 0)
 
     def test_terminate_aborts_active_ffmpeg_writer(self):
         with _fresh_io_module() as io:

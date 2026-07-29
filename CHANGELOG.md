@@ -4,6 +4,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Intermediate and frame-sequence writer failures now fail closed.** A
+  timed-out or nonzero-exit FFV1 intermediate encode was logged as a warning and
+  a failed `cv2.imwrite` was ignored entirely, so a truncated intermediate or a
+  frame that never reached disk could still advance the resume checkpoint and be
+  promoted as a finished output. Both paths now raise a typed
+  `backend.io.MediaWriteError`: `_LosslessIntermediateWriter.release()` reports
+  `intermediate_writer_timeout` / `intermediate_writer_failed` (with the ffmpeg
+  stderr tail) and clears its handles so a cleanup release stays a no-op, and
+  `_FrameSequenceWriter.write()` reports `frame_write_failed` before advancing
+  the frame index. `process_video` handles the new error explicitly, so the
+  partial output is never promoted and the job is reported as failed.
+
 ## [3.29.0] - 2026-07-20
 
 ### Added

@@ -1,9 +1,11 @@
+import contextlib
 from dataclasses import FrozenInstanceError, fields
 import inspect
 
 import numpy as np
 import pytest
 
+from backend.io import MediaWriteError
 from backend.processor import (
     SubtitleRemover,
     _FrameBatch,
@@ -39,6 +41,53 @@ def test_frame_batch_add_keeps_parallel_payloads_synchronized():
     assert len(batch.frames) == len(batch.source_frames)
     assert len(batch.frames) == len(batch.passthrough_flags)
     assert batch.passthrough_flags == [True]
+
+
+def test_write_batch_propagates_writer_failure_before_checkpointing():
+    """RM-139: an unwritable frame must abort the loop, not advance state."""
+    class _ExplodingWriter:
+        def __init__(self):
+            self.calls = 0
+
+        def write(self, frame):
+            self.calls += 1
+            raise MediaWriteError(
+                "frame lost", reason="frame_write_failed", path="frame_000000.png")
+
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = type("_Cfg", (), {"quality_report": False})()
+    remover.live_preview_stride = 1
+    remover.on_preview_frame = None
+    remover._time_stage = lambda name: contextlib.nullcontext()
+    remover._merge_high_bit_output = lambda source, result, mask: result
+
+    ctx = _FrameLoopContext.__new__(_FrameLoopContext)
+    writer = _ExplodingWriter()
+    object.__setattr__(ctx, "writer", writer)
+    object.__setattr__(ctx, "matte_writer", None)
+    object.__setattr__(ctx, "frames_to_process", 2)
+    state = _FrameLoopState(
+        frame_idx=2, last_mask=None, last_hash=None, tracker=None,
+        fixed_mask_cache={})
+
+    batch = _FrameBatch()
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+    mask = np.zeros((4, 4), dtype=np.uint8)
+    batch.add(frame, mask, None, passthrough=False)
+    batch.add(frame, mask, None, passthrough=False)
+
+    with pytest.raises(MediaWriteError):
+        remover._write_batch(ctx, state, batch, [frame, frame])
+    assert writer.calls == 1
+
+
+def test_process_video_handles_media_write_error_before_generic_exception():
+    source = inspect.getsource(SubtitleRemover.process_video)
+    assert "except MediaWriteError as e:" in source
+    assert source.index("except MediaWriteError") < source.index("except Exception as e:")
+    # The success-path release must precede the encode-stage checkpoint marker
+    # so a failed flush cannot mark the inpaint pass complete.
+    assert source.index("writer.release()") < source.index('stage="encoding"')
 
 
 def test_process_video_delegates_each_frame_loop_stage():
