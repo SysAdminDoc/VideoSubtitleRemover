@@ -60,20 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-143 Reject unknown GUI, settings, and preset inpaint modes
-  Why: an invalid value currently becomes STTN while import/apply can report
-    success, so user intent and the effective algorithm diverge silently.
-  Evidence: `gui/config.py:304-320`; SysAdminDoc/VideoSubtitleRemover#7; the
-    backend registry at 2026-07-29 fails on unavailable selected models but this
-    GUI edge remains.
-  Touches: `gui/config.py`; `gui/settings_controller.py`; preset/settings import
-    paths; config and feedback tests.
-  Acceptance: unknown values such as `banana` are rejected/quarantined with an
-    actionable notice and leave the prior setting unchanged; valid backend-only
-    modes receive their existing explicit compatibility notice; no invalid value
-    can produce a successful preset/import result.
-  Complexity: S
-
 - [ ] P1 -- RM-144 Make user-state persistence observable and downgrade-safe
   Why: settings, queue, and preset write failures are swallowed, and opening then
     closing a future settings schema can erase fields the current version ignores.

@@ -35,6 +35,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Unknown inpaint modes are rejected instead of becoming STTN.** An
+  unrecognised value in `settings.json`, a preset, or an imported preset used
+  to fall through to STTN while the import or apply still reported success, so
+  the user's intent and the effective algorithm diverged silently. A new
+  `classify_inpaint_mode()` separates GUI modes, backend-only modes, and
+  invalid values: an invalid settings mode is quarantined with an actionable
+  notice (the rest of the file still loads), `apply_preset` refuses to apply
+  and leaves the current mode untouched, `import_preset` returns `None` and
+  stores nothing, and an out-of-range picker value restores the mode actually
+  in effect. Backend-only modes such as `migan` keep their existing
+  command-line compatibility notice.
 - **Subprocess stdin is now under timeout and cancellation control.**
   `run_process` wrote the whole input payload inline before entering its
   deadline loop, so a child that never read stdin blocked the caller forever

@@ -353,10 +353,10 @@ class BackendOnlyModeNoticeTests(unittest.TestCase):
         from gui import config as gcfg
         gcfg.consume_settings_load_notice()
 
-    def test_backend_only_mode_emits_notice(self):
+    def test_backend_only_mode_emits_notice_and_is_kept(self):
         from gui import config as gcfg
         self._clear()
-        gcfg._notice_if_backend_only_mode("migan")
+        self.assertFalse(gcfg._notice_for_inpaint_mode("migan"))
         notice = gcfg.consume_settings_load_notice()
         self.assertIsNotNone(notice)
         self.assertIn("migan", notice)
@@ -364,21 +364,142 @@ class BackendOnlyModeNoticeTests(unittest.TestCase):
     def test_gui_mode_emits_no_notice(self):
         from gui import config as gcfg
         self._clear()
-        gcfg._notice_if_backend_only_mode("lama")
+        self.assertFalse(gcfg._notice_for_inpaint_mode("lama"))
         self.assertIsNone(gcfg.consume_settings_load_notice())
 
-    def test_unknown_mode_emits_no_notice(self):
+    def test_unknown_mode_is_quarantined_with_a_notice(self):
         from gui import config as gcfg
         self._clear()
-        gcfg._notice_if_backend_only_mode("banana")
+        self.assertTrue(gcfg._notice_for_inpaint_mode("banana"))
+        notice = gcfg.consume_settings_load_notice()
+        self.assertIsNotNone(notice)
+        self.assertIn("banana", notice)
+
+    def test_blank_is_rejected_and_none_is_ignored(self):
+        from gui import config as gcfg
+        self._clear()
+        self.assertTrue(gcfg._notice_for_inpaint_mode(""))
+        self.assertIsNotNone(gcfg.consume_settings_load_notice())
+        self._clear()
+        self.assertFalse(gcfg._notice_for_inpaint_mode(None))
         self.assertIsNone(gcfg.consume_settings_load_notice())
 
-    def test_blank_and_nonstring_are_ignored(self):
+
+class UnknownInpaintModeRejectionTests(unittest.TestCase):
+    """RM-143: an invalid inpaint mode must never quietly become STTN."""
+
+    def setUp(self):
         from gui import config as gcfg
-        self._clear()
-        gcfg._notice_if_backend_only_mode("")
-        gcfg._notice_if_backend_only_mode(None)
-        self.assertIsNone(gcfg.consume_settings_load_notice())
+        gcfg.consume_settings_load_notice()
+        gcfg.consume_preset_import_notice()
+
+    def test_mode_classification(self):
+        from gui import config as gcfg
+        self.assertEqual(
+            gcfg.classify_inpaint_mode("lama"), gcfg.MODE_KIND_GUI)
+        self.assertEqual(
+            gcfg.classify_inpaint_mode("migan"), gcfg.MODE_KIND_BACKEND_ONLY)
+        self.assertEqual(
+            gcfg.classify_inpaint_mode("banana"), gcfg.MODE_KIND_UNKNOWN)
+        self.assertEqual(
+            gcfg.classify_inpaint_mode(42), gcfg.MODE_KIND_UNKNOWN)
+
+    def test_settings_load_drops_an_unknown_mode(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from gui import config as gcfg
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "settings.json"
+            path.write_text(
+                json.dumps({"mode": "banana", "gpu_id": 3}), encoding="utf-8")
+            with mock.patch.object(gcfg, "SETTINGS_FILE", str(path)):
+                config = gcfg.load_settings()
+        notice = gcfg.consume_settings_load_notice()
+        self.assertIsNotNone(notice)
+        self.assertIn("banana", notice)
+        self.assertEqual(config.mode, gcfg.InpaintMode.STTN)
+        # Unrelated settings still load.
+        self.assertEqual(config.gpu_id, 3)
+
+    def test_apply_preset_with_unknown_mode_fails_and_keeps_the_mode(self):
+        from unittest import mock
+        from gui import config as gcfg
+
+        config = gcfg.ProcessingConfig(mode=gcfg.InpaintMode.LAMA)
+        preset = {"description": "bad", "fields": {
+            "mode": "banana", "lama_super_fast": True}}
+        with mock.patch.object(
+            gcfg, "_load_user_presets", return_value={"bad": preset}
+        ):
+            self.assertFalse(gcfg.apply_preset(config, "bad"))
+        self.assertEqual(config.mode, gcfg.InpaintMode.LAMA)
+        self.assertFalse(config.lama_super_fast)
+        notice = gcfg.consume_preset_import_notice()
+        self.assertIsNotNone(notice)
+        self.assertIn("banana", notice)
+
+    def test_apply_preset_with_backend_only_mode_still_applies(self):
+        from unittest import mock
+        from gui import config as gcfg
+
+        config = gcfg.ProcessingConfig(mode=gcfg.InpaintMode.LAMA)
+        preset = {"description": "cli", "fields": {"mode": "migan"}}
+        with mock.patch.object(
+            gcfg, "_load_user_presets", return_value={"cli": preset}
+        ):
+            self.assertTrue(gcfg.apply_preset(config, "cli"))
+        # Backend-only modes keep the documented STTN compatibility behaviour.
+        self.assertEqual(config.mode, gcfg.InpaintMode.LAMA)
+
+    def test_import_preset_with_unknown_mode_is_rejected(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from gui import config as gcfg
+
+        saved = {}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "preset.json"
+            path.write_text(json.dumps({
+                "vsr_preset_format": 1,
+                "name": "bogus",
+                "fields": {"mode": "banana"},
+            }), encoding="utf-8")
+            with mock.patch.object(gcfg, "_load_user_presets", return_value={}):
+                with mock.patch.object(
+                    gcfg, "_save_user_presets", side_effect=saved.update
+                ):
+                    self.assertIsNone(gcfg.import_preset(str(path)))
+        self.assertEqual(saved, {})
+        notice = gcfg.consume_preset_import_notice()
+        self.assertIsNotNone(notice)
+        self.assertIn("banana", notice)
+
+    def test_import_preset_with_a_valid_mode_succeeds(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from gui import config as gcfg
+
+        stored = {}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "preset.json"
+            path.write_text(json.dumps({
+                "vsr_preset_format": 1,
+                "name": "good",
+                "fields": {"mode": "lama"},
+            }), encoding="utf-8")
+            with mock.patch.object(gcfg, "_load_user_presets", return_value={}):
+                with mock.patch.object(
+                    gcfg, "_save_user_presets", side_effect=stored.update
+                ):
+                    self.assertEqual(gcfg.import_preset(str(path)), "good")
+        self.assertIn("good", stored)
 
 
 if __name__ == "__main__":

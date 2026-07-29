@@ -121,7 +121,21 @@ class AdvancedSettingsControllerMixin:
 
     def _on_mode_changed(self, event=None):
         """Handle algorithm mode change."""
-        self.config.mode = InpaintMode(self.mode_var.get())
+        requested = self.mode_var.get()
+        try:
+            self.config.mode = InpaintMode(requested)
+        except ValueError:
+            # RM-143: never silently fall through to STTN. Restore the mode
+            # that is actually in effect and say why.
+            self.mode_var.set(self.config.mode.value)
+            picker = getattr(self, "mode_picker", None)
+            if picker is not None:
+                picker.set(self.config.mode.value)
+            self._update_status(
+                tr("'{mode}' is not a supported profile; keeping {current}")
+                .format(mode=requested, current=self.config.mode.value)
+            )
+            return
         self.algo_desc.config(text=self._get_algo_description())
         self._update_mode_options()
         self._update_status(

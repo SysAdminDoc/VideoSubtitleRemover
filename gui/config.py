@@ -310,35 +310,76 @@ _GUI_MODE_MAP = {
 }
 
 
-def _coerce_gui_mode(value) -> InpaintMode:
+MODE_KIND_GUI = "gui"
+MODE_KIND_BACKEND_ONLY = "backend-only"
+MODE_KIND_UNKNOWN = "unknown"
+
+
+def classify_inpaint_mode(value) -> str:
+    """Return whether a mode value is a GUI mode, backend-only, or invalid.
+
+    RM-143: an unknown value used to fall through to STTN, so an import or
+    preset apply could report success while the effective algorithm silently
+    diverged from what the user asked for.
+    """
+    if isinstance(value, InpaintMode):
+        return MODE_KIND_GUI
+    if not isinstance(value, str):
+        return MODE_KIND_UNKNOWN
+    normalized = value.strip().casefold()
+    if not normalized:
+        return MODE_KIND_UNKNOWN
+    if normalized in _GUI_MODE_MAP:
+        return MODE_KIND_GUI
+    try:
+        from backend.config import is_known_backend_mode
+    except Exception:
+        return MODE_KIND_UNKNOWN
+    return (
+        MODE_KIND_BACKEND_ONLY if is_known_backend_mode(value)
+        else MODE_KIND_UNKNOWN
+    )
+
+
+def _unknown_mode_message(value, *, kept: str) -> str:
+    shown = value if isinstance(value, str) and value.strip() else repr(value)
+    return (
+        f"Inpaint mode '{shown}' is not a recognised mode. It was rejected and "
+        f"{kept} was kept. Choose a mode in the app or pass a valid --mode."
+    )
+
+
+def _coerce_gui_mode(value, default: InpaintMode = InpaintMode.STTN) -> InpaintMode:
     if isinstance(value, InpaintMode):
         return value
     if isinstance(value, str):
         normalized = value.strip().casefold()
         if normalized in _GUI_MODE_MAP:
             return _GUI_MODE_MAP[normalized]
-    return InpaintMode.STTN
+    return default
 
 
-def _notice_if_backend_only_mode(value) -> None:
-    """Warn once when settings name a backend-only inpaint mode the GUI cannot
-    represent (e.g. ``migan`` saved from a ``--mode migan`` CLI run). Such a
-    mode coerces to STTN for this session, so surface it instead of silently
-    downgrading."""
-    if not isinstance(value, str):
-        return
-    normalized = value.strip().casefold()
-    if not normalized or normalized in _GUI_MODE_MAP:
-        return
-    try:
-        from backend.config import is_known_backend_mode
-    except Exception:
-        return
-    if is_known_backend_mode(value):
+def _notice_for_inpaint_mode(value) -> bool:
+    """Surface how a loaded settings mode was handled.
+
+    Returns ``True`` when the value must be quarantined (dropped) instead of
+    loaded. A backend-only mode keeps its existing compatibility notice and is
+    still coerced to STTN for the session; an unknown value is rejected.
+    """
+    kind = classify_inpaint_mode(value)
+    if kind == MODE_KIND_GUI:
+        return False
+    if kind == MODE_KIND_BACKEND_ONLY:
         _set_settings_load_notice(
             f"Inpaint mode '{value}' runs only from the command line; the app "
             "is using STTN this session. Run it with --mode to keep that mode."
         )
+        return False
+    if value is None:
+        return False
+    _set_settings_load_notice(
+        _unknown_mode_message(value, kept="the previous mode"))
+    return True
 
 
 # -- ProcessingConfig -------------------------------------------------------
@@ -905,7 +946,10 @@ def load_settings() -> ProcessingConfig:
                 )
                 return ProcessingConfig()
             data = _migrate_settings(data)
-            _notice_if_backend_only_mode(data.get("mode"))
+            if "mode" in data and _notice_for_inpaint_mode(data.get("mode")):
+                # Quarantine the invalid value so it cannot be silently
+                # reinterpreted as STTN.
+                data = {k: v for k, v in data.items() if k != "mode"}
             logger.info(f"Settings loaded from {settings_file}")
             return ProcessingConfig.from_dict(data)
     except Exception as e:
@@ -1267,9 +1311,19 @@ def apply_preset(config: ProcessingConfig, name: str) -> bool:
     if not isinstance(fields, dict):
         return False
     fields, _rejected = _filter_preset_fields(fields, name)
+    # RM-143: validate before mutating so a bad mode cannot leave the config
+    # half-applied with a silently downgraded algorithm.
+    if "mode" in fields and classify_inpaint_mode(
+            fields["mode"]) == MODE_KIND_UNKNOWN:
+        _set_preset_import_notice(_unknown_mode_message(
+            fields["mode"], kept=f"the current mode ({config.mode.value})"))
+        logger.warning(
+            "Preset %r names an unknown inpaint mode %r; not applied",
+            name, fields["mode"])
+        return False
     for k, v in fields.items():
         if k == "mode":
-            config.mode = _coerce_gui_mode(v)
+            config.mode = _coerce_gui_mode(v, config.mode)
             continue
         if hasattr(config, k):
             setattr(config, k, v)
@@ -1361,6 +1415,16 @@ def import_preset(path: str) -> Optional[str]:
     if not name or not isinstance(fields, dict):
         return None
     fields, rejected = _filter_preset_fields(fields, str(path))
+    # RM-143: an unknown mode fails the whole import instead of being stored
+    # and later reinterpreted as STTN.
+    if "mode" in fields and classify_inpaint_mode(
+            fields["mode"]) == MODE_KIND_UNKNOWN:
+        _set_preset_import_notice(_unknown_mode_message(
+            fields["mode"], kept="nothing"))
+        logger.warning(
+            "Rejected preset import with unknown inpaint mode %r: %s",
+            fields["mode"], path)
+        return None
     if not fields:
         logger.warning("Preset import contained no supported fields: %s", path)
         return None
