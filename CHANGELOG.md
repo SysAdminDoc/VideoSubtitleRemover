@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.31.0] - 2026-07-29
+
 ### Added
 
 - **Each queue job can run in an isolated child process.** A fatal native
