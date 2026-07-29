@@ -228,6 +228,17 @@ def tr(text: str) -> str:
     return _(text)
 
 
+def N_(text: str) -> str:
+    """Mark a string for extraction without translating it yet.
+
+    Deferred-translation sites need this: a model field that persists
+    across a locale change, or a module-level table built at import
+    time before `bind_locale()` has run, must store stable English and
+    call `tr()` at render time. Marking the literal here keeps it in the
+    catalog even though the `tr()` call site sees only a variable."""
+    return text
+
+
 def ntr(singular: str, plural: str, count: int) -> str:
     """Translate a plural pair through the active catalog."""
     if _active_translation is None:

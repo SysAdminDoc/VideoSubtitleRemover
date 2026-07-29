@@ -24,7 +24,7 @@ from gui.widgets import (
     ModernButton, make_themed_menu,
     SegmentedPicker, QueueItemWidget,
 )
-from backend.i18n import tr
+from backend.i18n import ntr, tr
 
 logger = logging.getLogger(__name__)
 
@@ -282,17 +282,20 @@ class QueueViewMixin:
 
         # Update the inline queue summary.
         total = len(self.queue)
-        self.queue_count.config(text=f"{total} item{'s' if total != 1 else ''}")
+        self.queue_count.config(text=ntr(
+            "{n} item", "{n} items", total).format(n=total))
         done = sum(1 for i in self.queue if i.status == ProcessingStatus.COMPLETE)
         attention = self._queue_attention_count(self.queue)
         if done > 0:
-            self.queue_done_lbl.config(text=f" / {done} done")
+            self.queue_done_lbl.config(
+                text=" / " + tr("{n} done").format(n=done))
             self.queue_done_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_done_pill.pack_forget()
         if attention > 0:
-            _need = "needs" if attention == 1 else "need"
-            self.queue_err_lbl.config(text=f" / {attention} {_need} attention")
+            self.queue_err_lbl.config(text=" / " + ntr(
+                "{n} needs attention", "{n} need attention",
+                attention).format(n=attention))
             self.queue_err_pill.pack(side="left", padx=(Theme.S_XS, 0))
         else:
             self.queue_err_pill.pack_forget()
@@ -397,16 +400,21 @@ class QueueViewMixin:
             else:
                 widget.pack_forget()
         if query:
-            self.queue_count.config(text=f"{visible} of {total} shown")
+            self.queue_count.config(text=tr(
+                "{visible} of {total} shown").format(
+                    visible=visible, total=total))
         else:
-            self.queue_count.config(text=f"{total} item{'s' if total != 1 else ''}")
+            self.queue_count.config(text=ntr(
+            "{n} item", "{n} items", total).format(n=total))
 
         if query and total and visible == 0:
             self._ensure_filter_empty_state()
             self._filter_empty_title.config(
-                text=f'No items match "{truncate_middle(query, 28)}"')
+                text=tr('No items match "{needle}"').format(
+                    needle=truncate_middle(query, 28)))
             self._filter_empty_body.config(
-                text="Try a shorter filename search, or clear the filter to see the full batch again.")
+                text=tr("Try a shorter filename search, or clear the "
+                        "filter to see the full batch again."))
             if not self._filter_empty_container.winfo_ismapped():
                 self._filter_empty_container.pack(
                     pady=(Theme.S_3XL, Theme.S_LG), fill="x")

@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
+from backend.i18n import N_, tr
 from backend.import_safety import module_can_import
 from backend.inpainters.lama import _pytorch_lama_allowed
 from backend.language_support import (
@@ -29,6 +30,32 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+# RM-152: canonical queue-item messages. The model stores stable English
+# so persisted queue state and the controllers' equality checks survive a
+# locale change; `queue_message_text()` translates on the way to a label.
+QUEUE_MESSAGE_READY = N_("Ready to process")
+QUEUE_MESSAGE_PROBING = N_("Checking embedded subtitle tracks...")
+QUEUE_MESSAGE_SOFT_SUBS_FOUND = N_(
+    "Embedded subtitle tracks found. Right-click for fast strip/keep, "
+    "or run burned-in cleanup."
+)
+
+CANONICAL_QUEUE_MESSAGES = frozenset({
+    QUEUE_MESSAGE_READY,
+    QUEUE_MESSAGE_PROBING,
+    QUEUE_MESSAGE_SOFT_SUBS_FOUND,
+})
+
+
+def queue_message_text(message: Optional[str]) -> str:
+    """Render a queue-item message, translating the canonical ones.
+
+    Progress text produced at runtime ("Frame 412/9000") is already
+    localized by its producer and passes through untouched."""
+    text = str(message or "").strip() or QUEUE_MESSAGE_READY
+    return tr(text) if text in CANONICAL_QUEUE_MESSAGES else text
 
 
 def get_app_dir() -> Path:

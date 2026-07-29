@@ -991,7 +991,7 @@ class ProcessingControllerMixin:
                 self._taskbar.set_value(current, total)
         else:
             self.batch_progress.set_progress(0)
-            self.batch_label.config(text="Ready", fg=Theme.TEXT_MUTED)
+            self.batch_label.config(text=tr("Ready"), fg=Theme.TEXT_MUTED)
             self.batch_percent_label.config(text="")
             if self._taskbar:
                 self._taskbar.clear()
@@ -1026,7 +1026,7 @@ class ProcessingControllerMixin:
         self.start_btn.set_text(tr("Start batch"))
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
         self.batch_progress.set_progress(0)
-        self.batch_label.config(text="Ready", fg=Theme.TEXT_MUTED)
+        self.batch_label.config(text=tr("Ready"), fg=Theme.TEXT_MUTED)
         if hasattr(self, "batch_percent_label"):
             self.batch_percent_label.config(text="")
         if self._taskbar:

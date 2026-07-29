@@ -122,10 +122,103 @@ def _probe_dialog_fit(app, work_area, tk) -> list[str]:
         if tall is not None:
             tall.destroy()
 
+    # RM-152: the About dialog is a real, media-free workflow surface.
+    about = None
+    try:
+        app._show_about()
+        about = next(
+            (child for child in app.root.winfo_children()
+             if isinstance(child, tk.Toplevel)), None)
+        if about is None:
+            failures.append("about dialog was not created")
+        else:
+            fit_dialog_to_work_area(about, app.root)
+            _check("about", about)
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"about probe raised: {exc}")
+    finally:
+        if about is not None:
+            try:
+                about.grab_release()
+            except tk.TclError:
+                pass
+            about.destroy()
+
     try:
         del app.root._vsr_work_area_override
     except AttributeError:
         pass
+    return failures
+
+
+def _probe_direction_mirror(app, tk) -> list[str]:
+    """RM-152: prove the logical-to-physical mirror reached the live tree.
+
+    Every assertion here is written against widgets the app built itself
+    from logical (`left`, `w`, `left`-justified) values, so a regression
+    that bypasses the mirror -- a hand-rolled physical value, or a widget
+    created before `install_direction_mirror()` -- shows up immediately.
+    """
+    from gui.direction import direction_mirror_installed, mirror_sticky
+
+    failures: list[str] = []
+    if not direction_mirror_installed():
+        failures.append("direction mirror was not installed")
+        return failures
+
+    # A freshly packed row proves the mirror is live on this tree. The
+    # aggregate LTR-vs-RTL comparison lives in the test, which can run
+    # both locales and check the histograms are mirror images; the app
+    # packs in both directions, so a surviving "left" here is expected.
+    try:
+        holder = tk.Frame(app.root)
+        probe = tk.Label(holder, text="probe", anchor="w", justify="left")
+        probe.pack(side="left", anchor="nw")
+        info = probe.pack_info()
+        if str(info.get("side")) != "right":
+            failures.append("a freshly packed row was not mirrored")
+        if str(info.get("anchor")) != "ne":
+            failures.append("a pack anchor was not mirrored")
+        if str(probe.cget("anchor")) != "e":
+            failures.append("a widget anchor was not mirrored")
+        if str(probe.cget("justify")) != "right":
+            failures.append("a widget justification was not mirrored")
+        holder.destroy()
+    except tk.TclError as exc:
+        failures.append(f"pack mirror probe failed: {exc}")
+
+    if not any(
+        str(widget.cget("anchor")) == "e"
+        for widget in _walk(app.root)
+        if isinstance(widget, tk.Label)
+    ):
+        failures.append("no label was anchored east under RTL")
+
+    # Directional arrow affordances inside menu captions.
+    try:
+        menu = tk.Menu(app.root, tearoff=0)
+        menu.add_command(label="Filename (A -> Z)")
+        if "<-" not in str(menu.entrycget(0, "label")):
+            failures.append("menu arrow affordance was not mirrored")
+        menu.destroy()
+    except tk.TclError as exc:
+        failures.append(f"menu mirror probe failed: {exc}")
+
+    # Grid sticky masks mirror their west/east components.
+    if mirror_sticky("nw") != "ne" or mirror_sticky("ew") != "we":
+        failures.append("grid sticky mask was not mirrored")
+
+    # Canvas items are coordinate-coupled and must be left alone: the
+    # Canvas-drawn widgets mirror their own geometry.
+    try:
+        canvas = tk.Canvas(app.root, width=40, height=20)
+        item = canvas.create_text(5, 5, text="x", anchor="w")
+        if str(canvas.itemcget(item, "anchor")) != "w":
+            failures.append("canvas item anchor was wrongly mirrored")
+        canvas.destroy()
+    except tk.TclError as exc:
+        failures.append(f"canvas mirror probe failed: {exc}")
+
     return failures
 
 
@@ -258,6 +351,7 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                         text_items[-1], "anchor"
                     ) != "e":
                         failures.append("RTL toggle geometry was not mirrored")
+                failures.extend(_probe_direction_mirror(app, tk))
             if high_contrast and Theme.BG_DARK != "#000000":
                 failures.append("high-contrast palette was not applied")
 
@@ -281,9 +375,29 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                     for item in _probe_dialog_fit(app, area, tk)
                 )
 
+            # RM-152: the direction census. A test that runs the same
+            # scale and theme under `en` and `rtl` can assert these two
+            # histograms are exact mirror images, which is the only way
+            # to prove *every* row flipped rather than merely some.
+            pack_sides = {"left": 0, "right": 0}
+            label_anchors = {"w": 0, "e": 0}
+            for widget in widgets:
+                try:
+                    side = str(widget.pack_info().get("side") or "")
+                except (tk.TclError, AttributeError, TypeError):
+                    side = ""
+                if side in pack_sides:
+                    pack_sides[side] += 1
+                if isinstance(widget, tk.Label):
+                    anchor = str(widget.cget("anchor"))
+                    if anchor in label_anchors:
+                        label_anchors[anchor] += 1
+
             return {
                 "ok": not failures,
                 "failures": failures,
+                "packSides": pack_sides,
+                "labelAnchors": label_anchors,
                 "scale": scale,
                 "theme": "high-contrast" if high_contrast else "default",
                 "locale": locale,

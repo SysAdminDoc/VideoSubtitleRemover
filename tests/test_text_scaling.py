@@ -58,34 +58,65 @@ class TextScaleLayoutMatrixTests(unittest.TestCase):
         (200, "high-contrast", "pseudo"),
     )
 
-    def test_hidden_minimum_viewport_matrix(self):
+    @staticmethod
+    def _run_probe(scale, theme, locale):
         probe = ROOT / "tools" / "ui_scaling_probe.py"
+        result = run_process(
+            [
+                sys.executable,
+                str(probe),
+                "--scale",
+                str(scale),
+                "--theme",
+                theme,
+                "--locale",
+                locale,
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        output = (result.stdout or "").strip().splitlines()
+        payload = json.loads(output[-1]) if output else {}
+        return result, payload
+
+    def test_hidden_minimum_viewport_matrix(self):
         for scale, theme, locale in self.CASES:
             with self.subTest(scale=scale, theme=theme, locale=locale):
-                result = run_process(
-                    [
-                        sys.executable,
-                        str(probe),
-                        "--scale",
-                        str(scale),
-                        "--theme",
-                        theme,
-                        "--locale",
-                        locale,
-                    ],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
-                output = (result.stdout or "").strip().splitlines()
-                payload = json.loads(output[-1]) if output else {}
+                result, payload = self._run_probe(scale, theme, locale)
                 self.assertEqual(
                     result.returncode,
                     0,
                     msg=(result.stderr or "") + "\n" + json.dumps(payload),
                 )
                 self.assertTrue(payload.get("ok"), payload)
+
+    def test_the_rendered_tree_flips_direction_between_locales(self):
+        """RM-152: prove the mirror moved the *whole* tree, not a corner.
+
+        The two runs build the same window at the same scale and theme
+        and differ only in direction, so the direction census has to
+        invert. Comparing populations rather than exact counts keeps the
+        assertion honest: RTL captions are longer, so the responsive
+        reflow legitimately stacks a slightly different set of rows.
+        """
+        _ltr_result, ltr = self._run_probe(150, "default", "en")
+        _rtl_result, rtl = self._run_probe(150, "default", "rtl")
+        self.assertTrue(ltr.get("ok"), ltr)
+        self.assertTrue(rtl.get("ok"), rtl)
+
+        ltr_sides = ltr["packSides"]
+        rtl_sides = rtl["packSides"]
+        self.assertGreater(ltr_sides["left"], ltr_sides["right"])
+        self.assertGreater(rtl_sides["right"], rtl_sides["left"])
+
+        # Not a single label may keep a west anchor once mirrored, and
+        # the LTR baseline must actually have some to lose.
+        self.assertGreater(ltr["labelAnchors"]["w"], 0)
+        self.assertEqual(rtl["labelAnchors"]["w"], 0)
+        self.assertGreater(
+            rtl["labelAnchors"]["e"], ltr["labelAnchors"]["e"])
 
 
 if __name__ == "__main__":

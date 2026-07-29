@@ -7,21 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2
 
-- [ ] P2 -- RM-152 Complete runtime-string extraction and bidirectional layout coverage
-  Why: gettext/pseudo-locale infrastructure is complete, but untranslated runtime
-    strings and left/right layout assumptions still block trustworthy human catalogs.
-  Evidence: `scripts/i18n_catalogs.py coverage` reports qps-Ploc 563/563 as the
-    only bundled catalog; runtime strings/layouts in `gui/app.py`,
-    `gui/preview_controller.py`, `gui/region_controller.py`, and settings flows;
-    Windows globalization/RTL guidance.
-  Touches: GUI controllers/layout helpers; `backend/i18n.py`; locale extraction
-    and UI scaling probes; i18n tests.
-  Acceptance: all user-visible runtime strings in GUI/controller paths pass
-    through `tr()`; direction-sensitive packing, anchors, arrows, and ordering
-    mirror under RTL; qps-Ploc plus a pseudo-RTL rendered probe passes every major
-    workflow; non-pseudo catalogs remain contribution-driven with enforced coverage.
-  Complexity: M
-
 - [ ] P2 -- RM-153 Freeze an approved matte as a reusable queue input
   Why: reviewed masks are valuable durable work, but reruns can still repeat
     detection/tracking or depend on disposable cache state.

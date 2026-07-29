@@ -54,7 +54,7 @@ def extract_messages(root: Path = ROOT) -> dict[str, Message]:
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
                 continue
             name = node.func.id
-            if name not in {"_", "tr", "ntr"} or not node.args:
+            if name not in {"_", "tr", "ntr", "N_"} or not node.args:
                 continue
             singular_node = node.args[0]
             if not isinstance(singular_node, ast.Constant) or not isinstance(
@@ -74,6 +74,154 @@ def extract_messages(root: Path = ROOT) -> dict[str, Message]:
                 raise ValueError(f"inconsistent plural definition for {singular!r}")
             message.references.add(f"{relative}:{node.lineno}")
     return messages
+
+
+# RM-152: runtime-string lint. A catalog is only trustworthy if every
+# user-visible literal actually reaches `tr()`; a string that never gets
+# extracted silently stays English in every locale, and no coverage
+# percentage will ever reveal it.
+TRANSLATION_CALLS = frozenset({"_", "tr", "ntr", "gettext_passthrough"})
+
+# Keyword arguments that carry a caption to the user.
+CAPTION_KEYWORDS = frozenset({
+    "text", "title", "label", "message", "placeholder", "prompt",
+    "caption", "detail", "heading",
+})
+
+# Callables whose leading positional argument is a caption.
+CAPTION_CALLS = frozenset({
+    "set_text", "set_status", "set_title", "set_heading", "set_caption",
+    "showinfo", "showerror", "showwarning", "askyesno", "askokcancel",
+    "askquestion", "askretrycancel",
+})
+
+# Literals that reach a caption sink but are deliberately not prose:
+# widget option values, layout tokens, and symbols with no words to
+# translate. Keep this list short and justified -- it is the only way to
+# silence the gate.
+LINT_ALLOWLIST = frozenset({
+    "Segoe UI Symbol",
+})
+
+# Constructors that build persisted model records rather than widgets.
+# Their captions must stay stable English so saved state and equality
+# checks survive a locale change; the view translates them on render
+# (see `gui.utils.queue_message_text`).
+MODEL_CONSTRUCTORS = frozenset({"QueueItem", "ProcessingConfig"})
+
+
+def _is_translated(node: ast.AST) -> bool:
+    """True when `node` routes through gettext somewhere in its tree."""
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+            if child.func.id in TRANSLATION_CALLS:
+                return True
+    return False
+
+
+def _fstring_template(node: ast.JoinedStr) -> str:
+    """Rebuild an f-string as a `{}`-placeholder template."""
+    parts = []
+    for piece in node.values:
+        if isinstance(piece, ast.Constant) and isinstance(piece.value, str):
+            parts.append(piece.value)
+        else:
+            parts.append("{}")
+    return "".join(parts)
+
+
+def _looks_translatable(value: str) -> bool:
+    """Heuristic: does this literal read as prose shown to a person?"""
+    if value.strip() in LINT_ALLOWLIST:
+        return False
+    # Judge the words, not the interpolation: "{} of {} shown" is a
+    # sentence whose first character happens to be a placeholder.
+    text = re.sub(r"\{[^{}]*\}", " ", value).strip()
+    if len(text) < 3:
+        return False
+    if not any(char.isalpha() for char in text):
+        return False
+    if text.startswith(("#", "<", ".", "-")):
+        return False
+    if "://" in text or ("/" in text and " " not in text):
+        return False
+    if "%" in text and " " not in text:
+        return False
+    words = text.split()
+    if len(words) == 1:
+        # A single bare token is a widget option value ("normal", "nw",
+        # "readonly") unless it is capitalised like a caption.
+        return text[0].isupper() and len(text) >= 4 and text.isascii()
+    return True
+
+
+def untranslated_literals(root: Path = ROOT) -> list[tuple[str, int, str, str]]:
+    """Return `(file, line, sink, literal)` for every unwrapped caption."""
+    findings: list[tuple[str, int, str, str]] = []
+    for path in _source_files(root):
+        relative = path.relative_to(root).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if isinstance(node.func, ast.Attribute):
+                called = node.func.attr
+            elif isinstance(node.func, ast.Name):
+                called = node.func.id
+            else:
+                called = ""
+            if called in TRANSLATION_CALLS or called in MODEL_CONSTRUCTORS:
+                continue
+            candidates: list[tuple[str, ast.AST]] = []
+            if called in CAPTION_CALLS and node.args:
+                candidates.append((called, node.args[0]))
+            for keyword in node.keywords:
+                if keyword.arg in CAPTION_KEYWORDS:
+                    candidates.append((f"{called}({keyword.arg}=)", keyword.value))
+                elif keyword.arg == "filetypes":
+                    # A file dialog filter is a list of (caption, pattern)
+                    # pairs; only the caption is prose.
+                    for element in getattr(keyword.value, "elts", ()):
+                        pair = getattr(element, "elts", ())
+                        if pair:
+                            candidates.append((f"{called}(filetypes=)", pair[0]))
+            for sink, value in candidates:
+                if _is_translated(value):
+                    continue
+                if isinstance(value, ast.JoinedStr):
+                    # An f-string is one sentence, not a bag of fragments:
+                    # judge the whole template so "{a} of {b} shown" is
+                    # caught even though no fragment reads as prose alone.
+                    template = _fstring_template(value)
+                    if _looks_translatable(template):
+                        findings.append(
+                            (relative, value.lineno, sink, template))
+                    continue
+                for literal in ast.walk(value):
+                    if not isinstance(literal, ast.Constant):
+                        continue
+                    if not isinstance(literal.value, str):
+                        continue
+                    if _looks_translatable(literal.value):
+                        findings.append(
+                            (relative, literal.lineno, sink, literal.value))
+    findings.sort(key=lambda item: (item[0], item[1], item[3]))
+    return findings
+
+
+def lint_runtime_strings(root: Path = ROOT) -> None:
+    """Raise when a user-visible literal bypasses the catalog."""
+    findings = untranslated_literals(root)
+    if not findings:
+        return
+    lines = [
+        f"  {path}:{line} [{sink}] {literal!r}"
+        for path, line, sink, literal in findings
+    ]
+    raise ValueError(
+        f"{len(findings)} user-visible string(s) do not pass through tr():\n"
+        + "\n".join(lines)
+    )
 
 
 def _quote(value: str) -> str:
@@ -431,6 +579,7 @@ def compile_catalogs(locale_dir: Path = LOCALE_DIR) -> None:
 
 
 def check_catalogs(locale_dir: Path = LOCALE_DIR) -> None:
+    lint_runtime_strings()
     messages = extract_messages()
     expected_pot = render_pot(messages)
     actual_pot = (locale_dir / "vsr.pot").read_text(encoding="utf-8")
@@ -464,11 +613,14 @@ def main() -> int:
         "command",
         nargs="?",
         default="check",
-        choices=("check", "update", "extract", "compile", "coverage"),
+        choices=("check", "update", "extract", "compile", "coverage", "lint"),
     )
     args = parser.parse_args()
     try:
-        if args.command == "update":
+        if args.command == "lint":
+            lint_runtime_strings()
+            print("runtime strings: every user-visible literal reaches tr()")
+        elif args.command == "update":
             update_catalogs()
         elif args.command == "extract":
             POT_PATH.write_text(

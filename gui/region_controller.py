@@ -94,8 +94,9 @@ class RegionSelectorWindow:
 
         if not source_path:
             source_path = filedialog.askopenfilename(
-                title="Select a video/image to define subtitle region",
-                filetypes=[("All Supported", filepicker_pattern(SUPPORTED_EXTENSIONS))]
+                title=tr("Select a video/image to define subtitle region"),
+                filetypes=[(tr("All Supported"),
+                            filepicker_pattern(SUPPORTED_EXTENSIONS))]
             )
         if not source_path:
             return

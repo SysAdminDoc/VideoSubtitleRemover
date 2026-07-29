@@ -576,7 +576,7 @@ class PreviewControllerMixin:
         # Frame slider (vertical -- below the image).
         slider_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
         slider_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
-        tk.Label(slider_row, text="Frame", font=f(Theme.F_BODY_SM),
+        tk.Label(slider_row, text=tr("Frame"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
         ts_label = tk.Label(slider_row, text="00:00:00",
                             font=f(Theme.F_META),
@@ -607,9 +607,9 @@ class PreviewControllerMixin:
         # Seam slider (wipe boundary).
         seam_row = tk.Frame(win, bg=Theme.BG_OVERLAY)
         seam_row.pack(fill="x", padx=Theme.S_MD, pady=(0, 0))
-        tk.Label(seam_row, text="Wipe", font=f(Theme.F_BODY_SM),
+        tk.Label(seam_row, text=tr("Wipe"), font=f(Theme.F_BODY_SM),
                  bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
-        tk.Label(seam_row, text="source <-> cleaned",
+        tk.Label(seam_row, text=tr("source <-> cleaned"),
                  font=f(Theme.F_META),
                  bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="right")
 
@@ -659,8 +659,9 @@ class PreviewControllerMixin:
             self._update_status("Pillow required for inpaint preview", "warning")
             return
 
-        self.preview_title_label.config(text=f"Inpainting {Path(item.file_path).name}")
-        self.preview_meta_label.config(text="Running detect + inpaint on the first frame...")
+        self.preview_title_label.config(text=tr("Inpainting {name}").format(
+                name=Path(item.file_path).name))
+        self.preview_meta_label.config(text=tr("Running detect + inpaint on the first frame..."))
         self._preview_label.config(image="", text="")
         self._preview_photo = None
         self._start_throbber()
@@ -692,7 +693,7 @@ class PreviewControllerMixin:
                         lambda: self._set_preview_unavailable(
                             "Test cleanup unavailable",
                             "The selected file could not be read. Verify the file path and add it again.",
-                            label="No frame available",
+                            label=tr("No frame available"),
                         ),
                     )
                     return
@@ -758,7 +759,7 @@ class PreviewControllerMixin:
                     lambda: self._set_preview_unavailable(
                         "Test cleanup failed",
                         "The cleanup preview could not be rendered. Check the activity log, then try Review mask or Set region.",
-                        label="Cleanup preview failed",
+                        label=tr("Cleanup preview failed"),
                         tone="error",
                     ),
                 )
@@ -775,7 +776,7 @@ class PreviewControllerMixin:
             pil_img.thumbnail((max_w, max_h), Image.LANCZOS)
             self._preview_photo = ImageTk.PhotoImage(pil_img)
             self._preview_label.config(image=self._preview_photo, text="")
-            self.preview_title_label.config(text="Inpaint preview")
+            self.preview_title_label.config(text=tr("Inpaint preview"))
             self.preview_meta_label.config(text=meta_text)
         except Exception:
             pass
@@ -1142,7 +1143,7 @@ class PreviewControllerMixin:
             self._set_preview_unavailable(
                 "Preview unavailable",
                 "Install Pillow to enable image previews.",
-                label="Preview tools need Pillow",
+                label=tr("Preview tools need Pillow"),
             )
             return
 
@@ -1173,8 +1174,9 @@ class PreviewControllerMixin:
             max_w, max_h = self._preview_display_bounds()
 
             self.preview_title_label.config(
-                text=f"Loading {Path(item.file_path).name}...")
-            self.preview_meta_label.config(text="Reading first frame...")
+                text=tr("Loading {name}...").format(
+                    name=Path(item.file_path).name))
+            self.preview_meta_label.config(text=tr("Reading first frame..."))
             self._preview_label.config(image="", text="")
             self._preview_photo = None
             lang = self.lang_var.get()
@@ -1218,7 +1220,7 @@ class PreviewControllerMixin:
                             self._set_preview_unavailable(
                                 "Preview unavailable",
                                 "The selected file could not be read. Verify the file path and add it again.",
-                                label="No frame available",
+                                label=tr("No frame available"),
                             )
                         self._dispatch_preview_ui(_no_frame)
                         return
@@ -1247,7 +1249,7 @@ class PreviewControllerMixin:
                         self._set_preview_unavailable(
                             "Preview unavailable",
                             "The preview failed before a frame could be rendered. Check the activity log, then try Set region.",
-                            label="Preview failed",
+                            label=tr("Preview failed"),
                             tone="error",
                         )
                     self._dispatch_preview_ui(_err)
@@ -1258,7 +1260,7 @@ class PreviewControllerMixin:
             self._set_preview_unavailable(
                 "Preview unavailable",
                 "The preview could not be prepared. Check the activity log, then try adding the file again.",
-                label="Preview failed",
+                label=tr("Preview failed"),
                 tone="error",
             )
 
@@ -1382,7 +1384,7 @@ class PreviewControllerMixin:
                 self._set_preview_unavailable(
                     "Detection preview failed",
                     "The mask preview could not be generated. Check the activity log, then draw a manual region if needed.",
-                    label="Mask preview failed",
+                    label=tr("Mask preview failed"),
                     tone="error",
                 )
             self._dispatch_preview_ui(_show_mask_error)
@@ -1430,15 +1432,19 @@ class PreviewControllerMixin:
         self._stop_throbber()
         self._preview_photo = ImageTk.PhotoImage(img)
         self.preview_title_label.config(
-            text=f"Composed mask for {Path(cache['item_file']).name}")
+            text=tr("Composed mask for {name}").format(
+                name=Path(cache["item_file"]).name))
         meta = cache["meta"] + cache["imported_note"]
-        meta += f" Dilation: {dilation} px; detection cached."
+        meta += " " + tr("Dilation: {px} px; detection cached.").format(
+            px=dilation)
         self.preview_meta_label.config(text=meta)
         n = cache["region_count"]
         engine = cache["engine"]
         self._preview_label.config(
             image=self._preview_photo,
-            text=f"{engine}: {n} detected" if n else "No text detected")
+            text=(
+                tr("{engine}: {n} detected").format(engine=engine, n=n)
+                if n else tr("No text detected")))
 
     def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,
                             item_output, item_quality, item_soft,

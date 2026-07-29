@@ -1161,6 +1161,7 @@ Community translations are welcome. All catalog work is driven by one script,
 | `python scripts/i18n_catalogs.py update` | Re-extracts strings, refreshes `vsr.pot`, merges new keys into every existing `.po` (keeping your translations), regenerates the pseudo-locale, compiles all `.mo`, and prints coverage. |
 | `python scripts/i18n_catalogs.py check` | Verifies the POT and every catalog are in sync, placeholders/plural forms are valid, and the compiled `.mo` files are current. This is the CI-equivalent gate. |
 | `python scripts/i18n_catalogs.py coverage` | Prints the translated / total string count per locale. |
+| `python scripts/i18n_catalogs.py lint` | Fails when a user-visible string in `gui/` reaches the screen without passing through `tr()`. Runs automatically as part of `check`. |
 
 To add a new language:
 
@@ -1183,6 +1184,25 @@ To add a new language:
 Set the interface language at runtime in the GUI (Settings) or override with
 `VSR_UI_LOCALE=<tag>`; `VSR_UI_LOCALE=qps-Ploc` forces the pseudo-locale for
 testing.
+
+### Right-to-left layouts
+
+Enable **Mirror layout for right-to-left languages** in Settings (or set
+`rtl_layout` in `settings.json`) to flip the interface for Arabic, Hebrew,
+Persian, and Urdu.
+
+Layout code is written in *logical* terms throughout -- `side="left"` means
+"the start of the row", not "the left of the screen". `gui/direction.py`
+translates those logical values into physical ones at a single interception
+point, so packing order, anchors, `grid` sticky masks, text justification, and
+directional arrow affordances (`A -> Z` becomes `A <- Z`) all mirror together.
+New widgets inherit the behaviour with no extra work; write the LTR value and
+the mirror handles the rest. Canvas *items* are deliberately excluded, because
+their anchors are paired with coordinates the caller has already computed.
+
+`tools/ui_scaling_probe.py --locale rtl` renders the whole window headlessly
+and asserts the mirror reached the live widget tree; the test suite runs it at
+every text scale and compares the direction census against the LTR baseline.
 
 ## Credits
 

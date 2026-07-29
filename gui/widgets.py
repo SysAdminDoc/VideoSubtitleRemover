@@ -29,6 +29,7 @@ from gui.utils import (
     VIDEO_EXTENSIONS,
     filepicker_pattern,
     format_time,
+    queue_message_text,
     truncate_middle,
     _queue_item_info_text,
 )
@@ -1082,18 +1083,19 @@ class ModernSlider(tk.Frame):
         set_accessible_metadata(
             self,
             role="slider",
-            label=getattr(self, "accessible_label", "Slider"),
+            label=getattr(self, "accessible_label", "") or tr("Slider"),
             state=_state_text(
                 "enabled" if enabled else "disabled",
                 "focused" if focused else "",
             ),
-            value=f"{int(value)} (range {from_value} to {to_value})",
+            value=tr("{value} (range {low} to {high})").format(
+                value=int(value), low=from_value, high=to_value),
         )
         try:
             set_accessible_metadata(
                 self.canvas,
                 role="slider",
-                label=getattr(self, "accessible_label", "Slider"),
+                label=getattr(self, "accessible_label", "") or tr("Slider"),
                 state=accessible_metadata(self).get("state", ""),
                 value=accessible_metadata(self).get("value", ""),
             )
@@ -1424,7 +1426,7 @@ class Toast:
             set_accessible_metadata(
                 self._win,
                 role="notification",
-                label="Notification",
+                label=tr("Notification"),
                 state=self.tone,
                 value=self.message,
             )
@@ -2002,7 +2004,8 @@ class QueueItemWidget(tk.Frame):
         self.bottom_row = tk.Frame(self.container, bg=self._surface_bg)
         self.bottom_row.pack(fill="x")
 
-        self.message_label = tk.Label(self.bottom_row, text=item.message or tr("Ready to process"),
+        self.message_label = tk.Label(self.bottom_row,
+                                      text=queue_message_text(item.message),
                                       font=f(Theme.F_BODY_SM), bg=self._surface_bg,
                                       fg=Theme.TEXT_SECONDARY, anchor="w")
         self.message_label.pack(side="left", fill="x", expand=True)
@@ -2341,7 +2344,7 @@ class QueueItemWidget(tk.Frame):
         self.info_label.config(text=_queue_item_info_text(item))
         self.progress_bar.set_progress(item.progress)
         self.progress_bar.set_color(self._get_status_color())
-        status_message = truncate_middle(item.message or tr("Ready to process"), 74)
+        status_message = truncate_middle(queue_message_text(item.message), 74)
         message_color = {
             ProcessingStatus.COMPLETE: Theme.SUCCESS,
             ProcessingStatus.ERROR: Theme.ERROR,

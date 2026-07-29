@@ -305,7 +305,8 @@ class AdvancedSettingsControllerMixin:
                 parent=self.root,
                 title=tr("Export settings copy"),
                 defaultextension=".json",
-                filetypes=[("VSR settings", "*.json"), ("All files", "*.*")],
+                filetypes=[(tr("VSR settings"), "*.json"),
+                           (tr("All files"), "*.*")],
                 initialfile="settings.json",
             )
             if not path:
@@ -332,9 +333,10 @@ class AdvancedSettingsControllerMixin:
                 return
             path = filedialog.asksaveasfilename(
                 parent=self.root,
-                title=f"Export preset '{name}'",
+                title=tr("Export preset '{name}'").format(name=name),
                 defaultextension=".json",
-                filetypes=[("VSR preset", "*.json"), ("All files", "*.*")],
+                filetypes=[(tr("VSR preset"), "*.json"),
+                           (tr("All files"), "*.*")],
                 initialfile=f"{name.replace('/', '-')}.vsr-preset.json",
             )
             if not path:
@@ -352,8 +354,9 @@ class AdvancedSettingsControllerMixin:
             from tkinter import filedialog
             path = filedialog.askopenfilename(
                 parent=self.root,
-                title="Import preset",
-                filetypes=[("VSR preset", "*.json"), ("All files", "*.*")],
+                title=tr("Import preset"),
+                filetypes=[(tr("VSR preset"), "*.json"),
+                           (tr("All files"), "*.*")],
             )
             if not path:
                 return

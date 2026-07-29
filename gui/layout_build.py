@@ -1395,6 +1395,20 @@ class LayoutBuildMixin:
         hc_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
         Tooltip(hc_toggle, tr("Alternative palette tuned for low-vision users. Persists across sessions."))
 
+        # RM-152: the RTL mirror has to be installed before the first
+        # widget is created, so like the palette it lands on next launch.
+        self.rtl_layout_var = tk.BooleanVar(
+            value=getattr(self.config, "rtl_layout", False))
+        rtl_toggle = ModernToggle(
+            quality_frame,
+            text=tr("Mirror layout for right-to-left languages (restart required)"),
+            variable=self.rtl_layout_var,
+        )
+        rtl_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        Tooltip(rtl_toggle, tr(
+            "Mirrors rows, anchors, and directional arrows for Arabic, "
+            "Hebrew, Persian, and Urdu. Persists across sessions."))
+
         self.update_check_var = tk.BooleanVar(value=getattr(self.config, "update_check", False))
         uc_toggle = ModernToggle(
             quality_frame,

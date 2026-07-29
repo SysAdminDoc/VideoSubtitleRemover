@@ -42,6 +42,8 @@ from gui.utils import (
     detect_ai_engines, detect_ffmpeg, get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
     truncate_middle,
+    QUEUE_MESSAGE_PROBING, QUEUE_MESSAGE_READY,
+    QUEUE_MESSAGE_SOFT_SUBS_FOUND,
 )
 from gui.widgets import (
     ModernButton, ModernSlider, show_confirm, TaskbarProgress, Toast, TextWidgetHandler,
@@ -53,11 +55,15 @@ from backend.ffmpeg_profiles import (
     summarize_missing_profile_requirements,
 )
 from backend.model_downloads import installed_backend_status
-from backend.i18n import bind_locale, tr
+from backend.i18n import bind_locale, ntr, tr
 from backend.region_keyframes import (
     normalize_region_keyframe_tracks,
     region_shapes_at,
     shape_bounds,
+)
+from gui.direction import (
+    install_direction_mirror,
+    uninstall_direction_mirror,
 )
 from gui.preview_controller import PreviewControllerMixin
 from gui.mask_correction_controller import MaskCorrectionControllerMixin
@@ -104,6 +110,14 @@ class VideoSubtitleRemoverApp(
         self._text_scale_factor = text_scale_factor()
         self._rtl_layout = bool(getattr(self.config, "rtl_layout", False))
         Theme.RTL_LAYOUT = self._rtl_layout
+        # RM-152: install the logical-to-physical mirror before the first
+        # widget exists so construction, configure(), and every geometry
+        # call is covered. Uninstalling on an LTR start keeps a process
+        # that builds a second app instance from inheriting the patch.
+        if self._rtl_layout:
+            install_direction_mirror()
+        else:
+            uninstall_direction_mirror()
         if getattr(self.config, "high_contrast", False):
             apply_high_contrast_theme()
         else:
@@ -343,12 +357,17 @@ class VideoSubtitleRemoverApp(
                                          ProcessingStatus.DETECTING,
                                          ProcessingStatus.PROCESSING,
                                          ProcessingStatus.MERGING))
-                label = f"{n} active item{'s' if n != 1 else ''} will be cancelled."
+                label = ntr(
+                    "{n} active item will be cancelled.",
+                    "{n} active items will be cancelled.",
+                    n,
+                ).format(n=n)
                 if not show_confirm(
                     self.root,
-                    title="Close while processing?",
-                    message="A batch is still running.",
-                    detail=label + " Completed outputs on disk are kept.",
+                    title=tr("Close while processing?"),
+                    message=tr("A batch is still running."),
+                    detail=label + " " + tr(
+                        "Completed outputs on disk are kept."),
                     confirm_label="Close anyway",
                     cancel_label="Keep working",
                     tone="danger",
@@ -542,6 +561,8 @@ class VideoSubtitleRemoverApp(
             self.config.detection_vertical = self.vertical_text_var.get()
         if hasattr(self, 'high_contrast_var'):
             self.config.high_contrast = self.high_contrast_var.get()
+        if hasattr(self, 'rtl_layout_var'):
+            self.config.rtl_layout = self.rtl_layout_var.get()
         if hasattr(self, 'text_scale_var'):
             self.config.text_scale_percent = _coerce_int(
                 str(self.text_scale_var.get()).replace("%", ""),
@@ -656,8 +677,11 @@ class VideoSubtitleRemoverApp(
     def _apply_translation_safe_reflow(self):
         """Wrap verbose labels and stack crowded Canvas-button rows."""
         wrap_limit = 360 if self._text_scale_percent >= 150 else 520
-        anchor = "e" if self._rtl_layout else "w"
-        justify = "right" if self._rtl_layout else "left"
+        # Logical values: under RTL the direction mirror turns these into
+        # "e"/"right" on the way into Tk. Writing the physical value here
+        # would be flipped back and silently left-align the label.
+        anchor = "w"
+        justify = "left"
 
         def walk(widget):
             yield widget
@@ -1704,12 +1728,9 @@ class VideoSubtitleRemoverApp(
         target.soft_subtitle_probe_done = True
         if target.status == ProcessingStatus.IDLE:
             if records:
-                target.message = (
-                    "Embedded subtitle tracks found. Right-click for "
-                    "fast strip/keep, or run burned-in cleanup."
-                )
-            elif target.message == "Checking embedded subtitle tracks...":
-                target.message = "Ready to process"
+                target.message = QUEUE_MESSAGE_SOFT_SUBS_FOUND
+            elif target.message == QUEUE_MESSAGE_PROBING:
+                target.message = QUEUE_MESSAGE_READY
         if target.id in self.queue_widgets:
             self.queue_widgets[target.id].update_item(target)
         if self._selected_queue_item_id == target.id:
@@ -1717,7 +1738,10 @@ class VideoSubtitleRemoverApp(
                 text=(
                     _format_soft_subtitle_summary(records)
                     if records else
-                    "Use Set region to draw the subtitle band, or Review mask to confirm what the detector finds automatically."
+                    tr(
+                        "Use Set region to draw the subtitle band, or Review "
+                        "mask to confirm what the detector finds automatically."
+                    )
                 )
             )
         save_queue_state(self.queue)
@@ -1916,9 +1940,9 @@ class VideoSubtitleRemoverApp(
 
         # Create queue item
         initial_message = (
-            "Checking embedded subtitle tracks..."
+            QUEUE_MESSAGE_PROBING
             if is_video_file(file_path) else
-            "Ready to process"
+            QUEUE_MESSAGE_READY
         )
         item = QueueItem(
             id=item_id,
@@ -1999,7 +2023,7 @@ class VideoSubtitleRemoverApp(
             output_path_locked=False,
             status=ProcessingStatus.IDLE,
             progress=0.0,
-            message="Ready to process",
+            message=QUEUE_MESSAGE_READY,
             soft_subtitle_streams=list(template.soft_subtitle_streams),
             soft_subtitle_probe_done=template.soft_subtitle_probe_done,
             soft_subtitle_action=template.soft_subtitle_action,
@@ -2032,11 +2056,14 @@ class VideoSubtitleRemoverApp(
         ext_star = f"*{suffix}" if suffix else "*.*"
         new_path = filedialog.asksaveasfilename(
             parent=self.root,
-            title="Choose an output path",
+            title=tr("Choose an output path"),
             initialdir=str(current.parent),
             initialfile=current.name,
             defaultextension=suffix,
-            filetypes=[("Keep extension", ext_star), ("All files", "*.*")],
+            filetypes=[
+                (tr("Keep extension"), ext_star),
+                (tr("All files"), "*.*"),
+            ],
         )
         if not new_path:
             return
@@ -2169,9 +2196,13 @@ class VideoSubtitleRemoverApp(
             n = len(self.queue)
             if not show_confirm(
                 self.root,
-                title="Clear the queue?",
-                message=f"Remove {n} item{'s' if n != 1 else ''} from the batch.",
-                detail="Completed outputs on disk are not deleted.",
+                title=tr("Clear the queue?"),
+                message=ntr(
+                    "Remove {n} item from the batch.",
+                    "Remove {n} items from the batch.",
+                    n,
+                ).format(n=n),
+                detail=tr("Completed outputs on disk are not deleted."),
                 confirm_label="Clear queue",
                 cancel_label="Keep",
                 tone="danger",
@@ -2325,9 +2356,9 @@ class VideoSubtitleRemoverApp(
             self._update_status("No completed job to repeat", "warning")
             return
         paths = filedialog.askopenfilenames(
-            title="Select files to process with the last job's settings",
+            title=tr("Select files to process with the last job's settings"),
             filetypes=[
-                ("All Supported",
+                (tr("All Supported"),
                  "*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv;*.webm;*.m4v;"
                  "*.mpeg;*.mpg;*.jpg;*.jpeg;*.png;*.bmp;*.tiff;*.webp"),
             ],
@@ -2534,8 +2565,11 @@ class VideoSubtitleRemoverApp(
         )
         if show_confirm(
             self.root,
-            title="FFmpeg capability warning",
-            message="Some selected batch options are not supported by this FFmpeg build.",
+            title=tr("FFmpeg capability warning"),
+            message=tr(
+                "Some selected batch options are not supported by this "
+                "FFmpeg build."
+            ),
             detail=detail,
             confirm_label="Start anyway",
             cancel_label="Review settings",
@@ -2594,12 +2628,19 @@ class VideoSubtitleRemoverApp(
             clear_queue_state()
             return
         n = len(valid)
-        label = f"{n} queued item{'s' if n != 1 else ''} from last session"
+        label = ntr(
+            "{n} queued item from last session",
+            "{n} queued items from last session",
+            n,
+        ).format(n=n)
         if not show_confirm(
             self.root,
-            title="Restore queue?",
+            title=tr("Restore queue?"),
             message=label,
-            detail="Idle and paused items from your previous session were saved. Restore them to the queue?",
+            detail=tr(
+                "Idle and paused items from your previous session were "
+                "saved. Restore them to the queue?"
+            ),
             confirm_label="Restore",
             cancel_label="Discard",
         ):
@@ -2645,7 +2686,7 @@ class VideoSubtitleRemoverApp(
                 status=status,
                 progress=max(0.0, min(1.0, float(
                     record.get("progress") or 0.0))),
-                message=str(record.get("message") or "Ready to process"),
+                message=str(record.get("message") or QUEUE_MESSAGE_READY),
                 error=(
                     str(record.get("error"))
                     if record.get("error") is not None else None

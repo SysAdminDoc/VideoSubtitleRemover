@@ -28,6 +28,7 @@ DESCRIPTIONS: dict[str, str] = {
     "gui/app.py": "Tk shell, shared state, queue model, settings.",
     "gui/config.py": "APP_VERSION, QueueItem, GUI ProcessingConfig, settings I/O.",
     "gui/dialog_layout.py": "Work-area fitting and scrollable dialog bodies.",
+    "gui/direction.py": "Logical-to-physical RTL mirror for Tk options.",
     "gui/layout_build.py": "Builder mixin: header, settings, queue, preview.",
     "gui/layout_helpers.py": "Shared layout primitives for the builder mixins.",
     "gui/layout_responsive.py": "Responsive / stacked layout mixin.",

@@ -218,6 +218,48 @@ class GuiSmokeTests(unittest.TestCase):
                 self._destroy_app(app)
             apply_default_theme()
 
+    def test_rtl_toggle_round_trips_into_settings(self):
+        """RM-152: a mirror nobody can switch on is not shipped."""
+        app = self._make_app()
+        try:
+            self.assertFalse(app.rtl_layout_var.get())
+            app.rtl_layout_var.set(True)
+            app._sync_config_from_ui()
+            self.assertTrue(app.config.rtl_layout)
+            restored = self._g.ProcessingConfig.from_dict(
+                app.config.to_dict()).normalized()
+            self.assertTrue(restored.rtl_layout)
+        finally:
+            self._destroy_app(app)
+
+    def test_the_rtl_preference_installs_the_mirror_before_any_widget(self):
+        from gui import app as app_module
+        from gui import direction
+        from gui.theme import Theme
+
+        cfg = self._g.ProcessingConfig(rtl_layout=True, onboarding_seen=True)
+        app = None
+        try:
+            with mock.patch.object(app_module, "load_settings",
+                                   return_value=cfg):
+                app = self._make_app()
+            self.assertTrue(Theme.RTL_LAYOUT)
+            self.assertTrue(direction.direction_mirror_installed())
+            # The mirror was live before the tree was built, so no label
+            # kept the logical west anchor its call site asked for.
+            anchors = {
+                str(widget.cget("anchor"))
+                for widget in self._walk_widgets(app.root)
+                if isinstance(widget, tk.Label)
+            }
+            self.assertNotIn("w", anchors)
+            self.assertIn("e", anchors)
+        finally:
+            if app is not None:
+                self._destroy_app(app)
+            direction.uninstall_direction_mirror()
+            Theme.RTL_LAYOUT = False
+
     def test_work_directory_control_round_trips_into_queue_snapshots(self):
         app = self._make_app()
         try:

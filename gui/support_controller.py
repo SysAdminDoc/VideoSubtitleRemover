@@ -24,6 +24,10 @@ from gui.widgets import (
     ModernButton, Tooltip,
     make_themed_menu,
 )
+from gui.dialog_layout import (
+    fit_dialog_to_work_area,
+    scrollable_dialog_body,
+)
 from backend.ffmpeg_profiles import ffmpeg_profile_entries
 from backend.i18n import tr
 from backend.model_downloads import installed_backend_status
@@ -516,7 +520,12 @@ class SupportControllerMixin:
                 pass
             dialog.destroy()
 
-        outer = tk.Frame(dialog, bg=Theme.BORDER, padx=1, pady=1)
+        # RM-152: About was the last major dialog still sized by its own
+        # content. At 200% text scale on a short work area it grew past
+        # the screen with no way to reach the Close button, so it now
+        # uses the same scroll-and-clamp path as every other dialog.
+        scroll_body = scrollable_dialog_body(dialog, bg=Theme.BG_SECONDARY)
+        outer = tk.Frame(scroll_body, bg=Theme.BORDER, padx=1, pady=1)
         outer.pack()
         body = tk.Frame(outer, bg=Theme.BG_SECONDARY)
         body.pack()
@@ -620,13 +629,7 @@ class SupportControllerMixin:
         dialog.protocol("WM_DELETE_WINDOW", _close_about)
 
         dialog.update_idletasks()
-        try:
-            px, py = self.root.winfo_rootx(), self.root.winfo_rooty()
-            pw, ph = self.root.winfo_width(), self.root.winfo_height()
-            dw, dh = dialog.winfo_reqwidth(), dialog.winfo_reqheight()
-            dialog.geometry(f"+{px + (pw - dw) // 2}+{py + (ph - dh) // 3}")
-        except Exception:
-            pass
+        fit_dialog_to_work_area(dialog, self.root)
         dialog.deiconify()
         dialog.grab_set()
 

@@ -35,6 +35,74 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         self.assertIn("qps-Ploc:", result.stdout)
         self.assertIn("100.0%", result.stdout)
 
+    def test_no_user_visible_string_bypasses_the_catalog(self):
+        """RM-152: the runtime-string gate over the real GUI tree."""
+        findings = i18n_catalogs.untranslated_literals()
+        self.assertEqual(findings, [], "\n".join(
+            f"{path}:{line} [{sink}] {literal!r}"
+            for path, line, sink, literal in findings
+        ))
+
+    def test_the_lint_catches_each_kind_of_caption_sink(self):
+        import ast
+
+        cases = {
+            "captions": 'tk.Label(root, text="Start the batch")',
+            "dialog titles": 'filedialog.askopenfilename(title="Pick a file")',
+            "positional captions": 'widget.set_text("Start the batch")',
+            "file filters": 'ask(filetypes=[("Video files", "*.mp4")])',
+            "interpolated sentences": 'label.config(text=f"{n} of {t} shown")',
+            "menu entries": 'menu.add_command(label="Sort by name")',
+        }
+        for name, source in cases.items():
+            with self.subTest(sink=name):
+                self.assertTrue(
+                    self._lint_flags(ast.parse(source)),
+                    f"{name} sink was not detected",
+                )
+
+    def test_the_lint_accepts_translated_and_non_prose_values(self):
+        import ast
+
+        cases = {
+            "wrapped": 'tk.Label(root, text=tr("Start the batch"))',
+            "wrapped and formatted":
+                'label.config(text=tr("{n} shown").format(n=n))',
+            "wrapped plural":
+                'label.config(text=ntr("{n} item", "{n} items", n))',
+            "wrapped filter": 'ask(filetypes=[(tr("Video files"), "*.mp4")])',
+            "option value": 'widget.config(text="", state="disabled")',
+            "widget anchor token": 'tk.Label(root, text="", anchor="nw")',
+            "model record": 'QueueItem(message="Ready to process")',
+            "dynamic value": 'label.config(text=some_variable)',
+        }
+        for name, source in cases.items():
+            with self.subTest(value=name):
+                self.assertFalse(
+                    self._lint_flags(ast.parse(source)),
+                    f"{name} was flagged but should not be",
+                )
+
+    @staticmethod
+    def _lint_flags(tree) -> bool:
+        """Run the lint's scan over a parsed snippet in a temp package."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            package = root / "gui"
+            package.mkdir()
+            import ast as _ast
+
+            (package / "probe.py").write_text(
+                _ast.unparse(tree), encoding="utf-8")
+            return bool(i18n_catalogs.untranslated_literals(root))
+
+    def test_deferred_marker_strings_are_extracted(self):
+        # `N_()` marks a literal that a later `tr()` call will translate
+        # from a variable, so it must still reach the catalog.
+        messages = i18n_catalogs.extract_messages()
+        self.assertIn("Ready to process", messages)
+        self.assertIn("Checking embedded subtitle tracks...", messages)
+
     def test_pseudo_catalog_loads_and_preserves_placeholders(self):
         self.assertIn("qps-Ploc", i18n.available_catalogs())
         self.assertEqual(i18n.bind_locale("qps_ploc"), "qps-Ploc")

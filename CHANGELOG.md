@@ -4,6 +4,51 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Right-to-left layouts mirror the whole interface.** RTL support
+  previously reached only a handful of hand-mirrored widgets, so an Arabic or
+  Hebrew user got a left-to-right window with a few right-aligned labels in
+  it. Layout code is now written in logical terms throughout and
+  `gui/direction.py` converts logical to physical at a single interception
+  point, so packing order, widget and geometry anchors, `grid` sticky masks,
+  text justification, and directional arrow affordances (`A -> Z` becomes
+  `A <- Z`) mirror together -- including in widgets written later. Canvas
+  items are deliberately excluded because their anchors are paired with
+  coordinates the caller already computed.
+- **A Settings toggle for right-to-left layout.** The `rtl_layout` preference
+  existed but could only be set by hand-editing `settings.json`. It is now a
+  toggle beside the high-contrast and text-scale controls, and like those it
+  applies on the next launch because the mirror has to be installed before the
+  first widget exists.
+- **`i18n_catalogs.py lint`, a runtime-string gate.** Coverage percentages
+  could read 100% while user-visible strings never reached the catalog at all,
+  because a string that is never extracted cannot be counted as missing. The
+  new lint walks every caption sink in `gui/` -- widget captions, dialog
+  titles, file-dialog filters, menu entries, accessibility labels, and
+  interpolated sentences -- and fails when one bypasses `tr()`. It runs as
+  part of `check`.
+
+### Changed
+
+- **43 user-visible strings now reach the catalog.** Confirmation dialogs,
+  file-picker titles and filters, preview status text, queue counters, and
+  screen-reader labels were previously hard-coded English. Counted strings use
+  proper plural forms via `ntr()` instead of an inline `'s' if n != 1` suffix,
+  which is wrong in most languages. The bundled pseudo-locale grew from 569 to
+  619 messages.
+- **Queue-item messages are translated at render time.** The model keeps
+  stable English so persisted queue state and status comparisons survive a
+  locale change, and `gui.utils.queue_message_text()` localizes on the way to
+  the label. `backend.i18n.N_()` marks those deferred literals for extraction.
+
+### Fixed
+
+- **The About dialog no longer outgrows the screen.** It was the last major
+  dialog still sized purely by its own content; at high text scale on a short
+  work area it extended past the desktop with no way to reach the Close
+  button. It now uses the same scroll-and-clamp path as every other dialog.
+
 ## [3.30.0] - 2026-07-29
 
 ### Added
