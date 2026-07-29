@@ -587,13 +587,24 @@ def _coerce_backend_mode(value):
         from backend import inpainter_registry as _reg
         if _reg.is_registered(normalized):
             return RegisteredMode(normalized)
-        logger.warning(f"Unknown inpaint mode {value!r}; falling back to STTN")
+        # Issue #7: a user who names a model must never silently get a
+        # different one. Unknown strings used to coerce to STTN with only
+        # a log warning, so a preset/config naming an opt-in backend whose
+        # enable env var was missing produced STTN output under that
+        # model's name.
+        registered = ", ".join(sorted(name for name, _ in _reg.list_modes()))
+        raise ValueError(
+            "Unknown inpaint mode %r. Known modes: %s. Opt-in backends "
+            "register only when their enable environment variable is set "
+            "and their optional dependencies import cleanly." % (
+                value, registered or "(none)")
+        )
     return InpaintMode.STTN
 
 
 def is_known_backend_mode(value) -> bool:
     """True when _coerce_backend_mode would honour `value` rather than
-    falling back to STTN."""
+    rejecting it (unknown strings raise) or defaulting to STTN."""
     if isinstance(value, (InpaintMode, RegisteredMode)):
         return True
     if isinstance(value, str):

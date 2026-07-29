@@ -9,6 +9,33 @@ from typing import Any, Callable, Optional, Protocol
 logger = logging.getLogger(__name__)
 
 
+class InpainterUnavailableError(RuntimeError):
+    """Raised when the requested inpainting model has no registered
+    backend.
+
+    GitHub issue #7: this case used to silently substitute STTN, so a
+    user who selected LaMa/MI-GAN/a diffusion backend that had not been
+    registered (missing opt-in env var, failed optional import) got STTN
+    output under every model name -- "all the models produce the same
+    results" with only a log-file warning as evidence. Substituting a
+    different model than the one the user asked for is never the right
+    call; fail with an actionable message instead.
+    """
+
+    def __init__(self, requested: str, registered: list):
+        self.requested = requested
+        self.registered = registered
+        available = ", ".join(sorted(registered)) if registered else "(none)"
+        super().__init__(
+            "No inpainting backend is registered for %r. Registered "
+            "backends: %s. Opt-in backends (LaMa-ONNX, MI-GAN, diffusion, "
+            "external) register only when their enable environment "
+            "variable is set and their optional dependencies import "
+            "cleanly -- check the log for '<name> did not load' messages."
+            % (requested, available)
+        )
+
+
 class DeviceProvider(Protocol):
     """Runtime strategy seam used by the processing orchestrator."""
 
@@ -113,11 +140,11 @@ class RuntimeDeviceProvider:
         try:
             builder = self._resolve(name)
         except KeyError:
-            logger.warning(
-                "No inpainter registered for %r; falling back to STTN",
+            from backend import inpainter_registry
+            raise InpainterUnavailableError(
                 name,
-            )
-            builder = self._resolve("sttn")
+                [mode for mode, _ in inpainter_registry.list_modes()],
+            ) from None
         return builder(device, config)
 
     @staticmethod

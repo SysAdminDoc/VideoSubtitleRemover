@@ -67,8 +67,10 @@ def register(name: str, builder: _BuilderT) -> None:
 
 def resolve(name: str) -> _BuilderT:
     """Return the builder for the named mode, or KeyError when no
-    builder is registered. Caller catches KeyError and falls back to
-    the default backend (STTN today)."""
+    builder is registered. The device provider translates the KeyError
+    into an actionable InpainterUnavailableError -- it must NOT
+    substitute a different backend (issue #7: the old silent STTN
+    fallback made every unregistered model produce STTN output)."""
     return _REGISTRY[name.strip().lower()]
 
 

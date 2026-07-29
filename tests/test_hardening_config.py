@@ -316,6 +316,15 @@ class ConfigFuzzTests(unittest.TestCase):
                     if hasattr(cfg, k):
                         setattr(cfg, k, v)
                 cfg = processor.normalize_processing_config(cfg)
+            except ValueError as exc:
+                # Issue #7: an unrecognized inpaint-mode STRING is a
+                # validated, user-actionable rejection (the user named a
+                # model; substituting STTN silently is worse than failing).
+                # Everything else must still normalize without raising.
+                if "Unknown inpaint mode" in str(exc) and isinstance(
+                        payload.get("mode"), str):
+                    continue
+                self.fail(f"iter={i} payload={payload!r} raised {exc!r}")
             except Exception as exc:
                 self.fail(f"iter={i} payload={payload!r} raised {exc!r}")
             # Numeric invariants.

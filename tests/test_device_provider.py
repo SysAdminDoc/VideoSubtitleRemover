@@ -2,9 +2,10 @@ from types import SimpleNamespace
 from unittest import mock
 
 import numpy as np
+import pytest
 
 from backend.config import ProcessingConfig
-from backend.device_provider import RuntimeDeviceProvider
+from backend.device_provider import InpainterUnavailableError, RuntimeDeviceProvider
 from backend.processor import SubtitleRemover
 
 
@@ -31,7 +32,7 @@ def test_runtime_provider_falls_back_when_accelerator_is_unavailable():
     assert directml.probe_available() == "cpu"
 
 
-def test_runtime_provider_constructs_registry_backend_and_sttn_fallback():
+def test_runtime_provider_constructs_registry_backend():
     calls = []
 
     def resolver(name):
@@ -47,10 +48,39 @@ def test_runtime_provider_constructs_registry_backend_and_sttn_fallback():
     provider = RuntimeDeviceProvider("cpu", resolver=resolver)
     config = object()
     direct = provider.create_inpainter("lama", "cpu", config)
-    fallback = provider.create_inpainter("missing", "cpu", config)
     assert direct.name == "lama"
-    assert fallback.name == "sttn"
-    assert calls == [("lama", "cpu", config), ("sttn", "cpu", config)]
+    assert calls == [("lama", "cpu", config)]
+
+
+def test_runtime_provider_raises_actionable_error_for_unregistered_mode():
+    """Issue #7: an unregistered model must fail loudly, not silently
+    become STTN (which made every model selection produce identical
+    output)."""
+
+    def resolver(name):
+        raise KeyError(name)
+
+    provider = RuntimeDeviceProvider("cpu", resolver=resolver)
+    with pytest.raises(InpainterUnavailableError) as excinfo:
+        provider.create_inpainter("diffueraser", "cpu", object())
+
+    message = str(excinfo.value)
+    assert "diffueraser" in message
+    assert "Registered backends" in message
+    assert excinfo.value.requested == "diffueraser"
+
+
+def test_unknown_inpaint_mode_string_raises_value_error():
+    """Issue #7 companion: config-level coercion must also reject unknown
+    model names instead of silently substituting STTN."""
+    from backend.config import _coerce_backend_mode
+
+    with pytest.raises(ValueError) as excinfo:
+        _coerce_backend_mode("diffueraser-typo")
+
+    message = str(excinfo.value)
+    assert "diffueraser-typo" in message
+    assert "Known modes" in message
 
 
 def test_subtitle_remover_uses_injected_provider_for_selection_and_factory():
