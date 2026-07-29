@@ -218,7 +218,39 @@ if not "!RELEASE_EXIT!"=="0" (
     exit /b 1
 )
 
-copy /Y "!INSTALLER_STAGE!" "!INSTALLER_PATH!" >nul
+:: Stage the whole release into a clean temporary directory, derive every
+:: filename from APP_VERSION, hash exactly that set, and promote it in one
+:: move. Nothing is published from the reusable scratch directory.
+echo.
+echo Staging the versioned release artifact set...
+for /f "delims=" %%V in ('"%PYTHON%" -c "from gui.config import APP_VERSION; print(APP_VERSION)"') do set "APP_VERSION=%%V"
+if not defined APP_VERSION (
+    echo ERROR: Could not read APP_VERSION.
+    exit /b 1
+)
+"%PYTHON%" -m backend.release_staging stage ^
+    --version "!APP_VERSION!" ^
+    --dist-dir "!DIST_DIR!" ^
+    --installer-path "!INSTALLER_STAGE!" ^
+    --evidence-dir "!RELEASE_DIR!" ^
+    --release-root "!RELEASE_DIR!" ^
+    --prune-stale
+if errorlevel 1 (
+    echo ERROR: Release staging failed; nothing was promoted.
+    exit /b 1
+)
+
+"%PYTHON%" -m backend.release_staging verify ^
+    --version "!APP_VERSION!" ^
+    --release-root "!RELEASE_DIR!" >nul
+if errorlevel 1 (
+    echo ERROR: Promoted release set did not verify.
+    exit /b 1
+)
+
+:: Promote from the verified versioned set, not from the scratch stage --
+:: --prune-stale removes the loose pre-versioned copies.
+copy /Y "!RELEASE_DIR!\!APP_VERSION!\VideoSubtitleRemoverPro-!APP_VERSION!-Setup.exe" "!INSTALLER_PATH!" >nul
 if errorlevel 1 (
     echo ERROR: Strict proof passed but the installer could not be promoted.
     exit /b 1
@@ -233,9 +265,10 @@ echo  EXE Location: !DIST_DIR!\
 echo  Bundle docs: README.md, LICENSE, CHANGELOG.md
 echo  Bundle launchers: Run_VSR_Pro.bat, Run_VSR_Pro_Debug.bat, Run_VSR_Pro.ps1
 echo  Installer: !INSTALLER_PATH!
-echo  Release evidence: release-verification.json, release-hidden-imports.json, release-advisories.json, pip-audit.json, sbom.cdx.json
+echo  Release set: !RELEASE_DIR!\!APP_VERSION!\ (installer, portable ZIP, evidence, SHA256SUMS.txt)
 echo.
-echo  To distribute, zip the entire VideoSubtitleRemoverPro folder.
+echo  Publish with:
+"%PYTHON%" -m backend.release_staging guidance --version "!APP_VERSION!"
 echo.
 exit /b 0
 

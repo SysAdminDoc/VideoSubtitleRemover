@@ -58,21 +58,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P0
 
-- [ ] P0 -- RM-141 Stage each release as one versioned, atomic artifact set
-  Why: the reusable release directory can pair a newer installer with older ZIP,
-    evidence, and checksums, making published integrity instructions unreliable.
-  Evidence: `build_exe.bat:169-238`; `build/release/SHA256SUMS.txt` does not match
-    the staged installer; as of 2026-07-29, source is 3.29.0 while the published
-    release/evidence is v3.22.0; GitHub immutable-release documentation.
-  Touches: `build_exe.bat`; `backend/release_verification.py`; release-workflow
-    tests; release documentation.
-  Acceptance: a clean temporary stage derives every filename from `APP_VERSION`,
-    builds installer + portable ZIP + SBOM/audit/evidence, hashes exactly that
-    set, rejects stale/extra assets or version drift, and promotes only after all
-    hashes and smoke tests pass; publication guidance uses draft/immutable
-    releases and remains explicitly unsigned.
-  Complexity: M
-
 ### P1
 
 - [ ] P1 -- RM-142 Put subprocess stdin under timeout and cancellation control

@@ -14,6 +14,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   newer ONNX Runtime fixes (1.28.0) while the CUDA 12 lane stays on its last
   compatible build, and marks CUDA 13 as an untested manual lane instead of
   hiding it behind a single onnxruntime recommendation.
+- **Atomic, version-derived release staging.** New `backend.release_staging`
+  stages a release into a clean temporary directory, derives every filename
+  from `APP_VERSION` (installer, portable ZIP, SBOM, audit, evidence), hashes
+  exactly that set into `SHA256SUMS.txt`, and promotes the whole directory to
+  `build/release/<version>/` in one move. It refuses evidence that records a
+  different version, a verification error, or a failed installer/launch smoke,
+  and `verify` rejects a promoted directory that gains or loses a file or whose
+  checksums no longer match. `build_exe.bat` stages, verifies, and only then
+  promotes the installer; `guidance` prints draft/immutable GitHub release
+  steps and restates that artifacts are intentionally unsigned. This closes the
+  case where a reusable release directory paired a newer installer with an
+  older portable ZIP and a checksum file describing neither.
 - **Dependency-profile provider smoke.**
   `python -m backend.dependency_profiles smoke --profile <name>` builds a
   minimal ONNX identity model and creates one real inference session on the

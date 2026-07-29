@@ -100,8 +100,8 @@ the download against the published `SHA256SUMS.txt` file.
    - Use `Run_VSR_Pro_Debug.bat` for a visible troubleshooting console, or
      `Run_VSR_Pro.ps1` when you prefer launching from PowerShell
 
-After the Windows Package Manager manifest is accepted, signed release
-installers can also be installed with:
+After the Windows Package Manager manifest is accepted, the unsigned release
+installer can also be installed with:
 
 ```powershell
 winget install SysAdminDoc.VideoSubtitleRemoverPro
@@ -212,6 +212,23 @@ PyInstaller's `Analysis-00.toc`: required Python libraries and hashed native
 files reflect the folder that actually ships, while PyInstaller and other
 build tools are marked with excluded scope. `release-verification.json` and
 `pip-audit.json` record the remaining release proof.
+
+Every release is staged as one atomic, version-derived artifact set. After
+the strict gates pass, `backend.release_staging` copies the installer,
+builds the portable ZIP from the frozen folder, copies the evidence set,
+derives every filename from `APP_VERSION`, hashes exactly those files into
+`SHA256SUMS.txt`, and promotes the whole directory to
+`build/release/<version>/` in a single move. Evidence that records a
+different version, a verification error, or a failed installer/launch smoke
+is refused, and a promoted directory that gains or loses a file no longer
+verifies -- so a newer installer can never be published beside an older ZIP
+or a checksum file that describes neither. Run
+`python -m backend.release_staging verify --version X.Y.Z` to re-check a
+staged set, and `... guidance` for the publication steps: upload the staged
+set to a **draft** GitHub release, publish it, and keep immutable releases
+enabled so a published tag's assets cannot be replaced. Artifacts are
+intentionally UNSIGNED; `SHA256SUMS.txt` from the same staged set is the
+only integrity reference.
 
 For an isolated CPU smoke without touching the Windows launcher, run the same
 check in the local container recipe:

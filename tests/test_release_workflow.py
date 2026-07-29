@@ -871,11 +871,19 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("--installer-smoke-executable", self.bat)
         self.assertIn("--runtime-hook assets\\runtime_hook_mp.py", self.bat)
         self.assertNotIn("pause", self.bat.lower())
-        self.assertIn("release-verification.json", self.bat)
-        self.assertIn("release-hidden-imports.json", self.bat)
-        self.assertIn("release-advisories.json", self.bat)
-        self.assertIn("sbom.cdx.json", self.bat)
-        self.assertIn("pip-audit.json", self.bat)
+        # The evidence filenames now live in one place: the staging module
+        # hashes exactly that set into the promoted release directory.
+        from backend.release_staging import EVIDENCE_FILES
+
+        self.assertIn("backend.release_staging stage", self.bat)
+        for name in (
+            "release-verification.json",
+            "release-hidden-imports.json",
+            "release-advisories.json",
+            "sbom.cdx.json",
+            "pip-audit.json",
+        ):
+            self.assertIn(name, EVIDENCE_FILES)
         self.assertIn("call :maybe_collect_data rapidocr", self.bat)
         self.assertIn("--hidden-import backend.opencv_ocr", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)
