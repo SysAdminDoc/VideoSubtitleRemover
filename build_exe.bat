@@ -53,6 +53,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Checking the architecture module map...
+"%PYTHON%" scripts\generate_architecture_map.py --check
+if errorlevel 1 (
+    echo Architecture module map drifted; release build stopped.
+    exit /b 1
+)
+
 echo Checking gettext catalogs...
 "%PYTHON%" scripts\i18n_catalogs.py check
 if errorlevel 1 (

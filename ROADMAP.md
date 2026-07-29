@@ -20,20 +20,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
     real-media licensing is required (the blocked real-corpus item remains separate).
   Complexity: M
 
-- [ ] P2 -- RM-151 Publish accurate architecture, release, and accessibility support docs
-  Why: current contributor/release claims contradict live module ownership,
-    unsigned distribution, changelog structure, and the known UIA limitation.
-  Evidence: `docs/architecture.md:8,20,35,117,144`; `README.md:85-104`;
-    duplicate `CHANGELOG.md` Unreleased sections; Adobe After Effects ACR;
-    UI Automation work remains in `Roadmap_Blocked.md`.
-  Touches: `README.md`; `docs/architecture.md`; `CLAUDE.md`; `CHANGELOG.md`;
-    documentation drift tests/checks.
-  Acceptance: module ownership and sizes match live code; one Unreleased section
-    remains; unsigned installer/Winget wording is consistent; a support matrix
-    distinguishes tested keyboard, high-contrast, scaling, and pseudo-locale
-    behavior from the explicitly unsupported custom-control screen-reader/UIA surface.
-  Complexity: S
-
 - [ ] P2 -- RM-152 Complete runtime-string extraction and bidirectional layout coverage
   Why: gettext/pseudo-locale infrastructure is complete, but untranslated runtime
     strings and left/right layout assumptions still block trustworthy human catalogs.

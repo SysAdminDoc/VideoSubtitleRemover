@@ -12,110 +12,141 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 
 ## Module map
 
+<!-- module-map:start -->
+
 ```
 .
 |-- VideoSubtitleRemover.py     # Entry point (thin launcher -> gui.app).
-|-- gui/
-|   |-- __init__.py             # GUI subpackage.
-|   |-- app.py                  # Main Tk shell, shared state, layout, settings.
-|   |-- processing_controller.py # Queue worker, pause/stop, reports, notify.
-|   |-- preview_controller.py   # Preview pane, A/B compare, region editor.
-|   |-- quality_controller.py   # Quality review, retry, batch-report helpers.
-|   |-- support_controller.py   # Support bundle, model cache, About panels.
-|   |-- widgets.py              # Custom controls: ModernButton, ModernToggle,
-|   |                           # ModernSlider, SegmentedPicker, ProgressBar,
-|   |                           # DragDropFrame, QueueItemWidget, Tooltip, Toast.
-|   |-- theme.py                # Design tokens, colors, spacing, typography.
-|   |-- config.py               # APP_VERSION, APP_NAME, QueueItem dataclass,
-|   |                           # ProcessingConfig (GUI-side), InpaintMode enum,
-|   |                           # settings load/save/migrate, preset import.
-|   `-- utils.py                # File helpers, media type checks, formatting.
-|-- backend/
-|   |-- __init__.py             # Lazy re-exports SubtitleRemover etc.
-|   |-- processor.py            # Legacy re-export shim + CLI delegation.
-|   |-- config.py               # Backend ProcessingConfig, InpaintMode enum,
-|   |                           # coercers, normalize_processing_config.
-|   |-- detection.py            # OCR cascade, selectable engines, confidence,
-|   |                           # recognized-text/script filtering.
-|   |-- tracking.py             # Kalman, pHash, karaoke grouping.
-|   |-- io.py                   # Capture, ffprobe, intermediate writers,
-|   |                           # PrefetchReader.
-|   |-- cli.py                  # argparse entry point.
-|   |-- encoder.py              # Output codec probing and HW encoder selection.
-|   |-- remux.py                # Soft-subtitle strip/keep remux paths.
-|   |-- quality.py              # PSNR/SSIM/VMAF helpers.
-|   |-- quality_gate.py         # Graduated quality gate with remediation ladder.
-|   |-- batch_report.py         # JSON + Markdown batch summary output.
-|   |-- inpainters/             # Built-in STTN/LaMa/ProPainter/AUTO paths.
-|   |   |-- __init__.py         # BaseInpainter, mode routing.
-|   |   |-- sttn.py             # TBE (Temporal Background Exposure).
-|   |   |-- lama.py             # ONNX > OpenCV 5 DNN > PyTorch opt-in > cv2.
-|   |   |-- propainter.py       # TBE + LaMa refinement hybrid.
-|   |   |-- auto.py             # Per-scene STTN/ProPainter motion routing.
-|   |   `-- _common.py          # Feathering, edge-ring color match.
-|   |-- inpainters_onnx.py      # ONNX Runtime inpaint session helpers.
-|   |-- inpainters_diffusion.py # Opt-in diffusion adapter scaffolds.
-|   |-- inpainter_registry.py   # In-process inpainter discovery registry.
-|   |-- presets.py              # Shared preset library (GUI + CLI).
-|   |-- model_hashes.py         # Vendored SHA-256 hashes + verifier.
-|   |-- adapter_manifest.py     # Optional model provenance and hash policy.
-|   |-- onnx_model_info.py      # ONNX opset audit and DirectML compat check.
-|   |-- remote_model_policy.py  # Gate for trust_remote_code / torch.hub.
-|   |-- model_downloads.py      # First-run model download guidance.
-|   |-- language_support.py     # GUI picker scope + OCR engine language facts.
-|   |-- paddle_compat.py        # PaddleOCR 2.x/3.x API compatibility layer.
-|   |-- hdr.py                  # Color metadata preservation.
-|   |-- decode_accel.py         # Hardware decode hints (D3D11/VAAPI/MFX).
-|   |-- preprocess.py           # Deinterlacing, keyframe enumeration.
-|   |-- post_restore.py         # Post-inpaint temporal smoothing.
-|   |-- whisper_fallback.py     # Whisper-based timing for OCR-empty speech.
-|   |-- karaoke_flow.py         # Karaoke optical-flow grouping helper.
-|   |-- proxy_workflow.py       # Proxy-encode workflow for large files.
-|   |-- nle_sidecar.py          # EDL/FCPXML sidecar export.
-|   |-- tensorrt_compile.py     # Optional TensorRT engine compilation.
-|   |-- cache_inventory.py      # --cache-info / --cache-clean.
-|   |-- update_check.py         # Startup version check (opt-in).
-|   |-- security_checks.py      # Runtime safety checks.
-|   |-- crash_reporter.py       # Opt-in GlitchTip reporter (path-scrubbed).
-|   |-- support_bundle.py       # Redacted diagnostics zip export.
-|   |-- dependency_caps.py      # Dependency version ceiling enforcement.
-|   |-- release_verification.py # Local PyInstaller release evidence writer.
-|   |-- ocr_vlm.py              # Optional VLM detectors (Florence-2, Qwen2.5).
-|   |-- segmentation.py         # Optional SAM 2 / CoTracker adapters.
-|   |-- i18n.py                 # Localisation scaffold.
-|   |-- a11y.py                 # Accessibility scaffold.
-|   `-- vapoursynth_bridge.py   # VapourSynth bridge scaffold.
-|-- tests/
-|   |-- test_hardening.py       # Core regression + fuzz suite.
-|   |-- test_detection_pipeline.py  # OCR cascade unit tests.
-|   |-- test_tracking_pipeline.py   # Kalman/pHash tracking tests.
-|   |-- test_io_pipeline.py         # Capture, intermediate, prefetch tests.
-|   |-- test_gui_smoke.py           # Off-screen GUI construction smoke test.
-|   |-- test_gui_*.py               # GUI widget / state / feedback tests.
-|   |-- test_release_workflow.py    # Local release evidence validation.
-|   |-- test_support_bundle.py      # Support bundle export tests.
-|   |-- test_preset_schema.py       # Preset round-trip validation.
-|   |-- test_reference_clips.py     # Reference-clip quality baselines.
-|   `-- test_*.py                   # Additional focused test modules.
-|-- .github/
-|   `-- ISSUE_TEMPLATE/         # Bug report + feature request forms.
-|-- docs/
-|   |-- architecture.md         # This file.
-|   |-- edge_case_corpus.md     # Community regression-corpus guide.
-|   `-- archive/                # Retired audits and completed checklists.
-|-- setup.py                    # First-run venv bootstrap.
-|-- scripts/setup_splash.py     # Dependency-free first-run progress splash.
+|-- setup.py                    # First-run venv bootstrap and dependency profiles.
+|-- build_exe.bat               # Local PyInstaller build, evidence, release staging.
+|-- requirements.txt            # Pinned and advisory dependency floors.
+|-- dependency_profiles.json    # Reviewed CPU/NVIDIA/DirectML profile manifest.
 |-- Run_VSR_Pro.bat             # Windows launcher.
-|-- Run_VSR_Pro_Debug.bat       # Windows launcher with visible console.
-|-- Run_VSR_Pro.ps1             # PowerShell launcher (generated by setup).
-|-- build_exe.bat               # Local PyInstaller build + evidence script.
-`-- requirements.txt            # Pinned + advisory deps.
+|-- Run_VSR_Pro_Debug.bat       # Windows launcher with a visible console.
+|-- Run_VSR_Pro.ps1             # PowerShell launcher.
+|-- gui/
+|   |-- __init__.py                   # GUI subpackage re-exports.
+|   |-- app.py                        # Tk shell, shared state, queue model, settings.
+|   |-- config.py                     # APP_VERSION, QueueItem, GUI ProcessingConfig, settings I/O.
+|   |-- dialog_layout.py              # Work-area fitting and scrollable dialog bodies.
+|   |-- layout_build.py               # Builder mixin: header, settings, queue, preview.
+|   |-- layout_helpers.py             # Shared layout primitives for the builder mixins.
+|   |-- layout_responsive.py          # Responsive / stacked layout mixin.
+|   |-- mask_correction_controller.py # Mask paint/erase review and selective rerun.
+|   |-- onboarding.py                 # First-run onboarding modal mixin.
+|   |-- preview_controller.py         # Preview pane, A/B compare, live frames, zoom.
+|   |-- processing_controller.py      # Queue worker, pause/stop, reports, notifications.
+|   |-- quality_controller.py         # Quality review, retry, batch-report helpers.
+|   |-- queue_view.py                 # Queue table rendering and row state mixin.
+|   |-- region_controller.py          # Region editor: rects, spans, keyframes, polygons.
+|   |-- settings_controller.py        # Settings widgets, presets, mode selection.
+|   |-- support_controller.py         # Support bundle, model cache, log panel, About.
+|   |-- theme.py                      # Design tokens, colors, spacing, typography, text scale.
+|   |-- utils.py                      # File helpers, media type checks, formatting.
+|   `-- widgets.py                    # Custom controls (ModernButton/Toggle/Slider/Picker/...).
+|-- backend/
+|   |-- __init__.py                 # Lazy re-exports SubtitleRemover and friends.
+|   |-- _clean_ref_mixin.py         # Clean-reference plate handling.
+|   |-- _encode_mixin.py            # Encode / mux / audio stages of the processor.
+|   |-- _finalize_mixin.py          # Finalize, output contract, post-restore, sidecar.
+|   |-- _quality_mixin.py           # Quality-report stages of the processor.
+|   |-- _srt_mixin.py               # SRT export and clean-reference export stages.
+|   |-- a11y.py                     # Accessibility metadata helpers.
+|   |-- adapter_manifest.py         # Optional model provenance and hash policy.
+|   |-- atomic_replace.py           # Journalled multi-file replacement and recovery.
+|   |-- batch_report.py             # JSON + Markdown batch summary and output sidecars.
+|   |-- cache_inventory.py          # Cache info/clean and portable model-cache bundles.
+|   |-- cli.py                      # argparse entry point and batch driver.
+|   |-- config.py                   # Backend ProcessingConfig, InpaintMode, coercers.
+|   |-- config_schema.py            # Canonical config schema and settings migration.
+|   |-- container_payload.py        # Container metadata/chapters/attachment mapping.
+|   |-- crash_reporter.py           # Opt-in crash reporter (allowlisted minimal events).
+|   |-- decode_accel.py             # Hardware decode hints (D3D11/VAAPI/MFX/PyNv).
+|   |-- dependency_caps.py          # Dependency ceilings and execution-provider lanes.
+|   |-- dependency_profiles.py      # Reviewed CPU/NVIDIA/DirectML dependency locks.
+|   |-- detection.py                # OCR cascade, selectable engines, execution provenance.
+|   |-- device_provider.py          # Device strategy and inpainter construction.
+|   |-- encoder.py                  # Output codec probing and HW encoder selection.
+|   |-- execution_provenance.py     # Requested vs. effective device/engine record.
+|   |-- ffmpeg_profiles.py          # FFmpeg capability profiles and security probe.
+|   |-- hdr.py                      # Color metadata preservation and HDR handling.
+|   |-- i18n.py                     # gettext localisation runtime.
+|   |-- import_safety.py            # Crash-safe optional-module import probes.
+|   |-- inpainter_registry.py       # In-process inpainter discovery registry.
+|   |-- inpainters_diffusion.py     # Opt-in diffusion adapter scaffolds.
+|   |-- inpainters_onnx.py          # ONNX Runtime inpaint session helpers.
+|   |-- io.py                       # Capture, ffprobe, intermediate writers, PrefetchReader.
+|   |-- karaoke_flow.py             # Karaoke optical-flow grouping helper.
+|   |-- language_support.py         # GUI picker scope vs. OCR engine language facts.
+|   |-- mask_corrections.py         # Ordered add/subtract mask corrections.
+|   |-- mask_free_benchmark.py      # Mask-free removal benchmark harness.
+|   |-- matte_interchange.py        # Lossless matte export / import / compose.
+|   |-- model_downloads.py          # First-run model download guidance.
+|   |-- model_hashes.py             # Vendored SHA-256 hashes and chunked verifier.
+|   |-- nle_sidecar.py              # EDL / FCPXML sidecar export.
+|   |-- ocr_benchmark.py            # OCR engine recall / precision benchmark.
+|   |-- ocr_fix.py                  # Per-language OCR replace lists for exported SRT.
+|   |-- ocr_vlm.py                  # Optional VLM detectors (Florence-2, Qwen2.5-VL).
+|   |-- onnx_model_info.py          # ONNX opset audit and Windows ML probe.
+|   |-- onnxruntime_cuda.py         # CUDA preload status for ONNX Runtime.
+|   |-- opencv_ocr.py               # PP-OCRv6 via OpenCV 5 DNN and the engine contract.
+|   |-- output_contract.py          # Frozen per-job output policy.
+|   |-- output_quality_preflight.py # Pre-run output quality warnings.
+|   |-- paddle_compat.py            # PaddleOCR 2.x / 3.x API compatibility layer.
+|   |-- post_restore.py             # Post-inpaint temporal smoothing and burn-in.
+|   |-- preprocess.py               # Deinterlacing and keyframe enumeration.
+|   |-- presets.py                  # Shared preset library (GUI + CLI).
+|   |-- processor.py                # Frame loop plus the legacy re-export / CLI shim.
+|   |-- proxy_workflow.py           # Proxy-encode workflow for large files.
+|   |-- quality.py                  # PSNR / SSIM / VMAF and temporal metrics.
+|   |-- quality_gate.py             # Graduated quality gate with a remediation ladder.
+|   |-- reference_corpus.py         # Synthetic reference-clip regression harness.
+|   |-- reference_fill.py           # Clean-plate reference fill.
+|   |-- region_editing.py           # Region geometry edit / undo primitives.
+|   |-- region_keyframes.py         # Interpolated moving-region keyframe tracks.
+|   |-- release_staging.py          # Atomic, version-derived release artifact set.
+|   |-- release_verification.py     # Local PyInstaller release evidence writer.
+|   |-- remote_model_policy.py      # Gate for trust_remote_code / torch.hub.
+|   |-- remux.py                    # Soft-subtitle strip / keep remux paths.
+|   |-- resume_checkpoint.py        # Crash-resume and pause checkpoints.
+|   |-- safe_image.py               # Bounded image reads.
+|   |-- security_checks.py          # Runtime safety checks (libpng floor).
+|   |-- segmentation.py             # Optional SAM 2 / MatAnyone / CoTracker adapters.
+|   |-- static_logo_benchmark.py    # Static-logo removal benchmark harness.
+|   |-- subprocess_policy.py        # Hidden, bounded, cancellable child processes.
+|   |-- subtitle_translation.py     # SRT parsing, providers, translated export.
+|   |-- support_bundle.py           # Redacted diagnostics zip export.
+|   |-- tensorrt_compile.py         # Optional TensorRT engine compilation.
+|   |-- tracking.py                 # Kalman tracking, pHash reuse, karaoke grouping.
+|   |-- update_check.py             # Startup version check (opt-in).
+|   |-- vapoursynth_bridge.py       # VapourSynth bridge (opt-in).
+|   |-- whisper_fallback.py         # Whisper-based timing for OCR-empty speech.
+|   `-- work_directory.py           # End-to-end scratch / storage policy.
+|   `-- inpainters/
+|       |-- __init__.py   # Mode routing and shared inpainter exports.
+|       |-- _common.py    # BaseInpainter, feathering, edge-ring match.
+|       |-- auto.py       # Per-scene STTN / ProPainter motion routing.
+|       |-- external.py   # VSR_EXTERNAL_INPAINTER bridge.
+|       |-- lama.py       # ONNX > OpenCV 5 DNN > PyTorch opt-in > cv2.
+|       |-- propainter.py # TBE plus LaMa residual refinement.
+|       `-- sttn.py       # TBE (Temporal Background Exposure).
+|-- scripts/                     # Build, i18n, and doc tooling.
+|-- tools/                       # Local probes (smoke, UI scaling).
+|-- installer/                   # NSIS installer sources.
+|-- tests/                       # Unit, hardening, and GUI suites.
+`-- docs/                        # Architecture and corpus guides.
 ```
+
+<!-- module-map:end -->
 
 ### Why this layout (and where new code should land)
 
-- **`gui/app.py`** owns the Tk shell, shared state, layout, settings
-  variables, queue model, and public `VideoSubtitleRemoverApp` surface.
+- **`gui/app.py`** owns the Tk shell, shared state, settings variables,
+  queue model, and the public `VideoSubtitleRemoverApp` surface. The widget
+  construction itself lives in the layout mixins (`gui/layout_build.py`,
+  `gui/layout_responsive.py`, `gui/layout_helpers.py`, `gui/queue_view.py`,
+  `gui/onboarding.py`), which compose onto the app exactly like the controller
+  mixins -- put new widget-building code in a mixin, not in `app.py`.
   The default shell is a command-first workbench: one compact command strip
   sits above the preview/inspector split, and the persistent queue is rendered
   as a dense table below it. Advanced controls remain progressively disclosed
@@ -124,8 +155,10 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
   orchestration, per-item backend dispatch, progress/taskbar updates,
   report preparation, and completion notifications.
 - **`gui/preview_controller.py`** owns preview placeholders, live frames,
-  mask review, A/B compare, test-cleanup previews, preview zoom, and the
-  inline region editor.
+  mask review, A/B compare, test-cleanup previews, and preview zoom. The
+  region editor lives in `gui/region_controller.py` and mask correction in
+  `gui/mask_correction_controller.py`; both build into a scrollable dialog
+  body from `gui/dialog_layout.py` so they reflow at high text scale.
 - **`gui/quality_controller.py`** owns batch-summary dialogs, source-aware
   quality warnings, quality-review worklists, retry-with-suggested-settings,
   and batch report file opening/writing.
@@ -361,3 +394,25 @@ releases and confirm inference parity before switching the default.
 - The FFV1 intermediate (`_LosslessIntermediateWriter`) needs
   ffmpeg on PATH; falls back to `mp4v` automatically. The fallback
   reverts to v3.12 behaviour (lossy intermediate).
+
+---
+
+## Accessibility support matrix
+
+What is actually tested here, and what is explicitly not supported. Keep this
+honest: an untested claim is worse than a documented gap.
+
+| Surface | State | Proof |
+|---------|-------|-------|
+| Keyboard reachability of major actions | Supported and tested | `tools/ui_scaling_probe.py` asserts every major action is focusable, has non-zero geometry, and is not clipped, across the scale/theme/locale matrix in `tests/test_text_scaling.py` |
+| Text scaling 100-200% | Supported and tested | Same probe at 100/125/150/175/200%; fonts, control heights, and wrap lengths must all scale |
+| Dialog reflow and scrolling at high scale | Supported and tested | `gui/dialog_layout.py`; the probe opens the dialogs at 980x720 and 2752x1152 work areas and requires an internal scroll path |
+| High-contrast theme | Supported and tested | Probe runs the whole matrix under the high-contrast palette |
+| Pseudo-locale (qps-Ploc) string expansion | Supported and tested | `scripts/i18n_catalogs.py`; probe renders pseudo-localised strings |
+| RTL mirroring | Supported and tested (pseudo-RTL) | Probe checks theme direction, label justification, and mirrored toggle geometry |
+| Accessible names/roles on standard widgets | Supported (best effort) | `backend/a11y.py` sets accessible metadata; not verified against a live client |
+| **Screen readers / UI Automation on custom controls** | **Not supported** | The Canvas-based `ModernButton` / `ModernToggle` / `ModernSlider` / `SegmentedPicker` expose no native UIA pattern. Implementing providers is tracked as blocked work; it needs a live Narrator/NVDA and a real UIA client to verify, which this project cannot do headlessly |
+
+If you need screen-reader support today, the CLI (`python -m backend.cli`) is
+the accessible surface: it is plain text, fully keyboard driven, and every
+option in the GUI has a CLI equivalent.
