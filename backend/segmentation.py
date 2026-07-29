@@ -368,9 +368,36 @@ def _write_matanyone_video(path: Path, frames: List[np.ndarray]) -> None:
         writer.release()
 
 
+def _empty_alpha_fallback(frame: np.ndarray,
+                          hint: Optional[np.ndarray]) -> np.ndarray:
+    """RM-136: an all-transparent alpha frame is a subtitle gap, not a failure.
+
+    ``_normalize_alpha_matte`` returns None for an all-zero frame, which is
+    exactly what a frame with no subtitle produces. Discarding the whole
+    refinement for that made the opt-in MatAnyone path a no-op on nearly every
+    real clip. Fall back to the per-frame hint (like ``_normalize_alpha_sequence``
+    already does), or to an explicit empty matte when no hint is available.
+    """
+    if hint is not None:
+        hint_arr = np.asarray(hint)
+        if hint_arr.size:
+            return hint_arr.astype(np.uint8)
+    height, width = frame.shape[:2]
+    return np.zeros((height, width), dtype=np.uint8)
+
+
+def _hint_at(hint_masks: Optional[List[np.ndarray]],
+             index: int) -> Optional[np.ndarray]:
+    if not hint_masks or index >= len(hint_masks):
+        return None
+    return hint_masks[index]
+
+
 def _read_alpha_video(path: Path,
                       expected_count: int,
-                      target_frames: List[np.ndarray]) -> Optional[List[np.ndarray]]:
+                      target_frames: List[np.ndarray],
+                      hint_masks: Optional[List[np.ndarray]] = None,
+                      ) -> Optional[List[np.ndarray]]:
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
         return None
@@ -380,17 +407,25 @@ def _read_alpha_video(path: Path,
             ok, frame = cap.read()
             if not ok:
                 break
-            out.append(_normalize_alpha_matte(frame, target_frames[len(out)].shape))
+            index = len(out)
+            target = target_frames[index]
+            normalized = _normalize_alpha_matte(frame, target.shape)
+            if normalized is None:
+                normalized = _empty_alpha_fallback(
+                    target, _hint_at(hint_masks, index))
+            out.append(normalized)
     finally:
         cap.release()
-    if len(out) != expected_count or any(item is None for item in out):
+    if len(out) != expected_count:
         return None
-    return [item for item in out if item is not None]
+    return out
 
 
 def _read_alpha_image_dir(path: Path,
                           expected_count: int,
-                          target_frames: List[np.ndarray]) -> Optional[List[np.ndarray]]:
+                          target_frames: List[np.ndarray],
+                          hint_masks: Optional[List[np.ndarray]] = None,
+                          ) -> Optional[List[np.ndarray]]:
     files = [
         item for item in sorted(path.rglob("*"))
         if item.is_file() and item.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
@@ -398,18 +433,25 @@ def _read_alpha_image_dir(path: Path,
     if len(files) < expected_count:
         return None
     out: List[np.ndarray] = []
-    for item, frame in zip(files[:expected_count], target_frames):
+    for index, (item, frame) in enumerate(
+            zip(files[:expected_count], target_frames)):
         alpha = safe_imread(item, cv2.IMREAD_UNCHANGED)
         normalized = _normalize_alpha_matte(alpha, frame.shape)
         if normalized is None:
-            return None
+            # RM-136: a fully transparent frame is a subtitle gap.
+            normalized = _empty_alpha_fallback(
+                frame, _hint_at(hint_masks, index))
         out.append(normalized)
+    if len(out) != expected_count:
+        return None
     return out
 
 
 def _read_matanyone_output(output_path: Path,
                            expected_count: int,
-                           target_frames: List[np.ndarray]) -> Optional[List[np.ndarray]]:
+                           target_frames: List[np.ndarray],
+                           hint_masks: Optional[List[np.ndarray]] = None,
+                           ) -> Optional[List[np.ndarray]]:
     candidates: List[Path] = []
     if output_path.is_file():
         candidates.append(output_path)
@@ -424,11 +466,13 @@ def _read_matanyone_output(output_path: Path,
         )
     for candidate in candidates:
         if candidate.is_file() and candidate.suffix.lower() in {".mp4", ".mov", ".avi", ".mkv"}:
-            out = _read_alpha_video(candidate, expected_count, target_frames)
+            out = _read_alpha_video(
+                candidate, expected_count, target_frames, hint_masks)
             if out is not None:
                 return out
         if candidate.is_dir():
-            out = _read_alpha_image_dir(candidate, expected_count, target_frames)
+            out = _read_alpha_image_dir(
+                candidate, expected_count, target_frames, hint_masks)
             if out is not None:
                 return out
     return None
@@ -509,7 +553,8 @@ def _run_matanyone_process_video(process_video,
                 if result.get(key):
                     candidate = Path(str(result[key]))
                     break
-        active_out = _read_matanyone_output(candidate, len(active_frames), active_frames)
+        active_out = _read_matanyone_output(
+            candidate, len(active_frames), active_frames, active_masks)
         if active_out is None:
             raise RuntimeError("MatAnyone alpha output was not found")
     return list(masks[:first_mask_idx]) + active_out

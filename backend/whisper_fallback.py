@@ -298,13 +298,24 @@ def extract_audio_to_temp(video_path: str, temp_dir: str) -> Optional[str]:
         "-i", video_path, "-vn", "-ac", "1", "-ar", "16000",
         "-acodec", "pcm_s16le", dst,
     ]
+    # RM-137: scale the demux+resample budget by the source duration, like
+    # run_ffmpeg_whisper_segments already does. A long source on a slow disk
+    # can take more than 10 minutes and would otherwise be killed silently.
     try:
-        run_process(cmd, check=True, capture_output=True, timeout=600)
+        from backend.io import _ffmpeg_subprocess_timeout, _probe_duration_seconds
+        duration = _probe_duration_seconds(video_path)
+        timeout = _ffmpeg_subprocess_timeout(duration, base=600.0, factor=2.0)
+    except Exception:
+        logger.debug("Audio-extraction duration probe failed", exc_info=True)
+        timeout = 600.0
+    try:
+        run_process(cmd, check=True, capture_output=True, timeout=timeout)
     except subprocess.CalledProcessError as exc:
         logger.info(f"Audio extraction failed (no stream?): {exc}")
         return None
     except subprocess.TimeoutExpired:
-        logger.warning("Audio extraction timed out")
+        logger.warning(
+            "Audio extraction timed out after %.0fs", timeout)
         return None
     if not Path(dst).is_file() or Path(dst).stat().st_size == 0:
         return None

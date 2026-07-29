@@ -207,16 +207,36 @@ class _PyNvVideoCapture:
         return 0.0
 
     def set(self, prop, value) -> bool:
-        if prop == cv2.CAP_PROP_POS_FRAMES:
-            try:
-                idx = max(0, min(self._frame_count, int(value)))
-                if self._mode == "legacy" and hasattr(self._decoder, "SeekFrame"):
-                    self._decoder.SeekFrame(idx)
-                self._pos = idx
+        if prop != cv2.CAP_PROP_POS_FRAMES:
+            return False
+        try:
+            idx = max(0, min(self._frame_count, int(value)))
+        except (TypeError, ValueError):
+            return False
+        if self._mode == "legacy":
+            # RM-138: legacy mode reads sequentially with GetNextFrame(), so a
+            # decoder without SeekFrame cannot reposition. Reporting success
+            # here would satisfy the cv2.VideoCapture drop-in contract while
+            # silently returning the wrong frame (resume / ROI re-scan
+            # misalignment), so fail loudly and leave _pos untouched.
+            seek = getattr(self._decoder, "SeekFrame", None)
+            if not callable(seek):
+                if idx != self._pos:
+                    logger.warning(
+                        "Hardware decoder cannot seek to frame %s (legacy "
+                        "mode without SeekFrame); refusing the reposition.",
+                        idx,
+                    )
+                    return False
                 return True
-            except Exception:
+            try:
+                seek(idx)
+            except Exception as exc:
+                logger.warning(
+                    "Hardware decoder seek to frame %s failed: %s", idx, exc)
                 return False
-        return False
+        self._pos = idx
+        return True
 
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         if not self._opened:

@@ -190,3 +190,177 @@ class CoTrackerPropagationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MatAnyoneAlphaGapTests(unittest.TestCase):
+    """RM-136: a subtitle-gap (fully transparent) alpha frame must not
+    discard the whole MatAnyone refinement."""
+
+    @staticmethod
+    def _write_alpha_video(path, values, size=(32, 48)):
+        import cv2
+
+        height, width = size
+        writer = cv2.VideoWriter(
+            str(path), cv2.VideoWriter_fourcc(*"mp4v"), 8.0, (width, height))
+        if not writer.isOpened():
+            return False
+        try:
+            for value in values:
+                frame = np.full((height, width, 3), value, dtype=np.uint8)
+                writer.write(frame)
+        finally:
+            writer.release()
+        return True
+
+    def test_empty_frame_falls_back_to_the_hint_instead_of_none(self):
+        import tempfile
+
+        from backend import segmentation as seg
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "alpha.mp4"
+            if not self._write_alpha_video(path, [255, 0, 255]):
+                self.skipTest("mp4v VideoWriter unavailable")
+            frames = [np.zeros((32, 48, 3), dtype=np.uint8) for _ in range(3)]
+            hints = [np.full((32, 48), 128, dtype=np.uint8) for _ in range(3)]
+            out = seg._read_alpha_video(path, 3, frames, hints)
+
+        self.assertIsNotNone(out, "gap frame discarded the whole result")
+        self.assertEqual(len(out), 3)
+        self.assertGreater(int(out[0].max()), 0)
+        # The empty frame becomes the hint, not a dropped result.
+        self.assertEqual(int(out[1].max()), 128)
+        self.assertGreater(int(out[2].max()), 0)
+
+    def test_empty_frame_without_a_hint_becomes_an_empty_matte(self):
+        import tempfile
+
+        from backend import segmentation as seg
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "alpha.mp4"
+            if not self._write_alpha_video(path, [0, 0]):
+                self.skipTest("mp4v VideoWriter unavailable")
+            frames = [np.zeros((32, 48, 3), dtype=np.uint8) for _ in range(2)]
+            out = seg._read_alpha_video(path, 2, frames)
+
+        self.assertIsNotNone(out)
+        self.assertEqual(len(out), 2)
+        for item in out:
+            self.assertEqual(item.shape, (32, 48))
+            self.assertEqual(int(item.max()), 0)
+
+    def test_truncated_output_is_still_rejected(self):
+        import tempfile
+
+        from backend import segmentation as seg
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "alpha.mp4"
+            if not self._write_alpha_video(path, [255]):
+                self.skipTest("mp4v VideoWriter unavailable")
+            frames = [np.zeros((32, 48, 3), dtype=np.uint8) for _ in range(4)]
+            self.assertIsNone(seg._read_alpha_video(path, 4, frames))
+
+    def test_image_directory_reader_tolerates_a_gap_frame(self):
+        import tempfile
+
+        import cv2
+
+        from backend import segmentation as seg
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cv2.imwrite(
+                str(root / "a_000.png"), np.full((32, 48), 255, np.uint8))
+            cv2.imwrite(
+                str(root / "a_001.png"), np.zeros((32, 48), np.uint8))
+            frames = [np.zeros((32, 48, 3), dtype=np.uint8) for _ in range(2)]
+            hints = [np.full((32, 48), 64, dtype=np.uint8) for _ in range(2)]
+            out = seg._read_alpha_image_dir(root, 2, frames, hints)
+
+        self.assertIsNotNone(out)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(int(out[1].max()), 64)
+
+
+class LegacyDecoderSeekTests(unittest.TestCase):
+    """RM-138: legacy-mode seek must not advertise success it cannot deliver."""
+
+    def _capture(self, decoder, mode="legacy"):
+        import cv2
+
+        from backend.decode_accel import _PyNvVideoCapture
+
+        cap = _PyNvVideoCapture.__new__(_PyNvVideoCapture)
+        cap._decoder = decoder
+        cap._mode = mode
+        cap._pos = 0
+        cap._frame_count = 100
+        cap._width = 16
+        cap._height = 16
+        cap._opened = True
+        return cap, cv2
+
+    def test_seek_fails_when_the_legacy_decoder_cannot_reposition(self):
+        class _NoSeek:
+            def GetNextFrame(self):
+                return None
+
+        cap, cv2 = self._capture(_NoSeek())
+        self.assertFalse(cap.set(cv2.CAP_PROP_POS_FRAMES, 42))
+        self.assertEqual(cap._pos, 0)
+
+    def test_seek_to_the_current_position_is_a_no_op_success(self):
+        class _NoSeek:
+            def GetNextFrame(self):
+                return None
+
+        cap, cv2 = self._capture(_NoSeek())
+        self.assertTrue(cap.set(cv2.CAP_PROP_POS_FRAMES, 0))
+        self.assertEqual(cap._pos, 0)
+
+    def test_seek_succeeds_when_the_decoder_supports_it(self):
+        seen = []
+
+        class _Seekable:
+            def SeekFrame(self, index):
+                seen.append(index)
+
+            def GetNextFrame(self):
+                return None
+
+        cap, cv2 = self._capture(_Seekable())
+        self.assertTrue(cap.set(cv2.CAP_PROP_POS_FRAMES, 42))
+        self.assertEqual(seen, [42])
+        self.assertEqual(cap._pos, 42)
+
+    def test_a_raising_seek_reports_failure_and_keeps_the_position(self):
+        class _Broken:
+            def SeekFrame(self, index):
+                raise RuntimeError("nope")
+
+            def GetNextFrame(self):
+                return None
+
+        cap, cv2 = self._capture(_Broken())
+        self.assertFalse(cap.set(cv2.CAP_PROP_POS_FRAMES, 42))
+        self.assertEqual(cap._pos, 0)
+
+    def test_simple_mode_indexes_directly_and_still_seeks(self):
+        class _Indexable:
+            def __getitem__(self, index):
+                return None
+
+        cap, cv2 = self._capture(_Indexable(), mode="simple")
+        self.assertTrue(cap.set(cv2.CAP_PROP_POS_FRAMES, 42))
+        self.assertEqual(cap._pos, 42)
+
+    def test_unsupported_property_is_rejected(self):
+        class _NoSeek:
+            def GetNextFrame(self):
+                return None
+
+        cap, cv2 = self._capture(_NoSeek())
+        self.assertFalse(cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920))

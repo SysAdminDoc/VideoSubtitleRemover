@@ -47,6 +47,25 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **MatAnyone refinement no longer discards a whole clip over a subtitle gap.**
+  `_read_alpha_video` returned `None` if any single alpha frame was fully
+  transparent -- exactly what a frame with no subtitle produces -- so the opt-in
+  refinement silently no-opped on nearly every real clip. A gap frame now falls
+  back to that frame's hint mask (matching `_normalize_alpha_sequence`) or to an
+  explicit empty matte; a truncated output is still rejected. The image-sequence
+  reader got the same treatment.
+- **Whisper audio extraction scales its ffmpeg timeout by source duration.**
+  `extract_audio_to_temp` hard-coded 600 s while its sibling already scaled by
+  probed duration, so a long source on a slow disk could exceed ten minutes to
+  demux and resample and have the Whisper fallback killed silently. It now
+  probes the duration and scales the budget, falling back to the 600 s floor
+  when probing fails.
+- **Legacy hardware-decoder seeks fail loudly when they cannot reposition.**
+  `set(CAP_PROP_POS_FRAMES)` advanced its position and returned `True` even
+  when the legacy decoder had no `SeekFrame`, so a seek-then-read returned the
+  wrong frame while claiming success on the `cv2.VideoCapture` drop-in contract
+  (resume and ROI re-scan misalignment). It now returns `False` and leaves the
+  position untouched, and logs when a seek raises.
 - **Every major dialog reflows and scrolls at 125-200% text scale.** The main
   workbench was already responsive, but the first-run onboarding modal, the
   region editor, and the mask-correction editor were fixed-size and
