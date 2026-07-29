@@ -71,6 +71,118 @@ ONNXRUNTIME_PACKAGES = (
     "onnxruntime-gpu",
     "onnxruntime-directml",
 )
+# RM-140: the CPU line is not pinned to the CUDA 12 ceiling. ONNX Runtime keeps
+# shipping CPU fixes on 1.27/1.28 while the CUDA 12 build stopped at 1.26.x, so
+# each provider lane below carries its own reviewed/tested version window.
+ONNXRUNTIME_CPU_TESTED_VERSION = "1.28.0"
+ONNXRUNTIME_CUDA12_TESTED_VERSION = "1.26.0"
+ONNXRUNTIME_CUDA13_TESTED_VERSION = "1.28.0"
+ONNXRUNTIME_CUDA13_MIN = "1.27.0"
+ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE = "1.29.0"
+ONNXRUNTIME_CPU_MAX_EXCLUSIVE = "1.29.0"
+ONNXRUNTIME_CUDA_MATRIX_SOURCE = (
+    "https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html"
+)
+
+# protobuf 6.33.4 and older are affected by CVE-2026-0994 (unbounded recursion
+# in the pure-Python and upb parsers). VSR parses ONNX model protos, so every
+# supported environment must install a fixed build.
+PROTOBUF_SECURITY_MIN = "6.33.5"
+PROTOBUF_TESTED_VERSION = "6.33.6"
+PROTOBUF_ADVISORY_ID = "CVE-2026-0994"
+PROTOBUF_ADVISORY_SOURCE = (
+    "https://github.com/protocolbuffers/protobuf/security/advisories"
+)
+
+PROVIDER_LANE_STATUS_SCHEMA = "vsr.provider_lanes.v1"
+
+
+@dataclass(frozen=True)
+class ProviderLane:
+    """One installable execution-provider lane with its own support state."""
+
+    key: str
+    label: str
+    profile: str
+    provider: str
+    package: str
+    minimum: str
+    maximum_exclusive: str
+    tested_version: str
+    security_floor: str
+    tested: bool
+    install_note: str
+    source: str
+
+
+PROVIDER_LANES: Tuple[ProviderLane, ...] = (
+    ProviderLane(
+        key="cpu",
+        label="CPU",
+        profile="cpu",
+        provider="CPUExecutionProvider",
+        package="onnxruntime",
+        minimum=ONNXRUNTIME_SECURITY_MIN,
+        maximum_exclusive=ONNXRUNTIME_CPU_MAX_EXCLUSIVE,
+        tested_version=ONNXRUNTIME_CPU_TESTED_VERSION,
+        security_floor=ONNXRUNTIME_SECURITY_MIN,
+        tested=True,
+        install_note="Installed by default; no vendor index required.",
+        source=ONNXRUNTIME_SECURITY_SOURCE,
+    ),
+    ProviderLane(
+        key="cuda12",
+        label="NVIDIA CUDA 12",
+        profile="nvidia",
+        provider="CUDAExecutionProvider",
+        package="onnxruntime-gpu",
+        minimum=ONNXRUNTIME_GPU_RECOMMENDED_MIN,
+        maximum_exclusive=ONNXRUNTIME_GPU_MAX_EXCLUSIVE,
+        tested_version=ONNXRUNTIME_CUDA12_TESTED_VERSION,
+        security_floor=ONNXRUNTIME_SECURITY_MIN,
+        tested=True,
+        install_note=(
+            "Default NVIDIA lane. onnxruntime-gpu 1.27+ is CUDA 13 only, so "
+            "this lane stays on the 1.26.x CUDA 12 build."
+        ),
+        source=ONNXRUNTIME_CUDA_MATRIX_SOURCE,
+    ),
+    ProviderLane(
+        key="cuda13",
+        label="NVIDIA CUDA 13",
+        profile="",
+        provider="CUDAExecutionProvider",
+        package="onnxruntime-gpu",
+        minimum=ONNXRUNTIME_CUDA13_MIN,
+        maximum_exclusive=ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE,
+        tested_version=ONNXRUNTIME_CUDA13_TESTED_VERSION,
+        security_floor=ONNXRUNTIME_CUDA13_MIN,
+        tested=False,
+        install_note=(
+            "Manual lane: install the cuda13 onnxruntime-gpu wheel per "
+            "onnxruntime.ai. Not covered by the reviewed profile locks."
+        ),
+        source=ONNXRUNTIME_CUDA_MATRIX_SOURCE,
+    ),
+    ProviderLane(
+        key="directml",
+        label="DirectML (AMD/Intel)",
+        profile="directml",
+        provider="DmlExecutionProvider",
+        package="onnxruntime-directml",
+        minimum=ONNXRUNTIME_DIRECTML_VERSION,
+        maximum_exclusive=ONNXRUNTIME_DIRECTML_MAX_EXCLUSIVE,
+        tested_version=ONNXRUNTIME_DIRECTML_VERSION,
+        security_floor=ONNXRUNTIME_DIRECTML_VERSION,
+        tested=True,
+        install_note=(
+            "DirectML is in sustained engineering; Windows ML is the "
+            "migration path."
+        ),
+        source=ONNXRUNTIME_DIRECTML_LIFECYCLE_SOURCE,
+    ),
+)
+
 OPENCV_WHEEL_STATUS_SCHEMA = "vsr.opencv_wheels.v1"
 OPENCV_PACKAGES = (
     "opencv-python",
@@ -702,6 +814,126 @@ def onnxruntime_release_advisories(status: Optional[Mapping[str, object]] = None
     return advisories
 
 
+def version_in_lane(version: str, lane: ProviderLane) -> bool:
+    """True when ``version`` falls inside a lane's reviewed window."""
+    parsed = _version_key(version)
+    if parsed < _version_key(lane.minimum):
+        return False
+    if lane.maximum_exclusive and parsed >= _version_key(lane.maximum_exclusive):
+        return False
+    return True
+
+
+def provider_lane(key: str) -> ProviderLane:
+    for lane in PROVIDER_LANES:
+        if lane.key == key:
+            return lane
+    raise KeyError(f"Unknown provider lane: {key!r}")
+
+
+def provider_lane_for_profile(profile: str) -> Optional[ProviderLane]:
+    for lane in PROVIDER_LANES:
+        if lane.profile and lane.profile == profile:
+            return lane
+    return None
+
+
+def collect_provider_lane_status(
+    package_versions: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Report tested/security state per execution-provider lane.
+
+    RM-140: CPU, CUDA 12, CUDA 13, and DirectML advance on different schedules
+    (the CUDA 12 build stopped at ONNX Runtime 1.26.x while CPU keeps shipping
+    fixes), so a single onnxruntime recommendation cannot describe them. Each
+    lane reports its own reviewed window, tested state, and whether the version
+    actually installed satisfies that lane's security floor.
+    """
+    lanes = []
+    for lane in PROVIDER_LANES:
+        installed = _installed_package_version(lane.package, package_versions)
+        if installed is None:
+            security_state = "not-installed"
+            in_window = None
+        elif not _version_gte(installed, lane.security_floor):
+            security_state = "below-floor"
+            in_window = version_in_lane(installed, lane)
+        elif version_in_lane(installed, lane):
+            security_state = "ok"
+            in_window = True
+        else:
+            security_state = "outside-lane"
+            in_window = False
+        lanes.append({
+            "key": lane.key,
+            "label": lane.label,
+            "provider": lane.provider,
+            "profile": lane.profile,
+            "package": lane.package,
+            "reviewedRange": (
+                f">={lane.minimum},<{lane.maximum_exclusive}"
+                if lane.maximum_exclusive else f">={lane.minimum}"
+            ),
+            "testedVersion": lane.tested_version,
+            "tested": lane.tested,
+            "securityFloor": lane.security_floor,
+            "installedVersion": installed or "",
+            "inReviewedRange": in_window,
+            "securityState": security_state,
+            "installNote": lane.install_note,
+            "source": lane.source,
+        })
+    return {
+        "schema": PROVIDER_LANE_STATUS_SCHEMA,
+        "lanes": lanes,
+        "protobuf": protobuf_status(package_versions),
+    }
+
+
+def protobuf_status(
+    package_versions: Optional[Mapping[str, str]] = None,
+) -> dict:
+    installed = _installed_package_version("protobuf", package_versions)
+    return {
+        "package": "protobuf",
+        "installedVersion": installed or "",
+        "securityFloor": PROTOBUF_SECURITY_MIN,
+        "testedVersion": PROTOBUF_TESTED_VERSION,
+        "satisfied": (
+            None if installed is None
+            else _version_gte(installed, PROTOBUF_SECURITY_MIN)
+        ),
+        "advisory": PROTOBUF_ADVISORY_ID,
+        "source": PROTOBUF_ADVISORY_SOURCE,
+    }
+
+
+def protobuf_release_advisory(
+    package_versions: Optional[Mapping[str, str]] = None,
+) -> Optional[dict]:
+    """Blocking advisory when the installed protobuf predates the CVE fix."""
+    status = protobuf_status(package_versions)
+    if status["satisfied"] is not False:
+        return None
+    return {
+        "id": PROTOBUF_ADVISORY_ID,
+        "package": "protobuf",
+        "installedVersion": status["installedVersion"],
+        "affected": f"<{PROTOBUF_SECURITY_MIN}",
+        "fixedIn": f">={PROTOBUF_SECURITY_MIN}",
+        "severity": "high",
+        "source": PROTOBUF_ADVISORY_SOURCE,
+        "allowed": False,
+        "allowReason": "",
+        "mitigation": (
+            f"Upgrade protobuf to >={PROTOBUF_SECURITY_MIN}; older builds "
+            "are affected by unbounded parser recursion and VSR parses ONNX "
+            "model protos from untrusted sources."
+        ),
+        "blocking": True,
+    }
+
+
 def check_ocr_dependency_caps(
     caps: Iterable[DependencyCap] = OCR_DEPENDENCY_CAPS,
 ) -> List[str]:
@@ -745,6 +977,7 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
         ONNXRUNTIME_DIRECTML_VERSION,
         ONNXRUNTIME_DIRECTML_MAX_EXCLUSIVE,
     ),
+    ("protobuf", PROTOBUF_SECURITY_MIN, ""),
     ("openvino", "2025.0.0", ""),
     ("simple-lama-inpainting", "0.1.0", ""),
     ("torch", "2.10.0", ""),

@@ -58,23 +58,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P0
 
-- [ ] P0 -- RM-140 Make dependency profiles satisfiable and provider-security-aware
-  Why: the reviewed NVIDIA profile cannot install its claimed CUDA-12 ORT path,
-    while the current advisories cannot express newer CPU fixes alongside
-    constrained CUDA-12, CUDA-13, and DirectML lanes.
-  Evidence: `setup.py:35-46,592-605`; `dependency_profiles.json:31-44`;
-    `dependency_profiles/nvidia.txt:23`; ORT CUDA matrix and v1.28.0 release;
-    2026-07-29 `pip-audit` finding for protobuf 6.33.4 / CVE-2026-0994.
-  Touches: `setup.py`; `dependency_profiles.json`; `dependency_profiles/*.txt`;
-    `backend/dependency_profiles.py`; `backend/dependency_caps.py`;
-    `backend/release_verification.py`; dependency/profile tests.
-  Acceptance: setup and generated locks share one valid CUDA-12 constraint;
-    profile validation rejects an out-of-range exact lock; CPU, CUDA-12,
-    CUDA-13, and DirectML report separate tested/security states; supported
-    environments use protobuf >=6.33.5; profile smoke creates a minimal real
-    inference session on the claimed provider and fails if that provider falls back.
-  Complexity: M
-
 - [ ] P0 -- RM-141 Stage each release as one versioned, atomic artifact set
   Why: the reusable release directory can pair a newer installer with older ZIP,
     evidence, and checksums, making published integrity instructions unreliable.

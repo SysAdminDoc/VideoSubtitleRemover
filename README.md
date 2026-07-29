@@ -299,7 +299,17 @@ models through the runtime, and the self-test and strict release validation
 flag older CPU/CUDA builds as a blocking security advisory.
 Backend status and
 release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
-channel, `onnxruntime-directml`, and the providers reported at runtime. On
+channel, `onnxruntime-directml`, and the providers reported at runtime.
+The reviewed dependency profiles track four execution-provider lanes with
+separate tested and security state -- CPU (`onnxruntime`), CUDA 12
+(`onnxruntime-gpu` 1.26.x, the default NVIDIA lock), CUDA 13 (manual
+cuda13 wheel, untested here), and DirectML -- so the CPU lane can adopt
+newer ONNX Runtime fixes while the CUDA 12 lane stays on its last
+compatible build. `python -m backend.dependency_profiles smoke --profile
+<name>` creates one real inference session on the profile's claimed
+provider and fails if ONNX Runtime silently falls back. Every supported
+environment installs `protobuf>=6.33.5` (CVE-2026-0994); older builds are
+a blocking release advisory. On
 AMD/Intel systems, setup preflights and installs the latest published/reviewed
 DirectML wheel, `onnxruntime-directml==1.24.4`; incompatible Python/platform
 combinations fail before the environment is changed and point to CPU or the

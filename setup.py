@@ -43,7 +43,11 @@ ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.27.0"
 ONNXRUNTIME_GPU_SPEC = (
     f"onnxruntime-gpu>={ONNXRUNTIME_GPU_MIN},<{ONNXRUNTIME_GPU_MAX_EXCLUSIVE}"
 )
-ONNXRUNTIME_CPU_SPEC = f"onnxruntime>={ONNXRUNTIME_GPU_MIN}"
+# The CPU lane is not bound by the CUDA 12 ceiling -- ONNX Runtime keeps
+# shipping CPU fixes on 1.27/1.28 while the CUDA 12 build stopped at 1.26.x.
+# Its floor is the security floor, not the GPU recommendation.
+ONNXRUNTIME_CPU_MIN = "1.26.0"
+ONNXRUNTIME_CPU_SPEC = f"onnxruntime>={ONNXRUNTIME_CPU_MIN}"
 SETUP_PROGRESS_ENV = "VSR_SETUP_PROGRESS_FILE"
 
 

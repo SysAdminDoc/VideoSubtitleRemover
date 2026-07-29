@@ -4,7 +4,40 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-lane execution-provider support state.** `backend.dependency_caps`
+  now describes four provider lanes -- CPU, CUDA 12, CUDA 13, and DirectML --
+  each with its own reviewed version window, tested flag, and security floor,
+  reported through `collect_provider_lane_status()` and carried in the release
+  evidence's `dependencyProfile.providerLanes`. This lets the CPU lane adopt
+  newer ONNX Runtime fixes (1.28.0) while the CUDA 12 lane stays on its last
+  compatible build, and marks CUDA 13 as an untested manual lane instead of
+  hiding it behind a single onnxruntime recommendation.
+- **Dependency-profile provider smoke.**
+  `python -m backend.dependency_profiles smoke --profile <name>` builds a
+  minimal ONNX identity model and creates one real inference session on the
+  profile's claimed execution provider, failing when ONNX Runtime silently
+  falls back to another provider. Strict release verification runs it as part
+  of the dependency-profile evidence.
+
 ### Fixed
+
+- **The NVIDIA dependency profile is now installable.** The reviewed NVIDIA
+  lock pinned `onnxruntime-gpu==1.27.0` while setup installs
+  `onnxruntime-gpu>=1.26.0,<1.27.0`, so the profile advertised a CUDA 12
+  provider it could never install. The lock is now `onnxruntime-gpu==1.26.0`,
+  and `load_profile_manifest()` rejects any exact lock that falls outside its
+  provider lane's reviewed range so setup and the generated locks cannot drift
+  apart again.
+
+### Security
+
+- **protobuf floor raised to 6.33.5 (CVE-2026-0994).** VSR parses ONNX model
+  protos from untrusted sources, so unbounded parser recursion is a runtime
+  concern. `requirements.txt` and every reviewed profile lock now require a
+  fixed build, an older installed protobuf is a blocking release advisory, and
+  the dependency-profile status reports it as an error.
 
 - **Intermediate and frame-sequence writer failures now fail closed.** A
   timed-out or nonzero-exit FFV1 intermediate encode was logged as a warning and

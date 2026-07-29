@@ -2,8 +2,8 @@
 #   python -m backend.dependency_profiles update
 # Profile: directml
 # Provider: DmlExecutionProvider
-# Reviewed: 2026-07-14
-# Manifest-SHA256: 819679170b0e0a3082aeb0d63735591fa0208cd01a1843b05af589a1cd58abd1
+# Reviewed: 2026-07-29
+# Manifest-SHA256: 75a052ed5de01a34964e89041967c1b2bd40111ca27f3cfc199a6e745e69d3f5
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
@@ -12,6 +12,7 @@
 
 # Exact reviewed direct-dependency constraints.
 numpy==2.2.6
+protobuf==6.33.6
 opencv-python==5.0.0.93
 opencv-python-headless==5.0.0.93
 Pillow==12.3.0

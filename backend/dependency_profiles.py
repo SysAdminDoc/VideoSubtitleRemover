@@ -5,11 +5,22 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import importlib
 from importlib import metadata
 import json
 import os
 from pathlib import Path
+import re
+import tempfile
 from typing import Any, Mapping, Sequence
+
+from backend.dependency_caps import (
+    PROTOBUF_SECURITY_MIN,
+    PROVIDER_LANES,
+    collect_provider_lane_status,
+    provider_lane_for_profile,
+    version_in_lane,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +29,9 @@ PROFILE_DIR = ROOT / "dependency_profiles"
 PROFILE_SCHEMA = "vsr.dependency_profiles.v1"
 PROFILE_STATUS_SCHEMA = "vsr.dependency_profile_status.v1"
 PROFILE_ENV = "VSR_DEPENDENCY_PROFILE"
+PROFILE_SMOKE_SCHEMA = "vsr.dependency_profile_smoke.v1"
 SUPPORTED_PROFILES = ("cpu", "nvidia", "directml")
+_EXACT_PIN = re.compile(r"^\s*([A-Za-z0-9._-]+)\s*==\s*([0-9][0-9A-Za-z.+-]*)\s*$")
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -69,7 +82,85 @@ def load_profile_manifest(path: str | Path = MANIFEST_PATH) -> dict[str, Any]:
             isinstance(item, str) and item.startswith("https://") for item in indexes
         ):
             raise ValueError(f"Profile {name!r} indexes are invalid")
+    problems = constraint_range_problems(payload)
+    if problems:
+        raise ValueError(
+            "Dependency manifest pins a version outside its reviewed range: "
+            + "; ".join(problems)
+        )
     return payload
+
+
+def _exact_pins(requirements: Sequence[str]) -> dict[str, str]:
+    pins: dict[str, str] = {}
+    for requirement in requirements:
+        match = _EXACT_PIN.match(str(requirement))
+        if match:
+            pins[match.group(1).lower().replace("_", "-")] = match.group(2)
+    return pins
+
+
+def constraint_range_problems(manifest: Mapping[str, Any]) -> list[str]:
+    """Reject exact locks that fall outside their reviewed provider window.
+
+    RM-140: the NVIDIA lock previously pinned an onnxruntime-gpu build that the
+    setup path explicitly excludes (CUDA 13 only), so the profile advertised a
+    CUDA 12 provider it could never install. The reviewed windows live in
+    ``backend.dependency_caps.PROVIDER_LANES`` so setup, the locks, and the
+    advisories cannot drift apart.
+    """
+    problems: list[str] = []
+    common = _exact_pins(manifest.get("commonConstraints") or [])
+    protobuf = common.get("protobuf")
+    if protobuf is None:
+        problems.append(
+            f"commonConstraints must pin protobuf >={PROTOBUF_SECURITY_MIN}"
+        )
+    elif not _version_gte(protobuf, PROTOBUF_SECURITY_MIN):
+        problems.append(
+            f"protobuf=={protobuf} is below the security floor "
+            f"{PROTOBUF_SECURITY_MIN}"
+        )
+    lane_packages = {lane.package for lane in PROVIDER_LANES}
+    profiles = manifest.get("profiles") or {}
+    for name in sorted(profiles):
+        profile = profiles[name]
+        if not isinstance(profile, Mapping):
+            continue
+        lane = provider_lane_for_profile(name)
+        pins = _exact_pins(profile.get("constraints") or [])
+        for package, version in sorted(pins.items()):
+            if package not in lane_packages:
+                continue
+            if lane is None or package != lane.package:
+                problems.append(
+                    f"profile {name!r} pins {package}=={version}, which does "
+                    "not belong to its provider lane"
+                )
+                continue
+            if not version_in_lane(version, lane):
+                problems.append(
+                    f"profile {name!r} pins {package}=={version} outside the "
+                    f"{lane.label} lane range >={lane.minimum},"
+                    f"<{lane.maximum_exclusive}"
+                )
+        if lane is not None and lane.package not in pins:
+            problems.append(
+                f"profile {name!r} must pin {lane.package} for the "
+                f"{lane.label} lane"
+            )
+    return problems
+
+
+def _version_key(value: str) -> tuple[int, int, int, int]:
+    numbers = [int(part) for part in re.findall(r"\d+", value)[:4]]
+    while len(numbers) < 4:
+        numbers.append(0)
+    return tuple(numbers)  # type: ignore[return-value]
+
+
+def _version_gte(version: str, floor: str) -> bool:
+    return _version_key(version) >= _version_key(floor)
 
 
 def manifest_sha256(path: str | Path = MANIFEST_PATH) -> str:
@@ -193,6 +284,95 @@ def ensure_profile_current(
     return path
 
 
+def run_profile_provider_smoke(
+    name: str,
+    *,
+    manifest_path: str | Path = MANIFEST_PATH,
+    ort_module: Any = None,
+    importer=importlib.import_module,
+    temp_dir: str | Path | None = None,
+) -> dict:
+    """Create one real inference session on the profile's claimed provider.
+
+    RM-140: a profile that advertises ``CUDAExecutionProvider`` is only
+    meaningful if ONNX Runtime actually activates it. ONNX Runtime silently
+    falls back to CPU when a requested provider cannot load, so this smoke
+    fails when the active provider list does not lead with the claimed one.
+    """
+    manifest = load_profile_manifest(manifest_path)
+    provider = str(manifest["profiles"][name]["provider"])
+    result: dict[str, Any] = {
+        "schema": PROFILE_SMOKE_SCHEMA,
+        "profile": name,
+        "requestedProvider": provider,
+        "availableProviders": [],
+        "activeProviders": [],
+        "ran": False,
+        "passed": None,
+        "fellBack": None,
+        "error": "",
+    }
+    module = ort_module
+    if module is None:
+        try:
+            module = importer("onnxruntime")
+        except Exception as exc:  # pragma: no cover - import-environment specific
+            result["error"] = f"onnxruntime is not importable: {exc}"
+            return result
+    try:
+        available = list(module.get_available_providers())
+    except Exception as exc:
+        result["error"] = f"provider enumeration failed: {exc}"
+        return result
+    result["availableProviders"] = available
+    if provider not in available:
+        result["ran"] = True
+        result["passed"] = False
+        result["fellBack"] = True
+        result["error"] = (
+            f"{provider} is not offered by the installed onnxruntime build"
+        )
+        return result
+    from backend.onnx_model_info import _tiny_identity_onnx_bytes
+
+    try:
+        import numpy as np
+
+        with tempfile.TemporaryDirectory(
+            prefix="vsr_profile_smoke_",
+            dir=str(temp_dir) if temp_dir else None,
+        ) as tmpdir:
+            model_path = Path(tmpdir) / "identity.onnx"
+            model_path.write_bytes(_tiny_identity_onnx_bytes())
+            session = module.InferenceSession(
+                str(model_path), providers=[provider])
+            active = (
+                list(session.get_providers())
+                if hasattr(session, "get_providers") else [provider]
+            )
+            payload = np.array([3.0], dtype=np.float32)
+            output = session.run(None, {"x": payload})[0]
+            correct = bool(np.allclose(output, payload))
+    except Exception as exc:
+        result["ran"] = True
+        result["passed"] = False
+        result["error"] = f"inference session failed: {exc}"
+        return result
+    result["ran"] = True
+    result["activeProviders"] = active
+    fell_back = not active or active[0] != provider
+    result["fellBack"] = fell_back
+    result["passed"] = bool(correct and not fell_back)
+    if fell_back:
+        result["error"] = (
+            f"{provider} was requested but {active[0] if active else 'no provider'} "
+            "ran the session"
+        )
+    elif not correct:
+        result["error"] = "identity model produced an unexpected result"
+    return result
+
+
 def _installed_provider_profile(
     package_versions: Mapping[str, str] | None = None,
 ) -> str:
@@ -220,6 +400,7 @@ def collect_dependency_profile_status(
     package_versions: Mapping[str, str] | None = None,
     manifest_path: str | Path = MANIFEST_PATH,
     profile_dir: str | Path = PROFILE_DIR,
+    run_provider_smoke: bool = False,
 ) -> dict[str, Any]:
     environment = os.environ if env is None else env
     requested = str(profile or environment.get(PROFILE_ENV, "")).strip().lower()
@@ -242,6 +423,8 @@ def collect_dependency_profile_status(
             "manifestSha256": "",
             "constraintSha256": "",
             "intentionalExceptions": [],
+            "providerLanes": collect_provider_lane_status(package_versions),
+            "providerSmoke": None,
         }
     path = profile_constraint_path(name, profile_dir)
     actual = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -250,6 +433,21 @@ def collect_dependency_profile_status(
     elif actual != expected:
         errors.append(f"Constraint file is stale: {path}")
     profile_data = manifest["profiles"][name]
+    lanes = collect_provider_lane_status(package_versions)
+    protobuf = lanes.get("protobuf", {})
+    if protobuf.get("satisfied") is False:
+        errors.append(
+            f"protobuf {protobuf.get('installedVersion')} is below the "
+            f"{protobuf.get('securityFloor')} security floor"
+        )
+    smoke = None
+    if run_provider_smoke:
+        smoke = run_profile_provider_smoke(name, manifest_path=manifest_path)
+        if smoke.get("passed") is not True:
+            errors.append(
+                "Provider inference smoke failed for profile "
+                f"{name!r}: {smoke.get('error') or 'unknown error'}"
+            )
     return {
         "schema": PROFILE_STATUS_SCHEMA,
         "profile": name,
@@ -265,6 +463,8 @@ def collect_dependency_profile_status(
         "indexes": list(profile_data["indexes"]),
         "reviewedArtifactHashes": dict(manifest.get("reviewedArtifactHashes", {})),
         "intentionalExceptions": list(manifest.get("intentionalExceptions", [])),
+        "providerLanes": lanes,
+        "providerSmoke": smoke,
     }
 
 
@@ -279,20 +479,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Check, regenerate, or inspect reviewed dependency profiles."
     )
-    parser.add_argument("command", choices=("check", "update", "status"))
+    parser.add_argument("command", choices=("check", "update", "status", "smoke"))
     parser.add_argument("--profile", choices=SUPPORTED_PROFILES)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--manifest", default=str(MANIFEST_PATH))
     parser.add_argument("--profile-dir", default=str(PROFILE_DIR))
     args = parser.parse_args(argv)
 
-    if args.command == "status":
-        print(json.dumps(collect_dependency_profile_status(
+    if args.command in ("status", "smoke"):
+        status = collect_dependency_profile_status(
             profile=args.profile,
             manifest_path=args.manifest,
             profile_dir=args.profile_dir,
-        ), indent=2, sort_keys=True))
-        return 0
+            run_provider_smoke=args.command == "smoke",
+        )
+        print(json.dumps(status, indent=2, sort_keys=True))
+        return 0 if status.get("valid") or args.command == "status" else 1
 
     changes = update_profiles(
         manifest_path=args.manifest,

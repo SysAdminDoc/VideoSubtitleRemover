@@ -26,6 +26,9 @@ Pillow>=12.3.0
 # idna 3.15 fixes CVE-2026-45409/PYSEC-2026-215 resource exhaustion in
 # alternate per-label and codec APIs; requests and Hugging Face use it.
 idna>=3.15
+# protobuf 6.33.5 fixes CVE-2026-0994 unbounded parser recursion. VSR parses
+# ONNX model protos from untrusted sources, so this is a runtime concern.
+protobuf>=6.33.5
 
 # AI/ML Frameworks (choose based on your GPU)
 # ------------------------------------------

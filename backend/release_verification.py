@@ -35,6 +35,7 @@ from backend.dependency_caps import (
     collect_onnxruntime_provider_status,
     collect_rapidocr_engine_status,
     onnxruntime_release_advisories,
+    protobuf_release_advisory,
 )
 from backend.dependency_profiles import collect_dependency_profile_status
 from backend.ffmpeg_profiles import (
@@ -566,6 +567,10 @@ def collect_release_advisories(
         package_versions=package_versions,
     )
     findings.extend(onnxruntime_release_advisories(ort_status))
+
+    protobuf_advisory = protobuf_release_advisory(package_versions)
+    if protobuf_advisory is not None:
+        findings.append(protobuf_advisory)
 
     ffmpeg_advisory = ffmpeg_security_advisory()
     if ffmpeg_advisory is not None:
@@ -1211,6 +1216,10 @@ def build_release_evidence(
     dependency_profile = collect_dependency_profile_status(
         env=env,
         package_versions=package_versions,
+        # RM-140: a profile that claims a provider must prove it. The smoke
+        # creates one real inference session and fails when ONNX Runtime
+        # silently falls back to another provider.
+        run_provider_smoke=run_smoke,
     )
     sbom = build_cyclonedx_sbom(
         dependencies,
