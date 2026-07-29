@@ -35,6 +35,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Cache and matte replacements are transactionally recoverable.** Replacing a
+  set of files with `os.replace` is atomic per file but not across the set: a
+  model-cache import interrupted mid-commit could strand a weight in `.vsrbak`
+  with nothing at the target, and a matte export deleted the existing artifact
+  before promoting the new one, so a failure could destroy both halves of the
+  artifact/manifest pair. A new `backend.atomic_replace.ReplacementJournal`
+  records the whole plan and fsyncs it *before* the first original moves;
+  recovery is deterministic (`pending` rolls back to the complete old set,
+  `committed` finishes forward), orphaned `.vsrbak` files are resolved against
+  the target, and `model_cache_status()` runs recovery at startup. Matte export
+  now backs up rather than deletes and journals the artifact and manifest
+  together. The model-cache bundle manifest is also capped at 8 MiB before it
+  is read, so a decompression bomb in `manifest.json` cannot exhaust memory.
 - **User-state writes are observable and downgrade-safe.** Settings, queue, and
   preset saves swallowed their failures, so a full disk or a locked profile
   folder looked exactly like a successful save. Each now returns a typed

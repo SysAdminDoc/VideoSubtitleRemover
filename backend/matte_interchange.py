@@ -13,6 +13,7 @@ from typing import Iterable, Optional
 import cv2
 import numpy as np
 
+from backend.atomic_replace import ReplacementJournal
 from backend.io import (
     _LosslessIntermediateWriter,
     _allocate_temp_output_path,
@@ -185,18 +186,9 @@ class MaskInterchangeWriter:
             if not self._temp_artifact.is_file() or not self._temp_artifact.stat().st_size:
                 raise OSError("FFV1 matte writer produced no artifact")
             content_sha256 = _sha256_file(self._temp_artifact)
-            _promote_temp_output(self._temp_artifact, self.artifact_path)
-            self._temp_artifact = None
         else:
             assert self._temp_dir is not None
             content_sha256 = _sha256_sequence(self._temp_dir, expected)
-            if self.artifact_path.exists():
-                if self.artifact_path.is_dir():
-                    shutil.rmtree(self.artifact_path)
-                else:
-                    self.artifact_path.unlink()
-            os.replace(self._temp_dir, self.artifact_path)
-            self._temp_dir = None
 
         payload = {
             "schema": MASK_INTERCHANGE_SCHEMA,
@@ -214,11 +206,41 @@ class MaskInterchangeWriter:
             "timestamps_seconds": self.timestamps,
             "durations_seconds": self.durations,
         }
-        _write_text_atomic(
-            self.manifest_path,
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        # RM-146: the artifact and its manifest are one unit. Journal both
+        # replacements before either original moves, so an interrupted export
+        # leaves the complete old pair or the complete new pair -- never a new
+        # artifact beside a stale manifest, and never a deleted artifact whose
+        # replacement never landed.
+        journal = ReplacementJournal(
+            self.artifact_path.parent,
+            f"matte-export-{self.artifact_path.name}",
         )
-        manifest_sha256 = _sha256_file(self.manifest_path)
+        artifact_backup = journal.plan(self.artifact_path)
+        journal.plan(self.manifest_path)
+        journal.begin()
+        try:
+            if self.artifact_path.exists():
+                if artifact_backup.exists():
+                    if artifact_backup.is_dir():
+                        shutil.rmtree(artifact_backup, ignore_errors=True)
+                    else:
+                        artifact_backup.unlink()
+                os.replace(self.artifact_path, artifact_backup)
+            if self.export_format == "ffv1":
+                _promote_temp_output(self._temp_artifact, self.artifact_path)
+                self._temp_artifact = None
+            else:
+                os.replace(self._temp_dir, self.artifact_path)
+                self._temp_dir = None
+            _write_text_atomic(
+                self.manifest_path,
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            )
+            manifest_sha256 = _sha256_file(self.manifest_path)
+        except BaseException:
+            journal.rollback()
+            raise
+        journal.commit()
         self._finished = True
         return {
             "schema": MASK_INTERCHANGE_SCHEMA,

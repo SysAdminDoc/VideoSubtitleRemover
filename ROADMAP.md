@@ -60,19 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-146 Make cache and matte replacements transactionally recoverable
-  Why: a cache move failure can strand the current target in `.vsrbak`, while
-    matte export can delete/promote one half of the artifact/manifest pair.
-  Evidence: `backend/cache_inventory.py:499-503,626-658`;
-    `backend/matte_interchange.py:172-220`.
-  Touches: `backend/cache_inventory.py`; `backend/matte_interchange.py`;
-    shared atomic-replacement helper if introduced; cache/matte tests.
-  Acceptance: model-cache manifest bytes are capped before reading; a journal or
-    equivalent records rollback before any original moves; injected failure at
-    every replace/write step leaves either the complete old set or complete new
-    hash-matching set, with deterministic startup cleanup/recovery.
-  Complexity: M
-
 - [ ] P1 -- RM-147 Persist requested and effective execution provenance
   Why: CUDA/DirectML requests can execute RapidOCR or LaMa on CPU/cv2 while UI,
     smoke, and reports expose only ambiguous engine/backend labels.

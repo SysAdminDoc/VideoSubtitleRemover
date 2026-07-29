@@ -18,6 +18,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Dict, Iterable, List, Mapping, Optional
 
+from backend.atomic_replace import (
+    ReplacementJournal,
+    recover_pending_replacements,
+)
+
 logger = logging.getLogger(__name__)
 
 PORTABLE_MODEL_CACHE_SCHEMA = "vsr.model_cache_bundle.v1"
@@ -33,6 +38,9 @@ _IMPORT_MAX_MEMBERS = 1024
 _IMPORT_MAX_MEMBER_BYTES = 8 * 1024 ** 3            # 8 GiB per file
 _IMPORT_MAX_TOTAL_BYTES = 32 * 1024 ** 3            # 32 GiB total expansion
 _IMPORT_MAX_COMPRESSION_RATIO = 200.0              # uncompressed / compressed
+# RM-146: the manifest is read before any other ceiling applies, so it needs
+# its own cap or a zip bomb in manifest.json is decompressed into memory.
+_IMPORT_MAX_MANIFEST_BYTES = 8 * 1024 * 1024       # 8 MiB
 _IMPORT_FREE_SPACE_SLACK_BYTES = 256 * 1024 ** 2    # keep 256 MiB headroom
 
 _MODEL_CACHE_ROOTS = {
@@ -277,10 +285,20 @@ def _target_path_for_import(
     return target
 
 
+def recover_model_cache(env: Optional[Mapping[str, str]] = None) -> list[dict]:
+    """Resolve any interrupted model-cache import before reading the cache.
+
+    RM-146: deterministic startup recovery -- a pending journal rolls back to
+    the complete old set and a committed one drops the leftover backups.
+    """
+    return recover_pending_replacements(app_model_cache_dir(env))
+
+
 def model_cache_status(env: Optional[Mapping[str, str]] = None) -> dict:
     """Report known optional model assets without exposing full paths."""
     from backend.model_hashes import KNOWN_WEIGHT_HASHES, hash_file
 
+    recovered = recover_model_cache(env)
     app_cache = app_model_cache_dir(env)
     roots = [path for _name, path in _model_cache_roots(env) if path.is_dir()]
     weights = []
@@ -334,6 +352,7 @@ def model_cache_status(env: Optional[Mapping[str, str]] = None) -> dict:
             item["filename"] for item in weights
             if item["status"] == "mismatch"
         ],
+        "recovered_replacements": recovered,
     }
 
 
@@ -440,6 +459,27 @@ def _target_key(target: Path) -> str:
     return os.path.normcase(os.path.abspath(str(target)))
 
 
+def _read_member_capped(
+    bundle: zipfile.ZipFile,
+    archive_name: str,
+    cap_bytes: int,
+) -> str:
+    """Read one small text member with a hard decompressed-byte cap."""
+    limit = max(0, int(cap_bytes))
+    info = bundle.getinfo(archive_name)
+    if info.file_size > limit:
+        raise ValueError(
+            f"{archive_name} declares {info.file_size} bytes, exceeding the "
+            f"{limit}-byte ceiling"
+        )
+    with bundle.open(archive_name, "r") as handle:
+        payload = handle.read(limit + 1)
+    if len(payload) > limit:
+        raise ValueError(
+            f"{archive_name} expands past the {limit}-byte ceiling")
+    return payload.decode("utf-8")
+
+
 def _stream_member_capped(
     bundle: zipfile.ZipFile,
     archive_name: str,
@@ -498,8 +538,9 @@ def import_model_cache_bundle(
 
     with zipfile.ZipFile(bundle_path, "r") as bundle:
         try:
-            manifest = json.loads(bundle.read(MODEL_CACHE_MANIFEST))
-        except (KeyError, json.JSONDecodeError) as exc:
+            manifest = json.loads(_read_member_capped(
+                bundle, MODEL_CACHE_MANIFEST, _IMPORT_MAX_MANIFEST_BYTES))
+        except (KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError("model-cache bundle is missing a valid manifest") from exc
         if manifest.get("schema") != PORTABLE_MODEL_CACHE_SCHEMA:
             raise ValueError("unsupported model-cache bundle schema")
@@ -623,19 +664,24 @@ def import_model_cache_bundle(
                     "known_hash": known_expected is not None,
                 })
 
-            # ---- commit phase (all-or-nothing with rollback) ----
-            committed: List[tuple] = []
+            # ---- commit phase (all-or-nothing with journalled rollback) ----
+            # RM-146: the journal is fsynced before the first original moves,
+            # so a crash mid-commit is recovered deterministically on the next
+            # run instead of stranding a target in .vsrbak.
+            journal = ReplacementJournal(target_root, "model-cache-import")
+            backups = {}
+            for item in staged:
+                backups[id(item)] = journal.plan(item["target"])
+            journal.begin()
             try:
                 for item in staged:
                     target = item["target"]
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    backup = None
+                    backup = backups[id(item)]
+                    _cleanup_path(backup)
                     if target.exists():
-                        backup = target.with_name(target.name + ".vsrbak")
-                        _cleanup_path(backup)
                         os.replace(target, backup)
                     os.replace(item["temp_path"], target)
-                    committed.append((target, backup))
                     imported.append({
                         "cache": item["cache"],
                         "relative_path": item["relative"].as_posix(),
@@ -645,21 +691,13 @@ def import_model_cache_bundle(
                         "known_hash": item["known_hash"],
                     })
             except OSError as exc:
-                for target, backup in reversed(committed):
-                    _cleanup_path(target)
-                    if backup is not None and backup.exists():
-                        try:
-                            os.replace(backup, target)
-                        except OSError:
-                            pass
+                journal.rollback()
                 imported.clear()
                 raise ValueError(
                     f"model-cache import failed and was rolled back: {exc}"
                 ) from exc
             else:
-                for _target, backup in committed:
-                    if backup is not None:
-                        _cleanup_path(backup)
+                journal.commit()
         finally:
             shutil.rmtree(staging_dir, ignore_errors=True)
 
