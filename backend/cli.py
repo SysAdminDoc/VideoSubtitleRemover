@@ -95,6 +95,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--watermark-position", "--watermark-opacity", "--watermark-margin",
             "--no-hw-encode", "--d3d12-accel", "--codec", "--export-mask",
             "--mask-export-format", "--import-mask", "--mask-import-mode",
+            "--frozen-matte",
             "--deinterlace",
             "--no-deinterlace-detect", "--keyframe-detect", "--quality-report",
             "--quality-sheet", "--loudnorm", "--decode-accel", "--single-audio",
@@ -783,6 +784,12 @@ def _build_parser(mode_choices):
         "--mask-import-mode", choices=["replace", "add", "subtract"],
         default="replace",
         help="Compose the imported matte after native mask generation.")
+    parser.add_argument(
+        "--frozen-matte", default="", metavar="MANIFEST",
+        help=("Reuse an approved .mask.json matte as this job's mask, "
+              "skipping OCR, tracking, and the mask refiners. Fails "
+              "closed if the source, geometry, range, or timing no "
+              "longer match what the matte was approved against."))
     parser.add_argument("--auto-band", action="store_true",
                        help="Auto-detect the dominant subtitle band before processing")
     parser.add_argument("--no-kalman", action="store_true",
@@ -1197,6 +1204,13 @@ def _prepare_cli_args(args, parser, argv=None):
             parser.error("--pattern requires --out-dir")
         if args.input and not args.output and not dry_run_only:
             parser.error("--input requires --output")
+        # RM-153: a frozen matte is pinned to one source file, one frame
+        # range, and one timing table, so it cannot describe a glob of
+        # inputs and cannot coexist with a second matte source.
+        if args.frozen_matte and args.pattern:
+            parser.error("--frozen-matte applies to a single --input, not --pattern")
+        if args.frozen_matte and args.import_mask:
+            parser.error("--frozen-matte and --import-mask are mutually exclusive")
     if not 0.1 <= args.threshold <= 1.0:
         parser.error("--threshold must be between 0.1 and 1.0")
     if not 15 <= args.crf <= 35:
@@ -1241,6 +1255,22 @@ def _prepare_cli_args(args, parser, argv=None):
             parser.error(
                 "--translation-command is required for the command provider")
     return soft_action, dry_run_only, translation_enabled
+
+
+def _frozen_matte_from_args(args) -> dict:
+    """RM-153: build a frozen-matte record from `--frozen-matte MANIFEST`.
+
+    Freezing here is deliberately eager: the manifest, artifact, and the
+    source are checked against each other now, so the reason a matte
+    cannot be reused is reported before any decoding starts rather than
+    surfacing as an opaque mid-run failure.
+    """
+    manifest = str(getattr(args, "frozen_matte", "") or "").strip()
+    if not manifest:
+        return {}
+    from backend.frozen_matte import freeze_matte
+
+    return freeze_matte(manifest, args.input)
 
 
 def _build_processing_config(
@@ -1317,6 +1347,7 @@ def _build_processing_config(
         export_mask_video=args.export_mask,
         mask_export_format=args.mask_export_format,
         mask_import_path=args.import_mask,
+        frozen_matte=_frozen_matte_from_args(args),
         mask_import_mode=args.mask_import_mode,
         kalman_tracking=not args.no_kalman,
         phash_skip_enable=not args.no_phash,

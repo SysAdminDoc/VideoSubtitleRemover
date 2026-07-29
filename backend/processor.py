@@ -114,6 +114,11 @@ from backend.mask_corrections import (
     merge_frame_ranges,
     merge_review_spans as merge_review_spans,
 )
+from backend.frozen_matte import (
+    FrozenMatteError,
+    normalize_frozen_matte,
+    validate_frozen_matte,
+)
 from backend.matte_interchange import (
     MaskInterchangeReader,
     MaskInterchangeWriter,
@@ -398,6 +403,7 @@ class _FrameLoopContext:
     reader: Any
     selective_cap: Any
     matte_reader: Any
+    frozen_matte: bool
     writer: Any
     matte_writer: Any
     checkpoint: _FrameLoopCheckpoint
@@ -679,6 +685,12 @@ class SubtitleRemover(
             "status": "not-requested",
             "manifest": "",
             "mode": "replace",
+        }
+        self.last_frozen_matte: dict = {
+            "requested": bool(
+                normalize_frozen_matte(getattr(self.config, "frozen_matte", None))
+            ),
+            "status": "not-requested",
         }
         self.last_translation: dict = {
             "requested": bool(self.config.translation_enabled),
@@ -1639,6 +1651,22 @@ class SubtitleRemover(
                             self.config.kalman_iou_threshold,
                             self.config.kalman_max_age,
                         )
+            # RM-153: a frozen matte is this job's authoritative mask. It
+            # was reviewed and approved frame by frame against exactly
+            # these frames, so detection, tracking, and every heuristic
+            # that would alter it are skipped outright -- re-deriving a
+            # mask a human already signed off on is the cost the freeze
+            # exists to avoid, and refining it would change the pixels
+            # they approved.
+            if ctx.frozen_matte:
+                self._record_detection_skip("frozen_matte")
+                with self._time_stage("mask"):
+                    mask = ctx.matte_reader.read(state.frame_idx)
+                state.last_mask = mask
+                batch.add(frame, mask, source_frame, passthrough=False)
+                state.frame_idx += 1
+                continue
+
             fixed_shapes = (
                 self._fixed_region_shapes(frame_seconds)
                 if ctx.timed_region_spans else ctx.static_fixed_shapes
@@ -1895,19 +1923,37 @@ class SubtitleRemover(
             state.frame_idx += 1
         return batch
 
+    @staticmethod
+    def _mark_active_segments(batch: _FrameBatch) -> None:
+        """Record the contiguous non-passthrough runs to inpaint."""
+        segment_start = None
+        for index, passthrough in enumerate(
+                batch.passthrough_flags + [True]):
+            if not passthrough and segment_start is None:
+                segment_start = index
+            elif passthrough and segment_start is not None:
+                batch.active_segments.append((segment_start, index))
+                segment_start = None
+
     def _refine_batch_masks(self, ctx: _FrameLoopContext,
                             state: _FrameLoopState,
                             batch: _FrameBatch) -> None:
         """Apply temporal/refiner/imported-matte passes to one batch."""
         with self._time_stage("mask"):
-            segment_start = None
-            for index, passthrough in enumerate(
-                    batch.passthrough_flags + [True]):
-                if not passthrough and segment_start is None:
-                    segment_start = index
-                elif passthrough and segment_start is not None:
-                    batch.active_segments.append((segment_start, index))
-                    segment_start = None
+            self._mark_active_segments(batch)
+            # RM-153: the masks in a frozen batch came straight from the
+            # approved matte. Propagation, refinement, and rolling-union
+            # stabilization all exist to improve a *derived* mask, so
+            # running them here would silently edit pixels a human signed
+            # off on. Segments, quality accounting, and progress still
+            # run -- only the mask-altering passes are skipped.
+            if ctx.frozen_matte:
+                if self.config.quality_report:
+                    for index, mask in enumerate(batch.masks):
+                        if not batch.passthrough_flags[index]:
+                            self._accumulate_quality_bbox(mask)
+                self._finish_batch_masks(ctx, state, batch)
+                return
             for segment_start, segment_end in batch.active_segments:
                 segment_frames = batch.frames[segment_start:segment_end]
                 segment_masks = batch.masks[segment_start:segment_end]
@@ -1943,6 +1989,12 @@ class SubtitleRemover(
                 for index, mask in enumerate(batch.masks):
                     if not batch.passthrough_flags[index]:
                         self._accumulate_quality_bbox(mask)
+        self._finish_batch_masks(ctx, state, batch)
+
+    def _finish_batch_masks(self, ctx: _FrameLoopContext,
+                            state: _FrameLoopState,
+                            batch: _FrameBatch) -> None:
+        """Carry the last mask forward and report batch progress."""
         active_masks = [
             mask for index, mask in enumerate(batch.masks)
             if not batch.passthrough_flags[index]
@@ -2117,6 +2169,12 @@ class SubtitleRemover(
             "status": "pending" if self.config.mask_import_path else "not-requested",
             "manifest": self.config.mask_import_path,
             "mode": self.config.mask_import_mode,
+        }
+        frozen_record = normalize_frozen_matte(
+            getattr(self.config, "frozen_matte", None))
+        self.last_frozen_matte = {
+            "requested": bool(frozen_record),
+            "status": "pending" if frozen_record else "not-requested",
         }
         self.last_translation = {
             "requested": bool(self.config.translation_enabled),
@@ -2297,7 +2355,53 @@ class SubtitleRemover(
             matte_timestamps = _range.matte_timestamps
             matte_durations = _range.matte_durations
             matte_time_base = _range.matte_time_base
-            if self.config.mask_import_path:
+            if frozen_record:
+                # RM-153: revalidate before a single frame is decoded, so
+                # a matte that no longer belongs to this job stops the run
+                # with a specific reason instead of painting approved
+                # pixels onto frames they were never approved for.
+                if self.config.mask_import_path:
+                    raise ValueError(
+                        "A frozen matte and a manually imported matte cannot "
+                        "both drive one job; clear one of them."
+                    )
+                frozen_evidence = validate_frozen_matte(
+                    frozen_record,
+                    source_path=input_path,
+                    width=width,
+                    height=height,
+                    start_frame=start_frame,
+                    end_frame=end_frame,
+                    timestamps=matte_timestamps,
+                    durations=matte_durations,
+                    is_vfr=bool(
+                        frame_timing is not None and frame_timing.is_vfr),
+                    source_time_base=matte_time_base,
+                )
+                matte_reader = MaskInterchangeReader(
+                    frozen_record["manifest"],
+                    width=width,
+                    height=height,
+                    start_frame=start_frame,
+                    end_frame=end_frame,
+                    timestamps=matte_timestamps,
+                    durations=matte_durations,
+                    is_vfr=bool(
+                        frame_timing is not None and frame_timing.is_vfr),
+                    source_time_base=matte_time_base,
+                    mode="replace",
+                )
+                self.last_frozen_matte = {
+                    **frozen_evidence,
+                    "requested": True,
+                }
+                logger.info(
+                    "Reusing frozen %s matte (%d frames); skipping OCR, "
+                    "tracking, and mask refiners",
+                    frozen_record["format"],
+                    frozen_record["frame_count"],
+                )
+            elif self.config.mask_import_path:
                 matte_reader = MaskInterchangeReader(
                     self.config.mask_import_path,
                     width=width,
@@ -2729,6 +2833,7 @@ class SubtitleRemover(
                 reader=reader,
                 selective_cap=selective_cap,
                 matte_reader=matte_reader,
+                frozen_matte=bool(frozen_record),
                 writer=writer,
                 matte_writer=matte_writer,
                 checkpoint=_FrameLoopCheckpoint(
@@ -2872,6 +2977,23 @@ class SubtitleRemover(
         except InterruptedError:
             logger.info("Video processing cancelled")
             raise
+        except FrozenMatteError as e:
+            # RM-153: the frozen matte no longer belongs to this job. Say
+            # exactly what moved and ask for a re-freeze; painting approved
+            # pixels onto frames they were not approved for, or silently
+            # re-deriving a mask the user believes is pinned, are both worse
+            # than stopping. Nothing has been decoded at this point.
+            self.last_error_message = e.user_message
+            self.last_error_reason = f"frozen_matte_{e.reason}"
+            self.last_frozen_matte.update({
+                "status": "invalid",
+                "reason": e.reason,
+                "error": e.user_message,
+                "needs_revalidation": e.needs_revalidation,
+            })
+            logger.error(
+                "Frozen matte rejected (%s): %s", e.reason, e.user_message)
+            return False
         except MediaWriteError as e:
             # RM-139: a truncated intermediate or an unwritten frame must never
             # look like a completed job. The finally block below releases the

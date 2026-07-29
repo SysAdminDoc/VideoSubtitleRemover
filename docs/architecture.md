@@ -70,6 +70,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- encoder.py                  # Output codec probing and HW encoder selection.
 |   |-- execution_provenance.py     # Requested vs. effective device/engine record.
 |   |-- ffmpeg_profiles.py          # FFmpeg capability profiles and security probe.
+|   |-- frozen_matte.py             # Freeze an approved matte as a reusable input.
 |   |-- hdr.py                      # Color metadata preservation and HDR handling.
 |   |-- i18n.py                     # gettext localisation runtime.
 |   |-- import_safety.py            # Crash-safe optional-module import probes.

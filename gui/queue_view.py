@@ -335,7 +335,8 @@ class QueueViewMixin:
                                              on_cancel_item=self._cancel_queue_item,
                                              on_override=self._open_per_file_overrides,
                                              on_soft_action=self._set_soft_subtitle_action,
-                                             on_retry_suggested=self._retry_review_item_with_suggested_settings)
+                                             on_retry_suggested=self._retry_review_item_with_suggested_settings,
+                                             on_freeze_matte=self._set_frozen_matte_for_item)
                     widget.pack(fill="x")
                     self.queue_widgets[item.id] = widget
                     # Forward mousewheel to queue canvas

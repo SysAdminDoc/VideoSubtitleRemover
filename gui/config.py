@@ -546,6 +546,10 @@ class ProcessingConfig:
     mask_export_format: str = "ffv1"
     mask_import_path: str = ""
     mask_import_mode: str = "replace"
+    # RM-153: an approved matte frozen as this item's authoritative mask.
+    # Per-item by nature -- it names one source file and one frame range --
+    # so it lives on the item's config snapshot, not the global defaults.
+    frozen_matte: dict = field(default_factory=dict)
     adaptive_batch: bool = True
     gpu_oom_recovery: bool = True
     temporal_mask_union: bool = False
@@ -742,6 +746,10 @@ class ProcessingConfig:
             self.mask_import_path, "", 2048)
         self.mask_import_mode = normalize_mask_import_mode(
             self.mask_import_mode)
+        from backend.frozen_matte import normalize_frozen_matte
+        # An unreadable freeze normalizes to {}, so the job re-derives its
+        # mask instead of silently trusting a half-parsed record.
+        self.frozen_matte = normalize_frozen_matte(self.frozen_matte)
         self.adaptive_batch = _coerce_bool(self.adaptive_batch, True)
         self.gpu_oom_recovery = _coerce_bool(self.gpu_oom_recovery, True)
         self.temporal_mask_union = _coerce_bool(self.temporal_mask_union, False)

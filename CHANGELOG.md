@@ -6,6 +6,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- **An approved matte can be frozen as a reusable queue input.** A matte
+  reviewed frame by frame is the most expensive artifact this pipeline
+  produces, and a rerun threw it away to re-derive it from OCR and tracking
+  -- slow, and not guaranteed to reproduce the same mask, since detection is
+  not bit-reproducible across engine, driver, and threading changes.
+  **Freeze approved matte** on a completed queue item (or `--frozen-matte
+  MANIFEST`) pins the artifact and manifest hashes, a source fingerprint,
+  and the geometry, timing, and frame range it was approved for. A matching
+  rerun paints the approved mask directly and skips OCR, tracking, and the
+  mask refiners -- the refiners deliberately included, because they exist to
+  improve a derived mask and would edit approved pixels. Every part of the
+  promise is re-verified before a frame is decoded: a changed source, matte,
+  manifest, geometry, range, CFR/VFR mode, time base, or per-frame timing
+  stops the run with a reason naming what moved and a request to re-freeze,
+  never a silent re-detection and never a matte applied to frames it was not
+  approved against. New `backend/frozen_matte.py`; the reproducibility
+  sidecar records the freeze and the bypassed stages under `frozenMatte`.
 - **Right-to-left layouts mirror the whole interface.** RTL support
   previously reached only a handful of hand-mirrored widgets, so an Arabic or
   Hebrew user got a left-to-right window with a few right-aligned labels in

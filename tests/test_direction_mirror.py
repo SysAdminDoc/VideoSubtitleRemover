@@ -103,23 +103,38 @@ class LiveTkMirrorTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.root = tk.Tk()
+        # One root per class, torn down like the other GUI test files. A
+        # stale pointer left by an earlier file's destroyed root is the
+        # documented cause of intermittent "Tcl wasn't installed
+        # properly" errors, so clear it before asking for a new one.
+        try:
+            tk._default_root = None
+        except Exception:
+            pass
+        try:
+            cls.root = tk.Tk()
+        except Exception as exc:  # pragma: no cover - headless CI
+            raise unittest.SkipTest(f"Tk display unavailable: {exc}")
         cls.root.withdraw()
 
     @classmethod
     def tearDownClass(cls):
         cls.root.destroy()
-        tk._default_root = None
+        try:
+            tk._default_root = None
+        except Exception:
+            pass
 
     def setUp(self):
+        # This module patches a *global* -- tkinter.Misc._options. Register
+        # the teardown before patching so a test that raises mid-way can
+        # never leak the patch into the rest of the suite.
+        self.addCleanup(lambda: setattr(Theme, "RTL_LAYOUT", False))
+        self.addCleanup(direction.uninstall_direction_mirror)
         Theme.RTL_LAYOUT = True
         direction.install_direction_mirror()
         self.holder = tk.Frame(self.root)
-
-    def tearDown(self):
-        self.holder.destroy()
-        direction.uninstall_direction_mirror()
-        Theme.RTL_LAYOUT = False
+        self.addCleanup(self.holder.destroy)
 
     def test_pack_side_and_anchor_mirror(self):
         widget = tk.Label(self.holder, text="x")

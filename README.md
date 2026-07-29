@@ -530,6 +530,38 @@ The output reproducibility sidecar records the imported artifact's current
 SHA-256, whether it differs from the exported hash, and the deterministic mask
 composition order. **Review mask** shows that composed result before a run.
 
+### Freezing an approved matte
+
+A matte you have reviewed frame by frame is the most expensive artifact
+this pipeline produces, and re-running the same source normally throws it
+away and re-derives it from OCR and tracking. That is slow, and because
+detection is not bit-reproducible across engine, driver, and threading
+changes, it is not guaranteed to land on the same mask.
+
+Right-click a completed queue item and choose **Freeze approved matte** to
+pin the exported matte to that job. VSR records the artifact and manifest
+hashes, a fingerprint of the source, and the geometry, timing, and frame
+range the matte was approved for. A later run that matches on all of those
+paints the approved mask directly and skips OCR, tracking, and the mask
+refiners entirely -- the refiners are skipped on purpose, since they exist
+to improve a *derived* mask and would edit pixels you already signed off
+on. **Clear frozen matte** releases the pin and restores detection.
+
+```bash
+python -m backend.processor -i input.mp4 -o rerun.mp4 --frozen-matte cleaned.mask.json
+```
+
+Freezing is a promise that these exact pixels belong to these exact frames
+of this exact file, so every part of it is re-verified before a frame is
+decoded. If the source, matte, manifest, geometry, frame range, CFR/VFR
+mode, time base, or per-frame timing no longer matches, the run stops with
+a message naming what moved and asks you to freeze again. It never falls
+back to silent re-detection, and never applies a matte to frames it was not
+approved against. `--frozen-matte` cannot be combined with `--import-mask`
+or `--pattern`: a freeze describes one source, not a glob. The
+reproducibility sidecar records the freeze under `frozenMatte`, including
+which stages were bypassed.
+
 For static-camera overlays, a timed rectangle can use a deterministic clean
 plate instead of estimated or neural pixels. Open **Set Region**, add and
 select a timed rectangle, then choose a same-pixel-size clean image in the
@@ -696,6 +728,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--mask-export-format` | Lossless matte export as FFV1 video or a PNG sequence. | ffv1 | ffv1 \| png | Public |
 | `--import-mask` | Import an edited .mask.json timing manifest before inpainting. | - | - | Public |
 | `--mask-import-mode` | Compose the imported matte after native mask generation. | replace | replace \| add \| subtract | Public |
+| `--frozen-matte` | Reuse an approved .mask.json matte as this job's mask, skipping OCR, tracking, and the mask refiners. Fails closed if the source, geometry, range, or timing no longer match what the matte was approved against. | - | - | Public |
 | `--deinterlace` | Force ffmpeg yadif deinterlace before processing | Off | - | Public |
 | `--no-deinterlace-detect` | Skip the automatic ffprobe interlacing detection | Off | - | Public |
 | `--keyframe-detect` | OCR only at video I-frames (ffprobe-probed) | Off | - | Public |
@@ -866,6 +899,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `mask_export_format` | `str` | `ffv1` |
 | `mask_import_path` | `str` | `-` |
 | `mask_import_mode` | `str` | `replace` |
+| `frozen_matte` | `dict` | `{}` |
 | `export_srt` | `bool` | `Off` |
 | `ocr_fix_enable` | `bool` | `Off` |
 | `adaptive_batch` | `bool` | `On` |

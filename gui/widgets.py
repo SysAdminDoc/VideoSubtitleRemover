@@ -1935,6 +1935,7 @@ class QueueItemWidget(tk.Frame):
                  on_override: Callable = None,
                  on_soft_action: Callable = None,
                  on_retry_suggested: Callable = None,
+                 on_freeze_matte: Callable = None,
                  **kwargs):
         super().__init__(parent, bg=Theme.BG_CARD, highlightthickness=0,
                         takefocus=1)
@@ -1948,6 +1949,7 @@ class QueueItemWidget(tk.Frame):
         self.on_override = on_override
         self.on_soft_action = on_soft_action
         self.on_retry_suggested = on_retry_suggested
+        self.on_freeze_matte = on_freeze_matte
         self.is_selected = False
         self.focused = False
         self._surface_bg = Theme.BG_CARD
@@ -2102,6 +2104,27 @@ class QueueItemWidget(tk.Frame):
         menu.add_command(label=tr("Reveal output folder"),
                          command=self._reveal_output,
                          state="normal" if is_complete else "disabled")
+        # RM-153: a matte a human has reviewed is expensive work.
+        # Freezing pins it to this exact source, range, and timing
+        # so a rerun can paint it directly instead of re-deriving
+        # a mask that detection is not guaranteed to reproduce.
+        if self.on_freeze_matte is not None:
+            frozen = self._frozen_matte_record()
+            if frozen:
+                menu.add_command(
+                    label=tr("Clear frozen matte"),
+                    command=lambda: self.on_freeze_matte(
+                        self.item.id, "clear"))
+            else:
+                menu.add_command(
+                    label=tr("Freeze approved matte"),
+                    command=lambda: self.on_freeze_matte(
+                        self.item.id, "freeze"),
+                    state=(
+                        "normal"
+                        if self._freezable_matte_manifest()
+                        else "disabled"
+                    ))
         menu.add_separator()
         # Only allow renaming output before processing has started.
         rename_allowed = self.item.status == ProcessingStatus.IDLE and self.on_rename is not None
@@ -2292,6 +2315,18 @@ class QueueItemWidget(tk.Frame):
             return None
         path = Path(sheet)
         return path if path.exists() else None
+
+    def _frozen_matte_record(self) -> dict:
+        from backend.frozen_matte import normalize_frozen_matte
+        return normalize_frozen_matte(
+            getattr(self.item.config, "frozen_matte", None))
+
+    def _freezable_matte_manifest(self) -> Optional[Path]:
+        """The matte manifest this item wrote beside its output."""
+        from backend.frozen_matte import default_manifest_for_output
+        if self.item.status != ProcessingStatus.COMPLETE:
+            return None
+        return default_manifest_for_output(self.item.output_path)
 
     def _needs_quality_review(self) -> bool:
         report = getattr(self.item, "quality_report", None)

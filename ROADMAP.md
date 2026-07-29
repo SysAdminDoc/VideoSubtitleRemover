@@ -7,19 +7,6 @@ Completed items are deleted from this file; history lives in CHANGELOG.md and gi
 
 ### P2
 
-- [ ] P2 -- RM-153 Freeze an approved matte as a reusable queue input
-  Why: reviewed masks are valuable durable work, but reruns can still repeat
-    detection/tracking or depend on disposable cache state.
-  Evidence: `backend/matte_interchange.py`; `gui/mask_correction_controller.py`;
-    DaVinci Resolve “Render in Place”; Resolve cache-loss/matte-export reports.
-  Touches: quality/mask-correction UI; queue item/state schema; matte interchange;
-    processor mask-input path; reports/sidecars.
-  Acceptance: quality review offers “Freeze approved matte”; the exact
-    artifact/manifest hash, source fingerprint, geometry, timing, and range persist
-    with the queue item; a matching rerun can explicitly bypass OCR/tracking, while
-    any source/hash/timing mismatch fails closed and requests revalidation.
-  Complexity: M
-
 - [ ] P2 -- RM-154 Add loss-aware WebVTT translation and re-embed interchange
   Why: WebVTT cue IDs, settings, regions, vertical text, ruby, voice/language
     spans, STYLE, and NOTE cannot be safely flattened through the SRT-only model.

@@ -303,6 +303,11 @@ class _FinalizeMixin:
                     self.last_mask_import
                     if self.last_mask_import.get("requested") else None
                 ),
+                frozen_matte=(
+                    self.last_frozen_matte
+                    if getattr(self, "last_frozen_matte", {}).get("requested")
+                    else None
+                ),
                 translation=(
                     self.last_translation
                     if self.last_translation.get("requested") else None

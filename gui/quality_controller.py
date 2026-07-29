@@ -560,6 +560,60 @@ class QualityReviewControllerMixin:
                 }
         return changes
 
+    def _set_frozen_matte_for_item(self, item_id: str, action: str) -> None:
+        """RM-153: freeze this item's approved matte, or release it.
+
+        Freezing revalidates the exported matte and fingerprints the
+        source *now*, so the record is only ever written from a pair that
+        currently agrees. Everything after that point is the run-time
+        validator's job.
+        """
+        from backend.frozen_matte import (
+            FrozenMatteError,
+            default_manifest_for_output,
+            freeze_matte,
+            frozen_matte_summary,
+        )
+
+        item = next((entry for entry in self.queue if entry.id == item_id), None)
+        if item is None:
+            return
+        if str(action) == "clear":
+            item.config.frozen_matte = {}
+            save_queue_state(self.queue)
+            self._update_queue_display()
+            self._update_status(
+                tr("Released the frozen matte; this item will detect again"),
+                "info",
+            )
+            return
+
+        manifest = default_manifest_for_output(item.output_path)
+        if manifest is None:
+            self._update_status(
+                tr("No exported matte was found beside this output. Enable "
+                   "matte export and run the item again."),
+                "warning",
+            )
+            return
+        try:
+            record = freeze_matte(manifest, item.file_path)
+        except FrozenMatteError as exc:
+            logger.warning(
+                "Could not freeze matte for %s: %s (%s)",
+                item.output_path, exc.user_message, exc.reason,
+            )
+            self._update_status(exc.user_message, "error")
+            return
+        item.config.frozen_matte = record
+        save_queue_state(self.queue)
+        self._update_queue_display()
+        self._update_status(
+            tr("Froze the approved matte ({summary}); reruns will skip "
+               "detection").format(summary=frozen_matte_summary(record)),
+            "success",
+        )
+
     def _review_record_for_item(self, item: QueueItem) -> Optional[dict]:
         output_key = self._normalized_path_key(item.output_path)
         for record in self._review_needed_records():

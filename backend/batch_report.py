@@ -841,6 +841,7 @@ def build_output_sidecar(
     selective_rerun: Optional[dict] = None,
     mask_export: Optional[dict] = None,
     mask_import: Optional[dict] = None,
+    frozen_matte: Optional[dict] = None,
     translation: Optional[dict] = None,
     clean_reference: Optional[dict] = None,
     execution_provenance: Optional[dict] = None,
@@ -908,6 +909,8 @@ def build_output_sidecar(
         payload["maskExport"] = dict(mask_export)
     if mask_import is not None:
         payload["maskImport"] = dict(mask_import)
+    if frozen_matte is not None:
+        payload["frozenMatte"] = dict(frozen_matte)
     if translation is not None:
         payload["translation"] = dict(translation)
     if clean_reference is not None:
@@ -930,6 +933,7 @@ def write_output_sidecar(
     selective_rerun: Optional[dict] = None,
     mask_export: Optional[dict] = None,
     mask_import: Optional[dict] = None,
+    frozen_matte: Optional[dict] = None,
     translation: Optional[dict] = None,
     clean_reference: Optional[dict] = None,
     execution_provenance: Optional[dict] = None,
@@ -952,6 +956,7 @@ def write_output_sidecar(
             selective_rerun=selective_rerun,
             mask_export=mask_export,
             mask_import=mask_import,
+            frozen_matte=frozen_matte,
             translation=translation,
             clean_reference=clean_reference,
             execution_provenance=execution_provenance,

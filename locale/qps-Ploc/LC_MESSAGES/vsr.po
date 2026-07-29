@@ -268,7 +268,7 @@ msgstr "[!! ÇƤÛ öńŀý ! !!]"
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
-#: gui/widgets.py:2126
+#: gui/widgets.py:2149
 msgid "Cancel this item"
 msgstr "[!! Çåńçéŀ ţħîš îţéḿ ! !!]"
 
@@ -448,6 +448,10 @@ msgstr "[!! Çŀéåŕ çöŕŕéçţîöńš ! !!]"
 msgid "Clear filter"
 msgstr "[!! Çŀéåŕ ƒîŀţéŕ ! !!]"
 
+#: gui/widgets.py:2115
+msgid "Clear frozen matte"
+msgstr "[!! Çŀéåŕ ƒŕöžéń ḿåţţé ! !!]"
+
 #: gui/layout_build.py:921
 msgid "Clear import"
 msgstr "[!! Çŀéåŕ îḿƥöŕţ ! !!]"
@@ -524,11 +528,11 @@ msgstr "[!! Çöńƒîðéńçé ḿûšţ ƀé ƀéţŵééń 0.05 åńð 0.99 
 msgid "Configure"
 msgstr "[!! Çöńƒîĝûŕé ! !!]"
 
-#: gui/widgets.py:2113
+#: gui/widgets.py:2136
 msgid "Copy CLI command"
 msgstr "[!! Çöƥý ÇĿÎ çöḿḿåńð ! !!]"
 
-#: gui/widgets.py:2111
+#: gui/widgets.py:2134
 msgid "Copy source path"
 msgstr "[!! Çöƥý šöûŕçé ƥåţħ ! !!]"
 
@@ -804,11 +808,11 @@ msgstr "[!! ƑƑḿƥéĝ {name} ! !!]"
 msgid "Fast LaMa cleanup"
 msgstr "[!! Ƒåšţ ĿåḾå çŀéåńûƥ ! !!]"
 
-#: gui/widgets.py:2143
+#: gui/widgets.py:2166
 msgid "Fast remux and keep embedded subtitles"
 msgstr "[!! Ƒåšţ ŕéḿûẋ åńð ķééƥ éḿƀéððéð šûƀţîţŀéš ! ! ! !!]"
 
-#: gui/widgets.py:2139
+#: gui/widgets.py:2162
 msgid "Fast strip embedded subtitles"
 msgstr "[!! Ƒåšţ šţŕîƥ éḿƀéððéð šûƀţîţŀéš ! ! !!]"
 
@@ -883,6 +887,14 @@ msgstr "[!! Ƒŕåḿé {frame}; ƀåšé ḿåšķ ƒŕöḿ {source} ! ! ! !!]
 #: gui/mask_correction_controller.py:247
 msgid "Frame-local mask correction canvas"
 msgstr "[!! Ƒŕåḿé-ŀöçåŀ ḿåšķ çöŕŕéçţîöń çåńṽåš ! ! !!]"
+
+#: gui/widgets.py:2120
+msgid "Freeze approved matte"
+msgstr "[!! Ƒŕééžé åƥƥŕöṽéð ḿåţţé ! !!]"
+
+#: gui/quality_controller.py:612
+msgid "Froze the approved matte ({summary}); reruns will skip detection"
+msgstr "[!! Ƒŕöžé ţħé åƥƥŕöṽéð ḿåţţé ({summary}); ŕéŕûńš ŵîŀŀ šķîƥ ðéţéçţîöń ! ! ! ! ! !!]"
 
 #: gui/app.py:1441 gui/layout_build.py:1745
 msgid "Full size"
@@ -1284,6 +1296,10 @@ msgstr "[!! Ńö çöŕŕéçţîöń ţö ŕéðö ! !!]"
 msgid "No correction to undo"
 msgstr "[!! Ńö çöŕŕéçţîöń ţö ûńðö ! !!]"
 
+#: gui/quality_controller.py:594
+msgid "No exported matte was found beside this output. Enable matte export and run the item again."
+msgstr "[!! Ńö éẋƥöŕţéð ḿåţţé ŵåš ƒöûńð ƀéšîðé ţħîš öûţƥûţ. Éńåƀŀé ḿåţţé éẋƥöŕţ åńð ŕûń ţħé îţéḿ åĝåîń. ! ! ! ! ! ! ! !!]"
+
 #: gui/preview_controller.py:1223 gui/preview_controller.py:696
 msgid "No frame available"
 msgstr "[!! Ńö ƒŕåḿé åṽåîŀåƀŀé ! !!]"
@@ -1292,7 +1308,7 @@ msgstr "[!! Ńö ƒŕåḿé åṽåîŀåƀŀé ! !!]"
 msgid "No imported matte"
 msgstr "[!! Ńö îḿƥöŕţéð ḿåţţé ! !!]"
 
-#: gui/queue_view.py:413
+#: gui/queue_view.py:414
 msgid "No items match \"{needle}\""
 msgstr "[!! Ńö îţéḿš ḿåţçħ \"{needle}\" ! ! !!]"
 
@@ -1368,7 +1384,7 @@ msgstr "[!! Öƥéń ŀöĝ ƒîŀé ! !!]"
 msgid "Open output"
 msgstr "[!! Öƥéń öûţƥûţ ! !!]"
 
-#: gui/widgets.py:2091
+#: gui/widgets.py:2093
 msgid "Open quality sheet"
 msgstr "[!! Öƥéń ɋûåŀîţý šħééţ ! !!]"
 
@@ -1376,7 +1392,7 @@ msgstr "[!! Öƥéń ɋûåŀîţý šħééţ ! !!]"
 msgid "Open report"
 msgstr "[!! Öƥéń ŕéƥöŕţ ! !!]"
 
-#: gui/widgets.py:2025 gui/widgets.py:2088
+#: gui/widgets.py:2027 gui/widgets.py:2090
 msgid "Open result"
 msgstr "[!! Öƥéń ŕéšûŀţ ! !!]"
 
@@ -1420,7 +1436,7 @@ msgstr "[!! Öûţƥûţš åŕé ŕéåðý ƒöŕ ŕéṽîéŵ ! ! !!]"
 msgid "Outputs are ready to review."
 msgstr "[!! Öûţƥûţš åŕé ŕéåðý ţö ŕéṽîéŵ. ! ! !!]"
 
-#: gui/widgets.py:2132
+#: gui/widgets.py:2155
 msgid "Override settings for this file..."
 msgstr "[!! Öṽéŕŕîðé šéţţîńĝš ƒöŕ ţħîš ƒîŀé... ! ! !!]"
 
@@ -1496,7 +1512,7 @@ msgstr "[!! Ƥŕéšéŕṽé šöûŕçé åûðîö ! !!]"
 msgid "Preset"
 msgstr "[!! Ƥŕéšéţ ! !!]"
 
-#: gui/widgets.py:2332
+#: gui/widgets.py:2367
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr "[!! Ƥŕéšš Šħîƒţ+Ƒ10 öŕ ţħé Ḿéńû ķéý ƒöŕ îţéḿ åçţîöńš. ! ! ! ! !!]"
 
@@ -1512,7 +1528,7 @@ msgstr "[!! Ƥŕéṽîéŵ ƒåîŀéð ! !!]"
 msgid "Preview mask dilation"
 msgstr "[!! Ƥŕéṽîéŵ ḿåšķ ðîŀåţîöń ! !!]"
 
-#: gui/widgets.py:2083
+#: gui/widgets.py:2085
 msgid "Preview source frame"
 msgstr "[!! Ƥŕéṽîéŵ šöûŕçé ƒŕåḿé ! !!]"
 
@@ -1608,7 +1624,7 @@ msgstr "[!! Ŕéåðý ƒöŕ å ƒûŀŀ ŕéŕûń ŵîţħ ḿåšķ çöŕŕ
 msgid "Ready to preview alignment."
 msgstr "[!! Ŕéåðý ţö ƥŕéṽîéŵ åŀîĝńḿéńţ. ! ! !!]"
 
-#: gui/utils.py:38 gui/widgets.py:2331
+#: gui/utils.py:38 gui/widgets.py:2366
 msgid "Ready to process"
 msgstr "[!! Ŕéåðý ţö ƥŕöçéšš ! !!]"
 
@@ -1668,7 +1684,11 @@ msgstr "[!! Ŕéĝîöń {field} îń ƥîẋéŀš ! ! !!]"
 msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
 msgstr "[!! Ŕéŀéåšé ţö šåṽé ŕéĝîöń ({x1}, {y1}) ţö ({x2}, {y2}). ! ! ! ! !!]"
 
-#: gui/layout_build.py:1986 gui/layout_responsive.py:296 gui/widgets.py:2020
+#: gui/quality_controller.py:586
+msgid "Released the frozen matte; this item will detect again"
+msgstr "[!! Ŕéŀéåšéð ţħé ƒŕöžéń ḿåţţé; ţħîš îţéḿ ŵîŀŀ ðéţéçţ åĝåîń ! ! ! ! !!]"
+
+#: gui/layout_build.py:1986 gui/layout_responsive.py:296 gui/widgets.py:2022
 msgid "Remove"
 msgstr "[!! Ŕéḿöṽé ! !!]"
 
@@ -1680,7 +1700,7 @@ msgstr "[!! Ŕéḿöṽé çöḿƥŀéţéð îţéḿš ŵîţħöûţ ðéŀ
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr "[!! Ŕéḿöṽé ðîåŀöĝûé šûƀţîţŀéš (šħöŕţ-ŀîṽéð ÖÇŔ ţŕåçķš) ! ! ! ! !!]"
 
-#: gui/widgets.py:2151
+#: gui/widgets.py:2174
 msgid "Remove from queue"
 msgstr "[!! Ŕéḿöṽé ƒŕöḿ ɋûéûé ! !!]"
 
@@ -1706,7 +1726,7 @@ msgid_plural "Remove {n} items from the batch."
 msgstr[0] "[!! Ŕéḿöṽé {n} îţéḿ ƒŕöḿ ţħé ƀåţçħ. ! ! !!]"
 msgstr[1] "[!! Ŕéḿöṽé {n} îţéḿš ƒŕöḿ ţħé ƀåţçħ. ! ! !!]"
 
-#: gui/widgets.py:2108
+#: gui/widgets.py:2131
 msgid "Rename output..."
 msgstr "[!! Ŕéńåḿé öûţƥûţ... ! !!]"
 
@@ -1714,7 +1734,7 @@ msgstr "[!! Ŕéńåḿé öûţƥûţ... ! !!]"
 msgid "Repeat last"
 msgstr "[!! Ŕéƥéåţ ŀåšţ ! !!]"
 
-#: gui/widgets.py:2120
+#: gui/widgets.py:2143
 msgid "Repeat with these settings"
 msgstr "[!! Ŕéƥéåţ ŵîţħ ţħéšé šéţţîńĝš ! ! !!]"
 
@@ -1738,7 +1758,7 @@ msgstr "[!! Ŕéţŕý ƒåîŀéð ! !!]"
 msgid "Retry suggested"
 msgstr "[!! Ŕéţŕý šûĝĝéšţéð ! !!]"
 
-#: gui/widgets.py:2094
+#: gui/widgets.py:2096
 msgid "Retry with suggested settings"
 msgstr "[!! Ŕéţŕý ŵîţħ šûĝĝéšţéð šéţţîńĝš ! ! !!]"
 
@@ -1746,7 +1766,7 @@ msgstr "[!! Ŕéţŕý ŵîţħ šûĝĝéšţéð šéţţîńĝš ! ! !!]"
 msgid "Reuse masks on unchanged frames"
 msgstr "[!! Ŕéûšé ḿåšķš öń ûńçħåńĝéð ƒŕåḿéš ! ! !!]"
 
-#: gui/widgets.py:2102
+#: gui/widgets.py:2104
 msgid "Reveal output folder"
 msgstr "[!! Ŕéṽéåŀ öûţƥûţ ƒöŀðéŕ ! !!]"
 
@@ -1766,7 +1786,7 @@ msgstr "[!! Ŕéṽîéŵ ƒîŕšţ ! !!]"
 msgid "Review mask"
 msgstr "[!! Ŕéṽîéŵ ḿåšķ ! !!]"
 
-#: gui/widgets.py:2085
+#: gui/widgets.py:2087
 msgid "Review subtitle mask"
 msgstr "[!! Ŕéṽîéŵ šûƀţîţŀé ḿåšķ ! !!]"
 
@@ -1778,7 +1798,7 @@ msgstr "[!! Ŕûń å ƀåţçħ ƒîŕšţ ţö ŕéƥéåţ îţš šéţţî�
 msgid "Run and monitor the batch"
 msgstr "[!! Ŕûń åńð ḿöńîţöŕ ţħé ƀåţçħ ! ! !!]"
 
-#: gui/widgets.py:2147
+#: gui/widgets.py:2170
 msgid "Run burned-in cleanup instead"
 msgstr "[!! Ŕûń ƀûŕńéð-îń çŀéåńûƥ îńšţéåð ! ! !!]"
 
@@ -2198,7 +2218,7 @@ msgstr "[!! Ţŕåńšŀåţöŕ çöḿḿåńð ! !!]"
 msgid "Try FFmpeg D3D12 acceleration (experimental)"
 msgstr "[!! Ţŕý ƑƑḿƥéĝ Ð3Ð12 åççéŀéŕåţîöń (éẋƥéŕîḿéńţåŀ) ! ! ! !!]"
 
-#: gui/queue_view.py:416
+#: gui/queue_view.py:417
 msgid "Try a shorter filename search, or clear the filter to see the full batch again."
 msgstr "[!! Ţŕý å šħöŕţéŕ ƒîŀéńåḿé šéåŕçħ, öŕ çŀéåŕ ţħé ƒîŀţéŕ ţö šéé ţħé ƒûŀŀ ƀåţçħ åĝåîń. ! ! ! ! ! ! !!]"
 
@@ -2398,11 +2418,11 @@ msgstr "[!! ðŕåĝ åńð ðŕöƥ åṽåîŀåƀŀé ! !!]"
 msgid "enabled"
 msgstr "[!! éńåƀŀéð ! !!]"
 
-#: gui/widgets.py:1852 gui/widgets.py:2327
+#: gui/widgets.py:1852 gui/widgets.py:2362
 msgid "focused"
 msgstr "[!! ƒöçûšéð ! !!]"
 
-#: gui/widgets.py:2326
+#: gui/widgets.py:2361
 msgid "not selected"
 msgstr "[!! ńöţ šéŀéçţéð ! !!]"
 
@@ -2410,7 +2430,7 @@ msgstr "[!! ńöţ šéŀéçţéð ! !!]"
 msgid "ready"
 msgstr "[!! ŕéåðý ! !!]"
 
-#: gui/widgets.py:2326
+#: gui/widgets.py:2361
 msgid "selected"
 msgstr "[!! šéŀéçţéð ! !!]"
 
@@ -2464,7 +2484,7 @@ msgstr[1] "[!! {n} åçţîṽé îţéḿš ŵîŀŀ ƀé çåńçéŀŀéð. !
 msgid "{n} done"
 msgstr "[!! {n} ðöńé ! !!]"
 
-#: gui/queue_view.py:285 gui/queue_view.py:407
+#: gui/queue_view.py:285 gui/queue_view.py:408
 msgid "{n} item"
 msgid_plural "{n} items"
 msgstr[0] "[!! {n} îţéḿ ! !!]"
@@ -2490,6 +2510,6 @@ msgstr "[!! {stage} ðöḿîńåţéð ţħîš ŕûń. Öƥéń ţħé ŕéƥ�
 msgid "{value} (range {low} to {high})"
 msgstr "[!! {value} (ŕåńĝé {low} ţö {high}) ! ! !!]"
 
-#: gui/queue_view.py:403
+#: gui/queue_view.py:404
 msgid "{visible} of {total} shown"
 msgstr "[!! {visible} öƒ {total} šħöŵń ! ! !!]"

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Tuple
 
@@ -267,6 +267,10 @@ class ProcessingConfig:
     mask_export_format: str = "ffv1"
     mask_import_path: str = ""
     mask_import_mode: str = "replace"
+    # RM-153: an approved matte frozen as this job's authoritative mask.
+    # When set and revalidated, OCR, tracking, and the mask refiners are
+    # skipped and the stored matte is painted verbatim.
+    frozen_matte: dict = field(default_factory=dict)
     export_srt: bool = False          # write an .srt sidecar of detected text
     # Apply a per-language OCR-fix replace list to exported SRT text. Opt-in;
     # merges a small built-in default set with a user-editable JSON file under
@@ -758,6 +762,11 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         getattr(config, "mask_import_path", ""), "", 2048)
     config.mask_import_mode = normalize_mask_import_mode(
         getattr(config, "mask_import_mode", "replace"))
+    from backend.frozen_matte import normalize_frozen_matte
+    # A record that cannot be read back is not a freeze: normalizing to {}
+    # makes the job re-derive its mask instead of trusting a fragment.
+    config.frozen_matte = normalize_frozen_matte(
+        getattr(config, "frozen_matte", None))
     config.export_srt = _coerce_bool(config.export_srt, False)
     config.ocr_fix_enable = _coerce_bool(
         getattr(config, "ocr_fix_enable", False), False)

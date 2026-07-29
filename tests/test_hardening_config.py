@@ -240,6 +240,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "tbe_scene_cut_split", "tbe_scene_cut_threshold",
         "auto_band", "export_srt", "export_mask_video",
         "mask_export_format", "mask_import_path", "mask_import_mode",
+        "frozen_matte",
         "adaptive_batch", "auto_exposure_threshold",
         "deinterlace", "deinterlace_auto", "keyframe_detection",
         "quality_report", "kalman_tracking", "kalman_iou_threshold",
