@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from backend.config import ProcessingConfig, normalize_processing_config
 from backend.subtitle_translation import (
@@ -306,6 +307,54 @@ class SubtitleTranslationProcessorTests(unittest.TestCase):
         self.assertTrue(valid, (reason, details))
         self.assertEqual(sidecar["translation"]["status"], "embedded")
         self.assertEqual(sidecar["translation"]["provider"], "provided")
+
+
+class TranslationProviderBoundsTests(unittest.TestCase):
+    def test_oversized_request_is_rejected_before_a_child_starts(self):
+        """RM-142: the provider request is bounded on the way in."""
+        from backend import subtitle_translation
+
+        started = []
+
+        def _fail(*args, **kwargs):
+            started.append(args)
+            raise AssertionError("no child should be started")
+
+        texts = ["y" * 20_000] * 1_000
+        with mock.patch.object(subtitle_translation, "run_process", _fail):
+            with self.assertRaisesRegex(
+                subtitle_translation.SubtitleTranslationError,
+                "provider input limit",
+            ):
+                subtitle_translation._command_provider(
+                    texts, "en", "es", {"command": ["noop"]})
+        self.assertEqual(started, [])
+
+    def test_provider_that_never_reads_stdin_times_out(self):
+        from backend import subtitle_translation
+
+        with self.assertRaises(Exception) as ctx:
+            subtitle_translation._command_provider(
+                ["hello"], "en", "es",
+                {
+                    "command": [
+                        sys.executable, "-c", "import time; time.sleep(30)"],
+                    "timeout": 5.0,
+                },
+            )
+        self.assertNotIsInstance(ctx.exception, AssertionError)
+
+
+class SupportBundlePolicyTests(unittest.TestCase):
+    def test_every_support_probe_uses_the_shared_subprocess_policy(self):
+        import inspect
+
+        from backend import support_bundle
+
+        source = inspect.getsource(support_bundle)
+        self.assertNotIn("subprocess as _sp", source)
+        self.assertNotIn("_sp.run(", source)
+        self.assertNotIn("subprocess.run(", source)
 
 
 class ProvidedTranslationEvidenceTests(unittest.TestCase):

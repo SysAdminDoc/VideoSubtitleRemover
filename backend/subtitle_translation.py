@@ -19,6 +19,7 @@ TRANSLATION_SCHEMA = "vsr.subtitle_translation.v1"
 TRANSLATION_REQUEST_SCHEMA = "vsr.translation_request.v1"
 TRANSLATION_RESPONSE_SCHEMA = "vsr.translation_response.v1"
 MAX_SRT_BYTES = 16 * 1024 * 1024
+MAX_REQUEST_BYTES = 16 * 1024 * 1024
 MAX_CUES = 100_000
 MAX_CUE_TEXT = 20_000
 
@@ -232,9 +233,18 @@ def _command_provider(
         timeout = float(options.get("timeout", 300.0) or 300.0)
     except (TypeError, ValueError):
         timeout = 300.0
+    payload = json.dumps(request, ensure_ascii=False)
+    # RM-142: the request is bounded on the way in, not only on the way out.
+    # A provider that never reads stdin is handled by run_process, but an
+    # oversized request should be rejected before a child is even started.
+    if len(payload.encode("utf-8")) > MAX_REQUEST_BYTES:
+        raise SubtitleTranslationError(
+            "translation request exceeds the "
+            f"{MAX_REQUEST_BYTES // (1024 * 1024)} MiB provider input limit"
+        )
     result = run_process(
         _resolved_command(options.get("command")),
-        input=json.dumps(request, ensure_ascii=False),
+        input=payload,
         capture_output=True,
         text=True,
         timeout=max(5.0, min(3600.0, timeout)),

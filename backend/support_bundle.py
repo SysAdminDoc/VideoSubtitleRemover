@@ -436,14 +436,15 @@ def run_self_test() -> dict:
     def _check_ffmpeg_encoder(codec_name, encoder_name):
         def _fn():
             import shutil as _sh
-            import subprocess as _sp
             if _sh.which("ffmpeg") is None:
                 return False, "ffmpeg not on PATH"
             try:
-                result = _sp.run(
+                # RM-142: every probe goes through the shared bounded policy so
+                # it stays hidden on Windows, capped, and cancellable.
+                result = run_process(
                     ["ffmpeg", "-hide_banner", "-encoders"],
-                    capture_output=True, text=True, timeout=10)
-                if encoder_name in result.stdout:
+                    capture_output=True, text=True, timeout=10.0)
+                if encoder_name in (result.stdout or ""):
                     return True, f"{encoder_name} available"
                 return False, f"{encoder_name} not found in ffmpeg"
             except Exception as e:

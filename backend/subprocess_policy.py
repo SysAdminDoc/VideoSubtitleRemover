@@ -132,6 +132,45 @@ class _BoundedCollector:
         return self._empty.join(self._chunks)
 
 
+class _StdinWriter:
+    """Feed a child's stdin from a worker thread.
+
+    RM-142: writing a large payload inline blocks the caller before the
+    deadline/cancel loop starts, so a child that never reads stdin could hang
+    ``run_process`` forever despite its timeout. The write happens off-thread
+    instead; terminating the child breaks the pipe and releases it.
+    """
+
+    def __init__(self, stream: Any, payload: Union[str, bytes]) -> None:
+        self._stream = stream
+        self._payload = payload
+        self.error: Optional[BaseException] = None
+        self._thread = threading.Thread(
+            target=self._write,
+            name="vsr-subprocess-stdin",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self, timeout: float = 5.0) -> bool:
+        self._thread.join(timeout=max(0.0, float(timeout)))
+        return not self._thread.is_alive()
+
+    def _write(self) -> None:
+        try:
+            self._stream.write(self._payload)
+            self._stream.flush()
+        except BaseException as exc:  # child exited early or was terminated
+            self.error = exc
+        finally:
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+
+
 def run_process(
     command: Command,
     *,
@@ -180,13 +219,11 @@ def run_process(
     if on_process is not None:
         on_process(proc)
     started = time.monotonic()
+    stdin_writer: Optional[_StdinWriter] = None
+    if input is not None and proc.stdin is not None:
+        stdin_writer = _StdinWriter(proc.stdin, input)
+        stdin_writer.start()
     try:
-        if input is not None and proc.stdin is not None:
-            try:
-                proc.stdin.write(input)
-                proc.stdin.flush()
-            finally:
-                proc.stdin.close()
         while True:
             if cancel_check is not None and cancel_check():
                 terminate_process(proc, timeout=2.0)
@@ -203,6 +240,15 @@ def run_process(
     finally:
         if on_process is not None:
             on_process(None)
+        if stdin_writer is not None and not stdin_writer.join(timeout=5.0):
+            # The child is gone or ignoring stdin; break the pipe so the
+            # writer thread cannot outlive this call.
+            terminate_process(proc, timeout=2.0)
+            try:
+                proc.stdin.close()  # type: ignore[union-attr]
+            except Exception:
+                pass
+            stdin_writer.join(timeout=5.0)
         for collector in (stdout_collector, stderr_collector):
             if collector is not None:
                 collector.join()

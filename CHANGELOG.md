@@ -35,6 +35,28 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Subprocess stdin is now under timeout and cancellation control.**
+  `run_process` wrote the whole input payload inline before entering its
+  deadline loop, so a child that never read stdin blocked the caller forever
+  once the payload exceeded the OS pipe buffer -- defeating the shared bounded
+  process contract. The write now runs on a worker thread; the deadline and
+  cancel checks start immediately, terminating the child breaks the pipe, and
+  the writer thread is always joined so no thread or process is left behind.
+  The local translation provider rejects an oversized request before starting a
+  child, and the support-bundle encoder probes use the shared policy instead of
+  a raw `subprocess.run` (which also stops a console window flashing on
+  Windows).
+- **Intermediate and frame-sequence writer failures now fail closed.** A
+  timed-out or nonzero-exit FFV1 intermediate encode was logged as a warning and
+  a failed `cv2.imwrite` was ignored entirely, so a truncated intermediate or a
+  frame that never reached disk could still advance the resume checkpoint and be
+  promoted as a finished output. Both paths now raise a typed
+  `backend.io.MediaWriteError`: `_LosslessIntermediateWriter.release()` reports
+  `intermediate_writer_timeout` / `intermediate_writer_failed` (with the ffmpeg
+  stderr tail) and clears its handles so a cleanup release stays a no-op, and
+  `_FrameSequenceWriter.write()` reports `frame_write_failed` before advancing
+  the frame index. `process_video` handles the new error explicitly, so the
+  partial output is never promoted and the job is reported as failed.
 - **The NVIDIA dependency profile is now installable.** The reviewed NVIDIA
   lock pinned `onnxruntime-gpu==1.27.0` while setup installs
   `onnxruntime-gpu>=1.26.0,<1.27.0`, so the profile advertised a CUDA 12
@@ -50,18 +72,6 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   concern. `requirements.txt` and every reviewed profile lock now require a
   fixed build, an older installed protobuf is a blocking release advisory, and
   the dependency-profile status reports it as an error.
-
-- **Intermediate and frame-sequence writer failures now fail closed.** A
-  timed-out or nonzero-exit FFV1 intermediate encode was logged as a warning and
-  a failed `cv2.imwrite` was ignored entirely, so a truncated intermediate or a
-  frame that never reached disk could still advance the resume checkpoint and be
-  promoted as a finished output. Both paths now raise a typed
-  `backend.io.MediaWriteError`: `_LosslessIntermediateWriter.release()` reports
-  `intermediate_writer_timeout` / `intermediate_writer_failed` (with the ffmpeg
-  stderr tail) and clears its handles so a cleanup release stays a no-op, and
-  `_FrameSequenceWriter.write()` reports `frame_write_failed` before advancing
-  the frame index. `process_video` handles the new error explicitly, so the
-  partial output is never promoted and the job is reported as failed.
 
 ## [3.29.0] - 2026-07-20
 

@@ -60,19 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-142 Put subprocess stdin under timeout and cancellation control
-  Why: `run_process` can block forever while writing input before its deadline
-    loop starts, defeating the shared bounded-process contract.
-  Evidence: `backend/subprocess_policy.py:183-202`;
-    `backend/subtitle_translation.py:21,235-243` permits a 16 MiB payload;
-    `backend/support_bundle.py:436-450` bypasses the shared policy.
-  Touches: `backend/subprocess_policy.py`; `backend/subtitle_translation.py`;
-    `backend/support_bundle.py`; subprocess/translation tests.
-  Acceptance: a child that never reads stdin times out or cancels within the
-    requested bound, is terminated without zombie threads/processes, and captured
-    output remains capped; all support-bundle probes use the shared policy.
-  Complexity: M
-
 - [ ] P1 -- RM-143 Reject unknown GUI, settings, and preset inpaint modes
   Why: an invalid value currently becomes STTN while import/apply can report
     success, so user intent and the effective algorithm diverge silently.
