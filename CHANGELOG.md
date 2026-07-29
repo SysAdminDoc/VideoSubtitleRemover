@@ -35,6 +35,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **User-state writes are observable and downgrade-safe.** Settings, queue, and
+  preset saves swallowed their failures, so a full disk or a locked profile
+  folder looked exactly like a successful save. Each now returns a typed
+  `PersistenceResult` with actionable retry guidance, and a registered observer
+  surfaces failures in the activity UI as a warning toast; `save_user_preset`,
+  `delete_user_preset`, and `import_preset` report failure instead of claiming
+  success. The corrupt-settings notice only claims a backup exists once the
+  copy actually succeeded, and says so plainly when it did not. A settings file
+  written by a newer build now opens in explicit read-only compatibility mode:
+  it is never overwritten (so fields this version does not understand cannot be
+  erased), and a new **Export settings** action writes a deliberate
+  current-format copy instead.
 - **Unknown inpaint modes are rejected instead of becoming STTN.** An
   unrecognised value in `settings.json`, a preset, or an imported preset used
   to fall through to STTN while the import or apply still reported success, so

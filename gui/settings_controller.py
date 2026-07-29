@@ -19,6 +19,7 @@ from gui.config import (
     apply_preset,
     consume_preset_import_notice,
     export_preset,
+    export_settings_copy,
     import_preset,
     list_presets,
     save_settings,
@@ -290,6 +291,36 @@ class AdvancedSettingsControllerMixin:
         self._apply_current_settings_to_idle_items()
         save_settings(self.config)
         self._update_status(tr("Cleared imported matte"), "info")
+
+    def _export_settings_copy_dialog(self):
+        """Write a deliberate current-format settings copy.
+
+        RM-144: when settings.json comes from a newer build it is opened
+        read-only so its unknown keys are never erased. This is the explicit
+        way out -- the user chooses where a downgrade-safe copy is written.
+        """
+        try:
+            from tkinter import filedialog
+            path = filedialog.asksaveasfilename(
+                parent=self.root,
+                title=tr("Export settings copy"),
+                defaultextension=".json",
+                filetypes=[("VSR settings", "*.json"), ("All files", "*.*")],
+                initialfile="settings.json",
+            )
+            if not path:
+                return
+            result = export_settings_copy(self.config, path)
+            if result:
+                self._update_status(
+                    tr("Exported settings to {name}").format(
+                        name=Path(path).name),
+                    "success",
+                )
+            else:
+                self._update_status(result.message(), "error")
+        except Exception as exc:
+            self._update_status(f"Export failed: {exc}", "error")
 
     def _export_preset_dialog(self):
         """Export the currently-selected preset to a shareable JSON file."""

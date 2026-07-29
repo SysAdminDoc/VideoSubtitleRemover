@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from backend.i18n import normalise_locale_tag, tr
 from backend.config_schema import (
@@ -37,6 +37,78 @@ _preset_import_notice: Optional[str] = None
 def _set_settings_load_notice(message: str):
     global _settings_load_notice
     _settings_load_notice = message
+
+
+# -- Persistence outcomes ---------------------------------------------------
+
+
+PERSIST_SETTINGS = "settings"
+PERSIST_QUEUE = "queue"
+PERSIST_PRESETS = "presets"
+
+_PERSIST_LABELS = {
+    PERSIST_SETTINGS: "settings",
+    PERSIST_QUEUE: "queue state",
+    PERSIST_PRESETS: "presets",
+}
+
+
+@dataclass(frozen=True)
+class PersistenceResult:
+    """Typed outcome of a user-state write.
+
+    RM-144: settings, queue, and preset writes used to be swallowed, so a full
+    disk or a locked profile directory looked identical to a successful save.
+    Every save now reports what happened with actionable retry guidance.
+    """
+
+    ok: bool
+    kind: str
+    path: str = ""
+    error: str = ""
+    read_only: bool = False
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def message(self) -> str:
+        label = _PERSIST_LABELS.get(self.kind, self.kind)
+        if self.ok:
+            return f"Saved {label}."
+        if self.read_only:
+            return (
+                f"Your {label} file was written by a newer version, so it is "
+                "open read-only and was not overwritten. Use Export a copy to "
+                "save a file this version can write."
+            )
+        detail = f" ({self.error})" if self.error else ""
+        return (
+            f"Could not save {label}{detail}. Check free disk space and that "
+            f"{self.path or 'the profile folder'} is writable, then try again."
+        )
+
+
+_persistence_observer: Optional[Callable[["PersistenceResult"], None]] = None
+
+
+def set_persistence_observer(
+    callback: Optional[Callable[["PersistenceResult"], None]],
+) -> None:
+    """Register a UI sink for failed user-state writes."""
+    global _persistence_observer
+    _persistence_observer = callback
+
+
+def _report_persistence(result: "PersistenceResult") -> "PersistenceResult":
+    if result.ok:
+        return result
+    observer = _persistence_observer
+    if observer is not None:
+        try:
+            observer(result)
+        except Exception:
+            logger.warning("Persistence observer raised", exc_info=True)
+    return result
 
 
 def consume_settings_load_notice() -> Optional[str]:
@@ -899,14 +971,38 @@ def _write_json_atomic(path: Path, payload: dict):
                 pass
 
 
+_settings_read_only_version: Optional[int] = None
+
+
+def settings_read_only_version() -> Optional[int]:
+    """Schema version that put settings into read-only compatibility mode."""
+    return _settings_read_only_version
+
+
+def allow_settings_overwrite() -> None:
+    """Deliberately leave read-only mode (the user chose to overwrite)."""
+    global _settings_read_only_version
+    _settings_read_only_version = None
+
+
 def _migrate_settings(data: dict) -> dict:
+    global _settings_read_only_version
     migrated = migrate_gui_settings(data)
     version = migrated.get("vsr_settings_format")
     if isinstance(data, dict) and isinstance(version, int) and version > VSR_SETTINGS_FORMAT:
+        # RM-144: this build cannot represent the newer schema's fields, so
+        # writing it back would silently erase them. Open read-only instead.
+        _settings_read_only_version = version
         logger.info(
             f"settings.json reports vsr_settings_format={version} "
             f"(this build understands up to {VSR_SETTINGS_FORMAT}); "
-            f"unknown keys will be ignored."
+            f"opening read-only so newer keys are not erased."
+        )
+        _set_settings_load_notice(
+            f"settings.json was written by a newer version (format {version}; "
+            f"this build supports {VSR_SETTINGS_FORMAT}). It is open read-only "
+            "and will not be overwritten. Use Export settings copy to save a "
+            "file this version can write."
         )
     return migrated
 
@@ -933,17 +1029,30 @@ def _settings_path() -> Path:
     return Path(SETTINGS_FILE)
 
 
+def _corrupt_settings_notice(settings_file: Path) -> str:
+    # RM-144: only claim a backup exists once the copy actually succeeded.
+    if _backup_corrupt_settings(settings_file):
+        return (
+            "Settings were corrupted and reset to defaults."
+            " A backup was saved as settings.json.bak."
+        )
+    return (
+        "Settings were corrupted and reset to defaults. The backup copy could"
+        " not be written, so the original file was left in place --"
+        f" copy {settings_file} aside before changing settings if you need it."
+    )
+
+
 def load_settings() -> ProcessingConfig:
+    global _settings_read_only_version
+    _settings_read_only_version = None
     settings_file = _settings_path()
     try:
         if settings_file.exists():
             data = _read_json_object(settings_file, "settings")
             if data is None:
-                _backup_corrupt_settings(settings_file)
                 _set_settings_load_notice(
-                    "Settings were corrupted and reset to defaults."
-                    " A backup was saved as settings.json.bak."
-                )
+                    _corrupt_settings_notice(settings_file))
                 return ProcessingConfig()
             data = _migrate_settings(data)
             if "mode" in data and _notice_for_inpaint_mode(data.get("mode")):
@@ -954,32 +1063,70 @@ def load_settings() -> ProcessingConfig:
             return ProcessingConfig.from_dict(data)
     except Exception as e:
         logger.warning(f"Could not load settings: {e}")
-        _backup_corrupt_settings(settings_file)
-        _set_settings_load_notice(
-            "Settings were corrupted and reset to defaults."
-            " A backup was saved as settings.json.bak."
-        )
+        _set_settings_load_notice(_corrupt_settings_notice(settings_file))
     return ProcessingConfig()
 
 
-def _backup_corrupt_settings(settings_file: Path):
+def _backup_corrupt_settings(settings_file: Path) -> bool:
+    """Copy an unreadable settings file aside. Returns True only on success."""
     try:
+        if not settings_file.exists():
+            return False
         bak = settings_file.with_suffix(".json.bak")
-        if settings_file.exists():
-            import shutil
-            shutil.copy2(str(settings_file), str(bak))
-            logger.info(f"Corrupt settings backed up to {bak}")
+        import shutil
+        shutil.copy2(str(settings_file), str(bak))
+        logger.info(f"Corrupt settings backed up to {bak}")
+        return bak.exists()
     except Exception as exc:
-        logger.debug(f"Could not back up corrupt settings: {exc}")
+        logger.warning(f"Could not back up corrupt settings: {exc}")
+        return False
 
 
-def save_settings(config: ProcessingConfig):
+def save_settings(config: ProcessingConfig) -> PersistenceResult:
     settings_file = _settings_path()
+    if _settings_read_only_version is not None:
+        return _report_persistence(PersistenceResult(
+            ok=False,
+            kind=PERSIST_SETTINGS,
+            path=str(settings_file),
+            error=(
+                f"file uses settings format {_settings_read_only_version}, "
+                f"newer than {VSR_SETTINGS_FORMAT}"
+            ),
+            read_only=True,
+        ))
     try:
         _write_json_atomic(settings_file, config.normalized().to_dict())
         logger.info(f"Settings saved to {settings_file}")
     except Exception as e:
         logger.warning(f"Could not save settings: {e}")
+        return _report_persistence(PersistenceResult(
+            ok=False,
+            kind=PERSIST_SETTINGS,
+            path=str(settings_file),
+            error=str(e),
+        ))
+    return PersistenceResult(
+        ok=True, kind=PERSIST_SETTINGS, path=str(settings_file))
+
+
+def export_settings_copy(
+    config: ProcessingConfig,
+    path: str | Path,
+) -> PersistenceResult:
+    """Write a deliberate current-format copy, even in read-only mode."""
+    target = Path(path)
+    try:
+        _write_json_atomic(target, config.normalized().to_dict())
+    except Exception as exc:
+        return _report_persistence(PersistenceResult(
+            ok=False,
+            kind=PERSIST_SETTINGS,
+            path=str(target),
+            error=str(exc),
+        ))
+    return PersistenceResult(
+        ok=True, kind=PERSIST_SETTINGS, path=str(target))
 
 
 # -- Queue state persistence ------------------------------------------------
@@ -1066,13 +1213,22 @@ def save_queue_state(queue_items):
             if not records:
                 if QUEUE_STATE_FILE.exists():
                     QUEUE_STATE_FILE.unlink()
-                return
+                return PersistenceResult(
+                    ok=True, kind=PERSIST_QUEUE, path=str(QUEUE_STATE_FILE))
             _write_json_atomic(QUEUE_STATE_FILE, {
                 "schema": QUEUE_STATE_SCHEMA,
                 "items": records,
             })
     except Exception as exc:
-        logger.debug(f"Queue state save failed: {exc}")
+        logger.warning(f"Queue state save failed: {exc}", exc_info=True)
+        return _report_persistence(PersistenceResult(
+            ok=False,
+            kind=PERSIST_QUEUE,
+            path=str(QUEUE_STATE_FILE),
+            error=str(exc),
+        ))
+    return PersistenceResult(
+        ok=True, kind=PERSIST_QUEUE, path=str(QUEUE_STATE_FILE))
 
 
 def _quarantine_queue_state(reason: str) -> Optional[Path]:
@@ -1248,11 +1404,19 @@ def _load_user_presets() -> dict:
     return {}
 
 
-def _save_user_presets(presets: dict):
+def _save_user_presets(presets: dict) -> PersistenceResult:
     try:
         _write_json_atomic(PRESETS_FILE, presets)
     except Exception as exc:
         logger.warning(f"Could not save user presets: {exc}")
+        return _report_persistence(PersistenceResult(
+            ok=False,
+            kind=PERSIST_PRESETS,
+            path=str(PRESETS_FILE),
+            error=str(exc),
+        ))
+    return PersistenceResult(
+        ok=True, kind=PERSIST_PRESETS, path=str(PRESETS_FILE))
 
 
 def _format_rejected_preset_fields(fields: List[str]) -> str:
@@ -1360,8 +1524,8 @@ def save_user_preset(name: str, description: str,
             snap[k] = v
     user = _load_user_presets()
     user[name] = {"description": description, "fields": snap}
-    _save_user_presets(user)
-    return True
+    # RM-144: a preset that never reached disk is not a saved preset.
+    return bool(_save_user_presets(user))
 
 
 def delete_user_preset(name: str) -> bool:
@@ -1371,8 +1535,7 @@ def delete_user_preset(name: str) -> bool:
     if name not in user:
         return False
     del user[name]
-    _save_user_presets(user)
-    return True
+    return bool(_save_user_presets(user))
 
 
 def export_preset(name: str, path: str) -> bool:
@@ -1437,5 +1600,8 @@ def import_preset(path: str) -> Optional[str]:
         name = f"{name} (imported)"
     user = _load_user_presets()
     user[name] = {"description": description, "fields": fields}
-    _save_user_presets(user)
+    saved = _save_user_presets(user)
+    if not saved:
+        _set_preset_import_notice(saved.message())
+        return None
     return name

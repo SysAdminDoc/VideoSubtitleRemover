@@ -35,6 +35,7 @@ from gui.config import (
     _coerce_int, _coerce_region_span_list,
     consume_settings_load_notice, load_settings, save_settings,
     save_queue_state, load_queue_state, clear_queue_state,
+    set_persistence_observer, settings_read_only_version,
 )
 from gui.utils import (
     get_app_dir, detect_gpu, is_video_file, is_image_file,
@@ -282,6 +283,9 @@ class VideoSubtitleRemoverApp(
         self._update_output_label()
         self._update_region_label_display()
         self._update_status("Detecting hardware...", "info")
+        # RM-144: surface every failed user-state write in the activity UI
+        # instead of swallowing it.
+        set_persistence_observer(self._on_persistence_failure)
         self._surface_settings_load_notice()
         self._refresh_action_states()
         self.root.after(0, lambda: self._apply_responsive_layout(self.root.winfo_width()))
@@ -411,6 +415,7 @@ class VideoSubtitleRemoverApp(
         self._ui_resources_released = True
         self._shutdown_started = True
         self._preview_request_id = getattr(self, "_preview_request_id", 0) + 1
+        set_persistence_observer(None)
 
         handler = getattr(self, "_log_handler", None)
         if handler is not None:
@@ -565,6 +570,22 @@ class VideoSubtitleRemoverApp(
                 self.config.gpu_id = gpu['index']
                 self.config.use_gpu = True
                 break
+
+    def _on_persistence_failure(self, result):
+        """Report a failed settings/queue/preset write with retry guidance."""
+        message = result.message()
+        logger.warning(message)
+        if getattr(self, "_persistence_notice", None) == message:
+            # Shutdown saves several files in a row; do not stack duplicates.
+            return
+        self._persistence_notice = message
+        try:
+            self._update_status(message, "warning", toast=True)
+        except Exception:
+            pass
+
+    def _settings_are_read_only(self) -> bool:
+        return settings_read_only_version() is not None
 
     def _surface_settings_load_notice(self):
         notice = getattr(self, "_settings_load_notice", None)

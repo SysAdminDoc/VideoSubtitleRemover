@@ -496,7 +496,12 @@ class UnknownInpaintModeRejectionTests(unittest.TestCase):
             }), encoding="utf-8")
             with mock.patch.object(gcfg, "_load_user_presets", return_value={}):
                 with mock.patch.object(
-                    gcfg, "_save_user_presets", side_effect=stored.update
+                    gcfg, "_save_user_presets",
+                    side_effect=lambda payload: (
+                        stored.update(payload)
+                        or gcfg.PersistenceResult(
+                            ok=True, kind=gcfg.PERSIST_PRESETS)
+                    ),
                 ):
                     self.assertEqual(gcfg.import_preset(str(path)), "good")
         self.assertIn("good", stored)

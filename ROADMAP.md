@@ -60,20 +60,6 @@ required to implement or verify), and sit on opt-in / edge paths.
 
 ### P1
 
-- [ ] P1 -- RM-144 Make user-state persistence observable and downgrade-safe
-  Why: settings, queue, and preset write failures are swallowed, and opening then
-    closing a future settings schema can erase fields the current version ignores.
-  Evidence: `gui/config.py:861-870,921-938,944-1031,1207-1221`; Subtitle Edit's
-    concurrent autosave guard (PR #12976).
-  Touches: `gui/config.py`; app shutdown/startup and preset callers; persistence
-    result types; GUI/config tests.
-  Acceptance: every save returns or raises a typed outcome surfaced in the
-    activity UI with retry guidance; corrupt-backup success is reported only
-    after the copy succeeds; a future schema opens in explicit read-only
-    compatibility mode and the original file is not overwritten unless the user
-    deliberately exports a current-format copy.
-  Complexity: M
-
 - [ ] P1 -- RM-145 Make opt-in crash-report privacy fail closed
   Why: a scrubber exception returns the original event, and path scrubbing can
     retain the processed filename despite the documented privacy contract.

@@ -454,6 +454,16 @@ class LayoutBuildMixin:
         import_preset_btn.pack(side="left", padx=(Theme.S_XS, 0))
         Tooltip(import_preset_btn, tr("Load a preset JSON file into the user library."))
 
+        # RM-144: the explicit way out of read-only settings compatibility mode.
+        export_settings_btn = ModernButton(
+            preset_actions, text=tr("Export settings"),
+            command=self._export_settings_copy_dialog,
+            size="sm", style="ghost",
+        )
+        export_settings_btn.pack(side="left", padx=(Theme.S_XS, 0))
+        Tooltip(export_settings_btn, tr(
+            "Write a copy of the current settings this version can open."))
+
         # Algorithm -- segmented picker replaces the Combobox for speed + clarity
         self._legacy_mode_label = tk.Label(
             profile_panel, text=tr("Algorithm"), font=f(Theme.F_BODY_SM),
