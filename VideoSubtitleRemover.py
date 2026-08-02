@@ -12,6 +12,21 @@ a hardcoded number so there is a single source of truth.
 import multiprocessing
 multiprocessing.freeze_support()
 
+import sys as _sys_early
+
+# RM-155: a frozen build re-executes this same exe as its job worker. The
+# worker must stay lean and isolated: short-circuit BEFORE the module-level
+# logging setup (which would open the parent GUI's rotating log file from a
+# second process and break rotation on Windows) and before the `from gui
+# import ...` block (which drags tkinter, PIL, and the whole widget tree
+# into a process that only runs backend code). `main()` keeps its own
+# `--job-worker` branch as a belt-and-braces fallback.
+if __name__ == "__main__" and "--job-worker" in _sys_early.argv[1:]:
+    from backend.job_worker import main as _job_worker_main
+
+    raise SystemExit(_job_worker_main(
+        [arg for arg in _sys_early.argv[1:] if arg != "--job-worker"]))
+
 import json
 import logging
 import logging.handlers

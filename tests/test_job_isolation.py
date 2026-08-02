@@ -133,6 +133,36 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request["config"]["device"], "cpu")
         self.assertFalse(request["is_image"])
 
+    def test_a_request_carries_auto_band(self):
+        # Auto-band has to cross the process boundary explicitly, or an
+        # isolated job silently runs unpinned full-frame detection.
+        self.assertFalse(build_request(
+            input_path="a.mp4", output_path="b.mp4",
+            config_payload={}, is_image=False)["auto_band"])
+        self.assertTrue(build_request(
+            input_path="a.mp4", output_path="b.mp4",
+            config_payload={}, is_image=False, auto_band=True)["auto_band"])
+
+    def test_wiring_a_preview_callback_provisions_a_preview_dir(self):
+        # A caller that asks for previews must get them without having to
+        # invent a scratch directory of its own.
+        request = build_request(
+            input_path="a.mp4", output_path="b.mp4",
+            config_payload={}, is_image=False,
+        )
+        silent = JobSupervisor(request)
+        try:
+            self.assertFalse(silent.request.get("preview_dir"))
+        finally:
+            silent._cleanup_scratch()
+        wired = JobSupervisor(request, on_preview=lambda p, i, t: None)
+        try:
+            preview_dir = wired.request.get("preview_dir")
+            self.assertTrue(preview_dir)
+            self.assertIn(str(wired._scratch), preview_dir)
+        finally:
+            wired._cleanup_scratch()
+
     def test_the_worker_command_targets_the_module_from_source(self):
         command = worker_command("request.json")
         self.assertIn("-m", command)
@@ -517,6 +547,88 @@ class ControllerIntegrationTests(unittest.TestCase):
         self.assertFalse(ProcessingConfig().normalized().job_isolation)
 
 
+class WatchdogTests(unittest.TestCase):
+    """The control watchdog must neither spin forever nor wait forever."""
+
+    def _host(self):
+        import threading
+
+        from gui.config import ProcessingConfig, ProcessingStatus, QueueItem
+        from gui.processing_controller import ProcessingControllerMixin
+
+        item = QueueItem(
+            id="job-w", file_path="clip.mp4", output_path="clip.out.mp4",
+            config=ProcessingConfig(job_isolation=True),
+            status=ProcessingStatus.PROCESSING,
+        )
+
+        class Host(ProcessingControllerMixin):
+            def __init__(self):
+                self.cancel_event = threading.Event()
+                self.pause_event = threading.Event()
+
+        return Host(), item
+
+    def test_a_failed_spawn_does_not_leave_the_watchdog_spinning(self):
+        # When the worker cannot be spawned, supervisor.pid stays None and
+        # the item goes terminal; the watchdog must notice and stand down
+        # instead of sleeping in a loop for the life of the process.
+        import threading
+
+        from gui.config import ProcessingStatus
+
+        host, item = self._host()
+        item.status = ProcessingStatus.ERROR
+
+        class NeverSpawned:
+            pid = None
+
+        thread = threading.Thread(
+            target=host._watch_isolated_controls,
+            args=(NeverSpawned(), item), daemon=True)
+        thread.start()
+        thread.join(timeout=5.0)
+        self.assertFalse(thread.is_alive(), "watchdog kept spinning")
+
+    def test_a_child_that_ignores_cancel_is_terminated(self):
+        # A child wedged in native code never reads the control file; the
+        # watchdog must escalate to terminate() after the grace period.
+        import threading
+
+        host, item = self._host()
+        host._ISOLATED_CANCEL_GRACE_SECONDS = 0.2
+        item.cancel_requested = True
+        calls = []
+
+        class Wedged:
+            pid = 4242
+
+            def cancel(self):
+                calls.append("cancel")
+                return True
+
+            def pause(self):
+                calls.append("pause")
+                return True
+
+            def resume(self):
+                calls.append("resume")
+                return True
+
+            def terminate(self):
+                calls.append("terminate")
+
+        thread = threading.Thread(
+            target=host._watch_isolated_controls,
+            args=(Wedged(), item), daemon=True)
+        thread.start()
+        thread.join(timeout=10.0)
+        self.assertFalse(thread.is_alive(), "watchdog never escalated")
+        self.assertIn("cancel", calls)
+        self.assertIn("terminate", calls)
+        self.assertEqual(calls.index("cancel"), 0)
+
+
 class FrozenEntryPointTests(unittest.TestCase):
     def test_the_frozen_entry_point_routes_the_job_worker_marker(self):
         # A frozen build cannot `-m backend.job_worker`, so the exe has to
@@ -528,6 +640,27 @@ class FrozenEntryPointTests(unittest.TestCase):
         smoke = source.index("--frozen-import-smoke")
         # It must be handled before any DPI/Tk/settings work.
         self.assertLess(marker, smoke)
+
+    def test_the_marker_short_circuits_before_logging_and_gui_imports(self):
+        # The worker child must not open the parent's rotating log file
+        # (two processes rotating one file breaks on Windows) or import
+        # the widget tree. The short-circuit has to sit above both.
+        source = (_ROOT / "VideoSubtitleRemover.py").read_text(
+            encoding="utf-8")
+        marker = source.index("--job-worker")
+        self.assertLess(marker, source.index("logging.basicConfig"))
+        self.assertLess(marker, source.index("from gui import"))
+
+    def test_the_entry_script_answers_the_worker_marker_without_tk(self):
+        # End to end: the exe path a frozen supervisor uses must reach the
+        # worker's argument parser without touching logging or the GUI.
+        result = subprocess.run(
+            [sys.executable, str(_ROOT / "VideoSubtitleRemover.py"),
+             "--job-worker", "--protocol-version"],
+            cwd=_ROOT, capture_output=True, text=True, timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), str(JOB_PROTOCOL_VERSION))
 
     def test_the_supervisor_targets_the_marker_when_frozen(self):
         import gui.job_supervisor as supervisor_module

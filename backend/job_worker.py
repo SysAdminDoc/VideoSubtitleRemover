@@ -315,6 +315,34 @@ def run_job(request: dict, *, writer=None, control=None) -> int:
 
     events.emit(EVENT_READY, version=JOB_PROTOCOL_VERSION, pid=os.getpid())
 
+    # Auto subtitle-band detection runs here, in the child, so the probe's
+    # OCR model never loads into the GUI process the isolation exists to
+    # protect. `_apply_auto_band_override` only probes when no explicit
+    # region is configured, matching the in-process path.
+    if bool(request.get("auto_band")) and not bool(request.get("is_image")):
+        from backend.config import _apply_auto_band_override
+
+        try:
+            band = _apply_auto_band_override(
+                remover,
+                input_path,
+                auto_band=True,
+                base_subtitle_area=config.subtitle_area,
+                base_subtitle_areas=config.subtitle_areas,
+                base_subtitle_region_spans=getattr(
+                    config, "subtitle_region_spans", None),
+                base_subtitle_region_keyframes=getattr(
+                    config, "subtitle_region_keyframes", None),
+            )
+            if band:
+                events.emit(
+                    EVENT_PROGRESS, progress=0.0,
+                    message=f"Auto-detected subtitle band: {band}")
+        except Exception as exc:
+            events.emit(
+                EVENT_WARNING,
+                message=f"Subtitle band detection failed: {exc}")
+
     status = "error"
     error = ""
     reason = ""

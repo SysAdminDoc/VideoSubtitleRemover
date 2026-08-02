@@ -94,6 +94,7 @@ def build_request(
     resume_checkpoint: bool = True,
     selective_rerun_from: str = "",
     selective_rerun_ranges: Any = None,
+    auto_band: bool = False,
 ) -> dict:
     return {
         "schema": JOB_PROTOCOL_SCHEMA,
@@ -106,6 +107,7 @@ def build_request(
         "resume_checkpoint": bool(resume_checkpoint),
         "selective_rerun_from": str(selective_rerun_from or ""),
         "selective_rerun_ranges": selective_rerun_ranges or None,
+        "auto_band": bool(auto_band),
         "config": dict(config_payload),
     }
 
@@ -151,6 +153,11 @@ class JobSupervisor:
         self.request.setdefault("control_path", str(self._control_path))
         if not self.request.get("control_path"):
             self.request["control_path"] = str(self._control_path)
+        # A caller that wires on_preview wants frames: give the child a
+        # place to write them without every call site having to invent
+        # its own scratch directory.
+        if self.on_preview is not None and not self.request.get("preview_dir"):
+            self.request["preview_dir"] = str(self._scratch / "preview")
 
     # -- lifecycle ---------------------------------------------------
 

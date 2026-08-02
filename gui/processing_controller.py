@@ -503,6 +503,14 @@ class ProcessingControllerMixin:
         from gui.job_supervisor import JobSupervisor, build_request
 
         backend_config = gui_to_backend_config(item.config)
+        # Selective rerun (mask-correction retry) and auto-band both have
+        # to cross the process boundary explicitly, or an isolated job
+        # silently downgrades to a full re-detect of the whole file.
+        correction_retry = (
+            item.correction_retry
+            if isinstance(getattr(item, "correction_retry", None), dict)
+            else {}
+        )
         request = build_request(
             input_path=item.file_path,
             output_path=item.output_path,
@@ -510,6 +518,10 @@ class ProcessingControllerMixin:
             is_image=is_image_file(item.file_path),
             preview_dir="",
             resume_checkpoint=True,
+            selective_rerun_from=str(
+                correction_retry.get("source_output") or ""),
+            selective_rerun_ranges=correction_retry.get("ranges") or None,
+            auto_band=bool(getattr(item.config, "auto_band", False)),
         )
 
         def on_progress(progress: float, message: str) -> None:
@@ -533,22 +545,116 @@ class ProcessingControllerMixin:
             except (RuntimeError, tk.TclError):
                 pass
 
-        supervisor = JobSupervisor(
-            request, on_progress=on_progress, on_warning=on_warning)
-        self._active_supervisor = supervisor
-        # Cancel and pause are polled by the child, so the existing GUI
-        # events keep working: publish the state, then let it observe it.
-        watchdog = threading.Thread(
-            target=self._watch_isolated_controls,
-            args=(supervisor, item),
-            name="vsr-job-controls",
-            daemon=True,
-        )
-        watchdog.start()
-        try:
-            outcome = supervisor.run()
-        finally:
-            self._active_supervisor = None
+        # Live preview parity with the in-process path: the child writes a
+        # throttled PNG, this side loads it, downsizes, and marshals the
+        # PIL image onto the Tk main loop exactly like on_preview_frame.
+        preview_throttle_state = {"last_ts": 0.0}
+
+        def on_preview(path: str, cur_idx: int, total: int) -> None:
+            if self.cancel_event.is_set() or item.cancel_requested:
+                return
+            now = time.monotonic()
+            if (now - preview_throttle_state["last_ts"]) < (1.0 / 15.0):
+                return
+            preview_throttle_state["last_ts"] = now
+            try:
+                import cv2 as _cv2_live
+
+                frame = _cv2_live.imread(path, _cv2_live.IMREAD_COLOR)
+                if frame is None:
+                    return
+                max_w, max_h = 520, 320
+                h, w = frame.shape[:2]
+                scale = min(max_w / max(1, w), max_h / max(1, h), 1.0)
+                if scale < 1.0:
+                    frame = _cv2_live.resize(
+                        frame,
+                        (max(1, int(w * scale)), max(1, int(h * scale))),
+                        interpolation=_cv2_live.INTER_AREA)
+                from PIL import Image as _Image
+
+                pil = _Image.fromarray(frame[..., ::-1])
+                self.root.after(
+                    0, self._push_live_preview, pil, cur_idx, total,
+                    Path(item.file_path).name)
+            except Exception:
+                logger.warning(
+                    "Isolated live preview failed", exc_info=True)
+
+        max_retries = max(0, int(getattr(
+            item.config, 'batch_max_retries', 0)))
+        retry_backoff = max(0.0, float(getattr(
+            item.config, 'batch_retry_backoff_seconds', 5.0)))
+        attempt = 0
+        while True:
+            supervisor = JobSupervisor(
+                request, on_progress=on_progress, on_warning=on_warning,
+                on_preview=on_preview)
+            self._active_supervisor = supervisor
+            # Cancel and pause are polled by the child, so the existing GUI
+            # events keep working: publish the state, then let it observe it.
+            watchdog = threading.Thread(
+                target=self._watch_isolated_controls,
+                args=(supervisor, item),
+                name="vsr-job-controls",
+                daemon=True,
+            )
+            watchdog.start()
+            try:
+                outcome = supervisor.run()
+            finally:
+                self._active_supervisor = None
+
+            if outcome.status in ("complete", "paused", "cancelled"):
+                break
+            from backend.batch_report import is_retriable_error
+            failure = RuntimeError(outcome.error or "Processing failed")
+            item.retry_errors = list(item.retry_errors or []) + [str(failure)]
+            if (attempt >= max_retries
+                    or not is_retriable_error(failure)
+                    or self.cancel_event.is_set()
+                    or item.cancel_requested
+                    or self.pause_event.is_set()):
+                break
+            attempt += 1
+            item.retry_attempts = attempt
+            record = getattr(self, "_batch_report_records", {}).get(item.id)
+            if isinstance(record, dict):
+                record["retry_attempts"] = attempt
+                record["retry_errors"] = list(item.retry_errors)
+            wait = round(retry_backoff * attempt, 2)
+            item.status = ProcessingStatus.LOADING
+            item.message = (
+                f"Retrying after transient failure "
+                f"({attempt}/{max_retries})...")
+            self._update_item_display(item)
+            logger.warning(
+                "Transient isolated failure on %s (attempt %d/%d): %s; "
+                "retrying in %.1fs",
+                Path(item.file_path).name, attempt, max_retries,
+                failure, wait)
+            deadline = time.monotonic() + wait
+            while time.monotonic() < deadline:
+                if (self.cancel_event.is_set() or item.cancel_requested
+                        or self.pause_event.is_set()):
+                    break
+                time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+            # A cancel or pause that arrived during the backoff must not
+            # spawn another child. Report it as what the user asked for,
+            # not as the transient error the retry was about to absorb.
+            if self.cancel_event.is_set() or item.cancel_requested:
+                from gui.job_supervisor import JobOutcome
+                outcome = JobOutcome(
+                    status="cancelled", error="Cancelled",
+                    reason="cancelled")
+                break
+            if self.pause_event.is_set():
+                from gui.job_supervisor import JobOutcome
+                outcome = JobOutcome(
+                    status="paused",
+                    error="Paused before retry; resume to try again.",
+                    reason="paused")
+                break
 
         item.completed_at = datetime.now()
         self._apply_isolated_evidence(item, outcome.evidence)
@@ -558,6 +664,7 @@ class ProcessingControllerMixin:
         if outcome.status == "complete":
             item.progress = 1.0
             item.error = None
+            item.correction_retry = None
             item.message = "Complete!"
             note = format_quality_report(item.quality_report, compact=True)
             if note:
@@ -598,20 +705,32 @@ class ProcessingControllerMixin:
                 )
         self._update_item_display(item)
 
+    # How long a cancelled isolated child gets to exit gracefully (write
+    # its checkpoint, emit its result) before the watchdog force-kills
+    # it. A child wedged in native code never reads the control file, so
+    # without this escalation a per-item cancel could wait forever.
+    _ISOLATED_CANCEL_GRACE_SECONDS = 30.0
+
     def _watch_isolated_controls(self, supervisor, item: QueueItem) -> None:
         """Forward GUI cancel/pause requests to a running child."""
         cancelled = False
+        cancel_deadline = 0.0
         paused = False
+        terminal = (
+            ProcessingStatus.COMPLETE, ProcessingStatus.ERROR,
+            ProcessingStatus.CANCELLED, ProcessingStatus.PAUSED,
+        )
         while supervisor.pid is None:
-            time.sleep(0.05)
+            # A failed spawn never produces a pid; the item going terminal
+            # is this thread's signal to stand down instead of spinning.
+            if item.status in terminal:
+                return
             if self.cancel_event.is_set() or getattr(
                     item, "cancel_requested", False):
                 break
+            time.sleep(0.05)
         while True:
-            if item.status in (
-                ProcessingStatus.COMPLETE, ProcessingStatus.ERROR,
-                ProcessingStatus.CANCELLED, ProcessingStatus.PAUSED,
-            ):
+            if item.status in terminal:
                 return
             want_cancel = bool(
                 self.cancel_event.is_set()
@@ -619,7 +738,18 @@ class ProcessingControllerMixin:
             want_pause = bool(self.pause_event.is_set())
             if want_cancel and not cancelled:
                 cancelled = True
+                cancel_deadline = (
+                    time.monotonic() + self._ISOLATED_CANCEL_GRACE_SECONDS)
                 supervisor.cancel()
+            elif cancelled and time.monotonic() > cancel_deadline:
+                # The child had its grace period and is still running:
+                # it is not going to honour the control file. Kill it;
+                # the supervisor reports the outcome as cancelled.
+                logger.warning(
+                    "Isolated job ignored cancel for %.0fs; terminating",
+                    self._ISOLATED_CANCEL_GRACE_SECONDS)
+                supervisor.terminate()
+                return
             elif want_pause != paused:
                 paused = want_pause
                 supervisor.pause() if want_pause else supervisor.resume()
