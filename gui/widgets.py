@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional, Tuple
 
 from backend.i18n import tr
+from gui.direction import no_mirror
 from gui.theme import (
     Theme,
     f,
@@ -49,6 +50,14 @@ _FORCE_QUOTED_CLI_VALUE_FLAGS = {
 
 def _state_text(*values: str) -> str:
     return ", ".join(value for value in values if value)
+
+
+def _button_display_text(text: str, icon: Optional[str]) -> str:
+    """Compose a button's visible label in the active reading direction."""
+    label = str(text)
+    if not icon:
+        return label
+    return f"{label} {icon}" if Theme.RTL_LAYOUT else f"{icon} {label}"
 
 
 def _build_cli_command(item: QueueItem) -> str:
@@ -394,7 +403,7 @@ class ModernButton(tk.Canvas):
         base_height = int(height)
         minimum_height = scaled_control_size(base_height)
         height = minimum_height
-        display_text = f"{icon} {text}" if icon else str(text)
+        display_text = _button_display_text(text, icon)
         button_font = (Theme.FONT_FAMILY, font_size, "bold")
         try:
             natural_width = tkfont.Font(font=button_font).measure(display_text)
@@ -651,7 +660,7 @@ class ModernButton(tk.Canvas):
 
     def set_text(self, text: str):
         self.text = text
-        self._display_text = f"{self.icon} {text}" if self.icon else str(text)
+        self._display_text = _button_display_text(text, self.icon)
         button_font = (Theme.FONT_FAMILY, self.font_size, "bold")
         try:
             natural_width = tkfont.Font(font=button_font).measure(
@@ -728,7 +737,14 @@ class ModernProgressBar(tk.Canvas):
 
         if self.progress > 0:
             fill_width = max(r * 2, int(self.bar_width * self.progress))
-            self._create_rounded_rect(0, 0, fill_width, self.bar_height, r, fill=self.fill_color)
+            if Theme.RTL_LAYOUT:
+                fill_x1, fill_x2 = self.bar_width - fill_width, self.bar_width
+            else:
+                fill_x1, fill_x2 = 0, fill_width
+            self._create_rounded_rect(
+                fill_x1, 0, fill_x2, self.bar_height, r,
+                fill=self.fill_color,
+            )
 
     def _create_rounded_rect(self, x1, y1, x2, y2, r, **kwargs):
         points = [
@@ -1002,8 +1018,14 @@ class ModernSlider(tk.Frame):
         self.canvas.bind("<Button-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
-        self.canvas.bind("<Left>", lambda e: self._step(-1))
-        self.canvas.bind("<Right>", lambda e: self._step(1))
+        self.canvas.bind(
+            "<Left>",
+            lambda e: self._step(1 if Theme.RTL_LAYOUT else -1),
+        )
+        self.canvas.bind(
+            "<Right>",
+            lambda e: self._step(-1 if Theme.RTL_LAYOUT else 1),
+        )
         self.canvas.bind("<MouseWheel>", self._on_wheel)
         self.canvas.bind("<FocusIn>", lambda e: self._set_focused(True))
         self.canvas.bind("<FocusOut>", lambda e: self._set_focused(False))
@@ -1018,6 +1040,8 @@ class ModernSlider(tk.Frame):
         if self.to == self.from_:
             return self.THUMB_R
         pct = (v - self.from_) / (self.to - self.from_)
+        if Theme.RTL_LAYOUT:
+            pct = 1.0 - pct
         return int(self.THUMB_R + pct * (self._width - self.THUMB_R * 2))
 
     def _x_to_value(self, x):
@@ -1025,6 +1049,8 @@ class ModernSlider(tk.Frame):
             return self.from_
         pct = (x - self.THUMB_R) / (self._width - self.THUMB_R * 2)
         pct = max(0.0, min(1.0, pct))
+        if Theme.RTL_LAYOUT:
+            pct = 1.0 - pct
         return self.from_ + pct * (self.to - self.from_)
 
     def _draw(self):
@@ -1041,9 +1067,14 @@ class ModernSlider(tk.Frame):
 
         thumb_x = self._value_to_x(self.value)
         # Filled portion
-        if thumb_x > left:
+        if Theme.RTL_LAYOUT:
+            fill_left, fill_right = thumb_x, right
+        else:
+            fill_left, fill_right = left, thumb_x
+        if fill_right > fill_left:
             self.canvas.create_rectangle(
-                left, mid - self.TRACK_H // 2, thumb_x, mid + self.TRACK_H // 2,
+                fill_left, mid - self.TRACK_H // 2,
+                fill_right, mid + self.TRACK_H // 2,
                 fill=Theme.BLUE_PRIMARY if self.enabled else Theme.BORDER_SUBTLE,
                 outline="",
             )
@@ -1565,13 +1596,21 @@ class SegmentedPicker(tk.Frame):
                             selected=(val == self.value),
                             group_label=self.group_label)
             if columns:
-                seg.grid(
-                    row=index // column_count,
-                    column=index % column_count,
-                    sticky="ew", padx=1, pady=1,
-                )
+                column = index % column_count
+                if Theme.RTL_LAYOUT:
+                    column = column_count - 1 - column
+                with no_mirror():
+                    seg.grid(
+                        row=index // column_count,
+                        column=column,
+                        sticky="ew", padx=1, pady=1,
+                    )
             else:
-                seg.pack(side="left", fill="x", expand=True, padx=1, pady=1)
+                with no_mirror():
+                    seg.pack(
+                        side="right" if Theme.RTL_LAYOUT else "left",
+                        fill="x", expand=True, padx=1, pady=1,
+                    )
             self._segments[val] = seg
 
     def _select(self, val):
@@ -1957,9 +1996,11 @@ class QueueItemWidget(tk.Frame):
         self._pulse_phase = 0
         self._last_a11y_status = None
 
-        # Left accent stripe (visible only when selected)
+        # Reading-end accent stripe (visible only when selected)
         self.accent_stripe = tk.Frame(self, bg=Theme.BG_CARD, width=3)
-        self.accent_stripe.pack(side="left", fill="y")
+        with no_mirror():
+            self.accent_stripe.pack(
+                side="right" if Theme.RTL_LAYOUT else "left", fill="y")
 
         # Main container with padding
         self.container = tk.Frame(self, bg=self._surface_bg)

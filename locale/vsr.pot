@@ -70,7 +70,7 @@ msgstr ""
 msgid "Add a file to the queue first"
 msgstr ""
 
-#: gui/widgets.py:1758 gui/widgets.py:1849
+#: gui/widgets.py:1797 gui/widgets.py:1888
 msgid "Add files to the queue"
 msgstr ""
 
@@ -82,7 +82,7 @@ msgstr ""
 msgid "Add keyframe"
 msgstr ""
 
-#: gui/layout_build.py:1993 gui/widgets.py:1757
+#: gui/layout_build.py:1993 gui/widgets.py:1796
 msgid "Add media"
 msgstr ""
 
@@ -142,11 +142,11 @@ msgstr ""
 msgid "Alignment"
 msgstr ""
 
-#: gui/widgets.py:1887
+#: gui/widgets.py:1926
 msgid "All Files"
 msgstr ""
 
-#: gui/app.py:2361 gui/region_controller.py:98 gui/widgets.py:1884
+#: gui/app.py:2361 gui/region_controller.py:98 gui/widgets.py:1923
 msgid "All Supported"
 msgstr ""
 
@@ -274,7 +274,7 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: gui/widgets.py:2149
+#: gui/widgets.py:2190
 msgid "Cancel this item"
 msgstr ""
 
@@ -322,7 +322,7 @@ msgstr ""
 msgid "Choose a clean reference for the selected timed region"
 msgstr ""
 
-#: gui/widgets.py:1896
+#: gui/widgets.py:1935
 msgid "Choose a folder to clean"
 msgstr ""
 
@@ -354,19 +354,19 @@ msgstr ""
 msgid "Choose cleanup and region"
 msgstr ""
 
-#: gui/widgets.py:1779
+#: gui/widgets.py:1818
 msgid "Choose files"
 msgstr ""
 
-#: gui/widgets.py:1820
+#: gui/widgets.py:1859
 msgid "Choose files or a folder below. Originals are never modified."
 msgstr ""
 
-#: gui/widgets.py:1882
+#: gui/widgets.py:1921
 msgid "Choose files to clean"
 msgstr ""
 
-#: gui/layout_build.py:1470 gui/layout_build.py:369 gui/widgets.py:1784
+#: gui/layout_build.py:1470 gui/layout_build.py:369 gui/widgets.py:1823
 msgid "Choose folder"
 msgstr ""
 
@@ -454,7 +454,7 @@ msgstr ""
 msgid "Clear filter"
 msgstr ""
 
-#: gui/widgets.py:2115
+#: gui/widgets.py:2156
 msgid "Clear frozen matte"
 msgstr ""
 
@@ -534,11 +534,11 @@ msgstr ""
 msgid "Configure"
 msgstr ""
 
-#: gui/widgets.py:2136
+#: gui/widgets.py:2177
 msgid "Copy CLI command"
 msgstr ""
 
-#: gui/widgets.py:2134
+#: gui/widgets.py:2175
 msgid "Copy source path"
 msgstr ""
 
@@ -658,7 +658,7 @@ msgstr ""
 msgid "Drag a rectangle, or choose Polygon and click vertices."
 msgstr ""
 
-#: gui/widgets.py:1768
+#: gui/widgets.py:1807
 msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
 msgstr ""
 
@@ -820,11 +820,11 @@ msgstr ""
 msgid "Fast LaMa cleanup"
 msgstr ""
 
-#: gui/widgets.py:2166
+#: gui/widgets.py:2207
 msgid "Fast remux and keep embedded subtitles"
 msgstr ""
 
-#: gui/widgets.py:2162
+#: gui/widgets.py:2203
 msgid "Fast strip embedded subtitles"
 msgstr ""
 
@@ -900,7 +900,7 @@ msgstr ""
 msgid "Frame-local mask correction canvas"
 msgstr ""
 
-#: gui/widgets.py:2120
+#: gui/widgets.py:2161
 msgid "Freeze approved matte"
 msgstr ""
 
@@ -976,7 +976,7 @@ msgstr ""
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr ""
 
-#: gui/widgets.py:1886
+#: gui/widgets.py:1925
 msgid "Image Files"
 msgstr ""
 
@@ -1368,7 +1368,7 @@ msgstr ""
 msgid "Nothing to retry - every item is done."
 msgstr ""
 
-#: gui/widgets.py:1429
+#: gui/widgets.py:1460
 msgid "Notification"
 msgstr ""
 
@@ -1400,7 +1400,7 @@ msgstr ""
 msgid "Open output"
 msgstr ""
 
-#: gui/widgets.py:2093
+#: gui/widgets.py:2134
 msgid "Open quality sheet"
 msgstr ""
 
@@ -1408,7 +1408,7 @@ msgstr ""
 msgid "Open report"
 msgstr ""
 
-#: gui/widgets.py:2027 gui/widgets.py:2090
+#: gui/widgets.py:2068 gui/widgets.py:2131
 msgid "Open result"
 msgstr ""
 
@@ -1452,7 +1452,7 @@ msgstr ""
 msgid "Outputs are ready to review."
 msgstr ""
 
-#: gui/widgets.py:2155
+#: gui/widgets.py:2196
 msgid "Override settings for this file..."
 msgstr ""
 
@@ -1528,7 +1528,7 @@ msgstr ""
 msgid "Preset"
 msgstr ""
 
-#: gui/widgets.py:2367
+#: gui/widgets.py:2408
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr ""
 
@@ -1544,7 +1544,7 @@ msgstr ""
 msgid "Preview mask dilation"
 msgstr ""
 
-#: gui/widgets.py:2085
+#: gui/widgets.py:2126
 msgid "Preview source frame"
 msgstr ""
 
@@ -1640,7 +1640,7 @@ msgstr ""
 msgid "Ready to preview alignment."
 msgstr ""
 
-#: gui/utils.py:38 gui/widgets.py:2366
+#: gui/utils.py:38 gui/widgets.py:2407
 msgid "Ready to process"
 msgstr ""
 
@@ -1704,7 +1704,7 @@ msgstr ""
 msgid "Released the frozen matte; this item will detect again"
 msgstr ""
 
-#: gui/layout_build.py:2003 gui/layout_responsive.py:296 gui/widgets.py:2022
+#: gui/layout_build.py:2003 gui/layout_responsive.py:296 gui/widgets.py:2063
 msgid "Remove"
 msgstr ""
 
@@ -1716,7 +1716,7 @@ msgstr ""
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr ""
 
-#: gui/widgets.py:2174
+#: gui/widgets.py:2215
 msgid "Remove from queue"
 msgstr ""
 
@@ -1742,7 +1742,7 @@ msgid_plural "Remove {n} items from the batch."
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/widgets.py:2131
+#: gui/widgets.py:2172
 msgid "Rename output..."
 msgstr ""
 
@@ -1750,7 +1750,7 @@ msgstr ""
 msgid "Repeat last"
 msgstr ""
 
-#: gui/widgets.py:2143
+#: gui/widgets.py:2184
 msgid "Repeat with these settings"
 msgstr ""
 
@@ -1774,7 +1774,7 @@ msgstr ""
 msgid "Retry suggested"
 msgstr ""
 
-#: gui/widgets.py:2096
+#: gui/widgets.py:2137
 msgid "Retry with suggested settings"
 msgstr ""
 
@@ -1782,7 +1782,7 @@ msgstr ""
 msgid "Reuse masks on unchanged frames"
 msgstr ""
 
-#: gui/widgets.py:2104
+#: gui/widgets.py:2145
 msgid "Reveal output folder"
 msgstr ""
 
@@ -1802,7 +1802,7 @@ msgstr ""
 msgid "Review mask"
 msgstr ""
 
-#: gui/widgets.py:2087
+#: gui/widgets.py:2128
 msgid "Review subtitle mask"
 msgstr ""
 
@@ -1814,7 +1814,7 @@ msgstr ""
 msgid "Run and monitor the batch"
 msgstr ""
 
-#: gui/widgets.py:2170
+#: gui/widgets.py:2211
 msgid "Run burned-in cleanup instead"
 msgstr ""
 
@@ -2006,7 +2006,7 @@ msgstr ""
 msgid "Skip repeated detection when you have already set a precise subtitle region."
 msgstr ""
 
-#: gui/widgets.py:1086 gui/widgets.py:1098
+#: gui/widgets.py:1117 gui/widgets.py:1129
 msgid "Slider"
 msgstr ""
 
@@ -2338,7 +2338,7 @@ msgstr ""
 msgid "Vertices"
 msgstr ""
 
-#: gui/widgets.py:1885
+#: gui/widgets.py:1924
 msgid "Video Files"
 msgstr ""
 
@@ -2346,7 +2346,7 @@ msgstr ""
 msgid "Video Subtitle Remover Pro"
 msgstr ""
 
-#: gui/widgets.py:1790
+#: gui/widgets.py:1829
 msgid "Videos and images supported"
 msgstr ""
 
@@ -2434,23 +2434,23 @@ msgstr ""
 msgid "You can change every setting later."
 msgstr ""
 
-#: gui/widgets.py:1851
+#: gui/widgets.py:1890
 msgid "disabled"
 msgstr ""
 
-#: gui/widgets.py:1853
+#: gui/widgets.py:1892
 msgid "drag and drop available"
 msgstr ""
 
-#: gui/widgets.py:1851
+#: gui/widgets.py:1890
 msgid "enabled"
 msgstr ""
 
-#: gui/widgets.py:1852 gui/widgets.py:2362
+#: gui/widgets.py:1891 gui/widgets.py:2403
 msgid "focused"
 msgstr ""
 
-#: gui/widgets.py:2361
+#: gui/widgets.py:2402
 msgid "not selected"
 msgstr ""
 
@@ -2458,7 +2458,7 @@ msgstr ""
 msgid "ready"
 msgstr ""
 
-#: gui/widgets.py:2361
+#: gui/widgets.py:2402
 msgid "selected"
 msgstr ""
 
@@ -2540,7 +2540,7 @@ msgstr[1] ""
 msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
 msgstr ""
 
-#: gui/widgets.py:1091
+#: gui/widgets.py:1122
 msgid "{value} (range {low} to {high})"
 msgstr ""
 

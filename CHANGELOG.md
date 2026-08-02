@@ -9,6 +9,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - Isolated job timeouts now cover the worker event stream itself. A worker
   that keeps stdout open without emitting EOF is terminated within the
   caller's wall-clock budget and reported as `worker_timeout`.
+- RTL layouts now mirror the remaining Canvas affordances: slider values and
+  fills, progress fills, button icon/text order, segmented controls, and the
+  selected queue accent stripe.
 
 ## [3.32.0] - 2026-08-02
 

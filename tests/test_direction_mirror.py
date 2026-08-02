@@ -10,7 +10,15 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from gui import direction
+from gui.config import ProcessingConfig, QueueItem
 from gui.theme import Theme
+from gui.widgets import (
+    ModernButton,
+    ModernProgressBar,
+    ModernSlider,
+    QueueItemWidget,
+    SegmentedPicker,
+)
 
 
 class PureMirrorTests(unittest.TestCase):
@@ -115,6 +123,7 @@ class LiveTkMirrorTests(unittest.TestCase):
             cls.root = tk.Tk()
         except Exception as exc:  # pragma: no cover - headless CI
             raise unittest.SkipTest(f"Tk display unavailable: {exc}")
+        cls.root.geometry("1000x800")
         cls.root.withdraw()
 
     @classmethod
@@ -134,6 +143,7 @@ class LiveTkMirrorTests(unittest.TestCase):
         Theme.RTL_LAYOUT = True
         direction.install_direction_mirror()
         self.holder = tk.Frame(self.root)
+        self.holder.pack(fill="both", expand=True)
         self.addCleanup(self.holder.destroy)
 
     def test_pack_side_and_anchor_mirror(self):
@@ -205,6 +215,88 @@ class LiveTkMirrorTests(unittest.TestCase):
         direction.uninstall_direction_mirror()
         self.assertIs(tk.Misc._options, baseline)
         direction.install_direction_mirror()
+
+    def test_canvas_button_places_icon_after_text_in_rtl(self):
+        button = ModernButton(self.holder, text="Open", icon=">", width=120)
+        texts = [
+            str(button.itemcget(item, "text"))
+            for item in button.find_all()
+            if button.type(item) == "text"
+        ]
+        self.assertEqual(texts, ["Open >"])
+
+    def test_slider_value_geometry_and_fill_mirror_in_rtl(self):
+        slider = ModernSlider(
+            self.holder, from_=0, to=100, value=25, width=120)
+        slider.pack(fill="x")
+        self.root.update_idletasks()
+
+        self.assertGreater(slider._value_to_x(0), slider._value_to_x(100))
+        self.assertAlmostEqual(
+            slider._x_to_value(slider._value_to_x(25)), 25, places=0)
+        fill_items = [
+            item for item in slider.canvas.find_all()
+            if slider.canvas.type(item) == "rectangle"
+            and str(slider.canvas.itemcget(item, "fill")) == Theme.BLUE_PRIMARY
+        ]
+        self.assertEqual(len(fill_items), 1)
+        coords = slider.canvas.coords(fill_items[0])
+        self.assertGreater(min(coords[::2]), slider.THUMB_R)
+        self.assertEqual(max(coords[::2]), slider._width - slider.THUMB_R)
+
+    def test_progress_fill_grows_from_the_right_in_rtl(self):
+        progress = ModernProgressBar(self.holder, width=120, height=6)
+        progress.pack(fill="x")
+        progress.set_progress(0.25, animate=False)
+        fill_items = [
+            item for item in progress.find_all()
+            if progress.type(item) == "polygon"
+            and str(progress.itemcget(item, "fill")) == progress.fill_color
+        ]
+        self.assertEqual(len(fill_items), 1)
+        coords = progress.coords(fill_items[0])
+        self.assertGreater(min(coords[::2]), 0)
+        self.assertEqual(max(coords[::2]), progress.bar_width)
+
+    def test_segment_order_mirrors_for_packed_and_grid_layouts(self):
+        packed = SegmentedPicker(
+            self.holder, [("a", "A"), ("b", "B"), ("c", "C")])
+        packed.pack(fill="x")
+        grid = SegmentedPicker(
+            self.holder,
+            [("a", "A"), ("b", "B"), ("c", "C"), ("d", "D")],
+            columns=2,
+        )
+        grid.pack(fill="x")
+        self.root.update_idletasks()
+
+        self.assertEqual(
+            [str(packed._segments[value].pack_info()["side"])
+             for value in ("a", "b", "c")],
+            ["right", "right", "right"],
+        )
+        self.assertEqual(
+            int(grid._segments["a"].grid_info()["column"]), 1)
+        self.assertEqual(
+            int(grid._segments["b"].grid_info()["column"]), 0)
+        self.assertEqual(
+            int(grid._segments["c"].grid_info()["column"]), 1)
+        self.assertEqual(
+            int(grid._segments["d"].grid_info()["column"]), 0)
+
+    def test_selected_queue_accent_stripe_moves_to_the_reading_end(self):
+        item = QueueItem(
+            "id", "input.mp4", "output.mp4", ProcessingConfig())
+        queue_item = QueueItemWidget(
+            self.holder, item, on_remove=lambda _item_id: None)
+        queue_item.pack(fill="x")
+        queue_item.set_selected(True)
+        self.root.update_idletasks()
+
+        self.assertEqual(
+            str(queue_item.accent_stripe.pack_info()["side"]), "right")
+        self.assertEqual(
+            str(queue_item.accent_stripe.cget("bg")), Theme.BLUE_PRIMARY)
 
 
 if __name__ == "__main__":
