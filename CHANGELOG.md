@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.33.0] - 2026-08-02
+
 ### Fixed
 
 - Isolated job timeouts now cover the worker event stream itself. A worker
