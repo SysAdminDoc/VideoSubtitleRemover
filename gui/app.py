@@ -188,10 +188,6 @@ class VideoSubtitleRemoverApp(
                 pass
 
         # State
-        # RM-98: RTL layout mirror -- set the Tk option DB before widgets
-        # build so labels right-align and `pack(side="right")` becomes
-        # the dominant orientation. Full pack-side flipping for every
-        # widget is a much larger pass; this lands the framework.
         self.queue: List[QueueItem] = []
         self.queue_widgets: dict = {}
         self.is_processing = False

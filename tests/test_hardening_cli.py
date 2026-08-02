@@ -475,6 +475,25 @@ class DryRunCliTests(unittest.TestCase):
             self.assertFalse(out.exists())  # dry-run never encodes
 
 
+class FrozenMatteCliErrorTests(unittest.TestCase):
+    """RM-153: a refused freeze is a clean CLI error, not a traceback."""
+
+    def test_a_bad_frozen_matte_manifest_is_a_parser_error(self):
+        import subprocess as _sp
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "not-there.mask.json"
+            proc = _sp.run(
+                [sys.executable, "-m", "backend.cli",
+                 "-i", str(Path(tmp) / "in.mp4"),
+                 "-o", str(Path(tmp) / "out.mp4"),
+                 "--gpu", "-1", "--frozen-matte", str(missing)],
+                capture_output=True, text=True, timeout=300,
+                cwd=str(Path(__file__).resolve().parents[1]),
+            )
+            self.assertEqual(proc.returncode, 2, proc.stderr[-2000:])
+            self.assertIn("--frozen-matte", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

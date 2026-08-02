@@ -133,6 +133,39 @@ class ReplacementJournalTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b"current")
             self.assertFalse(backup.exists())
 
+    def test_a_journal_entry_with_empty_paths_is_ignored_not_expanded(self):
+        # Path("") is Path("."), so a malformed entry must be skipped on
+        # the RAW string. Anything else turns "restore this backup" into
+        # "remove the current directory".
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            canary = root / "canary.txt"
+            canary.write_bytes(b"survives")
+            journal_path = root / f".mangled{atomic_replace.JOURNAL_SUFFIX}"
+            for state in (atomic_replace.STATE_PENDING,
+                          atomic_replace.STATE_COMMITTED):
+                journal_path.write_text(json.dumps({
+                    "schema": atomic_replace.JOURNAL_SCHEMA,
+                    "state": state,
+                    "entries": [
+                        {"target": "", "backup": ""},
+                        {"target": "  ", "backup": None},
+                        {"backup": "x"},
+                        "not-a-dict",
+                    ],
+                }), encoding="utf-8")
+                cwd = os.getcwd()
+                os.chdir(root)
+                try:
+                    results = atomic_replace.recover_pending_replacements(root)
+                finally:
+                    os.chdir(cwd)
+                self.assertTrue(results)
+                self.assertTrue(
+                    canary.is_file(),
+                    f"{state}: recovery escaped onto the working directory")
+                self.assertFalse(journal_path.exists())
+
     def test_unreadable_journal_is_discarded(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

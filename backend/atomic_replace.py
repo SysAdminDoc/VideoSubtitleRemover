@@ -153,10 +153,15 @@ def _rollback_entries(entries: Iterable[Any]) -> None:
     for entry in reversed(list(entries)):
         if not isinstance(entry, dict):
             continue
-        target = Path(str(entry.get("target") or ""))
-        backup = Path(str(entry.get("backup") or ""))
-        if not str(target):
+        # Validate the RAW strings: Path("") is Path("."), so converting
+        # first would turn a malformed journal entry into "remove the
+        # current directory" -- the exact opposite of a safe rollback.
+        target_text = str(entry.get("target") or "").strip()
+        backup_text = str(entry.get("backup") or "").strip()
+        if not target_text or not backup_text:
             continue
+        target = Path(target_text)
+        backup = Path(backup_text)
         if backup.exists():
             _remove(target)
             try:
@@ -174,8 +179,11 @@ def _rollback_entries(entries: Iterable[Any]) -> None:
 
 def _finish_forward(entries: Iterable[Any]) -> None:
     for entry in entries:
-        if isinstance(entry, dict):
-            _remove(Path(str(entry.get("backup") or "")))
+        if not isinstance(entry, dict):
+            continue
+        backup_text = str(entry.get("backup") or "").strip()
+        if backup_text:
+            _remove(Path(backup_text))
 
 
 def recover_pending_replacements(directory: str | Path) -> list[dict]:

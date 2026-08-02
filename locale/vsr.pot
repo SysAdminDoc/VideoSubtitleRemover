@@ -1568,7 +1568,7 @@ msgstr ""
 msgid "Process"
 msgstr ""
 
-#: gui/processing_controller.py:1034
+#: gui/processing_controller.py:1164
 msgid "Processing failed"
 msgstr ""
 
@@ -1616,7 +1616,7 @@ msgstr ""
 msgid "Reading first frame..."
 msgstr ""
 
-#: gui/app.py:1146 gui/layout_build.py:1886 gui/layout_build.py:2111 gui/layout_build.py:2122 gui/layout_helpers.py:48 gui/processing_controller.py:1193 gui/processing_controller.py:1228 gui/support_controller.py:581
+#: gui/app.py:1146 gui/layout_build.py:1886 gui/layout_build.py:2111 gui/layout_build.py:2122 gui/layout_helpers.py:48 gui/processing_controller.py:1323 gui/processing_controller.py:1358 gui/support_controller.py:581
 msgid "Ready"
 msgstr ""
 
@@ -2042,7 +2042,7 @@ msgstr ""
 msgid "Start and end frames must be whole numbers"
 msgstr ""
 
-#: gui/layout_build.py:2045 gui/processing_controller.py:1225
+#: gui/layout_build.py:2045 gui/processing_controller.py:1355
 msgid "Start batch"
 msgstr ""
 

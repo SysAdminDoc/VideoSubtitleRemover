@@ -2057,10 +2057,18 @@ def main():
 
     soft_action, dry_run_only, translation_enabled = _prepare_cli_args(args, parser)
 
-    config = _build_processing_config(
-        args, translation_enabled, ProcessingConfig, _coerce_backend_mode,
-        normalize_processing_config,
-    )
+    # RM-153: a frozen matte that no longer matches its manifest, artifact,
+    # or source is a *user-facing* refusal with a curated message -- present
+    # it as a CLI error, not a traceback.
+    from backend.frozen_matte import FrozenMatteError
+
+    try:
+        config = _build_processing_config(
+            args, translation_enabled, ProcessingConfig, _coerce_backend_mode,
+            normalize_processing_config,
+        )
+    except FrozenMatteError as exc:
+        parser.error(f"--frozen-matte: {exc.user_message}")
 
     config, ffmpeg_ready = _apply_cli_config_overlays(
         args, parser, config,
