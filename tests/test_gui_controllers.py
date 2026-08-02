@@ -209,5 +209,37 @@ class ControllerBoundaryTests(unittest.TestCase):
         self.assertEqual(controller.root.after.call_count, 1)
 
 
+class WindowGeometryRestoreTests(unittest.TestCase):
+    """A saved position on ANY monitor must survive a restart."""
+
+    def _app_class(self):
+        from gui.app import VideoSubtitleRemoverApp
+
+        return VideoSubtitleRemoverApp
+
+    def test_secondary_monitor_positions_are_accepted(self):
+        app = self._app_class()
+        # Primary is 1920x1080; a second monitor sits to its right and a
+        # third to its left (negative origin). Both are legitimate homes.
+        bounds = (-1920, 0, 5760, 1080)
+        self.assertTrue(app._saved_position_visible(2500, 200, bounds))
+        self.assertTrue(app._saved_position_visible(-1800, 100, bounds))
+        self.assertTrue(app._saved_position_visible(100, 100, bounds))
+
+    def test_truly_offscreen_positions_are_still_rejected(self):
+        app = self._app_class()
+        bounds = (0, 0, 1920, 1080)
+        self.assertFalse(app._saved_position_visible(5360, 0, bounds))
+        self.assertFalse(app._saved_position_visible(-500, 100, bounds))
+        self.assertFalse(app._saved_position_visible(100, 1080, bounds))
+
+    def test_desktop_bounds_fall_back_to_the_primary_display(self):
+        app = self._app_class()
+        with mock.patch("gui.app.sys") as fake_sys:
+            fake_sys.platform = "linux"
+            self.assertEqual(
+                app._desktop_bounds(1920, 1080), (0, 0, 1920, 1080))
+
+
 if __name__ == "__main__":
     unittest.main()

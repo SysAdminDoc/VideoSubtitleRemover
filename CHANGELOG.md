@@ -4,6 +4,56 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.32.0] - 2026-08-02
+
+Deep audit pass over the code shipped since the last audit (3.24-3.31),
+centered on the new process-isolation path.
+
+### Fixed
+
+- **The frozen job worker no longer loads the GUI or shares the parent's
+  log file.** In a frozen build the `--job-worker` marker was only
+  recognised inside `main()`, after module-level code had already opened
+  the parent's rotating log from a second process (rotation breaks on
+  Windows when two processes hold one file) and imported the entire
+  widget tree. The marker now short-circuits at the top of the entry
+  module, before logging setup and every GUI import.
+- **A cancelled isolated job can no longer hang forever.** A child wedged
+  in native code -- the exact failure process isolation exists for --
+  never reads the polled control file, so a per-item cancel had no
+  effect. The control watchdog now escalates to `terminate()` after a
+  30-second grace period, and the outcome still reports as cancelled,
+  not crashed. The watchdog also stands down when a worker fails to
+  spawn instead of spinning at 20 Hz for the life of the process.
+- **Journal recovery can no longer expand an empty path onto the working
+  directory.** `Path("")` is `Path(".")`, so the empty-target guard in
+  `backend/atomic_replace.py` was dead code: a malformed journal entry
+  could direct rollback to remove the current directory tree. Raw
+  strings are now validated before any `Path` is built, on both the
+  rollback and finish-forward legs.
+- **A refused `--frozen-matte` is a clean CLI error, not a traceback.**
+  The freeze's curated user message (missing manifest, matte edited
+  after export, substituted source) now reaches the console through
+  `parser.error` instead of an unhandled-exception dump.
+- **Saved window positions on secondary monitors now survive a restart.**
+  Geometry restore validated positions against the primary display only,
+  so a window kept on any other monitor was silently recentered on every
+  launch. Restore now checks the full multi-monitor virtual desktop.
+- Plural agreement in two remaining messages ("queued item(s)",
+  "model-cache file(s)") now uses real singular/plural forms.
+
+### Added
+
+- **Isolated jobs reach feature parity with in-process jobs.** Live
+  preview (the child writes throttled PNG frames the parent marshals
+  into the preview pane), mask-correction selective reruns, auto
+  subtitle-band detection (probed inside the child so no OCR model loads
+  into the GUI process), and transient-failure retries with backoff all
+  now work when **Run each job in a separate process** is enabled.
+  Previously each of these silently degraded: no preview, full re-detect
+  instead of a selective rerun, unpinned full-frame detection, no
+  retries.
+
 ## [3.31.0] - 2026-07-29
 
 ### Added

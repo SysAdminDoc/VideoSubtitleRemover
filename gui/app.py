@@ -2557,7 +2557,12 @@ class VideoSubtitleRemoverApp(
                 f"{name}: {summarize_missing_profile_requirements(missing)}"
             )
         if len(issues) > 4:
-            lines.append(f"...and {len(issues) - 4} more queued item(s).")
+            more = len(issues) - 4
+            lines.append(ntr(
+                "...and {n} more queued item.",
+                "...and {n} more queued items.",
+                more,
+            ).format(n=more))
         detail = (
             "\n".join(lines)
             + "\n\nContinuing may skip optional metrics, drop audio, or fall "
@@ -2815,11 +2820,46 @@ class VideoSubtitleRemoverApp(
         except Exception:
             pass
 
+    @staticmethod
+    def _desktop_bounds(primary_w: int, primary_h: int) -> tuple:
+        """Return (x, y, w, h) of the full desktop across every monitor.
+
+        `winfo_screenwidth` only reports the primary display on Windows,
+        so validating a saved window position against it silently rejects
+        every secondary-monitor position and recenters the window each
+        launch. The virtual-screen metrics cover the whole arrangement,
+        including monitors left of or above the primary (negative
+        origins). Falls back to the primary bounds off-Windows or when
+        the metrics are unavailable.
+        """
+        if sys.platform == "win32":
+            try:
+                user32 = ctypes.windll.user32
+                vx = int(user32.GetSystemMetrics(76))  # SM_XVIRTUALSCREEN
+                vy = int(user32.GetSystemMetrics(77))  # SM_YVIRTUALSCREEN
+                vw = int(user32.GetSystemMetrics(78))  # SM_CXVIRTUALSCREEN
+                vh = int(user32.GetSystemMetrics(79))  # SM_CYVIRTUALSCREEN
+                if vw > 0 and vh > 0:
+                    return (vx, vy, vw, vh)
+            except Exception:
+                pass
+        return (0, 0, int(primary_w), int(primary_h))
+
+    @staticmethod
+    def _saved_position_visible(x: int, y: int, bounds: tuple) -> bool:
+        """True when enough of the title bar lands inside `bounds` to grab."""
+        bx, by, bw, bh = bounds
+        return not (
+            x < bx - 80 or y < by - 40
+            or x + 120 > bx + bw or y + 80 > by + bh
+        )
+
     def run(self):
         """Run the application."""
         self.root.update_idletasks()
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
+        desktop = self._desktop_bounds(screen_w, screen_h)
 
         # Try to restore saved geometry if it still fits on-screen; otherwise
         # fall back to a sensibly centered default.
@@ -2835,9 +2875,8 @@ class VideoSubtitleRemoverApp(
                     x_s, _, y_s = pos_part.partition('+')
                     x = int(x_s)
                     y = int(y_s)
-                    # Reject off-screen saved positions
-                    if (x < -80 or y < -40
-                            or x + 120 > screen_w or y + 80 > screen_h):
+                    # Reject saved positions no monitor can show anymore.
+                    if not self._saved_position_visible(x, y, desktop):
                         raise ValueError("off-screen")
                     self.root.geometry(f"{w}x{h}+{x}+{y}")
                 else:

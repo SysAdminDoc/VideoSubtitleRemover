@@ -29,7 +29,7 @@ from gui.dialog_layout import (
     scrollable_dialog_body,
 )
 from backend.ffmpeg_profiles import ffmpeg_profile_entries
-from backend.i18n import tr
+from backend.i18n import ntr, tr
 from backend.model_downloads import installed_backend_status
 
 logger = logging.getLogger(__name__)
@@ -310,10 +310,21 @@ class SupportControllerMixin:
                 result.get("status_after_export", {})
             )
             skipped = len(result.get("skipped", []) or [])
-            suffix = f"; skipped {skipped} unsafe or invalid file(s)" if skipped else ""
+            suffix = ""
+            if skipped:
+                suffix = "; " + ntr(
+                    "skipped {n} unsafe or invalid file",
+                    "skipped {n} unsafe or invalid files",
+                    skipped,
+                ).format(n=skipped)
+            exported = len(result.get("files", []))
+            summary = ntr(
+                "Exported {n} model-cache file",
+                "Exported {n} model-cache files",
+                exported,
+            ).format(n=exported)
             return (
-                f"Exported {len(result.get('files', []))} model-cache file(s) "
-                f"to {Path(result['output']).name}{suffix}{missing}",
+                f"{summary} to {Path(result['output']).name}{suffix}{missing}",
                 "warning" if skipped else "success",
             )
 

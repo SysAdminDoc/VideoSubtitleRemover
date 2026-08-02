@@ -12,6 +12,12 @@ msgstr ""
 msgid "'{mode}' is not a supported profile; keeping {current}"
 msgstr "[!! '{mode}' îš ńöţ å šûƥƥöŕţéð ƥŕöƒîŀé; ķééƥîńĝ {current} ! ! ! ! !!]"
 
+#: gui/app.py:2561
+msgid "...and {n} more queued item."
+msgid_plural "...and {n} more queued items."
+msgstr[0] "[!! ...åńð {n} ḿöŕé ɋûéûéð îţéḿ. ! ! !!]"
+msgstr[1] "[!! ...åńð {n} ḿöŕé ɋûéûéð îţéḿš. ! ! !!]"
+
 #: gui/layout_build.py:1279
 msgid "0 cleans every frame. Values above 1 clean fewer frames and recreate the gaps when Practical-RIFE is installed. Stride 3 can reduce inpaint calls by up to about 67%."
 msgstr "[!! 0 çŀéåńš éṽéŕý ƒŕåḿé. Ṽåŀûéš åƀöṽé 1 çŀéåń ƒéŵéŕ ƒŕåḿéš åńð ŕéçŕéåţé ţħé ĝåƥš ŵħéń Ƥŕåçţîçåŀ-ŔÎƑÉ îš îńšţåŀŀéð. Šţŕîðé 3 çåń ŕéðûçé îńƥåîńţ çåŀŀš ƀý ûƥ ţö åƀöûţ 67%. ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
@@ -44,7 +50,7 @@ msgstr "[!! ÅÇŢÎṼÎŢÝ ! !!]"
 msgid "ASS style override"
 msgstr "[!! ÅŠŠ šţýŀé öṽéŕŕîðé ! !!]"
 
-#: gui/support_controller.py:499 gui/support_controller.py:509
+#: gui/support_controller.py:510 gui/support_controller.py:520
 msgid "About {app_name}"
 msgstr "[!! Åƀöûţ {app_name} ! !!]"
 
@@ -144,7 +150,7 @@ msgstr "[!! Åŀŀ Ƒîŀéš ! !!]"
 msgid "All Supported"
 msgstr "[!! Åŀŀ Šûƥƥöŕţéð ! !!]"
 
-#: gui/app.py:2065 gui/region_controller.py:1221 gui/settings_controller.py:217 gui/settings_controller.py:254 gui/settings_controller.py:279 gui/settings_controller.py:311 gui/settings_controller.py:341 gui/settings_controller.py:361 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:331
+#: gui/app.py:2065 gui/region_controller.py:1221 gui/settings_controller.py:217 gui/settings_controller.py:254 gui/settings_controller.py:279 gui/settings_controller.py:311 gui/settings_controller.py:341 gui/settings_controller.py:361 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:342
 msgid "All files"
 msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
 
@@ -204,11 +210,11 @@ msgstr "[!! Åûţöḿåţîç ûšéš ţħé ƀéšţ îńšţåŀŀéð ðé
 msgid "Automatically chooses the best cleanup method for each file."
 msgstr "[!! Åûţöḿåţîçåŀŀý çħööšéš ţħé ƀéšţ çŀéåńûƥ ḿéţħöð ƒöŕ éåçħ ƒîŀé. ! ! ! ! ! !!]"
 
-#: gui/support_controller.py:435
+#: gui/support_controller.py:446
 msgid "BACKEND STATUS"
 msgstr "[!! ƁÅÇĶÉŃÐ ŠŢÅŢÛŠ ! !!]"
 
-#: gui/support_controller.py:511
+#: gui/support_controller.py:522
 msgid "Backend status and app version."
 msgstr "[!! Ɓåçķéńð šţåţûš åńð åƥƥ ṽéŕšîöń. ! ! !!]"
 
@@ -260,7 +266,7 @@ msgstr "[!! ÇÖḾƤĿÉŢÉÐ ! !!]"
 msgid "CPU mode"
 msgstr "[!! ÇƤÛ ḿöðé ! !!]"
 
-#: gui/support_controller.py:574
+#: gui/support_controller.py:585
 msgid "CPU only"
 msgstr "[!! ÇƤÛ öńŀý ! !!]"
 
@@ -476,11 +482,11 @@ msgstr "[!! Çŀéåŕéð îḿƥöŕţéð ḿåţţé ! !!]"
 msgid "Cleared mask corrections"
 msgstr "[!! Çŀéåŕéð ḿåšķ çöŕŕéçţîöńš ! ! !!]"
 
-#: gui/support_controller.py:592
+#: gui/support_controller.py:603
 msgid "Click Import or drag files onto the queue"
 msgstr "[!! Çŀîçķ Îḿƥöŕţ öŕ ðŕåĝ ƒîŀéš öńţö ţħé ɋûéûé ! ! ! !!]"
 
-#: gui/preview_controller.py:841 gui/quality_controller.py:346 gui/support_controller.py:624
+#: gui/preview_controller.py:841 gui/quality_controller.py:346 gui/support_controller.py:635
 msgid "Close"
 msgstr "[!! Çŀöšé ! !!]"
 
@@ -508,7 +514,7 @@ msgstr "[!! Çöḿƥŀéţéð öûţƥûţš öń ðîšķ åŕé ńöţ ðé�
 msgid "Composed mask for {name}"
 msgstr "[!! Çöḿƥöšéð ḿåšķ ƒöŕ {name} ! ! !!]"
 
-#: gui/support_controller.py:579
+#: gui/support_controller.py:590
 msgid "Compute"
 msgstr "[!! Çöḿƥûţé ! !!]"
 
@@ -620,11 +626,11 @@ msgstr "[!! Ðéţéçţîńĝ ħåŕðŵåŕé... ! !!]"
 msgid "Detecting language..."
 msgstr "[!! Ðéţéçţîńĝ ŀåńĝûåĝé... ! !!]"
 
-#: gui/layout_build.py:1511 gui/support_controller.py:402
+#: gui/layout_build.py:1511 gui/support_controller.py:413
 msgid "Detection"
 msgstr "[!! Ðéţéçţîöń ! !!]"
 
-#: gui/support_controller.py:577
+#: gui/support_controller.py:588
 msgid "Detection engines"
 msgstr "[!! Ðéţéçţîöń éńĝîńéš ! !!]"
 
@@ -632,7 +638,7 @@ msgstr "[!! Ðéţéçţîöń éńĝîńéš ! !!]"
 msgid "Dilation: {px} px; detection cached."
 msgstr "[!! Ðîŀåţîöń: {px} ƥẋ; ðéţéçţîöń çåçħéð. ! ! ! !!]"
 
-#: gui/support_controller.py:598 gui/support_controller.py:600
+#: gui/support_controller.py:609 gui/support_controller.py:611
 msgid "Disk cache"
 msgstr "[!! Ðîšķ çåçħé ! !!]"
 
@@ -748,7 +754,7 @@ msgstr "[!! Éẋƥöŕţ ŀöššŀéšš ḿåšķ / åŀƥħå ḿåţţé ! 
 msgid "Export model cache"
 msgstr "[!! Éẋƥöŕţ ḿöðéŀ çåçħé ! !!]"
 
-#: gui/support_controller.py:371
+#: gui/support_controller.py:382
 msgid "Export model cache..."
 msgstr "[!! Éẋƥöŕţ ḿöðéŀ çåçħé... ! !!]"
 
@@ -768,23 +774,29 @@ msgstr "[!! Éẋƥöŕţ šéţţîńĝš çöƥý ! !!]"
 msgid "Exported settings to {name}"
 msgstr "[!! Éẋƥöŕţéð šéţţîńĝš ţö {name} ! ! !!]"
 
+#: gui/support_controller.py:321
+msgid "Exported {n} model-cache file"
+msgid_plural "Exported {n} model-cache files"
+msgstr[0] "[!! Éẋƥöŕţéð {n} ḿöðéŀ-çåçħé ƒîŀé ! ! !!]"
+msgstr[1] "[!! Éẋƥöŕţéð {n} ḿöðéŀ-çåçħé ƒîŀéš ! ! !!]"
+
 #: gui/quality_controller.py:179
 msgid "FAILED"
 msgstr "[!! ƑÅÎĿÉÐ ! !!]"
 
-#: gui/layout_helpers.py:46 gui/support_controller.py:581
+#: gui/layout_helpers.py:46 gui/support_controller.py:592
 msgid "FFmpeg"
 msgstr "[!! ƑƑḿƥéĝ ! !!]"
 
-#: gui/support_controller.py:417
+#: gui/support_controller.py:428
 msgid "FFmpeg basic"
 msgstr "[!! ƑƑḿƥéĝ ƀåšîç ! !!]"
 
-#: gui/app.py:2568
+#: gui/app.py:2573
 msgid "FFmpeg capability warning"
 msgstr "[!! ƑƑḿƥéĝ çåƥåƀîŀîţý ŵåŕńîńĝ ! ! !!]"
 
-#: gui/support_controller.py:420
+#: gui/support_controller.py:431
 msgid "FFmpeg codecs"
 msgstr "[!! ƑƑḿƥéĝ çöðéçš ! !!]"
 
@@ -792,15 +804,15 @@ msgstr "[!! ƑƑḿƥéĝ çöðéçš ! !!]"
 msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
 msgstr "[!! ƑƑḿƥéĝ îš ńöţ åṽåîŀåƀŀé, šö öûţƥûţš ŵîŀŀ ƀé šåṽéð ŵîţħöûţ öŕîĝîńåŀ åûðîö ûńţîŀ îţ îš îńšţåŀŀéð. ! ! ! ! ! ! ! !!]"
 
-#: gui/support_controller.py:418
+#: gui/support_controller.py:429
 msgid "FFmpeg quality"
 msgstr "[!! ƑƑḿƥéĝ ɋûåŀîţý ! !!]"
 
-#: gui/support_controller.py:419
+#: gui/support_controller.py:430
 msgid "FFmpeg speech"
 msgstr "[!! ƑƑḿƥéĝ šƥééçħ ! !!]"
 
-#: gui/support_controller.py:424
+#: gui/support_controller.py:435
 msgid "FFmpeg {name}"
 msgstr "[!! ƑƑḿƥéĝ {name} ! !!]"
 
@@ -924,7 +936,7 @@ msgstr "[!! Ħåŕðŵåŕé éńçöðîńĝ (ŃṼÉŃÇ / ɊŠṼ / ÅḾƑ) 
 msgid "Hardware-decode hint"
 msgstr "[!! Ħåŕðŵåŕé-ðéçöðé ħîńţ ! !!]"
 
-#: gui/support_controller.py:407
+#: gui/support_controller.py:418
 msgid "Hash status"
 msgstr "[!! Ħåšħ šţåţûš ! !!]"
 
@@ -960,7 +972,7 @@ msgstr "[!! Ħîĝħ-ɋûåŀîţý ţéḿƥöŕåŀ ƒîŀŀ ƒöŕ ḿöţî�
 msgid "Homography"
 msgstr "[!! Ħöḿöĝŕåƥħý ! !!]"
 
-#: gui/app.py:2640
+#: gui/app.py:2645
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr "[!! Îðŀé åńð ƥåûšéð îţéḿš ƒŕöḿ ýöûŕ ƥŕéṽîöûš šéššîöń ŵéŕé šåṽéð. Ŕéšţöŕé ţħéḿ ţö ţħé ɋûéûé? ! ! ! ! ! ! ! !!]"
 
@@ -988,11 +1000,11 @@ msgstr "[!! Îḿƥöŕţ ƒîŀéš öŕ çħööšé å ƒöŀðéŕ ţö šţ
 msgid "Import matte"
 msgstr "[!! Îḿƥöŕţ ḿåţţé ! !!]"
 
-#: gui/support_controller.py:330
+#: gui/support_controller.py:341
 msgid "Import model cache"
 msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé ! !!]"
 
-#: gui/support_controller.py:375
+#: gui/support_controller.py:386
 msgid "Import model cache..."
 msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé... ! !!]"
 
@@ -1020,11 +1032,11 @@ msgstr "[!! Îńƒö ! !!]"
 msgid "Inpaint preview"
 msgstr "[!! Îńƥåîńţ ƥŕéṽîéŵ ! !!]"
 
-#: gui/layout_build.py:1512 gui/support_controller.py:403
+#: gui/layout_build.py:1512 gui/support_controller.py:414
 msgid "Inpainting"
 msgstr "[!! Îńƥåîńţîńĝ ! !!]"
 
-#: gui/support_controller.py:578
+#: gui/support_controller.py:589
 msgid "Inpainting engines"
 msgstr "[!! Îńƥåîńţîńĝ éńĝîńéš ! !!]"
 
@@ -1032,7 +1044,7 @@ msgstr "[!! Îńƥåîńţîńĝ éńĝîńéš ! !!]"
 msgid "Inpainting {name}"
 msgstr "[!! Îńƥåîńţîńĝ {name} ! !!]"
 
-#: gui/support_controller.py:592
+#: gui/support_controller.py:603
 msgid "Input"
 msgstr "[!! Îńƥûţ ! !!]"
 
@@ -1100,11 +1112,11 @@ msgstr "[!! ĿåḾå ƒåšţ ḿöðé îš ûšéƒûŀ ƒöŕ ɋûîçķ ƥ�
 msgid "Language tags"
 msgstr "[!! Ŀåńĝûåĝé ţåĝš ! !!]"
 
-#: gui/support_controller.py:405
+#: gui/support_controller.py:416
 msgid "Languages"
 msgstr "[!! Ŀåńĝûåĝéš ! !!]"
 
-#: gui/support_controller.py:588
+#: gui/support_controller.py:599
 msgid "Last run"
 msgstr "[!! Ŀåšţ ŕûń ! !!]"
 
@@ -1144,7 +1156,7 @@ msgstr "[!! Ŀöåðîńĝ {name}... ! !!]"
 msgid "Local provider"
 msgstr "[!! Ŀöçåŀ ƥŕöṽîðéŕ ! !!]"
 
-#: gui/support_controller.py:594
+#: gui/support_controller.py:605
 msgid "Log file"
 msgstr "[!! Ŀöĝ ƒîŀé ! !!]"
 
@@ -1208,7 +1220,7 @@ msgstr "[!! Ḿîŕŕöŕ ŀåýöûţ ƒöŕ ŕîĝħţ-ţö-ŀéƒţ ŀåńĝ�
 msgid "Mirrors rows, anchors, and directional arrows for Arabic, Hebrew, Persian, and Urdu. Persists across sessions."
 msgstr "[!! Ḿîŕŕöŕš ŕöŵš, åńçħöŕš, åńð ðîŕéçţîöńåŀ åŕŕöŵš ƒöŕ Åŕåƀîç, Ħéƀŕéŵ, Ƥéŕšîåń, åńð Ûŕðû. Ƥéŕšîšţš åçŕöšš šéššîöńš. ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/support_controller.py:581
+#: gui/support_controller.py:592
 msgid "Missing"
 msgstr "[!! Ḿîššîńĝ ! !!]"
 
@@ -1216,15 +1228,15 @@ msgstr "[!! Ḿîššîńĝ ! !!]"
 msgid "Mode"
 msgstr "[!! Ḿöðé ! !!]"
 
-#: gui/support_controller.py:612
+#: gui/support_controller.py:623
 msgid "Model cache"
 msgstr "[!! Ḿöðéŀ çåçħé ! !!]"
 
-#: gui/support_controller.py:298 gui/support_controller.py:331
+#: gui/support_controller.py:298 gui/support_controller.py:342
 msgid "Model cache bundle"
 msgstr "[!! Ḿöðéŀ çåçħé ƀûńðŀé ! !!]"
 
-#: gui/support_controller.py:406
+#: gui/support_controller.py:417
 msgid "Model files"
 msgstr "[!! Ḿöðéŀ ƒîŀéš ! !!]"
 
@@ -1276,7 +1288,7 @@ msgstr "[!! Ńåḿé ţħé çûŕŕéńţ çŀéåńûƥ šéţţîńĝš åń
 msgid "Needs attention"
 msgstr "[!! Ńééðš åţţéńţîöń ! !!]"
 
-#: gui/support_controller.py:408 gui/support_controller.py:466
+#: gui/support_controller.py:419 gui/support_controller.py:477
 msgid "Next action"
 msgstr "[!! Ńéẋţ åçţîöń ! !!]"
 
@@ -1284,7 +1296,7 @@ msgstr "[!! Ńéẋţ åçţîöń ! !!]"
 msgid "No FFmpeg"
 msgstr "[!! Ńö ƑƑḿƥéĝ ! !!]"
 
-#: gui/support_controller.py:408
+#: gui/support_controller.py:419
 msgid "No action needed."
 msgstr "[!! Ńö åçţîöń ńééðéð. ! !!]"
 
@@ -1348,7 +1360,7 @@ msgstr "[!! Ńö ţŕåńšŀåţéð ŠŔŢ šéŀéçţéð ! ! !!]"
 msgid "No valid correction frame ranges are available"
 msgstr "[!! Ńö ṽåŀîð çöŕŕéçţîöń ƒŕåḿé ŕåńĝéš åŕé åṽåîŀåƀŀé ! ! ! !!]"
 
-#: gui/region_controller.py:1158 gui/support_controller.py:568 gui/support_controller.py:569
+#: gui/region_controller.py:1158 gui/support_controller.py:579 gui/support_controller.py:580
 msgid "None"
 msgstr "[!! Ńöńé ! !!]"
 
@@ -1376,7 +1388,7 @@ msgstr "[!! ÖÇŔ ƥŕéṽîéŵ ûńåṽåîŀåƀŀé; ţħé ŕéĝîöń 
 msgid "Only remove the selected language"
 msgstr "[!! Öńŀý ŕéḿöṽé ţħé šéŀéçţéð ŀåńĝûåĝé ! ! !!]"
 
-#: gui/quality_controller.py:329 gui/support_controller.py:610
+#: gui/quality_controller.py:329 gui/support_controller.py:621
 msgid "Open log"
 msgstr "[!! Öƥéń ŀöĝ ! !!]"
 
@@ -1580,7 +1592,7 @@ msgstr "[!! Ƥŕöçéššîńĝ ɋûéûé ! !!]"
 msgid "Propagate through review span"
 msgstr "[!! Ƥŕöƥåĝåţé ţħŕöûĝħ ŕéṽîéŵ šƥåń ! ! !!]"
 
-#: gui/support_controller.py:404
+#: gui/support_controller.py:415
 msgid "Providers"
 msgstr "[!! Ƥŕöṽîðéŕš ! !!]"
 
@@ -1616,7 +1628,7 @@ msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕö�
 msgid "Reading first frame..."
 msgstr "[!! Ŕéåðîńĝ ƒîŕšţ ƒŕåḿé... ! !!]"
 
-#: gui/app.py:1142 gui/layout_build.py:1886 gui/layout_build.py:2111 gui/layout_build.py:2122 gui/layout_helpers.py:48 gui/processing_controller.py:1323 gui/processing_controller.py:1358 gui/support_controller.py:581
+#: gui/app.py:1142 gui/layout_build.py:1886 gui/layout_build.py:2111 gui/layout_build.py:2122 gui/layout_helpers.py:48 gui/processing_controller.py:1323 gui/processing_controller.py:1358 gui/support_controller.py:592
 msgid "Ready"
 msgstr "[!! Ŕéåðý ! !!]"
 
@@ -1750,7 +1762,7 @@ msgstr "[!! Ŕéƥŀåçé, åðð ţö, öŕ šûƀţŕåçţ ƒŕöḿ ţħé 
 msgid "Reset"
 msgstr "[!! Ŕéšéţ ! !!]"
 
-#: gui/app.py:2638
+#: gui/app.py:2643
 msgid "Restore queue?"
 msgstr "[!! Ŕéšţöŕé ɋûéûé? ! !!]"
 
@@ -1966,11 +1978,11 @@ msgstr "[!! Šéţ ŕéĝîöń ! !!]"
 msgid "Set region..."
 msgstr "[!! Šéţ ŕéĝîöń... ! !!]"
 
-#: gui/layout_build.py:232 gui/support_controller.py:593
+#: gui/layout_build.py:232 gui/support_controller.py:604
 msgid "Settings"
 msgstr "[!! Šéţţîńĝš ! !!]"
 
-#: gui/support_controller.py:621
+#: gui/support_controller.py:632
 msgid "Settings folder"
 msgstr "[!! Šéţţîńĝš ƒöŀðéŕ ! !!]"
 
@@ -2018,7 +2030,7 @@ msgstr "[!! Šöḿé çöḿƥŀéţéð öûţƥûţš ńééð å çŀöšé�
 msgid "Some items need attention"
 msgstr "[!! Šöḿé îţéḿš ńééð åţţéńţîöń ! ! !!]"
 
-#: gui/app.py:2569
+#: gui/app.py:2574
 msgid "Some selected batch options are not supported by this FFmpeg build."
 msgstr "[!! Šöḿé šéŀéçţéð ƀåţçħ öƥţîöńš åŕé ńöţ šûƥƥöŕţéð ƀý ţħîš ƑƑḿƥéĝ ƀûîŀð. ! ! ! ! ! !!]"
 
@@ -2106,7 +2118,7 @@ msgstr "[!! Šûƀţîţŀéš ! !!]"
 msgid "Subtract from mask"
 msgstr "[!! Šûƀţŕåçţ ƒŕöḿ ḿåšķ ! !!]"
 
-#: gui/support_controller.py:238 gui/support_controller.py:618
+#: gui/support_controller.py:238 gui/support_controller.py:629
 msgid "Support bundle"
 msgstr "[!! Šûƥƥöŕţ ƀûńðŀé ! !!]"
 
@@ -2254,7 +2266,7 @@ msgstr "[!! Ûńðîð ŕéĝîöń éðîţ ! !!]"
 msgid "Undo"
 msgstr "[!! Ûńðö ! !!]"
 
-#: gui/support_controller.py:402 gui/support_controller.py:403 gui/support_controller.py:404 gui/support_controller.py:405 gui/support_controller.py:406 gui/support_controller.py:407
+#: gui/support_controller.py:413 gui/support_controller.py:414 gui/support_controller.py:415 gui/support_controller.py:416 gui/support_controller.py:417 gui/support_controller.py:418
 msgid "Unknown"
 msgstr "[!! Ûńķńöŵń ! !!]"
 
@@ -2314,7 +2326,7 @@ msgstr "[!! ṼŠŔ šéţţîńĝš ! !!]"
 msgid "Values below this floor use normal inpainting."
 msgstr "[!! Ṽåŀûéš ƀéŀöŵ ţħîš ƒŀööŕ ûšé ńöŕḿåŀ îńƥåîńţîńĝ. ! ! ! !!]"
 
-#: gui/support_controller.py:546
+#: gui/support_controller.py:557
 msgid "Version {version}"
 msgstr "[!! Ṽéŕšîöń {version} ! !!]"
 
@@ -2442,7 +2454,7 @@ msgstr "[!! ƒöçûšéð ! !!]"
 msgid "not selected"
 msgstr "[!! ńöţ šéŀéçţéð ! !!]"
 
-#: gui/support_controller.py:425
+#: gui/support_controller.py:436
 msgid "ready"
 msgstr "[!! ŕéåðý ! !!]"
 
@@ -2450,15 +2462,21 @@ msgstr "[!! ŕéåðý ! !!]"
 msgid "selected"
 msgstr "[!! šéŀéçţéð ! !!]"
 
+#: gui/support_controller.py:315
+msgid "skipped {n} unsafe or invalid file"
+msgid_plural "skipped {n} unsafe or invalid files"
+msgstr[0] "[!! šķîƥƥéð {n} ûńšåƒé öŕ îńṽåŀîð ƒîŀé ! ! !!]"
+msgstr[1] "[!! šķîƥƥéð {n} ûńšåƒé öŕ îńṽåŀîð ƒîŀéš ! ! !!]"
+
 #: gui/preview_controller.py:612
 msgid "source <-> cleaned"
 msgstr "[!! šöûŕçé <-> çŀéåńéð ! !!]"
 
-#: gui/support_controller.py:600
+#: gui/support_controller.py:611
 msgid "unavailable"
 msgstr "[!! ûńåṽåîŀåƀŀé ! !!]"
 
-#: gui/support_controller.py:572
+#: gui/support_controller.py:583
 msgid "{count} GPU{suffix}"
 msgstr "[!! {count} ĜƤÛ{suffix} ! !!]"
 
@@ -2512,7 +2530,7 @@ msgid_plural "{n} need attention"
 msgstr[0] "[!! {n} ńééðš åţţéńţîöń ! !!]"
 msgstr[1] "[!! {n} ńééð åţţéńţîöń ! !!]"
 
-#: gui/app.py:2631
+#: gui/app.py:2636
 msgid "{n} queued item from last session"
 msgid_plural "{n} queued items from last session"
 msgstr[0] "[!! {n} ɋûéûéð îţéḿ ƒŕöḿ ŀåšţ šéššîöń ! ! !!]"
