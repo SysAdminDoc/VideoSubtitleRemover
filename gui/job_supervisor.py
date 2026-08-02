@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -140,6 +141,7 @@ class JobSupervisor:
         self._ready = threading.Event()
         self._cancel_sent = False
         self._paused = False
+        self._timed_out = False
         self._owned_scratch: Optional[tempfile.TemporaryDirectory] = None
         if scratch_dir:
             self._scratch = Path(scratch_dir)
@@ -193,7 +195,17 @@ class JobSupervisor:
         )
 
     def run(self, timeout: Optional[float] = None) -> JobOutcome:
-        """Start the child, pump its events, and return the outcome."""
+        """Start the child, pump its events, and return the outcome.
+
+        A pipe reader cannot be interrupted by ``Popen.wait(timeout=...)``
+        while it is blocked waiting for the next line. Keep that reader in a
+        daemon thread and spend one monotonic deadline across the reader,
+        process wait, termination escalation, and cleanup. This makes the
+        public timeout a wall-clock bound instead of only a post-EOF wait.
+        """
+        deadline = None
+        if timeout is not None:
+            deadline = time.monotonic() + max(0.0, float(timeout))
         try:
             self._write_request()
             self._process = self._popen()
@@ -208,13 +220,32 @@ class JobSupervisor:
         stderr_thread = threading.Thread(
             target=self._drain_stderr, name="vsr-job-stderr", daemon=True)
         stderr_thread.start()
+        event_thread = threading.Thread(
+            target=self._pump_events, name="vsr-job-events", daemon=True)
+        event_thread.start()
 
         try:
-            self._pump_events()
+            if deadline is None:
+                event_thread.join()
+            else:
+                event_thread.join(timeout=max(0.0, deadline - time.monotonic()))
+                if event_thread.is_alive():
+                    self._timed_out = True
+                    logger.warning(
+                        "Job worker exceeded its wall-clock time budget; "
+                        "terminating")
+                    self._terminate_with_deadline(deadline)
+            code = self._await_exit(deadline=deadline)
         finally:
-            code = self._await_exit(timeout)
-            stderr_thread.join(timeout=2.0)
+            if deadline is not None:
+                self._terminate_with_deadline(deadline)
             self._close_streams()
+            join_timeout = (
+                2.0 if deadline is None
+                else max(0.0, deadline - time.monotonic())
+            )
+            event_thread.join(timeout=join_timeout)
+            stderr_thread.join(timeout=join_timeout)
         outcome = self._build_outcome(code)
         self._cleanup_scratch()
         return outcome
@@ -304,19 +335,55 @@ class JobSupervisor:
         except (OSError, ValueError):
             pass
 
-    def _await_exit(self, timeout: Optional[float]) -> Optional[int]:
+    def _await_exit(
+        self,
+        timeout: Optional[float] = None,
+        *,
+        deadline: Optional[float] = None,
+    ) -> Optional[int]:
         if self._process is None:
             return None
+        wait_timeout = timeout
+        if deadline is not None:
+            wait_timeout = max(0.0, deadline - time.monotonic())
         try:
-            return self._process.wait(timeout=timeout)
+            return self._process.wait(timeout=wait_timeout)
         except subprocess.TimeoutExpired:
+            self._timed_out = True
             logger.warning(
-                "Job worker exceeded its time budget; terminating")
-            self.terminate()
+                "Job worker exceeded its wall-clock time budget; terminating")
+            self._terminate_with_deadline(deadline)
+            return self._process.poll()
+
+    def _terminate_with_deadline(self, deadline: Optional[float]) -> None:
+        """Terminate the child without exceeding ``deadline`` when set."""
+        if self._process is None or self._process.poll() is not None:
+            return
+        try:
+            self._process.terminate()
+        except OSError:
+            pass
+
+        grace = TERMINATE_GRACE_SECONDS
+        if deadline is not None:
+            grace = max(0.0, deadline - time.monotonic())
+        if grace:
             try:
-                return self._process.wait(timeout=TERMINATE_GRACE_SECONDS)
+                self._process.wait(timeout=grace)
+                return
             except subprocess.TimeoutExpired:
-                return None
+                pass
+
+        if self._process.poll() is None:
+            try:
+                self._process.kill()
+            except OSError:
+                pass
+        if deadline is None:
+            try:
+                self._process.wait(timeout=TERMINATE_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                pass
 
     def _close_streams(self) -> None:
         if self._process is None:
@@ -332,6 +399,18 @@ class JobSupervisor:
 
     def _build_outcome(self, code: Optional[int]) -> JobOutcome:
         tail = "\n".join(self._stderr_lines[-STDERR_TAIL_LINES:])
+        if self._timed_out and not self._cancel_sent:
+            return JobOutcome(
+                status="error",
+                success=False,
+                error=(
+                    "The job worker exceeded its wall-clock time budget "
+                    "and was terminated."
+                ),
+                reason="worker_timeout",
+                exit_code=code,
+                stderr_tail=tail,
+            )
         if self._result is None:
             # The defining case: no result event. Either the child was
             # killed, or it faulted natively. Report it as its own status
@@ -397,21 +476,7 @@ class JobSupervisor:
 
     def terminate(self) -> None:
         """Stop the child, escalating to kill if it will not go."""
-        if self._process is None or self._process.poll() is not None:
-            return
-        try:
-            self._process.terminate()
-        except OSError:
-            pass
-        try:
-            self._process.wait(timeout=TERMINATE_GRACE_SECONDS)
-            return
-        except subprocess.TimeoutExpired:
-            pass
-        try:
-            self._process.kill()
-        except OSError:
-            pass
+        self._terminate_with_deadline(None)
 
     @property
     def pid(self) -> Optional[int]:

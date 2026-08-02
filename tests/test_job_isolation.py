@@ -241,6 +241,23 @@ class SupervisorFailureTests(unittest.TestCase):
         self.assertEqual(outcome.status, "crashed")
         self.assertIn("going down hard", outcome.stderr_tail)
 
+    def test_timeout_is_wall_clock_bounded_while_stdout_stays_open(self):
+        supervisor = JobSupervisor(
+            self.request,
+            command=self._stub(
+                "import time\n"
+                "time.sleep(30)\n"
+            ),
+        )
+        started = time.monotonic()
+        outcome = supervisor.run(timeout=0.2)
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 3.0)
+        self.assertEqual(outcome.status, "error")
+        self.assertEqual(outcome.reason, "worker_timeout")
+        self.assertIn("time budget", outcome.error)
+
     def test_a_worker_that_cannot_be_spawned_is_an_error_not_a_crash(self):
         outcome = JobSupervisor(
             self.request,
