@@ -3137,3 +3137,17 @@ Premium polish pass. No behavioral changes; dramatic UX/UI refinement.
 - Changed: Update README badge for v3.3.0
 - v3.3.0: Real AI inpainting, multi-engine detection, comprehensive GUI overhaul
 - Added: Add files via upload
+
+## Roadmap archive — 2026-08-10 — ROADMAP.md
+
+<details>
+<summary>Original roadmap snapshot</summary>
+
+```markdown
+# Video Subtitle Remover Pro -- Roadmap
+
+Remaining-work backlog only: every item below is NOT yet implemented.
+Completed items are deleted from this file; history lives in CHANGELOG.md and git.
+```
+
+</details>
