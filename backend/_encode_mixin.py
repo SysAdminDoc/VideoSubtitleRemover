@@ -513,6 +513,7 @@ class _EncodeMixin:
         end_seconds: Optional[float] = None,
         _include_auxiliary: bool = True,
         _force_audio_transcode: bool = False,
+        video_is_contract_ready: bool = False,
     ) -> str:
         from backend.processor import OutputIntegrityError
         temp_output = self._allocate_work_output(output)
@@ -554,7 +555,14 @@ class _EncodeMixin:
             for warning in plan.get("warnings", []):
                 logger.warning(warning)
             cmd += ['-map', '0:v:0']
-            cmd += self._get_encode_args()
+            if video_is_contract_ready:
+                # `processed` already came out of _encode_frame_sequence with
+                # this job's encoder settings. Re-encoding it here put a
+                # second lossy generation on every video output that carries
+                # audio, and doubled the encode time, for no gain.
+                cmd += ['-c:v', 'copy']
+            else:
+                cmd += self._get_encode_args()
             cmd += build_container_mux_args(
                 plan,
                 input_index=1,
@@ -642,6 +650,7 @@ class _EncodeMixin:
                     end_seconds=end_seconds,
                     _include_auxiliary=False,
                     _force_audio_transcode=_force_audio_transcode,
+                    video_is_contract_ready=video_is_contract_ready,
                 )
             if payload_failure and copied_audio and not _force_audio_transcode:
                 logger.warning(
@@ -656,6 +665,7 @@ class _EncodeMixin:
                     end_seconds=end_seconds,
                     _include_auxiliary=False,
                     _force_audio_transcode=True,
+                    video_is_contract_ready=video_is_contract_ready,
                 )
             logger.warning(
                 "Container preservation failed integrity checks (%s); "
@@ -694,6 +704,7 @@ class _EncodeMixin:
                     end_seconds=end_seconds,
                     _include_auxiliary=_include_auxiliary,
                     _force_audio_transcode=_force_audio_transcode,
+                    video_is_contract_ready=video_is_contract_ready,
                 )
             mapped_auxiliary = any(
                 item.get("type") in {"subtitle", "attachment", "data", "video"}
@@ -716,6 +727,7 @@ class _EncodeMixin:
                     end_seconds=end_seconds,
                     _include_auxiliary=False,
                     _force_audio_transcode=_force_audio_transcode,
+                    video_is_contract_ready=video_is_contract_ready,
                 )
             if copied_audio and not _force_audio_transcode:
                 logger.warning(
@@ -729,6 +741,7 @@ class _EncodeMixin:
                     end_seconds=end_seconds,
                     _include_auxiliary=False,
                     _force_audio_transcode=True,
+                    video_is_contract_ready=video_is_contract_ready,
                 )
             logger.warning(f"Audio merge failed: {e}, encoding video without audio")
             self._mark_container_payload_failed(

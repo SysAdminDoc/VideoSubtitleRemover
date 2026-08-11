@@ -6,6 +6,24 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Video output is no longer encoded twice.** Every shipped entry point
+  passes a checkpoint directory, so finalization always encoded the frame
+  sequence and then handed that finished file to the audio merge -- which
+  applied the encoder arguments a second time. Every video output carrying
+  audio shipped two lossy generations and paid roughly double the encode
+  time. The merge now stream-copies video that finalization already produced
+  under the job's own output contract; the muxed bitstream is byte-identical
+  to the encode, verified against real media.
+- **Per-frame timing survives long sources.** The probe read ffprobe's
+  pretty-printed JSON under the shared 8 MiB output cap, and that collector
+  trims from the *head*, so any video past roughly 45-60 minutes lost the
+  start of its own document and failed to parse -- silently, at DEBUG level.
+  The fallout was not cosmetic: a VFR source reverted to the constant-rate
+  clock (mistimed mattes, audio offsets and SRT cues), and the frame-count
+  correction vanished, which can end the decode loop early and fail a good
+  file as `truncated_decode`. Frame rows are now read as CSV (measured at
+  10.6 bytes per frame against 79.8 for JSON), under a much larger cap and a
+  duration-scaled timeout, and a probe that still fails says so at WARNING.
 - **Picking a language by its long-form name no longer breaks detection.**
   The picker lists PaddleOCR-style codes ("japan", "korean", "arabic") ahead
   of their ISO primaries and both are selectable, but two consumers keyed

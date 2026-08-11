@@ -89,6 +89,10 @@ class _FinalizeMixin:
                         output_path,
                         start_seconds=processed_time_start,
                         end_seconds=processed_time_end,
+                        # _encode_frame_sequence just produced this with the
+                        # job's own encoder settings; muxing audio must not
+                        # add a second lossy generation.
+                        video_is_contract_ready=True,
                     )
             elif vfr_frame_dir is not None:
                 processed_video = self._encode_frame_sequence(
@@ -105,6 +109,7 @@ class _FinalizeMixin:
                     output_path,
                     start_seconds=processed_time_start,
                     end_seconds=processed_time_end,
+                    video_is_contract_ready=True,
                 )
             else:
                 final_output_path = output_path

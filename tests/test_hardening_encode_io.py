@@ -2071,3 +2071,79 @@ class RunProcessCancelClassificationTests(unittest.TestCase):
                     timeout=5.0,
                     cancel_check=lambda: state["cancelled"],
                 )
+
+
+class MergeAudioStreamCopyTests(unittest.TestCase):
+    """RM-164: muxing audio must not re-encode an already-encoded video.
+
+    Every shipped entry point passes a checkpoint_dir, so the writer is
+    always the frame-sequence writer and finalization always runs
+    _encode_frame_sequence (lossy pass 1) and then _merge_audio, which
+    applied _get_encode_args again (lossy pass 2). Every video output with
+    audio carried two generations and paid double the encode time.
+    """
+
+    def _remover(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = SimpleNamespace(
+            output_quality=23,
+            preserve_audio=True,
+            multi_audio_passthrough=False,
+            loudnorm_target=0.0,
+            time_start=0.0,
+            time_end=0.0,
+        )
+        remover._hw_encoder = None
+        remover._allocate_work_output = lambda output: output + ".tmp"
+        remover._d3d12_device_args = lambda: []
+        remover._get_encode_args = lambda **_k: ["-c:v", "libx264", "-crf", "23"]
+        remover._promote_video_output = lambda *a, **k: None
+        remover._is_teardown_requested = lambda: False
+        remover._mark_container_payload_failed = lambda *_a, **_k: None
+        remover.last_container_payload = {}
+        remover.commands = []
+
+        def _capture(cmd, timeout, **_kwargs):
+            remover.commands.append(list(cmd))
+
+        remover._run_checked_ffmpeg = _capture
+        return remover
+
+    def _merge(self, remover, contract_ready):
+        from backend import _encode_mixin
+
+        with unittest.mock.patch.object(
+            _encode_mixin, "probe_container_manifest", return_value={},
+        ), unittest.mock.patch.object(
+            _encode_mixin, "build_container_mux_plan",
+            return_value={"streams": [], "warnings": []},
+        ), unittest.mock.patch.object(
+            _encode_mixin, "build_container_mux_args", return_value=[],
+        ), unittest.mock.patch.object(
+            _encode_mixin, "_probe_duration_seconds", return_value=2.0,
+        ), unittest.mock.patch.object(
+            _encode_mixin, "validate_container_payload", return_value={},
+        ):
+            processor.SubtitleRemover._merge_audio(
+                remover, "src.mp4", "processed.mp4", "out.mp4",
+                video_is_contract_ready=contract_ready,
+            )
+        return remover.commands[0]
+
+    def test_contract_ready_video_is_stream_copied(self):
+        remover = self._remover()
+        cmd = self._merge(remover, True)
+
+        self.assertIn("-c:v", cmd)
+        self.assertEqual(cmd[cmd.index("-c:v") + 1], "copy")
+        self.assertNotIn("libx264", cmd)
+        self.assertNotIn("-crf", cmd)
+
+    def test_unprepared_video_is_still_encoded(self):
+        # The non-checkpoint path hands _merge_audio a raw intermediate that
+        # genuinely needs encoding; that behavior must survive.
+        remover = self._remover()
+        cmd = self._merge(remover, False)
+
+        self.assertIn("libx264", cmd)
+        self.assertIn("-crf", cmd)

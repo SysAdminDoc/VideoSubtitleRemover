@@ -577,10 +577,39 @@ def _parse_ffmpeg_ratio(value, default: float = 0.0) -> float:
     return result if np.isfinite(result) and result > 0 else default
 
 
+def _parse_frame_timing_csv(text: str) -> List[dict]:
+    """Turn `-of csv=p=0` frame rows into the dicts the parser below expects.
+
+    Each row is ``best_effort_timestamp_time,pkt_duration_time``; ffprobe
+    writes "N/A" for an unknown value, which the caller already treats as
+    missing.
+    """
+    frames: List[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(",")
+        frames.append({
+            "best_effort_timestamp_time": parts[0] if parts else "",
+            "pkt_duration_time": parts[1] if len(parts) > 1 else "",
+        })
+    return frames
+
+
+# A pretty-printed JSON frame record costs 70-110 bytes; the compact CSV
+# form below costs about 20. The old JSON probe ran under the shared 8 MiB
+# output cap, and that collector trims from the *head* (it was built for
+# stderr tails), so any video past roughly 80k frames -- about 45 minutes at
+# 30 fps -- lost the start of its own JSON document and failed to parse.
+# Silently: the failure logged at DEBUG and the caller fell back to CFR.
+_FRAME_TIMING_MAX_OUTPUT_BYTES = 256 * 1024 * 1024
+
+
 def _probe_video_frame_timing(
     path: str,
     *,
-    timeout: float = 120.0,
+    timeout: Optional[float] = None,
 ) -> Optional[VideoFrameTiming]:
     """Read per-frame presentation timestamps with ffprobe.
 
@@ -588,30 +617,56 @@ def _probe_video_frame_timing(
     video-frame timestamps.  Callers then retain the existing CFR behavior.
     ``best_effort_timestamp_time`` is presentation-ordered, unlike packet DTS,
     and therefore matches the decoded frame order exposed by OpenCV.
+
+    The per-frame rows are read as CSV rather than JSON, and the output cap
+    and timeout scale with the source, because losing this probe is not
+    cosmetic: a VFR source silently reverts to the CFR clock (mistimed
+    mattes, audio offsets and SRT cues), and the frame-count correction it
+    provides disappears -- which can end the decode loop early and fail a
+    perfectly good file as ``truncated_decode``.
     """
     if Path(path).is_dir() or shutil.which("ffprobe") is None:
         return None
-    cmd = [
+    if timeout is None:
+        # -show_frames decodes the whole stream, so a fixed 120 s budget
+        # expired on long or 4K sources and took the probe with it.
+        timeout = _ffmpeg_subprocess_timeout(_probe_duration_seconds(path))
+    stream_cmd = [
         "ffprobe", "-v", "error", "-select_streams", "v:0",
-        "-show_frames",
         "-show_entries",
-        (
-            "stream=time_base,avg_frame_rate,r_frame_rate,start_time,duration:"
-            "frame=best_effort_timestamp_time,pkt_duration_time"
-        ),
+        "stream=time_base,avg_frame_rate,r_frame_rate,start_time,duration",
         "-of", "json", str(path),
     ]
+    frame_cmd = [
+        "ffprobe", "-v", "error", "-select_streams", "v:0",
+        "-show_frames",
+        "-show_entries", "frame=best_effort_timestamp_time,pkt_duration_time",
+        "-of", "csv=p=0", str(path),
+    ]
     try:
-        result = run_process(
-            cmd,
+        stream_result = run_process(
+            stream_cmd,
             capture_output=True,
             text=True,
             timeout=max(1.0, float(timeout)),
         )
-        if result.returncode != 0:
-            logger.debug("Frame-timing probe failed: %s", result.stderr)
+        if stream_result.returncode != 0:
+            logger.debug(
+                "Frame-timing stream probe failed: %s", stream_result.stderr)
             return None
-        payload = json.loads(result.stdout or "{}")
+        payload = json.loads(stream_result.stdout or "{}")
+        frame_result = run_process(
+            frame_cmd,
+            capture_output=True,
+            text=True,
+            timeout=max(1.0, float(timeout)),
+            max_output_bytes=_FRAME_TIMING_MAX_OUTPUT_BYTES,
+        )
+        if frame_result.returncode != 0:
+            logger.debug(
+                "Frame-timing frame probe failed: %s", frame_result.stderr)
+            return None
+        payload["frames"] = _parse_frame_timing_csv(frame_result.stdout or "")
     except (
         FileNotFoundError,
         subprocess.TimeoutExpired,
@@ -619,7 +674,13 @@ def _probe_video_frame_timing(
         OSError,
         ValueError,
     ) as exc:
-        logger.debug("Frame-timing probe failed: %s", exc)
+        # WARNING, not DEBUG: this used to vanish silently and take VFR
+        # timing accuracy with it.
+        logger.warning(
+            "Frame-timing probe failed for %s (%s); falling back to the "
+            "constant-frame-rate clock, which is wrong for a VFR source",
+            Path(path).name, exc,
+        )
         return None
 
     streams = payload.get("streams") or []
