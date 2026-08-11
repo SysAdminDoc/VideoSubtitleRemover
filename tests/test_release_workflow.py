@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -858,7 +859,12 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("--analysis-path", self.bat)
         self.assertIn("--run-dependency-audit", self.bat)
         self.assertIn("--quality strict", self.bat)
-        self.assertIn("-m unittest discover -s tests -q", self.bat)
+        # The gate must use a runner that sees the WHOLE suite. `unittest
+        # discover` imports the bare-function test modules and collects zero
+        # tests from them without saying so, which hid 71 tests -- including
+        # the writer-failure, CVE-floor, and dependency-floor regressions.
+        self.assertIn("-m pytest tests -q", self.bat)
+        self.assertNotIn("-m unittest discover", self.bat)
         self.assertIn('"pytest>=9.0.0"', self.bat)
         self.assertIn(
             "-m PyInstaller --noconfirm --clean VideoSubtitleRemoverPro.spec",
@@ -895,6 +901,95 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertNotIn(
             "README.md LICENSE CHANGELOG.md Run_VSR_Pro.bat",
             self.bat,
+        )
+
+    def _command_block(self, marker: str) -> str:
+        """Return the full (caret-continued) command line containing `marker`.
+
+        The build script writes each release command across several lines
+        joined by a trailing `^`, so a flag belonging to one command cannot
+        be found by searching the file as a whole -- it has to be read from
+        that command's own block.
+        """
+        lines = self.bat.splitlines()
+        for index, line in enumerate(lines):
+            if marker not in line:
+                continue
+            block = [line]
+            while block[-1].rstrip().endswith("^") and index + 1 < len(lines):
+                index += 1
+                block.append(lines[index])
+            return "\n".join(block)
+        self.fail(f"build_exe.bat has no command containing {marker!r}")
+
+    def test_every_test_module_is_visible_to_the_release_runner(self):
+        # RM-157: 12 modules are written as bare module-level test functions.
+        # `unittest discover` imports them, collects nothing, and reports OK,
+        # so a regression in any of them could not fail the release build.
+        # Assert the inverse property directly: every test module contributes
+        # at least one test, and any module that relies on bare functions is
+        # only acceptable because the gate runs pytest (asserted above).
+        import ast
+
+        bare_function_modules = []
+        empty_modules = []
+        for path in sorted((ROOT / "tests").glob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            has_case = False
+            has_bare = False
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef):
+                    for base in node.bases:
+                        name = getattr(base, "attr", getattr(base, "id", ""))
+                        if name == "TestCase":
+                            has_case = True
+                            break
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if node.name.startswith("test"):
+                        has_bare = True
+            if not has_case and not has_bare:
+                empty_modules.append(path.name)
+            elif has_bare and not has_case:
+                bare_function_modules.append(path.name)
+
+        self.assertEqual(
+            empty_modules,
+            [],
+            "these test modules contribute no tests to any runner",
+        )
+        if bare_function_modules:
+            self.assertIn(
+                "-m pytest tests -q",
+                self.bat,
+                "modules "
+                + ", ".join(bare_function_modules)
+                + " define only bare test functions, which `unittest "
+                "discover` collects as zero tests; the release gate must "
+                "run pytest",
+            )
+
+    def test_release_evidence_is_written_where_staging_reads_it(self):
+        # RM-156: the verification step defaults its evidence directory to
+        # --dist-dir, so omitting --evidence-dir scattered the evidence into
+        # dist\ while staging looked in build\release\ -- a clean tree failed
+        # after every gate passed, and a dirty tree promoted stale evidence.
+        verify_block = self._command_block("-m backend.release_verification")
+        stage_block = self._command_block("backend.release_staging stage")
+        pattern = re.compile(r'--evidence-dir\s+"([^"]+)"')
+        verify_dir = pattern.search(verify_block)
+        stage_dir = pattern.search(stage_block)
+        self.assertIsNotNone(
+            verify_dir,
+            "release_verification must pass --evidence-dir explicitly; "
+            "its default is --dist-dir, which staging never reads",
+        )
+        self.assertIsNotNone(
+            stage_dir, "release_staging stage must pass --evidence-dir"
+        )
+        self.assertEqual(
+            verify_dir.group(1),
+            stage_dir.group(1),
+            "release evidence must be written to the directory staging reads",
         )
 
     def test_frozen_launcher_assets_do_not_bootstrap_source(self):

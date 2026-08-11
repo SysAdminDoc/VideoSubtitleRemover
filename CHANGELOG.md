@@ -4,6 +4,24 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The release build can complete on a clean tree again.** Release evidence
+  was written to `dist\` (the verification step's default) while staging read
+  `build\release\`, so a clean build failed after every gate had already
+  passed, and a tree still holding same-version evidence promoted that stale
+  set into `SHA256SUMS.txt` beside a freshly built installer. The build now
+  passes `--evidence-dir` explicitly, and a test asserts the verification and
+  staging steps name the same directory.
+- **The release test gate no longer runs blind.** It used `unittest discover`,
+  which imports the twelve modules written as bare test functions and then
+  collects zero tests from them without saying so -- 71 tests, including the
+  writer-failure, CVE-floor, dependency-floor, seek-accuracy, and HDR
+  regressions, could not fail the build. The gate now runs pytest, whose
+  collection is a strict superset, and a new invariant test fails if a
+  bare-function module is ever paired with a runner that cannot see it.
+
+
 ## [3.33.0] - 2026-08-02
 
 ### Fixed

@@ -69,7 +69,11 @@ if errorlevel 1 (
 
 echo.
 echo Running the complete test suite...
-"%PYTHON%" -m unittest discover -s tests -q
+:: pytest, not `unittest discover`: 12 test modules are written as bare
+:: module-level test functions, which unittest imports and then collects
+:: ZERO tests from -- silently, reporting OK. pytest collects those plus
+:: every TestCase class, so its coverage is a strict superset.
+"%PYTHON%" -m pytest tests -q
 if errorlevel 1 (
     echo Test suite failed; release build stopped.
     exit /b 1
@@ -206,6 +210,7 @@ echo Generating local release evidence...
 set "VSR_SMOKE_LOCALE=qps-Ploc"
 "%PYTHON%" -m backend.release_verification ^
     --dist-dir "!DIST_DIR!" ^
+    --evidence-dir "!RELEASE_DIR!" ^
     --analysis-path "!ANALYSIS_PATH!" ^
     --installer-path "!INSTALLER_STAGE!" ^
     --installer-smoke-executable "!SMOKE_INSTALL_DIR!\VideoSubtitleRemoverPro.exe" ^
