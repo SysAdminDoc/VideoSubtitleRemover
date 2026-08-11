@@ -15,26 +15,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
 
 ### P1
 
-- [ ] P1 -- RM-158: Applying a preset then starting a batch silently reverts most preset fields, including the headline behavior of a built-in preset
-  Category: correctness
-  Where: `gui/settings_controller.py:168-184` (the 13-entry var-refresh allowlist in `_on_preset_applied`), `gui/app.py:530-581` (`_sync_config_from_ui`), `backend/presets.py:124-141` (the "Logo / Watermark removal" built-in), `gui/config.py:1403` (`SAFE_PRESET_FIELDS`)
-  Problem: `apply_preset` writes preset values onto `self.config`, but `_on_preset_applied` only pushes 13 named fields back into their widget vars. Preset-safe fields absent from that list -- `remove_subtitles`, `remove_chyrons`, `karaoke_grouping`, `detection_vertical`, `deinterlace_auto`, `keyframe_detection`, `confidence_weighted_dilation`, `rife_fast_stride` -- leave their widgets showing the pre-preset value. The next `_sync_config_from_ui()` (which runs on every queue add, every batch start, and app close) reads the stale widget vars and overwrites the preset's values on both `self.config` and every idle item snapshot. Concretely: the built-in "Logo / Watermark removal" preset sets `remove_subtitles: False` -- that *is* the preset ("keeps dialogue subtitles") -- and starting a batch flips it back to `True`, so the run removes the subtitles the user chose the preset to preserve. `_on_close` then persists the stomped value, so the preset never sticks across sessions either.
-  Evidence: Verified by reading the refresh loop at `gui/settings_controller.py:168-184` -- it iterates a hardcoded 13-tuple; `remove_subtitles` is not in it. `gui/app.py:551` unconditionally assigns `self.config.remove_subtitles = self.remove_subs_var.get()`. `remove_subtitles`/`remove_chyrons` are both in `SAFE_PRESET_FIELDS` (`gui/config.py:1403` and neighbours), so user-exported presets carry them legitimately too.
-  Fix: Derive both `_on_preset_applied`'s refresh and `_sync_config_from_ui` from one shared field-to-var table rather than two hand-maintained lists, so a field can never exist in one and not the other. Minimum viable fix: extend the refresh tuple to cover every `SAFE_PRESET_FIELDS` entry that has a widget var.
-  Acceptance: Applying "Logo / Watermark removal", adding a file, and starting a batch produces an item whose backend config has `remove_subtitles=False`; a regression test asserts round-trip for every `SAFE_PRESET_FIELDS` entry that has a widget var.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P1 -- RM-159: DirectML selection never reaches the backend for real processing -- AMD/Intel GPUs silently run on CPU while the report claims DirectML
-  Category: correctness
-  Where: `backend/config_schema.py:119-127` (`gui_to_backend_payload` device branch), `gui/processing_controller.py:505` and `:808` (both batch paths), `gui/app.py:1649` (`_gui_to_backend_device`, the DirectML-aware mapper), `gui/processing_controller.py:263-271` (`_batch_report_device`)
-  Problem: Both the in-process and isolated batch paths build the backend config with `gui_to_backend_config(item.config)`. That function derives `device` purely from `use_gpu`/`gpu_id` as `f"cuda:{gpu_id}" if use_gpu else "cpu"` -- it has no DirectML branch. The DirectML-aware mapper `_gui_to_backend_device` is used only for the preview "Test cleanup" path and a cache key, never for the config handed to the backend. On an AMD/Intel machine `detect_gpu()` returns DirectML, which becomes `use_gpu=True, gpu_id=0`, which becomes `device="cuda:0"`, which `backend/device_provider.py` probes, fails, and falls back to CPU -- it never tries the DirectML EP. Meanwhile `_batch_report_device` writes `"directml"` into the batch report, so the provenance record names a device the run never used. CLAUDE.md documents `device="directml"` as the intended contract; only previews honor it.
-  Evidence: `sed -n '118,127p' backend/config_schema.py` shows the device branch with only the CUDA/CPU ternary and no DirectML case. `grep -n "gui_to_backend_config\|_gui_to_backend_device" gui/processing_controller.py` shows `gui_to_backend_config` at the two batch sites (505, 808) and `_gui_to_backend_device` only at 801 (the cache key).
-  Fix: Carry the device *type* on the item snapshot (or pass the string resolved by `_gui_to_backend_device`) and override `backend_config.device` in both `_process_item` and `_process_item_isolated` before handing it to the backend.
-  Acceptance: With a DirectML GPU selected, the built backend config carries `device="directml"`, `execution_provenance` records the DirectML EP as the effective provider, and the batch report's device field matches what actually ran.
-  Confidence: Verified
-  Effort: S-M
-
 - [ ] P1 -- RM-160: The entire screen-reader announcement layer has never worked on any machine
   Category: a11y
   Where: `backend/a11y.py:97` (`_cc.CreateObject("CUIAutomation8")`), plus every `announce()`/`announce_widget()` caller in `gui/widgets.py`, `gui/app.py`, `gui/processing_controller.py`

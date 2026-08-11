@@ -243,3 +243,57 @@ class WindowGeometryRestoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DirectMlDeviceMappingTests(unittest.TestCase):
+    """RM-159: a DirectML selection must reach the backend as "directml".
+
+    gui_to_backend_payload derived the device from use_gpu/gpu_id alone, so a
+    DirectML adapter became "cuda:N"; device_provider then probed CUDA, found
+    none, and fell back to CPU -- while the batch report still recorded
+    "directml". Only the preview path used the DirectML-aware mapper.
+    """
+
+    def _gui_config(self, **overrides):
+        from gui.config import ProcessingConfig
+
+        config = ProcessingConfig()
+        for key, value in overrides.items():
+            setattr(config, key, value)
+        return config
+
+    def test_directml_selection_maps_to_the_directml_device(self):
+        from backend.config_schema import gui_to_backend_payload
+
+        payload = gui_to_backend_payload(
+            self._gui_config(use_gpu=True, gpu_id=0, gpu_backend="directml")
+        )
+
+        self.assertEqual(payload["device"], "directml")
+
+    def test_cuda_selection_still_maps_to_an_indexed_cuda_device(self):
+        from backend.config_schema import gui_to_backend_payload
+
+        payload = gui_to_backend_payload(
+            self._gui_config(use_gpu=True, gpu_id=2, gpu_backend="cuda")
+        )
+
+        self.assertEqual(payload["device"], "cuda:2")
+
+    def test_gpu_disabled_still_maps_to_cpu(self):
+        from backend.config_schema import gui_to_backend_payload
+
+        payload = gui_to_backend_payload(
+            self._gui_config(use_gpu=False, gpu_backend="directml")
+        )
+
+        self.assertEqual(payload["device"], "cpu")
+
+    def test_unknown_family_falls_back_to_cuda_indexing(self):
+        from backend.config_schema import gui_to_backend_payload
+
+        payload = gui_to_backend_payload(
+            self._gui_config(use_gpu=True, gpu_id=1, gpu_backend="")
+        )
+
+        self.assertEqual(payload["device"], "cuda:1")

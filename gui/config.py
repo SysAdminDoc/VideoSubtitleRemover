@@ -463,6 +463,11 @@ class ProcessingConfig:
     mode: InpaintMode = InpaintMode.STTN
     use_gpu: bool = True
     gpu_id: int = 0
+    # Accelerator family of the selected GPU. DirectML devices are
+    # driven by the ONNX Runtime DirectML EP and must reach the
+    # backend as device="directml", never as "cuda:N" -- probing
+    # CUDA for a DirectML adapter fails and silently lands on CPU.
+    gpu_backend: str = ""
 
     sttn_skip_detection: bool = False
     sttn_neighbor_stride: int = 10
@@ -622,6 +627,7 @@ class ProcessingConfig:
         self.mode = _coerce_gui_mode(self.mode)
         self.use_gpu = _coerce_bool(self.use_gpu, True)
         self.gpu_id = max(0, _coerce_int(self.gpu_id, 0))
+        self.gpu_backend = _coerce_text(self.gpu_backend, "", 32).lower()
         self.sttn_skip_detection = _coerce_bool(self.sttn_skip_detection, False)
         self.sttn_neighbor_stride = _coerce_int(self.sttn_neighbor_stride, 10, 5, 30)
         self.sttn_reference_length = _coerce_int(self.sttn_reference_length, 10, 5, 30)
@@ -1406,6 +1412,49 @@ SAFE_PRESET_FIELDS = frozenset({
     "karaoke_x_gap_px",
     "karaoke_y_overlap",
 })
+
+# Widget variable <-> config field pairs that are a plain, uncoerced
+# assignment in both directions. ONE table drives both `_sync_config_from_ui`
+# (var -> config) and `_on_preset_applied` (config -> var); keeping two
+# hand-maintained lists is what let a preset write a field that the next
+# sync silently overwrote from a stale widget -- "Logo / Watermark removal"
+# set remove_subtitles=False and starting the batch flipped it back to True.
+# Fields needing coercion (text scale, locale tag, loudnorm, GPU choice)
+# stay bespoke in their respective methods and are deliberately absent here.
+SETTINGS_VAR_FIELDS = (
+    ("auto_band_var", "auto_band"),
+    ("flow_warp_var", "tbe_flow_warp"),
+    ("scene_split_var", "tbe_scene_cut_split"),
+    ("adaptive_batch_var", "adaptive_batch"),
+    ("temporal_mask_union_var", "temporal_mask_union"),
+    ("export_srt_var", "export_srt"),
+    ("export_mask_var", "export_mask_video"),
+    ("mask_export_format_var", "mask_export_format"),
+    ("mask_import_mode_var", "mask_import_mode"),
+    ("language_filter_var", "language_mask_filter"),
+    ("kalman_var", "kalman_tracking"),
+    ("phash_var", "phash_skip_enable"),
+    ("colour_tune_var", "colour_tune_enable"),
+    ("deinterlace_var", "deinterlace_auto"),
+    ("keyframe_var", "keyframe_detection"),
+    ("quality_report_var", "quality_report"),
+    ("quality_sheet_var", "quality_report_sheet"),
+    ("multi_audio_var", "multi_audio_passthrough"),
+    ("decode_accel_var", "decode_hw_accel"),
+    ("prefetch_var", "prefetch_decode"),
+    ("remove_subs_var", "remove_subtitles"),
+    ("remove_chyrons_var", "remove_chyrons"),
+    ("karaoke_grouping_var", "karaoke_grouping"),
+    ("output_codec_var", "output_codec"),
+    ("vertical_text_var", "detection_vertical"),
+    ("high_contrast_var", "high_contrast"),
+    ("rtl_layout_var", "rtl_layout"),
+    ("job_isolation_var", "job_isolation"),
+    ("update_check_var", "update_check"),
+    ("json_log_var", "json_log_enabled"),
+    ("conf_dilate_var", "confidence_weighted_dilation"),
+    ("d3d12_accel_var", "d3d12_accel"),
+)
 
 DEFAULT_PRESET_FIELDS = [
     "mode", "detection_threshold", "mask_dilate_px",

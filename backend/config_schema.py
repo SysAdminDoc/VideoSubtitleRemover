@@ -124,7 +124,18 @@ def gui_to_backend_payload(gui_config: Any) -> dict[str, Any]:
         if spec.name == "device":
             use_gpu = bool(getattr(gui_config, "use_gpu", True))
             gpu_id = max(0, int(getattr(gui_config, "gpu_id", 0)))
-            payload[spec.name] = f"cuda:{gpu_id}" if use_gpu else "cpu"
+            if not use_gpu:
+                payload[spec.name] = "cpu"
+                continue
+            # DirectML adapters are served by the ONNX Runtime DirectML EP,
+            # which the backend selects on the literal device string. Emitting
+            # "cuda:N" for one makes device_provider probe CUDA, fail, and
+            # fall back to CPU while the batch report still claimed DirectML.
+            family = str(getattr(gui_config, "gpu_backend", "") or "").lower()
+            if family == "directml":
+                payload[spec.name] = "directml"
+            else:
+                payload[spec.name] = f"cuda:{gpu_id}"
             continue
         if not hasattr(gui_config, spec.name):
             missing.append(spec.name)

@@ -6,6 +6,22 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Presets now survive the start of a batch.** Applying a preset wrote its
+  values onto the config, but only thirteen of the affected widgets were
+  refreshed; the next `_sync_config_from_ui` -- which runs on every queue
+  add, batch start, and app close -- read the untouched widgets back and
+  reverted the rest. The built-in "Logo / Watermark removal" preset lost its
+  entire purpose this way: it sets `remove_subtitles=False`, and starting the
+  batch flipped it back to `True`, so the run removed the dialogue subtitles
+  the preset exists to keep. Both directions are now driven by one shared
+  field-to-widget table, and a test fails if a preset-settable field with a
+  widget is ever missing from it.
+- **A DirectML GPU is finally used for processing.** The batch config derived
+  its device from the GPU toggle and index alone, so a DirectML adapter was
+  handed to the backend as `cuda:N`; the provider probe found no CUDA and
+  silently fell back to CPU while the batch report still recorded DirectML.
+  The selected accelerator family now travels on the item snapshot, so both
+  the in-process and isolated paths resolve it to `directml`.
 - **The release build can complete on a clean tree again.** Release evidence
   was written to `dist\` (the verification step's default) while staging read
   `build\release\`, so a clean build failed after every gate had already

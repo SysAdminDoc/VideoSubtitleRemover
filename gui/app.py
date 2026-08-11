@@ -32,7 +32,7 @@ from gui.theme import (
 )
 from gui.config import (
     APP_NAME, APP_VERSION, LOG_DIR, LOG_FILE, InpaintMode, ProcessingStatus, ProcessingConfig, QueueItem,
-    _coerce_int, _coerce_region_span_list,
+    _coerce_int, _coerce_region_span_list, SETTINGS_VAR_FIELDS,
     consume_settings_load_notice, load_settings, save_settings,
     save_queue_state, load_queue_state, clear_queue_state,
     set_persistence_observer, settings_read_only_version,
@@ -468,6 +468,19 @@ class VideoSubtitleRemoverApp(
             pass
         self._running_mutex_handle = None
 
+    def _sync_plain_setting_vars(self):
+        """Read every plain toggle/picker widget back onto the config.
+
+        Driven by the one shared SETTINGS_VAR_FIELDS table that
+        `_on_preset_applied` writes in the opposite direction, so a preset
+        can never set a field that this sync then reverts from a widget the
+        preset never reached.
+        """
+        for var_attr, field in SETTINGS_VAR_FIELDS:
+            var = getattr(self, var_attr, None)
+            if var is not None:
+                setattr(self.config, field, var.get())
+
     def _sync_config_from_ui(self):
         """Sync config object from current UI state."""
         try:
@@ -480,8 +493,7 @@ class VideoSubtitleRemoverApp(
         self.config.detection_lang = self.lang_var.get()
         self.config.detection_engine = self._ocr_engine_by_label.get(
             self.ocr_engine_var.get(), "auto")
-        if hasattr(self, "language_filter_var"):
-            self.config.language_mask_filter = self.language_filter_var.get()
+        self._sync_plain_setting_vars()
         # Threshold slider stores as int percent, convert to float
         pct = getattr(self.config, '_detection_threshold_pct', 50)
         self.config.detection_threshold = pct / 100.0
@@ -490,21 +502,6 @@ class VideoSubtitleRemoverApp(
         self.config.time_end = self._safe_float(self.time_end_entry.get())
         # HW encode
         self.config.use_hw_encode = self.hw_encode_var.get()
-        if hasattr(self, 'd3d12_accel_var'):
-            self.config.d3d12_accel = self.d3d12_accel_var.get()
-        # v3.9 quality + workflow toggles
-        if hasattr(self, 'auto_band_var'):
-            self.config.auto_band = self.auto_band_var.get()
-        if hasattr(self, 'flow_warp_var'):
-            self.config.tbe_flow_warp = self.flow_warp_var.get()
-        if hasattr(self, 'scene_split_var'):
-            self.config.tbe_scene_cut_split = self.scene_split_var.get()
-        if hasattr(self, 'adaptive_batch_var'):
-            self.config.adaptive_batch = self.adaptive_batch_var.get()
-        if hasattr(self, 'temporal_mask_union_var'):
-            self.config.temporal_mask_union = self.temporal_mask_union_var.get()
-        if hasattr(self, 'export_srt_var'):
-            self.config.export_srt = self.export_srt_var.get()
         if hasattr(self, 'translation_enabled_var'):
             self.config.translation_enabled = self.translation_enabled_var.get()
             self.config.translation_srt = self.translation_srt_var.get()
@@ -515,54 +512,12 @@ class VideoSubtitleRemoverApp(
                 self.translation_target_lang_var.get())
             self.config.translation_command = self.translation_command_var.get()
             self.config.translation_style = self.translation_style_var.get()
-        if hasattr(self, 'export_mask_var'):
-            self.config.export_mask_video = self.export_mask_var.get()
-        if hasattr(self, 'mask_export_format_var'):
-            self.config.mask_export_format = self.mask_export_format_var.get()
-        if hasattr(self, 'mask_import_mode_var'):
-            self.config.mask_import_mode = self.mask_import_mode_var.get()
-        if hasattr(self, 'kalman_var'):
-            self.config.kalman_tracking = self.kalman_var.get()
-        if hasattr(self, 'phash_var'):
-            self.config.phash_skip_enable = self.phash_var.get()
-        if hasattr(self, 'colour_tune_var'):
-            self.config.colour_tune_enable = self.colour_tune_var.get()
-        if hasattr(self, 'deinterlace_var'):
-            self.config.deinterlace_auto = self.deinterlace_var.get()
-        if hasattr(self, 'keyframe_var'):
-            self.config.keyframe_detection = self.keyframe_var.get()
-        if hasattr(self, 'quality_report_var'):
-            self.config.quality_report = self.quality_report_var.get()
         # v3.13 GUI-exposed toggles
-        if hasattr(self, 'quality_sheet_var'):
-            self.config.quality_report_sheet = self.quality_sheet_var.get()
-        if hasattr(self, 'multi_audio_var'):
-            self.config.multi_audio_passthrough = self.multi_audio_var.get()
         if hasattr(self, 'loudnorm_var'):
             self.config.loudnorm_target = self._safe_float(self.loudnorm_var.get(), 0.0)
-        if hasattr(self, 'decode_accel_var'):
-            self.config.decode_hw_accel = self.decode_accel_var.get()
         if hasattr(self, 'rife_stride_var'):
             self.config.rife_fast_stride = self._safe_int(
                 self.rife_stride_var.get(), 0)
-        if hasattr(self, 'prefetch_var'):
-            self.config.prefetch_decode = self.prefetch_var.get()
-        if hasattr(self, 'remove_subs_var'):
-            self.config.remove_subtitles = self.remove_subs_var.get()
-        if hasattr(self, 'remove_chyrons_var'):
-            self.config.remove_chyrons = self.remove_chyrons_var.get()
-        if hasattr(self, 'karaoke_grouping_var'):
-            self.config.karaoke_grouping = self.karaoke_grouping_var.get()
-        if hasattr(self, 'output_codec_var'):
-            self.config.output_codec = self.output_codec_var.get()
-        if hasattr(self, 'vertical_text_var'):
-            self.config.detection_vertical = self.vertical_text_var.get()
-        if hasattr(self, 'high_contrast_var'):
-            self.config.high_contrast = self.high_contrast_var.get()
-        if hasattr(self, 'rtl_layout_var'):
-            self.config.rtl_layout = self.rtl_layout_var.get()
-        if hasattr(self, 'job_isolation_var'):
-            self.config.job_isolation = self.job_isolation_var.get()
         if hasattr(self, 'text_scale_var'):
             self.config.text_scale_percent = _coerce_int(
                 str(self.text_scale_var.get()).replace("%", ""),
@@ -573,23 +528,22 @@ class VideoSubtitleRemoverApp(
         if hasattr(self, 'locale_var'):
             self.config.ui_locale = self._locale_display_to_tag.get(
                 self.locale_var.get(), "system")
-        if hasattr(self, 'update_check_var'):
-            self.config.update_check = self.update_check_var.get()
-        if hasattr(self, 'json_log_var'):
-            self.config.json_log_enabled = self.json_log_var.get()
-        if hasattr(self, 'conf_dilate_var'):
-            self.config.confidence_weighted_dilation = self.conf_dilate_var.get()
         if hasattr(self, 'work_dir_var'):
             self.config.work_directory = self.work_dir_var.get().strip()
         # GPU sync
         if self._hardware_probe_pending or not self.gpus:
             self.config.use_gpu = False
+            self.config.gpu_backend = ""
             return
         selection = self.gpu_var.get()
         for gpu in self.gpus:
             if f"{gpu['name']} ({gpu['memory']})" == selection:
                 self.config.gpu_id = gpu['index']
                 self.config.use_gpu = True
+                # Carried onto the item snapshot so the backend config -- and
+                # the isolated child, which cannot see self.gpus -- resolves
+                # a DirectML adapter to device="directml" rather than CUDA.
+                self.config.gpu_backend = str(gpu.get('type', '') or '').lower()
                 break
 
     def _on_persistence_failure(self, result):
@@ -1654,6 +1608,10 @@ class VideoSubtitleRemoverApp(
         for g in self.gpus:
             if g['index'] == gpu_id and g.get('type') == "DirectML":
                 return "directml"
+        # A per-item snapshot may outlive the probe list (isolated runs,
+        # restored queues), so fall back to the family recorded on the config.
+        if str(getattr(self.config, "gpu_backend", "") or "").lower() == "directml":
+            return "directml"
         return f"cuda:{gpu_id}"
 
     @staticmethod

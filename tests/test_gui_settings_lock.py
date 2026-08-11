@@ -6,6 +6,8 @@ import numpy as np
 from PIL import Image
 
 from gui.app import VideoSubtitleRemoverApp
+from gui.config import ProcessingConfig
+from gui.settings_controller import AdvancedSettingsControllerMixin
 from gui.preview_controller import PreviewControllerMixin
 from gui.widgets import ModernSlider
 
@@ -192,6 +194,87 @@ class CachedMaskPreviewTests(unittest.TestCase):
         self.assertGreater(
             np.count_nonzero(np.asarray(wide)),
             np.count_nonzero(np.asarray(narrow)),
+        )
+
+
+class PresetRoundTripTests(unittest.TestCase):
+    """RM-158: a preset must survive the next _sync_config_from_ui.
+
+    Presets write onto the config dataclass; the sync reads widget vars back
+    onto that same config on every queue add, batch start, and app close. Any
+    field a preset can set but the preset-refresh does not push into its
+    widget is silently reverted -- which is what happened to the built-in
+    "Logo / Watermark removal" preset's whole purpose (remove_subtitles).
+    """
+
+    class _Var:
+        def __init__(self, value):
+            self._value = value
+
+        def get(self):
+            return self._value
+
+        def set(self, value):
+            self._value = value
+
+    def test_every_table_field_survives_a_sync_after_a_preset(self):
+        from gui.config import SETTINGS_VAR_FIELDS
+
+        app = VideoSubtitleRemoverApp.__new__(VideoSubtitleRemoverApp)
+        config = ProcessingConfig()
+        app.config = config
+        # Widgets start at the dataclass defaults, as they do on a real launch.
+        for var_attr, field in SETTINGS_VAR_FIELDS:
+            setattr(app, var_attr, self._Var(getattr(config, field)))
+
+        # A preset writes straight onto the config, bypassing the widgets.
+        flipped = {}
+        for _, field in SETTINGS_VAR_FIELDS:
+            current = getattr(config, field)
+            if isinstance(current, bool):
+                flipped[field] = not current
+                setattr(config, field, not current)
+        self.assertIn("remove_subtitles", flipped)
+
+        AdvancedSettingsControllerMixin._push_plain_setting_vars(app)
+        VideoSubtitleRemoverApp._sync_plain_setting_vars(app)
+
+        for field, expected in flipped.items():
+            self.assertEqual(
+                getattr(config, field),
+                expected,
+                f"{field} was reverted by the sync after a preset set it",
+            )
+
+    def test_safe_preset_fields_with_widgets_are_all_in_the_table(self):
+        from gui.config import SAFE_PRESET_FIELDS, SETTINGS_VAR_FIELDS
+
+        table_fields = {field for _, field in SETTINGS_VAR_FIELDS}
+        # Fields a preset may carry AND that a widget var backs must be in the
+        # shared table; otherwise the sync reverts them.
+        widget_backed = {
+            "detection_vertical",
+            "confidence_weighted_dilation",
+            "tbe_flow_warp",
+            "tbe_scene_cut_split",
+            "auto_band",
+            "adaptive_batch",
+            "temporal_mask_union",
+            "deinterlace_auto",
+            "keyframe_detection",
+            "kalman_tracking",
+            "phash_skip_enable",
+            "colour_tune_enable",
+            "remove_subtitles",
+            "remove_chyrons",
+            "karaoke_grouping",
+        }
+        self.assertTrue(widget_backed <= SAFE_PRESET_FIELDS)
+        self.assertEqual(
+            sorted(widget_backed - table_fields),
+            [],
+            "these preset-settable fields have a widget var but are missing "
+            "from SETTINGS_VAR_FIELDS, so a sync will revert them",
         )
 
 

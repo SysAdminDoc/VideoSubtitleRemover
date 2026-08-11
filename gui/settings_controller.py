@@ -15,6 +15,7 @@ from gui.config import (
     BUILTIN_PRESETS,
     InpaintMode,
     ProcessingConfig,
+    SETTINGS_VAR_FIELDS,
     _load_user_presets,
     apply_preset,
     consume_preset_import_notice,
@@ -149,6 +150,19 @@ class AdvancedSettingsControllerMixin:
         self.mode_var.set(value)
         self._on_mode_changed()
 
+    def _push_plain_setting_vars(self):
+        """Push config values out to every plain toggle/picker widget.
+
+        The exact inverse of `_sync_plain_setting_vars`, over the same shared
+        table. Keeping two hand-maintained lists is what let the built-in
+        "Logo / Watermark removal" preset set remove_subtitles=False and have
+        the next sync read the untouched widget and flip it back to True.
+        """
+        for attr, field in SETTINGS_VAR_FIELDS:
+            var = getattr(self, attr, None)
+            if var is not None:
+                var.set(getattr(self.config, field))
+
     def _on_preset_applied(self, event=None):
         """Apply the chosen preset to the live config and refresh the UI."""
         name = self.preset_var.get()
@@ -165,23 +179,7 @@ class AdvancedSettingsControllerMixin:
             self.mode_picker.set(self.config.mode.value)
         except Exception:
             pass
-        for attr, field in (
-            ("auto_band_var", "auto_band"),
-            ("flow_warp_var", "tbe_flow_warp"),
-            ("scene_split_var", "tbe_scene_cut_split"),
-            ("kalman_var", "kalman_tracking"),
-            ("phash_var", "phash_skip_enable"),
-            ("colour_tune_var", "colour_tune_enable"),
-            ("adaptive_batch_var", "adaptive_batch"),
-            ("temporal_mask_union_var", "temporal_mask_union"),
-            ("export_srt_var", "export_srt"),
-            ("export_mask_var", "export_mask_video"),
-            ("mask_export_format_var", "mask_export_format"),
-            ("mask_import_mode_var", "mask_import_mode"),
-            ("language_filter_var", "language_mask_filter"),
-        ):
-            if hasattr(self, attr):
-                getattr(self, attr).set(getattr(self.config, field))
+        self._push_plain_setting_vars()
         for field, (slider, value_label) in getattr(
             self, "_settings_slider_by_attr", {}
         ).items():
