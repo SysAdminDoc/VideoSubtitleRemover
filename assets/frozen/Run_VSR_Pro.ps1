@@ -12,4 +12,10 @@ if ($env:VSR_LAUNCHER_WAIT -eq "1") {
     exit $LASTEXITCODE
 }
 
-Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $PSScriptRoot
+if ($args.Count -gt 0) {
+    # -ArgumentList rejects an empty collection (ValidateNotNullOrEmpty), so
+    # the plain no-argument launch -- the normal case -- used to fail here.
+    Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory $PSScriptRoot
+} else {
+    Start-Process -FilePath $exe -WorkingDirectory $PSScriptRoot
+}

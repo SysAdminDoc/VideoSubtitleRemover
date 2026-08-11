@@ -6,6 +6,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The PowerShell launcher repairs a broken venv instead of dying on it.**
+  It probed the environment with a redirected-stderr native call under
+  `$ErrorActionPreference = "Stop"`; Windows PowerShell 5.1 converts that
+  stderr into error records, so the failing import's first traceback line
+  terminated the script -- in precisely the case the repair branch below it
+  exists to handle. Native probes now run through a helper that drops to
+  `Continue` and reports an exit code, and a missing `python` no longer
+  throws either. The `.bat` launcher was always correct here; the two now
+  behave the same.
+- **The frozen PowerShell launcher starts with no arguments.** It passed an
+  empty `$args` to `Start-Process -ArgumentList`, which rejects empty
+  collections, so the ordinary double-click launch failed with a parameter
+  validation error. The release smoke never caught it because it always
+  passes `--smoke-test`, which takes the other branch.
 - **Screen-reader announcements work for the first time.** The announcer
   asked COM for `CUIAutomation8`, which is a coclass name rather than a
   registered ProgId, so every launch raised "Invalid class string" into a

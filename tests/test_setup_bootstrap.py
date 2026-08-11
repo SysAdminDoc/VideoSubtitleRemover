@@ -407,3 +407,39 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PowerShellLauncherRobustnessTests(unittest.TestCase):
+    """RM-161 / RM-181: both PowerShell launchers failed on a normal path.
+
+    The source launcher probed the venv with a redirected-stderr native call
+    under $ErrorActionPreference = "Stop"; on Windows PowerShell 5.1 that
+    turns the failing import's traceback into a terminating error, so the
+    launcher died in exactly the broken-venv case its repair branch exists
+    to handle. The frozen launcher passed an empty $args to
+    Start-Process -ArgumentList, which rejects empty collections, so the
+    plain no-argument launch failed.
+    """
+
+    def setUp(self):
+        self.root = Path(__file__).resolve().parents[1]
+
+    def test_source_launcher_probes_without_a_terminating_redirect(self):
+        text = (self.root / "Run_VSR_Pro.ps1").read_text(encoding="utf-8")
+        self.assertIn("function Invoke-VsrProbe", text)
+        self.assertIn('$ErrorActionPreference = "Continue"', text)
+        # The raw redirected-native-call form must not come back.
+        self.assertNotIn('-c "import cv2, PIL, numpy" 1>$null 2>$null', text)
+        self.assertIn("Invoke-VsrProbe", text)
+
+    def test_frozen_launcher_handles_a_no_argument_launch(self):
+        text = (
+            self.root / "assets" / "frozen" / "Run_VSR_Pro.ps1"
+        ).read_text(encoding="utf-8")
+        self.assertIn("$args.Count -gt 0", text)
+        # A bare Start-Process ... -ArgumentList $args would throw on the
+        # default launch; the else branch must omit -ArgumentList entirely.
+        self.assertIn(
+            "Start-Process -FilePath $exe -WorkingDirectory $PSScriptRoot",
+            text,
+        )
