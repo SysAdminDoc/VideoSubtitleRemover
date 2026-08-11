@@ -95,12 +95,16 @@ class CliPresetMergeTests(unittest.TestCase):
     def test_unmapped_valid_backend_field_is_stashed(self):
         # A preset field with no CLI flag but a real backend field name must be
         # stashed for post-build application, not silently dropped.
+        # RM-165 note: temporal_smooth_radius used to be the example here, but
+        # it does have a flag (--temporal-smooth) and is now mapped to that
+        # dest so a preset cannot override an explicitly typed value.
+        # kalman_max_age is genuinely flag-less, which is what this covers.
         from backend import presets
 
         original = dict(presets.BUILTIN_PRESETS)
         presets.BUILTIN_PRESETS["__audit_test__"] = {
             "description": "test",
-            "fields": {"temporal_smooth_radius": 3, "not_a_real_field": 9},
+            "fields": {"kalman_max_age": 3, "not_a_real_field": 9},
         }
         try:
             args = _prepare(["--validate-config", "--preset", "__audit_test__"])
@@ -109,7 +113,26 @@ class CliPresetMergeTests(unittest.TestCase):
             presets.BUILTIN_PRESETS.update(original)
         self.assertEqual(
             getattr(args, "_preset_backend_overrides"),
-            {"temporal_smooth_radius": 3})
+            {"kalman_max_age": 3})
+
+    def test_flag_backed_preset_field_reaches_args_not_the_override_stash(self):
+        # RM-165: a preset field that HAS a flag must land on args, where the
+        # explicit-flag check protects it, rather than in the unconditional
+        # override stash that used to beat what the user typed.
+        from backend import presets
+
+        original = dict(presets.BUILTIN_PRESETS)
+        presets.BUILTIN_PRESETS["__audit_test__"] = {
+            "description": "test",
+            "fields": {"temporal_smooth_radius": 3},
+        }
+        try:
+            args = _prepare(["--validate-config", "--preset", "__audit_test__"])
+        finally:
+            presets.BUILTIN_PRESETS.clear()
+            presets.BUILTIN_PRESETS.update(original)
+        self.assertEqual(args.temporal_smooth, 3)
+        self.assertEqual(getattr(args, "_preset_backend_overrides"), {})
 
     def test_explicit_no_kalman_overrides_preset(self):
         from backend import presets

@@ -497,3 +497,112 @@ class FrozenMatteCliErrorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PresetFlagPrecedenceTests(unittest.TestCase):
+    """RM-165 / RM-184: an explicitly typed flag must beat a preset.
+
+    _explicitly_provided_dests exists so a preset cannot discard a value the
+    user actually typed, but the field-to-dest maps covered only 14 fields.
+    Anything else -- --keep-chyrons, --no-tbe, --max-retries, --vertical --
+    fell into preset_backend_overrides and was applied unconditionally, so
+    `--preset "Logo / Watermark removal" --keep-chyrons` removed chyrons
+    anyway. Abbreviated and attached option forms were not recognised as
+    explicit either.
+    """
+
+    def _parser(self):
+        from backend.cli import _build_parser
+        from backend.config import InpaintMode
+
+        return _build_parser([mode.value for mode in InpaintMode])
+
+    def test_every_preset_settable_field_with_a_flag_is_protected(self):
+        from backend.cli import _build_parser  # noqa: F401
+        from backend.config_schema import processing_field_names
+        from gui.config import SAFE_PRESET_FIELDS
+
+        parser = self._parser()
+        dests = {action.dest for action in parser._actions}
+
+        # Mirrors the maps in _prepare_cli_args; kept in sync by this test.
+        field_to_attr = {
+            "mode": "mode", "detection_threshold": "threshold",
+            "mask_dilate_px": "mask_dilate", "mask_feather_px": "mask_feather",
+            "edge_ring_px": "edge_ring", "tbe_flow_warp": "flow_warp",
+            "colour_tune_enable": "colour_tune",
+            "colour_tune_tolerance": "colour_tolerance",
+            "phash_skip_distance": "phash_distance", "auto_band": "auto_band",
+            "detection_frame_skip": "frame_skip",
+            "detection_vertical": "vertical",
+            "confidence_weighted_dilation": "confidence_dilate",
+            "temporal_smooth_radius": "temporal_smooth",
+            "detection_denoise": "denoise_detect",
+            "tbe_scene_cut_use_pyscenedetect": "pyscenedetect",
+            "batch_max_retries": "max_retries",
+            "batch_retry_backoff_seconds": "retry_backoff",
+            "keyframe_detection": "keyframe_detect",
+            "karaoke_x_gap_px": "karaoke_x_gap",
+        }
+        inverted_flags = {
+            "tbe_scene_cut_split": "no_scene_split",
+            "kalman_tracking": "no_kalman",
+            "phash_skip_enable": "no_phash",
+            "tbe_enable": "no_tbe",
+            "adaptive_batch": "no_adaptive_batch",
+            "deinterlace_auto": "no_deinterlace_detect",
+            "remove_chyrons": "keep_chyrons",
+            "remove_subtitles": "keep_subtitles",
+        }
+
+        for field, dest in {**field_to_attr, **inverted_flags}.items():
+            with self.subTest(field=field):
+                self.assertIn(
+                    dest, dests,
+                    f"{field} maps to dest {dest!r}, which the parser does "
+                    "not define",
+                )
+
+        fields = set(processing_field_names())
+        protected = (
+            set(field_to_attr)
+            | set(inverted_flags)
+            | {name for name in fields if name in dests}
+        )
+        unprotected = sorted((fields & SAFE_PRESET_FIELDS) - protected)
+        # Fields with no CLI flag at all legitimately ride
+        # preset_backend_overrides; only flag-backed ones must be protected.
+        flag_backed = {
+            field for field in unprotected
+            if field.replace("_", "-") in {
+                opt.lstrip("-")
+                for action in parser._actions
+                for opt in action.option_strings
+            }
+        }
+        self.assertEqual(
+            sorted(flag_backed), [],
+            "these preset-settable fields have a CLI flag but no "
+            "explicit-flag protection, so a preset overrides what the user "
+            "typed",
+        )
+
+    def test_explicit_inverted_flag_beats_a_preset(self):
+        from backend.cli import _explicitly_provided_dests
+
+        parser = self._parser()
+        argv = ["--preset", "Logo / Watermark removal", "--keep-chyrons"]
+        explicit = _explicitly_provided_dests(parser, argv)
+        self.assertIn("keep_chyrons", explicit)
+
+    def test_attached_short_option_counts_as_explicit(self):
+        from backend.cli import _explicitly_provided_dests
+
+        parser = self._parser()
+        explicit = _explicitly_provided_dests(parser, ["-msttn"])
+        self.assertIn("mode", explicit)
+
+    def test_abbreviated_flags_are_rejected_rather_than_silently_ignored(self):
+        parser = self._parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["--thresho", "0.8"])

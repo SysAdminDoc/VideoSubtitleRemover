@@ -563,6 +563,11 @@ def _build_parser(mode_choices):
     parser = argparse.ArgumentParser(
         description="Video Subtitle Remover Pro CLI",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        # Abbreviated flags cannot be recognised as "the user typed this"
+        # by _explicitly_provided_dests, which matches whole tokens, so a
+        # preset silently overwrote a value passed as e.g. --thresho 0.8.
+        # Every documented flag is spelled in full in --help and the README.
+        allow_abbrev=False,
         epilog=(
             "Examples:\n"
             "  python -m backend.processor -i input.mp4 -o output.mp4 -m sttn --lang en\n"
@@ -1111,10 +1116,37 @@ def _explicitly_provided_dests(parser, argv):
     provided = set()
     for action in parser._actions:
         for opt in action.option_strings:
-            if any(tok == opt or tok.startswith(opt + "=") for tok in tokens):
+            matched = any(
+                tok == opt or tok.startswith(opt + "=") for tok in tokens
+            )
+            if not matched and len(opt) == 2 and opt.startswith("-"):
+                # Short options take an attached value: -msttn, -g0. Those
+                # are the user typing the flag just as surely as "-m sttn".
+                matched = any(
+                    tok.startswith(opt) and len(tok) > 2 and not tok.startswith("--")
+                    for tok in tokens
+                )
+            if matched:
                 provided.add(action.dest)
                 break
     return provided
+
+
+def _preset_field_to_dest(parser) -> dict:
+    """Map every backend config field name to the argparse dest that sets it.
+
+    Built from the parser itself rather than a hand-kept list: any field with
+    a CLI flag must be protected from preset overwrite, and the two
+    hand-maintained dicts this replaces covered 14 of them, so a preset
+    quietly won over flags like --keep-chyrons, --no-tbe and --max-retries.
+    """
+    mapping = {}
+    for action in parser._actions:
+        dest = getattr(action, "dest", "")
+        if not dest or dest in {"help", "version"}:
+            continue
+        mapping.setdefault(dest, dest)
+    return mapping
 
 
 def _prepare_cli_args(args, parser, argv=None):
@@ -1136,7 +1168,9 @@ def _prepare_cli_args(args, parser, argv=None):
     if args.soft_subtitle_plan_json and not args.soft_subtitle_dry_run:
         parser.error("--soft-subtitle-plan-json requires --soft-subtitle-dry-run")
     soft_action = _soft_subtitle_action(args)
-    dry_run_only = args.soft_subtitle_dry_run
+    # --dry-run writes nothing, so requiring --output/--out-dir
+    # contradicted the flag's own help text.
+    dry_run_only = bool(args.soft_subtitle_dry_run or getattr(args, "dry_run", False))
 
     if args.preset:
         from backend.presets import preset_fields as _preset_fields
@@ -1157,6 +1191,17 @@ def _prepare_cli_args(args, parser, argv=None):
             "phash_skip_distance": "phash_distance",
             "auto_band": "auto_band",
             "detection_frame_skip": "frame_skip",
+            # Renamed dests below this line were missing, so a preset
+            # carrying any of them silently beat an explicitly typed flag.
+            "detection_vertical": "vertical",
+            "confidence_weighted_dilation": "confidence_dilate",
+            "temporal_smooth_radius": "temporal_smooth",
+            "detection_denoise": "denoise_detect",
+            "tbe_scene_cut_use_pyscenedetect": "pyscenedetect",
+            "batch_max_retries": "max_retries",
+            "batch_retry_backoff_seconds": "retry_backoff",
+            "keyframe_detection": "keyframe_detect",
+            "karaoke_x_gap_px": "karaoke_x_gap",
         }
         # Preset booleans exposed only as inverted "--no-*" store_true flags.
         # A preset value of True means "enabled" (the parser default), so map
@@ -1165,6 +1210,11 @@ def _prepare_cli_args(args, parser, argv=None):
             "tbe_scene_cut_split": "no_scene_split",
             "kalman_tracking": "no_kalman",
             "phash_skip_enable": "no_phash",
+            "tbe_enable": "no_tbe",
+            "adaptive_batch": "no_adaptive_batch",
+            "deinterlace_auto": "no_deinterlace_detect",
+            "remove_chyrons": "keep_chyrons",
+            "remove_subtitles": "keep_subtitles",
         }
         # Preset fields with no CLI flag but that name a real backend config
         # field are applied to the built config later (via apply_backend_payload
@@ -1473,7 +1523,10 @@ def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
             if not inputs:
                 parser.error(f"No files matched pattern: {args.pattern}")
             out_dir = Path(args.out_dir)
-            out_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                out_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                parser.error(f"--out-dir is not usable: {exc}")
             batch_started_at = datetime.datetime.now(datetime.timezone.utc)
             records: list[dict] = []
             interrupted = False
@@ -1594,7 +1647,10 @@ def _run_processing(
         if args.checkpoint_dir
         else _default_checkpoint_dir(config.work_directory)
     )
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        parser.error(f"--checkpoint-dir is not usable: {exc}")
     pause_requested = {"value": False}
 
     def _request_pause(_signum=None, _frame=None):
@@ -1754,7 +1810,10 @@ def _run_processing(
         if not inputs:
             parser.error(f"No files matched pattern: {args.pattern}")
         out_dir = Path(args.out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            parser.error(f"--out-dir is not usable: {exc}")
         print(f"[batch] {len(inputs)} file(s) queued | out={out_dir} | resume={'on' if not args.no_resume else 'off'}")
         batch_started_at = datetime.datetime.now(datetime.timezone.utc)
         records: list[dict] = []
@@ -2069,6 +2128,11 @@ def main():
         )
     except FrozenMatteError as exc:
         parser.error(f"--frozen-matte: {exc.user_message}")
+    except (ValueError, TypeError) as exc:
+        # Preset values reach args unvalidated (unlike --set, which is
+        # coerced), so an unregistered mode or a string-typed numeric in a
+        # user preset used to surface as a raw traceback.
+        parser.error(str(exc))
 
     config, ffmpeg_ready = _apply_cli_config_overlays(
         args, parser, config,

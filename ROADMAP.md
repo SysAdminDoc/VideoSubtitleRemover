@@ -15,16 +15,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
 
 ### P2
 
-- [ ] P2 -- RM-165: Preset fields with no CLI flag mapping override values the user explicitly typed
-  Category: correctness
-  Where: `backend/cli.py:1148-1199` (`field_to_attr`, `inverted_flags`, `preset_backend_overrides`), `backend/cli.py:1400-1407` (`_apply_cli_config_overlays` applies them unconditionally)
-  Problem: The explicit-flag protection (`explicit_dests`) only covers the 11 fields in `field_to_attr` plus the 3 in `inverted_flags`. Any preset field whose config name differs from its argparse dest falls through to `preset_backend_overrides` and is applied unconditionally by `apply_backend_payload`, overwriting what the user typed. This is the still-live remnant of the "CLI `--preset` store_true/default precedence" gap deferred in 3.23. Concretely, `--preset "Logo / Watermark removal" --keep-chyrons` still removes chyrons: the preset carries `remove_chyrons: True`, there is no `args.remove_chyrons` (the dest is `keep_chyrons`), so it lands in the override dict and wins. The same class covers `tbe_enable` vs `--no-tbe`, `adaptive_batch` vs `--no-adaptive-batch`, `deinterlace_auto` vs `--no-deinterlace-detect`, `detection_vertical` vs `--vertical`, `keyframe_detection` vs `--keyframe-detect`, `temporal_smooth_radius` vs `--temporal-smooth`, `auto_exposure_threshold` vs `--auto-threshold`, `confidence_weighted_dilation` vs `--confidence-dilate`, and `batch_max_retries` vs `--max-retries` -- all of which are in `SAFE_PRESET_FIELDS`, so GUI-exported user presets legitimately carry them.
-  Evidence: `backend/cli.py:1186-1196` routes any field lacking an `args` attribute into `preset_backend_overrides`; `backend/cli.py:1402-1407` applies that dict with no `explicit_dests` consultation. `backend/cli.py:1378` confirms the flag is `--keep-chyrons` (dest `keep_chyrons`) while the config field is `remove_chyrons`.
-  Fix: Derive the field-to-flag map from a single table covering every backend field that has a CLI flag (including inverted ones), and route only genuinely flag-less fields through `preset_backend_overrides`. Add a test that every `--no-*`/inverse flag survives a preset that sets the positive field.
-  Acceptance: `--preset "Logo / Watermark removal" --keep-chyrons` produces a config with `remove_chyrons=False`; a parametrized test covers each inverted flag against a preset carrying the opposite value.
-  Confidence: Verified
-  Effort: M
-
 - [ ] P2 -- RM-167: Roughly 120 user-visible strings can never be translated -- deferred `tr()` sinks are invisible to the extractor
   Category: ux
   Where: extractor `scripts/i18n_catalogs.py` (`extract_messages`); sinks at `gui/app.py:2266` (`display_message = tr(message)`), `gui/config.py:932,938` (`tr(_STATUS_LABELS.get(...))`), `gui/layout_build.py:1955` (`tr(label)` over a tuple), `gui/layout_helpers.py` (`_card_header`, `_create_slider`)
@@ -142,16 +132,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Evidence: `py -3.12 -c "from backend.i18n import available_catalogs; print(available_catalogs())"` returns `('qps-Ploc',)`. Reading the catalog confirms mangled accented text. `VideoSubtitleRemoverPro.spec:32` includes `locale` in `datas`.
   Fix: Filter `qps-` prefixed catalogs out of the user-facing picker (keep them reachable through an env var or a debug flag for QA), or exclude the pseudo-locale from the frozen bundle.
   Acceptance: The language dropdown shows only System and English on a build with no real translations; `VSR_PSEUDO_LOCALE=1` (or equivalent) still exposes it for QA.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P2 -- RM-184: Abbreviated and attached CLI option forms are not recognized as explicit, so presets override them
-  Category: correctness
-  Where: `backend/cli.py:1101-1117` (`_explicitly_provided_dests`); the parser is constructed without `allow_abbrev=False`
-  Problem: Token matching is exact (`tok == opt or tok.startswith(opt + "=")`). argparse's default `allow_abbrev=True` accepts unambiguous prefixes (`--thresho 0.8`), and short options accept attached values (`-msttn`, `-g0`). None of those forms mark the dest as explicit, so a preset silently discards the value the user typed -- exactly the failure this function's docstring says it exists to prevent. For example `--preset "Anime / Animation" --thresho 0.8` parses `threshold=0.8` and then lets the preset's 0.55 win.
-  Evidence: `grep -n "allow_abbrev" backend/cli.py` returns nothing, so abbreviation is enabled. `sed -n '1110,1117p'` shows the exact-match loop.
-  Fix: Build the parser with `allow_abbrev=False` (all documented flags are full-name in the help and README, so nothing user-facing changes), and additionally match `tok.startswith(short_opt)` for single-dash options.
-  Acceptance: `--thresho 0.8` alongside a preset yields `threshold=0.8`; a test covers abbreviated and attached forms for a representative flag.
   Confidence: Verified
   Effort: S
 
@@ -364,16 +344,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Evidence: `sed -n '1598,1612p' backend/cli.py` shows the handler setting a flag with no re-arm, restore, or second-press branch.
   Fix: On the second invocation, restore `signal.default_int_handler` (or raise `KeyboardInterrupt`) so a second Ctrl+C hard-cancels, and remove or make reachable the dead handlers.
   Acceptance: Two Ctrl+C presses terminate the CLI even when the pipeline is not polling.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P3 -- RM-206: CLI preset values bypass validation and surface as tracebacks
-  Category: reliability
-  Where: `backend/cli.py:1177-1198` (values `setattr`'d onto args unvalidated), `:1218-1241`, `:2065-2071` (`main` catches only `FrozenMatteError`), `backend/config.py:581-606`
-  Problem: The CLI preset path does no field or value filtering (unlike the GUI's `SAFE_PRESET_FIELDS` filter). A user preset naming an unregistered mode sets `args.mode` unvalidated, `_coerce_backend_mode` raises `ValueError` inside `_build_processing_config`, and since `main` catches only `FrozenMatteError` the user sees a raw traceback -- while the `--set mode=...` path for the same mistake correctly produces a `parser.error`. Similarly a string-typed numeric in a preset (`"detection_threshold": "0.5"`) reaches the `0.1 <= args.threshold` comparison and raises `TypeError`.
-  Evidence: Read the preset application loop and the `main` exception handler; the asymmetry with `--set` is visible in the same file.
-  Fix: Widen the handler to `except (FrozenMatteError, ValueError)` with a curated message, and coerce/validate preset values through `apply_backend_payload` semantics before assigning them to args.
-  Acceptance: A preset naming an unavailable mode produces a clean `parser.error`, not a traceback.
   Confidence: Verified
   Effort: S
 
@@ -667,16 +637,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Confidence: Verified
   Effort: S
 
-- [ ] P3 -- RM-237: Small CLI ergonomics gaps (dry-run output requirement, unhandled directory `OSError`, preset allow-list asymmetry)
-  Category: ux
-  Where: `backend/cli.py:1139` and `:1202-1210` (`dry_run_only` covers only the soft-subtitle dry run), `:1476`, `:1597`, `:1757` (`mkdir` without a curated error), `:1141-1199` versus `gui/config.py:1450-1469`
-  Problem: Three small consistency gaps in the CLI. `--dry-run` promises "no files will be written" but still trips `--pattern requires --out-dir` / `--input requires --output`, because `dry_run_only` is set only by `--soft-subtitle-dry-run`. An invalid `--checkpoint-dir` or `--out-dir` (illegal characters, unwritable root) raises a raw `OSError` traceback instead of the curated `parser.error` used elsewhere. And the CLI preset path applies any field matching `processing_field_names()` while the GUI filters to `SAFE_PRESET_FIELDS` -- a strictly broader set on the CLI side; not a live escalation today (both writers into `presets.json` filter), but a latent trap if any future writer does not.
-  Evidence: Read all three sites; the GUI/CLI filter asymmetry is visible by comparing the two application paths.
-  Fix: Include `--dry-run` in `dry_run_only`; wrap the `mkdir` calls to emit `parser.error`; and centralize the `SAFE_PRESET_FIELDS` filter in `backend/presets.py` so both front-ends share it.
-  Acceptance: `--dry-run` runs without `--output`; a bad `--out-dir` yields a one-line CLI error; both front-ends filter presets identically.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P3 -- RM-238: ffprobe receives the input path as a bare trailing positional, so a leading-dash filename is parsed as options
   Category: security
   Where: `backend/container_payload.py:83-92` (`probe_container_manifest`), same pattern at `:472`
@@ -774,6 +734,25 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Evidence: `git tag --list | sort -V` ends at `v3.31.0`; `gh release list` shows v3.31.0 as Latest; `gui/config.py:137` is `APP_VERSION = "3.33.0"`; the measured suite is 1318 tests.
   Fix: Tag and publish v3.33.0 (unsigned, per policy) after the P0/P1 items land, or note in the README that badges track source rather than the latest release. Refresh the CLAUDE.md status block in the same pass.
   Acceptance: The newest tag matches `APP_VERSION`, or the README states the distinction explicitly.
+  Confidence: Verified
+  Effort: S
+
+- [ ] P3 -- RM-249: `test_cli_support_bundle_entrypoint_is_dependency_light` is flaky under full-suite load
+  Category: testing
+  Where: `tests/test_support_bundle.py:153-173`
+  Problem: The test spawns `python -m backend.cli --support-bundle` as a
+  subprocess with a fixed `timeout=30`. Running it inside the full suite on a
+  loaded machine intermittently exceeds that budget and fails the run; the
+  same test passes in isolation and on a re-run. A flaky gate trains everyone
+  to re-run rather than read failures.
+  Evidence: Observed 2026-08-11 -- one full-suite run reported this single
+  failure, an immediate isolated run passed in 10.9 s, and the next full run
+  passed with 1349 tests. Nothing in the code path changed between runs.
+  Fix: Scale the timeout (60-120 s) or mark the subprocess-spawning tests so
+  they are not competing with the rest of the suite for CPU. Prefer raising
+  the timeout: the assertion is about dependency weight, not speed.
+  Acceptance: Ten consecutive full-suite runs with no spurious failure from
+  this test.
   Confidence: Verified
   Effort: S
 

@@ -6,6 +6,22 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **An explicitly typed CLI flag now beats a preset.** The guard that exists
+  to stop a preset discarding what the user typed covered only fourteen
+  fields; every other preset value was applied unconditionally, so
+  `--preset "Logo / Watermark removal" --keep-chyrons` removed chyrons
+  anyway, and the same held for `--no-tbe`, `--no-adaptive-batch`,
+  `--vertical`, `--max-retries` and others. The flag maps now cover every
+  preset-settable field that has a flag, and a test fails if a new one is
+  added without protection. Abbreviated forms (`--thresho`) are rejected
+  outright rather than parsed-then-ignored, and an attached short option
+  (`-msttn`) counts as explicit.
+- **A malformed preset is a clean CLI error, not a traceback.** Preset values
+  bypassed the coercion that `--set` goes through, so an unregistered mode or
+  a string-typed number in a user preset ended in an unhandled exception dump.
+- **`--dry-run` no longer demands an output path** it has just promised not to
+  write to, and an unusable `--out-dir` or `--checkpoint-dir` reports a
+  one-line error instead of an `OSError` traceback.
 - **Video output is no longer encoded twice.** Every shipped entry point
   passes a checkpoint directory, so finalization always encoded the frame
   sequence and then handed that finished file to the audio merge -- which
