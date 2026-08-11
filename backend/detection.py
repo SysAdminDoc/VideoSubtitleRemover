@@ -193,6 +193,30 @@ def _build_rapidocr(rapid_cls, device: str, rapid_module=None):
         return rapid_cls(params={}), "CPU"
 
 
+def _vlm_detector_is_usable(detector) -> bool:
+    """Warm-load a VLM/manga detector and report whether it can actually run.
+
+    `maybe_build_vlm_detector` returns an instance without touching the
+    model, and `_BaseVlmDetector.detect` swallows its own load failure and
+    returns an empty box list forever. Probing here turns "silently detects
+    nothing" into a normal cascade fallback.
+    """
+    loader = getattr(detector, "_load", None)
+    if loader is None:
+        return True
+    try:
+        if getattr(detector, "_loaded", False):
+            return getattr(detector, "_model", None) is not None
+        model = loader()
+        detector._model = model
+        detector._loaded = True
+        return model is not None
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("VLM warm-load failed for %s: %s",
+                     getattr(detector, "name", "unknown"), exc)
+        return False
+
+
 class SubtitleDetector:
     """Detects subtitle regions in video frames using text detection models."""
 
@@ -268,6 +292,19 @@ class SubtitleDetector:
             try:
                 from backend.ocr_vlm import maybe_build_vlm_detector
                 vlm = maybe_build_vlm_detector(self.device, self.lang)
+                if vlm is not None and not _vlm_detector_is_usable(vlm):
+                    # Warm-load here rather than on the first frame. A
+                    # detector whose model never loads returns [] forever and
+                    # swallows its own errors, so the job used to report
+                    # success with every subtitle still burned in -- picking
+                    # "Manga / Anime" without manga-ocr installed did exactly
+                    # that. Fall through to the normal cascade instead.
+                    logger.warning(
+                        "VLM detector %s could not load its model; falling "
+                        "back to the standard OCR cascade",
+                        getattr(vlm, "name", "unknown"),
+                    )
+                    vlm = None
                 if vlm is not None:
                     self._vlm_detector = vlm
                     self._engine_name = f"VLM ({vlm.name})"
@@ -411,13 +448,24 @@ class SubtitleDetector:
         try:
             import easyocr
             gpu = self._is_gpu_device()
+            from backend.language_support import normalize_language_code
+
             easyocr_lang_map = {
                 "ch": "ch_sim", "chinese_cht": "ch_tra",
                 "ko": "ko", "ja": "ja", "en": "en",
                 "fr": "fr", "de": "de", "es": "es", "pt": "pt",
                 "ru": "ru", "ar": "ar", "hi": "hi", "it": "it",
+                "nl": "nl", "pl": "pl", "tr": "tr", "vi": "vi",
+                "th": "th", "uk": "uk", "sv": "sv", "no": "no",
+                "da": "da", "fi": "fi", "cs": "cs", "hu": "hu",
+                "ro": "ro", "id": "id", "ms": "ms",
             }
-            mapped_lang = easyocr_lang_map.get(self.lang, self.lang)
+            # Normalize first: the picker's long-form codes ("japan") are not
+            # EasyOCR codes, and handing one to Reader() raised, dropping the
+            # user to OpenCV thresholding with only a log line.
+            primary = normalize_language_code(self.lang) or self.lang
+            mapped_lang = easyocr_lang_map.get(
+                self.lang, easyocr_lang_map.get(primary, primary))
             lang_list = [mapped_lang]
             if mapped_lang != "en":
                 lang_list.append("en")
@@ -958,8 +1006,14 @@ def text_matches_detection_language(text: str, language: str) -> bool:
     This intentionally makes no unsupported claim that Latin text can be
     distinguished as English versus French (or another Latin language).
     """
+    from backend.language_support import normalize_language_code
+
     tag = str(language or "en").strip().lower().replace("_", "-")
-    primary = tag.split("-", 1)[0]
+    # The picker offers "japan"/"korean"/"arabic" ahead of their primaries;
+    # without normalizing, those fell through to "latin" and this filter
+    # discarded every genuine CJK/Hangul/Arabic detection, so the job
+    # completed "successfully" with the subtitles still burned in.
+    primary = normalize_language_code(language) or tag.split("-", 1)[0]
     if tag in {"chinese-cht", "manga"} or primary in {"ch", "zh", "ja"}:
         expected = "cjk"
     elif primary == "ko":
@@ -1019,7 +1073,25 @@ def probe_language(frame: np.ndarray,
         ocr = RapidOCR()
         output = ocr(crop)
         results = output[0] if isinstance(output, tuple) and output else output
-        if results:
+        # RapidOCR >= 2.0 (the pinned range) returns a RapidOCROutput object,
+        # which is neither a tuple nor a list -- the list-only loop below
+        # silently produced no text at all, so this always reported English
+        # at zero confidence. Read the structured fields first, exactly as
+        # every other parser in this module does.
+        structured_texts = SubtitleDetector._rapid_field(
+            results, "txts", "texts")
+        if structured_texts:
+            structured_scores = SubtitleDetector._rapid_field(
+                results, "scores", "confidences") or []
+            for index, value in enumerate(structured_texts):
+                if value is None:
+                    continue
+                texts.append(str(value))
+                try:
+                    confs.append(float(structured_scores[index]))
+                except (IndexError, TypeError, ValueError):
+                    confs.append(0.5)
+        elif results:
             for entry in (results if isinstance(results, list) else []):
                 if isinstance(entry, (list, tuple)) and len(entry) >= 2:
                     text = str(entry[1]) if not isinstance(entry[1], str) else entry[1]

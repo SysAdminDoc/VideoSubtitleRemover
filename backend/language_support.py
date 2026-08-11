@@ -148,3 +148,63 @@ def language_support_status(
             f"GUI picker: {gui_count} selectable OCR codes; {engine_text}."
         ),
     }
+
+
+# The picker lists PaddleOCR-style long-form codes ("japan", "korean") ahead
+# of their ISO primaries, and both are selectable. Consumers that keyed only
+# on the primaries silently mishandled whichever form the user picked first:
+# the language mask filter classified Japanese text as non-matching and threw
+# every correct detection away, and the EasyOCR reader was handed an unknown
+# code and fell through to OpenCV thresholding. One table, both consumers.
+LONG_FORM_LANGUAGE_PRIMARIES: Dict[str, str] = {
+    "japan": "ja",
+    "korean": "ko",
+    "chinese": "ch",
+    "chinese_cht": "ch",
+    "french": "fr",
+    "german": "de",
+    "spanish": "es",
+    "portuguese": "pt",
+    "italian": "it",
+    "arabic": "ar",
+    "russian": "ru",
+    "dutch": "nl",
+    "polish": "pl",
+    "turkish": "tr",
+    "vietnamese": "vi",
+    "thai": "th",
+    "ukrainian": "uk",
+    "swedish": "sv",
+    "norwegian": "no",
+    "danish": "da",
+    "finnish": "fi",
+    "czech": "cs",
+    "hungarian": "hu",
+    "romanian": "ro",
+    "greek": "el",
+    "hebrew": "he",
+    "indonesian": "id",
+    "malay": "ms",
+    "filipino": "fil",
+    "hindi": "hi",
+    "english": "en",
+}
+
+
+def normalize_language_code(language: str) -> str:
+    """Return the ISO-ish primary subtag for a picker language code.
+
+    ``"japan" -> "ja"``, ``"ko-KR" -> "ko"``, ``"en" -> "en"``. Unknown codes
+    are returned lowercased with any region suffix removed so callers can
+    still apply their own fallbacks.
+    """
+    tag = str(language or "").strip().lower().replace("_", "-")
+    if not tag:
+        return ""
+    # "chinese_cht" is a real engine code, not a region-tagged one.
+    if tag.replace("-", "_") in LONG_FORM_LANGUAGE_PRIMARIES:
+        return LONG_FORM_LANGUAGE_PRIMARIES[tag.replace("-", "_")]
+    if tag in LONG_FORM_LANGUAGE_PRIMARIES:
+        return LONG_FORM_LANGUAGE_PRIMARIES[tag]
+    primary = tag.split("-", 1)[0]
+    return LONG_FORM_LANGUAGE_PRIMARIES.get(primary, primary)

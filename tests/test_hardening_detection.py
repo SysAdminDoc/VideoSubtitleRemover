@@ -621,3 +621,122 @@ class ManualMaskCorrectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LanguageCodeNormalizationTests(unittest.TestCase):
+    """RM-172 / RM-173: the picker's long-form codes must reach both consumers.
+
+    CURATED_LANGUAGE_NAMES lists "japan" before "ja" and offers "korean" and
+    "arabic" too. The mask-language filter and the EasyOCR reader both keyed
+    on ISO primaries only, so the filter classified Japanese text as
+    non-matching and discarded every correct box (job "succeeds", subtitles
+    still burned in), and EasyOCR was handed an unknown code and fell through
+    to OpenCV thresholding.
+    """
+
+    def test_every_curated_code_normalizes_to_a_primary(self):
+        from backend.language_support import (
+            CURATED_LANGUAGE_NAMES,
+            normalize_language_code,
+        )
+
+        for code, _label in CURATED_LANGUAGE_NAMES:
+            with self.subTest(code=code):
+                self.assertTrue(normalize_language_code(code))
+
+    def test_long_form_codes_share_their_primary(self):
+        from backend.language_support import normalize_language_code
+
+        for long_form, primary in (
+            ("japan", "ja"),
+            ("korean", "ko"),
+            ("arabic", "ar"),
+            ("french", "fr"),
+            ("german", "de"),
+            ("spanish", "es"),
+            ("portuguese", "pt"),
+            ("italian", "it"),
+        ):
+            with self.subTest(long_form=long_form):
+                self.assertEqual(normalize_language_code(long_form), primary)
+                self.assertEqual(normalize_language_code(primary), primary)
+
+    def test_region_suffixes_are_stripped(self):
+        from backend.language_support import normalize_language_code
+
+        self.assertEqual(normalize_language_code("ko-KR"), "ko")
+        self.assertEqual(normalize_language_code("pt_BR"), "pt")
+
+    def test_language_filter_accepts_long_form_cjk_codes(self):
+        from backend.detection import text_matches_detection_language
+
+        # U+6F22 U+5B57 -- CJK ideographs (source stays pure ASCII).
+        cjk = "\u6f22\u5b57"
+        for code in ("ja", "japan"):
+            with self.subTest(code=code):
+                self.assertTrue(text_matches_detection_language(cjk, code))
+        hangul = "\ud55c\uae00"
+        for code in ("ko", "korean"):
+            with self.subTest(code=code):
+                self.assertTrue(text_matches_detection_language(hangul, code))
+        arabic = "\u0645\u0631\u062d\u0628\u0627"
+        for code in ("ar", "arabic"):
+            with self.subTest(code=code):
+                self.assertTrue(text_matches_detection_language(arabic, code))
+
+    def test_language_filter_still_rejects_a_real_mismatch(self):
+        from backend.detection import text_matches_detection_language
+
+        self.assertFalse(text_matches_detection_language("hello", "japan"))
+        self.assertFalse(
+            text_matches_detection_language("\u6f22\u5b57", "french"))
+
+
+class VlmCascadeFallbackTests(unittest.TestCase):
+    """RM-171: a VLM/manga detector that cannot load must not win the cascade."""
+
+    class _DeadDetector:
+        name = "manga-ocr"
+
+        def __init__(self):
+            self._loaded = False
+            self._model = None
+
+        def _load(self):
+            return None  # dependency missing
+
+    class _LiveDetector:
+        name = "florence2"
+
+        def __init__(self):
+            self._loaded = False
+            self._model = None
+
+        def _load(self):
+            return object()
+
+    def test_unloadable_detector_is_rejected(self):
+        from backend.detection import _vlm_detector_is_usable
+
+        self.assertFalse(_vlm_detector_is_usable(self._DeadDetector()))
+
+    def test_loadable_detector_is_accepted_and_cached(self):
+        from backend.detection import _vlm_detector_is_usable
+
+        detector = self._LiveDetector()
+        self.assertTrue(_vlm_detector_is_usable(detector))
+        self.assertTrue(detector._loaded)
+        self.assertIsNotNone(detector._model)
+
+    def test_raising_loader_is_rejected_not_propagated(self):
+        from backend.detection import _vlm_detector_is_usable
+
+        class _Boom:
+            name = "qwen25vl"
+            _loaded = False
+            _model = None
+
+            def _load(self):
+                raise RuntimeError("no weights")
+
+        self.assertFalse(_vlm_detector_is_usable(_Boom()))

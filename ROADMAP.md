@@ -85,36 +85,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Confidence: Verified
   Effort: S-M
 
-- [ ] P2 -- RM-171: A VLM/manga engine that fails to load turns the whole job into a silent no-op instead of falling through the cascade
-  Category: correctness
-  Where: `backend/detection.py:267-279` (`maybe_build_vlm_detector` result short-circuits `_load_model`), `backend/ocr_vlm.py:648-666` (returns a detector without loading), `backend/ocr_vlm.py:98-108` (`_BaseVlmDetector.detect` returns `[]` when the model is `None`)
-  Problem: `maybe_build_vlm_detector` returns an instance for `florence2`, `qwen25vl`, `paddleocr-vl`, and for `lang="manga"` **without attempting to load the model** (only the llama.cpp variant warm-loads and can return `None`). `_load_model` then returns early with every other engine slot `None`. On the first `detect()` the lazy load yields `None` and the method returns `[]` forever -- and because it also swallows its own exceptions, the "VLM detector errored, falling back" branch at `detection.py:683-684` is unreachable. A user who picks "Manga / Anime (vertical JP via manga-ocr)" from the language dropdown without `manga-ocr` installed gets "no text detected" on every frame; the video passes through untouched and the job reports success, with one INFO log line as the only signal. This contradicts the module docstring's documented "VLM > RapidOCR > ..." degradation contract.
-  Evidence: `sed -n '98,108p' backend/ocr_vlm.py` shows `if self._model is None: return []` with no cascade signal; `sed -n '648,666p'` shows the three non-llama backends constructed unconditionally. The manga option is offered to users via `CURATED_LANGUAGE_NAMES` (`backend/language_support.py:13`) and rendered by `gui/layout_build.py:512`.
-  Fix: Warm-load VLM and manga detectors inside `_load_model` the way the llama.cpp path already does, and continue the normal cascade when the load yields `None`; surface a warning naming the missing package.
-  Acceptance: Selecting Manga without `manga-ocr` installed logs a warning and falls through to RapidOCR rather than detecting nothing; a test asserts the cascade continues when the VLM load fails.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P2 -- RM-172: `language_mask_filter` discards every correct box for the long-form language codes the picker lists first
-  Category: correctness
-  Where: `backend/detection.py:955-977` (`text_matches_detection_language`), consumed at `backend/processor.py:1299-1308` and `:1765-1774`
-  Problem: The script-family map keys only on short primaries (`ja`, `ko`, `ar`, `ch`, ...). The PaddleOCR-style long codes the GUI offers -- and lists *before* the short ones -- fall through to `expected = "latin"`. So with the language filter enabled and `detection_lang="japan"`, Japanese text classifies as `"cjk"`, does not match `"latin"`, and **every genuine subtitle box is filtered out**: the job completes "successfully" with the subtitles still burned in. Same for `"korean"` and `"arabic"`.
-  Evidence: `sed -n '955,977p' backend/detection.py` shows the membership tests -- `primary in {"ch","zh","ja"}`, `primary == "ko"`, `primary in {"ar","fa","ur","ug"}` -- none of which match `"japan"`, `"korean"`, or `"arabic"`. `backend/language_support.py:11-26` confirms `("japan","Japanese")` precedes `("ja","Japanese")` in the curated list, and `("korean","Korean")`/`("arabic","Arabic")` are both offered.
-  Fix: Normalize long-form codes to their primaries ("japan"->ja, "korean"->ko, "arabic"->ar, "chinese"->ch, and the rest of the curated list) at the top of `text_matches_detection_language`, and share that map with the EasyOCR mapping in RM-173.
-  Acceptance: `text_matches_detection_language("<CJK text>", "japan")` returns True; a parametrized test covers every long-form code in `CURATED_LANGUAGE_NAMES`.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P2 -- RM-173: The EasyOCR language map misses the long-form codes, so those users silently lose real OCR
-  Category: correctness
-  Where: `backend/detection.py:414-424` (`easyocr_lang_map`), failure caught at `:431`
-  Problem: The map covers `ch`, `chinese_cht`, and the short ISO codes, but not `"japan"`, `"korean"`, `"french"`, `"german"`, `"spanish"`, `"portuguese"`, `"italian"`, or `"arabic"` -- all offered by the picker. `map.get("japan", "japan")` passes the unknown code straight to `easyocr.Reader(["japan","en"])`, which raises, is caught, and drops the user to the OpenCV fallback. When the cascade has already bottomed out at EasyOCR (no RapidOCR, no PaddleOCR), those users lose real OCR entirely with only a log warning. CLAUDE.md documents that this mapping exists; it is incomplete for exactly the codes listed first in the picker.
-  Evidence: Read the map at `backend/detection.py:414-424`; cross-checked against `CURATED_LANGUAGE_NAMES` in `backend/language_support.py:8-57`.
-  Fix: Extend the map with the long-form aliases, sharing the normalization table introduced for RM-172.
-  Acceptance: `easyocr_lang_map` resolves every code in `CURATED_LANGUAGE_NAMES` to a valid EasyOCR code; a test asserts full coverage of the curated list.
-  Confidence: Verified
-  Effort: S
-
 - [ ] P2 -- RM-174: The PyTorch LaMa path returns padded-size frames on non-mod-8 resolutions and crashes the job
   Category: correctness
   Where: `backend/inpainters/lama.py:636-641` (full-frame) and `:684-705` (tiled); contrast with the ONNX/DNN crops at `:415`, `:535`, and the batched crop at `:768`
@@ -163,16 +133,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Fix: Use a dark ink on the red fill (`#2a0505` or similar) for filled danger buttons, or darken `DANGER` for the filled variant while keeping the light tone for danger *text* on dark surfaces.
   Acceptance: The danger confirm button's text/fill pair computes >= 4.5:1 in both normal and hover states; a token contrast test guards the pair.
   Confidence: Verified (computed)
-  Effort: S
-
-- [ ] P2 -- RM-179: `probe_language` is dead under the pinned RapidOCR and always reports English at zero confidence
-  Category: correctness
-  Where: `backend/detection.py:1020-1033`
-  Problem: The result parser handles only tuple/list shapes -- `for entry in (results if isinstance(results, list) else [])`. RapidOCR 2.x and newer return a `RapidOCROutput` dataclass, which is neither, so `texts` stays empty even when text was recognized and the function always returns `("en", 0.0, "unknown")`. `requirements.txt:85` pins `rapidocr>=2.0.0,<4.0.0` and the import prefers the 2.x package, so a default install always hits this. The rest of the module already handles the object shape through `_rapid_field`; this one function was missed. Reached from the CLI's `--auto-lang-probe` (`backend/cli.py:1092-1096`) and the GUI's "detect language from preview" flow (`gui/preview_controller.py:452-470`), which then never matches a language label.
-  Evidence: `sed -n '1014,1035p' backend/detection.py` shows the isinstance-gated loop with no object-shape branch, while `benchmark_detect` at `:511-518` uses `_rapid_field` for the same data.
-  Fix: Route the results through the existing `_rapid_field(results, "txts")` / `"scores"` accessors, matching the other parsers. Consider caching the `RapidOCR()` instance -- the function currently constructs a full model load per invocation.
-  Acceptance: `probe_language` returns a real language and non-zero confidence on a frame containing text; a test feeds a `RapidOCROutput`-shaped object and asserts extraction.
-  Confidence: Verified
   Effort: S
 
 - [ ] P2 -- RM-180: The uninstaller can delete a user-chosen pre-existing directory wholesale

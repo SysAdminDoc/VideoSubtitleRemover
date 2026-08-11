@@ -6,6 +6,27 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Picking a language by its long-form name no longer breaks detection.**
+  The picker lists PaddleOCR-style codes ("japan", "korean", "arabic") ahead
+  of their ISO primaries and both are selectable, but two consumers keyed
+  only on the primaries. With the language mask filter on, Japanese text
+  classified as a script mismatch and *every* correct detection was thrown
+  away -- the job reported success with the subtitles still burned in. The
+  EasyOCR reader was handed the unknown code, raised, and dropped the user
+  to OpenCV thresholding. Both now normalize through one shared table, and
+  the EasyOCR map covers every code the picker offers.
+- **A VLM or manga detector that cannot load falls back instead of detecting
+  nothing.** The detector was constructed without loading its model, and its
+  `detect` swallowed the failure and returned an empty box list forever, so
+  choosing "Manga / Anime" without `manga-ocr` installed processed the whole
+  video as if it had no text and reported success. The model is now warm-
+  loaded when the cascade selects it; a failure logs a warning and continues
+  down the normal RapidOCR chain.
+- **Language auto-detection works again.** `probe_language` parsed only the
+  legacy list/tuple result shape, but the pinned RapidOCR returns an object,
+  so it always reported English at zero confidence -- making the CLI's
+  `--auto-lang-probe` and the GUI's detect-from-preview action useless. It
+  now reads the structured fields like every other parser in the module.
 - **Stopping a batch during the final encode or mux no longer destroys the
   output and the resume state.** Terminating the last FFmpeg surfaced as a
   nonzero exit rather than a cancellation, so the audio merge treated it as

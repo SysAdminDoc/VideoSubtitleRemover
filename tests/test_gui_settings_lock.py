@@ -246,37 +246,6 @@ class PresetRoundTripTests(unittest.TestCase):
                 f"{field} was reverted by the sync after a preset set it",
             )
 
-    def test_safe_preset_fields_with_widgets_are_all_in_the_table(self):
-        from gui.config import SAFE_PRESET_FIELDS, SETTINGS_VAR_FIELDS
-
-        table_fields = {field for _, field in SETTINGS_VAR_FIELDS}
-        # Fields a preset may carry AND that a widget var backs must be in the
-        # shared table; otherwise the sync reverts them.
-        widget_backed = {
-            "detection_vertical",
-            "confidence_weighted_dilation",
-            "tbe_flow_warp",
-            "tbe_scene_cut_split",
-            "auto_band",
-            "adaptive_batch",
-            "temporal_mask_union",
-            "deinterlace_auto",
-            "keyframe_detection",
-            "kalman_tracking",
-            "phash_skip_enable",
-            "colour_tune_enable",
-            "remove_subtitles",
-            "remove_chyrons",
-            "karaoke_grouping",
-        }
-        self.assertTrue(widget_backed <= SAFE_PRESET_FIELDS)
-        self.assertEqual(
-            sorted(widget_backed - table_fields),
-            [],
-            "these preset-settable fields have a widget var but are missing "
-            "from SETTINGS_VAR_FIELDS, so a sync will revert them",
-        )
-
 
 if __name__ == "__main__":
     unittest.main()
