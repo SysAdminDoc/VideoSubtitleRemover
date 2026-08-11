@@ -460,8 +460,19 @@ class _EncodeMixin:
             self._run_checked_ffmpeg(cmd, timeout)
             self._promote_video_output(temp_output, output, reference=source)
             return output
+        except InterruptedError:
+            # A user Stop is not an encoder failure. Salvaging here used to
+            # promote a silently audio-less intermediate over the user's
+            # destination and let process_video go on to delete the pause
+            # checkpoint, so a cancelled job destroyed both its output and
+            # the state needed to resume it.
+            raise
         except Exception as exc:
             from backend.processor import OutputIntegrityError
+            if self._is_teardown_requested():
+                # The child died because we terminated it; classify it as the
+                # cancel it is rather than an encoder fault.
+                raise InterruptedError("encode cancelled") from exc
             if isinstance(exc, OutputIntegrityError):
                 if self._fallback_after_hw_failure(exc):
                     logger.warning(
@@ -655,6 +666,10 @@ class _EncodeMixin:
                 f"Source container payload could not be preserved: {exc.reason}"
             )
             return self._salvage_intermediate(processed, output)
+        except InterruptedError:
+            # User Stop: never salvage over the destination, never let the
+            # caller treat this as a mux failure worth retrying.
+            raise
         except subprocess.TimeoutExpired:
             logger.warning("FFmpeg audio merge timed out, saving video without audio")
             self._mark_container_payload_failed(
@@ -662,6 +677,8 @@ class _EncodeMixin:
             )
             return self._salvage_intermediate(processed, output)
         except subprocess.CalledProcessError as e:
+            if self._is_teardown_requested():
+                raise InterruptedError("audio merge cancelled") from e
             if self._hw_encoder and self._hw_encoder in cmd:
                 self._fallback_after_hw_failure(e)
                 logger.warning(

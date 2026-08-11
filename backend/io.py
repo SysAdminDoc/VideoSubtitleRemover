@@ -960,6 +960,10 @@ def _deinterlace_to_temp(
                 cancel_check=cancel_check,
             )
             return dst
+        except InterruptedError:
+            # InterruptedError is an OSError subclass, so a user Stop used to
+            # be caught here and "retried" with yadif.
+            raise
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             logger.warning(
                 "D3D12 deinterlace failed; retrying with yadif: %s", exc)

@@ -1932,3 +1932,142 @@ class OutputIntegrityValidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CancelDuringFinalizeTests(unittest.TestCase):
+    """RM-162: a user Stop during encode/mux must not destroy the output.
+
+    Terminating the final ffmpeg surfaced as a nonzero exit rather than a
+    cancel, so _merge_audio treated it as a mux failure, retried, and
+    eventually called _reencode_or_copy -- whose blanket `except Exception`
+    swallowed the resulting InterruptedError and salvaged an audio-less
+    intermediate over the user's destination. process_video then deleted the
+    pause checkpoint before noticing the cancel, so the job lost both its
+    output and the state needed to resume.
+    """
+
+    def _remover(self, teardown: bool):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover._is_teardown_requested = lambda: teardown
+        remover._hw_encoder = None
+        remover._salvage_calls = []
+        remover._salvage_intermediate = lambda src, dst: (
+            remover._salvage_calls.append((src, dst)) or dst
+        )
+        remover._mark_container_payload_failed = lambda *_a, **_k: None
+        return remover
+
+    def test_reencode_reraises_a_cancel_instead_of_salvaging(self):
+        remover = self._remover(teardown=True)
+        remover._allocate_work_output = lambda output: output + ".tmp"
+        remover._d3d12_device_args = lambda: []
+        remover._get_encode_args = lambda **_k: ["-c:v", "libx264"]
+        remover._promote_video_output = lambda *a, **k: None
+
+        def _cancelled(*_args, **_kwargs):
+            raise InterruptedError("subprocess cancelled")
+
+        remover._run_checked_ffmpeg = _cancelled
+
+        with unittest.mock.patch.object(
+            processor, "_probe_duration_seconds", return_value=1.0,
+            create=True,
+        ):
+            with self.assertRaises(InterruptedError):
+                processor.SubtitleRemover._reencode_or_copy(
+                    remover, "in.mkv", "out.mp4"
+                )
+
+        self.assertEqual(
+            remover._salvage_calls,
+            [],
+            "a cancelled encode must not salvage over the destination",
+        )
+
+    def test_nonzero_exit_while_tearing_down_is_reclassified_as_cancel(self):
+        remover = self._remover(teardown=True)
+        remover._allocate_work_output = lambda output: output + ".tmp"
+        remover._d3d12_device_args = lambda: []
+        remover._get_encode_args = lambda **_k: ["-c:v", "libx264"]
+        remover._promote_video_output = lambda *a, **k: None
+
+        def _failed(*_args, **_kwargs):
+            raise subprocess.CalledProcessError(1, ["ffmpeg"])
+
+        remover._run_checked_ffmpeg = _failed
+
+        with unittest.mock.patch.object(
+            processor, "_probe_duration_seconds", return_value=1.0,
+            create=True,
+        ):
+            with self.assertRaises(InterruptedError):
+                processor.SubtitleRemover._reencode_or_copy(
+                    remover, "in.mkv", "out.mp4"
+                )
+
+        self.assertEqual(remover._salvage_calls, [])
+
+    def test_encoder_failure_without_teardown_still_salvages(self):
+        # The recovery path must survive: only a cancel is special.
+        remover = self._remover(teardown=False)
+        remover._allocate_work_output = lambda output: output + ".tmp"
+        remover._d3d12_device_args = lambda: []
+        remover._get_encode_args = lambda **_k: ["-c:v", "libx264"]
+        remover._promote_video_output = lambda *a, **k: None
+        remover._fallback_after_hw_failure = lambda _exc: False
+
+        def _failed(*_args, **_kwargs):
+            raise subprocess.CalledProcessError(1, ["ffmpeg"])
+
+        remover._run_checked_ffmpeg = _failed
+
+        with unittest.mock.patch.object(
+            processor, "_probe_duration_seconds", return_value=1.0,
+            create=True,
+        ):
+            result = processor.SubtitleRemover._reencode_or_copy(
+                remover, "in.mkv", "out.mp4"
+            )
+
+        self.assertEqual(result, "out.mp4")
+        self.assertEqual(len(remover._salvage_calls), 1)
+
+
+class RunProcessCancelClassificationTests(unittest.TestCase):
+    """RM-162: a cancel noticed only after wait() returns is still a cancel."""
+
+    def test_cancel_set_during_wait_raises_interrupted_not_called_process(self):
+        from backend import subprocess_policy
+
+        state = {"cancelled": False}
+
+        class _Proc:
+            returncode = 1
+            stdin = None
+            stdout = None
+            stderr = None
+
+            def wait(self, timeout=None):
+                # The caller terminated us; the flag flips while we were
+                # blocked here, exactly as a GUI Stop does.
+                state["cancelled"] = True
+                return 1
+
+            def poll(self):
+                return 1
+
+            def kill(self):
+                pass
+
+            def terminate(self):
+                pass
+
+        with unittest.mock.patch.object(
+            subprocess_policy.subprocess, "Popen", return_value=_Proc()
+        ):
+            with self.assertRaises(InterruptedError):
+                subprocess_policy.run_process(
+                    ["ffmpeg", "-i", "x"],
+                    timeout=5.0,
+                    cancel_check=lambda: state["cancelled"],
+                )

@@ -2235,6 +2235,11 @@ class SubtitleRemover(
                     )
                     logger.info(f"Using deinterlaced source: {processed_input}")
                     decode_path = processed_input
+                except InterruptedError:
+                    # A cancel here is a cancel, not a deinterlace failure to
+                    # shrug off; swallowing it kept the job decoding and
+                    # inpainting until the next progress callback.
+                    raise
                 except Exception as exc:
                     logger.warning(
                         f"Deinterlace failed, continuing with original: {exc}",

@@ -6,6 +6,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Stopping a batch during the final encode or mux no longer destroys the
+  output and the resume state.** Terminating the last FFmpeg surfaced as a
+  nonzero exit rather than a cancellation, so the audio merge treated it as
+  a mux failure, worked through its retry ladder, and ended in the re-encode
+  path -- whose blanket handler swallowed the resulting cancellation and
+  promoted a silently audio-less intermediate over the destination file.
+  `process_video` then deleted the pause checkpoint and every resume frame
+  before noticing the cancel at its final progress report, so the item read
+  as "Stopped" while the user's file had been replaced and could not be
+  resumed. A cancel is now classified as a cancel at each of those layers:
+  `run_process` re-checks after `wait()` returns, the encode and merge paths
+  re-raise it instead of salvaging, and the deinterlace ingest no longer
+  catches it as an ordinary `OSError`.
 - **The PowerShell launcher repairs a broken venv instead of dying on it.**
   It probed the environment with a redirected-stderr native call under
   `$ErrorActionPreference = "Stop"`; Windows PowerShell 5.1 converts that

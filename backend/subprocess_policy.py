@@ -234,6 +234,13 @@ def run_process(
                 raise subprocess.TimeoutExpired(command, timeout)
             try:
                 returncode = proc.wait(timeout=min(0.1, remaining))
+                if cancel_check is not None and cancel_check():
+                    # A cancel that arrived while we were blocked in wait()
+                    # -- typically because the caller terminated the child
+                    # itself -- must stay a cancel. Reporting the resulting
+                    # nonzero exit as a plain failure let callers mistake a
+                    # user Stop for an encoder error and "recover" from it.
+                    raise InterruptedError("subprocess cancelled")
                 break
             except subprocess.TimeoutExpired:
                 continue
