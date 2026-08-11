@@ -456,6 +456,14 @@ class VideoSubtitleRemoverApp(
                 pass
         self._elapsed_timer_id = None
         self._throbber_id = None
+        taskbar = getattr(self, "_taskbar", None)
+        if taskbar is not None:
+            try:
+                taskbar.clear()
+                taskbar.close()
+            except Exception:
+                pass
+            self._taskbar = None
         self._release_running_mutex()
 
     def _release_running_mutex(self):

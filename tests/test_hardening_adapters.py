@@ -260,3 +260,70 @@ class AdapterConformanceMatrixTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WindowsShellIntegrationTests(unittest.TestCase):
+    """RM-160 / RM-166: two shipped Windows features that never ran.
+
+    The screen-reader announcer called CreateObject("CUIAutomation8") -- an
+    unregistered class string -- and would have called RaiseNotificationEvent
+    on a client element that has no such method. The taskbar progress passed
+    a GUID instance where comtypes wants an interface class, raising
+    TypeError on every launch. Both failures were swallowed, so the features
+    looked present and did nothing for several releases.
+    """
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only shell APIs")
+    def test_uia_announcement_provider_binds(self):
+        from backend import a11y
+
+        a11y._PROBED = False
+        a11y._PROVIDER = None
+        try:
+            provider = a11y._probe_provider()
+            self.assertIsNotNone(
+                provider,
+                "UIAutomationCore announcement entry points must bind; a "
+                "silent None is how this stayed broken",
+            )
+            self.assertTrue(hasattr(provider, "UiaRaiseNotificationEvent"))
+            self.assertTrue(hasattr(provider, "UiaHostProviderFromHwnd"))
+        finally:
+            a11y._PROBED = False
+            a11y._PROVIDER = None
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only shell APIs")
+    def test_announce_does_not_raise_and_is_silent_without_text(self):
+        from backend import a11y
+
+        a11y._PROBED = False
+        a11y._PROVIDER = None
+        try:
+            a11y.announce("")
+            a11y.announce("batch complete")
+            a11y.announce("fatal error", importance="high")
+        finally:
+            a11y._PROBED = False
+            a11y._PROVIDER = None
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows-only shell APIs")
+    def test_taskbar_progress_acquires_a_real_com_object(self):
+        import ctypes
+
+        from gui.widgets import TaskbarProgress
+
+        hwnd = ctypes.windll.user32.GetDesktopWindow()
+        taskbar = TaskbarProgress(hwnd)
+        try:
+            self.assertIsNotNone(
+                taskbar._taskbar,
+                "ITaskbarList3 must be created; a None here is the dead "
+                "feature this test exists to catch",
+            )
+            taskbar.set_state(TaskbarProgress.STATE_NORMAL)
+            taskbar.set_value(1, 2)
+            taskbar.clear()
+        finally:
+            taskbar.close()
+        self.assertIsNone(taskbar._taskbar)
+        taskbar.close()

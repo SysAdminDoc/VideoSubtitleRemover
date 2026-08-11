@@ -1337,40 +1337,112 @@ class TaskbarProgress:
     STATE_ERROR = 4
     STATE_PAUSED = 8
 
+    # ITaskbarList3 vtable slots after the three IUnknown entries.
+    _VT_HRINIT = 3
+    _VT_SET_PROGRESS_VALUE = 9
+    _VT_SET_PROGRESS_STATE = 10
+
     def __init__(self, hwnd):
         self._taskbar = None
         self._hwnd = hwnd
+        self._set_value = None
+        self._set_state = None
+        self._release = None
         if sys.platform != "win32":
             return
+        # Dispatched through the raw vtable with ctypes rather than comtypes:
+        # the previous `CreateObject(clsid, interface=comtypes.GUID(...))`
+        # passed a GUID *instance* where comtypes wants an interface *class*,
+        # so it raised TypeError on every launch and the feature was dead
+        # from the day it shipped. ctypes also keeps this dependency-free,
+        # which matters for the frozen build.
         try:
-            import comtypes.client  # type: ignore
-            # CLSID_TaskbarList
-            self._taskbar = comtypes.client.CreateObject(
-                "{56FDF344-FD6D-11D0-958A-006097C9A090}",
-                interface=comtypes.GUID("{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}"),
-            )
-            self._taskbar.HrInit()
-        except Exception:
+            self._taskbar = self._create_taskbar_list()
+        except Exception as exc:
+            logger.debug(f"Taskbar progress unavailable: {exc}")
             self._taskbar = None
 
+    def _create_taskbar_list(self):
+        import ctypes
+        from ctypes import wintypes
+
+        ole32 = ctypes.windll.ole32
+
+        class _GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", ctypes.c_ulong),
+                ("Data2", ctypes.c_ushort),
+                ("Data3", ctypes.c_ushort),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        def _guid(text):
+            value = _GUID()
+            if ole32.CLSIDFromString(ctypes.c_wchar_p(text),
+                                     ctypes.byref(value)) != 0:
+                raise OSError(f"bad GUID {text}")
+            return value
+
+        clsid = _guid("{56FDF344-FD6D-11D0-958A-006097C9A090}")
+        iid = _guid("{EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF}")
+        ole32.CoInitialize(None)
+        pointer = ctypes.c_void_p()
+        # CLSCTX_INPROC_SERVER = 1
+        if ole32.CoCreateInstance(ctypes.byref(clsid), None, 1,
+                                  ctypes.byref(iid),
+                                  ctypes.byref(pointer)) != 0 or not pointer:
+            raise OSError("CoCreateInstance(CLSID_TaskbarList) failed")
+        vtable = ctypes.cast(
+            pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        ).contents
+        hr_init = ctypes.CFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p)(
+            vtable[self._VT_HRINIT])
+        if hr_init(pointer) != 0:
+            raise OSError("ITaskbarList3::HrInit failed")
+        self._set_value = ctypes.CFUNCTYPE(
+            ctypes.HRESULT, ctypes.c_void_p, wintypes.HWND,
+            ctypes.c_ulonglong, ctypes.c_ulonglong,
+        )(vtable[self._VT_SET_PROGRESS_VALUE])
+        self._set_state = ctypes.CFUNCTYPE(
+            ctypes.HRESULT, ctypes.c_void_p, wintypes.HWND, ctypes.c_int,
+        )(vtable[self._VT_SET_PROGRESS_STATE])
+        self._release = ctypes.CFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(
+            vtable[2])
+        return pointer
+
     def set_value(self, current: int, total: int):
-        if not self._taskbar or not self._hwnd:
+        if not self._taskbar or not self._hwnd or self._set_value is None:
             return
         try:
-            self._taskbar.SetProgressValue(self._hwnd, current, max(total, 1))
-        except Exception:
-            pass
+            self._set_value(
+                self._taskbar, self._hwnd, max(0, int(current)),
+                max(1, int(total)),
+            )
+        except Exception as exc:
+            logger.debug(f"Taskbar progress value failed: {exc}")
 
     def set_state(self, state: int):
-        if not self._taskbar or not self._hwnd:
+        if not self._taskbar or not self._hwnd or self._set_state is None:
             return
         try:
-            self._taskbar.SetProgressState(self._hwnd, state)
-        except Exception:
-            pass
+            self._set_state(self._taskbar, self._hwnd, int(state))
+        except Exception as exc:
+            logger.debug(f"Taskbar progress state failed: {exc}")
 
     def clear(self):
         self.set_state(self.STATE_NONE)
+
+    def close(self):
+        """Release the COM pointer. Safe to call more than once."""
+        if self._taskbar and self._release is not None:
+            try:
+                self._release(self._taskbar)
+            except Exception as exc:
+                logger.debug(f"Taskbar release failed: {exc}")
+        self._taskbar = None
+        self._set_value = None
+        self._set_state = None
+        self._release = None
 
 
 def make_themed_menu(parent) -> tk.Menu:

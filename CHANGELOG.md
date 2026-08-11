@@ -6,6 +6,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Screen-reader announcements work for the first time.** The announcer
+  asked COM for `CUIAutomation8`, which is a coclass name rather than a
+  registered ProgId, so every launch raised "Invalid class string" into a
+  debug-level log and the provider stayed `None` -- and had it resolved, the
+  client element it would have used has no `RaiseNotificationEvent` method
+  at all. Announcements now go through the provider-side
+  `UiaRaiseNotificationEvent` against the window's own host provider, using
+  only `ctypes` (no new dependency, and it works in the frozen build). A
+  failed probe is logged at INFO instead of DEBUG.
+- **Windows taskbar progress works for the first time.** The `ITaskbarList3`
+  object was requested with a `GUID` instance where comtypes requires an
+  interface class, so construction raised `TypeError` on every launch and
+  every progress call was a no-op. The interface is now dispatched through
+  its vtable with `ctypes`, and the COM pointer is released on shutdown.
 - **Presets now survive the start of a batch.** Applying a preset wrote its
   values onto the config, but only thirteen of the affected widgets were
   refreshed; the next `_sync_config_from_ui` -- which runs on every queue
