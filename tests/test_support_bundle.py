@@ -376,3 +376,44 @@ class FfmpegProfileTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SupportPayloadRedactionTests(unittest.TestCase):
+    """RM-168: support.json was the one bundle artifact written unredacted.
+
+    Settings, logs and reports all went through the scrubber, but the largest
+    file did not -- and it embeds the OpenCV wheel diagnostics, whose
+    `imported.file` is `cv2.__file__`: an absolute path carrying the user's
+    Windows account name and directory layout. Users are told to attach this
+    archive to bug reports.
+    """
+
+    def test_support_json_carries_no_absolute_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "support.zip"
+            create_support_bundle(str(out), app_version="9.9.9")
+            with zipfile.ZipFile(out) as bundle:
+                raw = bundle.read("support.json").decode("utf-8", "replace")
+
+        lowered = raw.lower()
+        for probe in ("c:\\users", "c:/users", "site-packages", "appdata"):
+            with self.subTest(probe=probe):
+                self.assertNotIn(probe, lowered)
+        self.assertNotIn(str(Path.home()), raw)
+        self.assertNotRegex(raw, r"[A-Za-z]:\\")
+
+    def test_opencv_wheel_diagnostics_are_scrubbed_not_dropped(self):
+        # The diagnostics must survive redaction -- they are the reason the
+        # bundle exists -- with only the directory tree removed.
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "support.zip"
+            create_support_bundle(str(out), app_version="9.9.9")
+            with zipfile.ZipFile(out) as bundle:
+                payload = json.loads(bundle.read("support.json"))
+
+        diagnostics = payload.get("dependency_diagnostics", {})
+        self.assertIn("opencv", diagnostics)
+        imported = diagnostics["opencv"].get("imported", {})
+        self.assertIn("file", imported)
+        if imported["file"]:
+            self.assertNotIn(":", imported["file"].replace("<path>", ""))

@@ -1280,7 +1280,11 @@ class ProcessingControllerMixin:
                     ok, frame = cap.read()
                     if not ok:
                         break
-                    detector.detect(frame, threshold)
+                    # Serialize inference on the shared detector: this probe
+                    # runs on the worker thread and can overlap a review-mask
+                    # preview, and the OCR predictors are not thread-safe.
+                    with self._detector_lock:
+                        detector.detect(frame, threshold)
                     frames_done += 1
                     if time.monotonic() - t0 > 10.0:
                         break

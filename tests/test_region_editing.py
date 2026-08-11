@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
 from backend.region_editing import (
     RegionEditHistory,
@@ -70,3 +71,66 @@ class RegionEditingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RegionSaveGuardTests(unittest.TestCase):
+    """RM-170: Save must not silently discard a polygon or drawn rects.
+
+    The config carries rects, spans and keyframe tracks -- there is no field
+    for a static polygon. Saving with only a polygon fell past the
+    `if not self.rects` early return, landed in the else branch, cleared
+    every manual-region field and reported "Cleared manual subtitle regions",
+    so the shape vanished and detection silently reverted to automatic.
+    """
+
+    def _editor(self, **state):
+        from gui.region_controller import RegionSelectorWindow
+
+        editor = RegionSelectorWindow.__new__(RegionSelectorWindow)
+        editor.pending_keyframes = []
+        editor.polygon_points = []
+        editor.polygon_shapes = []
+        editor.rects = []
+        editor.region_spans = []
+        editor.keyframe_tracks = []
+        editor.is_video = False
+        editor.config = SimpleNamespace(
+            subtitle_area=None, subtitle_areas=None,
+            subtitle_region_spans=None, subtitle_region_keyframes=None,
+        )
+        editor.messages = []
+        editor._update_status = lambda text, tone="info": (
+            editor.messages.append((text, tone))
+        )
+        editor._commit_motion_track = lambda: True
+        editor.closed = False
+        editor._close = lambda: setattr(editor, "closed", True)
+        for key, value in state.items():
+            setattr(editor, key, value)
+        return editor
+
+    def test_unfinished_polygon_blocks_save(self):
+        from gui.region_controller import RegionSelectorWindow
+
+        editor = self._editor(polygon_points=[(1, 1), (5, 5), (9, 1)])
+        RegionSelectorWindow._save_and_close(editor)
+
+        self.assertTrue(editor.messages)
+        text, tone = editor.messages[-1]
+        self.assertEqual(tone, "warning")
+        self.assertIn("polygon", text.lower())
+        self.assertIsNone(editor.config.subtitle_areas)
+        self.assertFalse(editor.closed)
+
+    def test_finished_polygon_is_not_silently_dropped(self):
+        from gui.region_controller import RegionSelectorWindow
+
+        editor = self._editor(polygon_shapes=[[1, 1, 5, 5, 9, 1]])
+        RegionSelectorWindow._save_and_close(editor)
+
+        text, tone = editor.messages[-1]
+        self.assertEqual(tone, "warning")
+        # The old behavior reported a *success* that cleared the regions.
+        self.assertNotIn("cleared", text.lower())
+        self.assertIsNone(editor.config.subtitle_areas)
+        self.assertFalse(editor.closed)

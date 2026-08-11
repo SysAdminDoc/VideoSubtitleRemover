@@ -1284,14 +1284,19 @@ class PreviewControllerMixin:
                     self._preview_detector_lang = lang
                     self._preview_detector_engine = ocr_engine
                 det = self._preview_detector
-            frame_copy = raw_frame.copy()
-            if sub_areas or manual_shapes:
-                boxes = sub_areas
-            elif (timed_regions_configured
-                  and getattr(self.config, "sttn_skip_detection", False)):
-                boxes = []
-            else:
-                boxes = det.detect(frame_copy, threshold)
+                frame_copy = raw_frame.copy()
+                if sub_areas or manual_shapes:
+                    boxes = sub_areas
+                elif (timed_regions_configured
+                      and getattr(self.config, "sttn_skip_detection", False)):
+                    boxes = []
+                else:
+                    # Inference stays INSIDE the lock: PaddleOCR/EasyOCR
+                    # predictors are not thread-safe, and two review-mask
+                    # requests (or one racing the batch ETA probe) share this
+                    # single detector instance. region_controller already
+                    # holds the lock across detect for the same reason.
+                    boxes = det.detect(frame_copy, threshold)
             vis = frame_copy.copy()
             # Detection boxes use the theme's danger accent (BGR for cv2) so
             # they stay visible in the high-contrast palette.

@@ -42,6 +42,10 @@ msgstr "[!! Å ƀåţçħ îš šţîŀŀ ŕûńńîńĝ. ! ! !!]"
 msgid "A motion keyframe uses one frame, not an end frame"
 msgstr "[!! Å ḿöţîöń ķéýƒŕåḿé ûšéš öńé ƒŕåḿé, ńöţ åń éńð ƒŕåḿé ! ! ! ! !!]"
 
+#: gui/region_controller.py:1688
+msgid "A polygon can only be saved as a moving track: add at least two motion keyframes, or convert it to a rectangle"
+msgstr "[!! Å ƥöŀýĝöń çåń öńŀý ƀé šåṽéð åš å ḿöṽîńĝ ţŕåçķ: åðð åţ ŀéåšţ ţŵö ḿöţîöń ķéýƒŕåḿéš, öŕ çöńṽéŕţ îţ ţö å ŕéçţåńĝŀé ! ! ! ! ! ! ! ! ! !!]"
+
 #: gui/support_controller.py:64
 msgid "ACTIVITY"
 msgstr "[!! ÅÇŢÎṼÎŢÝ ! !!]"
@@ -510,7 +514,7 @@ msgstr "[!! Çöḿƥŀéţéð öûţƥûţš öń ðîšķ åŕé ķéƥţ. ! 
 msgid "Completed outputs on disk are not deleted."
 msgstr "[!! Çöḿƥŀéţéð öûţƥûţš öń ðîšķ åŕé ńöţ ðéŀéţéð. ! ! ! !!]"
 
-#: gui/preview_controller.py:1435
+#: gui/preview_controller.py:1440
 msgid "Composed mask for {name}"
 msgstr "[!! Çöḿƥöšéð ḿåšķ ƒöŕ {name} ! ! !!]"
 
@@ -570,7 +574,7 @@ msgstr "[!! Çöŕŕéçţîöń šţŕöķé åððéð; ûńðö îš åṽå�
 msgid "Could not detect language from this frame"
 msgstr "[!! Çöûŀð ńöţ ðéţéçţ ŀåńĝûåĝé ƒŕöḿ ţħîš ƒŕåḿé ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:531
+#: gui/mask_correction_controller.py:537
 msgid "Could not read the selected review frame"
 msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ŕéṽîéŵ ƒŕåḿé ! ! ! !!]"
 
@@ -634,7 +638,7 @@ msgstr "[!! Ðéţéçţîöń ! !!]"
 msgid "Detection engines"
 msgstr "[!! Ðéţéçţîöń éńĝîńéš ! !!]"
 
-#: gui/preview_controller.py:1438
+#: gui/preview_controller.py:1443
 msgid "Dilation: {px} px; detection cached."
 msgstr "[!! Ðîŀåţîöń: {px} ƥẋ; ðéţéçţîöń çåçħéð. ! ! ! !!]"
 
@@ -856,6 +860,10 @@ msgstr "[!! Ƒîŀéńåḿé (Ž -> Å) ! !!]"
 msgid "Filter"
 msgstr "[!! Ƒîŀţéŕ ! !!]"
 
+#: gui/region_controller.py:1682
+msgid "Finish or cancel the polygon in progress before saving"
+msgstr "[!! Ƒîńîšħ öŕ çåńçéŀ ţħé ƥöŀýĝöń îń ƥŕöĝŕéšš ƀéƒöŕé šåṽîńĝ ! ! ! ! !!]"
+
 #: gui/region_controller.py:260
 msgid "Finish polygon"
 msgstr "[!! Ƒîńîšħ ƥöŀýĝöń ! !!]"
@@ -892,7 +900,7 @@ msgstr "[!! Ƒŕåḿé îńţéŕƥöŀåţîöń šţŕîðé ! ! !!]"
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr "[!! Ƒŕåḿé {current}/{total} ({percent}%) ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:639
+#: gui/mask_correction_controller.py:645
 msgid "Frame {frame}; base mask from {source}"
 msgstr "[!! Ƒŕåḿé {frame}; ƀåšé ḿåšķ ƒŕöḿ {source} ! ! ! !!]"
 
@@ -1140,7 +1148,7 @@ msgstr "[!! Ŀîṽé ƥŕéṽîéŵ: {file_name} ! ! !!]"
 msgid "Load a preset JSON file into the user library."
 msgstr "[!! Ŀöåð å ƥŕéšéţ ĴŠÖŃ ƒîŀé îńţö ţħé ûšéŕ ŀîƀŕåŕý. ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:541
+#: gui/mask_correction_controller.py:547
 msgid "Loading detected mask for frame {frame}..."
 msgstr "[!! Ŀöåðîńĝ ðéţéçţéð ḿåšķ ƒöŕ ƒŕåḿé {frame}... ! ! ! !!]"
 
@@ -1192,7 +1200,7 @@ msgstr "[!! Ḿåšķ çöŕŕéçţîöń šţåţûš ! !!]"
 msgid "Mask dilation"
 msgstr "[!! Ḿåšķ ðîŀåţîöń ! !!]"
 
-#: gui/preview_controller.py:1387
+#: gui/preview_controller.py:1392
 msgid "Mask preview failed"
 msgstr "[!! Ḿåšķ ƥŕéṽîéŵ ƒåîŀéð ! !!]"
 
@@ -1344,7 +1352,7 @@ msgstr "[!! Ńö ŕéĝîöń éðîţ ţö ŕéðö ! !!]"
 msgid "No region edit to undo"
 msgstr "[!! Ńö ŕéĝîöń éðîţ ţö ûńðö ! !!]"
 
-#: gui/preview_controller.py:1447
+#: gui/preview_controller.py:1452
 msgid "No text detected"
 msgstr "[!! Ńö ţéẋţ ðéţéçţéð ! !!]"
 
@@ -1356,7 +1364,7 @@ msgstr "[!! Ńö ţéẋţ ƒöûńð îń ţħîš ŕéçţåńĝŀé ýéţ. !
 msgid "No translated SRT selected"
 msgstr "[!! Ńö ţŕåńšŀåţéð ŠŔŢ šéŀéçţéð ! ! !!]"
 
-#: gui/mask_correction_controller.py:579
+#: gui/mask_correction_controller.py:585
 msgid "No valid correction frame ranges are available"
 msgstr "[!! Ńö ṽåŀîð çöŕŕéçţîöń ƒŕåḿé ŕåńĝéš åŕé åṽåîŀåƀŀé ! ! ! !!]"
 
@@ -1468,7 +1476,7 @@ msgstr "[!! ƤÅÛŠÉÐ ! !!]"
 msgid "Paint frame-local mask corrections for a selective rerun."
 msgstr "[!! Ƥåîńţ ƒŕåḿé-ŀöçåŀ ḿåšķ çöŕŕéçţîöńš ƒöŕ å šéŀéçţîṽé ŕéŕûń. ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:565
+#: gui/mask_correction_controller.py:571
 msgid "Paint or clear a correction before preparing a rerun"
 msgstr "[!! Ƥåîńţ öŕ çŀéåŕ å çöŕŕéçţîöń ƀéƒöŕé ƥŕéƥåŕîńĝ å ŕéŕûń ! ! ! ! !!]"
 
@@ -1516,7 +1524,7 @@ msgstr "[!! Ƥöŀýĝöń {index} ! !!]"
 msgid "Prepare selective rerun"
 msgstr "[!! Ƥŕéƥåŕé šéŀéçţîṽé ŕéŕûń ! !!]"
 
-#: gui/mask_correction_controller.py:614
+#: gui/mask_correction_controller.py:620
 msgid "Prepared mask-correction rerun for {count} frame range{suffix}"
 msgstr "[!! Ƥŕéƥåŕéð ḿåšķ-çöŕŕéçţîöń ŕéŕûń ƒöŕ {count} ƒŕåḿé ŕåńĝé{suffix} ! ! ! ! ! !!]"
 
@@ -1628,11 +1636,11 @@ msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕö�
 msgid "Reading first frame..."
 msgstr "[!! Ŕéåðîńĝ ƒîŕšţ ƒŕåḿé... ! !!]"
 
-#: gui/app.py:1104 gui/layout_build.py:1886 gui/layout_build.py:2111 gui/layout_build.py:2122 gui/layout_helpers.py:48 gui/processing_controller.py:1323 gui/processing_controller.py:1358 gui/support_controller.py:592
+#: gui/app.py:1104 gui/layout_build.py:1886 gui/layout_build.py:2111 gui/layout_build.py:2122 gui/layout_helpers.py:48 gui/processing_controller.py:1327 gui/processing_controller.py:1362 gui/support_controller.py:592
 msgid "Ready"
 msgstr "[!! Ŕéåðý ! !!]"
 
-#: gui/mask_correction_controller.py:603
+#: gui/mask_correction_controller.py:609
 msgid "Ready for a full rerun with mask corrections"
 msgstr "[!! Ŕéåðý ƒöŕ å ƒûŀŀ ŕéŕûń ŵîţħ ḿåšķ çöŕŕéçţîöńš ! ! ! !!]"
 
@@ -1644,7 +1652,7 @@ msgstr "[!! Ŕéåðý ţö ƥŕéṽîéŵ åŀîĝńḿéńţ. ! ! !!]"
 msgid "Ready to process"
 msgstr "[!! Ŕéåðý ţö ƥŕöçéšš ! !!]"
 
-#: gui/mask_correction_controller.py:601
+#: gui/mask_correction_controller.py:607
 msgid "Ready to rerun corrected frames"
 msgstr "[!! Ŕéåðý ţö ŕéŕûń çöŕŕéçţéð ƒŕåḿéš ! ! !!]"
 
@@ -1882,6 +1890,10 @@ msgstr "[!! Šåṽé ţħé çûŕŕéńţ šéţûƥ åš å ƥŕéšéţ ! ! 
 msgid "Saved redacted support bundle to {name}"
 msgstr "[!! Šåṽéð ŕéðåçţéð šûƥƥöŕţ ƀûńðŀé ţö {name} ! ! ! !!]"
 
+#: gui/region_controller.py:1710
+msgid "Saved {tracks} moving track(s); {rects} drawn rectangle(s) were not kept because a file uses either tracks or fixed regions, not both"
+msgstr "[!! Šåṽéð {tracks} ḿöṽîńĝ ţŕåçķ(š); {rects} ðŕåŵń ŕéçţåńĝŀé(š) ŵéŕé ńöţ ķéƥţ ƀéçåûšé å ƒîŀé ûšéš éîţħéŕ ţŕåçķš öŕ ƒîẋéð ŕéĝîöńš, ńöţ ƀöţħ ! ! ! ! ! ! ! ! ! ! ! !!]"
+
 #: gui/layout_build.py:1341
 msgid "Scales interface text and dependent controls on the next launch."
 msgstr "[!! Šçåŀéš îńţéŕƒåçé ţéẋţ åńð ðéƥéńðéńţ çöńţŕöŀš öń ţħé ńéẋţ ŀåûńçħ. ! ! ! ! ! !!]"
@@ -1894,11 +1906,11 @@ msgstr "[!! Šçåń ţħé ƒîŕšţ 30 ƒŕåḿéš åńð ƥîń ţħé ð�
 msgid "Scanning this region for text..."
 msgstr "[!! Šçåńńîńĝ ţħîš ŕéĝîöń ƒöŕ ţéẋţ... ! ! !!]"
 
-#: gui/settings_controller.py:595
+#: gui/settings_controller.py:604
 msgid "Select Output Directory"
 msgstr "[!! Šéŀéçţ Öûţƥûţ Ðîŕéçţöŕý ! !!]"
 
-#: gui/settings_controller.py:613
+#: gui/settings_controller.py:622
 msgid "Select Processing Work Directory"
 msgstr "[!! Šéŀéçţ Ƥŕöçéššîńĝ Ŵöŕķ Ðîŕéçţöŕý ! ! !!]"
 
@@ -1906,7 +1918,7 @@ msgstr "[!! Šéŀéçţ Ƥŕöçéššîńĝ Ŵöŕķ Ðîŕéçţöŕý ! ! !!
 msgid "Select a completed queue item to compare source and output."
 msgstr "[!! Šéŀéçţ å çöḿƥŀéţéð ɋûéûé îţéḿ ţö çöḿƥåŕé šöûŕçé åńð öûţƥûţ. ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:668
+#: gui/mask_correction_controller.py:674
 msgid "Select a queue item before correcting its mask"
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ƀéƒöŕé çöŕŕéçţîńĝ îţš ḿåšķ ! ! ! !!]"
 
@@ -2054,7 +2066,7 @@ msgstr "[!! Šţåŕţ (š) ! !!]"
 msgid "Start and end frames must be whole numbers"
 msgstr "[!! Šţåŕţ åńð éńð ƒŕåḿéš ḿûšţ ƀé ŵħöŀé ńûḿƀéŕš ! ! ! !!]"
 
-#: gui/layout_build.py:2045 gui/processing_controller.py:1355
+#: gui/layout_build.py:2045 gui/processing_controller.py:1359
 msgid "Start batch"
 msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
 
@@ -2496,7 +2508,7 @@ msgstr "[!! {count} ɋûéûéð åńð ŕéåðý ţö ƥŕöçéšš ! ! !!]"
 msgid "{count} warning{suffix}"
 msgstr "[!! {count} ŵåŕńîńĝ{suffix} ! !!]"
 
-#: gui/preview_controller.py:1446
+#: gui/preview_controller.py:1451
 msgid "{engine}: {n} detected"
 msgstr "[!! {engine}: {n} ðéţéçţéð ! !!]"
 

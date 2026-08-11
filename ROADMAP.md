@@ -25,36 +25,6 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Confidence: Verified
   Effort: M
 
-- [ ] P2 -- RM-168: The support bundle ships unredacted absolute paths (Windows username) in `support.json`
-  Category: security
-  Where: `backend/support_bundle.py:144` (`_write_json(bundle, "support.json", support_payload, included)` with no scrub), versus `:151` and `:208` which do apply `_redact_json`; leak source `backend/dependency_caps.py:416-420` (`"file": imported_file`) reached through `backend/model_downloads.py:548-552`
-  Problem: Every artifact in the bundle is redacted except the largest one. `settings.redacted.json`, the logs, and the batch reports all pass through `redact_text`/`_redact_json`, but `support.json` is written raw. It embeds `collect_opencv_wheel_status()`, whose `imported.file` is `cv2.__file__` -- an absolute path such as `C:\Users\<username>\...\site-packages\cv2\__init__.py` -- and the ONNX Runtime provider block, whose preload error strings can carry raw DLL paths. The module docstring is "Redacted support bundle generation for bug reports" and 3.17.0 shipped "Reports redact absolute paths by default"; users are told to attach this zip to bug reports, so the local username and directory layout go to whoever receives it.
-  Evidence: `grep -n "_redact_json\|_write_json" backend/support_bundle.py` shows the settings payload wrapped at line 151 and `facts` at 208, while line 144 writes `support_payload` unwrapped. `backend/dependency_caps.py:418` sets `"file": imported_file` inside the returned status dict.
-  Fix: Pass the whole `_support_payload` dict through `_redact_json` before writing (matching how `facts` is already handled), or null the path-bearing fields in the opencv/onnxruntime diagnostics before embedding them.
-  Acceptance: A generated bundle's `support.json` contains no `C:\Users\<name>` substring; a test asserts the redaction over a payload seeded with a home-directory path.
-  Confidence: Verified
-  Effort: S
-
-- [ ] P2 -- RM-169: The shared preview detector runs OCR outside its lock in three places -- concurrent inference on one non-thread-safe detector
-  Category: reliability
-  Where: `gui/preview_controller.py:1275-1294`, `gui/processing_controller.py:1264-1283` (`_probe_batch_eta`, 30 `detect()` calls), `gui/mask_correction_controller.py:492-510`; correct pattern for comparison at `gui/region_controller.py:910-922`
-  Problem: In all three sites the detector object is fetched under `self._detector_lock` but `detect()` is called after the lock is released, so the lock serializes only cache creation, not inference. `region_controller.py` does it correctly -- `detect_with_confidence` runs *inside* the lock -- which establishes serialized inference as the intended contract. Reachable overlaps: right-clicking "Review mask" on one item and then another spawns two daemon threads sharing one `SubtitleDetector`; a mask preview still running when Start batch fires `_probe_batch_eta` on the worker thread; and the mask-correction editor's frame loader racing either. PaddleOCR and EasyOCR predictors are not thread-safe, so outcomes range from garbage boxes to a native crash that takes the GUI with it.
-  Evidence: Read all four call sites; the three listed close the `with` block before the `detect()` call, `region_controller.py:910-922` does not. `gui/settings_controller.py:577-581` additionally nulls the detector cache without holding the lock.
-  Fix: Move the `detect(...)` calls inside the `with self._detector_lock:` block in all three places (matching `region_controller`), and take the lock in `_on_ocr_engine_changed` before clearing the cache.
-  Acceptance: All shared-detector inference happens under the lock; a stress test issuing two concurrent preview detections completes without corrupt results.
-  Confidence: Verified (race path); crash severity engine-dependent
-  Effort: M
-
-- [ ] P2 -- RM-170: The region selector silently discards static polygons on Save, and drops drawn rects when motion tracks exist
-  Category: correctness
-  Where: `gui/region_controller.py:986-999` (`_save_and_close`), `:1631-1636` (`_add_timed_regions` early return), `:1680-1690` (the `if tracks:` branch)
-  Problem: `_save_and_close` persists only `tracks`, `rects`, and `spans`. `self.polygon_shapes` -- built by the advertised "choose Polygon, click vertices, Finish polygon" flow -- is never written to the config, and no config field exists to hold a static polygon. With only a polygon drawn, `_add_timed_regions(close_on_empty=True)` returns at the `if not self.rects` guard before the "polygons are saved through motion keyframes" warning can fire, so Save falls into the else branch, clears every manual-region field, and reports "Cleared manual subtitle regions" -- the user's polygon is gone and detection silently reverts to automatic. Separately, when a committed motion track coexists with a freshly drawn rect that has no time fields, the `if tracks:` branch wins and the rect is discarded without warning. (Distinct from the 3.23 audit's correctly-rejected "rects vs spans" claim -- that pair really is mutually exclusive; polygons and tracks-vs-rects are not covered by that argument.)
-  Evidence: `grep -n "polygon_shapes" gui/region_controller.py` shows it created (171), drawn (756, 1032), edited (995, 1365), snapshotted for undo (1068, 1086), and cleared (1527) -- but never read by any save branch. `sed -n '1631,1640p'` confirms the `if not self.rects` early return precedes the polygon warning.
-  Fix: Block Save with an explicit warning while `polygon_shapes`/`polygon_points` are non-empty, or persist a static polygon as a degenerate single-keyframe track so it round-trips. Warn before the tracks branch discards drawn rects.
-  Acceptance: Saving with only a polygon either persists it or refuses with a specific message; it never reports "Cleared manual subtitle regions" for a non-empty editor.
-  Confidence: Verified
-  Effort: S-M
-
 - [ ] P2 -- RM-174: The PyTorch LaMa path returns padded-size frames on non-mod-8 resolutions and crashes the job
   Category: correctness
   Where: `backend/inpainters/lama.py:636-641` (full-frame) and `:684-705` (tiled); contrast with the ONNX/DNN crops at `:415`, `:535`, and the batched crop at `:768`

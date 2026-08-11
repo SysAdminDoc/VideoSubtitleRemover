@@ -6,6 +6,27 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The support bundle no longer leaks the account name and install layout.**
+  Settings, logs and reports were all scrubbed, but `support.json` -- the
+  largest artifact, and the one users are told to attach to bug reports --
+  was written raw, and it embeds the OpenCV wheel diagnostics whose
+  `imported.file` is an absolute `site-packages` path. The whole payload now
+  passes through the same redaction, with the diagnostics preserved and only
+  the directory tree removed.
+- **Shared-detector OCR is serialized.** Three call sites took the detector
+  lock only to build or fetch the cached detector and then ran inference
+  after releasing it, so a mask review racing a second review, the batch ETA
+  probe, or the mask-correction editor could drive one non-thread-safe
+  PaddleOCR/EasyOCR predictor from two threads at once -- garbage boxes at
+  best, a native crash at worst. Inference now happens under the lock, as the
+  region editor already did, and switching OCR engine takes the same lock
+  before dropping the cache.
+- **The region editor stops silently discarding shapes.** Saving with only a
+  polygon drawn cleared every manual region and reported success, because the
+  config has no field for a static polygon; it now refuses with an
+  explanation. Saving drawn rectangles alongside a committed motion track
+  kept the track and dropped the rectangles without a word; it now says which
+  one was kept and why.
 - **An explicitly typed CLI flag now beats a preset.** The guard that exists
   to stop a preset discarding what the user typed covered only fourteen
   fields; every other preset value was applied unconditionally, so

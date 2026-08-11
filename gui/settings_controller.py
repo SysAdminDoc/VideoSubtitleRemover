@@ -574,9 +574,18 @@ class AdvancedSettingsControllerMixin:
         del event
         self.config.detection_engine = self._ocr_engine_by_label.get(
             self.ocr_engine_var.get(), "auto")
-        self._preview_detector = None
-        self._preview_detector_lang = None
-        self._preview_detector_engine = None
+        # Take the same lock the preview/probe paths hold across inference,
+        # so the cache cannot be dropped out from under a running detect.
+        lock = getattr(self, "_detector_lock", None)
+        if lock is not None:
+            with lock:
+                self._preview_detector = None
+                self._preview_detector_lang = None
+                self._preview_detector_engine = None
+        else:
+            self._preview_detector = None
+            self._preview_detector_lang = None
+            self._preview_detector_engine = None
 
     def _on_gpu_changed(self, event=None):
         """Handle GPU device selection change."""

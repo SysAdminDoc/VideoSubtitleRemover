@@ -1673,6 +1673,26 @@ class RegionSelectorWindow:
     def _save_and_close(self):
         if self.pending_keyframes and not self._commit_motion_track():
             return
+        # A static polygon has nowhere to go: the config carries rects, spans
+        # and keyframe tracks only. Saving used to fall through to the
+        # "cleared manual regions" branch and silently discard the shape, so
+        # refuse instead of losing the user's work without saying so.
+        if self.polygon_points:
+            self._update_status(
+                tr("Finish or cancel the polygon in progress before saving"),
+                "warning",
+            )
+            return
+        if self.polygon_shapes:
+            self._update_status(
+                tr(
+                    "A polygon can only be saved as a moving track: add at "
+                    "least two motion keyframes, or convert it to a "
+                    "rectangle"
+                ),
+                "warning",
+            )
+            return
         if self.is_video and not self._add_timed_regions(close_on_empty=True):
             return
         spans = _coerce_region_span_list(self.region_spans) or []
@@ -1682,11 +1702,24 @@ class RegionSelectorWindow:
             self.config.subtitle_region_spans = None
             self.config.subtitle_areas = None
             self.config.subtitle_area = None
-            self._update_status(
-                f"Saved {len(tracks)} moving subtitle track"
-                f"{'s' if len(tracks) != 1 else ''}",
-                "success",
-            )
+            if self.rects:
+                # Motion tracks and static rects are mutually exclusive in the
+                # config; say which one won rather than dropping the other
+                # without a word.
+                self._update_status(
+                    tr(
+                        "Saved {tracks} moving track(s); {rects} drawn "
+                        "rectangle(s) were not kept because a file uses "
+                        "either tracks or fixed regions, not both"
+                    ).format(tracks=len(tracks), rects=len(self.rects)),
+                    "warning",
+                )
+            else:
+                self._update_status(
+                    f"Saved {len(tracks)} moving subtitle track"
+                    f"{'s' if len(tracks) != 1 else ''}",
+                    "success",
+                )
         elif self.rects:
             self.config.subtitle_areas = [tuple(r) for r in self.rects]
             self.config.subtitle_area = self.rects[0]

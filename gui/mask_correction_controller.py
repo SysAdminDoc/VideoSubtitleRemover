@@ -506,8 +506,14 @@ class MaskCorrectionWindow:
                     self._preview_detector = detector
                     self._preview_detector_lang = lang
                     self._preview_detector_engine = engine
-            boxes = detector.detect(
-                frame, getattr(self.item.config, "detection_threshold", 0.5))
+                # Inference stays under the same lock as the cache write:
+                # this editor's frame loader can race a review-mask preview
+                # or the batch ETA probe on one shared, non-thread-safe
+                # detector instance.
+                boxes = detector.detect(
+                    frame,
+                    getattr(self.item.config, "detection_threshold", 0.5),
+                )
             for x1, y1, x2, y2 in boxes:
                 self.cv2.rectangle(base, (x1, y1), (x2, y2), 255, -1)
             dilation = max(0, int(getattr(self.item.config, "mask_dilate_px", 0)))

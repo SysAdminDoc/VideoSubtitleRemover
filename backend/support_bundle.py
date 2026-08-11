@@ -141,7 +141,14 @@ def create_support_bundle(
                 app_version=app_version,
                 extra_facts=extra_facts or {},
             )
-            _write_json(bundle, "support.json", support_payload, included)
+            # Redact the whole payload, not just `facts`. The dependency and
+            # provider diagnostics embed absolute install paths (cv2.__file__,
+            # ONNX Runtime DLL load errors), so the largest artifact in a
+            # bundle users are told to attach to bug reports was the one
+            # carrying their Windows username and directory layout.
+            _write_json(
+                bundle, "support.json", _redact_json(support_payload), included
+            )
 
             settings_payload = _read_json(settings)
             if settings_payload is not None:
