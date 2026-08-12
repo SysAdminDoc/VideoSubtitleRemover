@@ -98,7 +98,7 @@ Section "Application files (required)" SecCore
         System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "Local\VideoSubtitleRemoverPro.Running") p .R0'
         IntCmp $R0 0 app_not_running app_running app_running
         app_running:
-            System::Call 'kernel32::CloseHandle(p r0)'
+            System::Call 'kernel32::CloseHandle(p R0)'
             MessageBox MB_OK|MB_ICONSTOP "Close Video Subtitle Remover Pro before installing."
             Abort
         app_not_running:
@@ -125,6 +125,7 @@ SectionEnd
 
 !ifndef VSR_SMOKE_BUILD
 Section "Start menu + desktop shortcuts" SecShortcuts
+    SetShellVarContext all
     CreateDirectory "$SMPROGRAMS\${APPNAME}"
     CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXENAME}"
     CreateShortCut "$SMPROGRAMS\${APPNAME}\Uninstall.lnk" "$INSTDIR\uninstall.exe"
@@ -154,6 +155,7 @@ Section "File extension handler" SecFileAssoc
 SectionEnd
 
 Section "Uninstall"
+    SetShellVarContext all
     Delete "$DESKTOP\${APPNAME}.lnk"
     RMDir /r "$SMPROGRAMS\${APPNAME}"
 
@@ -172,6 +174,37 @@ Section "Uninstall"
     DeleteRegKey HKCR ".mpeg\shell\OpenWithVSR"
     DeleteRegKey HKCR ".mpg\shell\OpenWithVSR"
 
-    RMDir /r "$INSTDIR"
+    ; Only remove the payload directories owned by this installer. Keeping
+    ; the install root non-recursive preserves unrelated files in a user-
+    ; selected pre-existing directory.
+    Delete "$INSTDIR\${EXENAME}"
+    Delete "$INSTDIR\uninstall.exe"
+    RMDir /r "$INSTDIR\_internal"
+    RMDir /r "$INSTDIR\locale"
+    RMDir /r "$INSTDIR\models"
+    RMDir "$INSTDIR"
 SectionEnd
+!endif
+
+!ifndef VSR_SMOKE_BUILD
+Function un.onInit
+    SetShellVarContext all
+
+    ; Refuse to remove an arbitrary directory when the registered payload is
+    ; missing. This also makes partial/corrupt installs fail closed.
+    IfFileExists "$INSTDIR\${EXENAME}" un_payload_present un_payload_missing
+    un_payload_missing:
+        MessageBox MB_OK|MB_ICONSTOP "Video Subtitle Remover Pro was not found in this install directory. Nothing was removed."
+        Abort
+    un_payload_present:
+
+    ; Do not delete files while a running process may still have them open.
+    System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "Local\VideoSubtitleRemoverPro.Running") p .R0'
+    IntCmp $R0 0 un_app_not_running un_app_running un_app_running
+    un_app_running:
+        System::Call 'kernel32::CloseHandle(p R0)'
+        MessageBox MB_OK|MB_ICONSTOP "Close Video Subtitle Remover Pro before uninstalling."
+        Abort
+    un_app_not_running:
+FunctionEnd
 !endif

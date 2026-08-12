@@ -723,6 +723,18 @@ class NsisInstallerArtefactTests(unittest.TestCase):
         self.assertIn("${NSIS_PACKEDVERSION} < 0x0300C000", text)
         self.assertNotIn("0x030B0000", text)
 
+    def test_nsi_uninstall_is_sentinel_guarded_and_non_recursive_at_root(self):
+        from pathlib import Path
+
+        text = (Path(__file__).resolve().parent.parent
+                / "installer" / "vsr.nsi").read_text(encoding="utf-8")
+        self.assertIn("Function un.onInit", text)
+        self.assertIn('IfFileExists "$INSTDIR\\${EXENAME}"', text)
+        self.assertIn("CloseHandle(p R0)", text)
+        self.assertIn("SetShellVarContext all", text)
+        self.assertNotIn('RMDir /r "$INSTDIR"', text)
+        self.assertIn('RMDir "$INSTDIR"', text)
+
     def test_nsi_version_matches_app_version(self):
         """The installer version defines must track gui.config.APP_VERSION so
         the packaged installer never drifts behind the application."""

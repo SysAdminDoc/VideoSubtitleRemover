@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **NSIS uninstall now fails closed and preserves selected-directory contents.**
+  It verifies the installed executable, refuses to run while VSR is active,
+  uses the all-users shell context consistently, closes the correct mutex
+  handle, and removes only known payload directories before a non-recursive
+  install-root cleanup.
+
 - **GUI batch startup now rolls back cleanly after preflight errors.** A failed
   report or output-volume preflight unlocks settings, restores the Start
   action, clears the timer state, and surfaces an error instead of wedging the
