@@ -23,6 +23,15 @@
 
 Video Subtitle Remover Pro uses real AI neural networks to remove hard-coded subtitles and text watermarks from videos and images. Unlike simple blur or crop methods, it intelligently fills in removed areas with content that matches the surrounding video.
 
+All media processing is local. No account, subscription, or upload is required:
+your video, images, masks, OCR text, and outputs stay on this computer. In the
+normal runtime, the only outbound requests made by the application are the
+opt-in GitHub update check and the opt-in crash report. Leave **Check for
+updates on startup** off (the persisted `update_check` setting is `false`) to
+disable the update request. Crash reporting is disabled unless both
+`VSR_GLITCHTIP_DSN` and `VSR_CRASH_REPORTS=1` are set; unset either variable, or
+set `VSR_CRASH_REPORTS=0`, to disable it.
+
 Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), enhanced with a professional interface, real LaMa inpainting, multi-engine detection, and a 52-code language picker backed by broader OCR engine coverage.
 
 ## Features

@@ -94,6 +94,36 @@ class UnsignedDistributionWordingTests(unittest.TestCase):
         self.assertIn("SHA256SUMS.txt", text)
 
 
+class OfflineGuaranteeDocumentationTests(unittest.TestCase):
+    def test_readme_names_local_processing_and_network_controls(self):
+        text = README.read_text(encoding="utf-8")
+        for phrase in (
+            "All media processing is local",
+            "No account, subscription, or upload is required",
+            "opt-in GitHub update check",
+            "opt-in crash report",
+            "`update_check` setting is `false`",
+            "`VSR_GLITCHTIP_DSN`",
+            "`VSR_CRASH_REPORTS=1`",
+            "`VSR_CRASH_REPORTS=0`",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+    def test_readme_controls_match_network_modules(self):
+        update = (_ROOT / "backend" / "update_check.py").read_text(
+            encoding="utf-8"
+        )
+        crash = (_ROOT / "backend" / "crash_reporter.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Off by default", update)
+        self.assertIn("GITHUB_LATEST_API", update)
+        self.assertIn("VSR_GLITCHTIP_DSN", crash)
+        self.assertIn("VSR_CRASH_REPORTS", crash)
+        self.assertIn("and bool(os.environ.get(\"VSR_GLITCHTIP_DSN\"", crash)
+
+
 class AccessibilitySupportMatrixTests(unittest.TestCase):
     def test_matrix_separates_tested_from_unsupported_surfaces(self):
         text = ARCHITECTURE.read_text(encoding="utf-8")

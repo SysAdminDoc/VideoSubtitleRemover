@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The offline guarantee is now explicit in the Overview.** README states
+  that processing needs no account or upload, and documents the opt-in update
+  check plus the two-variable crash-reporting gate and their disable controls.
+
 - **RGVI has been evaluated and rejected for integration.** Its upstream
   implementation and model materials are non-commercial research-only under
   CC BY-NC and the NTU S-Lab License 1.0, which is incompatible with this
