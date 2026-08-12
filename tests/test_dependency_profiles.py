@@ -24,7 +24,7 @@ class DependencyProfileTests(unittest.TestCase):
             text = dependency_profiles.profile_constraint_path(name).read_text(
                 encoding="utf-8")
             self.assertIn("Manifest-SHA256:", text)
-            self.assertIn("numpy==2.2.6", text)
+            self.assertIn("numpy==2.4.6", text)
             self.assertIn("Pillow==12.3.0", text)
 
         self.assertIn("onnxruntime==1.28.0", (

@@ -963,7 +963,7 @@ DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
 PILLOW_MINIMUM_VERSION = "12.3.0"
 
 TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
-    ("numpy", "1.21.0", ""),
+    ("numpy", "2.4.6", "2.5.0"),
     ("opencv-python", "5.0.0.93", ""),
     ("Pillow", PILLOW_MINIMUM_VERSION, ""),
     ("rapidocr", "2.0.0", "4.0.0"),

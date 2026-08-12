@@ -143,6 +143,10 @@ their OpenCV wheel ownership or NumPy caps conflict with the primary runtime.
 Python 3.11 is the minimum supported interpreter because the security-reviewed
 ONNX Runtime CPU/CUDA floor and pinned DirectML release do not provide Python
 3.10 wheels.
+The reviewed core NumPy lane pins 2.4.6 with a `<2.5.0` ceiling: 2.4.6 is the
+newest 2.4.x line supporting Python 3.11, while NumPy 2.5.x requires Python
+3.12 or newer. Keep the Python 3.11 floor and NumPy ceiling paired until the
+next coordinated dependency review.
 
 ### FFmpeg (Required for audio)
 

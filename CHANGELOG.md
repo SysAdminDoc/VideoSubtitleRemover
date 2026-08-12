@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The core NumPy lane now pins 2.4.6.** This is the newest 2.4.x line
+  supporting Python 3.11, so the explicit `<2.5.0` ceiling preserves the
+  supported interpreter floor while the removed NumPy APIs were audited from
+  the backend and test tree.
+
 - **RapidOCR now runs the reviewed 3.9.2 PP-OCRv6 generation by default.**
   PP-OCRv5 remains selectable for regression comparison, with a CLI benchmark
   that evaluates both generations on identical fixtures and release evidence

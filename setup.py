@@ -562,7 +562,7 @@ def install_dependencies(gpu_info=None):
 
         if not installed_from_requirements:
             core_packages = [
-                'numpy>=1.21.0',
+                'numpy>=2.4.6,<2.5.0',
                 'opencv-python>=5.0.0.93',
                 'Pillow>=12.3.0',
                 'rapidocr>=2.0.0,<4.0.0',

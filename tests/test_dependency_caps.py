@@ -29,7 +29,7 @@ class DependencyCapTests(unittest.TestCase):
             f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", setup
         )
         self.assertNotIn("opencv-python>=5.0.0.93,<", requirements)
-        self.assertNotIn("numpy>=1.21.0,<", requirements)
+        self.assertIn("numpy>=2.4.6,<2.5.0", requirements)
 
     def test_checker_passes_missing_or_in_range_engines(self):
         versions = {
@@ -272,7 +272,7 @@ class DependencyCapTests(unittest.TestCase):
 class DriftReportTests(unittest.TestCase):
     def test_drift_report_schema_and_summary(self):
         versions = {
-            "numpy": "1.26.4",
+            "numpy": "2.4.6",
             "opencv-python": "5.0.0.93",
             "pillow": "12.3.0",
             "rapidocr": "3.9.0",

@@ -752,13 +752,6 @@ RESEARCH.md instead of appearing here.
 
 ### P2
 
-- [ ] P2 -- RM-253: numpy is pinned 14 months stale, and the obvious bump collides with the declared Python 3.11 floor
-  Why: A coupled floor decision that only gets more expensive to defer, not a routine version bump.
-  Evidence: `dependency_profiles.json` pins `numpy==2.2.6` (released 2025-05-17); current is 2.5.2 (2026-08-09). numpy 2.5.0 drops Python 3.11 and expires a batch of 2.0-era deprecations; 2.4.0 removed `fix_imports` and the deprecated `newshape` reshape parameter and deprecated `np.testing.assert_warns`/`suppress_warnings` -- https://numpy.org/doc/stable/release.html, https://numpy.org/devdocs/release/2.4.0-notes.html. `dependency_profiles.json` declares `"python": ">=3.11,<3.15"`. No numpy-specific 2026 CVE was found.
-  Touches: `dependency_profiles.json`, `dependency_profiles/*.txt`, `requirements.txt`, `setup.py`, `backend/dependency_caps.py`, `README.md`
-  Acceptance: Either numpy moves to the newest 2.4.x that still supports 3.11 (with the deprecation removals checked against `backend/` and `tests/`), or the Python floor moves to 3.12 and numpy moves to 2.5.x -- whichever is chosen is recorded as a dated `intentionalExceptions` entry naming the 3.11 coupling so the next reviewer does not re-derive it.
-  Complexity: M
-
 - [ ] P2 -- RM-254: torch and torchvision are three minor releases behind and may be outside upstream's patch window
   Why: An unpatched ML runtime is a supply-chain liability even on an opt-in path, and the gap is now large enough that deferring again compounds the migration cost.
   Evidence: `dependency_profiles.json` pins `torch==2.10.0` / `torchvision==0.25.0` (2026-01-21); current is 2.13.0 / 0.28.0 (2026-07-08), with 2.11.0, 2.12.0 and 2.12.1 in between -- https://pypi.org/project/torch/#history, https://pypi.org/project/torchvision/#history. PyTorch's support window is typically about two minor releases. Exposure is capped because torch is only reached behind `VSR_ENABLE_PYTORCH_LAMA=1`, PaddlePaddle, and the opt-in diffusion adapters.

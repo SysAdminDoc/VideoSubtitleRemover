@@ -19,8 +19,9 @@
 # https://huggingface.co/opencv/inpainting_lama and set
 # VSR_OPENCV_LAMA=path/to/inpainting_lama_2025jan.onnx, or place it in
 # %APPDATA%/VideoSubtitleRemoverPro/models/ for auto-discovery. The
-# 4.x floor is kept for users who have not upgraded yet.
-numpy>=1.21.0
+# NumPy 2.4.6 is the newest 2.4.x line supporting the project's Python 3.11
+# floor; keep the explicit <2.5.0 ceiling until the Python floor is reviewed.
+numpy>=2.4.6,<2.5.0
 opencv-python>=5.0.0.93
 Pillow>=12.3.0
 # idna 3.15 fixes CVE-2026-45409/PYSEC-2026-215 resource exhaustion in
@@ -77,8 +78,8 @@ protobuf>=6.33.5
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Text Detection (install at least one, listed in priority order)
-# OCR engines are capped to their tested major versions; numpy/opencv stay
-# uncapped because the OpenCV 5 DNN path is the documented upgrade route.
+# OCR engines are capped to their tested major versions; NumPy stays in the
+# reviewed 2.4.x lane while OpenCV 5 remains the documented upgrade route.
 # RapidOCR runs PP-OCR via ONNX Runtime by default, can use OpenVINO when
 # openvino is installed on CPU/Intel systems, and stays free of the upstream
 # paddlepaddle memory-leak issues.
