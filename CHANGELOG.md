@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The Docker image is now a usable CPU CLI runtime.** It installs the active
+  requirements under the reviewed CPU constraints, including RapidOCR and the
+  ONNX Runtime LaMa tier, runs the generated-image smoke during the build, and
+  starts `python -m backend.cli` with mounted-volume usage documented; the
+  smoke remains available through an explicit entrypoint override.
+
 - **The CLI can now drain a watch folder unattended.** `--watch` polls for
   stable video/image inputs, forces canonical-output skip semantics, processes
   each stable file once through the existing single-file path, persists the

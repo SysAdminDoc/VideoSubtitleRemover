@@ -3,7 +3,7 @@
 # Profile: cpu
 # Provider: CPUExecutionProvider
 # Reviewed: 2026-08-12
-# Manifest-SHA256: 56e9aded98c6b138726fac6cf242081b5f432bcbe58c330eaedae5c2d899ce8b
+# Manifest-SHA256: 4eac14b8bc74f917d6942185a6e5fcae2711f1fe30a27338511ca9bb045ac3e4
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c

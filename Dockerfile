@@ -15,17 +15,18 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY dependency_profiles ./dependency_profiles
+COPY requirements.txt ./requirements.txt
 
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
     && python -m pip install --no-cache-dir \
         --constraint dependency_profiles/cpu.txt \
-        "numpy>=1.26" \
-        "opencv-python-headless>=5.0.0.93" \
-        "Pillow>=12.3.0" \
+        -r requirements.txt \
         "onnxruntime>=1.26.0"
 
 COPY . .
 
-RUN python -m backend.dependency_profiles check
+RUN python -m backend.dependency_profiles check \
+    && python tools/local_smoke.py --skip-self-test
 
-CMD ["python", "tools/local_smoke.py"]
+ENTRYPOINT ["python", "-m", "backend.cli"]
+CMD ["--help"]

@@ -14,5 +14,12 @@ models
 *.exe
 *.spec
 *.manifest
+tests
+docs
+CLAUDE.md
+AGENTS.md
+RESEARCH.md
+ROADMAP.md
+%temp%
 err.txt
 out.txt

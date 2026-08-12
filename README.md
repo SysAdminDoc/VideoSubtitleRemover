@@ -245,14 +245,20 @@ For an isolated CPU smoke without touching the Windows launcher, run the same
 check in the local container recipe:
 
 ```powershell
-docker build -t vsr-pro-smoke .
-docker run --rm vsr-pro-smoke
+docker build -t vsr-pro .
+docker run --rm --mount "type=bind,source=$((Get-Location).Path)\inputs,target=/in,readonly" --mount "type=bind,source=$((Get-Location).Path)\outputs,target=/out" vsr-pro --input /in/movie.mp4 --output /out/movie_no_sub.mp4 --gpu -1 --no-audio
 ```
 
-The container path installs only the minimal CPU smoke dependencies (including
-the canonical `onnxruntime>=1.26.0` security floor), records the resolved ONNX
-Runtime version/providers, runs `python -m backend.processor --self-test`, then
-processes a generated tiny image through the CLI with a fixed mask.
+The image installs the active CPU requirements under
+`dependency_profiles/cpu.txt`, including RapidOCR and the reviewed ONNX Runtime
+LaMa tier. It runs the generated-image smoke during `docker build`, then uses
+`python -m backend.cli` as its entrypoint; the input and output directories in
+the example are mounted into the container. To run that smoke explicitly after
+the build, bypass the CLI entrypoint:
+
+```powershell
+docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-test
+```
 
 ## Usage
 

@@ -40,16 +40,24 @@ class LocalSmokeTests(unittest.TestCase):
         self.assertIn('"version":', result.stdout)
         self.assertIn("[ok] local CPU smoke output:", result.stdout)
 
-    def test_dockerfile_uses_cpu_smoke_entrypoint(self):
+    def test_dockerfile_is_a_cpu_cli_runtime_with_build_smoke(self):
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-        self.assertIn("opencv-python-headless", dockerfile)
+        self.assertIn("-r requirements.txt", dockerfile)
+        self.assertIn("rapidocr", (ROOT / "requirements.txt").read_text(encoding="utf-8"))
         self.assertIn(
             f'"onnxruntime>={dependency_caps.ONNXRUNTIME_SECURITY_MIN}"',
             dockerfile,
         )
         self.assertNotIn('"onnxruntime>=1.21.0"', dockerfile)
-        self.assertIn('CMD ["python", "tools/local_smoke.py"]', dockerfile)
+        self.assertIn("tools/local_smoke.py --skip-self-test", dockerfile)
+        self.assertIn('ENTRYPOINT ["python", "-m", "backend.cli"]', dockerfile)
+        self.assertIn('CMD ["--help"]', dockerfile)
+        self.assertNotIn('CMD ["python", "tools/local_smoke.py"]', dockerfile)
         self.assertNotIn("github", dockerfile.lower())
+
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("--input /in/movie.mp4", readme)
+        self.assertIn("--entrypoint python vsr-pro tools/local_smoke.py", readme)
 
     def test_runtime_facts_record_resolved_version_and_providers(self):
         fake_ort = SimpleNamespace(
