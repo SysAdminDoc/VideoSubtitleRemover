@@ -13,6 +13,11 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.temporal_profile import (
+    GLOBAL_MOTION_MIN_INLIER_RATIO,
+    estimate_global_motion_quality,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -361,11 +366,41 @@ def _warp_mask_to_reference(src_mask: np.ndarray, src_frame: np.ndarray,
                      borderMode=cv2.BORDER_CONSTANT, borderValue=255)
 
 
+def _warp_affine(
+    source: np.ndarray,
+    matrix: np.ndarray,
+    *,
+    interpolation: int,
+    border_mode: int,
+    border_value: int = 0,
+) -> np.ndarray:
+    """Warp a frame or mask with a source-to-reference affine matrix."""
+    height, width = source.shape[:2]
+    return cv2.warpAffine(
+        source,
+        matrix,
+        (width, height),
+        flags=interpolation,
+        borderMode=border_mode,
+        borderValue=border_value,
+    )
+
+
+def _identity_affine() -> np.ndarray:
+    return np.asarray([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
+
+
 def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                          min_coverage: int, use_median: bool,
                          feather_px: int, edge_ring_px: int,
-                         flow_warp: bool) -> List[np.ndarray]:
-    """Aggregate one scene-contiguous segment via Temporal Background Exposure."""
+                         flow_warp: bool,
+                         global_motion_align: bool = True) -> List[np.ndarray]:
+    """Aggregate one scene-contiguous segment via Temporal Background Exposure.
+
+    Global affine registration puts every frame and mask in the middle-frame
+    reference coordinates before aggregation. The optional dense Farneback
+    pass then refines residual parallax on those already registered frames.
+    """
     n = len(frames)
     if n == 0:
         return []
@@ -375,30 +410,77 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
             filled = _edge_ring_color_correct(frames[0], filled, masks[0], edge_ring_px)
         return [_feather_blend(frames[0], filled, masks[0], feather_px)]
 
+    ref_idx = n // 2
+    ref_frame = frames[ref_idx]
+    frame_to_ref: List[Optional[np.ndarray]] = [None] * n
+    aligned_frames: List[np.ndarray] = []
+    aligned_masks: List[np.ndarray] = []
+    identity = _identity_affine()
+    for i, (frame, mask) in enumerate(zip(frames, masks)):
+        matrix = None
+        if global_motion_align and i != ref_idx:
+            try:
+                matrix, inlier_ratio = estimate_global_motion_quality(
+                    frame, ref_frame)
+                if matrix is None:
+                    logger.debug(
+                        "TBE global-motion alignment frame %d used identity: "
+                        "no affine fit (RANSAC inlier ratio %.3f)",
+                        i, inlier_ratio,
+                    )
+                    matrix = None
+                elif inlier_ratio < GLOBAL_MOTION_MIN_INLIER_RATIO:
+                    logger.debug(
+                        "TBE global-motion alignment frame %d used identity: "
+                        "RANSAC inlier ratio %.3f below %.3f",
+                        i, inlier_ratio, GLOBAL_MOTION_MIN_INLIER_RATIO,
+                    )
+                    matrix = None
+            except Exception as exc:
+                logger.debug(
+                    "TBE global-motion alignment frame %d used identity: %s",
+                    i, exc,
+                )
+                matrix = None
+        elif i == ref_idx:
+            matrix = identity
+
+        frame_to_ref[i] = matrix
+        if matrix is None:
+            aligned_frames.append(frame)
+            aligned_masks.append(mask)
+        else:
+            aligned_frames.append(_warp_affine(
+                frame, matrix, interpolation=cv2.INTER_LINEAR,
+                border_mode=cv2.BORDER_REPLICATE,
+            ))
+            aligned_masks.append(_warp_affine(
+                mask, matrix, interpolation=cv2.INTER_NEAREST,
+                border_mode=cv2.BORDER_CONSTANT, border_value=255,
+            ))
+
     if flow_warp:
-        ref_idx = n // 2
-        ref_frame = frames[ref_idx]
         warped_frames: List[np.ndarray] = []
         warped_masks: List[np.ndarray] = []
-        for i, (f, m) in enumerate(zip(frames, masks)):
+        for i, (frame, mask) in enumerate(zip(aligned_frames, aligned_masks)):
             if i == ref_idx:
-                warped_frames.append(f)
-                warped_masks.append(m)
-            else:
-                try:
-                    wf = _warp_to_reference(f, ref_frame)
-                    wm = _warp_mask_to_reference(m, f, ref_frame)
-                    warped_frames.append(wf)
-                    warped_masks.append(wm)
-                except Exception as exc:
-                    logger.debug(f"Flow warp fell back for frame {i}: {exc}")
-                    warped_frames.append(f)
-                    warped_masks.append(m)
+                warped_frames.append(frame)
+                warped_masks.append(mask)
+                continue
+            try:
+                wf = _warp_to_reference(frame, ref_frame)
+                wm = _warp_mask_to_reference(mask, frame, ref_frame)
+                warped_frames.append(wf)
+                warped_masks.append(wm)
+            except Exception as exc:
+                logger.debug("Flow warp fell back for frame %d: %s", i, exc)
+                warped_frames.append(frame)
+                warped_masks.append(mask)
         agg_frames = warped_frames
         agg_masks = warped_masks
     else:
-        agg_frames = list(frames)
-        agg_masks = list(masks)
+        agg_frames = aligned_frames
+        agg_masks = aligned_masks
 
     frame_stack = np.stack(agg_frames, axis=0).astype(np.float32)
     mask_stack = np.stack(agg_masks, axis=0)
@@ -430,18 +512,44 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
             results.append(frame.copy())
             continue
 
-        if flow_warp and t != (n // 2):
+        matrix = frame_to_ref[t]
+        if flow_warp and t != ref_idx:
             try:
                 bg_for_t = _warp_to_reference(bg, frame)
             except Exception as exc:
                 logger.debug(f"Flow back-warp fell back for frame {t}: {exc}")
                 bg_for_t = bg
+        elif matrix is not None and t != ref_idx:
+            try:
+                bg_for_t = _warp_affine(
+                    bg,
+                    cv2.invertAffineTransform(matrix),
+                    interpolation=cv2.INTER_LINEAR,
+                    border_mode=cv2.BORDER_REPLICATE,
+                )
+            except Exception as exc:
+                logger.debug("Global-motion back-warp fell back for frame %d: %s", t, exc)
+                bg_for_t = bg
         else:
             bg_for_t = bg
 
         mask_bool = mask > 0
-        has_exposure = mask_bool & (coverage >= min_coverage)
-        no_exposure = mask_bool & (coverage < min_coverage)
+        coverage_for_frame = coverage
+        if matrix is not None and t != ref_idx:
+            try:
+                coverage_for_frame = _warp_affine(
+                    coverage,
+                    cv2.invertAffineTransform(matrix),
+                    interpolation=cv2.INTER_NEAREST,
+                    border_mode=cv2.BORDER_CONSTANT,
+                )
+            except Exception as exc:
+                logger.debug(
+                    "Global-motion coverage back-warp fell back for frame %d: %s",
+                    t, exc,
+                )
+        has_exposure = mask_bool & (coverage_for_frame >= min_coverage)
+        no_exposure = mask_bool & (coverage_for_frame < min_coverage)
 
         filled = frame.copy()
         if has_exposure.any():
@@ -464,12 +572,14 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  feather_px: int = 4,
                                  edge_ring_px: int = 2,
                                  flow_warp: bool = False,
+                                 global_motion_align: bool = True,
                                  scene_cut_split: bool = True,
                                  scene_cut_threshold: float = 0.35,
                                  scene_cut_use_pyscenedetect: bool = False,
                                  scene_cut_use_transnetv2: bool = False) -> List[np.ndarray]:
     """Video-inpainting primitive: reconstruct masked pixels from
-    temporally exposed neighbours. Optional scene-cut split + flow warp."""
+    temporally exposed neighbours with optional scene splitting, global
+    alignment, and residual flow refinement."""
     if not scene_cut_split or len(frames) <= 1:
         segments = [(0, len(frames))]
     else:
@@ -494,6 +604,7 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
             feather_px=feather_px,
             edge_ring_px=edge_ring_px,
             flow_warp=flow_warp,
+            global_motion_align=global_motion_align,
         ))
     return out
 

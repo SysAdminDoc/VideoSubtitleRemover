@@ -719,15 +719,28 @@ class LayoutBuildMixin:
         auto_band_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(auto_band_toggle, tr("Scan the first 30 frames and pin the dominant subtitle band before processing."))
 
+        self.global_motion_var = tk.BooleanVar(
+            value=self.config.tbe_global_motion_align)
+        global_motion_toggle = ModernToggle(
+            det_frame,
+            text=tr("Align global camera motion before background recovery"),
+            variable=self.global_motion_var,
+        )
+        global_motion_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(global_motion_toggle, tr(
+            "Register each scene's frames to a reference before temporal "
+            "background recovery. Recommended for pans, zooms, and handheld footage."))
+
         self.flow_warp_var = tk.BooleanVar(value=self.config.tbe_flow_warp)
         flow_toggle = ModernToggle(
             det_frame,
-            text=tr("Motion-aligned background recovery"),
+            text=tr("Refine with residual optical flow"),
             variable=self.flow_warp_var,
         )
         flow_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
-        Tooltip(flow_toggle, tr("Align nearby frames before rebuilding hidden "
-                                "background pixels. Slower, but cleaner on pans and zooms."))
+        Tooltip(flow_toggle, tr("After global alignment, use dense optical flow "
+                                "to absorb residual parallax. Slower, but useful "
+                                "for moving foregrounds."))
 
         self.scene_split_var = tk.BooleanVar(value=self.config.tbe_scene_cut_split)
         scene_toggle = ModernToggle(

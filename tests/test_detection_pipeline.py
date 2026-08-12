@@ -483,6 +483,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg.loudnorm_target = -16.0
         cfg.multi_audio_passthrough = False
         cfg.tbe_flow_warp = True
+        cfg.tbe_global_motion_align = False
         cfg.colour_tune_enable = True
         cfg.colour_tune_tolerance = 30
         cfg.kalman_tracking = False
@@ -524,6 +525,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--loudnorm -16.0", cmd)
         self.assertIn("--single-audio", cmd)
         self.assertIn("--flow-warp", cmd)
+        self.assertIn("--no-global-motion-align", cmd)
         self.assertIn("--colour-tune", cmd)
         self.assertIn("--colour-tolerance 30", cmd)
         self.assertIn("--no-kalman", cmd)

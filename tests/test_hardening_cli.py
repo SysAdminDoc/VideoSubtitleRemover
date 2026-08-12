@@ -545,6 +545,7 @@ class PresetFlagPrecedenceTests(unittest.TestCase):
             "karaoke_x_gap_px": "karaoke_x_gap",
         }
         inverted_flags = {
+            "tbe_global_motion_align": "no_global_motion_align",
             "tbe_scene_cut_split": "no_scene_split",
             "kalman_tracking": "no_kalman",
             "phash_skip_enable": "no_phash",

@@ -129,6 +129,8 @@ def _build_cli_command(item: QueueItem) -> str:
         args.append("--single-audio")
     if getattr(cfg, "tbe_flow_warp", False):
         args.append("--flow-warp")
+    if not getattr(cfg, "tbe_global_motion_align", True):
+        args.append("--no-global-motion-align")
     if getattr(cfg, "colour_tune_enable", False):
         args.append("--colour-tune")
         tolerance = getattr(cfg, "colour_tune_tolerance", 25)

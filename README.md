@@ -717,6 +717,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--temporal-smooth` | Post-inpaint temporal smoothing radius for LaMa (0=off, 1-5) | 0 | 0..5 frames | Public |
 | `--edge-ring` | Edge-ring colour match width in pixels (0=off) | 2 | 0..32 pixels | Public |
 | `--flow-warp` | Farneback flow-warp TBE frames before aggregation | Off | - | Public |
+| `--no-global-motion-align` | Disable affine global-motion alignment before TBE aggregation | Off | - | Public |
 | `--no-scene-split` | Disable scene-cut splitting inside TBE batches | Off | - | Public |
 | `--pyscenedetect` | Prefer PySceneDetect AdaptiveDetector for scene cuts. | Off | - | Public |
 | `--transnetv2` | Prefer TransNetV2 (deep CNN) for scene-cut detection. | Off | - | Public |
@@ -949,6 +950,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `tbe_min_coverage` | `int` | `3` |
 | `tbe_use_median` | `bool` | `On` |
 | `tbe_flow_warp` | `bool` | `Off` |
+| `tbe_global_motion_align` | `bool` | `On` |
 | `tbe_scene_cut_split` | `bool` | `On` |
 | `tbe_scene_cut_threshold` | `float` | `0.35` |
 | `tbe_scene_cut_use_pyscenedetect` | `bool` | `Off` |

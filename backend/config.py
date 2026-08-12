@@ -215,6 +215,7 @@ class ProcessingConfig:
     tbe_min_coverage: int = 3     # min frames where pixel must be unmasked to trust mean
     tbe_use_median: bool = True   # median is more robust than mean to motion
     tbe_flow_warp: bool = False   # Farneback flow-warp frames before aggregating (motion-heavy)
+    tbe_global_motion_align: bool = True  # affine-register each TBE segment to its reference
     tbe_scene_cut_split: bool = True   # split TBE batch at scene cuts
     tbe_scene_cut_threshold: float = 0.35   # histogram delta to call a cut
     # RM-32: prefer the PySceneDetect AdaptiveDetector when installed
@@ -739,6 +740,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.tbe_min_coverage = _coerce_int(config.tbe_min_coverage, 3, 1, 32)
     config.tbe_use_median = _coerce_bool(config.tbe_use_median, True)
     config.tbe_flow_warp = _coerce_bool(config.tbe_flow_warp, False)
+    config.tbe_global_motion_align = _coerce_bool(
+        config.tbe_global_motion_align, True)
     config.tbe_scene_cut_split = _coerce_bool(config.tbe_scene_cut_split, True)
     config.tbe_scene_cut_threshold = _coerce_float(config.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
     config.tbe_scene_cut_use_pyscenedetect = _coerce_bool(

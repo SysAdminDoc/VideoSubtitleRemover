@@ -750,13 +750,6 @@ RESEARCH.md instead of appearing here.
 
 ### P1
 
-- [ ] P1 -- RM-251: TBE aggregates without global-motion alignment, so any pan, zoom, or handheld shake degrades the recovered background
-  Why: The median-of-unmasked-pixels model assumes the background is already pixel-aligned across the batch; on moving-camera footage it is not, and the per-pixel Farneback warp is being asked to recover global motion it was never designed for.
-  Evidence: `backend/inpainters/_common.py:403-423` stacks the batch and takes `np.nanmedian`/mean with no registration step; the only alignment is the optional per-pixel `_warp_to_reference` (`:326-343`). The primitives already exist in this repo but are not wired into TBE -- `cv2.findTransformECC` at `backend/reference_fill.py:176` and `cv2.estimateAffinePartial2D` at `backend/temporal_profile.py:86`. Global-motion compensation before temporal aggregation is the standard background-sprite technique -- https://bmva-archive.org.uk/bmvc/2015/papers/paper021/paper021.pdf, https://arxiv.org/pdf/2401.17883.
-  Touches: `backend/inpainters/_common.py` (`_tbe_single_segment`), `backend/config.py`, `backend/cli.py`, `gui/layout_build.py`, `tests/`
-  Acceptance: Each scene-contiguous segment estimates an affine/homographic transform per frame against the segment reference before aggregation, reusing the existing ECC / `estimateAffinePartial2D` helpers; a low RANSAC inlier ratio falls back to identity and logs the reason; the existing per-pixel flow warp still runs afterward to absorb residual parallax; a synthetic pan fixture shows a measurable drop in `temporal_profile.masked_flicker` and in mask-region residual against the current path, and a static-camera fixture is unchanged within tolerance.
-  Complexity: M
-
 - [ ] P1 -- RM-252: Detection is a full PP-OCR generation behind, and the upgrade is Apache-2.0 ONNX with no new runtime
   Why: Better detection recall directly reduces the missed-glyph and under-dilated-mask failures that dominate user-visible quality, and this upgrade costs a version pin rather than a new dependency.
   Evidence: RapidOCR 3.9.2 (2026-07-21) added PP-OCRv6 for both detection and recognition on ONNX Runtime and OpenVINO -- https://github.com/RapidAI/RapidOCR/releases; `dependency_profiles.json` pins `rapidocr==3.9.1`. PP-OCRv6 ships Tiny/Small/Medium variants with one unified CJK + 46-Latin model; PaddleOCR reports the Medium variant at +5.1% recognition and +4.6% detection over PP-OCRv5-server, with OpenVINO CPU inference up to 5.2x faster -- https://arxiv.org/html/2606.13108v1, https://github.com/PaddlePaddle/PaddleOCR/releases. Apache-2.0.

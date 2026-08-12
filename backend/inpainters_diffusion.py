@@ -105,6 +105,8 @@ def _fallback_to_tbe(config: ProcessingConfig,
             feather_px=config.mask_feather_px,
             edge_ring_px=config.edge_ring_px,
             flow_warp=config.tbe_flow_warp,
+            global_motion_align=getattr(
+                config, "tbe_global_motion_align", True),
             scene_cut_split=config.tbe_scene_cut_split,
             scene_cut_threshold=config.tbe_scene_cut_threshold,
             scene_cut_use_pyscenedetect=config.tbe_scene_cut_use_pyscenedetect,

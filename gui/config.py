@@ -529,6 +529,7 @@ class ProcessingConfig:
     tbe_use_median: bool = True
 
     tbe_flow_warp: bool = False
+    tbe_global_motion_align: bool = True
     tbe_scene_cut_split: bool = True
     tbe_scene_cut_threshold: float = 0.35
     tbe_scene_cut_use_pyscenedetect: bool = False
@@ -730,6 +731,8 @@ class ProcessingConfig:
         self.tbe_min_coverage = _coerce_int(self.tbe_min_coverage, 3, 1, 10)
         self.tbe_use_median = _coerce_bool(self.tbe_use_median, True)
         self.tbe_flow_warp = _coerce_bool(self.tbe_flow_warp, False)
+        self.tbe_global_motion_align = _coerce_bool(
+            self.tbe_global_motion_align, True)
         self.tbe_scene_cut_split = _coerce_bool(self.tbe_scene_cut_split, True)
         self.tbe_scene_cut_threshold = _coerce_float(
             self.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
@@ -1375,6 +1378,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "tbe_min_coverage",
     "tbe_use_median",
     "tbe_flow_warp",
+    "tbe_global_motion_align",
     "tbe_scene_cut_split",
     "tbe_scene_cut_threshold",
     "tbe_scene_cut_use_pyscenedetect",
@@ -1424,6 +1428,7 @@ SAFE_PRESET_FIELDS = frozenset({
 SETTINGS_VAR_FIELDS = (
     ("auto_band_var", "auto_band"),
     ("flow_warp_var", "tbe_flow_warp"),
+    ("global_motion_var", "tbe_global_motion_align"),
     ("scene_split_var", "tbe_scene_cut_split"),
     ("adaptive_batch_var", "adaptive_batch"),
     ("temporal_mask_union_var", "temporal_mask_union"),
@@ -1459,6 +1464,7 @@ SETTINGS_VAR_FIELDS = (
 DEFAULT_PRESET_FIELDS = [
     "mode", "detection_threshold", "mask_dilate_px",
     "mask_feather_px", "edge_ring_px", "tbe_flow_warp",
+    "tbe_global_motion_align",
     "tbe_scene_cut_split", "colour_tune_enable",
     "colour_tune_tolerance", "kalman_tracking",
     "phash_skip_enable", "phash_skip_distance", "auto_band",

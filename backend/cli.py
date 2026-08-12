@@ -59,7 +59,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--skip-detection", "--fast",
             "--threshold", "--vertical", "--frame-skip", "--mask-dilate",
             "--confidence-dilate", "--mask-feather", "--temporal-smooth",
-            "--edge-ring", "--flow-warp", "--no-scene-split", "--pyscenedetect",
+            "--edge-ring", "--flow-warp", "--no-global-motion-align",
+            "--no-scene-split", "--pyscenedetect",
             "--transnetv2", "--denoise-detect", "--sam2-refine",
             "--matanyone-refine", "--cotracker-propagate", "--no-tbe",
             "--no-adaptive-batch", "--temporal-mask-union",
@@ -742,6 +743,8 @@ def _build_parser(mode_choices):
                        help="Edge-ring colour match width in pixels (0=off)")
     parser.add_argument("--flow-warp", action="store_true",
                        help="Farneback flow-warp TBE frames before aggregation")
+    parser.add_argument("--no-global-motion-align", action="store_true",
+                       help="Disable affine global-motion alignment before TBE aggregation")
     parser.add_argument("--no-scene-split", action="store_true",
                        help="Disable scene-cut splitting inside TBE batches")
     parser.add_argument("--pyscenedetect", action="store_true",
@@ -1207,6 +1210,7 @@ def _prepare_cli_args(args, parser, argv=None):
         # A preset value of True means "enabled" (the parser default), so map
         # it back onto the negative flag; the user's explicit --no-* wins.
         inverted_flags = {
+            "tbe_global_motion_align": "no_global_motion_align",
             "tbe_scene_cut_split": "no_scene_split",
             "kalman_tracking": "no_kalman",
             "phash_skip_enable": "no_phash",
@@ -1384,6 +1388,7 @@ def _build_processing_config(
         edge_ring_px=args.edge_ring,
         tbe_enable=not args.no_tbe,
         tbe_flow_warp=args.flow_warp,
+        tbe_global_motion_align=not args.no_global_motion_align,
         tbe_scene_cut_split=not args.no_scene_split,
         tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
         tbe_scene_cut_use_transnetv2=args.transnetv2,

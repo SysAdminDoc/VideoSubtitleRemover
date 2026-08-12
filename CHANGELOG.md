@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Temporal background recovery now compensates for global camera motion.**
+  Each scene segment is affine-registered to a reference before aggregation,
+  rejects weak RANSAC fits, and keeps optional dense flow as a residual
+  parallax refinement. The CLI and GUI expose the alignment opt-out.
 - **FFmpeg runtime diagnostics now enforce the reviewed security floor.**
   VSR rejects an unclassified or vulnerable FFmpeg runtime, reports the
   affected CVEs and advisory URL in self-tests and support bundles, and

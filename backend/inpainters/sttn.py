@@ -42,6 +42,8 @@ class STTNInpainter(BaseInpainter):
                 feather_px=self.config.mask_feather_px,
                 edge_ring_px=self.config.edge_ring_px,
                 flow_warp=self.config.tbe_flow_warp,
+                global_motion_align=getattr(
+                    self.config, "tbe_global_motion_align", True),
                 scene_cut_split=self.config.tbe_scene_cut_split,
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,

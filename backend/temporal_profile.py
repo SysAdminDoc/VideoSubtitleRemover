@@ -49,6 +49,7 @@ class TemporalThresholds:
 
 
 DEFAULT_THRESHOLDS = TemporalThresholds()
+GLOBAL_MOTION_MIN_INLIER_RATIO = 0.35
 
 
 def _gray(frame: np.ndarray) -> np.ndarray:
@@ -61,30 +62,49 @@ def _binary(mask: np.ndarray) -> np.ndarray:
     return (np.asarray(mask) > 0).astype(np.uint8)
 
 
-def estimate_global_motion(previous: np.ndarray, current: np.ndarray):
-    """Estimate the dominant (camera) motion between two frames.
+def estimate_global_motion_quality(
+    previous: np.ndarray,
+    current: np.ndarray,
+) -> tuple[Optional[np.ndarray], float]:
+    """Estimate affine motion and return its RANSAC inlier ratio.
 
-    Returns a 2x3 affine matrix, or None when the estimate is not reliable.
-    Uses sparse feature tracking so a moving foreground object cannot dominate
-    the estimate the way dense whole-frame correlation would.
+    The matrix maps coordinates in ``previous`` into ``current``. A missing
+    matrix and a zero ratio both mean that the sparse estimate is unusable.
+    Keeping the quality value beside the matrix lets callers reject a fit
+    dominated by a moving foreground or a texture-poor region.
     """
     prev_gray = _gray(previous)
     cur_gray = _gray(current)
     corners = cv2.goodFeaturesToTrack(
         prev_gray, maxCorners=200, qualityLevel=0.01, minDistance=8)
     if corners is None or len(corners) < 6:
-        return None
+        return None, 0.0
     tracked, status, _err = cv2.calcOpticalFlowPyrLK(
         prev_gray, cur_gray, corners.astype(np.float32), None)
     if tracked is None or status is None:
-        return None
+        return None, 0.0
     keep = status.ravel() == 1
     src = corners[keep].reshape(-1, 2)
     dst = tracked[keep].reshape(-1, 2)
     if len(src) < 6:
-        return None
-    matrix, _inliers = cv2.estimateAffinePartial2D(
+        return None, 0.0
+    matrix, inliers = cv2.estimateAffinePartial2D(
         src, dst, method=cv2.RANSAC, ransacReprojThreshold=3.0)
+    if matrix is None or inliers is None:
+        return None, 0.0
+    inlier_ratio = float(np.count_nonzero(inliers)) / float(len(src))
+    return matrix, inlier_ratio
+
+
+def estimate_global_motion(previous: np.ndarray, current: np.ndarray):
+    """Estimate the dominant (camera) motion between two frames.
+
+    Returns a 2x3 affine matrix, or None when the estimate is not reliable.
+    This compatibility wrapper preserves the original API while the TBE path
+    also consumes the RANSAC quality returned by
+    :func:`estimate_global_motion_quality`.
+    """
+    matrix, _inlier_ratio = estimate_global_motion_quality(previous, current)
     return matrix
 
 

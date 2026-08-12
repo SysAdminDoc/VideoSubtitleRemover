@@ -5,12 +5,14 @@ import sys
 import unittest
 
 import numpy as np
+from unittest import mock
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from backend import temporal_profile as tp
+from backend import temporal_profile as tp  # noqa: E402
+from backend.inpainters import _common  # noqa: E402
 
 
 class SyntheticFixtureTests(unittest.TestCase):
@@ -55,8 +57,118 @@ class MetricTests(unittest.TestCase):
             with self.subTest(**kwargs):
                 clean, subtitled, masks = tp.synthetic_clip(**kwargs)
                 report = tp.evaluate_temporal_profile(subtitled, clean, masks)
-                self.assertTrue(report["passed"], report["failures"])
-                self.assertTrue(report["measured"])
+            self.assertTrue(report["passed"], report["failures"])
+            self.assertTrue(report["measured"])
+
+
+class TemporalBackgroundExposureTests(unittest.TestCase):
+    @staticmethod
+    def _recover(*, global_motion_align: bool, camera_motion: float = 4.0):
+        clean, subtitled, masks = tp.synthetic_clip(
+            frames=8,
+            width=192,
+            height=128,
+            camera_motion=camera_motion,
+            seed=7,
+        )
+        filled = _common._temporal_background_expose(
+            subtitled,
+            masks,
+            min_coverage=1,
+            use_median=True,
+            feather_px=0,
+            edge_ring_px=0,
+            flow_warp=False,
+            global_motion_align=global_motion_align,
+            scene_cut_split=False,
+        )
+        return clean, masks, filled
+
+    def test_global_alignment_improves_pan_recovery_metrics(self):
+        clean, masks, baseline = self._recover(global_motion_align=False)
+        _clean, _masks, aligned = self._recover(global_motion_align=True)
+
+        baseline_mae = np.mean([
+            np.mean(np.abs(
+                actual[mask > 0].astype(np.int16)
+                - expected[mask > 0].astype(np.int16)
+            ))
+            for actual, expected, mask in zip(baseline, clean, masks)
+        ])
+        aligned_mae = np.mean([
+            np.mean(np.abs(
+                actual[mask > 0].astype(np.int16)
+                - expected[mask > 0].astype(np.int16)
+            ))
+            for actual, expected, mask in zip(aligned, clean, masks)
+        ])
+        self.assertLess(aligned_mae, baseline_mae * 0.8)
+        self.assertLess(
+            tp.masked_flicker(aligned, masks),
+            tp.masked_flicker(baseline, masks),
+        )
+        self.assertLess(
+            tp.masked_warp_residual(aligned, masks),
+            tp.masked_warp_residual(baseline, masks),
+        )
+
+    def test_static_camera_output_is_unchanged_with_alignment(self):
+        clean, _masks, baseline = self._recover(
+            global_motion_align=False, camera_motion=0.0)
+        _clean, _masks, aligned = self._recover(
+            global_motion_align=True, camera_motion=0.0)
+        self.assertLessEqual(
+            max(
+                int(np.abs(actual.astype(np.int16) - expected.astype(np.int16)).max())
+                for actual, expected in zip(aligned, baseline)
+            ),
+            1,
+        )
+        self.assertLessEqual(
+            float(np.mean([
+                np.mean(np.abs(actual.astype(np.int16) - expected.astype(np.int16)))
+                for actual, expected in zip(aligned, clean)
+            ])),
+            float(np.mean([
+                np.mean(np.abs(actual.astype(np.int16) - expected.astype(np.int16)))
+                for actual, expected in zip(baseline, clean)
+            ])) + 1.0,
+        )
+
+    def test_low_ransac_inlier_ratio_falls_back_to_identity(self):
+        frames = [np.full((32, 48, 3), value, dtype=np.uint8)
+                  for value in (20, 40, 60)]
+        masks = [np.zeros((32, 48), dtype=np.uint8) for _ in frames]
+        masks[0][10:20, 10:30] = 255
+        fake_matrix = np.asarray([[1.0, 0.0, 4.0], [0.0, 1.0, 0.0]], dtype=np.float32)
+        with mock.patch.object(
+            _common,
+            "estimate_global_motion_quality",
+            return_value=(fake_matrix, 0.1),
+        ), self.assertLogs(_common.logger.name, level="DEBUG") as captured:
+            aligned = _common._tbe_single_segment(
+                frames,
+                masks,
+                min_coverage=1,
+                use_median=True,
+                feather_px=0,
+                edge_ring_px=0,
+                flow_warp=False,
+                global_motion_align=True,
+            )
+        self.assertTrue(any("inlier ratio" in line for line in captured.output))
+        baseline = _common._tbe_single_segment(
+            frames,
+            masks,
+            min_coverage=1,
+            use_median=True,
+            feather_px=0,
+            edge_ring_px=0,
+            flow_warp=False,
+            global_motion_align=False,
+        )
+        for actual, expected in zip(aligned, baseline):
+            np.testing.assert_array_equal(actual, expected)
 
     def test_a_frozen_fill_fails_the_warp_residual(self):
         clean, subtitled, masks = tp.synthetic_clip(camera_motion=3.0)
