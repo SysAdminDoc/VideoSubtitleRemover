@@ -16,7 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
-from backend.i18n import normalise_locale_tag, tr
+from backend.i18n import N_, normalise_locale_tag, tr
 from backend.config_schema import (
     CONFIG_SCHEMA_VERSION,
     GUI_SETTINGS_FORMAT,
@@ -192,15 +192,15 @@ class ProcessingStatus(Enum):
 STATUS_UI = None  # legacy name; use status_ui() instead
 
 _STATUS_LABELS = {
-    ProcessingStatus.IDLE: "Ready",
-    ProcessingStatus.LOADING: "Loading",
-    ProcessingStatus.DETECTING: "Scanning",
-    ProcessingStatus.PROCESSING: "Removing",
-    ProcessingStatus.MERGING: "Finishing",
-    ProcessingStatus.COMPLETE: "Complete",
-    ProcessingStatus.ERROR: "Needs Attention",
-    ProcessingStatus.PAUSED: "Paused",
-    ProcessingStatus.CANCELLED: "Stopped",
+    ProcessingStatus.IDLE: N_("Ready"),
+    ProcessingStatus.LOADING: N_("Loading"),
+    ProcessingStatus.DETECTING: N_("Scanning"),
+    ProcessingStatus.PROCESSING: N_("Removing"),
+    ProcessingStatus.MERGING: N_("Finishing"),
+    ProcessingStatus.COMPLETE: N_("Complete"),
+    ProcessingStatus.ERROR: N_("Needs Attention"),
+    ProcessingStatus.PAUSED: N_("Paused"),
+    ProcessingStatus.CANCELLED: N_("Stopped"),
 }
 
 _STATUS_THEME_KEYS = {

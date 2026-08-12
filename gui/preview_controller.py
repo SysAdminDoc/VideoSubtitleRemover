@@ -29,7 +29,7 @@ from gui.utils import (
 from gui.widgets import (
     ModernButton,
 )
-from backend.i18n import tr
+from backend.i18n import N_, tr
 from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
@@ -473,8 +473,8 @@ class PreviewControllerMixin:
                     self.lang_var.set(lang)
                     break
             self._update_status(
-                f"Detected {script} script, suggested language: {lang} "
-                f"(confidence {conf:.0%})",
+                N_(f"Detected {script} script, suggested language: {lang} "
+                f"(confidence {conf:.0%})"),
                 "success",
             )
 
@@ -494,15 +494,15 @@ class PreviewControllerMixin:
         """
         item = self._get_selected_queue_item(fallback_to_first=True)
         if item is None or item.status != ProcessingStatus.COMPLETE:
-            self._update_status("Select a completed item first", "warning")
+            self._update_status(N_("Select a completed item first"), "warning")
             return
         in_path = item.file_path
         out_path = item.output_path
         if not Path(out_path).exists():
-            self._update_status("Output file is missing", "warning")
+            self._update_status(N_("Output file is missing"), "warning")
             return
         if not PIL_AVAILABLE:
-            self._update_status("Pillow required for A/B compare", "warning")
+            self._update_status(N_("Pillow required for A/B compare"), "warning")
             return
 
         import cv2 as _cv2
@@ -511,7 +511,7 @@ class PreviewControllerMixin:
         if not cap_a.isOpened() or not cap_b.isOpened():
             cap_a.release()
             cap_b.release()
-            self._update_status("Could not open input/output for compare", "warning")
+            self._update_status(N_("Could not open input/output for compare"), "warning")
             return
 
         n_a = max(1, int(cap_a.get(_cv2.CAP_PROP_FRAME_COUNT)))
@@ -654,13 +654,13 @@ class PreviewControllerMixin:
         settings without committing a full batch run."""
         item = self._get_selected_queue_item(fallback_to_first=True)
         if item is None:
-            self._update_status("Select a queue item first", "warning")
+            self._update_status(N_("Select a queue item first"), "warning")
             return
         if self.is_processing:
-            self._update_status("Pause the batch before previewing", "warning")
+            self._update_status(N_("Pause the batch before previewing"), "warning")
             return
         if not PIL_AVAILABLE:
-            self._update_status("Pillow required for inpaint preview", "warning")
+            self._update_status(N_("Pillow required for inpaint preview"), "warning")
             return
 
         self.preview_title_label.config(text=tr("Inpainting {name}").format(
@@ -870,13 +870,13 @@ class PreviewControllerMixin:
         """Render the selected source frame as an inline draggable editor."""
         if self.is_processing:
             self._update_status(
-                "Stop the active batch before changing the subtitle region",
+                N_("Stop the active batch before changing the subtitle region"),
                 "warning",
             )
             return True
         if not PIL_AVAILABLE:
             self._update_status(
-                "Install Pillow to enable preview region editing",
+                N_("Install Pillow to enable preview region editing"),
                 "warning",
             )
             return False
@@ -897,7 +897,7 @@ class PreviewControllerMixin:
                     cap.release()
             if raw_frame is None:
                 self._update_status(
-                    "Could not read the selected file for region editing",
+                    N_("Could not read the selected file for region editing"),
                     "warning",
                 )
                 return True
@@ -953,7 +953,7 @@ class PreviewControllerMixin:
         except Exception:
             logger.warning("Inline region editor failed", exc_info=True)
             self._update_status(
-                "Inline region editor unavailable. Opening the full selector is still available.",
+                N_("Inline region editor unavailable. Opening the full selector is still available."),
                 "warning",
             )
             return True

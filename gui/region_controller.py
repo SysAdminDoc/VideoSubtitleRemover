@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - Pillow is optional for headless import
     PIL_AVAILABLE = False
 
 from backend.a11y import set_accessible_metadata
-from backend.i18n import tr
+from backend.i18n import N_, tr
 from backend.region_editing import (
     RegionEditHistory,
     format_polygon_vertices,
@@ -102,7 +102,7 @@ class RegionSelectorWindow:
             return
         if not PIL_AVAILABLE:
             self._update_status(
-                "Install Pillow to enable the visual region selector",
+                N_("Install Pillow to enable the visual region selector"),
                 "warning",
             )
             return
@@ -116,7 +116,7 @@ class RegionSelectorWindow:
             logger.error("Could not open video for region selection")
             self.cap.release()
             self._update_status(
-                "The selected video could not be opened for region selection",
+                N_("The selected video could not be opened for region selection"),
                 "warning",
             )
             return
@@ -134,7 +134,7 @@ class RegionSelectorWindow:
                     logger.error("Could not read video frame for region selection")
                     self.cap.release()
                     self._update_status(
-                        "The selected video did not provide a readable frame",
+                        N_("The selected video did not provide a readable frame"),
                         "warning",
                     )
                     return
@@ -143,7 +143,7 @@ class RegionSelectorWindow:
                 if frame is None:
                     logger.error("Could not read image for region selection")
                     self._update_status(
-                        "The selected image could not be read for region selection",
+                        N_("The selected image could not be read for region selection"),
                         "warning",
                     )
                     return
@@ -990,7 +990,7 @@ class RegionSelectorWindow:
     def _finish_polygon(self) -> bool:
         if len(self.polygon_points) < 3:
             self._update_status(
-                "A polygon needs at least three vertices", "warning")
+                N_("A polygon needs at least three vertices"), "warning")
             return False
         self._record_history()
         coords = []
@@ -1542,7 +1542,7 @@ class RegionSelectorWindow:
         shape_count = len(self.rects) + len(self.polygon_shapes)
         if shape_count != 1:
             self._update_status(
-                "Draw exactly one rectangle or polygon for this keyframe",
+                N_("Draw exactly one rectangle or polygon for this keyframe"),
                 "warning",
             )
             return False
@@ -1555,7 +1555,7 @@ class RegionSelectorWindow:
             kind = "rect" if "rect" in first else "polygon"
             if kind not in shape or len(first[kind]) != len(shape[kind]):
                 self._update_status(
-                    "Keyframes in one motion track need the same shape and vertex count",
+                    N_("Keyframes in one motion track need the same shape and vertex count"),
                     "warning",
                 )
                 return False
@@ -1577,13 +1577,13 @@ class RegionSelectorWindow:
         self._draw_saved_rects()
         self._refresh_region_editor(f"pending:{len(self.pending_keyframes) - 1}")
         self._update_status(
-            f"Added motion keyframe at {seconds:.3f} seconds", "success")
+            N_(f"Added motion keyframe at {seconds:.3f} seconds"), "success")
         return True
 
     def _commit_motion_track(self) -> bool:
         if len(self.pending_keyframes) < 2:
             self._update_status(
-                "Add at least two keyframes before saving a motion track",
+                N_("Add at least two keyframes before saving a motion track"),
                 "warning",
             )
             return False
@@ -1594,7 +1594,7 @@ class RegionSelectorWindow:
         }])
         if not track:
             self._update_status(
-                "The motion keyframes could not be normalized", "warning")
+                N_("The motion keyframes could not be normalized"), "warning")
             return False
         self._record_history()
         self.keyframe_tracks.append(track[0])
@@ -1605,7 +1605,7 @@ class RegionSelectorWindow:
         )
         self._draw_saved_rects()
         self._refresh_region_editor(f"track:{len(self.keyframe_tracks) - 1}:0")
-        self._update_status("Saved interpolated motion track", "success")
+        self._update_status(N_("Saved interpolated motion track"), "success")
         return True
 
     def _parse_time_inputs(self):
@@ -1628,7 +1628,7 @@ class RegionSelectorWindow:
         end_s = end_s or 0.0
         if end_s and end_s <= start_s:
             self._update_status(
-                "Timed region end must be after start", "warning")
+                N_("Timed region end must be after start"), "warning")
             return None
         return has_time, start_s, end_s
 
@@ -1640,18 +1640,18 @@ class RegionSelectorWindow:
         if not self.rects:
             if close_on_empty:
                 return True
-            self._update_status("Draw a region before adding a timed range", "warning")
+            self._update_status(N_("Draw a region before adding a timed range"), "warning")
             return False
         if self.polygon_shapes or self.polygon_points:
             self._update_status(
-                "Polygons are saved through motion keyframes", "warning")
+                N_("Polygons are saved through motion keyframes"), "warning")
             return False
         if not self.is_video:
             return False
         if not has_time and not self.region_spans:
             if not close_on_empty:
                 self._update_status(
-                    "Enter a start or end second for a timed range",
+                    N_("Enter a start or end second for a timed range"),
                     "warning",
                 )
             return True if close_on_empty else False
@@ -1720,8 +1720,8 @@ class RegionSelectorWindow:
                 )
             else:
                 self._update_status(
-                    f"Saved {len(tracks)} moving subtitle track"
-                    f"{'s' if len(tracks) != 1 else ''}",
+                    N_(f"Saved {len(tracks)} moving subtitle track"
+                    f"{'s' if len(tracks) != 1 else ''}"),
                     "success",
                 )
         elif self.rects:
@@ -1730,7 +1730,7 @@ class RegionSelectorWindow:
             self.config.subtitle_region_spans = None
             self.config.subtitle_region_keyframes = None
             self._update_status(
-                f"Saved {len(self.rects)} subtitle region{'s' if len(self.rects) != 1 else ''}",
+                N_(f"Saved {len(self.rects)} subtitle region{'s' if len(self.rects) != 1 else ''}"),
                 "success",
             )
         elif spans:
@@ -1739,8 +1739,8 @@ class RegionSelectorWindow:
             self.config.subtitle_area = None
             self.config.subtitle_region_keyframes = None
             self._update_status(
-                f"Saved {len(spans)} timed subtitle region"
-                f"{'s' if len(spans) != 1 else ''}",
+                N_(f"Saved {len(spans)} timed subtitle region"
+                f"{'s' if len(spans) != 1 else ''}"),
                 "success",
             )
         else:
@@ -1748,7 +1748,7 @@ class RegionSelectorWindow:
             self.config.subtitle_area = None
             self.config.subtitle_region_spans = None
             self.config.subtitle_region_keyframes = None
-            self._update_status("Cleared manual subtitle regions", "info")
+            self._update_status(N_("Cleared manual subtitle regions"), "info")
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         self.win.destroy()
@@ -1790,4 +1790,4 @@ class RegionEditorControllerMixin:
         self.config.subtitle_region_keyframes = None
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
-        self._update_status("Subtitle detection returned to automatic mode")
+        self._update_status(N_("Subtitle detection returned to automatic mode"))

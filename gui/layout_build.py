@@ -25,7 +25,7 @@ from gui.widgets import (
     ModernSlider, SegmentedPicker, DragDropFrame,
 )
 from backend.a11y import set_accessible_metadata
-from backend.i18n import available_catalogs, tr
+from backend.i18n import N_, available_catalogs, tr
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +347,7 @@ class LayoutBuildMixin:
         """Build the output destination group inside the inspector."""
         out_surface = self._create_card(parent)
         out_surface.pack(fill="x")
-        self._card_header(out_surface, "Output", "Output")
+        self._card_header(out_surface, N_("Output"), N_("Output"))
 
         out_row = tk.Frame(out_surface, bg=Theme.BG_CARD)
         out_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
@@ -401,7 +401,7 @@ class LayoutBuildMixin:
         profile_panel = self._create_card(settings)
         profile_panel.pack(fill="x")
 
-        self._card_header(profile_panel, "Cleanup profile", "Cleanup profile")
+        self._card_header(profile_panel, N_("Cleanup profile"), N_("Cleanup profile"))
 
         self.inspector_mode_value = tk.Label(
             profile_panel, textvariable=self.mode_var,
@@ -539,7 +539,7 @@ class LayoutBuildMixin:
         workflow_panel = self._create_card(settings)
         workflow_panel.pack(fill="x")
 
-        self._card_header(workflow_panel, "Subtitle region", "Subtitle region")
+        self._card_header(workflow_panel, N_("Subtitle region"), N_("Subtitle region"))
 
         workflow_details = tk.Frame(workflow_panel, bg=Theme.BG_CARD)
         self._inspector_workflow_details = workflow_details
@@ -620,32 +620,32 @@ class LayoutBuildMixin:
         # STTN Motion card
         sttn_frame = self._create_card(self.adv_panel)
         sttn_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
-        self._card_header(sttn_frame, "STTN motion", "Motion smoothing")
+        self._card_header(sttn_frame, N_("STTN motion"), N_("Motion smoothing"))
 
-        self._create_slider(sttn_frame, "Neighbor stride", 5, 30,
+        self._create_slider(sttn_frame, N_("Neighbor stride"), 5, 30,
                             self.config.sttn_neighbor_stride, "sttn_neighbor_stride",
-                            hint="How far apart nearby frames are sampled for motion "
-                                 "context. Lower is more thorough but slower.")
-        self._create_slider(sttn_frame, "Reference length", 5, 30,
+                            hint=N_("How far apart nearby frames are sampled for motion "
+                                 "context. Lower is more thorough but slower."))
+        self._create_slider(sttn_frame, N_("Reference length"), 5, 30,
                             self.config.sttn_reference_length, "sttn_reference_length",
-                            hint="How many reference frames are kept in view. More "
-                                 "references steady long, slow-moving shots.")
-        self._create_slider(sttn_frame, "Max load frames", 10, 100,
+                            hint=N_("How many reference frames are kept in view. More "
+                                 "references steady long, slow-moving shots."))
+        self._create_slider(sttn_frame, N_("Max load frames"), 10, 100,
                             self.config.sttn_max_load_num, "sttn_max_load_num",
-                            hint="Most frames held in memory per pass. Lower this if "
-                                 "you run out of GPU or system memory.")
+                            hint=N_("Most frames held in memory per pass. Lower this if "
+                                 "you run out of GPU or system memory."))
         tk.Frame(sttn_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
 
     def _build_detection_settings_group(self):
         # Detection Precision card
         det_frame = self._create_card(self.adv_panel)
         det_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(det_frame, "Detection", "Precision tuning")
+        self._card_header(det_frame, N_("Detection"), N_("Precision tuning"))
 
-        self._create_slider(det_frame, "Sensitivity", 10, 90,
+        self._create_slider(det_frame, N_("Sensitivity"), 10, 90,
                             int(self.config.detection_threshold * 100),
                             "_detection_threshold_pct",
-                            hint="Higher catches more text (lower confidence floor). Lower is stricter.")
+                            hint=N_("Higher catches more text (lower confidence floor). Lower is stricter."))
         engine_row = tk.Frame(det_frame, bg=Theme.BG_CARD)
         engine_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         tk.Label(
@@ -712,12 +712,12 @@ class LayoutBuildMixin:
             tr("Keep OCR boxes whose recognized script does not match the "
                "subtitle language. Latin-script languages share one family."),
         )
-        self._create_slider(det_frame, "Frame skip", 0, 10,
+        self._create_slider(det_frame, N_("Frame skip"), 0, 10,
                             self.config.detection_frame_skip, "detection_frame_skip",
-                            hint="Reuse the last mask for N frames. At 5, scheduled OCR drops by up to about 83% on stable footage.")
-        self._create_slider(det_frame, "Mask dilate", 0, 20,
+                            hint=N_("Reuse the last mask for N frames. At 5, scheduled OCR drops by up to about 83% on stable footage."))
+        self._create_slider(det_frame, N_("Mask dilate"), 0, 20,
                             self.config.mask_dilate_px, "mask_dilate_px",
-                            hint="Expand detected regions for cleaner fill edges.")
+                            hint=N_("Expand detected regions for cleaner fill edges."))
         self.auto_dilate_var = tk.BooleanVar(
             value=self.config.auto_dilate_enable)
         auto_dilate_toggle = ModernToggle(
@@ -743,12 +743,12 @@ class LayoutBuildMixin:
         Tooltip(conf_dilate_toggle,
                 tr("Add more padding around uncertain text detections while "
                    "keeping confident detections tight. Helps catch faint edges."))
-        self._create_slider(det_frame, "Mask feather", 0, 15,
+        self._create_slider(det_frame, N_("Mask feather"), 0, 15,
                             self.config.mask_feather_px, "mask_feather_px",
-                            hint="Soft-blend the removal edge for seamless boundaries.")
-        self._create_slider(det_frame, "Colour match ring", 0, 8,
+                            hint=N_("Soft-blend the removal edge for seamless boundaries."))
+        self._create_slider(det_frame, N_("Colour match ring"), 0, 8,
                             self.config.edge_ring_px, "edge_ring_px",
-                            hint="Post-inpaint edge-ring colour correction to kill faint seams.")
+                            hint=N_("Post-inpaint edge-ring colour correction to kill faint seams."))
 
         self.auto_band_var = tk.BooleanVar(value=self.config.auto_band)
         auto_band_toggle = ModernToggle(
@@ -810,9 +810,9 @@ class LayoutBuildMixin:
         phash_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         Tooltip(phash_toggle, tr("Skip OCR on frames nearly identical to the last detected one. Static shots can avoid most OCR calls."))
         self._create_slider(
-            det_frame, "pHash distance", 0, 16,
+            det_frame, N_("pHash distance"), 0, 16,
             self.config.phash_skip_distance, "phash_skip_distance",
-            hint="Higher values reuse masks across more near-identical frames; 4 is conservative.",
+            hint=N_("Higher values reuse masks across more near-identical frames; 4 is conservative."),
         )
 
         self.colour_tune_var = tk.BooleanVar(value=self.config.colour_tune_enable)
@@ -841,11 +841,11 @@ class LayoutBuildMixin:
         # Output Quality card
         quality_frame = self._create_card(self.adv_panel)
         quality_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(quality_frame, "Output", "Encoding quality")
+        self._card_header(quality_frame, N_("Output"), N_("Encoding quality"))
 
-        self._create_slider(quality_frame, "CRF target", 15, 35,
+        self._create_slider(quality_frame, N_("CRF target"), 15, 35,
                             self.config.output_quality, "output_quality",
-                            hint="Lower = higher quality. 23 is a balanced default.")
+                            hint=N_("Lower = higher quality. 23 is a balanced default."))
 
         self.hw_encode_var = tk.BooleanVar(value=self.config.use_hw_encode)
         self.hw_encode_check = ModernToggle(
@@ -908,9 +908,9 @@ class LayoutBuildMixin:
             "Automatic detection only. Carry recent text masks forward for a "
             "few frames so a single missed detection does not leave a flash."))
         self._create_slider(
-            quality_frame, "Mask carry window", 1, 15,
+            quality_frame, N_("Mask carry window"), 1, 15,
             self.config.temporal_mask_window, "temporal_mask_window",
-            hint="Number of recent masks available to repair a missed detection.",
+            hint=N_("Number of recent masks available to repair a missed detection."),
         )
 
         self.export_srt_var = tk.BooleanVar(value=self.config.export_srt)
@@ -1021,7 +1021,7 @@ class LayoutBuildMixin:
         translation_frame = self._create_card(self.adv_panel)
         translation_frame.pack(fill="x", pady=(0, Theme.S_SM))
         self._card_header(
-            translation_frame, "Localization", "Erase, translate, and re-embed")
+            translation_frame, N_("Localization"), N_("Erase, translate, and re-embed"))
 
         self.translation_enabled_var = tk.BooleanVar(
             value=self.config.translation_enabled)
@@ -1191,7 +1191,7 @@ class LayoutBuildMixin:
         # Video Range card
         time_frame = self._create_card(self.adv_panel)
         time_frame.pack(fill="x")
-        self._card_header(time_frame, "Video range", "Trim (videos only)")
+        self._card_header(time_frame, N_("Video range"), N_("Trim (videos only)"))
 
         time_inner = tk.Frame(time_frame, bg=Theme.BG_CARD)
         time_inner.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
@@ -1230,7 +1230,7 @@ class LayoutBuildMixin:
         # Editorial: chyron vs subtitle filter + karaoke grouping
         editorial_frame = self._create_card(self.adv_panel)
         editorial_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
-        self._card_header(editorial_frame, "Editorial", "Filter what gets removed")
+        self._card_header(editorial_frame, N_("Editorial"), N_("Filter what gets removed"))
 
         self.remove_subs_var = tk.BooleanVar(value=self.config.remove_subtitles)
         remove_subs_toggle = ModernToggle(
@@ -1264,7 +1264,7 @@ class LayoutBuildMixin:
         # Audio card: loudnorm target + multi-track passthrough
         audio_frame = self._create_card(self.adv_panel)
         audio_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(audio_frame, "Audio", "Loudness + tracks")
+        self._card_header(audio_frame, N_("Audio"), N_("Loudness + tracks"))
 
         self.multi_audio_var = tk.BooleanVar(value=self.config.multi_audio_passthrough)
         multi_audio_toggle = ModernToggle(
@@ -1297,7 +1297,7 @@ class LayoutBuildMixin:
         # Performance card: decode HW accel + prefetch
         perf_frame = self._create_card(self.adv_panel)
         perf_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(perf_frame, "Performance", "Decode pipeline")
+        self._card_header(perf_frame, N_("Performance"), N_("Decode pipeline"))
 
         accel_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
         accel_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
@@ -1492,8 +1492,8 @@ class LayoutBuildMixin:
         storage_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
         self._card_header(
             storage_frame,
-            "Storage",
-            "Temporary, mask, checkpoint, and resume files",
+            N_("Storage"),
+            N_("Temporary, mask, checkpoint, and resume files"),
         )
         storage_row = tk.Frame(storage_frame, bg=Theme.BG_CARD)
         storage_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
@@ -2005,7 +2005,7 @@ class LayoutBuildMixin:
         table_header.columnconfigure(0, weight=5, uniform="queue_columns")
         table_header.columnconfigure(1, weight=3, uniform="queue_columns")
         table_header.columnconfigure(2, weight=2, uniform="queue_columns")
-        for column, label in enumerate(("File name", "Details", "Status")):
+        for column, label in enumerate((N_("File name"), N_("Details"), N_("Status"))):
             tk.Label(
                 table_header, text=tr(label), font=f(Theme.F_META),
                 bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,

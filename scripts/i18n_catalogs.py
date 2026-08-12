@@ -45,6 +45,15 @@ def _source_files(root: Path = ROOT) -> list[Path]:
     return sorted(files, key=lambda path: path.as_posix().lower())
 
 
+def _message_template(node: ast.AST) -> str | None:
+    """Return a catalog template from a literal or deferred f-string."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return _fstring_template(node)
+    return None
+
+
 def extract_messages(root: Path = ROOT) -> dict[str, Message]:
     messages: dict[str, Message] = {}
     for path in _source_files(root):
@@ -57,18 +66,16 @@ def extract_messages(root: Path = ROOT) -> dict[str, Message]:
             if name not in {"_", "tr", "ntr", "N_"} or not node.args:
                 continue
             singular_node = node.args[0]
-            if not isinstance(singular_node, ast.Constant) or not isinstance(
-                singular_node.value, str
-            ):
+            singular = _message_template(singular_node)
+            if singular is None:
                 continue
-            singular = singular_node.value
             plural = ""
             if name == "ntr":
-                if len(node.args) < 2 or not isinstance(node.args[1], ast.Constant):
+                if len(node.args) < 2:
                     continue
-                if not isinstance(node.args[1].value, str):
+                plural = _message_template(node.args[1])
+                if plural is None:
                     continue
-                plural = node.args[1].value
             message = messages.setdefault(singular, Message(singular, plural))
             if message.msgid_plural != plural:
                 raise ValueError(f"inconsistent plural definition for {singular!r}")
@@ -80,12 +87,14 @@ def extract_messages(root: Path = ROOT) -> dict[str, Message]:
 # user-visible literal actually reaches `tr()`; a string that never gets
 # extracted silently stays English in every locale, and no coverage
 # percentage will ever reveal it.
-TRANSLATION_CALLS = frozenset({"_", "tr", "ntr", "gettext_passthrough"})
+TRANSLATION_CALLS = frozenset({
+    "_", "tr", "ntr", "N_", "gettext_passthrough",
+})
 
 # Keyword arguments that carry a caption to the user.
 CAPTION_KEYWORDS = frozenset({
     "text", "title", "label", "message", "placeholder", "prompt",
-    "caption", "detail", "heading",
+    "caption", "detail", "heading", "hint",
 })
 
 # Callables whose leading positional argument is a caption.
@@ -94,6 +103,15 @@ CAPTION_CALLS = frozenset({
     "showinfo", "showerror", "showwarning", "askyesno", "askokcancel",
     "askquestion", "askretrycancel",
 })
+
+# Helpers whose user-facing positional argument is not the leading argument
+# because the first argument is a parent/model object. Keeping these in the
+# lint model prevents a new deferred literal from bypassing the catalog.
+CAPTION_POSITIONS = {
+    "_update_status": (0,),
+    "_card_header": (1, 2),
+    "_create_slider": (1,),
+}
 
 # Literals that reach a caption sink but are deliberately not prose:
 # widget option values, layout tokens, and symbols with no words to
@@ -175,6 +193,9 @@ def untranslated_literals(root: Path = ROOT) -> list[tuple[str, int, str, str]]:
             candidates: list[tuple[str, ast.AST]] = []
             if called in CAPTION_CALLS and node.args:
                 candidates.append((called, node.args[0]))
+            for position in CAPTION_POSITIONS.get(called, ()):
+                if len(node.args) > position:
+                    candidates.append((f"{called}[{position}]", node.args[position]))
             for keyword in node.keywords:
                 if keyword.arg in CAPTION_KEYWORDS:
                     candidates.append((f"{called}({keyword.arg}=)", keyword.value))

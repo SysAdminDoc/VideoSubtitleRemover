@@ -22,7 +22,7 @@ from gui.utils import (
 from gui.widgets import (
     ModernButton,
 )
-from backend.i18n import tr
+from backend.i18n import N_, tr
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +388,7 @@ class QualityReviewControllerMixin:
         first = first_messages[0] if first_messages else "review output settings"
         item_word = "item" if count == 1 else "items"
         self._update_status(
-            f"Output quality preflight warning for {count} {item_word}: {first_name} - {first}",
+            N_(f"Output quality preflight warning for {count} {item_word}: {first_name} - {first}"),
             "warning",
             toast=True,
         )
@@ -497,7 +497,7 @@ class QualityReviewControllerMixin:
     def _open_first_review_item(self):
         records = self._review_needed_records()
         if not records:
-            self._update_status("No quality review items are available", "info")
+            self._update_status(N_("No quality review items are available"), "info")
             return
         record = records[0]
         item = self._queue_item_for_report_record(record)
@@ -512,8 +512,8 @@ class QualityReviewControllerMixin:
         if item is not None and mask_spans:
             if self._open_mask_correction_editor(item, initial_span=mask_spans[0]):
                 self._update_status(
-                    f"Opened frame-level mask review for "
-                    f"{record.get('output_name', 'output')}{stage_suffix}",
+                    N_(f"Opened frame-level mask review for "
+                    f"{record.get('output_name', 'output')}{stage_suffix}"),
                     "warning",
                 )
                 return
@@ -532,7 +532,7 @@ class QualityReviewControllerMixin:
                 try:
                     os.startfile(str(path))
                     self._update_status(
-                        f"Opened quality review for {record.get('output_name', 'output')}{stage_suffix}",
+                        N_(f"Opened quality review for {record.get('output_name', 'output')}{stage_suffix}"),
                         "warning",
                     )
                     return
@@ -540,12 +540,12 @@ class QualityReviewControllerMixin:
                     logger.warning("Could not open quality review artifact", exc_info=True)
         if self._open_batch_report_path(getattr(self, "_last_batch_report_paths", [])):
             self._update_status(
-                f"Opened batch report for review{stage_suffix}",
+                N_(f"Opened batch report for review{stage_suffix}"),
                 "warning",
             )
             return
         self._update_status(
-            f"Focused {record.get('output_name', 'the first review item')}{stage_suffix}",
+            N_(f"Focused {record.get('output_name', 'the first review item')}{stage_suffix}"),
             "warning",
         )
 
@@ -638,11 +638,11 @@ class QualityReviewControllerMixin:
 
     def _retry_review_item_with_suggested_settings(self, item_id: str) -> bool:
         if self.is_processing:
-            self._update_status("Stop the active batch before preparing a retry", "warning")
+            self._update_status(N_("Stop the active batch before preparing a retry"), "warning")
             return False
         item = self._queue_item_by_id(item_id)
         if item is None:
-            self._update_status("The review item is no longer in the queue", "warning")
+            self._update_status(N_("The review item is no longer in the queue"), "warning")
             return False
         record = self._review_record_for_item(item)
         gate = self._quality_gate_for_item(item, record)
@@ -651,10 +651,10 @@ class QualityReviewControllerMixin:
             patch = retry_config_patch_for_gate(gate, item.config.to_dict())
         except Exception as exc:
             logger.warning("Could not build quality retry config", exc_info=True)
-            self._update_status(f"Could not prepare suggested retry: {exc}", "warning")
+            self._update_status(N_(f"Could not prepare suggested retry: {exc}"), "warning")
             return False
         if not patch:
-            self._update_status("No automatic retry settings are available for this review item", "warning")
+            self._update_status(N_("No automatic retry settings are available for this review item"), "warning")
             return False
 
         before = item.config.to_dict()
@@ -664,7 +664,7 @@ class QualityReviewControllerMixin:
         after = after_config.to_dict()
         changes = self._retry_changes(before, after, patch)
         if not changes:
-            self._update_status("Suggested retry settings already match this item", "info")
+            self._update_status(N_("Suggested retry settings already match this item"), "info")
             return False
 
         item.config = after_config
@@ -691,7 +691,7 @@ class QualityReviewControllerMixin:
         save_queue_state(self.queue)
         changed_keys = ", ".join(changes)
         self._update_status(
-            f"Prepared retry for {Path(item.file_path).name}: {changed_keys}",
+            N_(f"Prepared retry for {Path(item.file_path).name}: {changed_keys}"),
             "success",
             toast=True,
         )
@@ -700,11 +700,11 @@ class QualityReviewControllerMixin:
     def _retry_first_review_with_suggested_settings(self) -> bool:
         records = self._review_needed_records()
         if not records:
-            self._update_status("No quality review items are available", "info")
+            self._update_status(N_("No quality review items are available"), "info")
             return False
         item = self._queue_item_for_report_record(records[0])
         if item is None:
-            self._update_status("The first review item is no longer in the queue", "warning")
+            self._update_status(N_("The first review item is no longer in the queue"), "warning")
             return False
         return self._retry_review_item_with_suggested_settings(item.id)
 

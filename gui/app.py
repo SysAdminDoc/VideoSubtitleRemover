@@ -56,7 +56,7 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.dependency_caps import FROZEN_OPTIONAL_DEPENDENCIES
-from backend.i18n import bind_locale, ntr, tr
+from backend.i18n import N_, bind_locale, ntr, tr
 from backend.region_keyframes import (
     normalize_region_keyframe_tracks,
     region_shapes_at,
@@ -300,7 +300,7 @@ class VideoSubtitleRemoverApp(
 
         self._update_output_label()
         self._update_region_label_display()
-        self._update_status("Detecting hardware...", "info")
+        self._update_status(N_("Detecting hardware..."), "info")
         # RM-144: surface every failed user-state write in the activity UI
         # instead of swallowing it.
         set_persistence_observer(self._on_persistence_failure)
@@ -383,7 +383,7 @@ class VideoSubtitleRemoverApp(
                 self._terminate_active_backend_work()
                 self._join_processing_thread(0.1)
                 self._update_status(
-                    "Closing after the current step stops safely...",
+                    N_("Closing after the current step stops safely..."),
                     "warning",
                 )
                 if self._taskbar:
@@ -875,7 +875,7 @@ class VideoSubtitleRemoverApp(
 
         gpu_label = self.gpus[0]["name"] if self.gpus else tr("CPU mode")
         audio_label = "FFmpeg ready" if self.ffmpeg_ready else "FFmpeg missing"
-        self._update_status(f"Hardware detected: {gpu_label}; {audio_label}", "info")
+        self._update_status(N_(f"Hardware detected: {gpu_label}; {audio_label}"), "info")
         logger.info(
             "Startup hardware probe complete: gpus=%s detection=%s inpainting=%s ffmpeg=%s",
             len(self.gpus),
@@ -1565,7 +1565,7 @@ class VideoSubtitleRemoverApp(
         if hasattr(self, "auto_band_var"):
             self.auto_band_var.set(True)
         save_settings(self.config)
-        self._update_status("Automatic subtitle-band detection enabled", "success")
+        self._update_status(N_("Automatic subtitle-band detection enabled"), "success")
 
     def _schedule_onboarding_test_cleanup(self):
         """Open the ordinary one-frame cleanup flow after the modal closes."""
@@ -1758,7 +1758,7 @@ class VideoSubtitleRemoverApp(
         with self.queue_lock:
             item = next((it for it in self.queue if it.id == item_id), None)
         if item is None or item.status != ProcessingStatus.IDLE:
-            self._update_status("Only idle queue items can change subtitle action", "warning")
+            self._update_status(N_("Only idle queue items can change subtitle action"), "warning")
             return
         item.soft_subtitle_action = action
         if action == "burned_in":
@@ -1773,7 +1773,7 @@ class VideoSubtitleRemoverApp(
         if item.id in self.queue_widgets:
             self.queue_widgets[item.id].update_item(item)
         save_queue_state(self.queue)
-        self._update_status(f"{Path(item.file_path).name}: {labels[action]}", "info")
+        self._update_status(N_(f"{Path(item.file_path).name}: {labels[action]}"), "info")
 
     def _refresh_idle_output_paths(self) -> int:
         """Recompute output paths for idle items that still follow the live output rule."""
@@ -1818,17 +1818,17 @@ class VideoSubtitleRemoverApp(
             return
 
         if queue_full:
-            self._update_status("The queue is already full (500 items max)", "warning")
+            self._update_status(N_("The queue is already full (500 items max)"), "warning")
             logger.warning("Queue full while importing items")
             return
 
         if folders and supported_in_folders == 0:
-            self._update_status("No supported videos or images were found in the selected folder", "warning")
+            self._update_status(N_("No supported videos or images were found in the selected folder"), "warning")
             logger.warning("No supported files found while importing folder selection")
             return
 
         if duplicate and not (missing or unsupported):
-            self._update_status("Everything selected is already in the queue", "info")
+            self._update_status(N_("Everything selected is already in the queue"), "info")
             logger.info("Import skipped because every selected item was already queued")
             return
 
@@ -1842,11 +1842,11 @@ class VideoSubtitleRemoverApp(
             return
 
         if missing and not (duplicate or unsupported):
-            self._update_status("Some selected files could not be found", "warning")
+            self._update_status(N_("Some selected files could not be found"), "warning")
             logger.warning("Import skipped because selected files were missing")
             return
 
-        self._update_status("Nothing new was added to the queue", "warning")
+        self._update_status(N_("Nothing new was added to the queue"), "warning")
         logger.warning("Import completed without adding new queue items")
 
     def _on_files_dropped(self, files: List[str]):
@@ -1965,11 +1965,11 @@ class VideoSubtitleRemoverApp(
                                 ProcessingStatus.DETECTING,
                                 ProcessingStatus.PROCESSING,
                                 ProcessingStatus.MERGING):
-            self._update_status("That item is not running", "warning")
+            self._update_status(N_("That item is not running"), "warning")
             return
         item.cancel_requested = True
         self._update_status(
-            f"Stopping {Path(item.file_path).name}", "warning", toast=True,
+            N_(f"Stopping {Path(item.file_path).name}"), "warning", toast=True,
         )
 
     def _repeat_item_with_settings(self, item_id: str):
@@ -1980,7 +1980,7 @@ class VideoSubtitleRemoverApp(
         with self.queue_lock:
             template = next((it for it in self.queue if it.id == item_id), None)
         if template is None:
-            self._update_status("Item not found in queue", "warning")
+            self._update_status(N_("Item not found in queue"), "warning")
             return
         # Snapshot via to_dict / from_dict so any future field churn does
         # not need an explicit copy update here.
@@ -2006,7 +2006,7 @@ class VideoSubtitleRemoverApp(
         self._refresh_action_states()
         save_queue_state(self.queue)
         self._update_status(
-            f"Re-queued {Path(template.file_path).name} with the same settings",
+            N_(f"Re-queued {Path(template.file_path).name} with the same settings"),
             "info", toast=True,
         )
 
@@ -2020,7 +2020,7 @@ class VideoSubtitleRemoverApp(
             return
         if item.status != ProcessingStatus.IDLE:
             self._update_status(
-                "Only idle items can have their output renamed", "warning")
+                N_("Only idle items can have their output renamed"), "warning")
             return
 
         current = Path(item.output_path)
@@ -2051,12 +2051,12 @@ class VideoSubtitleRemoverApp(
         save_queue_state(self.queue)
         if self._normalized_path_key(new_path) != self._normalized_path_key(resolved_path):
             self._update_status(
-                f"Output renamed to {resolved_path.name} to avoid an overwrite",
+                N_(f"Output renamed to {resolved_path.name} to avoid an overwrite"),
                 "success",
             )
         else:
             self._update_status(
-                f"Output renamed to {resolved_path.name}", "success")
+                N_(f"Output renamed to {resolved_path.name}"), "success")
 
     def _try_dequeue_queue_item(
         self, item_id: str,
@@ -2081,7 +2081,7 @@ class VideoSubtitleRemoverApp(
         item, result = self._try_dequeue_queue_item(item_id)
         if result == "busy":
             self._update_status(
-                "Wait for the active item to finish before removing it",
+                N_("Wait for the active item to finish before removing it"),
                 "warning",
             )
             return
@@ -2089,14 +2089,14 @@ class VideoSubtitleRemoverApp(
             self._selected_queue_item_id = None
         self._update_queue_display()
         if item:
-            self._update_status(f"Removed {Path(item.file_path).name} from the queue")
+            self._update_status(N_(f"Removed {Path(item.file_path).name} from the queue"))
         save_queue_state(self.queue)
 
     def _remove_selected_queue_item(self):
         """Remove the selected inactive queue item."""
         item = self._get_selected_queue_item()
         if item is None:
-            self._update_status("Select a queue item to remove", "warning")
+            self._update_status(N_("Select a queue item to remove"), "warning")
             return
         self._remove_from_queue(item.id)
 
@@ -2104,7 +2104,7 @@ class VideoSubtitleRemoverApp(
         """Remove completed queue records while preserving output files."""
         if self.is_processing or self._has_active_processing_thread():
             self._update_status(
-                "Wait for the active batch to finish before clearing completed items",
+                N_("Wait for the active batch to finish before clearing completed items"),
                 "warning",
             )
             return
@@ -2117,7 +2117,7 @@ class VideoSubtitleRemoverApp(
                 item for item in self.queue if item.id not in completed_ids
             ]
         if not completed_ids:
-            self._update_status("No completed items to clear")
+            self._update_status(N_("No completed items to clear"))
             return
         if self._selected_queue_item_id in completed_ids:
             self._selected_queue_item_id = None
@@ -2128,19 +2128,19 @@ class VideoSubtitleRemoverApp(
             clear_queue_state()
         count = len(completed_ids)
         self._update_status(
-            f"Cleared {count} completed item{'s' if count != 1 else ''}")
+            N_(f"Cleared {count} completed item{'s' if count != 1 else ''}"))
 
     def _move_selected_queue_item(self, direction: int):
         """Move the selected inactive queue item one position."""
         if self.is_processing or self._has_active_processing_thread():
             self._update_status(
-                "Wait for the active batch to finish before reordering the queue",
+                N_("Wait for the active batch to finish before reordering the queue"),
                 "warning",
             )
             return
         item = self._get_selected_queue_item()
         if item is None:
-            self._update_status("Select a queue item to move", "warning")
+            self._update_status(N_("Select a queue item to move"), "warning")
             return
         step = -1 if direction < 0 else 1
         with self.queue_lock:
@@ -2156,13 +2156,13 @@ class VideoSubtitleRemoverApp(
         self._update_queue_display()
         save_queue_state(self.queue)
         self._update_status(
-            f"Moved {Path(item.file_path).name} "
-            f"{'up' if step < 0 else 'down'}")
+            N_(f"Moved {Path(item.file_path).name} "
+            f"{'up' if step < 0 else 'down'}"))
 
     def _clear_queue(self):
         """Clear all items from the queue."""
         if self.is_processing:
-            self._update_status("Stop the batch before clearing the queue", "warning")
+            self._update_status(N_("Stop the batch before clearing the queue"), "warning")
             return
         if self.queue:
             n = len(self.queue)
@@ -2185,7 +2185,7 @@ class VideoSubtitleRemoverApp(
             self.queue.clear()
         self._selected_queue_item_id = None
         self._update_queue_display()
-        self._update_status("Queue cleared")
+        self._update_status(N_("Queue cleared"))
         clear_queue_state()
 
     @staticmethod
@@ -2273,16 +2273,16 @@ class VideoSubtitleRemoverApp(
             output_dir = str(Path(target.output_path).parent)
             try:
                 os.startfile(output_dir)
-                self._update_status("Opened the output folder", "info")
+                self._update_status(N_("Opened the output folder"), "info")
             except Exception:
                 logger.warning(f"Could not open folder: {output_dir}")
         else:
-            self._update_status("No completed results are available yet", "warning")
+            self._update_status(N_("No completed results are available yet"), "warning")
 
     def _retry_failed(self):
         """Reset failed/cancelled items so they can be reprocessed."""
         if self.is_processing:
-            self._update_status("Stop the active batch before retrying failed items", "warning")
+            self._update_status(N_("Stop the active batch before retrying failed items"), "warning")
             return
         count = 0
         with self.queue_lock:
@@ -2303,9 +2303,9 @@ class VideoSubtitleRemoverApp(
                 if item.message == "Ready to retry" and item.id in self.queue_widgets:
                     self.queue_widgets[item.id].update_item(item)
             save_queue_state(self.queue)
-            self._update_status(f"Reset {count} item{'s' if count != 1 else ''} for retry", "success")
+            self._update_status(N_(f"Reset {count} item{'s' if count != 1 else ''} for retry"), "success")
         else:
-            self._update_status("There are no failed items to retry", "warning")
+            self._update_status(N_("There are no failed items to retry"), "warning")
 
     def _last_completed_config(self) -> "ProcessingConfig | None":
         """Return the config snapshot from the most recently completed
@@ -2321,11 +2321,11 @@ class VideoSubtitleRemoverApp(
         """Open a file picker and enqueue the selected files with the
         config from the most recently completed job."""
         if self.is_processing:
-            self._update_status("Stop the active batch first", "warning")
+            self._update_status(N_("Stop the active batch first"), "warning")
             return
         source_config = self._last_completed_config()
         if source_config is None:
-            self._update_status("No completed job to repeat", "warning")
+            self._update_status(N_("No completed job to repeat"), "warning")
             return
         paths = filedialog.askopenfilenames(
             title=tr("Select files to process with the last job's settings"),
@@ -2350,8 +2350,8 @@ class VideoSubtitleRemoverApp(
             self._update_queue_display()
             save_queue_state(self.queue)
             self._update_status(
-                f"Queued {added} file{'s' if added != 1 else ''} "
-                f"with the last job's settings",
+                N_(f"Queued {added} file{'s' if added != 1 else ''} "
+                f"with the last job's settings"),
                 "success", toast=True,
             )
         self._refresh_action_states()
@@ -2468,11 +2468,11 @@ class VideoSubtitleRemoverApp(
             for status in assess_storage_volumes(requirements):
                 if status.free_bytes < status.required_bytes:
                     self._update_status(
-                        f"Low disk space at {status.path}: about "
+                        N_(f"Low disk space at {status.path}: about "
                         f"{status.required_bytes / (1024 ** 3):.1f} GB is "
                         f"estimated for {', '.join(status.purposes)}, but "
                         f"{status.free_bytes / (1024 ** 3):.1f} GB is free. "
-                        "The backend will run an exact frame-based check.",
+                        "The backend will run an exact frame-based check."),
                         "warning",
                         toast=True,
                     )
@@ -2555,7 +2555,7 @@ class VideoSubtitleRemoverApp(
             logger.warning("Starting despite FFmpeg capability gaps: %s", detail)
             return True
         self._update_status(
-            "Batch not started. Review FFmpeg-dependent settings or install a fuller FFmpeg build.",
+            N_("Batch not started. Review FFmpeg-dependent settings or install a fuller FFmpeg build."),
             "warning",
         )
         return False
@@ -2575,19 +2575,19 @@ class VideoSubtitleRemoverApp(
             if item.status == ProcessingStatus.COMPLETE:
                 if self._queue_item_needs_quality_review(item):
                     self._update_status(
-                        f"{fname} completed; quality review recommended",
+                        N_(f"{fname} completed; quality review recommended"),
                         "warning",
                     )
                 else:
-                    self._update_status(f"Completed {fname}", "success")
+                    self._update_status(N_(f"Completed {fname}"), "success")
             elif item.status == ProcessingStatus.ERROR:
-                self._update_status(f"{fname} needs attention: {item.message}", "error")
+                self._update_status(N_(f"{fname} needs attention: {item.message}"), "error")
             elif item.status == ProcessingStatus.PAUSED:
-                self._update_status(f"Paused {fname}: resume from checkpoint", "warning")
+                self._update_status(N_(f"Paused {fname}: resume from checkpoint"), "warning")
             elif item.status == ProcessingStatus.CANCELLED:
-                self._update_status(f"Stopped {fname}", "warning")
+                self._update_status(N_(f"Stopped {fname}"), "warning")
             else:
-                self._update_status(f"{fname}: {item.message}", "info")
+                self._update_status(N_(f"{fname}: {item.message}"), "info")
             self._refresh_action_states()
 
         try:
@@ -2751,7 +2751,7 @@ class VideoSubtitleRemoverApp(
         # Replace the consumed snapshot with the reconstructed queue. Keeping
         # this atomic snapshot makes a second crash/restore cycle lossless.
         save_queue_state(self.queue)
-        self._update_status(f"Restored {n} item{'s' if n != 1 else ''} from last session")
+        self._update_status(N_(f"Restored {n} item{'s' if n != 1 else ''} from last session"))
 
     def _queue_argv_files(self):
         """RM-58: queue files passed via sys.argv (e.g. 'Send to VSR')."""
@@ -2786,7 +2786,7 @@ class VideoSubtitleRemoverApp(
                 # the user can actually reach it.
                 logger.info(f"Update {tag} available: {url}")
                 self._update_status(
-                    f"Update {tag} available -- link in the log panel",
+                    N_(f"Update {tag} available -- link in the log panel"),
                     "info",
                 )
         except Exception:

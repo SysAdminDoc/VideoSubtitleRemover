@@ -53,6 +53,10 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
             "file filters": 'ask(filetypes=[("Video files", "*.mp4")])',
             "interpolated sentences": 'label.config(text=f"{n} of {t} shown")',
             "menu entries": 'menu.add_command(label="Sort by name")',
+            "deferred status": 'self._update_status("A new status")',
+            "deferred card title": 'self._card_header(root, "Card", "A new card")',
+            "deferred slider label": 'self._create_slider(root, "A new slider", 0, 1, 0, "x")',
+            "deferred slider hint": 'self._create_slider(root, "Slider", 0, 1, 0, "x", hint="A new hint")',
         }
         for name, source in cases.items():
             with self.subTest(sink=name):
@@ -75,6 +79,7 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
             "widget anchor token": 'tk.Label(root, text="", anchor="nw")',
             "model record": 'QueueItem(message="Ready to process")',
             "dynamic value": 'label.config(text=some_variable)',
+            "deferred marker": 'self._update_status(N_("Marked status"))',
         }
         for name, source in cases.items():
             with self.subTest(value=name):
@@ -102,6 +107,7 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         messages = i18n_catalogs.extract_messages()
         self.assertIn("Ready to process", messages)
         self.assertIn("Checking embedded subtitle tracks...", messages)
+        self.assertIn("Hardware detected: {}; {}", messages)
 
     def test_pseudo_catalog_loads_and_preserves_placeholders(self):
         with mock.patch.dict(

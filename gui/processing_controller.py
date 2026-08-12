@@ -25,7 +25,7 @@ from gui.utils import (
 from gui.widgets import (
     TaskbarProgress,
 )
-from backend.i18n import tr
+from backend.i18n import N_, tr
 from backend.job_worker import describe_exit_code
 from backend.resume_checkpoint import ProcessingPaused
 
@@ -51,7 +51,7 @@ class ProcessingControllerMixin:
     def _start_processing(self):
         """Start processing the queue."""
         if not self.queue:
-            self._update_status("Add media to the queue before starting a batch", "warning")
+            self._update_status(N_("Add media to the queue before starting a batch"), "warning")
             return
 
         active_thread = self._has_active_processing_thread()
@@ -59,20 +59,20 @@ class ProcessingControllerMixin:
         if batch_busy:
             if self._pause_requested or self.pause_event.is_set():
                 self._update_status(
-                    "Batch is already pausing. Please wait for the checkpoint to finish.",
+                    N_("Batch is already pausing. Please wait for the checkpoint to finish."),
                     "warning",
                 )
                 return
             if self._stop_requested or self.cancel_event.is_set():
                 self._update_status(
-                    "Batch is already stopping. Please wait for the current item to wrap up.",
+                    N_("Batch is already stopping. Please wait for the current item to wrap up."),
                     "warning",
                 )
                 return
             if active_thread:
                 self._pause_processing()
             else:
-                self._update_status("Finalizing the previous batch...", "info")
+                self._update_status(N_("Finalizing the previous batch..."), "info")
             return
 
         self._apply_current_settings_to_idle_items()
@@ -81,7 +81,7 @@ class ProcessingControllerMixin:
             has_video = any(is_video_file(item.file_path) for item in self.queue)
             if has_video:
                 self._update_status(
-                    "FFmpeg is missing, so video outputs will be saved without original audio.",
+                    N_("FFmpeg is missing, so video outputs will be saved without original audio."),
                     "warning",
                     toast=True,
                 )
@@ -110,7 +110,7 @@ class ProcessingControllerMixin:
             self._write_batch_preflight_plan()
             self._last_batch_report_paths = []
             self._refresh_action_states()
-            self._update_status("Batch processing started", "info")
+            self._update_status(N_("Batch processing started"), "info")
             # Kick off Windows taskbar progress in indeterminate until first tick
             self._ensure_taskbar()
             if self._taskbar:
@@ -144,12 +144,12 @@ class ProcessingControllerMixin:
             self.start_btn.set_text(tr("Start batch"))
             self._refresh_action_states()
             self._update_status(
-                f"Could not start batch: {exc}", "error", toast=True)
+                N_(f"Could not start batch: {exc}"), "error", toast=True)
 
     def _pause_processing(self):
         """Pause the current processing at the next checkpoint boundary."""
         if self._pause_requested:
-            self._update_status("Batch is already pausing...", "warning")
+            self._update_status(N_("Batch is already pausing..."), "warning")
             return
         self._pause_requested = True
         self.pause_event.set()
@@ -158,7 +158,7 @@ class ProcessingControllerMixin:
         self.start_btn.set_text(tr("Pausing..."))
         self._refresh_action_states()
         self._update_status(
-            "Pausing at the next safe frame checkpoint. Current progress will resume later.",
+            N_("Pausing at the next safe frame checkpoint. Current progress will resume later."),
             "warning",
         )
         if self._taskbar:
@@ -167,7 +167,7 @@ class ProcessingControllerMixin:
     def _stop_processing(self):
         """Stop the current processing."""
         if self._stop_requested:
-            self._update_status("Batch is already stopping...", "warning")
+            self._update_status(N_("Batch is already stopping..."), "warning")
             return
         self._stop_requested = True
         self.cancel_event.set()
@@ -183,7 +183,7 @@ class ProcessingControllerMixin:
         self.start_btn.set_text(tr("Stopping..."))
         self._refresh_action_states()
         self._update_status(
-            "Stopping after the current step. Finished outputs stay on disk.",
+            N_("Stopping after the current step. Finished outputs stay on disk."),
             "warning",
         )
         if self._taskbar:

@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Deferred GUI strings now enter the translation catalog.** Status messages,
+  queue labels, card headers, slider labels and hints use explicit `N_()`
+  markers; the extractor supports their deferred f-string templates, and the
+  lint gate models those helper signatures so new unmarked captions fail.
+
 - **README no longer advertises unpublished documentation paths.** The
   contributor-facing edge-case guide and retired-audit directory are ignored
   maintainer notes, so the public structure now links only the tracked

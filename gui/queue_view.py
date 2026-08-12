@@ -24,7 +24,7 @@ from gui.widgets import (
     ModernButton, make_themed_menu,
     SegmentedPicker, QueueItemWidget,
 )
-from backend.i18n import ntr, tr
+from backend.i18n import N_, ntr, tr
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class QueueViewMixin:
         """Pop up a themed sort menu anchored to the sort button."""
         if self.is_processing:
             self._update_status(
-                "Sorting is disabled while a batch is running", "warning")
+                N_("Sorting is disabled while a batch is running"), "warning")
             return
         menu = make_themed_menu(self.root)
         menu.add_command(label=tr("Filename (A -> Z)"),
@@ -97,7 +97,7 @@ class QueueViewMixin:
         self.queue_widgets.clear()
         self._update_queue_display()
         save_queue_state(self.queue)
-        self._update_status("Queue sorted")
+        self._update_status(N_("Queue sorted"))
 
     def _open_per_file_overrides(self, item_id: str):
         """RM-29: themed popover that edits a single queue item's
@@ -243,7 +243,7 @@ class QueueViewMixin:
                 self.queue_widgets[item.id].update_item(item)
             save_queue_state(self.queue)
             self._update_status(
-                f"Overrides saved for {Path(item.file_path).name}",
+                N_(f"Overrides saved for {Path(item.file_path).name}"),
                 "success",
             )
             dialog.destroy()
