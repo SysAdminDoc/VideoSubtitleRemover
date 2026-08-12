@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Provider diagnostics now include TensorRT-RTX.** The manual
+  `NvTensorRTRTXExecutionProvider` lane reports its package, runtime provider
+  list, security floor, and explicitly untested state; no hardware benchmark
+  or frozen dependency profile is implied.
+
 - **Mask dilation can now follow glyph edges.** `--auto-dilate` measures
   outline and drop-shadow falloff per detected region, clamps the result to
   20 pixels, and uses one distance-transform alpha for inpainting and final

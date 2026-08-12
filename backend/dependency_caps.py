@@ -13,6 +13,7 @@ from typing import Iterable, List, Mapping, Optional, Sequence, Tuple
 from backend.onnxruntime_cuda import (
     collect_onnxruntime_cuda_preload_status,
     preload_status_from_mapping,
+    TENSORRT_RTX_PROVIDER,
 )
 from backend.subprocess_policy import run_process
 
@@ -82,6 +83,10 @@ ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE = "1.29.0"
 ONNXRUNTIME_CPU_MAX_EXCLUSIVE = "1.29.0"
 ONNXRUNTIME_CUDA_MATRIX_SOURCE = (
     "https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html"
+)
+ONNXRUNTIME_TENSORRT_RTX_SOURCE = (
+    "https://onnxruntime.ai/docs/execution-providers/"
+    "TensorRTRTX-ExecutionProvider.html"
 )
 
 # protobuf 6.33.4 and older are affected by CVE-2026-0994 (unbounded recursion
@@ -163,6 +168,24 @@ PROVIDER_LANES: Tuple[ProviderLane, ...] = (
             "onnxruntime.ai. Not covered by the reviewed profile locks."
         ),
         source=ONNXRUNTIME_CUDA_MATRIX_SOURCE,
+    ),
+    ProviderLane(
+        key="tensorrt-rtx",
+        label="NVIDIA TensorRT-RTX",
+        profile="",
+        provider=TENSORRT_RTX_PROVIDER,
+        package="onnxruntime-gpu",
+        minimum=ONNXRUNTIME_SECURITY_MIN,
+        maximum_exclusive="",
+        tested_version="not tested",
+        security_floor=ONNXRUNTIME_SECURITY_MIN,
+        tested=False,
+        install_note=(
+            "Manual lane: the built-in EP is deprecated; use the standalone "
+            "TensorRT-RTX EP ABI plugin with an ONNX Runtime build. No "
+            "reviewed lock or live benchmark is claimed here."
+        ),
+        source=ONNXRUNTIME_TENSORRT_RTX_SOURCE,
     ),
     ProviderLane(
         key="directml",

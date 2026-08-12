@@ -8,6 +8,9 @@ from typing import Any, Mapping, Optional, Sequence
 
 CUDA_PRELOAD_STATUS_SCHEMA = "vsr.onnxruntime_cuda_preload.v1"
 CUDA_PROVIDER = "CUDAExecutionProvider"
+# ONNX Runtime's built-in TensorRT RTX EP and its standalone ABI plugin use
+# this same provider name when they are registered with the runtime.
+TENSORRT_RTX_PROVIDER = "NvTensorRTRTXExecutionProvider"
 
 _LOCK = Lock()
 

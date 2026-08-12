@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional, Protocol
 
+from backend.onnxruntime_cuda import TENSORRT_RTX_PROVIDER
+
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,46 @@ def windowsml_status() -> dict:
     except Exception:
         providers = None
     return {"available": True, "version": version, "providers": providers}
+
+
+def tensorrtrtx_status() -> dict:
+    """Probe the manually installed TensorRT-RTX ONNX Runtime EP."""
+    import importlib.metadata as _md
+
+    package = None
+    version = None
+    for candidate in ("onnxruntime-gpu", "onnxruntime"):
+        try:
+            version = _md.version(candidate)
+            package = candidate
+            break
+        except Exception:
+            continue
+    if package is None:
+        return {
+            "available": False,
+            "packageInstalled": False,
+            "package": None,
+            "version": None,
+            "provider": TENSORRT_RTX_PROVIDER,
+            "providers": None,
+        }
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+    except Exception:
+        providers = None
+    provider_names = list(providers) if providers is not None else None
+    return {
+        "available": bool(
+            provider_names and TENSORRT_RTX_PROVIDER in provider_names
+        ),
+        "packageInstalled": True,
+        "package": package,
+        "version": version,
+        "provider": TENSORRT_RTX_PROVIDER,
+        "providers": provider_names,
+    }
 
 
 class RuntimeDeviceProvider:

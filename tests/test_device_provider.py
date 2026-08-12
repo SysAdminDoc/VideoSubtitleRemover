@@ -22,6 +22,31 @@ def test_runtime_provider_selects_available_cuda_and_directml():
     assert directml.probe_available() == "directml"
 
 
+def test_tensorrtrtx_status_reports_the_manual_provider_lane():
+    from backend.device_provider import tensorrtrtx_status
+
+    fake_ort = SimpleNamespace(
+        get_available_providers=lambda: [
+            "NvTensorRTRTXExecutionProvider",
+            "CPUExecutionProvider",
+        ],
+    )
+
+    def fake_version(package):
+        if package == "onnxruntime-gpu":
+            return "1.26.0"
+        raise ModuleNotFoundError(package)
+
+    with mock.patch.dict("sys.modules", {"onnxruntime": fake_ort}), \
+            mock.patch("importlib.metadata.version", side_effect=fake_version):
+        status = tensorrtrtx_status()
+
+    assert status["available"] is True
+    assert status["package"] == "onnxruntime-gpu"
+    assert status["provider"] == "NvTensorRTRTXExecutionProvider"
+    assert "CPUExecutionProvider" in status["providers"]
+
+
 def test_runtime_provider_falls_back_when_accelerator_is_unavailable():
     cuda = RuntimeDeviceProvider("cuda:0", cuda_probe=lambda index: False)
     directml = RuntimeDeviceProvider(

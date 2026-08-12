@@ -112,10 +112,19 @@ class DependencyProfileTests(unittest.TestCase):
         })
         lanes = {item["key"]: item for item in status["lanes"]}
         self.assertEqual(
-            set(lanes), {"cpu", "cuda12", "cuda13", "directml"})
+            set(lanes), {
+                "cpu", "cuda12", "cuda13", "tensorrt-rtx", "directml",
+            })
         self.assertTrue(lanes["cpu"]["tested"])
         self.assertTrue(lanes["cuda12"]["tested"])
         self.assertFalse(lanes["cuda13"]["tested"])
+        self.assertFalse(lanes["tensorrt-rtx"]["tested"])
+        self.assertEqual(
+            lanes["tensorrt-rtx"]["provider"],
+            "NvTensorRTRTXExecutionProvider",
+        )
+        self.assertEqual(lanes["tensorrt-rtx"]["profile"], "")
+        self.assertEqual(lanes["tensorrt-rtx"]["securityState"], "ok")
         self.assertTrue(lanes["directml"]["tested"])
         self.assertEqual(lanes["cpu"]["securityState"], "ok")
         self.assertEqual(lanes["cuda12"]["securityState"], "ok")

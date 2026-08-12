@@ -349,12 +349,26 @@ flag older CPU/CUDA builds as a blocking security advisory.
 Backend status and
 release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
 channel, `onnxruntime-directml`, and the providers reported at runtime.
-The reviewed dependency profiles track four execution-provider lanes with
+The reviewed dependency profiles track five execution-provider lanes with
 separate tested and security state -- CPU (`onnxruntime`), CUDA 12
 (`onnxruntime-gpu` 1.26.x, the default NVIDIA lock), CUDA 13 (manual
 cuda13 wheel, untested here), and DirectML -- so the CPU lane can adopt
 newer ONNX Runtime fixes while the CUDA 12 lane stays on its last
-compatible build. `python -m backend.dependency_profiles smoke --profile
+compatible build. TensorRT-RTX is listed as a separate untested manual lane;
+it requires the `NvTensorRTRTXExecutionProvider` built-in provider or the
+standalone EP ABI plugin and is not included in a frozen profile or live
+benchmark. See the [official TensorRT-RTX provider notes](https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html)
+for the current installation and deprecation status.
+
+| Provider lane | Execution provider | Profile / test state |
+|---------------|--------------------|----------------------|
+| CPU | `CPUExecutionProvider` | CPU profile; tested |
+| CUDA 12 | `CUDAExecutionProvider` | NVIDIA profile; tested at 1.26.x |
+| CUDA 13 | `CUDAExecutionProvider` | Manual lane; untested |
+| DirectML | `DmlExecutionProvider` | DirectML profile; tested at 1.24.4 |
+| TensorRT-RTX | `NvTensorRTRTXExecutionProvider` | Manual lane; untested; no live benchmark |
+
+`python -m backend.dependency_profiles smoke --profile
 <name>` creates one real inference session on the profile's claimed
 provider and fails if ONNX Runtime silently falls back. Every supported
 environment installs `protobuf>=6.33.5` (CVE-2026-0994); older builds are
