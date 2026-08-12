@@ -355,6 +355,10 @@ class PreviewControllerMixin:
             return
         item.config.mask_dilate_px = dilation
         self.config.mask_dilate_px = dilation
+        self.config.auto_dilate_enable = False
+        auto_var = getattr(self, "auto_dilate_var", None)
+        if auto_var is not None:
+            auto_var.set(False)
         tracked = getattr(self, "_settings_slider_by_attr", {}).get(
             "mask_dilate_px")
         if tracked:

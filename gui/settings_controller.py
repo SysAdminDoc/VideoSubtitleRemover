@@ -79,6 +79,13 @@ class AdvancedSettingsControllerMixin:
         def on_change(val):
             value_label.config(text=str(int(val)))
             setattr(self.config, attr_name, int(val))
+            if attr_name == "mask_dilate_px":
+                # A hand-tuned slider is an explicit override of the
+                # contrast-measured radius.
+                self.config.auto_dilate_enable = False
+                auto_var = getattr(self, "auto_dilate_var", None)
+                if auto_var is not None:
+                    auto_var.set(False)
 
         slider.command = on_change
 

@@ -299,6 +299,13 @@ treating the region as an opaque binary hole. Opaque, poorly fitted, or
 temporally unexposed regions keep the existing inpainting path; use
 `--no-translucency` when a source needs the historical binary behavior.
 
+For outlined or drop-shadowed glyphs, enable `--auto-dilate` (or the matching
+Advanced > Detection toggle). It measures the local Lab-contrast falloff per
+detected box, clamps the halo to 20 pixels, and uses a distance-transform edge
+so the inpaint matte and final blend share one continuous boundary. An explicit
+`--mask-dilate N` or a manual Mask dilate slider change disables auto mode for
+that run.
+
 ### Detection Engines
 
 The app automatically selects the best available engine. Advanced > Detection
@@ -761,6 +768,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--vertical` | Vertical-text mode (rotate frames 90 CCW before OCR). | Off | - | Public |
 | `--frame-skip` | Reuse detection mask for N frames between detections | 0 | 0..240 frames | Public |
 | `--mask-dilate` | Mask dilation in pixels (0=off) | 8 | 0..100 pixels | Public |
+| `--auto-dilate` | Measure outlined and shadowed glyph falloff and build a continuous mask; an explicit --mask-dilate overrides it. | Off | - | Public |
 | `--confidence-dilate` | Scale mask dilation inversely with OCR confidence | Off | - | Public |
 | `--mask-feather` | Gaussian edge feathering in pixels (0=off) | 4 | 0..100 pixels | Public |
 | `--temporal-smooth` | Post-inpaint temporal smoothing radius for LaMa (0=off, 1-5) | 0 | 0..5 frames | Public |
@@ -997,6 +1005,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `translation_timeout_seconds` | `float` | `300.0` |
 | `nle_sidecar` | `str` | `off` |
 | `mask_dilate_px` | `int` | `8` |
+| `auto_dilate_enable` | `bool` | `Off` |
 | `mask_feather_px` | `int` | `4` |
 | `confidence_weighted_dilation` | `bool` | `Off` |
 | `confidence_dilation_scale` | `float` | `1.5` |
@@ -1087,6 +1096,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | Output Codec | H.264 / H.265 / AV1 / VVC (H.266) | h264 | h264/h265/av1/vvc; VVC requires FFmpeg with `libvvenc` |
 | Frame Skip | Reuse detection mask for N frames | 0 | 0-10 |
 | Mask Dilate | Expand detected regions (px) | 8 | 0-20 |
+| Auto Mask Dilate | Measure outline and shadow padding from local glyph contrast | Off | On/Off; manual Mask Dilate overrides |
 | Mask Feather | Soft alpha-blend at boundary (px) | 4 | 0-15 |
 | Timed-region Clean Reference | Same-size clean plate with translation/homography preview, color matching, and confidence-gated inpaint fallback | None | Per timed rectangle |
 | TBE Coverage | Min frames a pixel must be unmasked to trust its exposure | 3 | 1-10 |

@@ -38,6 +38,145 @@ from backend.safe_image import safe_imread
 logger = logging.getLogger(__name__)
 
 
+AUTO_DILATE_MAX_PX = 20
+
+
+def _auto_dilate_roi(
+    frame: np.ndarray,
+    box: Tuple[int, int, int, int],
+    max_radius: int,
+) -> Optional[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Return Lab contrast, box gate, and context ring for one OCR box."""
+    if not isinstance(frame, np.ndarray) or frame.ndim != 3:
+        return None
+    height, width = frame.shape[:2]
+    clipped = _clip_box(box, width, height)
+    if clipped is None:
+        return None
+    x1, y1, x2, y2 = clipped
+    if x2 - x1 < 3 or y2 - y1 < 3:
+        return None
+    context = max(4, min(32, int(max_radius) + 4))
+    rx1 = max(0, x1 - context)
+    ry1 = max(0, y1 - context)
+    rx2 = min(width, x2 + context)
+    ry2 = min(height, y2 + context)
+    roi = frame[ry1:ry2, rx1:rx2]
+    if roi.size == 0:
+        return None
+    try:
+        lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB).astype(np.float32)
+    except (cv2.error, ValueError):
+        return None
+    box_gate = np.zeros(lab.shape[:2], dtype=bool)
+    box_gate[y1 - ry1:y2 - ry1, x1 - rx1:x2 - rx1] = True
+    ring = ~box_gate
+    if int(ring.sum()) < 16:
+        return None
+    background = np.median(lab[ring], axis=0)
+    contrast = np.linalg.norm(lab - background, axis=2)
+    return contrast, box_gate, ring
+
+
+def estimate_auto_dilation_radius(
+    frame: np.ndarray,
+    box: Tuple[int, int, int, int],
+    max_radius: int = AUTO_DILATE_MAX_PX,
+) -> int:
+    """Estimate an outlined/drop-shadow halo around one detected text box.
+
+    The detected glyph is separated from its local background in Lab space at
+    two thresholds.  The distance from the high-contrast core to the softer
+    outer component is the measured intensity falloff, rather than a fixed
+    confidence heuristic.  Invalid or ambiguous boxes deliberately return
+    zero so the caller can keep the existing rectangular mask path.
+    """
+    try:
+        limit = max(0, min(AUTO_DILATE_MAX_PX, int(max_radius)))
+    except (TypeError, ValueError, OverflowError):
+        limit = AUTO_DILATE_MAX_PX
+    if limit <= 0:
+        return 0
+    prepared = _auto_dilate_roi(frame, box, limit)
+    if prepared is None:
+        return 0
+    contrast, box_gate, ring = prepared
+    inside = contrast[box_gate]
+    outside = contrast[ring]
+    finite_inside = inside[np.isfinite(inside)]
+    finite_outside = outside[np.isfinite(outside)]
+    if finite_inside.size < 4 or finite_outside.size < 16:
+        return 0
+    peak = float(np.percentile(finite_inside, 99.5))
+    if peak < 4.0:
+        return 0
+    background_mad = float(
+        np.median(np.abs(finite_outside - np.median(finite_outside)))
+    )
+    low = max(4.0, background_mad * 3.0, peak * 0.10)
+    low = min(low, peak * 0.45)
+    high = min(max(low + 5.0, peak * 0.55), peak * 0.90)
+    if high <= low:
+        return 0
+
+    outer = contrast >= low
+    core = (contrast >= high) & box_gate
+    if int(core.sum()) < 4:
+        return 0
+    # Keep only outer components that actually touch a glyph core. This
+    # rejects textured-background speckles in the generous context window.
+    near_core = cv2.dilate(
+        core.astype(np.uint8),
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+        iterations=1,
+    ) > 0
+    component_count, labels, _stats, _centroids = cv2.connectedComponentsWithStats(
+        outer.astype(np.uint8), connectivity=8)
+    halo = np.zeros_like(outer)
+    for component_index in range(1, component_count):
+        component = labels == component_index
+        if bool(np.any(component & near_core)):
+            halo |= component
+    halo &= ~core
+    if not np.any(halo):
+        return 0
+    distance = cv2.distanceTransform(
+        (~core).astype(np.uint8), cv2.DIST_L2, 3)
+    distances = distance[halo]
+    if distances.size == 0:
+        return 0
+    measured = int(np.ceil(float(np.percentile(distances, 90))))
+    return max(0, min(limit, measured))
+
+
+def soft_dilate_mask(
+    binary_mask: np.ndarray,
+    radius: int,
+) -> np.ndarray:
+    """Grow a binary mask with a continuous distance-transform edge."""
+    if not isinstance(binary_mask, np.ndarray) or binary_mask.ndim != 2:
+        return binary_mask
+    binary = (binary_mask > 0).astype(np.uint8)
+    if binary.size == 0 or not np.any(binary):
+        return np.zeros_like(binary_mask, dtype=np.uint8)
+    try:
+        radius = max(0, min(AUTO_DILATE_MAX_PX, int(radius)))
+    except (TypeError, ValueError, OverflowError):
+        radius = 0
+    if radius <= 0:
+        return np.where(binary > 0, np.uint8(255), np.uint8(0))
+    distance = cv2.distanceTransform((binary == 0).astype(np.uint8), cv2.DIST_L2, 3)
+    alpha = np.zeros(distance.shape, dtype=np.float32)
+    alpha[binary > 0] = 1.0
+    outside = binary == 0
+    alpha[outside] = np.clip(
+        (radius + 0.5 - distance[outside]) / (radius + 0.5),
+        0.0,
+        1.0,
+    )
+    return np.clip(np.rint(alpha * 255.0), 0, 255).astype(np.uint8)
+
+
 def _env_set(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 

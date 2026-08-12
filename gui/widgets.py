@@ -97,6 +97,8 @@ def _build_cli_command(item: QueueItem) -> str:
     dilate = getattr(cfg, "mask_dilate_px", 8)
     if dilate != 8:
         args.extend(["--mask-dilate", str(dilate)])
+    if getattr(cfg, "auto_dilate_enable", False):
+        args.append("--auto-dilate")
     feather = getattr(cfg, "mask_feather_px", 4)
     if feather != 4:
         args.extend(["--mask-feather", str(feather)])

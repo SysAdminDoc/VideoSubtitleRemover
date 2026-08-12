@@ -519,6 +519,7 @@ class ProcessingConfig:
 
     detection_frame_skip: int = 0
     mask_dilate_px: int = 8
+    auto_dilate_enable: bool = False
     mask_feather_px: int = 4
     confidence_weighted_dilation: bool = False
     confidence_dilation_scale: float = 1.5
@@ -750,6 +751,8 @@ class ProcessingConfig:
         self.detection_frame_skip = _coerce_int(
             self.detection_frame_skip, 0, 0, 10)
         self.mask_dilate_px = _coerce_int(self.mask_dilate_px, 8, 0, 20)
+        self.auto_dilate_enable = _coerce_bool(
+            getattr(self, "auto_dilate_enable", False), False)
         self.mask_feather_px = _coerce_int(self.mask_feather_px, 4, 0, 15)
         self.tbe_enable = _coerce_bool(self.tbe_enable, True)
         self.tbe_min_coverage = _coerce_int(self.tbe_min_coverage, 3, 1, 10)
@@ -1402,6 +1405,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "rapidocr_variant",
     "paddleocr_variant",
     "mask_dilate_px",
+    "auto_dilate_enable",
     "mask_feather_px",
     "confidence_weighted_dilation",
     "confidence_dilation_scale",
@@ -1496,11 +1500,12 @@ SETTINGS_VAR_FIELDS = (
     ("update_check_var", "update_check"),
     ("json_log_var", "json_log_enabled"),
     ("conf_dilate_var", "confidence_weighted_dilation"),
+    ("auto_dilate_var", "auto_dilate_enable"),
     ("d3d12_accel_var", "d3d12_accel"),
 )
 
 DEFAULT_PRESET_FIELDS = [
-    "mode", "detection_threshold", "mask_dilate_px",
+    "mode", "detection_threshold", "mask_dilate_px", "auto_dilate_enable",
     "mask_feather_px", "edge_ring_px", "rapidocr_variant",
     "paddleocr_variant",
     "tbe_flow_warp",

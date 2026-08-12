@@ -558,6 +558,22 @@ class CliCommandBuilderTests(unittest.TestCase):
         self.assertIn("--mask-dilate 12", cmd)
         self.assertIn("--fast", cmd)
 
+    def test_auto_dilate_config_emits_the_adaptive_flag(self):
+        from gui.config import ProcessingConfig, QueueItem
+        from gui.widgets import _build_cli_command
+
+        item = QueueItem(
+            id="test",
+            file_path="video.mkv",
+            output_path="clean.mkv",
+            config=ProcessingConfig(auto_dilate_enable=True),
+        )
+
+        cmd = _build_cli_command(item)
+
+        self.assertIn("--auto-dilate", cmd)
+        self.assertNotIn("--mask-dilate", cmd)
+
     def test_expanded_fields_round_trip(self):
         from gui.config import ProcessingConfig, QueueItem
         from gui.widgets import _build_cli_command

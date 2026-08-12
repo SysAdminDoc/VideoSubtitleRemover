@@ -608,6 +608,37 @@ class CliNumericRangeTests(unittest.TestCase):
         cfg = normalize_processing_config(cfg)
         self.assertGreaterEqual(cfg.mask_dilate_px, 0)
 
+    def test_auto_dilate_is_disabled_by_an_explicit_manual_radius(self):
+        from backend.cli import (
+            _build_parser,
+            _build_processing_config,
+            _prepare_cli_args,
+        )
+        from backend.config import (
+            InpaintMode,
+            ProcessingConfig,
+            _coerce_backend_mode,
+            normalize_processing_config,
+        )
+
+        parser = _build_parser([mode.value for mode in InpaintMode])
+        argv = [
+            "--input", "source.mp4", "--output", "clean.mp4",
+            "--gpu", "-1", "--auto-dilate", "--mask-dilate", "12",
+        ]
+        args = parser.parse_args(argv)
+        _prepare_cli_args(args, parser, argv)
+        config = _build_processing_config(
+            args,
+            False,
+            ProcessingConfig,
+            _coerce_backend_mode,
+            normalize_processing_config,
+        )
+
+        self.assertEqual(config.mask_dilate_px, 12)
+        self.assertFalse(config.auto_dilate_enable)
+
     def test_extreme_frame_skip_is_clamped(self):
         from backend.config import ProcessingConfig, normalize_processing_config
         cfg = ProcessingConfig(detection_frame_skip=9999)

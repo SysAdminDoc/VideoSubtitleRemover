@@ -1084,36 +1084,60 @@ class SubtitleRemover(
         h, w = frame_shape[:2]
         mask = np.zeros((h, w), dtype=np.uint8)
         base_dilate = self.config.mask_dilate_px
+        auto_dilate = bool(
+            getattr(self.config, "auto_dilate_enable", False)
+            and frame is not None
+        )
         use_conf_dilate = (
             self.config.confidence_weighted_dilation
             and confidences is not None
             and base_dilate > 0
+            and not auto_dilate
         )
 
-        for idx, (x1, y1, x2, y2) in enumerate(boxes):
-            bx1 = max(0, x1 - padding)
-            by1 = max(0, y1 - padding)
-            bx2 = min(w, x2 + padding)
-            by2 = min(h, y2 + padding)
-            mask[by1:by2, bx1:bx2] = 255
+        if auto_dilate:
+            from backend.segmentation import (
+                estimate_auto_dilation_radius,
+                soft_dilate_mask,
+            )
+            for x1, y1, x2, y2 in boxes:
+                bx1 = max(0, x1 - padding)
+                by1 = max(0, y1 - padding)
+                bx2 = min(w, x2 + padding)
+                by2 = min(h, y2 + padding)
+                box_mask = np.zeros((h, w), dtype=np.uint8)
+                box_mask[by1:by2, bx1:bx2] = 255
+                radius = estimate_auto_dilation_radius(frame, (x1, y1, x2, y2))
+                mask = np.maximum(mask, soft_dilate_mask(box_mask, radius))
+                logger.debug(
+                    "Auto mask dilation box=(%d,%d,%d,%d) radius=%d",
+                    x1, y1, x2, y2, radius,
+                )
+        else:
+            for idx, (x1, y1, x2, y2) in enumerate(boxes):
+                bx1 = max(0, x1 - padding)
+                by1 = max(0, y1 - padding)
+                bx2 = min(w, x2 + padding)
+                by2 = min(h, y2 + padding)
+                mask[by1:by2, bx1:bx2] = 255
 
-            if use_conf_dilate:
-                conf = confidences[idx] if idx < len(confidences) else 1.0
-                scale = self.config.confidence_dilation_scale
-                effective = int(base_dilate * (1.0 + (1.0 - conf) * scale))
-                if effective > 0:
-                    k = cv2.getStructuringElement(
-                        cv2.MORPH_ELLIPSE,
-                        (effective * 2 + 1, effective * 2 + 1))
-                    box_mask = np.zeros((h, w), dtype=np.uint8)
-                    box_mask[by1:by2, bx1:bx2] = 255
-                    dilated = cv2.dilate(box_mask, k, iterations=1)
-                    mask = cv2.bitwise_or(mask, dilated)
+                if use_conf_dilate:
+                    conf = confidences[idx] if idx < len(confidences) else 1.0
+                    scale = self.config.confidence_dilation_scale
+                    effective = int(base_dilate * (1.0 + (1.0 - conf) * scale))
+                    if effective > 0:
+                        k = cv2.getStructuringElement(
+                            cv2.MORPH_ELLIPSE,
+                            (effective * 2 + 1, effective * 2 + 1))
+                        box_mask = np.zeros((h, w), dtype=np.uint8)
+                        box_mask[by1:by2, bx1:bx2] = 255
+                        dilated = cv2.dilate(box_mask, k, iterations=1)
+                        mask = cv2.bitwise_or(mask, dilated)
 
-        if not use_conf_dilate and base_dilate > 0 and mask.max() > 0:
-            kernel = cv2.getStructuringElement(
-                cv2.MORPH_ELLIPSE, (base_dilate * 2 + 1, base_dilate * 2 + 1))
-            mask = cv2.dilate(mask, kernel, iterations=1)
+            if not use_conf_dilate and base_dilate > 0 and mask.max() > 0:
+                kernel = cv2.getStructuringElement(
+                    cv2.MORPH_ELLIPSE, (base_dilate * 2 + 1, base_dilate * 2 + 1))
+                mask = cv2.dilate(mask, kernel, iterations=1)
 
         # RM-66: optional SAM 2 mask refinement. When the user has set
         # VSR_SAM2_CHECKPOINT we replace each box's coarse rectangle

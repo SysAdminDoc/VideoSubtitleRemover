@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Mask dilation can now follow glyph edges.** `--auto-dilate` measures
+  outline and drop-shadow falloff per detected region, clamps the result to
+  20 pixels, and uses one distance-transform alpha for inpainting and final
+  compositing; an explicit `--mask-dilate` or manual slider change keeps the
+  historical binary path.
+
 - **TBE now recovers fitted semi-transparent overlays.** Each connected mask
   region uses the existing Lab two-cluster foreground estimate and temporal
   background endpoint to solve closed-form opacity; only low-residual,

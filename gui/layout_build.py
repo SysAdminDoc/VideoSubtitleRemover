@@ -718,6 +718,20 @@ class LayoutBuildMixin:
         self._create_slider(det_frame, "Mask dilate", 0, 20,
                             self.config.mask_dilate_px, "mask_dilate_px",
                             hint="Expand detected regions for cleaner fill edges.")
+        self.auto_dilate_var = tk.BooleanVar(
+            value=self.config.auto_dilate_enable)
+        auto_dilate_toggle = ModernToggle(
+            det_frame,
+            text=tr("Measure outline and shadow padding automatically"),
+            variable=self.auto_dilate_var,
+        )
+        auto_dilate_toggle.pack(
+            anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        Tooltip(
+            auto_dilate_toggle,
+            tr("Use local glyph contrast and a soft distance-transform edge. "
+               "Changing Mask dilate turns this off."),
+        )
         self.conf_dilate_var = tk.BooleanVar(
             value=self.config.confidence_weighted_dilation)
         conf_dilate_toggle = ModernToggle(

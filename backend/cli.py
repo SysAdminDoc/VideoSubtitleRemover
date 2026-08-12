@@ -60,7 +60,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--mode", "--gpu", "--lang", "--language-filter",
             "--skip-detection", "--fast",
             "--threshold", "--vertical", "--frame-skip", "--mask-dilate",
-            "--confidence-dilate", "--mask-feather", "--temporal-smooth",
+            "--auto-dilate", "--confidence-dilate", "--mask-feather",
+            "--temporal-smooth",
             "--edge-ring", "--flow-warp", "--flow-estimator",
             "--poisson-seam", "--no-translucency",
             "--no-global-motion-align",
@@ -858,6 +859,14 @@ def _build_parser(mode_choices):
                              "frames with Practical-RIFE (0 disables)."))
     parser.add_argument("--mask-dilate", type=int, default=8,
                        help="Mask dilation in pixels (0=off)")
+    parser.add_argument(
+        "--auto-dilate",
+        action="store_true",
+        help=(
+            "Measure outlined and shadowed glyph falloff and build a "
+            "continuous mask; an explicit --mask-dilate overrides it."
+        ),
+    )
     parser.add_argument("--confidence-dilate", action="store_true",
                        help="Scale mask dilation inversely with OCR confidence")
     parser.add_argument("--no-hw-encode", action="store_true",
@@ -1338,6 +1347,7 @@ def _prepare_cli_args(args, parser, argv=None):
     if argv is None:
         argv = sys.argv[1:]
     explicit_dests = _explicitly_provided_dests(parser, argv)
+    args._explicit_dests = explicit_dests
     soft_mode_count = sum(
         1 for enabled in (
             args.strip_soft_subtitles,
@@ -1368,6 +1378,7 @@ def _prepare_cli_args(args, parser, argv=None):
             "mode": "mode",
             "detection_threshold": "threshold",
             "mask_dilate_px": "mask_dilate",
+            "auto_dilate_enable": "auto_dilate",
             "mask_feather_px": "mask_feather",
             "edge_ring_px": "edge_ring",
             "tbe_flow_warp": "flow_warp",
@@ -1597,6 +1608,10 @@ def _build_processing_config(
         detection_frame_skip=args.frame_skip,
         rife_fast_stride=args.rife_fast_stride,
         mask_dilate_px=args.mask_dilate,
+        auto_dilate_enable=(
+            bool(args.auto_dilate)
+            and "mask_dilate" not in getattr(args, "_explicit_dests", set())
+        ),
         confidence_weighted_dilation=args.confidence_dilate,
         mask_feather_px=args.mask_feather,
         temporal_smooth_radius=args.temporal_smooth,

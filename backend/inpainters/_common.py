@@ -126,10 +126,17 @@ def _binarize_mask(mask: np.ndarray) -> np.ndarray:
 
 
 def _feather_blend(original: np.ndarray, filled: np.ndarray,
-                   mask: np.ndarray, feather_px: int = 4) -> np.ndarray:
+                   mask: np.ndarray, feather_px: int = 4,
+                   continuous: bool = False) -> np.ndarray:
     """Alpha-blend the inpainted `filled` result back onto `original`
     using a Gaussian-softened mask so the boundary of the removed
-    region is seamless."""
+    region is seamless. Auto-dilate masks already contain a continuous
+    distance-transform alpha and must not be blurred a second time."""
+    if continuous and np.any((mask > 0) & (mask < 255)):
+        soft = mask.astype(np.float32) / 255.0
+        soft = soft[..., None]
+        out = filled.astype(np.float32) * soft + original.astype(np.float32) * (1.0 - soft)
+        return np.clip(out, 0, 255).astype(np.uint8)
     if feather_px <= 0 or mask.max() == 0:
         if filled.dtype == np.uint8:
             return filled
@@ -623,7 +630,16 @@ def apply_finishing(original, filled, masks, config=None, *,
             r = _edge_ring_color_correct(f, r, m, edge_ring_px)
         r = _restore_mask_grain(
             f, r, m, grain_strength, frame_index=index)
-        out.append(_feather_blend(f, r, m, feather_px))
+        out.append(_feather_blend(
+            f,
+            r,
+            m,
+            feather_px,
+            continuous=bool(
+                getattr(config, "auto_dilate_enable", False)
+                if config is not None else False
+            ),
+        ))
     return out
 
 

@@ -205,6 +205,7 @@ class ProcessingConfig:
 
     # Mask settings
     mask_dilate_px: int = 8  # morphological dilation on masks for cleaner removal
+    auto_dilate_enable: bool = False  # measure glyph halo from frame contrast
     mask_feather_px: int = 4  # gaussian feather for seamless alpha-blend at edges
     confidence_weighted_dilation: bool = False
     confidence_dilation_scale: float = 1.5
@@ -754,6 +755,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.translation_timeout_seconds = _coerce_float(
         config.translation_timeout_seconds, 300.0, 5.0, 3600.0)
     config.mask_dilate_px = _coerce_int(config.mask_dilate_px, 8, 0, 100)
+    config.auto_dilate_enable = _coerce_bool(
+        getattr(config, "auto_dilate_enable", False), False)
     config.mask_feather_px = _coerce_int(config.mask_feather_px, 4, 0, 100)
     config.confidence_weighted_dilation = _coerce_bool(
         config.confidence_weighted_dilation, False)

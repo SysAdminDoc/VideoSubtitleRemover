@@ -235,7 +235,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "subtitle_area", "subtitle_areas", "subtitle_region_spans",
         "detection_lang",
         "detection_threshold", "detection_frame_skip",
-        "mask_dilate_px", "mask_feather_px", "edge_ring_px",
+        "mask_dilate_px", "auto_dilate_enable", "mask_feather_px", "edge_ring_px",
         "paddleocr_variant",
         "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
         "tbe_flow_estimator",
@@ -357,6 +357,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         "prefetch_decode", "prefetch_queue_size", "input_fps",
         "rapidocr_variant", "paddleocr_variant",
         "translucency_enable",
+        "auto_dilate_enable",
         "quality_report_sheet", "rife_fast_stride",
         "remove_subtitles", "remove_chyrons",
         "chyron_min_hits", "karaoke_grouping", "karaoke_x_gap_px",
@@ -382,6 +383,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
             input_fps=30.0,
             paddleocr_variant="server",
             translucency_enable=False,
+            auto_dilate_enable=True,
             quality_report_sheet=True,
             rife_fast_stride=3,
             remove_subtitles=False,
@@ -401,6 +403,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         self.assertEqual(restored.rife_fast_stride, 3)
         self.assertEqual(restored.paddleocr_variant, "server")
         self.assertFalse(restored.translucency_enable)
+        self.assertTrue(restored.auto_dilate_enable)
         self.assertTrue(restored.karaoke_grouping)
         self.assertEqual(restored.chyron_min_hits, 120)
 

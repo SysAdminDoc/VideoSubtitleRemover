@@ -49,6 +49,75 @@ class Sam2RefinementTests(unittest.TestCase):
         self.assertIn("point_labels", predict_kwargs)
 
 
+class AutoDilationTests(unittest.TestCase):
+    def test_outline_falloff_gets_more_radius_than_plain_glyph(self):
+        import cv2
+        from backend.segmentation import estimate_auto_dilation_radius
+
+        plain = np.full((100, 200, 3), 80, dtype=np.uint8)
+        cv2.putText(
+            plain, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
+            1.5, (240, 240, 240), 3, cv2.LINE_AA,
+        )
+        outlined = np.full((100, 200, 3), 80, dtype=np.uint8)
+        cv2.putText(
+            outlined, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
+            1.5, (20, 20, 20), 8, cv2.LINE_AA,
+        )
+        cv2.putText(
+            outlined, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
+            1.5, (240, 240, 240), 3, cv2.LINE_AA,
+        )
+        box = (35, 25, 170, 70)
+
+        plain_radius = estimate_auto_dilation_radius(plain, box)
+        outline_radius = estimate_auto_dilation_radius(outlined, box)
+
+        self.assertGreaterEqual(plain_radius, 0)
+        self.assertGreater(outline_radius, plain_radius)
+        self.assertLessEqual(outline_radius, 20)
+
+    def test_soft_dilation_has_a_continuous_distance_edge(self):
+        from backend.segmentation import soft_dilate_mask
+
+        base = np.zeros((20, 20), dtype=np.uint8)
+        base[8:12, 8:12] = 255
+        result = soft_dilate_mask(base, 4)
+
+        self.assertEqual(int(result[8, 8]), 255)
+        self.assertGreater(int(result[7, 8]), int(result[6, 8]))
+        self.assertGreater(int(result[6, 8]), int(result[5, 8]))
+        self.assertEqual(int(result[3, 8]), 0)
+
+    def test_processor_auto_mask_is_soft_but_manual_mask_stays_binary(self):
+        import cv2
+        from backend import processor
+
+        frame = np.full((100, 200, 3), 80, dtype=np.uint8)
+        cv2.putText(
+            frame, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
+            1.5, (20, 20, 20), 8, cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
+            1.5, (240, 240, 240), 3, cv2.LINE_AA,
+        )
+        box = (35, 25, 170, 70)
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+
+        remover.config = processor.ProcessingConfig(auto_dilate_enable=True)
+        adaptive = remover._create_mask(frame.shape, [box], frame=frame)
+        self.assertTrue(np.any((adaptive > 0) & (adaptive < 255)))
+
+        remover.config = processor.ProcessingConfig(auto_dilate_enable=False)
+        manual = remover._create_mask(frame.shape, [box], frame=frame)
+        expected = np.zeros(frame.shape[:2], dtype=np.uint8)
+        expected[20:75, 30:175] = 255
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17))
+        expected = cv2.dilate(expected, kernel, iterations=1)
+        np.testing.assert_array_equal(manual, expected)
+
+
 class MatAnyoneRefinementTests(unittest.TestCase):
     def test_matte_frame_normalizes_float_alpha(self):
         from backend import segmentation as seg
