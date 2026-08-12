@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Film grain now reaches inpainted regions.** Positive `--film-grain`
+  strength estimates high-pass texture from nearby unmasked pixels, adds
+  decorrelated per-frame grain plus a small dither before 8-bit conversion,
+  and leaves clean or texture-poor sources unchanged; the existing full-frame
+  post-encode pass remains available for the surrounding image.
+
 - **Finishing now has an opt-in gradient-domain seam correction.** A
   boundary-aware Poisson solve uses a dilated mask domain before feathering,
   skips frame-edge and degenerate masks, and remains shared across all

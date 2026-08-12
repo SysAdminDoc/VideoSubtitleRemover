@@ -7,18 +7,20 @@ re-implementations of the same loop.
 
 from __future__ import annotations
 
-import numpy as np
 import cv2
+import numpy as np
+import pytest
 
 from backend.inpainters import apply_finishing
 from backend import temporal_profile
 
 
 class _Config:
-    def __init__(self, feather=4, ring=2, poisson=False):
+    def __init__(self, feather=4, ring=2, poisson=False, grain=0.0):
         self.mask_feather_px = feather
         self.edge_ring_px = ring
         self.poisson_seam_enable = poisson
+        self.film_grain_strength = grain
 
 
 def _frame(value):
@@ -45,6 +47,24 @@ def _gradient_fixture():
     mask[24:72, 34:94] = 255
     filled = np.full_like(original, 128)
     return clean, original, filled, mask
+
+
+def _grain_fixture():
+    height = width = 96
+    rng = np.random.default_rng(5)
+    base = np.full((height, width, 3), 120, dtype=np.float32)
+    source = np.clip(
+        base + rng.normal(0, 7, (height, width, 1)), 0, 255
+    ).astype(np.uint8)
+    mask = np.zeros((height, width), dtype=np.uint8)
+    mask[24:72, 24:72] = 255
+    source[mask > 0] = 235
+    filled = np.full_like(source, 120)
+    outer = cv2.dilate(
+        mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))) > 0
+    inner = cv2.dilate(
+        mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))) > 0
+    return source, filled, mask, outer & ~inner
 
 
 def test_none_config_passes_through():
@@ -139,3 +159,32 @@ def test_poisson_seam_keeps_temporal_flicker_under_profile_floor():
     flicker = temporal_profile.masked_flicker(poisson, masks)
     assert flicker is not None
     assert flicker <= temporal_profile.DEFAULT_THRESHOLDS.masked_flicker
+
+
+def test_grain_restore_matches_adjacent_noise_variance():
+    source, filled, mask, ring = _grain_fixture()
+    output = apply_finishing(
+        [source], [filled], [mask],
+        _Config(feather=0, ring=0, grain=0.04),
+    )[0]
+    outside_std = float(source[ring].astype(np.float32).std(axis=0).mean())
+    inside_std = float(output[mask > 0].astype(np.float32).std(axis=0).mean())
+    assert output.dtype == np.uint8
+    assert inside_std == pytest.approx(outside_std, rel=0.3, abs=0.5)
+
+
+def test_grain_restore_decorrelates_frames_and_skips_clean_source():
+    source, filled, mask, _ring = _grain_fixture()
+    outputs = apply_finishing(
+        [source, source, source], [filled.copy() for _ in range(3)],
+        [mask, mask, mask], _Config(feather=0, ring=0, grain=0.04),
+    )
+    first = outputs[0][mask > 0].astype(np.float32).ravel()
+    second = outputs[1][mask > 0].astype(np.float32).ravel()
+    assert abs(float(np.corrcoef(first, second)[0, 1])) < 0.2
+
+    clean = np.full_like(source, 120)
+    clean_output = apply_finishing(
+        [clean], [filled], [mask], _Config(feather=0, ring=0, grain=0.04)
+    )[0]
+    np.testing.assert_array_equal(clean_output, filled)

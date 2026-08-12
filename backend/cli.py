@@ -650,7 +650,7 @@ def _build_parser(mode_choices):
     parser.add_argument("--seedvr2", action="store_true",
                        help="Post-cleanup SeedVR2 restoration pass.")
     parser.add_argument("--film-grain", type=float, default=0.0, metavar="STRENGTH",
-                       help="Additive film grain after cleanup (0..0.5; 0 disables).")
+                       help="Restore masked texture and add film grain after cleanup (0..0.5; 0 disables).")
     parser.add_argument("--watermark", default="", metavar="PATH",
                        help="Burn a PNG watermark onto the output after cleanup.")
     parser.add_argument("--watermark-position", default="bottom-right",

@@ -1,7 +1,8 @@
 """Optional post-restore passes that run after the inpaint stage.
 
 RM-78 Real-ESRGAN super-resolution and RM-80 film-grain re-synthesis
-both shape the *output* video rather than the inpainted region. Each
+shape the output video after inpainting. Shared finishing also restores
+local grain inside masked fills before this full-frame pass. Each
 adapter here:
 
 - Imports lazily so the rest of the codebase keeps working when the

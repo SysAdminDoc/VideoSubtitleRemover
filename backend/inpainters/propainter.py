@@ -72,6 +72,8 @@ class ProPainterInpainter(BaseInpainter):
                     self.config, "tbe_flow_estimator", "dis"),
                 global_motion_align=getattr(
                     self.config, "tbe_global_motion_align", True),
+                grain_strength=getattr(
+                    self.config, "film_grain_strength", 0.0),
                 scene_cut_split=self.config.tbe_scene_cut_split,
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,

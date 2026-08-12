@@ -108,6 +108,7 @@ def _fallback_to_tbe(config: ProcessingConfig,
             flow_estimator=getattr(config, "tbe_flow_estimator", "dis"),
             global_motion_align=getattr(
                 config, "tbe_global_motion_align", True),
+            grain_strength=getattr(config, "film_grain_strength", 0.0),
             scene_cut_split=config.tbe_scene_cut_split,
             scene_cut_threshold=config.tbe_scene_cut_threshold,
             scene_cut_use_pyscenedetect=config.tbe_scene_cut_use_pyscenedetect,

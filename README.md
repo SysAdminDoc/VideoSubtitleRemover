@@ -32,7 +32,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **AUTO Inpaint Routing** -- Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
 - **Multi-Engine Detection** -- RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
-- **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
+- **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, mask-aware film-grain restoration plus native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
 - **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
@@ -804,7 +804,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--nle-sidecar` | Emit an EDL or FCPXML sidecar next to the output. | off | off \| edl \| fcpxml | Public |
 | `--swinir` | Post-cleanup SwinIR restoration pass. | Off | - | Public |
 | `--seedvr2` | Post-cleanup SeedVR2 restoration pass. | Off | - | Public |
-| `--film-grain` | Additive film grain after cleanup (0..0.5; 0 disables). | 0.0 | 0..0.5 | Public |
+| `--film-grain` | Restore masked texture and add film grain after cleanup (0..0.5; 0 disables). | 0.0 | 0..0.5 | Public |
 | `--watermark` | Burn a PNG watermark onto the output after cleanup. | - | - | Public |
 | `--watermark-position` | Watermark corner position (default bottom-right). | bottom-right | top-left \| top-right \| bottom-left \| bottom-right \| center | Public |
 | `--watermark-opacity` | Watermark opacity 0.0-1.0 (default 1.0). | 1.0 | 0..1 | Public |

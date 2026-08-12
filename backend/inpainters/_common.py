@@ -24,6 +24,13 @@ _TBE_MAD_K = 3.0
 _TBE_MAD_MIN_TOLERANCE = 1.0
 _TBE_MIN_SURVIVORS = 3
 _POISSON_SEAM_DILATE_PX = 3
+_GRAIN_RING_INNER_PX = 2
+_GRAIN_RING_OUTER_PX = 6
+_GRAIN_MIN_RING_PIXELS = 32
+_GRAIN_MIN_STD = 1.0
+_GRAIN_SEED = 0x47524149
+_GRAIN_TEXTURE_SIGMA = 0.65
+_GRAIN_DITHER_STD = 0.2
 
 
 class BaseInpainter(ABC):
@@ -121,7 +128,9 @@ def _feather_blend(original: np.ndarray, filled: np.ndarray,
     using a Gaussian-softened mask so the boundary of the removed
     region is seamless."""
     if feather_px <= 0 or mask.max() == 0:
-        return filled
+        if filled.dtype == np.uint8:
+            return filled
+        return np.clip(filled, 0, 255).astype(np.uint8)
     k = feather_px * 2 + 1
     soft = cv2.GaussianBlur(mask, (k, k), 0).astype(np.float32) / 255.0
     if soft.ndim == 2:
@@ -265,16 +274,108 @@ def _poisson_seam_correct(
     return out
 
 
+def _restore_mask_grain(
+    original: np.ndarray,
+    filled: np.ndarray,
+    mask: np.ndarray,
+    strength: float = 0.0,
+    *,
+    frame_index: int = 0,
+) -> np.ndarray:
+    """Re-synthesize local texture inside a filled mask.
+
+    A high-pass residual from the unmasked ring estimates the nearby grain
+    scale without importing subtitle pixels or large image edges. A fresh,
+    lightly correlated noise field is generated for each frame, and a small
+    high-pass dither is added before the shared float-to-uint8 feather blend.
+    Clean or texture-poor rings return the original fill unchanged.
+    """
+    if original is None or filled is None or mask is None:
+        return filled
+    try:
+        strength = float(strength)
+    except (TypeError, ValueError):
+        return filled
+    if strength <= 0.0 or mask.size == 0 or mask.max() == 0:
+        return filled
+    if original.ndim != 3 or original.shape[2] < 3:
+        return filled
+    if filled.shape != original.shape:
+        return filled
+    binary = _binarize_mask(mask)
+    if binary.ndim != 2 or binary.shape != original.shape[:2]:
+        return filled
+    mask_bool = binary > 0
+    outer_size = _GRAIN_RING_OUTER_PX * 2 + 1
+    inner_size = _GRAIN_RING_INNER_PX * 2 + 1
+    outer_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (outer_size, outer_size))
+    inner_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (inner_size, inner_size))
+    outer = cv2.dilate(binary, outer_kernel, iterations=1) > 0
+    inner = cv2.dilate(binary, inner_kernel, iterations=1) > 0
+    ring = outer & ~inner
+    if int(ring.sum()) < _GRAIN_MIN_RING_PIXELS:
+        return filled
+
+    source = original[..., :3].astype(np.float32)
+    smooth = cv2.GaussianBlur(source, (0, 0), 1.0)
+    residual = source - smooth
+    ring_values = residual[ring]
+    centered = ring_values - np.median(ring_values, axis=0)
+    robust_std = (
+        np.percentile(centered, 84, axis=0)
+        - np.percentile(centered, 16, axis=0)
+    ) / 2.0
+    measured_std = np.std(centered, axis=0)
+    grain_std = np.maximum(robust_std, measured_std)
+    grain_std = np.where(grain_std >= _GRAIN_MIN_STD, grain_std, 0.0)
+    target_std = np.minimum(grain_std, strength * 255.0)
+    if float(target_std.max()) < 0.5:
+        return filled
+
+    height, width = mask_bool.shape
+    try:
+        frame_seed = _GRAIN_SEED + int(frame_index)
+    except (TypeError, ValueError, OverflowError):
+        frame_seed = _GRAIN_SEED
+    rng = np.random.default_rng(frame_seed)
+    noise = np.zeros((height, width, 3), dtype=np.float32)
+    for channel in range(3):
+        white = rng.standard_normal((height, width)).astype(np.float32)
+        correlated = cv2.GaussianBlur(
+            white, (0, 0), _GRAIN_TEXTURE_SIGMA)
+        correlated -= float(correlated.mean())
+        correlated_std = float(correlated.std())
+        if correlated_std > 1e-6:
+            noise[..., channel] = (
+                correlated * (float(target_std[channel]) / correlated_std)
+            )
+
+    white = rng.random((height, width), dtype=np.float32)
+    blue_noise = white - cv2.GaussianBlur(white, (0, 0), 0.8)
+    blue_std = float(blue_noise.std())
+    if blue_std > 1e-6:
+        blue_noise = blue_noise * (_GRAIN_DITHER_STD / blue_std)
+    else:
+        blue_noise.fill(0.0)
+
+    out = filled.astype(np.float32)
+    out[mask_bool] += noise[mask_bool] + blue_noise[mask_bool, None]
+    return out
+
+
 def apply_finishing(original, filled, masks, config=None, *,
                     edge_ring: bool = True,
                     feather_px: Optional[int] = None,
                     edge_ring_px: Optional[int] = None):
     """Single post-inpaint finishing step shared by every inpainter family.
 
-    Applies the opt-in Poisson seam correction or shared edge-ring colour match
-    followed by the feather blend at each mask boundary. Poisson mode uses the
-    dilated solve domain but only replaces pixels inside the original mask;
-    edge-ring correction is skipped when Poisson mode is enabled.
+    Applies the opt-in Poisson seam correction or shared edge-ring colour match,
+    restores local grain when configured, and then runs the feather blend at
+    each mask boundary. Poisson mode uses the dilated solve domain but only
+    replaces pixels inside the original mask; edge-ring correction is skipped
+    when Poisson mode is enabled.
     ``feather_px``/``edge_ring_px`` default to ``config.mask_feather_px`` and
     ``config.edge_ring_px``. When ``config`` is ``None`` and no explicit
     ``feather_px`` is given, the filled frames pass through unchanged so a
@@ -294,12 +395,18 @@ def apply_finishing(original, filled, masks, config=None, *,
         getattr(config, "poisson_seam_enable", False)
         if config is not None else False
     )
+    grain_strength = (
+        getattr(config, "film_grain_strength", 0.0)
+        if config is not None else 0.0
+    )
     out = []
-    for f, r, m in zip(original, filled, masks):
+    for index, (f, r, m) in enumerate(zip(original, filled, masks)):
         if poisson_seam:
             r = _poisson_seam_correct(f, r, m)
         elif edge_ring and edge_ring_px > 0 and m.max() > 0:
             r = _edge_ring_color_correct(f, r, m, edge_ring_px)
+        r = _restore_mask_grain(
+            f, r, m, grain_strength, frame_index=index)
         out.append(_feather_blend(f, r, m, feather_px))
     return out
 
@@ -579,7 +686,9 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                          feather_px: int, edge_ring_px: int,
                          flow_warp: bool,
                          global_motion_align: bool = True,
-                         flow_estimator: str = "dis") -> List[np.ndarray]:
+                         flow_estimator: str = "dis",
+                         grain_strength: float = 0.0,
+                         grain_frame_offset: int = 0) -> List[np.ndarray]:
     """Aggregate one scene-contiguous segment via Temporal Background Exposure.
 
     Global affine registration puts every frame and mask in the middle-frame
@@ -593,6 +702,9 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
         filled = _cv2_inpaint(frames[0], masks[0], 7, cv2.INPAINT_NS)
         if edge_ring_px > 0:
             filled = _edge_ring_color_correct(frames[0], filled, masks[0], edge_ring_px)
+        filled = _restore_mask_grain(
+            frames[0], filled, masks[0], grain_strength,
+            frame_index=grain_frame_offset)
         return [_feather_blend(frames[0], filled, masks[0], feather_px)]
 
     ref_idx = n // 2
@@ -734,6 +846,9 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
 
         if edge_ring_px > 0:
             filled = _edge_ring_color_correct(frame, filled, mask, edge_ring_px)
+        filled = _restore_mask_grain(
+            frame, filled, mask, grain_strength,
+            frame_index=grain_frame_offset + t)
         results.append(_feather_blend(frame, filled, mask, feather_px))
     return results
 
@@ -749,7 +864,8 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  scene_cut_threshold: float = 0.35,
                                  scene_cut_use_pyscenedetect: bool = False,
                                  scene_cut_use_transnetv2: bool = False,
-                                 flow_estimator: str = "dis") -> List[np.ndarray]:
+                                 flow_estimator: str = "dis",
+                                 grain_strength: float = 0.0) -> List[np.ndarray]:
     """Video-inpainting primitive: reconstruct masked pixels from
     temporally exposed neighbours with optional scene splitting, global
     alignment, and residual flow refinement."""
@@ -779,6 +895,8 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
             flow_warp=flow_warp,
             global_motion_align=global_motion_align,
             flow_estimator=flow_estimator,
+            grain_strength=grain_strength,
+            grain_frame_offset=start,
         ))
     return out
 

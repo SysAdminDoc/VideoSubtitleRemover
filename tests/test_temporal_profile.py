@@ -5,6 +5,7 @@ import sys
 import time
 import unittest
 
+import cv2
 import numpy as np
 from unittest import mock
 
@@ -258,6 +259,37 @@ class TemporalBackgroundExposureTests(unittest.TestCase):
         )
 
         np.testing.assert_array_equal(recovered[0][region], 177)
+
+    def test_tbe_grain_restore_rehydrates_masked_texture(self):
+        height = width = 64
+        rng = np.random.default_rng(7)
+        mask = np.zeros((height, width), dtype=np.uint8)
+        mask[16:48, 16:48] = 255
+        frames = []
+        masks = []
+        for _ in range(5):
+            gray = np.clip(
+                120 + rng.normal(0, 7, (height, width)), 0, 255
+            ).astype(np.uint8)
+            frame = np.dstack([gray] * 3)
+            frame[mask > 0] = 235
+            frames.append(frame)
+            masks.append(mask.copy())
+
+        restored = _common._tbe_single_segment(
+            frames, masks, min_coverage=1, use_median=True,
+            feather_px=0, edge_ring_px=0, flow_warp=False,
+            global_motion_align=False, grain_strength=0.04,
+        )
+        outer = cv2.dilate(
+            mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))) > 0
+        inner = cv2.dilate(
+            mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))) > 0
+        outside_std = float(frames[0][outer & ~inner].std(axis=0).mean())
+        inside_std = float(restored[0][mask > 0].std(axis=0).mean())
+        self.assertEqual(restored[0].dtype, np.uint8)
+        self.assertGreater(inside_std, 0.65 * outside_std)
+        self.assertLess(inside_std, 1.35 * outside_std)
 
     def test_low_ransac_inlier_ratio_falls_back_to_identity(self):
         frames = [np.full((32, 48, 3), value, dtype=np.uint8)

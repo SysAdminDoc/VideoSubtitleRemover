@@ -160,7 +160,8 @@ class ProcessingConfig:
     # main encode + audio mux. Real-ESRGAN scale 0 = disabled; values
     # 2 or 4 invoke the upscale stage (requires the
     # realesrgan-ncnn-vulkan binary on PATH). Film-grain strength 0 =
-    # disabled; positive values invoke the ffmpeg noise pass.
+    # disabled; positive values restore masked texture and invoke the ffmpeg
+    # full-frame noise pass.
     upscale_factor: int = 0
     film_grain_strength: float = 0.0
     # RM-79: SwinIR restoration as an alternative to Real-ESRGAN for
