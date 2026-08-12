@@ -42,6 +42,50 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
             self.setup_mod._windows_cuda_wheels_unavailable(version, "Windows")
         )
 
+    def test_detect_gpu_uses_cim_for_amd_when_wmic_is_absent(self):
+        missing_nvidia = FileNotFoundError()
+        cim = SimpleNamespace(
+            returncode=0,
+            stdout="Name\nAMD Radeon RX 7800 XT\n",
+        )
+        with mock.patch.object(
+            self.setup_mod.subprocess, "run",
+            side_effect=[missing_nvidia, cim],
+        ) as run:
+            gpu = self.setup_mod.detect_gpu()
+
+        self.assertTrue(gpu["amd"])
+        self.assertEqual(gpu["name"], "AMD Radeon RX 7800 XT")
+        self.assertTrue(any(
+            "Get-CimInstance" in arg for arg in run.call_args_list[1].args[0]
+        ))
+
+    def test_detect_gpu_falls_back_to_wmic_for_legacy_hosts(self):
+        wmic = SimpleNamespace(
+            returncode=0,
+            stdout="Name\nIntel(R) UHD Graphics 770\n",
+        )
+        with mock.patch.object(
+            self.setup_mod.subprocess, "run",
+            side_effect=[FileNotFoundError(), FileNotFoundError(), wmic],
+        ):
+            gpu = self.setup_mod.detect_gpu()
+
+        self.assertTrue(gpu["intel"])
+        self.assertEqual(gpu["name"], "Intel(R) UHD Graphics 770")
+
+    def test_detect_gpu_warns_when_all_non_nvidia_probes_are_unavailable(self):
+        with mock.patch.object(
+            self.setup_mod.subprocess, "run",
+            side_effect=FileNotFoundError(),
+        ):
+            with mock.patch("builtins.print") as printed:
+                gpu = self.setup_mod.detect_gpu()
+
+        self.assertFalse(gpu["amd"] or gpu["intel"])
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("GPU probe was inconclusive", output)
+
     def test_nvidia_python_314_fails_without_cpu_override(self):
         gpu_info = {
             "nvidia": True,

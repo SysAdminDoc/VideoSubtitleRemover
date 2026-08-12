@@ -331,23 +331,57 @@ def detect_gpu():
     
     # Check AMD/Intel via DirectX
     if not gpu_info["nvidia"]:
+        controller_output = None
+        # WMIC is absent on clean Windows 11 installations. CIM is the
+        # supported probe; retain WMIC only as a compatibility fallback for
+        # older images that do not expose PowerShell's CIM cmdlet.
         try:
             result = subprocess.run(
-                ['wmic', 'path', 'win32_VideoController', 'get', 'name'],
-                capture_output=True, text=True, timeout=10
+                [
+                    "powershell", "-NoProfile", "-NonInteractive",
+                    "-Command",
+                    "Get-CimInstance Win32_VideoController | "
+                    "Select-Object -ExpandProperty Name",
+                ],
+                capture_output=True, text=True, timeout=10,
             )
             if result.returncode == 0:
-                output = result.stdout.lower()
-                if 'amd' in output or 'radeon' in output:
-                    gpu_info["amd"] = True
-                    lines = [l.strip() for l in result.stdout.split('\n') if 'amd' in l.lower() or 'radeon' in l.lower()]
-                    gpu_info["name"] = lines[0] if lines else "AMD GPU"
-                elif 'intel' in output:
-                    gpu_info["intel"] = True
-                    lines = [l.strip() for l in result.stdout.split('\n') if 'intel' in l.lower()]
-                    gpu_info["name"] = lines[0] if lines else "Intel GPU"
-        except Exception:
+                controller_output = result.stdout
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             pass
+
+        if controller_output is None:
+            try:
+                result = subprocess.run(
+                    ["wmic", "path", "win32_VideoController", "get", "name"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode == 0:
+                    controller_output = result.stdout
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                pass
+
+        if controller_output is None:
+            print(
+                f"{Colors.YELLOW}  WARN: GPU probe was inconclusive "
+                "(PowerShell CIM and WMIC were unavailable).{Colors.END}"
+            )
+        else:
+            output = controller_output.lower()
+            lines = [line.strip() for line in controller_output.splitlines() if line.strip()]
+            if "amd" in output or "radeon" in output:
+                gpu_info["amd"] = True
+                gpu_info["name"] = next(
+                    (line for line in lines
+                     if "amd" in line.lower() or "radeon" in line.lower()),
+                    "AMD GPU",
+                )
+            elif "intel" in output:
+                gpu_info["intel"] = True
+                gpu_info["name"] = next(
+                    (line for line in lines if "intel" in line.lower()),
+                    "Intel GPU",
+                )
 
     if gpu_info["nvidia"]:
         print(f"  [OK] NVIDIA GPU detected: {gpu_info['name']}")

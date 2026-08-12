@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Windows setup now detects AMD and Intel GPUs without WMIC.** The installer
+  probes `Get-CimInstance Win32_VideoController`, retains WMIC as a legacy
+  fallback, and prints a distinct inconclusive warning when neither probe is
+  available instead of silently selecting CPU mode.
+
 - **NSIS uninstall now fails closed and preserves selected-directory contents.**
   It verifies the installed executable, refuses to run while VSR is active,
   uses the all-users shell context consistently, closes the correct mutex
