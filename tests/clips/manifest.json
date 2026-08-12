@@ -84,7 +84,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "ce2d2d553076607382d1b2fe58fa2fb1d6b42c76ee39fcd7bf331e1975b9ab19",
+        "output_frames_sha256": "2cfd98683398c05a80a8e6fb108dc2f7b5e1a415fd5c31d76153caad23a08c0d",
         "width": 160
       },
       "config": {
@@ -111,8 +111,8 @@
       "filename": "motion_pan.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 11.511499,
-        "ssim": 0.709657
+        "psnr": 11.511254,
+        "ssim": 0.708984
       },
       "sha256": "ab124826841d308c1c2df9d4e0d7a9c4e403bd3810c06d672e4deae254eee069"
     },
@@ -120,7 +120,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "536829d096e06159bfb278ec990eddfc08723d21eb7c6cfcef1f3bf7cc828a1c",
+        "output_frames_sha256": "9138d2cd57d5403ea1422e44345d3f12e16eea0fd6bcfb579150ea5e83959062",
         "width": 160
       },
       "config": {
@@ -147,7 +147,7 @@
       "filename": "karaoke_burnin.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 13.011953,
+        "psnr": 13.008877,
         "ssim": 0.801191
       },
       "sha256": "381f7fef152e2c664c2ea20b7a7a039c073281d762fbe552f65f7889252099e9"
@@ -228,7 +228,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "d5e3f9aa1f684b4f0eb25b80af737ef6124df674a040aba59b47ac7656683293",
+        "output_frames_sha256": "75359ec955e421a82accaea12f35e90cc38761b506116730202af0d07261dbe1",
         "width": 160
       },
       "config": {
@@ -256,7 +256,7 @@
       "license": "MIT",
       "metric_floors": {
         "psnr": 16.815226,
-        "ssim": 0.728001
+        "ssim": 0.727273
       },
       "sha256": "589690cb8875c5f97727afdec51f073bd407cd12abc3981f70d145699be1b7e2"
     },
