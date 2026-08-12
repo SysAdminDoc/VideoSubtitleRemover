@@ -1,15 +1,25 @@
-"""Tests for the centralized libpng security floor.
+"""Tests for the centralized native-dependency security floors.
 
-The libpng version floor and its advisory metadata must live in a single
-source (backend.security_checks) so opencv_ocr and release_verification cannot
-drift to a different version than the runtime vulnerability check enforces.
+The version floors and advisory metadata must live in a single source
+(backend.security_checks) so runtime diagnostics and release verification
+cannot drift to a different policy than the vulnerability checks enforce.
 """
 
 from __future__ import annotations
 
 import backend.security_checks as sc
+from unittest import mock
+
 from backend.security_checks import (
+    FFMPEG_SECURITY_ADVISORY_IDS,
+    FFMPEG_SECURITY_ADVISORY_URL,
+    FFMPEG_SECURITY_BRANCH_FLOORS,
+    FFMPEG_SECURITY_FLOOR,
+    FFMPEG_SECURITY_LTS_FLOOR,
     LIBPNG_FIXED_VERSION,
+    ffmpeg_security_floor_str,
+    ffmpeg_security_affected_range,
+    ffmpeg_security_lts_floor_str,
     libpng_fixed_version_str,
     libpng_is_vulnerable,
 )
@@ -75,3 +85,57 @@ def test_release_advisory_derives_from_constants(monkeypatch):
     assert advisory["fixedIn"] == libpng_fixed_version_str()
     assert advisory["affected"] == sc.LIBPNG_AFFECTED_RANGE
     assert advisory["source"] == sc.LIBPNG_ADVISORY_URL
+
+
+def test_ffmpeg_policy_is_shared_with_classifier():
+    from backend import ffmpeg_profiles
+
+    assert ffmpeg_profiles.FFMPEG_SECURITY_ADVISORY_IDS == FFMPEG_SECURITY_ADVISORY_IDS
+    assert ffmpeg_profiles.FFMPEG_SECURITY_SOURCE == FFMPEG_SECURITY_ADVISORY_URL
+    assert ffmpeg_profiles.FFMPEG_RELEASE_SOURCE == sc.FFMPEG_SECURITY_RELEASE_URL
+    for branch, floor in FFMPEG_SECURITY_BRANCH_FLOORS.items():
+        assert ffmpeg_profiles._FFMPEG_VULNERABLE_LINES[branch] == (
+            floor[2], ".".join(str(part) for part in floor)
+        )
+    assert FFMPEG_SECURITY_FLOOR == (8, 1, 2)
+    assert FFMPEG_SECURITY_LTS_FLOOR == (8, 0, 3)
+    assert ffmpeg_security_floor_str() == "8.1.2"
+    assert ffmpeg_security_lts_floor_str() == "8.0.3"
+    assert ffmpeg_security_affected_range() == "8.1.0-8.1.1, 8.0.0-8.0.2"
+
+
+def test_ffmpeg_vulnerability_warning_carries_cves_and_advisory_url():
+    from backend import ffmpeg_profiles
+
+    status = ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 8.1.1")
+    assert status["advisories"] == list(FFMPEG_SECURITY_ADVISORY_IDS)
+    assert status["advisory_url"] == FFMPEG_SECURITY_ADVISORY_URL
+    assert FFMPEG_SECURITY_ADVISORY_URL in status["reason"]
+    for advisory_id in FFMPEG_SECURITY_ADVISORY_IDS:
+        assert advisory_id in status["reason"]
+
+
+def test_ffmpeg_probe_records_pass_fail():
+    from backend import ffmpeg_profiles
+
+    with mock.patch.object(
+        ffmpeg_profiles,
+        "_tool_status",
+        return_value={
+            "available": True,
+            "path": "ffmpeg",
+            "version": "ffmpeg version 8.1.2",
+        },
+    ):
+        assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is True
+
+    with mock.patch.object(
+        ffmpeg_profiles,
+        "_tool_status",
+        return_value={
+            "available": True,
+            "path": "ffmpeg",
+            "version": "ffmpeg version 8.1.1",
+        },
+    ):
+        assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is False

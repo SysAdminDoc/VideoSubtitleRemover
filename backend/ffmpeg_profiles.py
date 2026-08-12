@@ -13,6 +13,14 @@ import shutil
 import subprocess
 from typing import Any, Mapping, Optional, Sequence
 
+from backend.security_checks import (
+    FFMPEG_SECURITY_ADVISORY_IDS,
+    FFMPEG_SECURITY_ADVISORY_URL,
+    FFMPEG_SECURITY_BRANCH_FLOORS,
+    FFMPEG_SECURITY_RELEASE_URL,
+    ffmpeg_security_floor_str,
+    ffmpeg_security_lts_floor_str,
+)
 from backend.subprocess_policy import run_process
 
 
@@ -62,17 +70,14 @@ _PROFILE_DEFS: dict[str, dict[str, Any]] = {
 
 
 # Known-vulnerable FFmpeg release floors. Media is untrusted input, so a
-# build below these fixed versions is a security blocker rather than a
-# feature gap. CVE-2026-8461 (MagicYUV heap out-of-bounds write, RCE) and
-# CVE-2026-30999 are fixed in 8.1.2 for the 8.1 line and 8.0.3 for the 8.0
-# line. Source: https://ffmpeg.org/security.html
-FFMPEG_SECURITY_ADVISORY_IDS = ("CVE-2026-8461", "CVE-2026-30999")
-FFMPEG_SECURITY_SOURCE = "https://ffmpeg.org/security.html"
-FFMPEG_RELEASE_SOURCE = "https://ffmpeg.org/download.html"
+# build below the reviewed floor is a security blocker rather than a feature
+# gap. The values are derived from backend.security_checks, the policy source.
+FFMPEG_SECURITY_SOURCE = FFMPEG_SECURITY_ADVISORY_URL
+FFMPEG_RELEASE_SOURCE = FFMPEG_SECURITY_RELEASE_URL
 # Map of (major, minor) line -> (exclusive-below fixed patch, fixed version).
 _FFMPEG_VULNERABLE_LINES: dict[tuple[int, int], tuple[int, str]] = {
-    (8, 1): (2, "8.1.2"),
-    (8, 0): (3, "8.0.3"),
+    branch: (floor[2], ".".join(str(part) for part in floor))
+    for branch, floor in FFMPEG_SECURITY_BRANCH_FLOORS.items()
 }
 
 _FFMPEG_VERSION_RE = re.compile(r"version\s+n?(\d+)\.(\d+)(?:\.(\d+))?")
@@ -106,12 +111,15 @@ def classify_ffmpeg_security(version_text: object) -> dict:
         "vulnerable": False,
         "fixed_in": "",
         "advisories": [],
+        "advisory_url": "",
         "reason": "",
     }
     if not parsed:
         payload["reason"] = (
             "FFmpeg version is unknown (development snapshot, missing, or "
-            "unrecognized); use a reviewed stable 8.1.2+ or 8.0.3+ build"
+            "unrecognized); use a reviewed stable "
+            f"{ffmpeg_security_floor_str()}+ or "
+            f"{ffmpeg_security_lts_floor_str()}+ build"
         )
         return payload
     major, minor, patch = parsed
@@ -120,7 +128,9 @@ def classify_ffmpeg_security(version_text: object) -> dict:
         payload["classification"] = "unsupported"
         payload["reason"] = (
             f"FFmpeg {payload['version']} is outside VSR's reviewed 8.0/8.1 "
-            "security branches; use a stable 8.1.2+ or 8.0.3+ build"
+            "security branches; use a stable "
+            f"{ffmpeg_security_floor_str()}+ or "
+            f"{ffmpeg_security_lts_floor_str()}+ build"
         )
     elif line is None:
         payload["reason"] = (
@@ -133,10 +143,11 @@ def classify_ffmpeg_security(version_text: object) -> dict:
         payload["vulnerable"] = True
         payload["fixed_in"] = line[1]
         payload["advisories"] = list(FFMPEG_SECURITY_ADVISORY_IDS)
+        payload["advisory_url"] = FFMPEG_SECURITY_ADVISORY_URL
         payload["reason"] = (
             f"FFmpeg {payload['version']} predates {line[1]} security "
             f"backports ({', '.join(FFMPEG_SECURITY_ADVISORY_IDS)}); "
-            f"upgrade to {line[1]} or newer"
+            f"upgrade to {line[1]} or newer; see {FFMPEG_SECURITY_ADVISORY_URL}"
         )
     else:
         payload["classification"] = "safe"
@@ -156,6 +167,9 @@ def probe_ffmpeg_security(*, timeout: float = 10.0) -> dict:
     classified = classify_ffmpeg_security(status.get("version"))
     classified["available"] = bool(status.get("available"))
     classified["path"] = status.get("path", "")
+    classified["passed"] = bool(
+        classified["available"] and classified["classification"] == "safe"
+    )
     return classified
 
 

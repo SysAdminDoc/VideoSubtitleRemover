@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **FFmpeg runtime diagnostics now enforce the reviewed security floor.**
+  VSR rejects an unclassified or vulnerable FFmpeg runtime, reports the
+  affected CVEs and advisory URL in self-tests and support bundles, and
+  records the pass/fail result in release evidence.
 - **The support bundle no longer leaks the account name and install layout.**
   Settings, logs and reports were all scrubbed, but `support.json` -- the
   largest artifact, and the one users are told to attach to bug reports --

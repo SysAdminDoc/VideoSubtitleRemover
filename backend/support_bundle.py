@@ -30,7 +30,11 @@ from backend.ffmpeg_profiles import (
 from backend.import_safety import module_can_import
 from backend.model_downloads import installed_backend_status
 from backend.opencv_ocr import collect_opencv_dnn_ocr_status
-from backend.security_checks import opencv_libpng_status
+from backend.security_checks import (
+    FFMPEG_SECURITY_ADVISORY_IDS,
+    FFMPEG_SECURITY_ADVISORY_URL,
+    opencv_libpng_status,
+)
 from backend.subprocess_policy import run_process
 
 
@@ -504,6 +508,18 @@ def run_self_test() -> dict:
         elif ffmpeg_security.get("vulnerable"):
             available = False
             reason = ffmpeg_security.get("reason") or "vulnerable FFmpeg runtime"
+            advisory_ids = list(
+                ffmpeg_security.get("advisories") or FFMPEG_SECURITY_ADVISORY_IDS
+            )
+            missing_ids = [item for item in advisory_ids if str(item) not in reason]
+            if missing_ids or FFMPEG_SECURITY_ADVISORY_URL not in reason:
+                details = ", ".join(str(item) for item in missing_ids)
+                if details:
+                    details += "; "
+                reason = (
+                    f"{reason} ({details}"
+                    f"see {FFMPEG_SECURITY_ADVISORY_URL})"
+                )
         else:
             available = True
             reason = (

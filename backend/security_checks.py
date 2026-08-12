@@ -19,6 +19,46 @@ LIBPNG_AFFECTED_RANGE = ">=1.6.26,<1.6.54"
 LIBPNG_ADVISORY_URL = "https://nvd.nist.gov/vuln/detail/CVE-2026-22801"
 
 
+# Single source of truth for the FFmpeg runtime security floor. FFmpeg 8.1.2
+# contains the security backports for the current line; 8.0.3 is the
+# equivalent reviewed floor for the supported LTS line. Keep the advisory
+# identifiers and source URL beside the floors so diagnostics, release
+# evidence, and cross-source tests cannot drift independently.
+FFMPEG_SECURITY_FLOOR = (8, 1, 2)
+FFMPEG_SECURITY_LTS_FLOOR = (8, 0, 3)
+FFMPEG_SECURITY_BRANCH_FLOORS = {
+    (8, 1): FFMPEG_SECURITY_FLOOR,
+    (8, 0): FFMPEG_SECURITY_LTS_FLOOR,
+}
+FFMPEG_SECURITY_ADVISORY_IDS = ("CVE-2026-8461", "CVE-2026-30999")
+FFMPEG_SECURITY_ADVISORY_URL = "https://ffmpeg.org/security.html"
+FFMPEG_SECURITY_RELEASE_URL = "https://ffmpeg.org/download.html"
+
+
+def format_ffmpeg_version(version: Tuple[int, int, int]) -> str:
+    return ".".join(str(part) for part in version)
+
+
+def ffmpeg_security_floor_str() -> str:
+    """Return the reviewed current-line FFmpeg floor as dotted text."""
+    return format_ffmpeg_version(FFMPEG_SECURITY_FLOOR)
+
+
+def ffmpeg_security_lts_floor_str() -> str:
+    """Return the reviewed FFmpeg LTS floor as dotted text."""
+    return format_ffmpeg_version(FFMPEG_SECURITY_LTS_FLOOR)
+
+
+def ffmpeg_security_affected_range() -> str:
+    """Return the below-floor branch ranges used by release advisories."""
+    ranges = []
+    for (major, minor), floor in FFMPEG_SECURITY_BRANCH_FLOORS.items():
+        ranges.append(
+            f"{major}.{minor}.0-{major}.{minor}.{floor[2] - 1}"
+        )
+    return ", ".join(ranges)
+
+
 def libpng_fixed_version_str() -> str:
     """Return the libpng security floor as a dotted string (single source)."""
     return format_libpng_version(LIBPNG_FIXED_VERSION)

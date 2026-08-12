@@ -65,6 +65,7 @@ class ReleaseVerificationTests(unittest.TestCase):
                     "reason": "no known-vulnerable release floor matched",
                     "available": True,
                     "path": "ffmpeg",
+                    "passed": True,
                 },
             ),
             mock.patch(
@@ -339,6 +340,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             evidence["releaseTools"]["ffmpegProfiles"]["schema"],
             "vsr.ffmpeg_profiles.v1",
         )
+        self.assertTrue(evidence["releaseTools"]["ffmpegSecurity"]["passed"])
         self.assertEqual(
             evidence["releaseTools"]["onnxRuntimeProviders"]["schema"],
             "vsr.onnxruntime_providers.v1",

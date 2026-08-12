@@ -51,9 +51,14 @@ from backend.opencv_ocr import (
 )
 from backend.remote_model_policy import release_remote_model_status
 from backend.security_checks import (
+    FFMPEG_SECURITY_ADVISORY_URL,
+    FFMPEG_SECURITY_ADVISORY_IDS,
     LIBPNG_ADVISORY_URL,
     LIBPNG_AFFECTED_RANGE,
     LIBPNG_CVE,
+    ffmpeg_security_floor_str,
+    ffmpeg_security_affected_range,
+    ffmpeg_security_lts_floor_str,
     libpng_fixed_version_str,
     opencv_libpng_status,
 )
@@ -681,20 +686,20 @@ def ffmpeg_security_advisory(
         return None
     version = str(status.get("version") or "unknown")
     if classification == "vulnerable":
-        fixed_in = str(status.get("fixed_in") or "8.1.2")
+        fixed_in = str(status.get("fixed_in") or ffmpeg_security_floor_str())
         advisories = status.get("advisories") or []
-        advisory_id = advisories[0] if advisories else "CVE-2026-8461"
-        affected = "8.1.0-8.1.1, 8.0.0-8.0.2"
+        advisory_id = advisories[0] if advisories else FFMPEG_SECURITY_ADVISORY_IDS[0]
+        affected = ffmpeg_security_affected_range()
         source = FFMPEG_SECURITY_SOURCE
     elif classification == "unsupported":
         advisory_id = "FFMPEG-UNSUPPORTED-BRANCH"
         affected = "outside VSR's reviewed 8.0/8.1 branches"
-        fixed_in = "8.1.2 (reviewed stable branch)"
+        fixed_in = f"{ffmpeg_security_floor_str()} (reviewed stable branch)"
         source = FFMPEG_RELEASE_SOURCE
     else:
         advisory_id = "FFMPEG-UNCLASSIFIED-VERSION"
         affected = "snapshot, missing, or unclassified future branch"
-        fixed_in = "8.1.2 (reviewed stable branch)"
+        fixed_in = f"{ffmpeg_security_floor_str()} (reviewed stable branch)"
         source = FFMPEG_RELEASE_SOURCE
     return _advisory(
         advisory_id=str(advisory_id),
@@ -706,8 +711,10 @@ def ffmpeg_security_advisory(
         source=source,
         mitigation=(
             "VSR decodes untrusted media through FFmpeg; install a reviewed "
-            "stable FFmpeg 8.1.2+ build (or 8.0.3+ on the 8.0 branch) before "
-            f"shipping. Probe result: {status.get('reason') or classification}."
+            f"stable FFmpeg {ffmpeg_security_floor_str()}+ build (or "
+            f"{ffmpeg_security_lts_floor_str()}+ on the 8.0 branch) before "
+            f"shipping. Probe result: {status.get('reason') or classification}. "
+            f"Advisory: {FFMPEG_SECURITY_ADVISORY_URL}."
         ),
     )
 
@@ -1292,6 +1299,7 @@ def build_release_evidence(
     rapidocr_engines = collect_rapidocr_engine_status(
         package_versions=package_versions,
     )
+    ffmpeg_security = probe_ffmpeg_security()
     advisories = collect_release_advisories(dependencies, env=env)
     hidden_payload = {
         "schema": "vsr.release_hidden_imports.v1",
@@ -1334,6 +1342,7 @@ def build_release_evidence(
                 _source_file_status(item) for item in hooks
             ],
             "ffmpeg": _tool_version(["ffmpeg", "-version"]),
+            "ffmpegSecurity": ffmpeg_security,
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "opencvWheels": opencv_wheels,

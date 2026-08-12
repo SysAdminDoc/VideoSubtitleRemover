@@ -737,3 +737,152 @@ IDs continue the existing scheme (highest prior ID was RM-155).
   Acceptance: Each area either audited or explicitly accepted as out of reach.
   Confidence: Verified
   Effort: L
+
+## Research-Driven Additions
+
+External research pass 2026-08-11 (~120 sources; conclusions in RESEARCH.md). IDs
+continue the existing scheme from RM-249. These are ecosystem gaps and
+opportunities, not defects found by the audit above -- no item here duplicates
+RM-167..RM-249. Every premise was checked against the code first; the ones that
+turned out to be already implemented (VMAF, flicker metrics, "Copy CLI command",
+chyron dwell heuristics, moving-watermark tracking) are recorded as rejections in
+RESEARCH.md instead of appearing here.
+
+### P1
+
+- [ ] P1 -- RM-251: TBE aggregates without global-motion alignment, so any pan, zoom, or handheld shake degrades the recovered background
+  Why: The median-of-unmasked-pixels model assumes the background is already pixel-aligned across the batch; on moving-camera footage it is not, and the per-pixel Farneback warp is being asked to recover global motion it was never designed for.
+  Evidence: `backend/inpainters/_common.py:403-423` stacks the batch and takes `np.nanmedian`/mean with no registration step; the only alignment is the optional per-pixel `_warp_to_reference` (`:326-343`). The primitives already exist in this repo but are not wired into TBE -- `cv2.findTransformECC` at `backend/reference_fill.py:176` and `cv2.estimateAffinePartial2D` at `backend/temporal_profile.py:86`. Global-motion compensation before temporal aggregation is the standard background-sprite technique -- https://bmva-archive.org.uk/bmvc/2015/papers/paper021/paper021.pdf, https://arxiv.org/pdf/2401.17883.
+  Touches: `backend/inpainters/_common.py` (`_tbe_single_segment`), `backend/config.py`, `backend/cli.py`, `gui/layout_build.py`, `tests/`
+  Acceptance: Each scene-contiguous segment estimates an affine/homographic transform per frame against the segment reference before aggregation, reusing the existing ECC / `estimateAffinePartial2D` helpers; a low RANSAC inlier ratio falls back to identity and logs the reason; the existing per-pixel flow warp still runs afterward to absorb residual parallax; a synthetic pan fixture shows a measurable drop in `temporal_profile.masked_flicker` and in mask-region residual against the current path, and a static-camera fixture is unchanged within tolerance.
+  Complexity: M
+
+- [ ] P1 -- RM-252: Detection is a full PP-OCR generation behind, and the upgrade is Apache-2.0 ONNX with no new runtime
+  Why: Better detection recall directly reduces the missed-glyph and under-dilated-mask failures that dominate user-visible quality, and this upgrade costs a version pin rather than a new dependency.
+  Evidence: RapidOCR 3.9.2 (2026-07-21) added PP-OCRv6 for both detection and recognition on ONNX Runtime and OpenVINO -- https://github.com/RapidAI/RapidOCR/releases; `dependency_profiles.json` pins `rapidocr==3.9.1`. PP-OCRv6 ships Tiny/Small/Medium variants with one unified CJK + 46-Latin model; PaddleOCR reports the Medium variant at +5.1% recognition and +4.6% detection over PP-OCRv5-server, with OpenVINO CPU inference up to 5.2x faster -- https://arxiv.org/html/2606.13108v1, https://github.com/PaddlePaddle/PaddleOCR/releases. Apache-2.0.
+  Touches: `dependency_profiles.json`, `dependency_profiles/*.txt`, `backend/detection.py` (`_detect_rapid`), `backend/onnx_model_info.py`, `backend/model_hashes.py`, `README.md`, `tests/`
+  Acceptance: The RapidOCR pin moves to 3.9.2 with a refreshed reviewed artifact hash; PP-OCRv6 is selectable as a detector variant with PP-OCRv5 retained as the fallback for regression comparison; `backend/ocr_benchmark.py` records both over the same fixtures; the RapidOCR 1.x/2.x output-shape handling documented in CLAUDE.md is confirmed or extended for the v6 models.
+  Complexity: M
+
+### P2
+
+- [ ] P2 -- RM-253: numpy is pinned 14 months stale, and the obvious bump collides with the declared Python 3.11 floor
+  Why: A coupled floor decision that only gets more expensive to defer, not a routine version bump.
+  Evidence: `dependency_profiles.json` pins `numpy==2.2.6` (released 2025-05-17); current is 2.5.2 (2026-08-09). numpy 2.5.0 drops Python 3.11 and expires a batch of 2.0-era deprecations; 2.4.0 removed `fix_imports` and the deprecated `newshape` reshape parameter and deprecated `np.testing.assert_warns`/`suppress_warnings` -- https://numpy.org/doc/stable/release.html, https://numpy.org/devdocs/release/2.4.0-notes.html. `dependency_profiles.json` declares `"python": ">=3.11,<3.15"`. No numpy-specific 2026 CVE was found.
+  Touches: `dependency_profiles.json`, `dependency_profiles/*.txt`, `requirements.txt`, `setup.py`, `backend/dependency_caps.py`, `README.md`
+  Acceptance: Either numpy moves to the newest 2.4.x that still supports 3.11 (with the deprecation removals checked against `backend/` and `tests/`), or the Python floor moves to 3.12 and numpy moves to 2.5.x -- whichever is chosen is recorded as a dated `intentionalExceptions` entry naming the 3.11 coupling so the next reviewer does not re-derive it.
+  Complexity: M
+
+- [ ] P2 -- RM-254: torch and torchvision are three minor releases behind and may be outside upstream's patch window
+  Why: An unpatched ML runtime is a supply-chain liability even on an opt-in path, and the gap is now large enough that deferring again compounds the migration cost.
+  Evidence: `dependency_profiles.json` pins `torch==2.10.0` / `torchvision==0.25.0` (2026-01-21); current is 2.13.0 / 0.28.0 (2026-07-08), with 2.11.0, 2.12.0 and 2.12.1 in between -- https://pypi.org/project/torch/#history, https://pypi.org/project/torchvision/#history. PyTorch's support window is typically about two minor releases. Exposure is capped because torch is only reached behind `VSR_ENABLE_PYTORCH_LAMA=1`, PaddlePaddle, and the opt-in diffusion adapters.
+  Touches: `dependency_profiles.json`, `dependency_profiles/*.txt`, `setup.py`, `backend/dependency_caps.py`, `README.md`
+  Acceptance: The pin advances to a release still inside upstream's patch window, or `intentionalExceptions` gains a dated entry stating why 2.10.0 is held with the blocking constraint named. The RTX 50-series / sm_120 question is explicitly out of this item -- see the open question in RESEARCH.md.
+  Complexity: M
+
+- [ ] P2 -- RM-255: Two shipped optional tiers are abandoned upstream and the docs do not say so
+  Why: Users choosing an OCR engine or a LaMa tier deserve to know which options are frozen, since neither will receive a security patch.
+  Evidence: easyocr has had no release since 1.7.2 on 2024-09-24 and simple-lama-inpainting is still 0.1.2 -- https://pypi.org/project/easyocr/#history, https://pypi.org/project/simple-lama-inpainting/#history. Both are already opt-in and commented out at `requirements.txt:93,102`, but `README.md:278` presents EasyOCR as a peer detection engine without qualification.
+  Touches: `README.md`, `requirements.txt`, `backend/dependency_caps.py`, `gui/layout_build.py` (engine picker), `backend/detection.py`
+  Acceptance: The detection-engines table and the GUI engine picker mark EasyOCR as frozen/unmaintained with its last release date; the LaMa tier documentation does the same for simple-lama-inpainting and points at the ONNX and OpenCV-5 DNN tiers as the maintained paths; `dependency_caps` records both as frozen so a future reviewer does not chase a bump that will never come.
+  Complexity: S
+
+- [ ] P2 -- RM-256: TBE aggregation has no outlier rejection, so a few misaligned frames ghost into the recovered background
+  Why: A plain median or mean is maximally sensitive to exactly the failure the flow warp produces -- a handful of badly-registered frames -- and rejecting them is a contained change to one numpy block.
+  Evidence: `backend/inpainters/_common.py:408-423` computes either `np.nanmedian` over the unmasked stack (n <= 64) or a plain `sum/count` mean, with no robustness step. Robust temporal aggregation is standard in exemplar/patch video-inpainting practice -- https://arxiv.org/pdf/2401.17883.
+  Touches: `backend/inpainters/_common.py`, `tests/`
+  Acceptance: Aggregation computes a per-pixel median and MAD, rejects samples beyond k*MAD and averages the survivors, falling back to current behaviour when fewer than three samples survive; a fixture with deliberately corrupted frames in the batch shows the recovered background unchanged where the current code visibly ghosts; the batch-size-64 median/mean switch documented in CLAUDE.md is preserved or explicitly retired.
+  Complexity: S
+
+- [ ] P2 -- RM-257: The flow estimator is a hardcoded Farneback with no better option, though a stronger one ships in core OpenCV
+  Why: DIS handles motion discontinuities and occlusion boundaries better than Farneback at comparable CPU cost, and it is already available -- no new dependency, no model download.
+  Evidence: `backend/inpainters/_common.py:326-360` calls `cv2.calcOpticalFlowFarneback` twice with a hand-tuned `_farneback_winsize` heuristic. `cv2.DISOpticalFlow_create` is in the OpenCV core video module (confirmed present in the installed cv2) and exposes PRESET_ULTRAFAST/FAST/MEDIUM -- https://docs.opencv.org/4.x/da/d06/classcv_1_1optflow_1_1DISOpticalFlow.html. TV-L1 is deliberately excluded: `cv2.optflow.DualTVL1OpticalFlow` is opencv-contrib only and the repo requires plain `opencv-python`.
+  Touches: `backend/inpainters/_common.py`, `backend/karaoke_flow.py`, `backend/config.py`, `backend/cli.py`, `tests/`
+  Acceptance: A flow-estimator setting selects DIS (default preset FAST) or Farneback, probing for `DISOpticalFlow_create` and falling back to Farneback with a logged reason when absent; both `_warp_to_reference` and `_warp_mask_to_reference` honour it; a synthetic-motion fixture asserts the DIS path produces endpoint error no worse than Farneback at equal or lower wall time.
+  Complexity: S
+
+- [ ] P2 -- RM-258: Compositing corrects colour but not gradient, so seams survive on skin tones and gradients
+  Why: `_edge_ring_color_correct` fixes a flat colour offset and `_feather_blend` softens the boundary, but neither matches the gradient field across the seam, which is what reads as a soft halo on smooth content.
+  Evidence: `grep -rn "seamlessClone\|[Pp]oisson" backend/` returns nothing; finishing is edge-ring then feather for every inpainter via the shared `apply_finishing` introduced in 3.18.0. `cv2.seamlessClone` is in every OpenCV build the repo already requires -- https://docs.opencv.org/4.x/df/da0/group__photo__clone.html. Implement the modified-Poisson variant, not vanilla: naive Poisson blending is a documented source of temporal bleeding, which matters for video -- https://link.springer.com/article/10.1007/s41095-015-0027-z.
+  Touches: `backend/inpainters/_common.py` (`apply_finishing`, `_edge_ring_color_correct`), `backend/config.py`, `backend/cli.py`, `tests/`
+  Acceptance: An opt-in gradient-domain finishing mode runs a modified-Poisson seam correction inside the dilated mask boundary before feathering, shared by every inpainter through `apply_finishing`; it is skipped for masks touching the frame edge and for degenerate mask areas; a gradient-background fixture shows lower seam residual than the edge-ring path, and `temporal_profile.masked_flicker` does not regress across a multi-frame fixture.
+  Complexity: M
+
+- [ ] P2 -- RM-259: The fill is smoother than the source it replaces, and nothing puts the grain back
+  Why: A temporal median is a low-pass filter by construction, so on any grainy or noisy source the filled region reads as a plastic patch no matter how well the seam is blended.
+  Evidence: Every `film_grain` reference is in `backend/_encode_mixin.py:51-65` and only emits `-svtav1-params film-grain=N` for AV1 final encodes -- an encoder-side setting that does nothing for the fill region and does not apply to H.264/HEVC outputs at all. Parametric autoregressive grain fitted from a clean neighbouring patch is a well-specified classical technique -- https://norkin.org/pdf/DCC_2018_AV1_film_grain.pdf, https://www.lirmm.fr/~nfaraj/publications/film_grain_ipol/2017_Newson_film_grain.pdf.
+  Touches: `backend/post_restore.py`, `backend/inpainters/_common.py`, `backend/config.py`, `backend/cli.py`, `tests/`
+  Acceptance: Grain statistics are estimated from unmasked pixels adjacent to the mask, synthetic grain matching those statistics is added inside the feathered region with per-frame temporal decorrelation, and a small blue-noise dither is applied before the return to 8-bit so the float blend does not band; a grainy fixture shows noise variance inside the fill within tolerance of the surrounding region, and a clean synthetic fixture is left untouched.
+  Complexity: M
+
+- [ ] P2 -- RM-260: PaddleOCR 3.6.0 silently changed the PP-OCRv5 default from mobile to server models
+  Why: If detection relies on library defaults rather than explicit model names, latency and memory changed under the project without a code change or a note.
+  Evidence: PaddleOCR 3.6.0 release notes state the default model for both PP-OCRv5 detection and recognition changed from the mobile to the server variants -- https://sourceforge.net/projects/paddleocr.mirror/files/v3.6.0/. `dependency_profiles.json` pins `paddleocr==3.6.0`. The 2.x -> 3.x API removals (`det`/`rec` kwargs on `.ocr()`, `show_log`, `use_onnx`, `PPStructure`) are documented upstream and worth re-checking against `backend/paddle_compat.py` in the same pass -- http://www.paddleocr.ai/main/en/update/upgrade_notes.html. That the project takes whatever the library defaults to is Verified: `backend/paddle_compat.py:47-60` constructs `PaddleOCR(...)` with no `text_detection_model_name`, `text_recognition_model_name`, or `ocr_version`, on both the 3.x and the 2.x fallback path. That 3.6.0 specifically flipped the default is Reported -- confirm against the installed package before changing behaviour. `backend/detection.py:175-193` likewise builds RapidOCR with `params={}`.
+  Touches: `backend/detection.py` (`_load_model`), `backend/paddle_compat.py`, `README.md`, `tests/`
+  Acceptance: PaddleOCR detection and recognition model variants are named explicitly rather than defaulted, the chosen variant is recorded in execution provenance alongside the engine, and README documents the mobile/server tradeoff so a user on constrained hardware can pick.
+  Complexity: S
+
+- [ ] P2 -- RM-261: No unattended watch-folder mode, which is the automation shape with the clearest external demand
+  Why: Archivists and bulk users want a directory that drains itself; every primitive already exists (glob batch, checkpoints, skip-existing, output contracts, job isolation) and only the loop is missing.
+  Evidence: `grep -rn "watch_folder\|--watch"` over `backend/` and `README.md` returns nothing. Demand is concrete: the upstream project has an open request for portable CLI and headless server support (YaoFANGUK #246), and `axllent/vidfxr` is a Docker image whose entire purpose is polling a directory and stripping subtitles from newly-written files -- https://hub.docker.com/r/axllent/vidfxr, https://github.com/YaoFANGUK/video-subtitle-remover/issues. Every commercial competitor surveyed gates batch behind a paid tier.
+  Touches: `backend/cli.py`, `backend/resume_checkpoint.py`, `backend/output_contract.py`, `README.md`, `tests/`
+  Acceptance: `--watch <dir>` polls for new inputs on a configurable interval, waits for each file to stop growing before claiming it, processes it through the existing single-file path with `--skip-existing` semantics, writes per-item outcomes to the existing batch report, survives a failed item without exiting, and shuts down cleanly on the existing cancellation signal; a fixture drops files into a temp directory mid-run and asserts each is processed exactly once.
+  Complexity: M
+
+- [ ] P2 -- RM-262: The Docker image validates the pipeline but cannot run it
+  Why: A container that only self-tests forces every headless or Linux user to build their own, which is exactly why third-party wrappers exist for the upstream project.
+  Evidence: `Dockerfile` installs only numpy, opencv-headless, Pillow and onnxruntime from the CPU constraints, and its CMD is `["python", "tools/local_smoke.py"]`; `dependency_profiles.json` `intentionalExceptions` states plainly that it "is a local pipeline smoke image, not the frozen Windows distribution". `leeyeel/video-subtitle-remover-docker` exists specifically because upstream ships no first-class container -- https://github.com/leeyeel/video-subtitle-remover-docker.
+  Touches: `Dockerfile`, `.dockerignore`, `dependency_profiles/cpu.txt`, `README.md`, `tests/`
+  Acceptance: The image installs the full CPU profile including RapidOCR and the ONNX LaMa tier, its entrypoint is the CLI (`python -m backend.cli`) with the smoke test kept reachable as an explicit command, input and output are mounted volumes, and README documents a working one-line `docker run` that processes a file end to end; the smoke stage still runs at build time so a broken image fails to build. Pairs with RM-261 -- the watch-folder mode is what makes the container useful unattended. Note: RM-246 already covers the separate `.dockerignore` hygiene gap.
+  Complexity: M
+
+### P3
+
+- [ ] P3 -- RM-263: Semi-transparent subtitle boxes are treated as binary masks, though the pipeline already computes both endpoints needed to solve them properly
+  Why: A translucent caption bar is a linear mix, not an occlusion; removing it as an occlusion discards recoverable background, and it is a named open problem in the current literature.
+  Evidence: No `unmix`, `alpha` or `translucent` handling exists in `backend/`; the mask path is binary plus morphological dilation plus Gaussian feather. Both endpoints of `I = a*FG + (1-a)*BG` are already produced -- the foreground colour by the Lab two-cluster split that `--colour-tune` runs (`backend/inpainters/_common.py:145`) and the background by the TBE aggregate. Both 2026 subtitle-erasure papers name semi-transparent and gradient captions as the unsolved case -- https://arxiv.org/html/2603.21901, https://arxiv.org/abs/2605.14894 -- and both are diffusion models with no released code, so the classical solve is the only one available.
+  Touches: `backend/inpainters/_common.py`, `backend/segmentation.py`, `backend/config.py`, `backend/cli.py`, `tests/`
+  Acceptance: A translucency detector decides per region whether the masked pixels fit a two-endpoint linear mix (low residual against the estimated FG colour and the TBE background) and, when they do, solves per-pixel alpha in closed form and composites with it instead of the binary mask; regions that do not fit fall back to the current path with the decision logged; a synthetic translucent-bar fixture recovers the known background within tolerance, and an opaque-caption fixture is byte-identical to today's output.
+  Complexity: L
+
+- [ ] P3 -- RM-264: Mask dilation is a fixed slider, so outlined and drop-shadowed glyphs are systematically under- or over-dilated
+  Why: The correct dilation depends on the glyph's outline and shadow thickness, which varies per source and is measurable from the detected box.
+  Evidence: `--mask-dilate` is a fixed 0-20px setting and `--confidence-dilate` scales by detector confidence -- which RM-242 already flags as fabricated for most engines, so that path cannot be the adaptive mechanism. Nothing measures the actual stroke or shadow extent, and PP-OCR-family DB detection heads localize the glyph body, not its outline.
+  Touches: `backend/segmentation.py`, `backend/detection.py`, `backend/config.py`, `backend/cli.py`, `tests/`
+  Acceptance: An auto-dilate mode measures the intensity-gradient falloff distance outward from the binarized glyph inside each detected box, derives a per-box dilation radius and clamps it to the existing 0-20px range; a soft continuous mask built with `cv2.distanceTransform` replaces the discrete dilate-then-feather pair so the two steps cannot disagree at the boundary; outlined-glyph and plain-glyph fixtures each get an appropriate radius, and the manual slider still overrides. Depends on RM-242 if the confidence path is to be reused.
+  Complexity: M
+
+- [ ] P3 -- RM-265: The NVIDIA TensorRT-RTX execution provider is not declared as a provider lane
+  Why: The provider-lane table is the project's honest map of what inference paths exist and how tested each is; a consumer-RTX-targeted EP that ONNX Runtime now ships is missing from it.
+  Evidence: `backend/dependency_caps.PROVIDER_LANES` declares CPU, CUDA-12, CUDA-13 and DirectML, with CUDA-13 already carried as an untested manual lane -- the exact pattern this needs. ONNX Runtime documents the NV TensorRT-RTX EP as targeting Ampere-and-newer consumer RTX and as more straightforward than the legacy TensorRT EP and more performant than the CUDA EP -- https://onnxruntime.ai/docs/execution-providers/TensorRTRTX-ExecutionProvider.html. The repo's existing TensorRT support is a polygraphy-based ahead-of-time engine cache behind `VSR_TENSORRT=1` (`backend/tensorrt_compile.py`), a different mechanism.
+  Touches: `backend/dependency_caps.py`, `backend/device_provider.py`, `backend/onnxruntime_cuda.py`, `README.md`, `tests/`
+  Acceptance: TensorRT-RTX appears in PROVIDER_LANES as an untested manual lane with its own security and tested state, `device_provider` probes for and reports it the way `windowsml_status()` reports Windows ML, and README's provider table lists it. Live benchmarking stays out -- it needs NVIDIA hardware and belongs in Roadmap_Blocked.md.
+  Complexity: S
+
+- [ ] P3 -- RM-266: README advertises a winget install path that the no-signing policy makes unreliable
+  Why: winget's non-interactive upgrade flow has no way past a SmartScreen block, so the documented command can work on first install and then fail on upgrade.
+  Evidence: `README.md:65` promises "winget-ready installer metadata" and `:103-107` gives `winget install SysAdminDoc.VideoSubtitleRemoverPro` for "the unsigned release". A winget-pkgs thread treats unresolved SmartScreen and Mark-of-the-Web blocking of an unsigned installer as a release blocker precisely because upgrades must run non-interactively -- https://github.com/microsoft/winget-pkgs/issues/385483. Code signing is prohibited by repository policy, so the constraint is permanent rather than a to-do. Confidence: Reported.
+  Touches: `README.md`
+  Acceptance: The winget section states the SmartScreen / Mark-of-the-Web constraint for unsigned packages and names direct download plus "More info -> Run anyway" as the supported path, keeping the manifest-metadata claim only if the manifest is actually published. Distinct from RM-185, which covers broken documentation links.
+  Complexity: S
+
+- [ ] P3 -- RM-267: The TTML/IMSC rejection cites reasoning that predates IMSC 1.3 becoming a W3C Recommendation
+  Why: A correct decision resting on a stale citation invites the next reviewer to reopen it from scratch.
+  Evidence: `backend/webvtt.py:21` and `backend/subtitle_translation.py:293-301` state that TTML and IMSC are deliberately unsupported. IMSC Text Profile 1.3 became a W3C Recommendation on 2026-05-21 -- https://www.w3.org/TR/ttml-imsc1.3/. The decision to stay out is still correct (no demand was found this cycle, and the XML plus region/image-profile surface is materially larger than the WebVTT work that shipped in 3.31.0), but the notes should say so against the current spec.
+  Touches: `backend/webvtt.py`, `backend/subtitle_translation.py`
+  Acceptance: Both module docstrings cite IMSC 1.3 with its Recommendation date and state the demand-and-surface reason for staying out, so the rejection is re-readable rather than re-litigable.
+  Complexity: S
+
+- [ ] P3 -- RM-268: RGVI is an unevaluated flow-guided inpainting candidate that may fit where the diffusion models cannot
+  Why: Every other 2025-2026 candidate is a multi-billion-parameter diffusion model; RGVI is flow-guided, architecturally much closer to what TBE already does and plausibly viable at consumer VRAM.
+  Evidence: RGVI (AAAI 2025) elevates flow-guided video inpainting with a learned reference-frame generator -- https://github.com/suhwan-cho/rgvi. It appears in none of this repo's prior evaluations and is absent from both RESEARCH.md's rejection list and Roadmap_Blocked.md. License and weight availability were not confirmed during the 2026-08-11 research pass.
+  Touches: `RESEARCH.md`, `Roadmap_Blocked.md`
+  Acceptance: The repository's LICENSE file, weight availability and stated VRAM requirement are read and recorded; the result is either a permissive-and-light candidate promoted to a GPU-validation entry in Roadmap_Blocked.md beside ROSE, or a dated rejection line in RESEARCH.md naming the blocking reason. No integration work in this item.
+  Complexity: S
+
+- [ ] P3 -- RM-269: The offline guarantee -- the project's strongest differentiator -- is buried
+  Why: A commercial competitor charges for exactly this guarantee, and the forums where the target users ask this question still answer that it cannot be done at all.
+  Evidence: EchoSubs AI sells "100% offline-first... your source files never leave your computer" and air-gap compatibility at $5.99/mo or $49 lifetime, and explicitly positions against "Open Source CLI tools (GitHub)" as being for people who can compile Python scripts -- https://www.echosubs.com/hardcoded-subtitle-remover-offline. Meanwhile the standing answer on VideoHelp and Doom9 is still that hardcoded subtitles cannot be removed without cropping or overlaying -- https://forum.videohelp.com/threads/418726-Is-there-a-way-to-remove-hardcoded-subtitles-without-cropping. `README.md:22` opens on capability, not on the local-only property; the network posture is inferable from the feature list but never stated as a guarantee.
+  Touches: `README.md`
+  Acceptance: The Overview states plainly that all processing is local, that no account or upload is required, that the only outbound requests are the opt-in update check and opt-in crash reporting, and names the flags that disable them -- verified against `backend/update_check.py` and `backend/crash_reporter.py` rather than asserted.
+  Complexity: S
