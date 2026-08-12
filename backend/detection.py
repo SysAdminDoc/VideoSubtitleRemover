@@ -1,5 +1,5 @@
 """Subtitle detector cascade (VLM > RapidOCR > PaddleOCR > Surya >
-EasyOCR > OpenCV fallback).
+EasyOCR frozen fallback > OpenCV fallback).
 
 Extracted from processor.py as part of RFP-L-1. The cascade dispatches
 through `backend.ocr_vlm.maybe_build_vlm_detector` first when the user
@@ -372,7 +372,7 @@ class SubtitleDetector:
 
     def _load_model(self):
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
-        EasyOCR > OpenCV fallback."""
+        EasyOCR (frozen; last release 2024-09-24) > OpenCV fallback."""
         self.engine = normalize_ocr_engine(getattr(self, "engine", "auto"))
         self.rapidocr_variant = normalize_rapidocr_variant(
             getattr(self, "rapidocr_variant", "v6")

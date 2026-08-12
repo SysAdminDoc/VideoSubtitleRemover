@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Frozen optional OCR and LaMa tiers are now labeled honestly.** EasyOCR is
+  marked frozen at 1.7.2 (last release 2024-09-24), and
+  simple-lama-inpainting at 0.1.2 (last release 2023-07-28), in the GUI,
+  backend status, dependency caps, README, and optional install guidance.
+  Maintained RapidOCR, LaMa ONNX, and OpenCV 5 DNN paths are called out.
+
 - **Reviewed PyTorch fallback profiles advanced.** CPU and DirectML now pin
   torch 2.13.0 with torchvision 0.28.0; the NVIDIA CUDA 12.8 profile advances
   to torch 2.11.0 with torchvision 0.26.0, the newest pair exposed by that

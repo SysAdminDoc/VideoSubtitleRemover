@@ -94,16 +94,19 @@ rapidocr>=2.0.0,<4.0.0
 # dependency profiles for explicit, isolated installs.
 # paddleocr>=3.0.0,<4.0.0
 # surya-ocr>=0.9.0  # Optional: fast layout-aware detection (GPL -- see license)
-# easyocr>=1.7.0
+# EasyOCR is frozen at 1.7.2 (last release 2024-09-24); prefer RapidOCR for
+# the maintained default path.
+# easyocr>=1.7.2,<1.7.3
 
 # Real AI Inpainting (LAMA mode)
-# simple-lama-inpainting is now an optional fallback dependency. The
+# simple-lama-inpainting is frozen at 0.1.2 (last release 2023-07-28) and is
+# only an optional legacy fallback. The
 # preferred backends (ONNX Runtime or OpenCV 5 DNN) avoid the torch.load
 # CVE surface entirely. Install simple-lama-inpainting only if neither
 # onnxruntime nor opencv-python >= 5.0 is available. Its NumPy <2 requirement
 # is incompatible with the reviewed OpenCV 5 / NumPy 2 runtime, so install
 # it only in an isolated legacy environment.
-# simple-lama-inpainting>=0.1.0
+# simple-lama-inpainting>=0.1.2,<0.1.3
 
 # GUI Enhancement (optional)
 # tkinterdnd2>=0.3.0  # For native drag-drop support

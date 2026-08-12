@@ -55,6 +55,7 @@ from backend.ffmpeg_profiles import (
     summarize_missing_profile_requirements,
 )
 from backend.model_downloads import installed_backend_status
+from backend.dependency_caps import FROZEN_OPTIONAL_DEPENDENCIES
 from backend.i18n import bind_locale, ntr, tr
 from backend.region_keyframes import (
     normalize_region_keyframe_tracks,
@@ -263,12 +264,14 @@ class VideoSubtitleRemoverApp(
         self.lama_fast_var = tk.BooleanVar(value=self.config.lama_super_fast)
         self.preserve_audio_var = tk.BooleanVar(value=self.config.preserve_audio)
         self.lang_var = tk.StringVar(value=self.config.detection_lang)
+        easyocr_release = FROZEN_OPTIONAL_DEPENDENCIES["easyocr"]["last_release"]
+        easyocr_label = f"EasyOCR (frozen, last release {easyocr_release})"
         self._ocr_engine_by_label = {
             "Automatic (recommended)": "auto",
             "RapidOCR": "rapidocr",
             "OpenCV 5 DNN": "opencv-dnn",
             "PaddleOCR": "paddleocr",
-            "EasyOCR": "easyocr",
+            easyocr_label: "easyocr",
             "OpenCV fallback": "opencv",
         }
         current_engine = getattr(self.config, "detection_engine", "auto")

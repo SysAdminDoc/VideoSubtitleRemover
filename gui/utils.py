@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
 from backend.i18n import N_, tr
+from backend.dependency_caps import FROZEN_OPTIONAL_DEPENDENCIES
 from backend.import_safety import module_can_import
 from backend.inpainters.lama import _pytorch_lama_allowed
 from backend.language_support import (
@@ -205,7 +206,9 @@ def detect_ai_engines() -> dict:
         logger=logger,
         failure_context="EasyOCR engine probe skipped",
     ):
-        engines["detection"].append("EasyOCR")
+        easyocr_release = FROZEN_OPTIONAL_DEPENDENCIES["easyocr"]["last_release"]
+        engines["detection"].append(
+            f"EasyOCR (frozen, last release {easyocr_release})")
     if not engines["detection"]:
         engines["detection"].append("OpenCV fallback")
     engines["inpainting"].append("Temporal BG (TBE)")
@@ -214,7 +217,10 @@ def detect_ai_engines() -> dict:
         logger=logger,
         failure_context="LaMa engine probe skipped",
     ):
-        engines["inpainting"].append("LaMa (PyTorch, opt-in)")
+        lama_release = FROZEN_OPTIONAL_DEPENDENCIES[
+            "simple-lama-inpainting"]["last_release"]
+        engines["inpainting"].append(
+            f"LaMa (PyTorch, frozen; last release {lama_release}, opt-in)")
     engines["inpainting"].append("OpenCV")
     return engines
 

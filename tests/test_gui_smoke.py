@@ -550,6 +550,10 @@ class GuiSmokeTests(unittest.TestCase):
             app._sync_config_from_ui()
             self.assertFalse(app.config.preserve_audio)
             self.assertEqual(app.config.detection_engine, "paddleocr")
+            self.assertIn(
+                "EasyOCR (frozen, last release 2024-09-24)",
+                app._ocr_engine_by_label,
+            )
             self.assertTrue(app.config.language_mask_filter)
         finally:
             self._destroy_app(app)

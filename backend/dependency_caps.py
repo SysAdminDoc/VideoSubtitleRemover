@@ -963,6 +963,18 @@ DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
 PILLOW_MINIMUM_VERSION = "12.3.0"
 TORCH_MINIMUM_VERSION = "2.11.0"
 TORCHVISION_MINIMUM_VERSION = "0.26.0"
+FROZEN_OPTIONAL_DEPENDENCIES: Mapping[str, Mapping[str, str]] = {
+    "easyocr": {
+        "reviewed_version": "1.7.2",
+        "last_release": "2024-09-24",
+        "replacement": "RapidOCR",
+    },
+    "simple-lama-inpainting": {
+        "reviewed_version": "0.1.2",
+        "last_release": "2023-07-28",
+        "replacement": "LaMa ONNX or OpenCV 5 DNN",
+    },
+}
 
 TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("numpy", "2.4.6", "2.5.0"),
@@ -971,7 +983,11 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("rapidocr", "2.0.0", "4.0.0"),
     ("rapidocr-onnxruntime", "1.4.0", "2.0.0"),
     ("paddleocr", "3.0.0", "4.0.0"),
-    ("easyocr", "1.7.0", ""),
+    (
+        "easyocr",
+        FROZEN_OPTIONAL_DEPENDENCIES["easyocr"]["reviewed_version"],
+        "1.7.3",
+    ),
     ("onnxruntime", "1.26.0", ""),
     ("onnxruntime-gpu", "1.26.0", ""),
     (
@@ -981,7 +997,11 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ),
     ("protobuf", PROTOBUF_SECURITY_MIN, ""),
     ("openvino", "2025.0.0", ""),
-    ("simple-lama-inpainting", "0.1.0", ""),
+    (
+        "simple-lama-inpainting",
+        FROZEN_OPTIONAL_DEPENDENCIES["simple-lama-inpainting"]["reviewed_version"],
+        "0.1.3",
+    ),
     ("torch", TORCH_MINIMUM_VERSION, ""),
     ("torchvision", TORCHVISION_MINIMUM_VERSION, ""),
     ("pyinstaller", "6.10.0", ""),

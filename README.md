@@ -30,7 +30,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
 - **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
 - **AUTO Inpaint Routing** -- Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
-- **Multi-Engine Detection** -- RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR > threshold fallback (automatic)
+- **Multi-Engine Detection** -- RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
@@ -138,8 +138,11 @@ CI or repair installs. Maintainers update `dependency_profiles.json`, run
 `python -m backend.dependency_profiles update`, review the emitted diffs, and
 then run `python -m backend.dependency_profiles check`. Generated constraint
 and manifest SHA-256 values are included in release evidence. PaddleOCR,
-EasyOCR, and legacy `simple-lama-inpainting` remain isolated opt-ins because
-their OpenCV wheel ownership or NumPy caps conflict with the primary runtime.
+EasyOCR (frozen at 1.7.2; last release 2024-09-24) and legacy
+`simple-lama-inpainting` (frozen at 0.1.2; last release 2023-07-28) remain
+isolated opt-ins because their OpenCV wheel ownership or NumPy caps conflict
+with the primary runtime. Prefer RapidOCR for maintained OCR and LaMa ONNX or
+OpenCV 5 DNN for maintained inpainting.
 Python 3.11 is the minimum supported interpreter because the security-reviewed
 ONNX Runtime CPU/CUDA floor and pinned DirectML release do not provide Python
 3.10 wheels.
@@ -286,7 +289,8 @@ processes a generated tiny image through the CLI with a fixed mask.
 ### Detection Engines
 
 The app automatically selects the best available engine. Advanced > Detection
-can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, EasyOCR, or the dependency-free
+can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, EasyOCR (frozen; last release
+2024-09-24), or the dependency-free
 OpenCV fallback for comparison and reproducible runs; unavailable pinned
 engines fall back safely instead of silently switching to another OCR model.
 The same selector is available as `--ocr-engine` on the CLI:
@@ -302,7 +306,7 @@ languages such as English and French intentionally share one family.
 | 1 | **RapidOCR 3.9.2** (OpenCV/ONNX/OpenVINO PP-OCRv6; PP-OCRv5 fallback) | `pip install "rapidocr==3.9.2"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | OpenCV 5 DNN is the dependency-light PP-OCRv6 CPU path; RapidOCR providers can compare v6 and v5 |
 | 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.6.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | High accuracy reference implementation; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
-| 4 | EasyOCR | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Legacy fallback; installs its own OpenCV wheel |
+| 4 | EasyOCR (frozen) | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Frozen legacy fallback; last release 2024-09-24; installs its own OpenCV wheel |
 | 5 | OpenCV fallback | Built-in | Any | Threshold-based |
 
 Experimental VLM OCR tiers stay default-off. `VSR_VLM_OCR=florence2`,
@@ -422,11 +426,13 @@ Smooth-background clips can trade precision for throughput with
 Practical-RIFE to synthesize the skipped cleaned frames when `practical-rife`
 is installed, and duplicates the nearer cleaned keyframe across scene cuts or
 missing RIFE adapters.
-The legacy `simple-lama-inpainting` PyTorch backend is disabled unless
+The legacy `simple-lama-inpainting` PyTorch backend is frozen at 0.1.2 (last
+release 2023-07-28) and disabled unless
 `VSR_ENABLE_PYTORCH_LAMA=1` is set, because broken native torch wheels can
 crash the GUI process during import. Its NumPy <2 cap also conflicts with the
-primary OpenCV runtime, so use a separate legacy environment. Prefer `VSR_LAMA_ONNX` or
-`VSR_OPENCV_LAMA` for automatic LaMa acceleration.
+primary OpenCV runtime, so use a separate legacy environment. Prefer the
+maintained `VSR_LAMA_ONNX` or `VSR_OPENCV_LAMA` paths for automatic LaMa
+acceleration.
 
 ## CLI Usage
 

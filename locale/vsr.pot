@@ -12,7 +12,7 @@ msgstr ""
 msgid "'{mode}' is not a supported profile; keeping {current}"
 msgstr ""
 
-#: gui/app.py:2530
+#: gui/app.py:2533
 msgid "...and {n} more queued item."
 msgid_plural "...and {n} more queued items."
 msgstr[0] ""
@@ -34,7 +34,7 @@ msgstr ""
 msgid "; would fall back to normal inpainting"
 msgstr ""
 
-#: gui/app.py:369
+#: gui/app.py:372
 msgid "A batch is still running."
 msgstr ""
 
@@ -58,7 +58,7 @@ msgstr ""
 msgid "About {app_name}"
 msgstr ""
 
-#: gui/app.py:1417 gui/layout_build.py:2174 gui/layout_responsive.py:325 gui/support_controller.py:140
+#: gui/app.py:1420 gui/layout_build.py:2174 gui/layout_responsive.py:325 gui/support_controller.py:140
 msgid "Activity"
 msgstr ""
 
@@ -90,7 +90,7 @@ msgstr ""
 msgid "Add media"
 msgstr ""
 
-#: gui/app.py:1007
+#: gui/app.py:1010
 msgid "Add media to the queue before starting."
 msgstr ""
 
@@ -154,11 +154,11 @@ msgstr ""
 msgid "All Files"
 msgstr ""
 
-#: gui/app.py:2330 gui/region_controller.py:98 gui/widgets.py:2000
+#: gui/app.py:2333 gui/region_controller.py:98 gui/widgets.py:2000
 msgid "All Supported"
 msgstr ""
 
-#: gui/app.py:2034 gui/region_controller.py:1225 gui/settings_controller.py:215 gui/settings_controller.py:252 gui/settings_controller.py:277 gui/settings_controller.py:309 gui/settings_controller.py:339 gui/settings_controller.py:359 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:342
+#: gui/app.py:2037 gui/region_controller.py:1225 gui/settings_controller.py:215 gui/settings_controller.py:252 gui/settings_controller.py:277 gui/settings_controller.py:309 gui/settings_controller.py:339 gui/settings_controller.py:359 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:342
 msgid "All files"
 msgstr ""
 
@@ -166,7 +166,7 @@ msgstr ""
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr ""
 
-#: gui/app.py:2247 gui/layout_build.py:2159
+#: gui/app.py:2250 gui/layout_build.py:2159
 msgid "Application status"
 msgstr ""
 
@@ -198,7 +198,7 @@ msgstr ""
 msgid "Auto-detect the subtitle language from a sample frame."
 msgstr ""
 
-#: gui/app.py:1305 gui/layout_build.py:144
+#: gui/app.py:1308 gui/layout_build.py:144
 msgid "Automatic"
 msgstr ""
 
@@ -226,11 +226,11 @@ msgstr ""
 msgid "Backend status and app version."
 msgstr ""
 
-#: gui/app.py:211
+#: gui/app.py:212
 msgid "Backend status is still being probed."
 msgstr ""
 
-#: gui/app.py:1353
+#: gui/app.py:1356
 msgid "Balanced"
 msgstr ""
 
@@ -242,7 +242,7 @@ msgstr ""
 msgid "Batch finished with issues"
 msgstr ""
 
-#: gui/app.py:1402 gui/layout_build.py:1712
+#: gui/app.py:1405 gui/layout_build.py:1712
 msgid "Before / after"
 msgstr ""
 
@@ -270,7 +270,7 @@ msgstr ""
 msgid "COMPLETED"
 msgstr ""
 
-#: gui/app.py:873 gui/app.py:887 gui/app.py:913 gui/app.py:914 gui/layout_helpers.py:42
+#: gui/app.py:876 gui/app.py:890 gui/app.py:916 gui/app.py:917 gui/layout_helpers.py:42
 msgid "CPU mode"
 msgstr ""
 
@@ -310,11 +310,11 @@ msgstr ""
 msgid "Checking"
 msgstr ""
 
-#: gui/app.py:922 gui/layout_build.py:576
+#: gui/app.py:925 gui/layout_build.py:576
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr ""
 
-#: gui/utils.py:39
+#: gui/utils.py:40
 msgid "Checking embedded subtitle tracks..."
 msgstr ""
 
@@ -350,7 +350,7 @@ msgstr ""
 msgid "Choose a starting profile"
 msgstr ""
 
-#: gui/app.py:2028
+#: gui/app.py:2031
 msgid "Choose an output path"
 msgstr ""
 
@@ -458,7 +458,7 @@ msgstr ""
 msgid "Clear corrections"
 msgstr ""
 
-#: gui/app.py:1465
+#: gui/app.py:1468
 msgid "Clear filter"
 msgstr ""
 
@@ -474,11 +474,11 @@ msgstr ""
 msgid "Clear queue"
 msgstr ""
 
-#: gui/app.py:1455
+#: gui/app.py:1458
 msgid "Clear the filter or search for part of a filename."
 msgstr ""
 
-#: gui/app.py:2168
+#: gui/app.py:2171
 msgid "Clear the queue?"
 msgstr ""
 
@@ -498,7 +498,7 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: gui/app.py:368
+#: gui/app.py:371
 msgid "Close while processing?"
 msgstr ""
 
@@ -510,11 +510,11 @@ msgstr ""
 msgid "Completed outputs are ready. Review the outliers or open the log for details."
 msgstr ""
 
-#: gui/app.py:370
+#: gui/app.py:373
 msgid "Completed outputs on disk are kept."
 msgstr ""
 
-#: gui/app.py:2174
+#: gui/app.py:2177
 msgid "Completed outputs on disk are not deleted."
 msgstr ""
 
@@ -550,7 +550,7 @@ msgstr ""
 msgid "Copy source path"
 msgstr ""
 
-#: gui/app.py:1407 gui/layout_build.py:1806
+#: gui/app.py:1410 gui/layout_build.py:1806
 msgid "Correct mask"
 msgstr ""
 
@@ -598,7 +598,7 @@ msgstr ""
 msgid "Default workflow"
 msgstr ""
 
-#: gui/app.py:1355
+#: gui/app.py:1358
 msgid "Detail"
 msgstr ""
 
@@ -698,7 +698,7 @@ msgstr ""
 msgid "EBU R128 loudness target"
 msgstr ""
 
-#: gui/utils.py:40
+#: gui/utils.py:41
 msgid "Embedded subtitle tracks found. Right-click for fast strip/keep, or run burned-in cleanup."
 msgstr ""
 
@@ -800,7 +800,7 @@ msgstr ""
 msgid "FFmpeg basic"
 msgstr ""
 
-#: gui/app.py:2542
+#: gui/app.py:2545
 msgid "FFmpeg capability warning"
 msgstr ""
 
@@ -808,7 +808,7 @@ msgstr ""
 msgid "FFmpeg codecs"
 msgstr ""
 
-#: gui/app.py:929
+#: gui/app.py:932
 msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
 msgstr ""
 
@@ -872,7 +872,7 @@ msgstr ""
 msgid "Finish polygon"
 msgstr ""
 
-#: gui/app.py:1024
+#: gui/app.py:1027
 msgid "Finish processing an item to open its output folder."
 msgstr ""
 
@@ -920,7 +920,7 @@ msgstr ""
 msgid "Froze the approved matte ({summary}); reruns will skip detection"
 msgstr ""
 
-#: gui/app.py:1406 gui/layout_build.py:1801
+#: gui/app.py:1409 gui/layout_build.py:1801
 msgid "Full size"
 msgstr ""
 
@@ -984,7 +984,7 @@ msgstr ""
 msgid "Homography"
 msgstr ""
 
-#: gui/app.py:2614
+#: gui/app.py:2617
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr ""
 
@@ -1104,7 +1104,7 @@ msgstr ""
 msgid "Keep background recovery from mixing frames across scene changes. Recommended for edited video."
 msgstr ""
 
-#: gui/app.py:2033
+#: gui/app.py:2036
 msgid "Keep extension"
 msgstr ""
 
@@ -1180,7 +1180,7 @@ msgstr ""
 msgid "Manual mask review"
 msgstr ""
 
-#: gui/app.py:1305 gui/layout_build.py:144
+#: gui/app.py:1308 gui/layout_build.py:144
 msgid "Manual region"
 msgstr ""
 
@@ -1252,7 +1252,7 @@ msgstr ""
 msgid "Model files"
 msgstr ""
 
-#: gui/app.py:1354
+#: gui/app.py:1357
 msgid "Motion"
 msgstr ""
 
@@ -1308,7 +1308,7 @@ msgstr ""
 msgid "No action needed."
 msgstr ""
 
-#: gui/app.py:1074
+#: gui/app.py:1077
 msgid "No completed items are in the queue."
 msgstr ""
 
@@ -1340,7 +1340,7 @@ msgstr ""
 msgid "No media queued"
 msgstr ""
 
-#: gui/app.py:1447
+#: gui/app.py:1450
 msgid "No queued items match this search"
 msgstr ""
 
@@ -1372,7 +1372,7 @@ msgstr ""
 msgid "None"
 msgstr ""
 
-#: gui/app.py:1031
+#: gui/app.py:1034
 msgid "Nothing to retry - every item is done."
 msgstr ""
 
@@ -1452,7 +1452,7 @@ msgstr ""
 msgid "Output codec"
 msgstr ""
 
-#: gui/app.py:1098
+#: gui/app.py:1101
 msgid "Outputs are ready for review"
 msgstr ""
 
@@ -1496,7 +1496,7 @@ msgstr ""
 msgid "Pause batch"
 msgstr ""
 
-#: gui/app.py:1009
+#: gui/app.py:1012
 msgid "Pause is already in progress."
 msgstr ""
 
@@ -1644,7 +1644,7 @@ msgstr ""
 msgid "Reading first frame..."
 msgstr ""
 
-#: gui/app.py:1107 gui/layout_build.py:1925 gui/layout_build.py:2150 gui/layout_build.py:2161 gui/layout_helpers.py:48 gui/processing_controller.py:1339 gui/processing_controller.py:1374 gui/support_controller.py:592
+#: gui/app.py:1110 gui/layout_build.py:1925 gui/layout_build.py:2150 gui/layout_build.py:2161 gui/layout_helpers.py:48 gui/processing_controller.py:1339 gui/processing_controller.py:1374 gui/support_controller.py:592
 msgid "Ready"
 msgstr ""
 
@@ -1656,7 +1656,7 @@ msgstr ""
 msgid "Ready to preview alignment."
 msgstr ""
 
-#: gui/utils.py:38 gui/widgets.py:2484
+#: gui/utils.py:39 gui/widgets.py:2484
 msgid "Ready to process"
 msgstr ""
 
@@ -1760,7 +1760,7 @@ msgstr ""
 msgid "Remove the selected item from the queue."
 msgstr ""
 
-#: gui/app.py:2169
+#: gui/app.py:2172
 msgid "Remove {n} item from the batch."
 msgid_plural "Remove {n} items from the batch."
 msgstr[0] ""
@@ -1786,7 +1786,7 @@ msgstr ""
 msgid "Reset"
 msgstr ""
 
-#: gui/app.py:2612
+#: gui/app.py:2615
 msgid "Restore queue?"
 msgstr ""
 
@@ -1822,7 +1822,7 @@ msgstr ""
 msgid "Review first"
 msgstr ""
 
-#: gui/app.py:1404 gui/layout_build.py:1784
+#: gui/app.py:1407 gui/layout_build.py:1784
 msgid "Review mask"
 msgstr ""
 
@@ -1830,7 +1830,7 @@ msgstr ""
 msgid "Review subtitle mask"
 msgstr ""
 
-#: gui/app.py:1047
+#: gui/app.py:1050
 msgid "Run a batch first to repeat its settings."
 msgstr ""
 
@@ -1946,7 +1946,7 @@ msgstr ""
 msgid "Select a queue item to inspect its subtitle region."
 msgstr ""
 
-#: gui/app.py:1066
+#: gui/app.py:1069
 msgid "Select a queue item to remove."
 msgstr ""
 
@@ -1966,15 +1966,15 @@ msgstr ""
 msgid "Select a video/image to define subtitle region"
 msgstr ""
 
-#: gui/app.py:1087
+#: gui/app.py:1090
 msgid "Select an item above the last row to move it down."
 msgstr ""
 
-#: gui/app.py:1080
+#: gui/app.py:1083
 msgid "Select an item below the first row to move it up."
 msgstr ""
 
-#: gui/app.py:2328
+#: gui/app.py:2331
 msgid "Select files to process with the last job's settings"
 msgstr ""
 
@@ -1998,11 +1998,11 @@ msgstr ""
 msgid "Sensitivity"
 msgstr ""
 
-#: gui/app.py:1403 gui/layout_build.py:1777 gui/layout_build.py:608
+#: gui/app.py:1406 gui/layout_build.py:1777 gui/layout_build.py:608
 msgid "Set region"
 msgstr ""
 
-#: gui/app.py:1311 gui/layout_build.py:144
+#: gui/app.py:1314 gui/layout_build.py:144
 msgid "Set region..."
 msgstr ""
 
@@ -2054,11 +2054,11 @@ msgstr ""
 msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
 msgstr ""
 
-#: gui/app.py:1103
+#: gui/app.py:1106
 msgid "Some items need attention"
 msgstr ""
 
-#: gui/app.py:2543
+#: gui/app.py:2546
 msgid "Some selected batch options are not supported by this FFmpeg build."
 msgstr ""
 
@@ -2102,7 +2102,7 @@ msgstr ""
 msgid "Status (pending first)"
 msgstr ""
 
-#: gui/app.py:1011
+#: gui/app.py:1014
 msgid "Stop is already in progress."
 msgstr ""
 
@@ -2166,15 +2166,15 @@ msgstr ""
 msgid "Target language tag"
 msgstr ""
 
-#: gui/app.py:1356
+#: gui/app.py:1359
 msgid "Temporal"
 msgstr ""
 
-#: gui/app.py:1405 gui/layout_build.py:1792
+#: gui/app.py:1408 gui/layout_build.py:1792
 msgid "Test cleanup"
 msgstr ""
 
-#: gui/app.py:1013
+#: gui/app.py:1016
 msgid "The batch is already running."
 msgstr ""
 
@@ -2198,7 +2198,7 @@ msgstr ""
 msgid "The log file is not available yet"
 msgstr ""
 
-#: gui/app.py:1039
+#: gui/app.py:1042
 msgid "The queue is empty - add media to get started."
 msgstr ""
 
@@ -2298,7 +2298,7 @@ msgstr ""
 msgid "Unknown"
 msgstr ""
 
-#: gui/app.py:1710
+#: gui/app.py:1713
 msgid "Use Set region to draw the subtitle band, or Review mask to confirm what the detector finds automatically."
 msgstr ""
 
@@ -2386,7 +2386,7 @@ msgstr ""
 msgid "Wait for the active batch to finish before editing regions."
 msgstr ""
 
-#: gui/app.py:1030 gui/app.py:1038 gui/app.py:1046 gui/app.py:1053 gui/app.py:1065 gui/app.py:1073
+#: gui/app.py:1033 gui/app.py:1041 gui/app.py:1049 gui/app.py:1056 gui/app.py:1068 gui/app.py:1076
 msgid "Wait for the current batch to finish."
 msgstr ""
 
@@ -2516,7 +2516,7 @@ msgstr ""
 msgid "{count} items"
 msgstr ""
 
-#: gui/app.py:1093
+#: gui/app.py:1096
 msgid "{count} queued and ready to process"
 msgstr ""
 
@@ -2536,7 +2536,7 @@ msgstr ""
 msgid "{method} alignment: {confidence:.1%}"
 msgstr ""
 
-#: gui/app.py:361
+#: gui/app.py:364
 msgid "{n} active item will be cancelled."
 msgid_plural "{n} active items will be cancelled."
 msgstr[0] ""
@@ -2558,7 +2558,7 @@ msgid_plural "{n} need attention"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/app.py:2605
+#: gui/app.py:2608
 msgid "{n} queued item from last session"
 msgid_plural "{n} queued items from last session"
 msgstr[0] ""

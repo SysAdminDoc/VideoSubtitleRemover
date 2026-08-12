@@ -752,13 +752,6 @@ RESEARCH.md instead of appearing here.
 
 ### P2
 
-- [ ] P2 -- RM-255: Two shipped optional tiers are abandoned upstream and the docs do not say so
-  Why: Users choosing an OCR engine or a LaMa tier deserve to know which options are frozen, since neither will receive a security patch.
-  Evidence: easyocr has had no release since 1.7.2 on 2024-09-24 and simple-lama-inpainting is still 0.1.2 -- https://pypi.org/project/easyocr/#history, https://pypi.org/project/simple-lama-inpainting/#history. Both are already opt-in and commented out at `requirements.txt:93,102`, but `README.md:278` presents EasyOCR as a peer detection engine without qualification.
-  Touches: `README.md`, `requirements.txt`, `backend/dependency_caps.py`, `gui/layout_build.py` (engine picker), `backend/detection.py`
-  Acceptance: The detection-engines table and the GUI engine picker mark EasyOCR as frozen/unmaintained with its last release date; the LaMa tier documentation does the same for simple-lama-inpainting and points at the ONNX and OpenCV-5 DNN tiers as the maintained paths; `dependency_caps` records both as frozen so a future reviewer does not chase a bump that will never come.
-  Complexity: S
-
 - [ ] P2 -- RM-256: TBE aggregation has no outlier rejection, so a few misaligned frames ghost into the recovered background
   Why: A plain median or mean is maximally sensitive to exactly the failure the flow warp produces -- a handful of badly-registered frames -- and rejecting them is a contained change to one numpy block.
   Evidence: `backend/inpainters/_common.py:408-423` computes either `np.nanmedian` over the unmasked stack (n <= 64) or a plain `sum/count` mean, with no robustness step. Robust temporal aggregation is standard in exemplar/patch video-inpainting practice -- https://arxiv.org/pdf/2401.17883.
