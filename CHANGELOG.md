@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The install documentation no longer presents winget as a supported path.**
+  README now states that no manifest is published, explains the unsigned
+  SmartScreen/Mark-of-the-Web limitation, and points users to the verified
+  direct ZIP download with **More info -> Run anyway** when Windows blocks it.
+
 - **Provider diagnostics now include TensorRT-RTX.** The manual
   `NvTensorRTRTXExecutionProvider` lane reports its package, runtime provider
   list, security floor, and explicitly untested state; no hardware benchmark

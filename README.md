@@ -62,7 +62,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
 - **Premium Dark UI** -- Media-first preview, flat four-row inspector, readable typography, quiet queue actions, responsive scrolling, taskbar progress, and onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
-- **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, support bundles, and winget-ready installer metadata
+- **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, and support bundles
 
 ## System Requirements
 
@@ -100,12 +100,16 @@ the download against the published `SHA256SUMS.txt` file.
    - Use `Run_VSR_Pro_Debug.bat` for a visible troubleshooting console, or
      `Run_VSR_Pro.ps1` when you prefer launching from PowerShell
 
-After the Windows Package Manager manifest is accepted, the unsigned release
-installer can also be installed with:
+### Windows Package Manager
 
-```powershell
-winget install SysAdminDoc.VideoSubtitleRemoverPro
-```
+This project does not currently publish a Windows Package Manager (winget)
+manifest, so `winget install SysAdminDoc.VideoSubtitleRemoverPro` is not a
+supported installation path. The supported path is the direct Windows x64 ZIP
+download in [Prebuilt Download](#prebuilt-download-no-setup) above. The release
+is unsigned: SmartScreen and Mark-of-the-Web can block first launch, and an
+unattended winget upgrade would have no reliable way to clear that prompt.
+If Windows blocks the downloaded executable, choose **More info -> Run
+anyway** after verifying `SHA256SUMS.txt`.
 
 ### Manual Install
 
