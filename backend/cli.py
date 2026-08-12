@@ -62,7 +62,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--threshold", "--vertical", "--frame-skip", "--mask-dilate",
             "--confidence-dilate", "--mask-feather", "--temporal-smooth",
             "--edge-ring", "--flow-warp", "--flow-estimator",
-            "--poisson-seam",
+            "--poisson-seam", "--no-translucency",
             "--no-global-motion-align",
             "--no-scene-split", "--pyscenedetect",
             "--transnetv2", "--denoise-detect", "--sam2-refine",
@@ -893,6 +893,11 @@ def _build_parser(mode_choices):
         action="store_true",
         help="Use opt-in gradient-domain seam correction before feathering.",
     )
+    parser.add_argument(
+        "--no-translucency",
+        action="store_true",
+        help="Disable fitted semi-transparent overlay recovery.",
+    )
     parser.add_argument("--no-global-motion-align", action="store_true",
                        help="Disable affine global-motion alignment before TBE aggregation")
     parser.add_argument("--no-scene-split", action="store_true",
@@ -1601,6 +1606,7 @@ def _build_processing_config(
         tbe_flow_estimator=args.flow_estimator,
         tbe_global_motion_align=not args.no_global_motion_align,
         poisson_seam_enable=args.poisson_seam,
+        translucency_enable=not args.no_translucency,
         tbe_scene_cut_split=not args.no_scene_split,
         tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
         tbe_scene_cut_use_transnetv2=args.transnetv2,

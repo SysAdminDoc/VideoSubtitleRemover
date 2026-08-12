@@ -223,6 +223,7 @@ class ProcessingConfig:
     tbe_flow_estimator: str = "dis"  # dis (FAST) or farneback
     tbe_global_motion_align: bool = True  # affine-register each TBE segment to its reference
     poisson_seam_enable: bool = False  # opt-in gradient-domain finishing
+    translucency_enable: bool = True  # recover fitted semi-transparent overlays
     tbe_scene_cut_split: bool = True   # split TBE batch at scene cuts
     tbe_scene_cut_threshold: float = 0.35   # histogram delta to call a cut
     # RM-32: prefer the PySceneDetect AdaptiveDetector when installed
@@ -774,6 +775,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.tbe_global_motion_align, True)
     config.poisson_seam_enable = _coerce_bool(
         config.poisson_seam_enable, False)
+    config.translucency_enable = _coerce_bool(
+        getattr(config, "translucency_enable", True), True)
     config.tbe_scene_cut_split = _coerce_bool(config.tbe_scene_cut_split, True)
     config.tbe_scene_cut_threshold = _coerce_float(config.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
     config.tbe_scene_cut_use_pyscenedetect = _coerce_bool(

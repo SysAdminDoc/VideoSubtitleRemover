@@ -113,6 +113,8 @@ def _fallback_to_tbe(config: ProcessingConfig,
             scene_cut_threshold=config.tbe_scene_cut_threshold,
             scene_cut_use_pyscenedetect=config.tbe_scene_cut_use_pyscenedetect,
             scene_cut_use_transnetv2=config.tbe_scene_cut_use_transnetv2,
+            translucency_enable=getattr(
+                config, "translucency_enable", True),
         )
     filled = [
         _cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)

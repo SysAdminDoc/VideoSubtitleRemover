@@ -291,6 +291,64 @@ class TemporalBackgroundExposureTests(unittest.TestCase):
         self.assertGreater(inside_std, 0.65 * outside_std)
         self.assertLess(inside_std, 1.35 * outside_std)
 
+    def test_tbe_unmixes_a_translucent_overlay_to_the_known_background(self):
+        height, width = 60, 120
+        yy, xx = np.mgrid[:height, :width]
+        clean = np.stack([
+            30 + xx // 3,
+            60 + yy // 2,
+            100 + xx // 4,
+        ], axis=2).astype(np.uint8)
+        foreground = np.asarray([240, 240, 240], dtype=np.float32)
+        observed = clean.astype(np.float32).copy()
+        region = (slice(18, 42), slice(30, 90))
+        observed[region] = (
+            0.45 * foreground + 0.55 * clean[region].astype(np.float32)
+        )
+        observed = np.clip(observed, 0, 255).astype(np.uint8)
+        frames = [observed.copy()] + [clean.copy() for _ in range(4)]
+        masks = [np.zeros((height, width), dtype=np.uint8) for _ in frames]
+        masks[0][region] = 255
+
+        recovered = _common._tbe_single_segment(
+            frames, masks, min_coverage=1, use_median=True,
+            feather_px=0, edge_ring_px=0, flow_warp=False,
+            global_motion_align=False,
+        )
+        error = np.abs(
+            recovered[0][region].astype(np.int16)
+            - clean[region].astype(np.int16)
+        )
+        self.assertLessEqual(float(error.mean()), 1.0)
+        self.assertLessEqual(int(error.max()), 3)
+
+    def test_tbe_opaque_caption_stays_byte_identical_with_unmix_enabled(self):
+        height, width = 60, 120
+        yy, xx = np.mgrid[:height, :width]
+        clean = np.stack([
+            30 + xx // 3,
+            60 + yy // 2,
+            100 + xx // 4,
+        ], axis=2).astype(np.uint8)
+        observed = clean.copy()
+        region = (slice(18, 42), slice(30, 90))
+        observed[region] = [240, 240, 240]
+        frames = [observed.copy()] + [clean.copy() for _ in range(4)]
+        masks = [np.zeros((height, width), dtype=np.uint8) for _ in frames]
+        masks[0][region] = 255
+
+        enabled = _common._tbe_single_segment(
+            frames, masks, min_coverage=1, use_median=True,
+            feather_px=0, edge_ring_px=0, flow_warp=False,
+            global_motion_align=False, translucency_enable=True,
+        )
+        disabled = _common._tbe_single_segment(
+            frames, masks, min_coverage=1, use_median=True,
+            feather_px=0, edge_ring_px=0, flow_warp=False,
+            global_motion_align=False, translucency_enable=False,
+        )
+        np.testing.assert_array_equal(enabled[0], disabled[0])
+
     def test_low_ransac_inlier_ratio_falls_back_to_identity(self):
         frames = [np.full((32, 48, 3), value, dtype=np.uint8)
                   for value in (20, 40, 60)]

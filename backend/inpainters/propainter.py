@@ -78,6 +78,8 @@ class ProPainterInpainter(BaseInpainter):
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
                 scene_cut_use_transnetv2=self.config.tbe_scene_cut_use_transnetv2,
+                translucency_enable=getattr(
+                    self.config, "translucency_enable", True),
             )
             if self._lama is not None:
                 from PIL import Image

@@ -31,6 +31,9 @@ _GRAIN_MIN_STD = 1.0
 _GRAIN_SEED = 0x47524149
 _GRAIN_TEXTURE_SIGMA = 0.65
 _GRAIN_DITHER_STD = 0.2
+_TRANSLUCENCY_MIN_ALPHA = 0.15
+_TRANSLUCENCY_MAX_ALPHA = 0.92
+_TRANSLUCENCY_RESIDUAL_TOLERANCE = 2.0
 
 
 class BaseInpainter(ABC):
@@ -158,21 +161,234 @@ def _expand_mask_by_color(frame: np.ndarray, mask: np.ndarray,
         if x2 <= x1 or y2 <= y1:
             continue
         roi = lab[y1:y2, x1:x2].reshape(-1, 3).astype(np.int16)
-        if roi.size == 0:
+        fg = _lab_two_cluster_foreground(roi)
+        if fg is None:
             continue
-        L = roi[:, 0]
-        low = roi[L < np.median(L)]
-        high = roi[L >= np.median(L)]
-        if low.size == 0 or high.size == 0:
-            continue
-        low_var = float(low.var())
-        high_var = float(high.var())
-        fg = low.mean(axis=0) if low_var < high_var else high.mean(axis=0)
         diff = roi - fg
         dist = np.sqrt((diff * diff).sum(axis=1))
         match = (dist < tolerance).reshape(y2 - y1, x2 - x1).astype(np.uint8) * 255
         out[y1:y2, x1:x2] = np.maximum(out[y1:y2, x1:x2], match)
     return out
+
+
+def _lab_two_cluster_foreground(roi: np.ndarray) -> Optional[np.ndarray]:
+    """Return the lower-variance Lab cluster used by colour-tune.
+
+    The existing colour-tune mask grower uses a deterministic two-cluster
+    split at the median lightness. Keeping that estimate in one helper lets
+    the translucency detector use the same foreground endpoint instead of
+    introducing a second, incompatible colour model.
+    """
+    values = np.asarray(roi)
+    if values.ndim != 2 or values.shape[1] != 3 or values.size == 0:
+        return None
+    lightness = values[:, 0]
+    midpoint = np.median(lightness)
+    low = values[lightness < midpoint]
+    high = values[lightness >= midpoint]
+    if low.size == 0 or high.size == 0:
+        return None
+    low_var = float(low.var())
+    high_var = float(high.var())
+    return low.mean(axis=0) if low_var < high_var else high.mean(axis=0)
+
+
+def _lab_to_bgr(color: np.ndarray) -> np.ndarray:
+    value = np.clip(np.rint(np.asarray(color)), 0, 255).astype(np.uint8)
+    return cv2.cvtColor(value.reshape(1, 1, 3), cv2.COLOR_LAB2BGR)[0, 0]
+
+
+def _translucency_foreground_candidates(
+    frame: np.ndarray,
+    background: np.ndarray,
+    component_mask: np.ndarray,
+    *,
+    padding: int = 4,
+) -> list[np.ndarray]:
+    """Build deterministic foreground candidates from the colour-tune split.
+
+    A translucent overlay may not contain a pure foreground pixel. In that
+    case the cluster is an observed mixture, so the same endpoint is also
+    extrapolated from the local TBE background at conservative opacity priors.
+    Candidates are scored by the closed-form fit in
+    ``_unmix_translucent_regions``; opaque regions are rejected there.
+    """
+    ys, xs = np.where(component_mask > 0)
+    if ys.size == 0:
+        return []
+    height, width = component_mask.shape[:2]
+    x1 = max(0, int(xs.min()) - padding)
+    y1 = max(0, int(ys.min()) - padding)
+    x2 = min(width, int(xs.max()) + padding + 1)
+    y2 = min(height, int(ys.max()) + padding + 1)
+    roi = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2LAB)
+    cluster = _lab_two_cluster_foreground(roi.reshape(-1, 3).astype(np.int16))
+    if cluster is None:
+        return []
+    observed = _lab_to_bgr(cluster).astype(np.float32)
+    pixels = component_mask > 0
+    local_background = background[pixels].astype(np.float32)
+    if local_background.size == 0:
+        return [observed]
+    background_reference = np.median(local_background, axis=0)
+    direction = observed - background_reference
+    candidates = [observed]
+    if float(np.linalg.norm(direction)) >= 8.0:
+        for prior in (0.35, 0.5, 0.65):
+            candidates.append(
+                np.clip(background_reference + direction / prior, 0, 255)
+            )
+        if float(direction.mean()) > 0:
+            candidates.append(np.full(3, 255.0, dtype=np.float32))
+        elif float(direction.mean()) < 0:
+            candidates.append(np.zeros(3, dtype=np.float32))
+    unique: list[np.ndarray] = []
+    for candidate in candidates:
+        if not any(np.allclose(candidate, prior, atol=0.5) for prior in unique):
+            unique.append(candidate.astype(np.float32))
+    return unique
+
+
+def _unmix_translucent_regions(
+    frame: np.ndarray,
+    background: np.ndarray,
+    filled: np.ndarray,
+    mask: np.ndarray,
+    eligible: np.ndarray,
+    *,
+    residual_tolerance: float = _TRANSLUCENCY_RESIDUAL_TOLERANCE,
+) -> np.ndarray:
+    """Recover fitted translucent regions with closed-form alpha unmixing.
+
+    For each connected mask component, solve
+    ``alpha = dot(I-B, F-B) / dot(F-B, F-B)`` and recover
+    ``B = (I - alpha*F) / (1-alpha)`` where the region has a stable
+    intermediate alpha and a low two-endpoint residual. ``B`` is already
+    independently estimated by TBE, so the recovered result is blended with
+    that endpoint to remain bounded near alpha=1. Regions that look opaque,
+    have no temporal exposure, or fail the fit remain on the existing binary
+    path and are logged as rejected.
+    """
+    if (
+        frame is None
+        or background is None
+        or filled is None
+        or mask is None
+        or eligible is None
+        or frame.ndim != 3
+        or background.shape != frame.shape
+        or filled.shape != frame.shape
+        or mask.ndim != 2
+        or eligible.shape != mask.shape
+    ):
+        return filled
+    binary = _binarize_mask(mask)
+    if binary.max() == 0:
+        return filled
+    component_count, labels, _stats, _centroids = cv2.connectedComponentsWithStats(
+        binary, connectivity=8)
+    output = filled.copy()
+    for component_index in range(1, component_count):
+        component = labels == component_index
+        pixel_count = int(component.sum())
+        if pixel_count < 16:
+            logger.debug(
+                "Translucency region %d rejected: only %d pixels",
+                component_index,
+                pixel_count,
+            )
+            continue
+        exposed = component & (np.asarray(eligible) > 0)
+        if int(exposed.sum()) < 16:
+            logger.debug(
+                "Translucency region %d rejected: no temporal exposure",
+                component_index,
+            )
+            continue
+        candidates = _translucency_foreground_candidates(
+            frame, background, component)
+        if not candidates:
+            logger.debug(
+                "Translucency region %d rejected: no foreground cluster",
+                component_index,
+            )
+            continue
+        observed = frame[exposed].astype(np.float32)
+        local_background = background[exposed].astype(np.float32)
+        best = None
+        for foreground in candidates:
+            delta = foreground[None, :] - local_background
+            denominator = np.sum(delta * delta, axis=1)
+            valid = denominator >= 64.0
+            if int(valid.sum()) < 16:
+                continue
+            observed_delta = observed - local_background
+            with np.errstate(divide="ignore", invalid="ignore"):
+                alpha = np.sum(observed_delta * delta, axis=1) / denominator
+            alpha = np.clip(alpha, 0.0, 1.0)
+            predicted = local_background + alpha[:, None] * delta
+            residual = np.linalg.norm(observed - predicted, axis=1)
+            valid &= np.isfinite(alpha) & np.isfinite(residual)
+            if int(valid.sum()) < 16:
+                continue
+            alpha_valid = alpha[valid]
+            residual_valid = residual[valid]
+            intermediate = (
+                (alpha_valid >= _TRANSLUCENCY_MIN_ALPHA)
+                & (alpha_valid <= _TRANSLUCENCY_MAX_ALPHA)
+            )
+            intermediate_fraction = float(intermediate.mean())
+            median_alpha = float(np.median(alpha_valid))
+            median_residual = float(np.median(residual_valid))
+            if (
+                intermediate_fraction < 0.65
+                or not (
+                    _TRANSLUCENCY_MIN_ALPHA
+                    <= median_alpha
+                    <= _TRANSLUCENCY_MAX_ALPHA
+                )
+                or median_residual > residual_tolerance
+            ):
+                continue
+            score = median_residual + abs(median_alpha - 0.5) * 2.0
+            if best is None or score < best[0]:
+                best = (
+                    score,
+                    foreground,
+                    alpha,
+                    valid,
+                    median_alpha,
+                    median_residual,
+                )
+        if best is None:
+            logger.debug(
+                "Translucency region %d rejected: endpoints do not fit",
+                component_index,
+            )
+            continue
+        _score, foreground, alpha, valid, median_alpha, median_residual = best
+        safe_denominator = np.maximum(1.0 - alpha, 0.08)
+        recovered = (
+            observed - alpha[:, None] * foreground[None, :]
+        ) / safe_denominator[:, None]
+        # TBE is the independently measured clean endpoint. Averaging it with
+        # the algebraic recovery damps quantisation noise without reintroducing
+        # any subtitle pixels into the accepted region.
+        recovered = 0.5 * recovered + 0.5 * local_background
+        recovered = np.clip(recovered, 0, 255)
+        indices = np.flatnonzero(exposed)
+        accepted_indices = indices[valid]
+        output.reshape(-1, 3)[
+            np.flatnonzero(exposed)[valid]
+        ] = recovered[valid].astype(np.uint8)
+        logger.info(
+            "Translucency region %d accepted: alpha=%.3f residual=%.3f pixels=%d",
+            component_index,
+            median_alpha,
+            median_residual,
+            int(accepted_indices.size),
+        )
+    return output
 
 
 def _edge_ring_color_correct(original: np.ndarray, filled: np.ndarray,
@@ -688,7 +904,8 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                          global_motion_align: bool = True,
                          flow_estimator: str = "dis",
                          grain_strength: float = 0.0,
-                         grain_frame_offset: int = 0) -> List[np.ndarray]:
+                         grain_frame_offset: int = 0,
+                         translucency_enable: bool = True) -> List[np.ndarray]:
     """Aggregate one scene-contiguous segment via Temporal Background Exposure.
 
     Global affine registration puts every frame and mask in the middle-frame
@@ -844,6 +1061,15 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
             residual[no_exposure] = 255
             filled = _cv2_inpaint(filled, residual, 5, cv2.INPAINT_TELEA)
 
+        if translucency_enable and has_exposure.any():
+            filled = _unmix_translucent_regions(
+                frame,
+                bg_for_t,
+                filled,
+                mask,
+                has_exposure,
+            )
+
         if edge_ring_px > 0:
             filled = _edge_ring_color_correct(frame, filled, mask, edge_ring_px)
         filled = _restore_mask_grain(
@@ -865,7 +1091,8 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  scene_cut_use_pyscenedetect: bool = False,
                                  scene_cut_use_transnetv2: bool = False,
                                  flow_estimator: str = "dis",
-                                 grain_strength: float = 0.0) -> List[np.ndarray]:
+                                 grain_strength: float = 0.0,
+                                 translucency_enable: bool = True) -> List[np.ndarray]:
     """Video-inpainting primitive: reconstruct masked pixels from
     temporally exposed neighbours with optional scene splitting, global
     alignment, and residual flow refinement."""
@@ -897,6 +1124,7 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
             flow_estimator=flow_estimator,
             grain_strength=grain_strength,
             grain_frame_offset=start,
+            translucency_enable=translucency_enable,
         ))
     return out
 

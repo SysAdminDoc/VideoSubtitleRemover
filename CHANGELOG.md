@@ -6,6 +6,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **TBE now recovers fitted semi-transparent overlays.** Each connected mask
+  region uses the existing Lab two-cluster foreground estimate and temporal
+  background endpoint to solve closed-form opacity; only low-residual,
+  intermediate-opacity regions are accepted, while opaque and failed fits
+  stay on the prior binary path and log their decision. `--no-translucency`
+  disables the new behavior.
+
 - **The Docker image is now a usable CPU CLI runtime.** It installs the active
   requirements under the reviewed CPU constraints, including RapidOCR and the
   ONNX Runtime LaMa tier, runs the generated-image smoke during the build, and

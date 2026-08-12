@@ -52,6 +52,8 @@ class STTNInpainter(BaseInpainter):
                 scene_cut_threshold=self.config.tbe_scene_cut_threshold,
                 scene_cut_use_pyscenedetect=self.config.tbe_scene_cut_use_pyscenedetect,
                 scene_cut_use_transnetv2=self.config.tbe_scene_cut_use_transnetv2,
+                translucency_enable=getattr(
+                    self.config, "translucency_enable", True),
             )
         filled = [_cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
                   for f, m in zip(frames, masks)]

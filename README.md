@@ -292,6 +292,13 @@ docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-tes
 
 > All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a TBE + LaMa refinement hybrid -- it is **not** the ICCV 2023 ProPainter model or weights (which carry a non-commercial NTU S-Lab license). This implementation uses only MIT-licensed code.
 
+TBE also tests each exposed mask region for a semi-transparent overlay. When
+the observed pixels fit the foreground/background mixture, it solves the
+per-pixel opacity and recovers the clean background endpoint instead of
+treating the region as an opaque binary hole. Opaque, poorly fitted, or
+temporally unexposed regions keep the existing inpainting path; use
+`--no-translucency` when a source needs the historical binary behavior.
+
 ### Detection Engines
 
 The app automatically selects the best available engine. Advanced > Detection
@@ -761,6 +768,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--flow-warp` | Flow-warp TBE frames before aggregation | Off | - | Public |
 | `--flow-estimator` | Dense flow estimator for --flow-warp (DIS FAST or Farneback). | dis | dis \| farneback | Public |
 | `--poisson-seam` | Use opt-in gradient-domain seam correction before feathering. | Off | - | Public |
+| `--no-translucency` | Disable fitted semi-transparent overlay recovery. | Off | - | Public |
 | `--no-global-motion-align` | Disable affine global-motion alignment before TBE aggregation | Off | - | Public |
 | `--no-scene-split` | Disable scene-cut splitting inside TBE batches | Off | - | Public |
 | `--pyscenedetect` | Prefer PySceneDetect AdaptiveDetector for scene cuts. | Off | - | Public |
@@ -1002,6 +1010,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `tbe_flow_estimator` | `str` | `dis` |
 | `tbe_global_motion_align` | `bool` | `On` |
 | `poisson_seam_enable` | `bool` | `Off` |
+| `translucency_enable` | `bool` | `On` |
 | `tbe_scene_cut_split` | `bool` | `On` |
 | `tbe_scene_cut_threshold` | `float` | `0.35` |
 | `tbe_scene_cut_use_pyscenedetect` | `bool` | `Off` |

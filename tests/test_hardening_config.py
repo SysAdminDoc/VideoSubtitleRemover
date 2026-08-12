@@ -241,6 +241,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "tbe_flow_estimator",
         "tbe_global_motion_align",
         "poisson_seam_enable",
+        "translucency_enable",
         "tbe_scene_cut_split", "tbe_scene_cut_threshold",
         "auto_band", "export_srt", "export_mask_video",
         "mask_export_format", "mask_import_path", "mask_import_mode",
@@ -355,6 +356,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         "loudnorm_target", "multi_audio_passthrough", "decode_hw_accel",
         "prefetch_decode", "prefetch_queue_size", "input_fps",
         "rapidocr_variant", "paddleocr_variant",
+        "translucency_enable",
         "quality_report_sheet", "rife_fast_stride",
         "remove_subtitles", "remove_chyrons",
         "chyron_min_hits", "karaoke_grouping", "karaoke_x_gap_px",
@@ -379,6 +381,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
             prefetch_queue_size=24,
             input_fps=30.0,
             paddleocr_variant="server",
+            translucency_enable=False,
             quality_report_sheet=True,
             rife_fast_stride=3,
             remove_subtitles=False,
@@ -397,6 +400,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         self.assertEqual(restored.decode_hw_accel, "d3d11")
         self.assertEqual(restored.rife_fast_stride, 3)
         self.assertEqual(restored.paddleocr_variant, "server")
+        self.assertFalse(restored.translucency_enable)
         self.assertTrue(restored.karaoke_grouping)
         self.assertEqual(restored.chyron_min_hits, 120)
 
