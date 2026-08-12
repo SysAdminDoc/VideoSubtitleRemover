@@ -129,6 +129,10 @@ def locale_fallback_chain(value: Optional[str]) -> tuple[str, ...]:
 
 
 def available_catalogs() -> tuple[str, ...]:
+    pseudo_enabled = os.environ.get("VSR_PSEUDO_LOCALE", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    smoke_locale = normalise_locale_tag(os.environ.get("VSR_SMOKE_LOCALE"))
     found = {}
     for root in _candidate_locale_dirs():
         try:
@@ -140,6 +144,10 @@ def available_catalogs() -> tuple[str, ...]:
                 continue
             tag = normalise_locale_tag(child.name)
             catalog = child / "LC_MESSAGES" / f"{DOMAIN}.mo"
+            if tag.lower().startswith("qps-") and not (
+                pseudo_enabled or smoke_locale == tag
+            ):
+                continue
             if tag and catalog.is_file():
                 found.setdefault(tag.lower(), tag)
     return tuple(sorted(found.values(), key=str.lower))

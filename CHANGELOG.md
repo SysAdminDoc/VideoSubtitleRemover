@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The QA pseudo-locale is no longer offered to ordinary users.** `qps-Ploc`
+  stays bundled and directly bindable, but the language picker hides it unless
+  `VSR_PSEUDO_LOCALE=1` (or the smoke-test locale override) is explicitly set.
+
 - **Windows setup now detects AMD and Intel GPUs without WMIC.** The installer
   probes `Get-CimInstance Win32_VideoController`, retains WMIC as a legacy
   fallback, and prints a distinct inconclusive warning when neither probe is

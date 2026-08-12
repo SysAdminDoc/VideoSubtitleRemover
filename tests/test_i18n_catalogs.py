@@ -104,7 +104,10 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         self.assertIn("Checking embedded subtitle tracks...", messages)
 
     def test_pseudo_catalog_loads_and_preserves_placeholders(self):
-        self.assertIn("qps-Ploc", i18n.available_catalogs())
+        with mock.patch.dict(
+            "os.environ", {"VSR_PSEUDO_LOCALE": "1"}, clear=False
+        ):
+            self.assertIn("qps-Ploc", i18n.available_catalogs())
         self.assertEqual(i18n.bind_locale("qps_ploc"), "qps-Ploc")
         source = "Moving manual regions: {count} track{suffix}"
         translated = i18n.tr(source)
@@ -157,8 +160,17 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         with mock.patch.object(sys, "_MEIPASS", str(ROOT), create=True):
             roots = i18n._candidate_locale_dirs()
             self.assertIn((ROOT / "locale").resolve(), [root.resolve() for root in roots])
-            self.assertIn("qps-Ploc", i18n.available_catalogs())
+            with mock.patch.dict(
+                "os.environ", {"VSR_PSEUDO_LOCALE": "1"}, clear=False
+            ):
+                self.assertIn("qps-Ploc", i18n.available_catalogs())
         self.assertEqual(i18n.locale_fallback_chain("qps_PlOC"), ("qps-Ploc", "qps"))
+
+    def test_pseudo_catalog_is_hidden_from_end_users_by_default(self):
+        with mock.patch.dict(
+            "os.environ", {"VSR_PSEUDO_LOCALE": ""}, clear=False
+        ):
+            self.assertNotIn("qps-Ploc", i18n.available_catalogs())
 
     def test_locale_preference_round_trips_and_normalizes(self):
         config = ProcessingConfig(ui_locale="pt_br").normalized()
