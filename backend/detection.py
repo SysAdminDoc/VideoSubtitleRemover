@@ -33,6 +33,7 @@ OCR_ENGINE_CHOICES = (
     "opencv",
 )
 RAPIDOCR_VARIANT_CHOICES = ("v6", "v5")
+PADDLEOCR_VARIANT_CHOICES = ("mobile", "server")
 
 
 def normalize_ocr_engine(value: object) -> str:
@@ -62,6 +63,20 @@ def normalize_rapidocr_variant(value: object) -> str:
         "ppocrv6": "v6",
     }
     return aliases.get(text, "v6")
+
+
+def normalize_paddleocr_variant(value: object) -> str:
+    """Normalize the explicit PaddleOCR PP-OCRv5 model family."""
+    text = str(value or "mobile").strip().lower().replace("_", "-")
+    aliases = {
+        "mobile": "mobile",
+        "pp-ocrv5-mobile": "mobile",
+        "ppocrv5-mobile": "mobile",
+        "server": "server",
+        "pp-ocrv5-server": "server",
+        "ppocrv5-server": "server",
+    }
+    return aliases.get(text, "mobile")
 
 
 def _surya_allowed() -> bool:
@@ -306,15 +321,19 @@ class SubtitleDetector:
 
     def __init__(self, device: str = "cuda:0", lang: str = "en",
                  vertical: bool = False, engine: str = "auto",
-                 rapidocr_variant: str = "v6"):
+                 rapidocr_variant: str = "v6",
+                 paddleocr_variant: str = "mobile"):
         self.device = device
         self.lang = lang
         self.vertical = bool(vertical)
         self.engine = normalize_ocr_engine(engine)
         self.rapidocr_variant = normalize_rapidocr_variant(rapidocr_variant)
+        self.paddleocr_variant = normalize_paddleocr_variant(
+            paddleocr_variant)
         self._engine_name = "none"
         self._rapid_model = None
         self._paddle_model = None
+        self._paddle_model_variant = ""
         self._surya_det = None
         self._surya_processor = None
         self._easyocr_reader = None
@@ -360,11 +379,14 @@ class SubtitleDetector:
         """Return the OCR stage's requested/effective execution record."""
         from backend.execution_provenance import StageProvenance
 
+        engine = self._engine_name
+        if engine == "PaddleOCR" and getattr(self, "_paddle_model_variant", ""):
+            engine = f"{engine} ({self._paddle_model_variant})"
         return StageProvenance(
             stage="ocr",
             requested_device=self.device,
             effective_device=self._effective_device or "cpu",
-            engine=self._engine_name,
+            engine=engine,
             backend=self._engine_name,
             provider=self._provider_name,
             fallback_reason=self._provenance_reason,
@@ -376,6 +398,9 @@ class SubtitleDetector:
         self.engine = normalize_ocr_engine(getattr(self, "engine", "auto"))
         self.rapidocr_variant = normalize_rapidocr_variant(
             getattr(self, "rapidocr_variant", "v6")
+        )
+        self.paddleocr_variant = normalize_paddleocr_variant(
+            getattr(self, "paddleocr_variant", "mobile")
         )
         if self.engine == "auto":
             try:
@@ -485,15 +510,20 @@ class SubtitleDetector:
             except Exception as e:
                 logger.warning(f"RapidOCR init failed: {e}")
 
-        # PaddleOCR PP-OCRv6/3.x (2.x compatibility handled by paddle_compat)
+        # PaddleOCR PP-OCRv5 with an explicit mobile/server family.
         if self.engine in {"auto", "paddleocr"}:
             try:
                 from backend.paddle_compat import build_paddleocr
-                self._paddle_model = build_paddleocr(self.lang, self.device)
+                self._paddle_model = build_paddleocr(
+                    self.lang, self.device, variant=self.paddleocr_variant)
+                self._paddle_model_variant = (
+                    f"PP-OCRv5_{self.paddleocr_variant}")
                 self._engine_name = "PaddleOCR"
                 self._provider_name = (
                     "cuda" if self._is_gpu_device() else "cpu")
-                logger.info(f"PaddleOCR loaded (lang={self.lang})")
+                logger.info(
+                    f"PaddleOCR loaded (lang={self.lang}, "
+                    f"model={self._paddle_model_variant})")
                 return
             except ImportError:
                 pass

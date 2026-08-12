@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **PaddleOCR model selection is now explicit.** The reviewed PP-OCRv5
+  mobile family remains the default for stable resource use, while
+  `--paddleocr-variant server` selects the larger accuracy-oriented models;
+  the chosen family is included in OCR execution provenance.
+
 - **Film grain now reaches inpainted regions.** Positive `--film-grain`
   strength estimates high-pass texture from nearby unmasked pixels, adds
   decorrelated per-frame grain plus a small dither before 8-bit conversion,

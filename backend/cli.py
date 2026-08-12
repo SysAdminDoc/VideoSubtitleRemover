@@ -118,7 +118,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--cache-clean", "--model-cache-export", "--model-cache-import",
             "--support-bundle", "--validate-config", "--self-test",
             "--inference-smoke", "--ocr-benchmark", "--ocr-engine",
-            "--rapidocr-variant", "--ocr-compare-variants", "--dry-run",
+            "--rapidocr-variant", "--paddleocr-variant",
+            "--ocr-compare-variants", "--dry-run",
             "--json", "--auto-lang-probe", "--intent", "--json-log",
             "--dump-cli-reference",
         ),
@@ -932,6 +933,13 @@ def _build_parser(mode_choices):
         help="Select RapidOCR PP-OCR generation (v6 default, v5 fallback).",
     )
     parser.add_argument(
+        "--paddleocr-variant",
+        choices=("mobile", "server"),
+        default="mobile",
+        help=("Select PaddleOCR PP-OCRv5 models: mobile is smaller/faster; "
+              "server is larger/higher accuracy."),
+    )
+    parser.add_argument(
         "--ocr-compare-variants",
         action="store_true",
         help="Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures.",
@@ -1381,6 +1389,7 @@ def _build_processing_config(
         detection_lang=args.lang,
         detection_engine=args.ocr_engine,
         rapidocr_variant=args.rapidocr_variant,
+        paddleocr_variant=args.paddleocr_variant,
         language_mask_filter=args.language_filter,
         detection_threshold=args.threshold,
         detection_vertical=args.vertical,

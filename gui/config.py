@@ -480,6 +480,7 @@ class ProcessingConfig:
     detection_lang: str = "en"
     detection_engine: str = "auto"
     rapidocr_variant: str = "v6"
+    paddleocr_variant: str = "mobile"
     language_mask_filter: bool = False
     detection_threshold: float = 0.5
     detection_vertical: bool = False
@@ -658,6 +659,19 @@ class ProcessingConfig:
             self.rapidocr_variant = "v5"
         elif self.rapidocr_variant not in {"v5", "v6"}:
             self.rapidocr_variant = "v6"
+        self.paddleocr_variant = _coerce_text(
+            self.paddleocr_variant, "mobile", 24
+        ).lower().replace("_", "-")
+        if self.paddleocr_variant in {
+            "pp-ocrv5-mobile", "ppocrv5-mobile"
+        }:
+            self.paddleocr_variant = "mobile"
+        elif self.paddleocr_variant in {
+            "pp-ocrv5-server", "ppocrv5-server"
+        }:
+            self.paddleocr_variant = "server"
+        elif self.paddleocr_variant not in {"mobile", "server"}:
+            self.paddleocr_variant = "mobile"
         self.language_mask_filter = _coerce_bool(
             self.language_mask_filter, False)
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
@@ -1383,6 +1397,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "detection_vertical",
     "detection_frame_skip",
     "rapidocr_variant",
+    "paddleocr_variant",
     "mask_dilate_px",
     "mask_feather_px",
     "confidence_weighted_dilation",
@@ -1483,6 +1498,7 @@ SETTINGS_VAR_FIELDS = (
 DEFAULT_PRESET_FIELDS = [
     "mode", "detection_threshold", "mask_dilate_px",
     "mask_feather_px", "edge_ring_px", "rapidocr_variant",
+    "paddleocr_variant",
     "tbe_flow_warp",
     "tbe_flow_estimator",
     "tbe_global_motion_align",

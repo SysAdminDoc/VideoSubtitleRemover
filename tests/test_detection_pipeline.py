@@ -250,7 +250,7 @@ class DetectionCascadeTests(unittest.TestCase):
         real_import = builtins.__import__
         paddle_model = object()
         paddle = types.ModuleType("backend.paddle_compat")
-        paddle.build_paddleocr = lambda lang, device: paddle_model
+        paddle.build_paddleocr = lambda lang, device, **kwargs: paddle_model
 
         def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
             if name in blocked:
@@ -273,8 +273,12 @@ class DetectionCascadeTests(unittest.TestCase):
 
     def test_forced_paddle_skips_earlier_and_later_engines(self):
         paddle_model = object()
+        calls = []
         paddle = types.ModuleType("backend.paddle_compat")
-        paddle.build_paddleocr = lambda lang, device: paddle_model
+        def build_paddle(lang, device, **kwargs):
+            calls.append(kwargs)
+            return paddle_model
+        paddle.build_paddleocr = build_paddle
 
         with _fresh_detection_module() as detection:
             with mock.patch.dict(
@@ -287,10 +291,16 @@ class DetectionCascadeTests(unittest.TestCase):
                     side_effect=AssertionError("unexpected engine probe"),
                 ):
                     detector = detection.SubtitleDetector(
-                        device="cpu", lang="en", engine="paddleocr")
+                        device="cpu", lang="en", engine="paddleocr",
+                        paddleocr_variant="server")
 
         self.assertEqual(detector.engine, "paddleocr")
         self.assertEqual(detector._engine_name, "PaddleOCR")
+        self.assertEqual(calls[0]["variant"], "server")
+        self.assertEqual(
+            detector.execution_provenance().engine,
+            "PaddleOCR (PP-OCRv5_server)",
+        )
         self.assertIs(detector._paddle_model, paddle_model)
         self.assertIsNone(detector._rapid_model)
 
@@ -314,7 +324,7 @@ class DetectionCascadeTests(unittest.TestCase):
         real_import = builtins.__import__
         paddle_model = object()
         paddle = types.ModuleType("backend.paddle_compat")
-        paddle.build_paddleocr = lambda lang, device: paddle_model
+        paddle.build_paddleocr = lambda lang, device, **kwargs: paddle_model
 
         def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
             if name in blocked:

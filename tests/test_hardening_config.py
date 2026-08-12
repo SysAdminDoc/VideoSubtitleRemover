@@ -236,6 +236,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "detection_lang",
         "detection_threshold", "detection_frame_skip",
         "mask_dilate_px", "mask_feather_px", "edge_ring_px",
+        "paddleocr_variant",
         "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
         "tbe_flow_estimator",
         "tbe_global_motion_align",
@@ -353,7 +354,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
     EXPECTED_GUI_FIELDS = (
         "loudnorm_target", "multi_audio_passthrough", "decode_hw_accel",
         "prefetch_decode", "prefetch_queue_size", "input_fps",
-        "rapidocr_variant",
+        "rapidocr_variant", "paddleocr_variant",
         "quality_report_sheet", "rife_fast_stride",
         "remove_subtitles", "remove_chyrons",
         "chyron_min_hits", "karaoke_grouping", "karaoke_x_gap_px",
@@ -377,6 +378,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
             prefetch_decode=False,
             prefetch_queue_size=24,
             input_fps=30.0,
+            paddleocr_variant="server",
             quality_report_sheet=True,
             rife_fast_stride=3,
             remove_subtitles=False,
@@ -394,6 +396,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
         self.assertEqual(restored.loudnorm_target, -14.0)
         self.assertEqual(restored.decode_hw_accel, "d3d11")
         self.assertEqual(restored.rife_fast_stride, 3)
+        self.assertEqual(restored.paddleocr_variant, "server")
         self.assertTrue(restored.karaoke_grouping)
         self.assertEqual(restored.chyron_min_hits, 120)
 

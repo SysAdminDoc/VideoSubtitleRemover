@@ -1,8 +1,15 @@
+import types
 import unittest
+from unittest import mock
 
 import numpy as np
 
-from backend.paddle_compat import extract_paddle_boxes, extract_paddle_text_boxes
+from backend.paddle_compat import (
+    build_paddleocr,
+    extract_paddle_boxes,
+    extract_paddle_text_boxes,
+    normalize_paddleocr_variant,
+)
 
 
 class _JsonMethodResult:
@@ -19,6 +26,51 @@ class _JsonPropertyResult:
 
 
 class PaddleCompatTests(unittest.TestCase):
+    def test_normalize_variant_defaults_to_mobile(self):
+        self.assertEqual(normalize_paddleocr_variant("server"), "server")
+        self.assertEqual(normalize_paddleocr_variant("PP-OCRv5_mobile"), "mobile")
+        self.assertEqual(normalize_paddleocr_variant("unknown"), "mobile")
+
+    def test_v3_builder_names_selected_models_explicitly(self):
+        calls = []
+
+        class PaddleOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        paddle = types.ModuleType("paddleocr")
+        paddle.PaddleOCR = PaddleOCR
+        paddle.__version__ = "3.6.0"
+        with mock.patch.dict("sys.modules", {"paddleocr": paddle}):
+            build_paddleocr("en", "cpu", variant="server")
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["ocr_version"], "PP-OCRv5")
+        self.assertEqual(
+            calls[0]["text_detection_model_name"], "PP-OCRv5_server_det")
+        self.assertEqual(
+            calls[0]["text_recognition_model_name"], "PP-OCRv5_server_rec")
+
+    def test_v2_fallback_drops_v3_model_keywords(self):
+        calls = []
+
+        class PaddleOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+                if "device" in kwargs:
+                    raise TypeError("2.x constructor")
+
+        paddle = types.ModuleType("paddleocr")
+        paddle.PaddleOCR = PaddleOCR
+        paddle.__version__ = "2.7.0"
+        with mock.patch.dict("sys.modules", {"paddleocr": paddle}):
+            build_paddleocr("en", "cpu", variant="server")
+
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn("ocr_version", calls[1])
+        self.assertNotIn("text_detection_model_name", calls[1])
+        self.assertNotIn("text_recognition_model_name", calls[1])
+
     def test_ppocrv6_predict_payload_extracts_rec_polys(self):
         class Model:
             def predict(self, frame):

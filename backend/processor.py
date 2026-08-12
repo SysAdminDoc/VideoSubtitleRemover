@@ -643,6 +643,8 @@ class SubtitleRemover(
             vertical=self.config.detection_vertical,
             engine=self.config.detection_engine,
             rapidocr_variant=getattr(self.config, "rapidocr_variant", "v6"),
+            paddleocr_variant=getattr(
+                self.config, "paddleocr_variant", "mobile"),
         )
         if self.config.language_mask_filter and not any(
             name in self.detector._engine_name

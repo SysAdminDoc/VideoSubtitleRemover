@@ -135,6 +135,7 @@ class ProcessingConfig:
     detection_lang: str = "en"
     detection_engine: str = "auto"
     rapidocr_variant: str = "v6"
+    paddleocr_variant: str = "mobile"
     language_mask_filter: bool = False
     detection_frame_skip: int = 0  # 0=detect every frame, N=reuse mask for N frames
     # RM-24 vertical-text mode: when on, detectors that support a
@@ -672,6 +673,19 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.rapidocr_variant = "v5"
     elif config.rapidocr_variant not in {"v5", "v6"}:
         config.rapidocr_variant = "v6"
+    config.paddleocr_variant = _coerce_text(
+        getattr(config, "paddleocr_variant", "mobile"), "mobile", 24
+    ).lower().replace("_", "-")
+    if config.paddleocr_variant in {
+        "pp-ocrv5-mobile", "ppocrv5-mobile"
+    }:
+        config.paddleocr_variant = "mobile"
+    elif config.paddleocr_variant in {
+        "pp-ocrv5-server", "ppocrv5-server"
+    }:
+        config.paddleocr_variant = "server"
+    elif config.paddleocr_variant not in {"mobile", "server"}:
+        config.paddleocr_variant = "mobile"
     config.language_mask_filter = _coerce_bool(
         config.language_mask_filter, False)
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)

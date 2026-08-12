@@ -5,11 +5,10 @@ constructor (device selection moved to ``device=``, angle classification
 to ``use_textline_orientation=``) and replaced the 2.x
 ``.ocr(img, cls=...)`` nested-list result with ``.predict(img)``
 returning dict-like result objects keyed by ``rec_polys``/``rec_scores``.
-PaddleOCR 3.7 defaults to PP-OCRv6, which keeps that result contract and
-adds documented ``rec_boxes`` rectangular boxes. requirements.txt caps
-PaddleOCR to the tested 3.x major range, but a pre-existing 2.x install
-must keep working, so every PaddleOCR call site goes through these two
-helpers instead of touching the API directly.
+PaddleOCR 3.x defaults vary by release and model family, so the constructor
+helper explicitly selects PP-OCRv5 mobile or server detection/recognition
+models. A pre-existing 2.x install must keep working, so every PaddleOCR call
+site goes through these helpers instead of touching the API directly.
 """
 
 from __future__ import annotations
@@ -23,18 +22,48 @@ logger = logging.getLogger(__name__)
 
 Box = Tuple[int, int, int, int]
 TextBox = Tuple[int, int, int, int, float, str]
+PADDLEOCR_VARIANTS = ("mobile", "server")
+_PADDLEOCR_V3_MODEL_KEYS = frozenset({
+    "ocr_version",
+    "text_detection_model_name",
+    "text_recognition_model_name",
+})
 
 
-def build_paddleocr(lang: str, device: str, **extra):
+def normalize_paddleocr_variant(value: object) -> str:
+    """Normalize the explicit PP-OCRv5 model family selection."""
+    text = str(value or "mobile").strip().lower().replace("_", "-")
+    aliases = {
+        "mobile": "mobile",
+        "pp-ocrv5-mobile": "mobile",
+        "ppocrv5-mobile": "mobile",
+        "server": "server",
+        "pp-ocrv5-server": "server",
+        "ppocrv5-server": "server",
+    }
+    return aliases.get(text, "mobile")
+
+
+def paddleocr_model_names(variant: object = "mobile") -> tuple[str, str]:
+    """Return the explicit PP-OCRv5 detection and recognition model names."""
+    normalized = normalize_paddleocr_variant(variant)
+    prefix = f"PP-OCRv5_{normalized}"
+    return f"{prefix}_det", f"{prefix}_rec"
+
+
+def build_paddleocr(lang: str, device: str, *, variant: str = "mobile", **extra):
     """Construct a PaddleOCR instance on either major version.
 
     Tries the 3.x constructor first (matching the requirements pin),
     falls back to the 2.x keyword set on TypeError. Unknown ``extra``
     kwargs raise TypeError from both attempts so callers can detect
-    unsupported variants (e.g. the VL model selector).
+    unsupported variants (e.g. the VL model selector). The 3.x model family
+    is always explicit; 2.x receives only its compatible keyword subset.
     """
     from paddleocr import PaddleOCR
 
+    variant = normalize_paddleocr_variant(variant)
+    det_model, rec_model = paddleocr_model_names(variant)
     paddle_version = "unknown"
     try:
         import paddleocr as _poc
@@ -43,6 +72,16 @@ def build_paddleocr(lang: str, device: str, **extra):
         pass
 
     use_cuda = "cuda" in device
+    v3_extra = dict(extra)
+    v3_extra.update({
+        "ocr_version": "PP-OCRv5",
+        "text_detection_model_name": det_model,
+        "text_recognition_model_name": rec_model,
+    })
+    legacy_extra = {
+        key: value for key, value in extra.items()
+        if key not in _PADDLEOCR_V3_MODEL_KEYS
+    }
     try:
         model = PaddleOCR(
             lang=lang,
@@ -50,10 +89,11 @@ def build_paddleocr(lang: str, device: str, **extra):
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
-            **extra,
+            **v3_extra,
         )
         logger.info(
-            f"PaddleOCR {paddle_version} loaded (3.x API, lang={lang})"
+            f"PaddleOCR {paddle_version} loaded (3.x API, lang={lang}, "
+            f"models={det_model}/{rec_model})"
         )
         return model
     except TypeError:
@@ -62,10 +102,11 @@ def build_paddleocr(lang: str, device: str, **extra):
             use_angle_cls=False,
             use_gpu=use_cuda,
             show_log=False,
-            **extra,
+            **legacy_extra,
         )
         logger.info(
-            f"PaddleOCR {paddle_version} loaded (2.x API, lang={lang})"
+            f"PaddleOCR {paddle_version} loaded (2.x API, lang={lang}; "
+            f"requested models={det_model}/{rec_model})"
         )
         return model
 
