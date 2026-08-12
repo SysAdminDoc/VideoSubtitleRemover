@@ -822,6 +822,39 @@ def _warp_to_reference(
                      borderMode=cv2.BORDER_REPLICATE)
 
 
+def _warp_field_to_reference(
+    field: np.ndarray,
+    src_frame: np.ndarray,
+    ref_frame: np.ndarray,
+    flow_estimator: str = "dis",
+) -> np.ndarray:
+    """Warp a scalar field with the exact flow used for its source frame.
+
+    TBE's exposure coverage is a scalar map, not a BGR image. Converting it
+    to a fake three-channel image would change the interpolation contract and
+    can also fail for integer coverage arrays, so remap it directly with the
+    flow estimated from the matching source/reference frames.
+    """
+    src_gray = cv2.cvtColor(src_frame, cv2.COLOR_BGR2GRAY)
+    ref_gray = cv2.cvtColor(ref_frame, cv2.COLOR_BGR2GRAY)
+    height, width = field.shape[:2]
+    flow = _calc_dense_flow(ref_gray, src_gray, flow_estimator)
+    grid_x, grid_y = np.meshgrid(
+        np.arange(width, dtype=np.float32),
+        np.arange(height, dtype=np.float32),
+    )
+    map_x = grid_x + flow[..., 0]
+    map_y = grid_y + flow[..., 1]
+    return cv2.remap(
+        np.asarray(field, dtype=np.float32),
+        map_x,
+        map_y,
+        cv2.INTER_NEAREST,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    )
+
+
 def _warp_mask_to_reference(
     src_mask: np.ndarray,
     src_frame: np.ndarray,
@@ -931,6 +964,13 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
     n = len(frames)
     if n == 0:
         return []
+    effective_min_coverage = min(int(min_coverage), max(1, n - 1))
+    if effective_min_coverage != int(min_coverage):
+        logger.debug(
+            "TBE min_coverage=%d exceeds the usable exposure count for %d "
+            "frames; clamping to %d",
+            int(min_coverage), n, effective_min_coverage,
+        )
     if n == 1:
         filled = _cv2_inpaint(frames[0], masks[0], 7, cv2.INPAINT_NS)
         if edge_ring_px > 0:
@@ -1032,7 +1072,7 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
         matrix = frame_to_ref[t]
         if flow_warp and t != ref_idx:
             try:
-                bg_for_t = _warp_to_reference(bg, frame)
+                bg_for_t = _warp_to_reference(bg, frame, flow_estimator)
             except Exception as exc:
                 logger.debug(f"Flow back-warp fell back for frame {t}: {exc}")
                 bg_for_t = bg
@@ -1052,7 +1092,16 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
 
         mask_bool = mask > 0
         coverage_for_frame = coverage
-        if matrix is not None and t != ref_idx:
+        if flow_warp and t != ref_idx:
+            try:
+                coverage_for_frame = _warp_field_to_reference(
+                    coverage, bg, frame, flow_estimator)
+            except Exception as exc:
+                logger.debug(
+                    "Flow coverage back-warp fell back for frame %d: %s",
+                    t, exc,
+                )
+        elif matrix is not None and t != ref_idx:
             try:
                 coverage_for_frame = _warp_affine(
                     coverage,
@@ -1065,8 +1114,10 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                     "Global-motion coverage back-warp fell back for frame %d: %s",
                     t, exc,
                 )
-        has_exposure = mask_bool & (coverage_for_frame >= min_coverage)
-        no_exposure = mask_bool & (coverage_for_frame < min_coverage)
+        has_exposure = mask_bool & (
+            coverage_for_frame >= effective_min_coverage)
+        no_exposure = mask_bool & (
+            coverage_for_frame < effective_min_coverage)
 
         filled = frame.copy()
         if has_exposure.any():

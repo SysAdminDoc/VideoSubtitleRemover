@@ -66,6 +66,7 @@ def _rotation(stream: Mapping[str, Any]) -> int:
 
 
 def probe_container_manifest(path: str | Path, timeout: float = 30.0) -> dict:
+    probe_path = Path(path).resolve(strict=False)
     payload = {
         "schema": "vsr.container_manifest.v1",
         "path": str(path),
@@ -83,7 +84,7 @@ def probe_container_manifest(path: str | Path, timeout: float = 30.0) -> dict:
         result = run_process(
             [
                 "ffprobe", "-v", "error", "-show_streams", "-show_chapters",
-                "-show_format", "-of", "json", str(path),
+                "-show_format", "-of", "json", str(probe_path),
             ],
             capture_output=True,
             text=True,

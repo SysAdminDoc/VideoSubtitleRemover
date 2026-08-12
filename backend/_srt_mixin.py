@@ -107,7 +107,7 @@ class _SrtMixin:
         cues and write to disk. Gaps of up to 0.5s are bridged."""
         if not self._srt_entries:
             return
-        fps = fps if fps and fps > 1.0 else 30.0
+        fps = fps if fps and fps > 0 else 30.0
         gap_tol = max(1, int(fps * 0.5))
 
         def ts(t: float) -> str:
@@ -211,7 +211,7 @@ class _SrtMixin:
                     self._write_srt(
                         str(source_path),
                         fps,
-                        offset_frames,
+                        0,
                         frame_timing=frame_timing,
                     )
                     source_kind = "ocr-srt"
@@ -257,4 +257,3 @@ class _SrtMixin:
             report.get("provider", "unknown"),
             int(report.get("cueCount", 0) or 0),
         )
-

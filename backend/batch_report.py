@@ -20,6 +20,7 @@ from typing import Any, List, Optional
 from backend.config_schema import CONFIG_SCHEMA_VERSION
 from backend.io import (
     _choose_available_output_path,
+    _path_key,
     _probe_codec_for_log,
     _probe_duration_seconds,
     _probe_subtitle_streams,
@@ -115,7 +116,7 @@ def choose_batch_output_path(source_path: str, out_dir: Path, suffix: str,
     """
     source = Path(source_path)
     base = Path(out_dir) / f"{source.stem}{suffix}{source.suffix}"
-    if skip_existing:
+    if skip_existing and _path_key(base) not in (reserved_outputs or set()):
         return base
     return _choose_available_output_path(base, reserved_outputs or set())
 

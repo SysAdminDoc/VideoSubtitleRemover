@@ -194,8 +194,9 @@ class _PropainterRealBackend(_DiffusionBackendBase):
         frames_arr = np.stack(frames, axis=0)
         masks_arr = np.stack([(m > 0).astype(np.uint8) for m in masks], axis=0)
         out = self._model.inpaint(frames_arr, masks_arr)
+        out = _coerce_adapter_frames(out, len(frames), "ProPainter")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames, out, masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -222,8 +223,9 @@ class _DiffuEraserBackend(_DiffusionBackendBase):
 
     def _run_model(self, frames, masks):
         result = self._model.run(frames, masks)
+        result = _coerce_adapter_frames(result, len(frames), "DiffuEraser")
         return apply_finishing(
-            frames, list(result), masks, self.config, edge_ring=False)
+            frames, result, masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +284,12 @@ class _VaceBackend(_DiffusionBackendBase):
         out = _call_vace_model(self._model, frames, masks, prompt)
         out = _coerce_adapter_frames(out, len(frames), "VACE")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames,
+            out,
+            masks,
+            self.config,
+            edge_ring=False,
+        )
 
 
 def _vace_cache_dir(env=None) -> Path:
@@ -554,17 +561,40 @@ def _coerce_adapter_frames(value, expected_count: int, label: str) -> List[np.nd
                 value = value[key]
                 break
     if isinstance(value, np.ndarray):
-        if value.ndim == 4:
-            frames = [np.asarray(frame).astype(np.uint8) for frame in value]
-            if len(frames) != expected_count:
-                raise RuntimeError(f"{label} output frame count does not match input")
-            return frames
-        raise RuntimeError(f"{label} output ndarray must be T,H,W,C")
+        if value.ndim != 4:
+            raise RuntimeError(f"{label} output ndarray must be T,H,W,C")
+        value = list(value)
     if not isinstance(value, (list, tuple)):
         raise RuntimeError(f"{label} output must be a frame list or ndarray")
-    frames = [np.asarray(frame).astype(np.uint8) for frame in value]
-    if len(frames) != expected_count:
+    if len(value) != expected_count:
         raise RuntimeError(f"{label} output frame count does not match input")
+    frames = []
+    for index, raw_frame in enumerate(value):
+        frame = np.asarray(raw_frame)
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise RuntimeError(
+                f"{label} output frame {index} must have shape H,W,3"
+            )
+        if np.issubdtype(frame.dtype, np.floating):
+            if not np.isfinite(frame).all():
+                raise RuntimeError(
+                    f"{label} output frame {index} contains non-finite values"
+                )
+            low, high = float(frame.min()), float(frame.max())
+            if low >= 0.0 and high <= 1.0:
+                frame = np.rint(frame * 255.0)
+            elif low >= 0.0 and high <= 255.0:
+                frame = np.rint(frame)
+            else:
+                raise RuntimeError(
+                    f"{label} output frame {index} has values outside "
+                    "[0,1] or [0,255]"
+                )
+        elif not np.issubdtype(frame.dtype, np.integer):
+            raise RuntimeError(
+                f"{label} output frame {index} has unsupported dtype"
+            )
+        frames.append(np.clip(frame, 0, 255).astype(np.uint8, copy=False))
     return frames
 
 
@@ -918,7 +948,7 @@ class _VideoPainterBackend(_DiffusionBackendBase):
         out = _call_videopainter_model(self._model, frames, masks, prompt)
         out = _coerce_adapter_frames(out, len(frames), "VideoPainter")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames, out, masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -946,8 +976,9 @@ class _CocoCoBackend(_DiffusionBackendBase):
         # set VSR_COCOCO_PROMPT.
         prompt = os.environ.get("VSR_COCOCO_PROMPT", "background")
         out = self._model.inpaint(frames, masks, prompt=prompt)
+        out = _coerce_adapter_frames(out, len(frames), "CoCoCo")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames, out, masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -972,8 +1003,9 @@ class _EraserDitBackend(_DiffusionBackendBase):
 
     def _run_model(self, frames, masks):
         out = self._model.inpaint(frames, masks)
+        out = _coerce_adapter_frames(out, len(frames), "EraserDiT")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames, out, masks, self.config, edge_ring=False)
 
 
 # ---------------------------------------------------------------------------
@@ -1215,7 +1247,7 @@ class _FloedBackend(_DiffusionBackendBase):
         out = _call_floed_model(self._model, frames, masks, prompt)
         out = _coerce_adapter_frames(out, len(frames), "FloED")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames, out, masks, self.config, edge_ring=False)
 
 
 def _void_weight_paths() -> Optional[List[str]]:
@@ -1291,8 +1323,9 @@ class _VoidBackend(_DiffusionBackendBase):
             out = module.run(frames, masks, **kwargs)
         else:
             raise RuntimeError("VOID package missing `inpaint` or `run` entrypoint")
+        out = _coerce_adapter_frames(out, len(frames), "VOID")
         return apply_finishing(
-            frames, list(out), masks, self.config, edge_ring=False)
+            frames, out, masks, self.config, edge_ring=False)
 
 
 # Map an env var to (mode-name, builder).

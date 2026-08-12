@@ -35,7 +35,7 @@ def _default_checkpoint_dir(work_directory: str = "") -> Path:
     return path
 
 
-def _checkpoint_key(input_path: str, output_path: str) -> str:
+def _checkpoint_key(input_path: str, output_path: str, config: Any = None) -> str:
     """Return a stable input/output fingerprint for completion markers."""
     try:
         stat = os.stat(input_path)
@@ -44,6 +44,8 @@ def _checkpoint_key(input_path: str, output_path: str) -> str:
         )
     except OSError:
         fingerprint = f"{input_path}|{output_path}"
+    if config is not None:
+        fingerprint += f"|config:{config_fingerprint(config)}"
     return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
 
 

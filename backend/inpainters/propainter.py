@@ -14,6 +14,7 @@ from backend.inpainters.lama import (
 )
 from backend.inpainters._common import (
     BaseInpainter,
+    _binarize_mask,
     _cv2_inpaint,
     apply_finishing,
     _temporal_background_expose,
@@ -29,15 +30,13 @@ class ProPainterInpainter(BaseInpainter):
 
     @property
     def backend_name(self) -> str:
-        return (
-            "TBE + LaMa refinement" if self._lama is not None
-            else "TBE (no LaMa refinement)"
-        )
+        return self._last_backend_name
 
     def __init__(self, device: str = "cuda:0", config=None):
         self.device = device
         from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
+        self._last_backend_name = "cv2"
         self._lama = None
         if not _pytorch_lama_allowed():
             logger.info(
@@ -61,6 +60,10 @@ class ProPainterInpainter(BaseInpainter):
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         feather = self.config.mask_feather_px
         if self.config.tbe_enable and len(frames) > 1:
+            self._last_backend_name = (
+                "TBE + LaMa refinement" if self._lama is not None
+                else "TBE (no LaMa refinement)"
+            )
             results = _temporal_background_expose(
                 frames, masks,
                 min_coverage=max(2, self.config.tbe_min_coverage + 1),
@@ -91,9 +94,14 @@ class ProPainterInpainter(BaseInpainter):
                     try:
                         frame_rgb = cv2.cvtColor(inpainted, cv2.COLOR_BGR2RGB)
                         pil_image = Image.fromarray(frame_rgb)
-                        pil_mask = Image.fromarray(mask)
+                        pil_mask = Image.fromarray(_binarize_mask(mask))
                         lama_out = self._lama(pil_image, pil_mask)
                         bgr = cv2.cvtColor(np.array(lama_out), cv2.COLOR_RGB2BGR)
+                        bgr = bgr[:frame.shape[0], :frame.shape[1]]
+                        if bgr.shape[:2] != frame.shape[:2]:
+                            raise ValueError(
+                                "LaMa returned an output smaller than the source frame"
+                            )
                         # TBE 65 / LaMa 35 -- TBE carries the accurate
                         # background; LaMa kills ringing.
                         blend = cv2.addWeighted(inpainted, 0.65, bgr, 0.35, 0)
@@ -112,4 +120,5 @@ class ProPainterInpainter(BaseInpainter):
             return results
         filled = [_cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
                   for f, m in zip(frames, masks)]
+        self._last_backend_name = "cv2"
         return apply_finishing(frames, filled, masks, self.config)

@@ -329,7 +329,22 @@ def _seek_capture_to_frame(cap, target: int) -> int:
     never over-advances. Returns the resulting position.
     """
     target = max(0, int(target))
-    cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+    try:
+        positioned = bool(cap.set(cv2.CAP_PROP_POS_FRAMES, target))
+    except Exception as exc:
+        positioned = False
+        set_error = exc
+    else:
+        set_error = None
+    if target > 0 and not positioned:
+        raise MediaInputError(
+            f"The decoder could not seek to frame {target}; retry from the "
+            "beginning or use a different decoder.",
+            reason="decoder_seek_failed",
+            path=str(getattr(cap, "_path", "")),
+            detail=(str(set_error) if set_error is not None
+                    else "decoder rejected frame seek"),
+        )
     if target == 0:
         return 0
     try:
@@ -338,11 +353,22 @@ def _seek_capture_to_frame(cap, target: int) -> int:
         pos = target
     if pos > target:
         # Overshot; restart and scan forward from the beginning.
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        if not cap.set(cv2.CAP_PROP_POS_FRAMES, 0):
+            raise MediaInputError(
+                "The decoder could not restart while seeking the requested frame.",
+                reason="decoder_seek_failed",
+                path=str(getattr(cap, "_path", "")),
+                detail="decoder rejected frame-zero seek",
+            )
         pos = 0
     while pos < target:
         if not cap.grab():
-            break
+            raise MediaInputError(
+                f"The decoder stopped before frame {target} while seeking.",
+                reason="decoder_seek_failed",
+                path=str(getattr(cap, "_path", "")),
+                detail=f"reached frame {pos}",
+            )
         pos += 1
     return pos
 
@@ -439,7 +465,7 @@ def _frame_seconds(index: int, fps: float,
     """Return one frame index on the shared VFR/CFR processing clock."""
     if frame_timing is not None:
         return frame_timing.frame_time(index, fps)
-    return float(index) / max(float(fps), 1.0)
+    return float(index) / max(float(fps), 1e-6)
 
 
 def _spans_from_segments(segments, *, fps: float, total_frames: int,
@@ -2175,6 +2201,7 @@ class SubtitleRemover(
         temp_dir = None
         cap = None
         selective_cap = None
+        selective_prior_offset = 0
         selective_ranges = merge_frame_ranges(selective_rerun_ranges or [])
         reader = None
         writer = None
@@ -2496,9 +2523,19 @@ class SubtitleRemover(
                     raise ValueError(
                         "Previous cleaned output dimensions do not match the source"
                     )
-                if prior_frames < end_frame:
+                if start_frame > 0 and prior_frames == frames_to_process:
+                    # A range-relative output starts at source frame zero from
+                    # the capture's point of view. Do not add start_frame a
+                    # second time when reading it for selective reruns.
+                    selective_prior_offset = 0
+                elif prior_frames >= end_frame:
+                    # A full-source output keeps source frame numbering.
+                    selective_prior_offset = start_frame
+                else:
                     raise ValueError(
-                        "Previous cleaned output is missing frames required for selective rerun"
+                        "Previous cleaned output does not cover the requested "
+                        "source range; selective rerun with a time range "
+                        "requires a range-length output"
                     )
                 prior_stat = selective_path.stat()
                 rerun_frame_count = sum(end - start for start, end in selective_ranges)
@@ -2534,7 +2571,7 @@ class SubtitleRemover(
                 checkpoint_root = Path(checkpoint_dir)
                 checkpoint_root.mkdir(parents=True, exist_ok=True)
                 checkpoint_key = checkpoint_key or _checkpoint_key(
-                    input_path, output_path)
+                    input_path, output_path, self.config)
                 checkpoint_state_path = (
                     checkpoint_root / f"{checkpoint_key}.pause.json"
                 )
@@ -2574,17 +2611,27 @@ class SubtitleRemover(
                             f"{resume_frame_count}/{frames_to_process}"
                         )
 
-            if self.config.export_mask_video and resume_frame_count > 0:
+            restart_for_derived_outputs = any(
+                bool(getattr(self.config, name, False))
+                for name in (
+                    "export_mask_video",
+                    "export_srt",
+                    "translation_enabled",
+                    "quality_report",
+                    "quality_report_sheet",
+                )
+            )
+            if restart_for_derived_outputs and resume_frame_count > 0:
                 logger.warning(
-                    "Restarting from frame zero so the lossless matte export "
-                    "contains a complete, timestamp-aligned sequence"
+                    "Restarting from frame zero so requested sidecars, reports, "
+                    "and exports contain a complete timestamp-aligned sequence"
                 )
                 resume_frame_count = 0
                 _seek_capture_to_frame(cap, start_frame)
 
             if selective_cap is not None:
                 _seek_capture_to_frame(
-                    selective_cap, start_frame + resume_frame_count)
+                    selective_cap, selective_prior_offset + resume_frame_count)
 
             # Fail fast on a drive that clearly cannot hold the encode, before
             # any temp file is created (only the frames still to write count).

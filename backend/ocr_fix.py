@@ -112,7 +112,11 @@ def apply_ocr_fixes(text: str, replacements: Mapping[str, str]) -> str:
         if not src:
             continue
         if re.fullmatch(r"\w+", src, flags=re.UNICODE):
-            text = re.sub(rf"(?<!\w){re.escape(src)}(?!\w)", dst, text)
+            text = re.sub(
+                rf"(?<!\w){re.escape(src)}(?!\w)",
+                lambda _match: dst,
+                text,
+            )
         else:
             text = text.replace(src, dst)
     return text

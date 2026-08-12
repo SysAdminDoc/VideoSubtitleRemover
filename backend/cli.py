@@ -1895,6 +1895,12 @@ def _run_processing(
         if not pause_requested["value"]:
             pause_requested["value"] = True
             print("\n[pause] Requested. Waiting for the next safe frame checkpoint...")
+        else:
+            # The first Ctrl+C is a cooperative pause. A second one is an
+            # explicit escalation and must reach the existing KeyboardInterrupt
+            # failure path instead of being silently ignored.
+            signal.signal(signal.SIGINT, signal.default_int_handler)
+            raise KeyboardInterrupt
 
     try:
         signal.signal(signal.SIGINT, _request_pause)
@@ -1919,7 +1925,7 @@ def _run_processing(
         if args.skip_existing and Path(outp).exists():
             print(f"[skip] {Path(inp).name} (output exists)")
             return True
-        key = _checkpoint_key(inp, outp)
+        key = _checkpoint_key(inp, outp, config)
         if not args.no_resume and _checkpoint_is_done(ckpt_dir, key, outp):
             print(f"[skip] {Path(inp).name} (checkpoint)")
             return True
@@ -2184,7 +2190,7 @@ def _run_processing(
                         skip_existing=not collision,
                     )
                     reserved_outputs.add(_path_key(outp))
-                    key = _checkpoint_key(str(path), str(outp))
+                    key = _checkpoint_key(str(path), str(outp), config)
                     checkpoint_done = (
                         not args.no_resume
                         and _checkpoint_is_done(ckpt_dir, key, str(outp))
@@ -2293,7 +2299,7 @@ def _run_processing(
                     skip_existing=args.skip_existing,
                 )
                 reserved_outputs.add(_path_key(outp))
-                key = _checkpoint_key(inp, str(outp))
+                key = _checkpoint_key(inp, str(outp), config)
                 checkpoint_done = (
                     not args.no_resume
                     and _checkpoint_is_done(ckpt_dir, key, str(outp))
@@ -2538,6 +2544,13 @@ def _run_processing(
 
 def main():
     """CLI entry point."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     early_parser = argparse.ArgumentParser(add_help=False)
     early_parser.add_argument("--support-bundle", metavar="PATH")
     early_args, _remaining = early_parser.parse_known_args()

@@ -239,6 +239,7 @@ class ExternalInpainter(BaseInpainter):
         originals = []
         filled = []
         result_masks = []
+        missing_indices = []
         for i, (frame, mask) in enumerate(zip(frames, masks)):
             out_path = os.path.join(out_dir, f"{i:06d}.png")
             if os.path.isfile(out_path):
@@ -251,6 +252,12 @@ class ExternalInpainter(BaseInpainter):
             originals.append(frame)
             filled.append(frame.copy())
             result_masks.append(np.zeros_like(mask))
+            missing_indices.append(i)
+        if missing_indices:
+            logger.warning(
+                "External inpainter returned missing or malformed frame(s): %s",
+                missing_indices,
+            )
         return apply_finishing(
             originals, filled, result_masks, self._config,
         )

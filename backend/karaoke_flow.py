@@ -41,7 +41,11 @@ def warp_mask_with_flow(prev_frame: np.ndarray,
     text that moved between frames."""
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     next_gray = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
-    flow = _calc_dense_flow(prev_gray, next_gray, flow_estimator)
+    # remap() samples the source at destination-grid coordinates. Estimate
+    # the inverse (next -> previous) flow so a previous-frame mask lands on
+    # the next-frame subtitle position rather than moving in the opposite
+    # direction.
+    flow = _calc_dense_flow(next_gray, prev_gray, flow_estimator)
     h, w = mask.shape[:2]
     gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
     map_x = gx + flow[..., 0]

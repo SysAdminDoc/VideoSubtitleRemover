@@ -337,10 +337,17 @@ def maybe_register() -> List[str]:
     list of registered mode names so callers can log what landed."""
     from backend.inpainter_registry import register
     registered = []
-    if os.environ.get("VSR_LAMA_ONNX"):
+    lama_path = os.environ.get("VSR_LAMA_ONNX", "").strip()
+    if lama_path and Path(lama_path).is_file():
         register("lama", lambda device, config: LamaOnnxInpainter(device, config))
         registered.append("lama (ONNX)")
         logger.info("LaMa-ONNX backend registered, shadowing PyTorch LaMa")
+    elif lama_path:
+        logger.warning(
+            "Ignoring VSR_LAMA_ONNX because the configured model does not "
+            "exist: %s",
+            lama_path,
+        )
     if os.environ.get("VSR_MIGAN_ONNX"):
         register("migan", lambda device, config: MiGanInpainter(device, config))
         registered.append("migan")

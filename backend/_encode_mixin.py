@@ -335,7 +335,7 @@ class _EncodeMixin:
             )
             if use_vfr:
                 normalized_durations = []
-                fallback = 1.0 / max(float(fps), 1.0)
+                fallback = 1.0 / max(float(fps), 1e-6)
                 for value in frame_durations[:frame_total]:
                     try:
                         duration = float(value)

@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Backend audit fixes harden resumed jobs and optional engines.** Completion
+  checkpoints now include processing settings, derived exports restart from a
+  complete frame, ranged selective reruns handle range-relative outputs, and
+  sub-1 FPS timing is preserved. TBE flow/coverage gates, OCR confidence and
+  fixes, LaMa/ONNX/diffusion adapters, SAM overlap handling, decoder seeks,
+  CLI output/signals, and typed intermediate-writer failures now fail or
+  degrade explicitly.
+
 - **Deferred GUI strings now enter the translation catalog.** Status messages,
   queue labels, card headers, slider labels and hints use explicit `N_()`
   markers; the extractor supports their deferred f-string templates, and the

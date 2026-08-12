@@ -266,12 +266,17 @@ def refine_mask_with_sam2(frame: np.ndarray,
         predictor.set_image(rgb)
         refined = base_mask.copy()
         height, width = base_mask.shape[:2]
-        for raw_box in boxes:
-            clipped = _clip_box(raw_box, width, height)
-            if clipped is None:
-                continue
-            x1, y1, x2, y2 = clipped
+        clipped_boxes = [
+            clipped for raw_box in boxes
+            if (clipped := _clip_box(raw_box, width, height)) is not None
+        ]
+        # Clear all prompted regions before adding any predictor output. If a
+        # later box overlaps an earlier one, clearing inside the loop would
+        # erase the earlier SAM mask and make the result order-dependent.
+        for x1, y1, x2, y2 in clipped_boxes:
             refined[y1:y2, x1:x2] = 0
+        for clipped in clipped_boxes:
+            x1, y1, x2, y2 = clipped
             box_t = np.array([x1, y1, x2, y2], dtype=np.float32)[None, :]
             point = _positive_point_for_box(base_mask, clipped)
             labels = np.array([1], dtype=np.int32)

@@ -707,6 +707,46 @@ class SubtitleDetector:
     ) -> List[Tuple[int, int, int, int, float]]:
         if self._rapid_model is not None:
             return self._detect_rapid_conf(frame, threshold)
+        if self._paddle_model is not None:
+            try:
+                from backend.paddle_compat import extract_paddle_text_boxes
+                return [row[:5] for row in extract_paddle_text_boxes(
+                    self._paddle_model, frame, threshold)]
+            except Exception as exc:
+                logger.error(f"PaddleOCR confidence detection error: {exc}")
+                return [(*box, 1.0) for box in self._fallback_detection(frame)]
+        if self._surya_det is not None:
+            try:
+                from PIL import Image
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                predictions = self._surya_det([Image.fromarray(frame_rgb)])
+                output = []
+                for bbox in predictions[0].bboxes if predictions else []:
+                    confidence = float(getattr(bbox, "confidence", 1.0))
+                    if confidence >= threshold:
+                        x1, y1, x2, y2 = [int(v) for v in bbox.bbox]
+                        output.append((x1, y1, x2, y2, confidence))
+                return output
+            except Exception as exc:
+                logger.error(f"Surya confidence detection error: {exc}")
+                return [(*box, 1.0) for box in self._fallback_detection(frame)]
+        if self._easyocr_reader is not None:
+            try:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                output = []
+                for bbox, _text, confidence in self._easyocr_reader.readtext(
+                    frame_rgb
+                ):
+                    confidence = float(confidence)
+                    if confidence < threshold:
+                        continue
+                    box = self._poly_to_box(bbox)
+                    if box is not None:
+                        output.append((*box, confidence))
+                return output
+            except Exception as exc:
+                logger.error(f"EasyOCR confidence detection error: {exc}")
+                return [(*box, 1.0) for box in self._fallback_detection(frame)]
         boxes = self._detect_axis_aligned(frame, threshold)
         return [(x1, y1, x2, y2, 1.0) for (x1, y1, x2, y2) in boxes]
 
@@ -752,7 +792,7 @@ class SubtitleDetector:
         if output is None:
             return []
         results = output[0] if isinstance(output, tuple) and output else output
-        if results is None:
+        if not results:
             return []
         polys = cls._rapid_field(
             results, "boxes", "dt_polys", "dt_boxes", "polys", "det_polys")

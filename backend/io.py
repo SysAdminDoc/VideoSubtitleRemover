@@ -80,13 +80,13 @@ class VideoFrameTiming:
         if 0 <= int(index) < len(self.timestamps):
             return float(self.timestamps[int(index)])
         rate = self.average_fps if self.average_fps > 0 else fallback_fps
-        return max(0.0, int(index) / max(rate, 1.0))
+        return max(0.0, int(index) / max(rate, 1e-6))
 
     def frame_duration(self, index: int, fallback_fps: float = 30.0) -> float:
         if 0 <= int(index) < len(self.durations):
             return float(self.durations[int(index)])
         rate = self.average_fps if self.average_fps > 0 else fallback_fps
-        return 1.0 / max(rate, 1.0)
+        return 1.0 / max(rate, 1e-6)
 
     def frame_range(
         self,
@@ -688,7 +688,7 @@ def _probe_video_frame_timing(
     average_fps = _parse_ffmpeg_ratio(stream.get("avg_frame_rate"), 0.0)
     if average_fps <= 0:
         average_fps = _parse_ffmpeg_ratio(stream.get("r_frame_rate"), 30.0)
-    fallback_duration = 1.0 / max(average_fps, 1.0)
+    fallback_duration = 1.0 / max(average_fps, 1e-6)
     time_base = _parse_ffmpeg_ratio(stream.get("time_base"), 0.0)
     stream_start = _parse_ffmpeg_ratio(stream.get("start_time"), 0.0)
     try:
@@ -1194,7 +1194,8 @@ class _FrameSequenceCapture:
         if first is None:
             raise ValueError(f"Could not read first frame: {self._files[0]}")
         self._h, self._w = first.shape[:2]
-        self._fps = max(1.0, float(fps))
+        fps_value = float(fps)
+        self._fps = fps_value if fps_value > 0 else 24.0
         self._pos = 0
 
     def isOpened(self) -> bool:
@@ -1334,7 +1335,7 @@ class _FfmpegBgr48Capture:
             ):
                 seek_seconds = self._frame_timestamps[self._pos]
             else:
-                seek_seconds = self._pos / max(self._fps, 1.0)
+                seek_seconds = self._pos / max(self._fps, 1e-6)
             cmd += ["-ss", f"{seek_seconds:.9f}"]
         cmd += [
             "-i", self._path,
@@ -1398,7 +1399,8 @@ def _open_bgr48_capture(path: str, *, input_fps: float = 24.0):
         except (TypeError, ValueError):
             fps = 0.0
         if not np.isfinite(fps) or fps <= 0:
-            fps = max(1.0, float(input_fps or 24.0))
+            fallback_fps = float(input_fps or 24.0)
+            fps = fallback_fps if fallback_fps > 0 else 24.0
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -1748,9 +1750,15 @@ class _LosslessIntermediateWriter:
             frame = np.ascontiguousarray(frame)
         if self._proc is not None and self._proc.stdin is not None:
             if self._proc.poll() is not None:
-                raise BrokenPipeError(
-                    f"FFV1 ffmpeg process exited with code {self._proc.returncode}"
-                    " before frame could be written"
+                raise MediaWriteError(
+                    "The intermediate video writer stopped before the current "
+                    "frame was saved; the partial output was discarded.",
+                    reason="intermediate_writer_died",
+                    path=self._path,
+                    detail=(
+                        f"FFV1 ffmpeg process exited with code "
+                        f"{self._proc.returncode} before frame could be written"
+                    ),
                 )
             try:
                 self._proc.stdin.write(frame.tobytes())
@@ -1763,7 +1771,15 @@ class _LosslessIntermediateWriter:
                     f"FFV1 ffmpeg stdin broke after writing frames: {exc}"
                     + (f"\nffmpeg stderr: {stderr_excerpt}" if stderr_excerpt else "")
                 )
-                raise
+                raise MediaWriteError(
+                    "The intermediate video writer stopped while saving a frame; "
+                    "the partial output was discarded.",
+                    reason="intermediate_writer_died",
+                    path=self._path,
+                    detail=(str(exc)
+                            + (f"; ffmpeg stderr: {stderr_excerpt}"
+                               if stderr_excerpt else "")),
+                ) from exc
         elif self._fallback is not None:
             self._fallback.write(frame)
 

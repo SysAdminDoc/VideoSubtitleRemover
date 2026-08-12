@@ -231,7 +231,12 @@ def _try_onnx_session(model_path: str, device: str):
             model_path, _providers_for_device(device)
         )
         preload_onnxruntime_cuda_dlls_if_needed(ort, providers)
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "LaMa provider selection for %s failed; falling back to CPU: %s",
+            device,
+            exc,
+        )
         providers = ["CPUExecutionProvider"]
     try:
         session = ort.InferenceSession(model_path, providers=providers)
@@ -327,21 +332,30 @@ class LAMAInpainter(BaseInpainter):
                 log_adapter_verification as _log_adapter,
                 verify_adapter_path as _verify_adapter,
             )
-            from backend.model_hashes import (
-                candidate_weight_dirs as _cands,
-            )
-            for cache_dir in _cands():
-                for path in cache_dir.glob("**/big-lama*.pt"):
-                    result = _verify_adapter("simple-lama", str(path))
-                    _log_adapter(result)
-                    if not result.allowed:
-                        self._lama = None
-                        self._backend_name = "cv2"
-                        logger.warning(
-                            "LaMa neural inpainting disabled because cached "
-                            "weights failed manifest verification."
-                        )
-                    return
+            model_env = os.environ.get("LAMA_MODEL", "").strip()
+            if model_env:
+                path = Path(model_env)
+            else:
+                import torch
+                model_url = os.environ.get(
+                    "LAMA_MODEL_URL",
+                    "https://github.com/enesmsahin/simple-lama-inpainting/"
+                    "releases/download/v0.1.0/big-lama.pt",
+                )
+                path = Path(torch.hub.get_dir()) / "checkpoints" / Path(
+                    model_url.split("?", 1)[0]).name
+            if not path.is_file():
+                logger.debug("Simple-Lama weights are not present at %s", path)
+                return
+            result = _verify_adapter("simple-lama", str(path))
+            _log_adapter(result)
+            if not result.allowed:
+                self._lama = None
+                self._backend_name = "cv2"
+                logger.warning(
+                    "LaMa neural inpainting disabled because cached "
+                    "weights failed manifest verification."
+                )
         except Exception as exc:
             logger.debug("Weight verification skipped: %s", exc)
 
@@ -457,7 +471,12 @@ class LAMAInpainter(BaseInpainter):
                     ramp = min(overlap, th // 2, tw // 2)
                     if ramp > 0:
                         taper = 0.5 - 0.5 * np.cos(
-                            np.linspace(0, np.pi, ramp, dtype=np.float32))
+                            np.linspace(
+                                0.5 * np.pi / ramp,
+                                np.pi - 0.5 * np.pi / ramp,
+                                ramp,
+                                dtype=np.float32,
+                            ))
                         wy[:ramp] *= taper
                         wy[-ramp:] *= taper[::-1]
                         wx[:ramp] *= taper
@@ -575,7 +594,11 @@ class LAMAInpainter(BaseInpainter):
                     if ramp > 0:
                         taper = 0.5 - 0.5 * np.cos(
                             np.linspace(
-                                0, np.pi, ramp, dtype=np.float32))
+                                0.5 * np.pi / ramp,
+                                np.pi - 0.5 * np.pi / ramp,
+                                ramp,
+                                dtype=np.float32,
+                            ))
                         wy[:ramp] *= taper
                         wy[-ramp:] *= taper[::-1]
                         wx[:ramp] *= taper
@@ -705,7 +728,12 @@ class LAMAInpainter(BaseInpainter):
                         ramp = min(overlap, th // 2, tw // 2)
                         if ramp > 0:
                             taper = 0.5 - 0.5 * np.cos(
-                                np.linspace(0, np.pi, ramp, dtype=np.float32))
+                                np.linspace(
+                                    0.5 * np.pi / ramp,
+                                    np.pi - 0.5 * np.pi / ramp,
+                                    ramp,
+                                    dtype=np.float32,
+                                ))
                             wy[:ramp] *= taper
                             wy[-ramp:] *= taper[::-1]
                             wx[:ramp] *= taper

@@ -25,16 +25,15 @@ class STTNInpainter(BaseInpainter):
         self.device = device
         from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
+        self._last_backend_name = "cv2"
 
     @property
     def backend_name(self) -> str:
-        return (
-            "TBE (temporal background exposure)"
-            if self.config.tbe_enable else "cv2"
-        )
+        return self._last_backend_name
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self.config.tbe_enable and len(frames) > 1:
+            self._last_backend_name = "TBE (temporal background exposure)"
             return _temporal_background_expose(
                 frames, masks,
                 min_coverage=max(1, self.config.tbe_min_coverage),
@@ -55,6 +54,7 @@ class STTNInpainter(BaseInpainter):
                 translucency_enable=getattr(
                     self.config, "translucency_enable", True),
             )
+        self._last_backend_name = "cv2"
         filled = [_cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
                   for f, m in zip(frames, masks)]
         return apply_finishing(frames, filled, masks, self.config)
