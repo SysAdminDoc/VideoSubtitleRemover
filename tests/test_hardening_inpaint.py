@@ -1011,12 +1011,42 @@ class TiledLamaTests(unittest.TestCase):
         inpainter.config = cfg
         inpainter.device = "cpu"
         def fake_lama(pil_img, pil_mask):
-            return pil_img
+            # Reproduce simple-lama-inpainting's padded output contract.
+            from PIL import Image as _Image
+            padded = _Image.new(
+                "RGB", (pil_img.width + 8, pil_img.height + 8), (0, 0, 0))
+            padded.paste(pil_img, (0, 0))
+            return padded
         inpainter._lama = fake_lama
         frame = _np.random.randint(0, 255, (600, 800, 3), dtype=_np.uint8)
         mask = _np.zeros((600, 800), dtype=_np.uint8)
         mask[250:350, 300:500] = 255
         result = inpainter._inpaint_lama_tiled(frame, mask, 256, 32)
+        self.assertEqual(result.shape, frame.shape)
+        self.assertEqual(result.dtype, _np.uint8)
+
+    def test_full_frame_pytorch_crops_non_mod8_model_output(self):
+        import numpy as _np
+        from PIL import Image as _Image
+        from backend.inpainters.lama import LAMAInpainter
+
+        cfg = gui.ProcessingConfig()
+        inpainter = LAMAInpainter.__new__(LAMAInpainter)
+        inpainter.config = cfg
+        inpainter.device = "cpu"
+
+        def padded_lama(pil_img, pil_mask):
+            padded = _Image.new(
+                "RGB", (pil_img.width + 8, pil_img.height + 8), (0, 0, 0))
+            padded.paste(pil_img, (0, 0))
+            return padded
+
+        inpainter._lama = padded_lama
+        frame = _np.random.randint(0, 255, (270, 480, 3), dtype=_np.uint8)
+        mask = _np.zeros((270, 480), dtype=_np.uint8)
+        mask[100:160, 180:300] = 255
+
+        result = inpainter._inpaint_pytorch([frame], [mask])[0]
         self.assertEqual(result.shape, frame.shape)
         self.assertEqual(result.dtype, _np.uint8)
 

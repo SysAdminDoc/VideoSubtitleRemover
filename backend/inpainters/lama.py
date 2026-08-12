@@ -638,6 +638,14 @@ class LAMAInpainter(BaseInpainter):
                 pil_mask = Image.fromarray(mask)
                 result_pil = self._lama(pil_image, pil_mask)
                 result_bgr = cv2.cvtColor(np.array(result_pil), cv2.COLOR_RGB2BGR)
+                # simple-lama-inpainting pads inputs to a multiple of eight
+                # but does not crop its result back to the source geometry.
+                # Finishing and output contracts require the original shape.
+                result_bgr = result_bgr[:h, :w]
+                if result_bgr.shape[:2] != (h, w):
+                    raise ValueError(
+                        "LaMa returned a frame smaller than the source"
+                    )
                 results.append(result_bgr)
             except Exception as e:
                 logger.warning(
@@ -683,27 +691,36 @@ class LAMAInpainter(BaseInpainter):
                 try:
                     pil_out = self._lama(pil_tile, pil_mask)
                     tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
+                    tile_h, tile_w = tile_frame.shape[:2]
+                    tile_out = tile_out[:tile_h, :tile_w]
+                    if tile_out.shape[:2] != (tile_h, tile_w):
+                        raise ValueError(
+                            "LaMa tile output is smaller than the source tile"
+                        )
+
+                    th, tw = tile_out.shape[:2]
+                    wy = np.ones(th, dtype=np.float32)
+                    wx = np.ones(tw, dtype=np.float32)
+                    if overlap > 0:
+                        ramp = min(overlap, th // 2, tw // 2)
+                        if ramp > 0:
+                            taper = 0.5 - 0.5 * np.cos(
+                                np.linspace(0, np.pi, ramp, dtype=np.float32))
+                            wy[:ramp] *= taper
+                            wy[-ramp:] *= taper[::-1]
+                            wx[:ramp] *= taper
+                            wx[-ramp:] *= taper[::-1]
+                    win = np.outer(wy, wx)
+                    color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32) * win[..., None]
+                    weight_acc[ty1:ty2, tx1:tx2] += win
                 except Exception:
                     logger.warning(
                         "LaMa PyTorch tile inference failed, falling back to cv2",
                         exc_info=True,
                     )
                     tile_out = _cv2_inpaint(tile_frame, tile_mask, 7, cv2.INPAINT_NS)
-                th, tw = tile_out.shape[:2]
-                wy = np.ones(th, dtype=np.float32)
-                wx = np.ones(tw, dtype=np.float32)
-                if overlap > 0:
-                    ramp = min(overlap, th // 2, tw // 2)
-                    if ramp > 0:
-                        taper = 0.5 - 0.5 * np.cos(
-                            np.linspace(0, np.pi, ramp, dtype=np.float32))
-                        wy[:ramp] *= taper
-                        wy[-ramp:] *= taper[::-1]
-                        wx[:ramp] *= taper
-                        wx[-ramp:] *= taper[::-1]
-                win = np.outer(wy, wx)
-                color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32) * win[..., None]
-                weight_acc[ty1:ty2, tx1:tx2] += win
+                    color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32)
+                    weight_acc[ty1:ty2, tx1:tx2] += 1.0
                 tile_count += 1
         if tile_count > 0:
             blend_mask = weight_acc > 0

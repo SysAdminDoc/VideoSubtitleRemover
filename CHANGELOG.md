@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The opt-in PyTorch LaMa fallback now restores source geometry.** Full-frame
+  and tiled simple-lama outputs are cropped back from their modulo-eight
+  padding before finishing, so non-mod-8 inputs no longer fail or blend at the
+  wrong shape.
+
 - **The offline guarantee is now explicit in the Overview.** README states
   that processing needs no account or upload, and documents the opt-in update
   check plus the two-variable crash-reporting gate and their disable controls.
