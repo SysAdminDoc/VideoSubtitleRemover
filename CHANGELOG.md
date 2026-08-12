@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The TTML/IMSC rejection rationale is current.** The format notes now
+  acknowledge IMSC Text Profile 1.3's 21 May 2026 W3C Recommendation status
+  while recording the current demand and XML/layout surface reasons for
+  staying with SRT and loss-aware WebVTT.
+
 - **The install documentation no longer presents winget as a supported path.**
   README now states that no manifest is published, explains the unsigned
   SmartScreen/Mark-of-the-Web limitation, and points users to the verified

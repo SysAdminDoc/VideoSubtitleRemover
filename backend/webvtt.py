@@ -18,10 +18,12 @@ Where a conversion genuinely cannot be lossless -- writing a positioned,
 regioned WebVTT document out as SRT -- `loss_report()` enumerates what
 will be dropped instead of dropping it quietly.
 
-TTML and IMSC are deliberately not handled here. They are a different
-model (XML, nested styling, layout regions with inheritance) and pretending
-otherwise inside a WebVTT parser would be the same silent-flattening
-mistake one format further along.
+TTML and IMSC are deliberately not handled here. IMSC Text Profile 1.3 is a
+W3C Recommendation dated 21 May 2026, but it remains a different model (XML,
+nested styling, layout regions with inheritance). The current demand signal
+does not justify adding that larger parser surface, and pretending otherwise
+inside a WebVTT parser would be the same silent-flattening mistake one format
+further along. See https://www.w3.org/TR/ttml-imsc1.3/.
 """
 
 from __future__ import annotations

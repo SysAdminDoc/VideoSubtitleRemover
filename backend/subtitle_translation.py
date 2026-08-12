@@ -290,8 +290,11 @@ def translated_srt_path(
 def subtitle_format(path: str | Path) -> str:
     """Return "vtt" or "srt" for a subtitle path. Anything else is SRT.
 
-    Only these two are claimed. TTML/IMSC are a different model entirely
-    and are rejected loudly rather than silently parsed as SRT.
+    Only these two are claimed. TTML/IMSC are a different model entirely;
+    IMSC Text Profile 1.3 became a W3C Recommendation on 21 May 2026, but its
+    XML, nested styling, and inherited layout-region surface is still outside
+    the current demand envelope. They are rejected loudly rather than
+    silently parsed as SRT. See https://www.w3.org/TR/ttml-imsc1.3/.
     """
     suffix = Path(path).suffix.lower()
     if suffix == ".vtt":

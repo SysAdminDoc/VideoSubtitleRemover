@@ -1,6 +1,5 @@
 """RM-154: loss-aware WebVTT translation and re-embed interchange."""
 
-import json
 from pathlib import Path
 import sys
 import tempfile
@@ -392,6 +391,17 @@ class TranslationPipelineTests(unittest.TestCase):
         self.assertEqual(subtitle_format("a.VTT"), "vtt")
         self.assertEqual(subtitle_format("a.srt"), "srt")
         self.assertEqual(subtitle_format("a.txt"), "srt")
+
+    def test_rejection_rationale_names_current_imsc_recommendation(self):
+        import backend.subtitle_translation as translation
+
+        self.assertIn("21 May 2026", translation.subtitle_format.__doc__ or "")
+        self.assertIn("21 May 2026", W.__doc__ or "")
+        self.assertIn(
+            "w3.org/TR/ttml-imsc1.3",
+            translation.subtitle_format.__doc__ or "",
+        )
+        self.assertIn("w3.org/TR/ttml-imsc1.3", W.__doc__ or "")
 
     def test_ttml_and_imsc_are_refused_loudly(self):
         # The item scopes TTML/IMSC out. Silently parsing one as SRT is
