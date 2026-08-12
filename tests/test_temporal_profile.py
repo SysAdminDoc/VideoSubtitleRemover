@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import sys
+import time
 import unittest
 
 import numpy as np
@@ -44,6 +45,81 @@ class SyntheticFixtureTests(unittest.TestCase):
         outside = masks[0] == 0
         self.assertEqual(int(delta[outside].sum()), 0)
         self.assertGreater(int(delta[~outside].sum()), 0)
+
+
+class DenseFlowEstimatorTests(unittest.TestCase):
+    @staticmethod
+    def _large_motion_fixture():
+        height, width = 160, 240
+        rng = np.random.default_rng(7)
+        reference = rng.integers(
+            0, 256, (height, width, 3), dtype=np.uint8)
+        reference = _common.cv2.GaussianBlur(reference, (3, 3), 0)
+        dx, dy = 16.0, 8.0
+        source = _common.cv2.warpAffine(
+            reference,
+            np.asarray([[1, 0, dx], [0, 1, dy]], dtype=np.float32),
+            (width, height),
+            borderMode=_common.cv2.BORDER_REFLECT,
+        )
+        expected = np.zeros((height, width, 2), dtype=np.float32)
+        expected[..., 0] = dx
+        expected[..., 1] = dy
+        valid = np.zeros((height, width), dtype=bool)
+        valid[32:-32, 32:-32] = True
+        return reference, source, expected, valid
+
+    def test_dis_beats_farneback_on_large_blurred_motion(self):
+        reference, source, expected, valid = self._large_motion_fixture()
+        ref_gray = _common.cv2.cvtColor(
+            reference, _common.cv2.COLOR_BGR2GRAY)
+        src_gray = _common.cv2.cvtColor(source, _common.cv2.COLOR_BGR2GRAY)
+        measurements = {}
+        for estimator in ("farneback", "dis"):
+            _common._calc_dense_flow(ref_gray, src_gray, estimator)
+            timings = []
+            errors = []
+            for _ in range(5):
+                started = time.perf_counter()
+                flow = _common._calc_dense_flow(
+                    ref_gray, src_gray, estimator)
+                timings.append(time.perf_counter() - started)
+                errors.append(float(np.linalg.norm(
+                    flow[valid] - expected[valid], axis=1).mean()))
+            measurements[estimator] = (
+                float(np.median(errors)), float(np.median(timings)))
+
+        dis_error, dis_time = measurements["dis"]
+        farneback_error, farneback_time = measurements["farneback"]
+        self.assertLessEqual(dis_error, farneback_error)
+        self.assertLessEqual(dis_time, farneback_time)
+
+    def test_frame_and_mask_warps_honour_the_selected_estimator(self):
+        reference, source, _expected, _valid = self._large_motion_fixture()
+        mask = np.zeros(reference.shape[:2], dtype=np.uint8)
+        mask[48:92, 84:138] = 255
+        with mock.patch.object(
+            _common, "_calc_dense_flow",
+            wraps=_common._calc_dense_flow,
+        ) as estimator:
+            _common._warp_to_reference(source, reference, "farneback")
+            _common._warp_mask_to_reference(
+                mask, source, reference, "dis")
+        self.assertEqual(
+            [call.args[2] for call in estimator.call_args_list],
+            ["farneback", "dis"],
+        )
+
+    def test_dis_unavailable_falls_back_to_farneback(self):
+        reference, source, _expected, _valid = self._large_motion_fixture()
+        ref_gray = _common.cv2.cvtColor(
+            reference, _common.cv2.COLOR_BGR2GRAY)
+        src_gray = _common.cv2.cvtColor(source, _common.cv2.COLOR_BGR2GRAY)
+        with mock.patch.object(_common.cv2, "DISOpticalFlow_create", None), \
+                self.assertLogs(_common.logger.name, level="DEBUG") as captured:
+            flow = _common._calc_dense_flow(ref_gray, src_gray, "dis")
+        self.assertEqual(flow.shape[:2], ref_gray.shape)
+        self.assertTrue(any("unavailable" in line for line in captured.output))
 
 
 class MetricTests(unittest.TestCase):

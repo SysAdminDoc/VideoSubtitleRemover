@@ -26,23 +26,22 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+from backend.inpainters._common import _calc_dense_flow
+
 logger = logging.getLogger(__name__)
 
 
 def warp_mask_with_flow(prev_frame: np.ndarray,
                          next_frame: np.ndarray,
-                         mask: np.ndarray) -> np.ndarray:
+                         mask: np.ndarray,
+                         flow_estimator: str = "dis") -> np.ndarray:
     """RM-43: warp `mask` from `prev_frame`'s coords into the next
-    frame's coords using Farneback dense optical flow. Lets callers
+    frame's coords using configurable dense optical flow. Lets callers
     union the warped mask with the next detection to catch karaoke
     text that moved between frames."""
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     next_gray = cv2.cvtColor(next_frame, cv2.COLOR_BGR2GRAY)
-    flow = cv2.calcOpticalFlowFarneback(
-        prev_gray, next_gray, None,
-        pyr_scale=0.5, levels=3, winsize=21, iterations=3,
-        poly_n=7, poly_sigma=1.5, flags=0,
-    )
+    flow = _calc_dense_flow(prev_gray, next_gray, flow_estimator)
     h, w = mask.shape[:2]
     gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
     map_x = gx + flow[..., 0]

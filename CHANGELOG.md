@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **TBE residual flow now has a DIS path.** DIS FAST is the default dense-flow
+  estimator, with explicit Farneback selection and a logged fallback when the
+  installed OpenCV build does not expose DIS; frame, mask, and karaoke warps
+  use the same estimator contract.
+
 - **TBE now rejects misaligned temporal samples.** Per-pixel median/MAD
   filtering removes corrupted exposures before averaging, while sparse pixels
   retain the historical batch-size fallback behavior.

@@ -530,6 +530,7 @@ class ProcessingConfig:
     tbe_use_median: bool = True
 
     tbe_flow_warp: bool = False
+    tbe_flow_estimator: str = "dis"
     tbe_global_motion_align: bool = True
     tbe_scene_cut_split: bool = True
     tbe_scene_cut_threshold: float = 0.35
@@ -738,6 +739,10 @@ class ProcessingConfig:
         self.tbe_min_coverage = _coerce_int(self.tbe_min_coverage, 3, 1, 10)
         self.tbe_use_median = _coerce_bool(self.tbe_use_median, True)
         self.tbe_flow_warp = _coerce_bool(self.tbe_flow_warp, False)
+        self.tbe_flow_estimator = _coerce_text(
+            self.tbe_flow_estimator, "dis", 16).lower()
+        if self.tbe_flow_estimator not in {"dis", "farneback"}:
+            self.tbe_flow_estimator = "dis"
         self.tbe_global_motion_align = _coerce_bool(
             self.tbe_global_motion_align, True)
         self.tbe_scene_cut_split = _coerce_bool(self.tbe_scene_cut_split, True)
@@ -1386,6 +1391,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "tbe_min_coverage",
     "tbe_use_median",
     "tbe_flow_warp",
+    "tbe_flow_estimator",
     "tbe_global_motion_align",
     "tbe_scene_cut_split",
     "tbe_scene_cut_threshold",
@@ -1474,6 +1480,7 @@ DEFAULT_PRESET_FIELDS = [
     "mode", "detection_threshold", "mask_dilate_px",
     "mask_feather_px", "edge_ring_px", "rapidocr_variant",
     "tbe_flow_warp",
+    "tbe_flow_estimator",
     "tbe_global_motion_align",
     "tbe_scene_cut_split", "colour_tune_enable",
     "colour_tune_tolerance", "kalman_tracking",

@@ -1,5 +1,5 @@
 """Shared inpainter primitives: BaseInpainter ABC, mask conditioning,
-Farneback warp helpers, the TBE primitive, and the scene-cut detector
+dense-flow warp helpers, the TBE primitive, and the scene-cut detector
 cascade used by STTN / ProPainter / AUTO.
 """
 
@@ -323,7 +323,7 @@ def stabilize_masks_rolling_union(
 
 
 # ---------------------------------------------------------------------------
-# Farneback warp helpers + TBE primitive
+# Dense optical-flow warp helpers + TBE primitive
 # ---------------------------------------------------------------------------
 
 
@@ -333,16 +333,69 @@ def _farneback_winsize(h: int, w: int) -> int:
     return int(max(9, min(33, short_edge // 24)))
 
 
-def _warp_to_reference(src: np.ndarray, ref: np.ndarray) -> np.ndarray:
-    src_gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-    ref_gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
-    h, w = src.shape[:2]
+def _calc_farneback_flow(
+    ref_gray: np.ndarray,
+    src_gray: np.ndarray,
+) -> np.ndarray:
+    h, w = ref_gray.shape[:2]
     winsize = _farneback_winsize(h, w)
-    flow = cv2.calcOpticalFlowFarneback(
+    return cv2.calcOpticalFlowFarneback(
         ref_gray, src_gray, None,
         pyr_scale=0.5, levels=3, winsize=winsize, iterations=3,
         poly_n=7, poly_sigma=1.5, flags=0,
     )
+
+
+def _calc_dense_flow(
+    ref_gray: np.ndarray,
+    src_gray: np.ndarray,
+    flow_estimator: str = "dis",
+) -> np.ndarray:
+    """Estimate flow from reference coordinates into source coordinates.
+
+    DIS is the default because its FAST preset handles discontinuities without
+    adding a dependency. Farneback remains an explicit option and is also the
+    closed-loop fallback when a build lacks DIS or DIS fails at runtime.
+    """
+    estimator = str(flow_estimator or "dis").strip().lower()
+    if estimator not in {"dis", "farneback"}:
+        logger.debug(
+            "Unknown optical-flow estimator %r; using DIS",
+            flow_estimator,
+        )
+        estimator = "dis"
+
+    if estimator == "dis":
+        factory = getattr(cv2, "DISOpticalFlow_create", None)
+        preset = getattr(cv2, "DISOPTICAL_FLOW_PRESET_FAST", None)
+        if callable(factory) and preset is not None:
+            try:
+                flow = factory(preset).calc(ref_gray, src_gray, None)
+                if flow is None or flow.shape[:2] != ref_gray.shape[:2]:
+                    raise ValueError("DIS returned an invalid flow shape")
+                return flow
+            except Exception as exc:
+                logger.debug(
+                    "DIS optical flow failed; falling back to Farneback: %s",
+                    exc,
+                )
+        else:
+            logger.debug(
+                "DIS optical flow is unavailable; falling back to Farneback"
+            )
+
+    return _calc_farneback_flow(ref_gray, src_gray)
+
+
+def _warp_to_reference(
+    src: np.ndarray,
+    ref: np.ndarray,
+    flow_estimator: str = "dis",
+) -> np.ndarray:
+    src_gray = cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
+    ref_gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
+    h, w = src.shape[:2]
+    flow = _calc_dense_flow(ref_gray, src_gray, flow_estimator)
     grid_x, grid_y = np.meshgrid(np.arange(w, dtype=np.float32),
                                   np.arange(h, dtype=np.float32))
     map_x = grid_x + flow[..., 0]
@@ -351,17 +404,16 @@ def _warp_to_reference(src: np.ndarray, ref: np.ndarray) -> np.ndarray:
                      borderMode=cv2.BORDER_REPLICATE)
 
 
-def _warp_mask_to_reference(src_mask: np.ndarray, src_frame: np.ndarray,
-                              ref_frame: np.ndarray) -> np.ndarray:
+def _warp_mask_to_reference(
+    src_mask: np.ndarray,
+    src_frame: np.ndarray,
+    ref_frame: np.ndarray,
+    flow_estimator: str = "dis",
+) -> np.ndarray:
     src_gray = cv2.cvtColor(src_frame, cv2.COLOR_BGR2GRAY)
     ref_gray = cv2.cvtColor(ref_frame, cv2.COLOR_BGR2GRAY)
     h, w = src_mask.shape[:2]
-    winsize = _farneback_winsize(h, w)
-    flow = cv2.calcOpticalFlowFarneback(
-        ref_gray, src_gray, None,
-        pyr_scale=0.5, levels=3, winsize=winsize, iterations=3,
-        poly_n=7, poly_sigma=1.5, flags=0,
-    )
+    flow = _calc_dense_flow(ref_gray, src_gray, flow_estimator)
     grid_x, grid_y = np.meshgrid(np.arange(w, dtype=np.float32),
                                   np.arange(h, dtype=np.float32))
     map_x = grid_x + flow[..., 0]
@@ -447,11 +499,12 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                          min_coverage: int, use_median: bool,
                          feather_px: int, edge_ring_px: int,
                          flow_warp: bool,
-                         global_motion_align: bool = True) -> List[np.ndarray]:
+                         global_motion_align: bool = True,
+                         flow_estimator: str = "dis") -> List[np.ndarray]:
     """Aggregate one scene-contiguous segment via Temporal Background Exposure.
 
     Global affine registration puts every frame and mask in the middle-frame
-    reference coordinates before aggregation. The optional dense Farneback
+    reference coordinates before aggregation. The optional dense DIS/Farneback
     pass then refines residual parallax on those already registered frames.
     """
     n = len(frames)
@@ -521,8 +574,10 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                 warped_masks.append(mask)
                 continue
             try:
-                wf = _warp_to_reference(frame, ref_frame)
-                wm = _warp_mask_to_reference(mask, frame, ref_frame)
+                wf = _warp_to_reference(
+                    frame, ref_frame, flow_estimator)
+                wm = _warp_mask_to_reference(
+                    mask, frame, ref_frame, flow_estimator)
                 warped_frames.append(wf)
                 warped_masks.append(wm)
             except Exception as exc:
@@ -614,7 +669,8 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  scene_cut_split: bool = True,
                                  scene_cut_threshold: float = 0.35,
                                  scene_cut_use_pyscenedetect: bool = False,
-                                 scene_cut_use_transnetv2: bool = False) -> List[np.ndarray]:
+                                 scene_cut_use_transnetv2: bool = False,
+                                 flow_estimator: str = "dis") -> List[np.ndarray]:
     """Video-inpainting primitive: reconstruct masked pixels from
     temporally exposed neighbours with optional scene splitting, global
     alignment, and residual flow refinement."""
@@ -643,6 +699,7 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
             edge_ring_px=edge_ring_px,
             flow_warp=flow_warp,
             global_motion_align=global_motion_align,
+            flow_estimator=flow_estimator,
         ))
     return out
 

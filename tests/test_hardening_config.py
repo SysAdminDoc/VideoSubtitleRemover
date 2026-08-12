@@ -237,6 +237,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "detection_threshold", "detection_frame_skip",
         "mask_dilate_px", "mask_feather_px", "edge_ring_px",
         "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
+        "tbe_flow_estimator",
         "tbe_global_motion_align",
         "tbe_scene_cut_split", "tbe_scene_cut_threshold",
         "auto_band", "export_srt", "export_mask_video",

@@ -28,6 +28,8 @@ from backend.region_keyframes import normalize_region_keyframe_tracks
 
 logger = logging.getLogger(__name__)
 
+TBE_FLOW_ESTIMATORS = ("dis", "farneback")
+
 
 def _load_json_config(path: str) -> dict:
     """Load a bounded JSON object of ProcessingConfig field overrides."""
@@ -215,7 +217,8 @@ class ProcessingConfig:
     tbe_enable: bool = True       # enable temporal background exposure
     tbe_min_coverage: int = 3     # min frames where pixel must be unmasked to trust mean
     tbe_use_median: bool = True   # median is more robust than mean to motion
-    tbe_flow_warp: bool = False   # Farneback flow-warp frames before aggregating (motion-heavy)
+    tbe_flow_warp: bool = False   # dense flow-warp frames before aggregating
+    tbe_flow_estimator: str = "dis"  # dis (FAST) or farneback
     tbe_global_motion_align: bool = True  # affine-register each TBE segment to its reference
     tbe_scene_cut_split: bool = True   # split TBE batch at scene cuts
     tbe_scene_cut_threshold: float = 0.35   # histogram delta to call a cut
@@ -747,6 +750,10 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.tbe_min_coverage = _coerce_int(config.tbe_min_coverage, 3, 1, 32)
     config.tbe_use_median = _coerce_bool(config.tbe_use_median, True)
     config.tbe_flow_warp = _coerce_bool(config.tbe_flow_warp, False)
+    config.tbe_flow_estimator = _coerce_text(
+        config.tbe_flow_estimator, "dis", 16).lower()
+    if config.tbe_flow_estimator not in TBE_FLOW_ESTIMATORS:
+        config.tbe_flow_estimator = "dis"
     config.tbe_global_motion_align = _coerce_bool(
         config.tbe_global_motion_align, True)
     config.tbe_scene_cut_split = _coerce_bool(config.tbe_scene_cut_split, True)

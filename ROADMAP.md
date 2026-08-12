@@ -752,13 +752,6 @@ RESEARCH.md instead of appearing here.
 
 ### P2
 
-- [ ] P2 -- RM-257: The flow estimator is a hardcoded Farneback with no better option, though a stronger one ships in core OpenCV
-  Why: DIS handles motion discontinuities and occlusion boundaries better than Farneback at comparable CPU cost, and it is already available -- no new dependency, no model download.
-  Evidence: `backend/inpainters/_common.py:326-360` calls `cv2.calcOpticalFlowFarneback` twice with a hand-tuned `_farneback_winsize` heuristic. `cv2.DISOpticalFlow_create` is in the OpenCV core video module (confirmed present in the installed cv2) and exposes PRESET_ULTRAFAST/FAST/MEDIUM -- https://docs.opencv.org/4.x/da/d06/classcv_1_1optflow_1_1DISOpticalFlow.html. TV-L1 is deliberately excluded: `cv2.optflow.DualTVL1OpticalFlow` is opencv-contrib only and the repo requires plain `opencv-python`.
-  Touches: `backend/inpainters/_common.py`, `backend/karaoke_flow.py`, `backend/config.py`, `backend/cli.py`, `tests/`
-  Acceptance: A flow-estimator setting selects DIS (default preset FAST) or Farneback, probing for `DISOpticalFlow_create` and falling back to Farneback with a logged reason when absent; both `_warp_to_reference` and `_warp_mask_to_reference` honour it; a synthetic-motion fixture asserts the DIS path produces endpoint error no worse than Farneback at equal or lower wall time.
-  Complexity: S
-
 - [ ] P2 -- RM-258: Compositing corrects colour but not gradient, so seams survive on skin tones and gradients
   Why: `_edge_ring_color_correct` fixes a flat colour offset and `_feather_blend` softens the boundary, but neither matches the gradient field across the seam, which is what reads as a soft halo on smooth content.
   Evidence: `grep -rn "seamlessClone\|[Pp]oisson" backend/` returns nothing; finishing is edge-ring then feather for every inpainter via the shared `apply_finishing` introduced in 3.18.0. `cv2.seamlessClone` is in every OpenCV build the repo already requires -- https://docs.opencv.org/4.x/df/da0/group__photo__clone.html. Implement the modified-Poisson variant, not vanilla: naive Poisson blending is a documented source of temporal bleeding, which matters for video -- https://link.springer.com/article/10.1007/s41095-015-0027-z.
