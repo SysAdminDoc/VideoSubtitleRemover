@@ -121,9 +121,9 @@ $profile = "cpu"
 
 # Install PyTorch (Python 3.12/3.13 recommended for CUDA):
 # NVIDIA RTX 20/30/40/50-series:
-pip install torch>=2.10.0 torchvision>=0.25.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cu128
+pip install torch>=2.11.0 torchvision>=0.26.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cu128
 # CPU:
-pip install torch>=2.10.0 torchvision>=0.25.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cpu
+pip install torch>=2.11.0 torchvision>=0.26.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cpu
 
 # Install dependencies
 pip install -r requirements.txt --constraint "dependency_profiles/$profile.txt"
@@ -1097,10 +1097,11 @@ the `cu128` build. To fix an existing environment manually:
 ```powershell
 .\venv\Scripts\activate
 pip uninstall -y torch torchvision
-pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
+pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
-torch 2.7+ supports Python 3.9-3.13, so a recent Python is fine. If
+The reviewed NVIDIA CUDA 12.8 lane uses torch 2.11.0/torchvision 0.26.0;
+CPU and DirectML use the current 2.13.0/0.28.0 pair. If
 PaddleOCR fails to load on Blackwell, detection automatically falls back
 to RapidOCR (ONNX Runtime), which is GPU-generation agnostic.
 

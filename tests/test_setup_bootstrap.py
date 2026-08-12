@@ -108,7 +108,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
         self.assertTrue(ok)
         args = run.call_args.args[0]
-        self.assertIn("torch>=2.10.0", args)
+        self.assertIn("torch>=2.11.0", args)
         self.assertIn("https://download.pytorch.org/whl/cu128", args)
         self.assertNotIn("https://download.pytorch.org/whl/cu118", args)
 
@@ -235,7 +235,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
-        self.assertTrue(any("torch>=2.10.0" in call for call in calls))
+        self.assertTrue(any("torch>=2.11.0" in call for call in calls))
         self.assertTrue(any("https://download.pytorch.org/whl/cpu" in call for call in calls))
         self.assertFalse(any("torch-directml" in call for call in calls))
 

@@ -48,6 +48,10 @@ ONNXRUNTIME_GPU_SPEC = (
 # Its floor is the security floor, not the GPU recommendation.
 ONNXRUNTIME_CPU_MIN = "1.26.0"
 ONNXRUNTIME_CPU_SPEC = f"onnxruntime>={ONNXRUNTIME_CPU_MIN}"
+TORCH_MINIMUM = "2.11.0"
+TORCHVISION_MINIMUM = "0.26.0"
+TORCH_SPEC = f"torch>={TORCH_MINIMUM}"
+TORCHVISION_SPEC = f"torchvision>={TORCHVISION_MINIMUM}"
 SETUP_PROGRESS_ENV = "VSR_SETUP_PROGRESS_FILE"
 
 
@@ -414,7 +418,7 @@ def install_pytorch(gpu_info):
     profile_args = _profile_constraint_args(gpu_info)
     
     try:
-        # torch >= 2.10.0 patches CVE-2026-24747 / CVE-2025-32434
+        # torch >= 2.11.0 patches CVE-2026-24747 / CVE-2025-32434
         # (torch.load weights_only RCE in 2.9.1 and earlier).
         if gpu_info["nvidia"] and _windows_cuda_wheels_unavailable():
             version = sys.version_info
@@ -434,7 +438,7 @@ def install_pytorch(gpu_info):
             print(f"{Colors.YELLOW}  WARN: Proceeding with CPU-only PyTorch by explicit override.{Colors.END}")
             _run_pip_install([
                 pip, 'install',
-                'torch>=2.10.0', 'torchvision>=0.25.0',
+                TORCH_SPEC, TORCHVISION_SPEC,
                 *_profile_constraint_args(gpu_info),
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")
@@ -444,7 +448,7 @@ def install_pytorch(gpu_info):
             print(f"  Installing PyTorch with CUDA 12.8 (Blackwell) support...")
             _run_pip_install([
                 pip, 'install',
-                'torch>=2.10.0', 'torchvision>=0.25.0',
+                TORCH_SPEC, TORCHVISION_SPEC,
                 *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cu128'
             ], "installing CUDA 12.8 PyTorch")
@@ -452,7 +456,7 @@ def install_pytorch(gpu_info):
             print(f"  Installing PyTorch with CUDA 12.8 support...")
             _run_pip_install([
                 pip, 'install',
-                'torch>=2.10.0', 'torchvision>=0.25.0',
+                TORCH_SPEC, TORCHVISION_SPEC,
                 *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cu128'
             ], "installing CUDA 12.8 PyTorch")
@@ -461,7 +465,7 @@ def install_pytorch(gpu_info):
             print(f"  DirectML acceleration is provided by ONNX Runtime, not torch-directml.")
             _run_pip_install([
                 pip, 'install',
-                'torch>=2.10.0', 'torchvision>=0.25.0',
+                TORCH_SPEC, TORCHVISION_SPEC,
                 *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")
@@ -469,7 +473,7 @@ def install_pytorch(gpu_info):
             print(f"  Installing PyTorch CPU version...")
             _run_pip_install([
                 pip, 'install',
-                'torch>=2.10.0', 'torchvision>=0.25.0',
+                TORCH_SPEC, TORCHVISION_SPEC,
                 *profile_args,
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")

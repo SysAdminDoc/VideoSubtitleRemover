@@ -36,6 +36,16 @@ class DependencyProfileTests(unittest.TestCase):
         self.assertIn("onnxruntime-directml==1.24.4", (
             dependency_profiles.profile_constraint_path("directml").read_text(
                 encoding="utf-8")))
+        expected_torch = {
+            "cpu": ("2.13.0", "0.28.0"),
+            "nvidia": ("2.11.0", "0.26.0"),
+            "directml": ("2.13.0", "0.28.0"),
+        }
+        for name, (torch, torchvision) in expected_torch.items():
+            text = dependency_profiles.profile_constraint_path(name).read_text(
+                encoding="utf-8")
+            self.assertIn(f"torch=={torch}", text)
+            self.assertIn(f"torchvision=={torchvision}", text)
         for name in dependency_profiles.SUPPORTED_PROFILES:
             self.assertIn(
                 f"protobuf=={dependency_caps.PROTOBUF_TESTED_VERSION}",

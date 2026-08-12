@@ -961,6 +961,8 @@ def enforce_ocr_dependency_caps() -> None:
 
 DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
 PILLOW_MINIMUM_VERSION = "12.3.0"
+TORCH_MINIMUM_VERSION = "2.11.0"
+TORCHVISION_MINIMUM_VERSION = "0.26.0"
 
 TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("numpy", "2.4.6", "2.5.0"),
@@ -980,8 +982,8 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ("protobuf", PROTOBUF_SECURITY_MIN, ""),
     ("openvino", "2025.0.0", ""),
     ("simple-lama-inpainting", "0.1.0", ""),
-    ("torch", "2.10.0", ""),
-    ("torchvision", "0.25.0", ""),
+    ("torch", TORCH_MINIMUM_VERSION, ""),
+    ("torchvision", TORCHVISION_MINIMUM_VERSION, ""),
     ("pyinstaller", "6.10.0", ""),
 )
 

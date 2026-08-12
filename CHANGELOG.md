@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Reviewed PyTorch fallback profiles advanced.** CPU and DirectML now pin
+  torch 2.13.0 with torchvision 0.28.0; the NVIDIA CUDA 12.8 profile advances
+  to torch 2.11.0 with torchvision 0.26.0, the newest pair exposed by that
+  reviewed channel. Setup, locks, drift floors, and install guidance now agree.
+
 - **The core NumPy lane now pins 2.4.6.** This is the newest 2.4.x line
   supporting Python 3.11, so the explicit `<2.5.0` ceiling preserves the
   supported interpreter floor while the removed NumPy APIs were audited from

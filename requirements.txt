@@ -33,7 +33,7 @@ protobuf>=6.33.5
 
 # AI/ML Frameworks (choose based on your GPU)
 # ------------------------------------------
-# IMPORTANT: torch >= 2.10.0 is required.
+# IMPORTANT: torch >= 2.11.0 is required.
 # CVE-2026-24747 / CVE-2025-32434: torch.load weights_only RCE in PyTorch
 # 2.9.1 and earlier. simple-lama-inpainting loads weights via torch.load,
 # so this is a runtime concern, not just a transitive-dependency one.
@@ -41,6 +41,9 @@ protobuf>=6.33.5
 # Python compatibility: VSR requires Python 3.11+. PyTorch publishes Windows
 # CUDA wheels through Python 3.13. Python 3.14 currently resolves CPU-only torch;
 # setup.py blocks that NVIDIA path unless VSR_ALLOW_PY314_CPU=1 is set.
+# CPU and DirectML profiles lock torch 2.13.0/torchvision 0.28.0; the NVIDIA
+# profile stays on 2.11.0/0.26.0 because the reviewed CUDA 12.8 index tops out
+# at that pair.
 
 # ONNX Runtime >= 1.26.0 is required for CPU/CUDA. Older builds predate
 # OOB/overflow hardening in 1.26.0 (unrestricted setattr allowlist,
@@ -51,14 +54,14 @@ protobuf>=6.33.5
 # sustained-engineering line, pinned below to its latest PyPI build.
 #
 # For NVIDIA RTX 20/30/40-series (Turing/Ampere/Ada):
-# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
+# pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cu128
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 # pip install "onnxruntime-gpu>=1.26.0,<1.27.0"
 
 # For NVIDIA RTX 50-series (Blackwell, sm_120 -- e.g. RTX 5070/5080/5090):
 # Blackwell needs CUDA 12.8 wheels. The cu118/cu121 builds have no Blackwell
 # kernels and do not carry the current torch security floor.
-# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cu128
+# pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cu128
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
 # pip install "onnxruntime-gpu>=1.26.0,<1.27.0"
 # (Run_VSR_Pro.bat / setup.py use cu128 for NVIDIA PyTorch wheels.)
@@ -70,11 +73,11 @@ protobuf>=6.33.5
 # pip install onnxruntime-directml==1.24.4
 # Intel CPU/iGPU users can add OpenVINO for RapidOCR:
 # pip install openvino>=2025.0.0
-# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
+# pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # For CPU only:
-# pip install torch>=2.10.0 torchvision>=0.25.0 --index-url https://download.pytorch.org/whl/cpu
+# pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Text Detection (install at least one, listed in priority order)

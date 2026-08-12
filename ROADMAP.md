@@ -752,13 +752,6 @@ RESEARCH.md instead of appearing here.
 
 ### P2
 
-- [ ] P2 -- RM-254: torch and torchvision are three minor releases behind and may be outside upstream's patch window
-  Why: An unpatched ML runtime is a supply-chain liability even on an opt-in path, and the gap is now large enough that deferring again compounds the migration cost.
-  Evidence: `dependency_profiles.json` pins `torch==2.10.0` / `torchvision==0.25.0` (2026-01-21); current is 2.13.0 / 0.28.0 (2026-07-08), with 2.11.0, 2.12.0 and 2.12.1 in between -- https://pypi.org/project/torch/#history, https://pypi.org/project/torchvision/#history. PyTorch's support window is typically about two minor releases. Exposure is capped because torch is only reached behind `VSR_ENABLE_PYTORCH_LAMA=1`, PaddlePaddle, and the opt-in diffusion adapters.
-  Touches: `dependency_profiles.json`, `dependency_profiles/*.txt`, `setup.py`, `backend/dependency_caps.py`, `README.md`
-  Acceptance: The pin advances to a release still inside upstream's patch window, or `intentionalExceptions` gains a dated entry stating why 2.10.0 is held with the blocking constraint named. The RTX 50-series / sm_120 question is explicitly out of this item -- see the open question in RESEARCH.md.
-  Complexity: M
-
 - [ ] P2 -- RM-255: Two shipped optional tiers are abandoned upstream and the docs do not say so
   Why: Users choosing an OCR engine or a LaMa tier deserve to know which options are frozen, since neither will receive a security patch.
   Evidence: easyocr has had no release since 1.7.2 on 2024-09-24 and simple-lama-inpainting is still 0.1.2 -- https://pypi.org/project/easyocr/#history, https://pypi.org/project/simple-lama-inpainting/#history. Both are already opt-in and commented out at `requirements.txt:93,102`, but `README.md:278` presents EasyOCR as a peer detection engine without qualification.
