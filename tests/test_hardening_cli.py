@@ -531,6 +531,7 @@ class PresetFlagPrecedenceTests(unittest.TestCase):
             "mask_dilate_px": "mask_dilate", "mask_feather_px": "mask_feather",
             "edge_ring_px": "edge_ring", "tbe_flow_warp": "flow_warp",
             "tbe_flow_estimator": "flow_estimator",
+            "poisson_seam_enable": "poisson_seam",
             "colour_tune_enable": "colour_tune",
             "colour_tune_tolerance": "colour_tolerance",
             "phash_skip_distance": "phash_distance", "auto_band": "auto_band",

@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 _TBE_MAD_K = 3.0
 _TBE_MAD_MIN_TOLERANCE = 1.0
 _TBE_MIN_SURVIVORS = 3
+_POISSON_SEAM_DILATE_PX = 3
 
 
 class BaseInpainter(ABC):
@@ -194,14 +195,86 @@ def _edge_ring_color_correct(original: np.ndarray, filled: np.ndarray,
     return out.astype(np.uint8)
 
 
+def _poisson_seam_correct(
+    original: np.ndarray,
+    filled: np.ndarray,
+    mask: np.ndarray,
+    dilate_px: int = _POISSON_SEAM_DILATE_PX,
+) -> np.ndarray:
+    """Blend a filled region through a boundary-aware Poisson solve.
+
+    The dilated mask is the solve domain, while only the original mask is
+    copied back. This lets the solver see clean source and destination pixels
+    on both sides of the seam without modifying the untouched ring. Masks
+    touching the image edge and tiny regions are intentionally skipped because
+    they do not provide a closed boundary for a stable solve.
+    """
+    if original is None or filled is None or mask is None:
+        return filled
+    if mask.size == 0 or mask.max() == 0:
+        return filled
+    if original.ndim != 3 or filled.shape != original.shape:
+        return filled
+    binary = _binarize_mask(mask)
+    if binary.ndim != 2 or binary.shape != original.shape[:2]:
+        return filled
+    mask_bool = binary > 0
+    height, width = binary.shape[:2]
+    if (
+        height < 3
+        or width < 3
+        or int(mask_bool.sum()) < 16
+        or bool(mask_bool[0].any())
+        or bool(mask_bool[-1].any())
+        or bool(mask_bool[:, 0].any())
+        or bool(mask_bool[:, -1].any())
+    ):
+        return filled
+
+    radius = max(1, int(dilate_px))
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (radius * 2 + 1, radius * 2 + 1))
+    solve_mask = cv2.dilate(binary, kernel, iterations=1)
+    ys, xs = np.where(solve_mask > 0)
+    if ys.size == 0:
+        return filled
+    x1, x2 = int(xs.min()), int(xs.max())
+    y1, y2 = int(ys.min()), int(ys.max())
+    if x1 <= 0 or y1 <= 0 or x2 >= width - 1 or y2 >= height - 1:
+        return filled
+    source_roi = filled[y1:y2 + 1, x1:x2 + 1]
+    destination_roi = original[y1:y2 + 1, x1:x2 + 1]
+    mask_roi = solve_mask[y1:y2 + 1, x1:x2 + 1]
+    center = ((x2 - x1) // 2, (y2 - y1) // 2)
+    try:
+        cloned = cv2.seamlessClone(
+            source_roi,
+            destination_roi,
+            mask_roi,
+            center,
+            cv2.NORMAL_CLONE,
+        )
+    except Exception as exc:
+        logger.debug("Poisson seam correction fell back: %s", exc)
+        return filled
+    out = filled.copy()
+    original_mask_roi = mask_bool[y1:y2 + 1, x1:x2 + 1]
+    output_roi = out[y1:y2 + 1, x1:x2 + 1].copy()
+    output_roi[original_mask_roi] = cloned[original_mask_roi]
+    out[y1:y2 + 1, x1:x2 + 1] = output_roi
+    return out
+
+
 def apply_finishing(original, filled, masks, config=None, *,
                     edge_ring: bool = True,
                     feather_px: Optional[int] = None,
                     edge_ring_px: Optional[int] = None):
     """Single post-inpaint finishing step shared by every inpainter family.
 
-    Applies the shared edge-ring colour match (when ``edge_ring`` is true and
-    ``edge_ring_px > 0``) followed by the feather blend at each mask boundary.
+    Applies the opt-in Poisson seam correction or shared edge-ring colour match
+    followed by the feather blend at each mask boundary. Poisson mode uses the
+    dilated solve domain but only replaces pixels inside the original mask;
+    edge-ring correction is skipped when Poisson mode is enabled.
     ``feather_px``/``edge_ring_px`` default to ``config.mask_feather_px`` and
     ``config.edge_ring_px``. When ``config`` is ``None`` and no explicit
     ``feather_px`` is given, the filled frames pass through unchanged so a
@@ -217,9 +290,15 @@ def apply_finishing(original, filled, masks, config=None, *,
     if edge_ring_px is None:
         edge_ring_px = (
             getattr(config, "edge_ring_px", 2) if config is not None else 0)
+    poisson_seam = bool(
+        getattr(config, "poisson_seam_enable", False)
+        if config is not None else False
+    )
     out = []
     for f, r, m in zip(original, filled, masks):
-        if edge_ring and edge_ring_px > 0 and m.max() > 0:
+        if poisson_seam:
+            r = _poisson_seam_correct(f, r, m)
+        elif edge_ring and edge_ring_px > 0 and m.max() > 0:
             r = _edge_ring_color_correct(f, r, m, edge_ring_px)
         out.append(_feather_blend(f, r, m, feather_px))
     return out

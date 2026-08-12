@@ -239,6 +239,7 @@ class ConfigFuzzTests(unittest.TestCase):
         "tbe_enable", "tbe_min_coverage", "tbe_use_median", "tbe_flow_warp",
         "tbe_flow_estimator",
         "tbe_global_motion_align",
+        "poisson_seam_enable",
         "tbe_scene_cut_split", "tbe_scene_cut_threshold",
         "auto_band", "export_srt", "export_mask_video",
         "mask_export_format", "mask_import_path", "mask_import_mode",

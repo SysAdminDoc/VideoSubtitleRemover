@@ -60,6 +60,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--threshold", "--vertical", "--frame-skip", "--mask-dilate",
             "--confidence-dilate", "--mask-feather", "--temporal-smooth",
             "--edge-ring", "--flow-warp", "--flow-estimator",
+            "--poisson-seam",
             "--no-global-motion-align",
             "--no-scene-split", "--pyscenedetect",
             "--transnetv2", "--denoise-detect", "--sam2-refine",
@@ -751,6 +752,11 @@ def _build_parser(mode_choices):
         default="dis",
         help="Dense flow estimator for --flow-warp (DIS FAST or Farneback).",
     )
+    parser.add_argument(
+        "--poisson-seam",
+        action="store_true",
+        help="Use opt-in gradient-domain seam correction before feathering.",
+    )
     parser.add_argument("--no-global-motion-align", action="store_true",
                        help="Disable affine global-motion alignment before TBE aggregation")
     parser.add_argument("--no-scene-split", action="store_true",
@@ -1218,6 +1224,7 @@ def _prepare_cli_args(args, parser, argv=None):
             "edge_ring_px": "edge_ring",
             "tbe_flow_warp": "flow_warp",
             "tbe_flow_estimator": "flow_estimator",
+            "poisson_seam_enable": "poisson_seam",
             "colour_tune_enable": "colour_tune",
             "colour_tune_tolerance": "colour_tolerance",
             "phash_skip_distance": "phash_distance",
@@ -1420,6 +1427,7 @@ def _build_processing_config(
         tbe_flow_warp=args.flow_warp,
         tbe_flow_estimator=args.flow_estimator,
         tbe_global_motion_align=not args.no_global_motion_align,
+        poisson_seam_enable=args.poisson_seam,
         tbe_scene_cut_split=not args.no_scene_split,
         tbe_scene_cut_use_pyscenedetect=args.pyscenedetect,
         tbe_scene_cut_use_transnetv2=args.transnetv2,

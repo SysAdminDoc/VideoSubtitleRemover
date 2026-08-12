@@ -532,6 +532,7 @@ class ProcessingConfig:
     tbe_flow_warp: bool = False
     tbe_flow_estimator: str = "dis"
     tbe_global_motion_align: bool = True
+    poisson_seam_enable: bool = False
     tbe_scene_cut_split: bool = True
     tbe_scene_cut_threshold: float = 0.35
     tbe_scene_cut_use_pyscenedetect: bool = False
@@ -745,6 +746,8 @@ class ProcessingConfig:
             self.tbe_flow_estimator = "dis"
         self.tbe_global_motion_align = _coerce_bool(
             self.tbe_global_motion_align, True)
+        self.poisson_seam_enable = _coerce_bool(
+            self.poisson_seam_enable, False)
         self.tbe_scene_cut_split = _coerce_bool(self.tbe_scene_cut_split, True)
         self.tbe_scene_cut_threshold = _coerce_float(
             self.tbe_scene_cut_threshold, 0.35, 0.0, 1.0)
@@ -1393,6 +1396,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "tbe_flow_warp",
     "tbe_flow_estimator",
     "tbe_global_motion_align",
+    "poisson_seam_enable",
     "tbe_scene_cut_split",
     "tbe_scene_cut_threshold",
     "tbe_scene_cut_use_pyscenedetect",
@@ -1482,6 +1486,7 @@ DEFAULT_PRESET_FIELDS = [
     "tbe_flow_warp",
     "tbe_flow_estimator",
     "tbe_global_motion_align",
+    "poisson_seam_enable",
     "tbe_scene_cut_split", "colour_tune_enable",
     "colour_tune_tolerance", "kalman_tracking",
     "phash_skip_enable", "phash_skip_distance", "auto_band",

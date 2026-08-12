@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Finishing now has an opt-in gradient-domain seam correction.** A
+  boundary-aware Poisson solve uses a dilated mask domain before feathering,
+  skips frame-edge and degenerate masks, and remains shared across all
+  inpainter families through `apply_finishing`.
+
 - **TBE residual flow now has a DIS path.** DIS FAST is the default dense-flow
   estimator, with explicit Farneback selection and a logged fallback when the
   installed OpenCV build does not expose DIS; frame, mask, and karaoke warps
