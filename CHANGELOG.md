@@ -6,6 +6,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **GUI batch startup now rolls back cleanly after preflight errors.** A failed
+  report or output-volume preflight unlocks settings, restores the Start
+  action, clears the timer state, and surfaces an error instead of wedging the
+  window in a phantom processing state. Danger actions now use AA-safe dark
+  ink, and stretched buttons redraw and remain clickable across their full
+  layout slot; keyboard activation stops at the focused button.
+
 - **The opt-in PyTorch LaMa fallback now restores source geometry.** Full-frame
   and tiled simple-lama outputs are cropped back from their modulo-eight
   padding before finishing, so non-mod-8 inputs no longer fail or blend at the

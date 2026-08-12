@@ -85,6 +85,71 @@ class GuiFfmpegProfilePreflightTests(unittest.TestCase):
         app._update_status.assert_called_once()
 
 
+class ProcessingStartupRollbackTests(unittest.TestCase):
+    def test_preflight_failure_unlocks_the_ui(self):
+        from gui.processing_controller import ProcessingControllerMixin
+        from gui.config import ProcessingConfig, QueueItem
+
+        app = gui.VideoSubtitleRemoverApp.__new__(gui.VideoSubtitleRemoverApp)
+        app.queue = [QueueItem(
+            id="startup",
+            file_path="clip.mp4",
+            output_path="clip.cleaned.mp4",
+            config=ProcessingConfig(),
+        )]
+        app.is_processing = False
+        app._processing_thread = None
+        app._stop_requested = False
+        app._pause_requested = False
+        app.cancel_event = threading.Event()
+        app.pause_event = threading.Event()
+        app.preserve_audio_var = unittest.mock.Mock(get=unittest.mock.Mock(return_value=False))
+        app.ffmpeg_ready = True
+        app.start_btn = unittest.mock.Mock()
+        app._taskbar = None
+        app._elapsed_timer_id = None
+        app._update_status = unittest.mock.Mock()
+        app._apply_current_settings_to_idle_items = unittest.mock.Mock()
+        app._preflight_free_space_check = unittest.mock.Mock()
+        app._confirm_ffmpeg_profile_coverage = unittest.mock.Mock(return_value=True)
+        app._set_settings_locked = unittest.mock.Mock()
+        app._refresh_action_states = unittest.mock.Mock()
+        app._prepare_batch_report_records = unittest.mock.Mock(
+            side_effect=OSError("output volume disappeared"))
+        app._warn_output_quality_preflight = unittest.mock.Mock()
+        app._stop_elapsed_timer = unittest.mock.Mock()
+
+        ProcessingControllerMixin._start_processing(app)
+
+        self.assertFalse(app.is_processing)
+        self.assertIsNone(app._processing_thread)
+        app._set_settings_locked.assert_called_with(False)
+        app.start_btn.set_text.assert_called_with("Start batch")
+        app._update_status.assert_called_once()
+        self.assertIn("output volume disappeared", app._update_status.call_args.args[0])
+
+
+class DangerContrastTests(unittest.TestCase):
+    @staticmethod
+    def _relative_luminance(color):
+        channels = []
+        for index in (1, 3, 5):
+            value = int(color[index:index + 2], 16) / 255
+            channels.append(value / 12.92 if value <= 0.04045 else
+                           ((value + 0.055) / 1.055) ** 2.4)
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+    def test_danger_button_text_passes_aa_in_normal_and_hover_states(self):
+        from gui.theme import Theme
+
+        ink = self._relative_luminance(Theme.INK_ON_DANGER)
+        for background in (Theme.DANGER, Theme.DANGER_HOVER):
+            fill = self._relative_luminance(background)
+            ratio = (max(ink, fill) + 0.05) / (min(ink, fill) + 0.05)
+            with self.subTest(background=background):
+                self.assertGreaterEqual(ratio, 4.5)
+
+
 class JsonLineLogHandlerTests(unittest.TestCase):
     """JsonLineLogHandler must write exactly one JSON record per emit,
     include the level / logger / msg / ts fields, and capture exception

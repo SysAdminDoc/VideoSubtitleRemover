@@ -104,23 +104,47 @@ class ProcessingControllerMixin:
         # line is simply empty.
         self._probe_eta_seconds = 0.0
         self._batch_started_at = datetime.now()
-        self._prepare_batch_report_records()
-        self._warn_output_quality_preflight()
-        self._write_batch_preflight_plan()
-        self._last_batch_report_paths = []
-        self._refresh_action_states()
-        self._update_status("Batch processing started", "info")
-        # Kick off Windows taskbar progress in indeterminate until first tick
-        self._ensure_taskbar()
-        if self._taskbar:
-            self._taskbar.set_state(TaskbarProgress.STATE_INDETERMINATE)
+        try:
+            self._prepare_batch_report_records()
+            self._warn_output_quality_preflight()
+            self._write_batch_preflight_plan()
+            self._last_batch_report_paths = []
+            self._refresh_action_states()
+            self._update_status("Batch processing started", "info")
+            # Kick off Windows taskbar progress in indeterminate until first tick
+            self._ensure_taskbar()
+            if self._taskbar:
+                self._taskbar.set_state(TaskbarProgress.STATE_INDETERMINATE)
 
-        # Start elapsed timer
-        self._start_elapsed_timer()
+            # Start elapsed timer
+            self._start_elapsed_timer()
 
-        # Start processing thread
-        self._processing_thread = threading.Thread(target=self._process_queue, daemon=True)
-        self._processing_thread.start()
+            # Start processing thread
+            self._processing_thread = threading.Thread(
+                target=self._process_queue, daemon=True)
+            self._processing_thread.start()
+        except Exception as exc:
+            # The startup preflight runs after the UI has been locked. Roll
+            # every bit of that state back when a removable output volume or
+            # another preflight dependency fails before the worker starts.
+            logger.exception("Batch startup failed")
+            self.is_processing = False
+            self._stop_requested = False
+            self._pause_requested = False
+            self.cancel_event.clear()
+            self.pause_event.clear()
+            self._processing_thread = None
+            try:
+                self._stop_elapsed_timer()
+            except Exception:
+                pass
+            self._set_settings_locked(False)
+            self.start_btn.set_style("primary")
+            self.start_btn.icon = ">"
+            self.start_btn.set_text(tr("Start batch"))
+            self._refresh_action_states()
+            self._update_status(
+                f"Could not start batch: {exc}", "error", toast=True)
 
     def _pause_processing(self):
         """Pause the current processing at the next checkpoint boundary."""

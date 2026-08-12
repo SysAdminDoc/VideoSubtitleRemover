@@ -53,7 +53,7 @@ class Theme:
     # Ink: dark foreground for bright-filled controls
     INK_ON_GREEN = "#04120b"
     INK_ON_BLUE = "#071226"
-    INK_ON_DANGER = "#ffffff"
+    INK_ON_DANGER = "#2a0505"
 
     # Danger / destructive action
     DANGER = "#f87171"
@@ -156,7 +156,7 @@ def apply_high_contrast_theme():
     Theme.BORDER_FOCUS = "#ffff00"
     Theme.INK_ON_GREEN = "#000000"
     Theme.INK_ON_BLUE = "#000000"
-    Theme.INK_ON_DANGER = "#ffffff"
+    Theme.INK_ON_DANGER = "#2a0505"
     Theme.DANGER = "#ff5555"
     Theme.DANGER_HOVER = "#ff3333"
     Theme.DANGER_PRESS = "#cc0000"

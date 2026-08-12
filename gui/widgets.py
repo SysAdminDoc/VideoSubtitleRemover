@@ -464,6 +464,7 @@ class ModernButton(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._on_release)
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<Configure>", self._on_configure, add="+")
         self.bind("<Return>", self._on_keyboard_activate)
         self.bind("<space>", self._on_keyboard_activate)
 
@@ -559,6 +560,17 @@ class ModernButton(tk.Canvas):
             justify="center",
         )
 
+    def _on_configure(self, event):
+        """Keep the drawing and hit target aligned with geometry-manager size."""
+        width = max(1, int(getattr(event, "width", 0) or 0))
+        height = max(1, int(getattr(event, "height", 0) or 0))
+        if width == self.width and height == self.height:
+            return
+        self.width = width
+        self.height = height
+        self._text_width_px = max(20, width - scaled_control_size(16))
+        self._draw()
+
     def _sync_a11y(self):
         state = _state_text(
             "enabled" if self.enabled else "disabled",
@@ -652,6 +664,7 @@ class ModernButton(tk.Canvas):
     def _on_keyboard_activate(self, event):
         if self.enabled and self.command:
             self.command()
+        return "break"
 
     def set_enabled(self, enabled: bool, reason: str = ""):
         self.enabled = enabled
@@ -949,7 +962,7 @@ class ModernToggle(tk.Canvas):
 
     def _toggle(self, event=None):
         if not self.enabled:
-            return
+            return "break"
         self.focus_set()
         self.variable.set(not self.variable.get())
         self._sync_a11y()
@@ -957,6 +970,7 @@ class ModernToggle(tk.Canvas):
         announce_widget(self)
         if self.command:
             self.command()
+        return "break"
 
     def _on_enter(self, event):
         if self.enabled:
