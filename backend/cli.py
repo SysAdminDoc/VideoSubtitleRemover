@@ -26,6 +26,7 @@ from backend.resume_checkpoint import (
     _checkpoint_key,
     _checkpoint_mark_done,
     _default_checkpoint_dir,
+    file_stability_signature,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--config-schema-version", "--set", "--preset", "--list-presets",
             "--checkpoint-dir", "--work-dir", "--no-resume", "--start", "--end",
             "--input-fps", "--output-frames", "--nle-input", "--skip-existing",
+            "--watch", "--watch-interval", "--watch-stable-seconds", "--watch-once",
         ),
     ),
     (
@@ -157,6 +159,8 @@ _CLI_VALUE_RANGES = {
     "--loudnorm": "0 (off) or -70..-5 LUFS",
     "--prefetch-queue": "0..512 frames",
     "--translation-timeout": "5..3600 seconds",
+    "--watch-interval": ">=0.1 seconds",
+    "--watch-stable-seconds": ">=0 seconds",
 }
 
 # There are currently no deprecated public options. Keeping the set explicit
@@ -432,6 +436,112 @@ def _write_cli_batch_reports(out_dir: Path, records: list[dict], *,
     print(f"[batch] wrote summary {md_path}")
 
 
+_WATCH_IMAGE_EXTENSIONS = frozenset({
+    ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp",
+})
+
+
+def _watch_path_is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _watch_discover_files(
+    root: Path,
+    media_extensions: set[str] | frozenset[str],
+    *,
+    excluded_roots: tuple[Path, ...] = (),
+) -> list[Path]:
+    """Return sorted media files below ``root``, excluding worker artifacts."""
+    root = Path(root).resolve()
+    extensions = {str(ext).lower() for ext in media_extensions}
+    excluded = tuple(Path(path).resolve() for path in excluded_roots)
+    found: list[Path] = []
+    try:
+        candidates = root.rglob("*")
+        for candidate in candidates:
+            try:
+                if not candidate.is_file():
+                    continue
+                resolved = candidate.resolve()
+                if any(_watch_path_is_within(resolved, parent) for parent in excluded):
+                    continue
+                if resolved.suffix.lower() not in extensions:
+                    continue
+                found.append(resolved)
+            except OSError:
+                # A file can disappear or be locked between enumeration and stat.
+                continue
+    except OSError:
+        return []
+    return sorted(set(found), key=lambda path: (str(path).casefold(), str(path)))
+
+
+def _watch_ready_files(
+    root: Path,
+    media_extensions: set[str] | frozenset[str],
+    state: dict[str, tuple[tuple[int, int], float]],
+    processed: set[tuple[str, int, int]],
+    *,
+    now: float | None = None,
+    stable_seconds: float = 0.0,
+    excluded_roots: tuple[Path, ...] = (),
+) -> tuple[list[tuple[Path, tuple[str, int, int]]], int]:
+    """Return stable, not-yet-processed files and the active candidate count.
+
+    ``state`` is deliberately supplied by the caller so a long-lived watch
+    loop can observe a file growing across polls without writing another
+    state file beside user media. The processed key includes the current
+    size/mtime, so an edited source becomes a new work item while an item
+    that failed remains exactly-once for that stable file version.
+    """
+    if now is None:
+        now = time.monotonic()
+    stable_seconds = max(0.0, float(stable_seconds))
+    ready: list[tuple[Path, tuple[str, int, int]]] = []
+    active_paths: set[str] = set()
+    candidate_count = 0
+    for path in _watch_discover_files(
+        root,
+        media_extensions,
+        excluded_roots=excluded_roots,
+    ):
+        path_key = str(path)
+        active_paths.add(path_key)
+        try:
+            size, mtime_ns = file_stability_signature(path)
+        except OSError:
+            continue
+        fingerprint = (path_key, size, mtime_ns)
+        if fingerprint in processed:
+            continue
+        candidate_count += 1
+        previous = state.get(path_key)
+        signature = (size, mtime_ns)
+        if previous is None or previous[0] != signature:
+            state[path_key] = (signature, now)
+            if stable_seconds > 0.0:
+                continue
+        if now - state[path_key][1] >= stable_seconds:
+            ready.append((path, fingerprint))
+    for path_key in set(state) - active_paths:
+        state.pop(path_key, None)
+    return ready, candidate_count
+
+
+def _wait_for_watch_interval(seconds: float, pause_check) -> bool:
+    """Sleep in short slices so SIGINT can stop an idle watcher promptly."""
+    deadline = time.monotonic() + max(0.0, float(seconds))
+    while time.monotonic() < deadline:
+        if pause_check():
+            return False
+        time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+    return not pause_check()
+
+
 def _print_output_quality_preflight(preflight: dict) -> None:
     from backend.output_quality_preflight import output_quality_preflight_messages
 
@@ -576,13 +686,38 @@ def _build_parser(mode_choices):
         epilog=(
             "Examples:\n"
             "  python -m backend.processor -i input.mp4 -o output.mp4 -m sttn --lang en\n"
-            "  python -m backend.processor --pattern \"inputs/*.mp4\" --out-dir cleaned --mode auto"
+            "  python -m backend.processor --pattern \"inputs/*.mp4\" --out-dir cleaned --mode auto\n"
+            "  python -m backend.processor --watch incoming --out-dir cleaned"
         ),
     )
     parser.add_argument("--input", "-i", help="Input file path")
     parser.add_argument("--output", "-o", help="Output file path")
     parser.add_argument("--pattern", help="Glob pattern for batch mode (e.g. 'inputs/*.mp4')")
     parser.add_argument("--out-dir", help="Output directory for batch mode")
+    parser.add_argument(
+        "--watch",
+        metavar="DIR",
+        help="Watch DIR recursively for new media files and process them continuously.",
+    )
+    parser.add_argument(
+        "--watch-interval",
+        type=float,
+        default=5.0,
+        metavar="SECONDS",
+        help="Seconds between watch-folder polls.",
+    )
+    parser.add_argument(
+        "--watch-stable-seconds",
+        type=float,
+        default=2.0,
+        metavar="SECONDS",
+        help="Require a file's size and mtime to stay unchanged this long before processing.",
+    )
+    parser.add_argument(
+        "--watch-once",
+        action="store_true",
+        help="Process stable files currently in the watch folder, including files dropped during the drain, then exit.",
+    )
     parser.add_argument("--config", help="JSON config file (key=value pairs overriding CLI defaults)")
     parser.add_argument(
         "--config-schema-version",
@@ -1297,11 +1432,40 @@ def _prepare_cli_args(args, parser, argv=None):
         args._preset_backend_overrides = preset_backend_overrides
         logger.info(f"Applied preset: {args.preset}")
 
+    watch_path = getattr(args, "watch", None)
+    if getattr(args, "watch_once", False) and not watch_path:
+        parser.error("--watch-once requires --watch")
+    if watch_path and (soft_mode_count or args.soft_subtitle_dry_run):
+        parser.error("--watch cannot be combined with soft-subtitle modes")
+    if watch_path and args.nle_input:
+        parser.error("--watch cannot be combined with --nle-input")
+    if watch_path and args.frozen_matte:
+        parser.error("--watch cannot be combined with --frozen-matte")
+    if not 0.1 <= args.watch_interval:
+        parser.error("--watch-interval must be at least 0.1 seconds")
+    if not 0.0 <= args.watch_stable_seconds:
+        parser.error("--watch-stable-seconds must be zero or positive")
     if not args.validate_config:
-        if not args.input and not args.pattern:
-            parser.error("one of --input or --pattern is required")
-        if args.input and args.pattern:
-            parser.error("--input and --pattern are mutually exclusive")
+        source_count = sum(bool(value) for value in (args.input, args.pattern, watch_path))
+        if source_count == 0:
+            parser.error("one of --input, --pattern, or --watch is required")
+        if source_count > 1:
+            parser.error("--input, --pattern, and --watch are mutually exclusive")
+        if watch_path:
+            if dry_run_only:
+                parser.error("--watch cannot be combined with --dry-run")
+            if args.output:
+                parser.error("--watch uses --out-dir, not --output")
+            watch_root = Path(watch_path).resolve()
+            if not watch_root.is_dir():
+                parser.error(f"--watch directory does not exist: {watch_path}")
+            if not args.out_dir:
+                parser.error("--watch requires --out-dir")
+            if watch_root == Path(args.out_dir).resolve():
+                parser.error("--out-dir must differ from the --watch directory")
+            # Watch mode is an unattended batch drain. Existing canonical
+            # outputs are always skipped instead of receiving a collision suffix.
+            args.skip_existing = True
         if args.pattern and not args.out_dir and not dry_run_only:
             parser.error("--pattern requires --out-dir")
         if args.input and not args.output and not dry_run_only:
@@ -1855,6 +2019,230 @@ def _run_processing(
                 if _pause_requested():
                     raise ProcessingPaused("Processing paused before retry")
                 time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+
+    if args.watch:
+        out_dir = Path(args.out_dir).resolve()
+        watch_dir = Path(args.watch).resolve()
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            parser.error(f"--out-dir is not usable: {exc}")
+        excluded_roots = [out_dir, ckpt_dir.resolve()]
+        work_dir = str(getattr(config, "work_directory", "") or "").strip()
+        if work_dir:
+            excluded_roots.append(Path(work_dir).resolve())
+        media_extensions = set(video_exts) | _WATCH_IMAGE_EXTENSIONS
+        watch_state: dict[str, tuple[tuple[int, int], float]] = {}
+        processed: set[tuple[str, int, int]] = set()
+        records: list[dict] = []
+        reserved_outputs: set = set()
+        watch_started_at = datetime.datetime.now(datetime.timezone.utc)
+        interrupted = False
+        paused = False
+
+        def _run_watch_item(inp: str, outp: str, record: dict) -> tuple[bool, bool]:
+            """Process one discovered file; return (success, paused)."""
+            src = Path(inp)
+            _print_output_quality_preflight(
+                record.get("output_quality_preflight") or {}
+            )
+            print(f"\n[watch] {src.name}")
+            planned = record["planned_result"]
+            if planned == STATUS_SKIPPED_EXISTING:
+                print(f"[skip] {src.name} (output exists)")
+                finish_batch_item(
+                    record,
+                    STATUS_SKIPPED_EXISTING,
+                    message="Output already exists",
+                )
+                write_output_sidecar(
+                    input_path=inp,
+                    output_path=str(outp),
+                    config=config,
+                    status="skipped-existing",
+                    app_version=_app_version(),
+                )
+                return True, False
+            if planned == STATUS_CHECKPOINT_DONE:
+                print(f"[skip] {src.name} (checkpoint)")
+                finish_batch_item(
+                    record,
+                    STATUS_CHECKPOINT_DONE,
+                    message="Checkpoint already complete",
+                )
+                write_output_sidecar(
+                    input_path=inp,
+                    output_path=str(outp),
+                    config=config,
+                    status="checkpoint-done",
+                    checkpoint_resumed=True,
+                    app_version=_app_version(),
+                )
+                return True, False
+
+            started = time.monotonic()
+            try:
+                ok = _process_one_with_retry(inp, str(outp), record)
+            except ProcessingPaused as exc:
+                print(f"\n[pause] {exc}")
+                finish_batch_item(
+                    record,
+                    STATUS_PAUSED,
+                    message=str(exc),
+                    elapsed_seconds=time.monotonic() - started,
+                    stage_timings=getattr(remover, "last_stage_timings", None),
+                    detection_stats=getattr(remover, "last_detection_stats", None),
+                    execution_provenance=_provenance_dict(remover),
+                    output_contract=getattr(remover, "last_output_contract", None),
+                )
+                return False, True
+            except Exception as exc:  # noqa: BLE001
+                logger.error(f"Failed on {src.name}: {exc}")
+                finish_batch_item(
+                    record,
+                    STATUS_FAILED,
+                    message=str(exc),
+                    elapsed_seconds=time.monotonic() - started,
+                    stage_timings=getattr(remover, "last_stage_timings", None),
+                    detection_stats=getattr(remover, "last_detection_stats", None),
+                    execution_provenance=_provenance_dict(remover),
+                    output_contract=getattr(remover, "last_output_contract", None),
+                )
+                return False, False
+
+            quality_report = (
+                getattr(remover, "last_quality_report", None) if ok else None
+            )
+            failure_message = (
+                getattr(remover, "last_error_message", None)
+                or "Processing failed"
+            )
+            actual_output = getattr(remover, "last_output_path", None)
+            if ok and actual_output and _path_key(actual_output) != _path_key(record["output"]):
+                _update_record_output_path(record, actual_output)
+            finish_batch_item(
+                record,
+                STATUS_HARDCODED_PROCESSED if ok else STATUS_FAILED,
+                message="Processed" if ok else failure_message,
+                elapsed_seconds=time.monotonic() - started,
+                quality_report=quality_report,
+                stage_timings=getattr(remover, "last_stage_timings", None),
+                detection_stats=getattr(remover, "last_detection_stats", None),
+                execution_provenance=_provenance_dict(remover),
+                output_contract=getattr(remover, "last_output_contract", None),
+            )
+            return bool(ok), False
+
+        print(
+            f"[watch] directory={watch_dir} | out={out_dir} | "
+            f"interval={args.watch_interval:g}s | "
+            f"stable={args.watch_stable_seconds:g}s | "
+            f"once={'on' if args.watch_once else 'off'}"
+        )
+        try:
+            while True:
+                ready, candidate_count = _watch_ready_files(
+                    watch_dir,
+                    media_extensions,
+                    watch_state,
+                    processed,
+                    stable_seconds=args.watch_stable_seconds,
+                    excluded_roots=tuple(excluded_roots),
+                )
+                for path, fingerprint in ready:
+                    if _pause_requested():
+                        paused = True
+                        break
+                    canonical = Path(out_dir) / f"{path.stem}_no_sub{path.suffix}"
+                    collision = _path_key(canonical) in reserved_outputs
+                    outp = choose_batch_output_path(
+                        str(path),
+                        out_dir,
+                        "_no_sub",
+                        reserved_outputs,
+                        skip_existing=not collision,
+                    )
+                    reserved_outputs.add(_path_key(outp))
+                    key = _checkpoint_key(str(path), str(outp))
+                    checkpoint_done = (
+                        not args.no_resume
+                        and _checkpoint_is_done(ckpt_dir, key, str(outp))
+                    )
+                    record = make_batch_item_record(
+                        str(path),
+                        str(outp),
+                        config=config,
+                        skip_existing=True,
+                        checkpoint_done=checkpoint_done,
+                    )
+                    records.append(record)
+                    _run_watch_item(str(path), str(outp), record)
+                    processed.add(fingerprint)
+                    watch_state.pop(str(path), None)
+                    _write_cli_batch_reports(
+                        out_dir,
+                        records,
+                        kind="watch-folder",
+                        started_at=watch_started_at,
+                    )
+                    if record.get("status") == STATUS_PAUSED:
+                        paused = True
+                        break
+                if paused or _pause_requested():
+                    interrupted = True
+                    break
+                if args.watch_once and candidate_count == 0:
+                    break
+                if not _wait_for_watch_interval(args.watch_interval, _pause_requested):
+                    interrupted = True
+                    break
+        except KeyboardInterrupt:
+            print("\n[watch] Interrupted by user -- partial results kept on disk.")
+            _cancel_pending_records(records)
+            interrupted = True
+        finally:
+            _write_cli_batch_reports(
+                out_dir,
+                records,
+                kind="watch-folder",
+                started_at=watch_started_at,
+            )
+        if paused:
+            print("[watch] Paused. Re-run the same command to resume pending files.")
+            sys.exit(130)
+        if interrupted:
+            sys.exit(130)
+        failures = sum(1 for record in records if record.get("status") == STATUS_FAILED)
+        reviews = sum(
+            1 for record in records
+            if record.get("status") == STATUS_REVIEW_NEEDED
+        )
+        succeeded = len(records) - failures
+        suffix = f", {reviews} review-needed" if reviews else ""
+        print(
+            f"\n[watch] drain complete: {succeeded}/{len(records)} succeeded{suffix}"
+        )
+        if failures:
+            print("[watch] Some items failed; review vsr-batch-summary before retrying.")
+        if getattr(args, "json_output", False):
+            print(json.dumps({
+                "watch": True,
+                "total": len(records),
+                "succeeded": succeeded,
+                "failed": failures,
+                "review_needed": reviews,
+                "items": [
+                    {
+                        "input": r.get("input"),
+                        "output": r.get("output"),
+                        "status": r.get("status"),
+                        "message": r.get("message"),
+                        "elapsed_seconds": r.get("elapsed_seconds"),
+                    }
+                    for r in records
+                ],
+            }, indent=2))
+        sys.exit(0 if failures == 0 else 1)
 
     if args.pattern:
         from glob import glob

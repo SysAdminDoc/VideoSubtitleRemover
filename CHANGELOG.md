@@ -6,6 +6,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The CLI can now drain a watch folder unattended.** `--watch` polls for
+  stable video/image inputs, forces canonical-output skip semantics, processes
+  each stable file once through the existing single-file path, persists the
+  normal batch reports after every item, keeps going after failures, and stops
+  cleanly on the existing pause/cancellation signal. `--watch-once` provides a
+  finite drain for scheduled jobs and tests.
+
 - **PaddleOCR model selection is now explicit.** The reviewed PP-OCRv5
   mobile family remains the default for stable resource use, while
   `--paddleocr-variant server` selects the larger accuracy-oriented models;

@@ -405,6 +405,182 @@ class CliBatchReportTests(unittest.TestCase):
         self.assertEqual(payload["files"][0]["soft_action"], "strip")
 
 
+class CliWatchFolderTests(unittest.TestCase):
+    def _run_cli(self, args):
+        from unittest import mock
+        from backend import cli as _cli
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(sys, "argv", ["vsr"] + args):
+            with mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as caught:
+                    _cli.main()
+        return caught.exception.code, stdout.getvalue(), stderr.getvalue()
+
+    def _patch_preflight_probes(self):
+        from unittest import mock
+        from backend import batch_report as _br
+
+        return mock.patch.multiple(
+            _br,
+            _probe_codec_for_log=mock.Mock(return_value="h264,640,360,30/1"),
+            _probe_duration_seconds=mock.Mock(return_value=10.0),
+            _probe_subtitle_streams=mock.Mock(return_value=[]),
+        )
+
+    def test_watch_requires_stable_file_version_before_claiming(self):
+        from backend import cli as _cli
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "clip.mp4"
+            source.write_bytes(b"first")
+            state = {}
+            processed = set()
+
+            ready, candidates = _cli._watch_ready_files(
+                root,
+                {".mp4"},
+                state,
+                processed,
+                now=10.0,
+                stable_seconds=2.0,
+            )
+            self.assertEqual(ready, [])
+            self.assertEqual(candidates, 1)
+
+            source.write_bytes(b"second-version")
+            ready, candidates = _cli._watch_ready_files(
+                root,
+                {".mp4"},
+                state,
+                processed,
+                now=11.0,
+                stable_seconds=2.0,
+            )
+            self.assertEqual(ready, [])
+            self.assertEqual(candidates, 1)
+
+            ready, candidates = _cli._watch_ready_files(
+                root,
+                {".mp4"},
+                state,
+                processed,
+                now=12.9,
+                stable_seconds=2.0,
+            )
+            self.assertEqual(ready, [])
+            self.assertEqual(candidates, 1)
+
+            ready, candidates = _cli._watch_ready_files(
+                root,
+                {".mp4"},
+                state,
+                processed,
+                now=13.0,
+                stable_seconds=2.0,
+            )
+            self.assertEqual([path.name for path, _fingerprint in ready], ["clip.mp4"])
+            self.assertEqual(candidates, 1)
+
+    def test_watch_once_processes_file_dropped_during_drain_exactly_once(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            watch_dir = work / "incoming"
+            out_dir = work / "out"
+            checkpoint_dir = work / "checkpoints"
+            watch_dir.mkdir()
+            first = watch_dir / "first.mp4"
+            second = watch_dir / "second.mp4"
+            first.write_bytes(b"first")
+            calls = []
+
+            def process_video(input_path, *_args, **_kwargs):
+                calls.append(Path(input_path).name)
+                if len(calls) == 1:
+                    second.write_bytes(b"second")
+                return True
+
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(side_effect=process_video),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--watch", str(watch_dir),
+                        "--watch-once",
+                        "--watch-stable-seconds", "0",
+                        "--watch-interval", "0.1",
+                        "--out-dir", str(out_dir),
+                        "--checkpoint-dir", str(checkpoint_dir),
+                        "--gpu", "-1",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(calls, ["first.mp4", "second.mp4"])
+        self.assertEqual(fake_remover.process_video.call_count, 2)
+        self.assertEqual(payload["kind"], "watch-folder")
+        self.assertEqual(payload["counts"], {"hardcoded-processed": 2})
+        self.assertIn("[watch] drain complete: 2/2 succeeded", stdout)
+
+    def test_watch_failure_is_recorded_and_later_files_still_run(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            watch_dir = work / "incoming"
+            out_dir = work / "out"
+            watch_dir.mkdir()
+            (watch_dir / "bad.mp4").write_bytes(b"bad")
+            (watch_dir / "good.mp4").write_bytes(b"good")
+            calls = []
+
+            def process_video(input_path, *_args, **_kwargs):
+                calls.append(Path(input_path).name)
+                if Path(input_path).name == "bad.mp4":
+                    raise ValueError("unsupported fixture")
+                return True
+
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(side_effect=process_video),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, _stdout, stderr = self._run_cli([
+                        "--watch", str(watch_dir),
+                        "--watch-once",
+                        "--watch-stable-seconds", "0",
+                        "--out-dir", str(out_dir),
+                        "--gpu", "-1",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(code, 1, stderr)
+        self.assertEqual(calls, ["bad.mp4", "good.mp4"])
+        self.assertEqual(
+            payload["counts"],
+            {"failed": 1, "hardcoded-processed": 1},
+        )
+
+
 class LoadJsonConfigTests(unittest.TestCase):
     def test_load_json_config_rejects_oversized_file(self):
         """Files larger than 1 MB should raise ValueError without being parsed."""

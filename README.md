@@ -499,6 +499,21 @@ In the GUI, queued videos with embedded subtitle tracks show a track summary;
 right-click the item to fast strip, fast remux/keep, or continue with
 burned-in cleanup.
 
+For unattended directory processing, watch a folder recursively for new video
+or image inputs. A file must keep the same size and modification time for the
+stability window before it is claimed; existing canonical outputs are skipped,
+and Ctrl-C requests the same safe pause used by ordinary CLI batches:
+
+```powershell
+python -m backend.processor --watch incoming --out-dir cleaned --watch-interval 5 --watch-stable-seconds 2
+```
+
+Use `--watch-once` to drain the files currently present (including files
+dropped while that drain is running) and then exit, which is useful for a
+scheduled job or a deterministic test. Both modes keep per-item outcomes in
+the normal `vsr-batch-summary.json` and `vsr-batch-summary.md` reports; failed
+items do not stop later files from being processed.
+
 Pattern batches and GUI batches write `vsr-batch-summary.json` and
 `vsr-batch-summary.md` next to their outputs when they finish. The report
 records each input, selected output path, codec/duration/subtitle preflight
@@ -700,6 +715,10 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--output`, `-o` | Output file path | - | - | Public |
 | `--pattern` | Glob pattern for batch mode (e.g. 'inputs/*.mp4') | - | - | Public |
 | `--out-dir` | Output directory for batch mode | - | - | Public |
+| `--watch` | Watch DIR recursively for new media files and process them continuously. | - | - | Public |
+| `--watch-interval` | Seconds between watch-folder polls. | 5.0 | >=0.1 seconds | Public |
+| `--watch-stable-seconds` | Require a file's size and mtime to stay unchanged this long before processing. | 2.0 | >=0 seconds | Public |
+| `--watch-once` | Process stable files currently in the watch folder, including files dropped during the drain, then exit. | Off | - | Public |
 | `--config` | JSON config file (key=value pairs overriding CLI defaults) | - | - | Public |
 | `--config-schema-version` | Canonical processing-config schema version for reproducible commands. | - | - | Public |
 | `--set` | Override any canonical processing field; repeat for multiple values. | - | - | Public |

@@ -101,6 +101,15 @@ def file_fingerprint(path: str) -> dict:
     }
 
 
+def file_stability_signature(path: str | Path) -> tuple[int, int]:
+    """Return the size/mtime pair used to decide whether a file is still growing."""
+    source = Path(path)
+    stat = source.stat()
+    if not source.is_file():
+        raise OSError(f"Not a regular file: {path}")
+    return int(stat.st_size), int(stat.st_mtime_ns)
+
+
 def config_fingerprint(config: Any) -> str:
     payload = _jsonable_config(config)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
