@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import subprocess
 import sys
 import unittest
 
@@ -92,6 +93,30 @@ class UnsignedDistributionWordingTests(unittest.TestCase):
         text = README.read_text(encoding="utf-8")
         self.assertIn("The build is unsigned", text)
         self.assertIn("SHA256SUMS.txt", text)
+
+
+class PublishedDocumentationLinkTests(unittest.TestCase):
+    def test_readme_does_not_link_ignored_maintainer_documents(self):
+        text = README.read_text(encoding="utf-8")
+        for reference in (
+            "edge_case_corpus.md",
+            "docs/archive/",
+            "[ROADMAP.md](",
+            "[RESEARCH.md](",
+        ):
+            with self.subTest(reference=reference):
+                self.assertNotIn(reference, text)
+
+    def test_published_docs_link_is_tracked(self):
+        self.assertTrue((_ROOT / "docs" / "architecture.md").is_file())
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "docs/architecture.md"],
+            cwd=_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(tracked.returncode, 0)
 
 
 class OfflineGuaranteeDocumentationTests(unittest.TestCase):

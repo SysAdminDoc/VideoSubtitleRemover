@@ -1319,8 +1319,7 @@ VideoSubtitleRemover/
 |   `-- model_hashes.py       # Vendored SHA-256 weight hashes
 |-- docs/
 |   |-- architecture.md       # Pipeline map for new contributors
-|   |-- edge_case_corpus.md   # Community regression-corpus guide
-|   `-- archive/              # Retired audits and completed checklists
+|   `-- (retired audit material is kept in local maintainer notes)
 |-- ROADMAP.md                # Active incomplete work
 |-- RESEARCH.md               # Current research synthesis
 |-- setup.py                  # First-time environment setup
@@ -1341,10 +1340,9 @@ See [docs/architecture.md](docs/architecture.md) for a walkthrough of
 the detect -> tracker -> mask -> TBE -> refine -> mux pipeline and the
 "add a new feature" checklist.
 
-Planning entry points:
-[ROADMAP.md](ROADMAP.md) for active incomplete work and
-[RESEARCH.md](RESEARCH.md) for current research synthesis. Retired audits
-and completed checklists live under [docs/archive/](docs/archive/).
+Maintainers keep active planning and research notes locally; the published
+documentation surface is the architecture guide above and the usage sections
+in this README.
 
 ## Translating VSR
 

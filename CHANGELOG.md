@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **README no longer advertises unpublished documentation paths.** The
+  contributor-facing edge-case guide and retired-audit directory are ignored
+  maintainer notes, so the public structure now links only the tracked
+  architecture guide and keeps planning-note wording unlinked.
+
 - **The QA pseudo-locale is no longer offered to ordinary users.** `qps-Ploc`
   stays bundled and directly bindable, but the language picker hides it unless
   `VSR_PSEUDO_LOCALE=1` (or the smoke-test locale override) is explicitly set.
