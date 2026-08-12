@@ -135,6 +135,54 @@ class TemporalBackgroundExposureTests(unittest.TestCase):
             ])) + 1.0,
         )
 
+    def test_robust_aggregation_rejects_corrupted_exposure(self):
+        shape = (12, 16, 3)
+        frames = [np.full(shape, 100, dtype=np.uint8) for _ in range(65)]
+        masks = [np.zeros(shape[:2], dtype=np.uint8) for _ in frames]
+        region = (slice(3, 9), slice(4, 12))
+        for mask in masks[:61]:
+            mask[region] = 255
+        frames[-1][region] = 255
+
+        recovered = _common._tbe_single_segment(
+            frames,
+            masks,
+            min_coverage=3,
+            use_median=False,
+            feather_px=0,
+            edge_ring_px=0,
+            flow_warp=False,
+            global_motion_align=False,
+        )
+
+        current_mean = int((100 * 3 + 255) / 4)
+        self.assertGreater(current_mean, 100)
+        np.testing.assert_array_equal(recovered[0][region], 100)
+        np.testing.assert_array_equal(recovered[0][masks[0] == 0], 100)
+
+    def test_robust_aggregation_falls_back_for_sparse_pixels(self):
+        shape = (12, 16, 3)
+        frames = [
+            np.full(shape, value, dtype=np.uint8)
+            for value in (0, 100, 255)
+        ]
+        masks = [np.zeros(shape[:2], dtype=np.uint8) for _ in frames]
+        region = (slice(3, 9), slice(4, 12))
+        masks[0][region] = 255
+
+        recovered = _common._tbe_single_segment(
+            frames,
+            masks,
+            min_coverage=1,
+            use_median=False,
+            feather_px=0,
+            edge_ring_px=0,
+            flow_warp=False,
+            global_motion_align=False,
+        )
+
+        np.testing.assert_array_equal(recovered[0][region], 177)
+
     def test_low_ransac_inlier_ratio_falls_back_to_identity(self):
         frames = [np.full((32, 48, 3), value, dtype=np.uint8)
                   for value in (20, 40, 60)]

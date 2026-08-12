@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **TBE now rejects misaligned temporal samples.** Per-pixel median/MAD
+  filtering removes corrupted exposures before averaging, while sparse pixels
+  retain the historical batch-size fallback behavior.
+
 - **Frozen optional OCR and LaMa tiers are now labeled honestly.** EasyOCR is
   marked frozen at 1.7.2 (last release 2024-09-24), and
   simple-lama-inpainting at 0.1.2 (last release 2023-07-28), in the GUI,

@@ -20,6 +20,10 @@ from backend.temporal_profile import (
 
 logger = logging.getLogger(__name__)
 
+_TBE_MAD_K = 3.0
+_TBE_MAD_MIN_TOLERANCE = 1.0
+_TBE_MIN_SURVIVORS = 3
+
 
 class BaseInpainter(ABC):
     """Abstract base class for inpainting models."""
@@ -390,6 +394,55 @@ def _identity_affine() -> np.ndarray:
     return np.asarray([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
 
 
+def _tbe_aggregate_background(
+    frame_stack: np.ndarray,
+    unmasked: np.ndarray,
+    use_median: bool,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Build a robust background and return it with the exposure coverage.
+
+    The median/MAD pass identifies per-channel temporal outliers. Surviving
+    samples are averaged so stable detail is retained instead of forcing the
+    final background to a median. Sparse pixels use the historical median for
+    batches up to 64 frames and mean for larger batches, which keeps the old
+    low-coverage behavior intact.
+    """
+    n = frame_stack.shape[0]
+    coverage = unmasked.sum(axis=0).astype(np.int32)
+    weighted = np.where(unmasked[..., None], frame_stack, np.nan)
+    with np.errstate(all="ignore"):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="All-NaN slice encountered",
+                category=RuntimeWarning,
+            )
+            median = np.nanmedian(weighted, axis=0)
+            mad = np.nanmedian(
+                np.abs(weighted - median[None, ...]), axis=0)
+    median = np.nan_to_num(median, nan=0.0)
+    mad = np.nan_to_num(mad, nan=0.0)
+
+    if use_median and n <= 64:
+        legacy_bg = median
+    else:
+        sum_vals = (frame_stack * unmasked[..., None]).sum(axis=0)
+        count = np.maximum(coverage, 1).astype(np.float32)
+        legacy_bg = sum_vals / count[..., None]
+
+    tolerance = np.maximum(_TBE_MAD_K * mad, _TBE_MAD_MIN_TOLERANCE)
+    survivors = unmasked[..., None] & (
+        np.abs(frame_stack - median[None, ...]) <= tolerance
+    )
+    survivor_count = survivors.sum(axis=0).astype(np.int32)
+    survivor_sum = np.where(survivors, frame_stack, 0.0).sum(axis=0)
+    survivor_denominator = np.maximum(survivor_count, 1).astype(np.float32)
+    robust_bg = survivor_sum / survivor_denominator
+    enough_survivors = survivor_count >= _TBE_MIN_SURVIVORS
+    bg = np.where(enough_survivors, robust_bg, legacy_bg)
+    return bg, coverage
+
+
 def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                          min_coverage: int, use_median: bool,
                          feather_px: int, edge_ring_px: int,
@@ -485,23 +538,8 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
     frame_stack = np.stack(agg_frames, axis=0).astype(np.float32)
     mask_stack = np.stack(agg_masks, axis=0)
     unmasked = (mask_stack == 0)
-    coverage = unmasked.sum(axis=0).astype(np.int32)
-
-    if use_median and n <= 64:
-        weighted = np.where(unmasked[..., None], frame_stack, np.nan)
-        with np.errstate(all='ignore'):
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="All-NaN slice encountered",
-                    category=RuntimeWarning,
-                )
-                bg = np.nanmedian(weighted, axis=0)
-        bg = np.nan_to_num(bg, nan=0.0)
-    else:
-        sum_vals = (frame_stack * unmasked[..., None]).sum(axis=0)
-        count = np.maximum(coverage, 1).astype(np.float32)
-        bg = sum_vals / count[..., None]
+    bg, coverage = _tbe_aggregate_background(
+        frame_stack, unmasked, use_median)
     bg = np.clip(bg, 0, 255).astype(np.uint8)
 
     results = []

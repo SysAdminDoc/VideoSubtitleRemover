@@ -752,13 +752,6 @@ RESEARCH.md instead of appearing here.
 
 ### P2
 
-- [ ] P2 -- RM-256: TBE aggregation has no outlier rejection, so a few misaligned frames ghost into the recovered background
-  Why: A plain median or mean is maximally sensitive to exactly the failure the flow warp produces -- a handful of badly-registered frames -- and rejecting them is a contained change to one numpy block.
-  Evidence: `backend/inpainters/_common.py:408-423` computes either `np.nanmedian` over the unmasked stack (n <= 64) or a plain `sum/count` mean, with no robustness step. Robust temporal aggregation is standard in exemplar/patch video-inpainting practice -- https://arxiv.org/pdf/2401.17883.
-  Touches: `backend/inpainters/_common.py`, `tests/`
-  Acceptance: Aggregation computes a per-pixel median and MAD, rejects samples beyond k*MAD and averages the survivors, falling back to current behaviour when fewer than three samples survive; a fixture with deliberately corrupted frames in the batch shows the recovered background unchanged where the current code visibly ghosts; the batch-size-64 median/mean switch documented in CLAUDE.md is preserved or explicitly retired.
-  Complexity: S
-
 - [ ] P2 -- RM-257: The flow estimator is a hardcoded Farneback with no better option, though a stronger one ships in core OpenCV
   Why: DIS handles motion discontinuities and occlusion boundaries better than Farneback at comparable CPU cost, and it is already available -- no new dependency, no model download.
   Evidence: `backend/inpainters/_common.py:326-360` calls `cv2.calcOpticalFlowFarneback` twice with a hand-tuned `_farneback_winsize` heuristic. `cv2.DISOpticalFlow_create` is in the OpenCV core video module (confirmed present in the installed cv2) and exposes PRESET_ULTRAFAST/FAST/MEDIUM -- https://docs.opencv.org/4.x/da/d06/classcv_1_1optflow_1_1DISOpticalFlow.html. TV-L1 is deliberately excluded: `cv2.optflow.DualTVL1OpticalFlow` is opencv-contrib only and the repo requires plain `opencv-python`.
