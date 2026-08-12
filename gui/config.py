@@ -479,6 +479,7 @@ class ProcessingConfig:
     subtitle_area: Optional[Tuple[int, int, int, int]] = None
     detection_lang: str = "en"
     detection_engine: str = "auto"
+    rapidocr_variant: str = "v6"
     language_mask_filter: bool = False
     detection_threshold: float = 0.5
     detection_vertical: bool = False
@@ -649,6 +650,12 @@ class ProcessingConfig:
             "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
         }:
             self.detection_engine = "auto"
+        self.rapidocr_variant = _coerce_text(
+            self.rapidocr_variant, "v6", 16).lower()
+        if self.rapidocr_variant in {"5", "pp-ocrv5", "ppocrv5"}:
+            self.rapidocr_variant = "v5"
+        elif self.rapidocr_variant not in {"v5", "v6"}:
+            self.rapidocr_variant = "v6"
         self.language_mask_filter = _coerce_bool(
             self.language_mask_filter, False)
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)
@@ -1367,6 +1374,7 @@ SAFE_PRESET_FIELDS = frozenset({
     "detection_threshold",
     "detection_vertical",
     "detection_frame_skip",
+    "rapidocr_variant",
     "mask_dilate_px",
     "mask_feather_px",
     "confidence_weighted_dilation",
@@ -1427,6 +1435,7 @@ SAFE_PRESET_FIELDS = frozenset({
 # stay bespoke in their respective methods and are deliberately absent here.
 SETTINGS_VAR_FIELDS = (
     ("auto_band_var", "auto_band"),
+    ("rapidocr_variant_var", "rapidocr_variant"),
     ("flow_warp_var", "tbe_flow_warp"),
     ("global_motion_var", "tbe_global_motion_align"),
     ("scene_split_var", "tbe_scene_cut_split"),
@@ -1463,7 +1472,8 @@ SETTINGS_VAR_FIELDS = (
 
 DEFAULT_PRESET_FIELDS = [
     "mode", "detection_threshold", "mask_dilate_px",
-    "mask_feather_px", "edge_ring_px", "tbe_flow_warp",
+    "mask_feather_px", "edge_ring_px", "rapidocr_variant",
+    "tbe_flow_warp",
     "tbe_global_motion_align",
     "tbe_scene_cut_split", "colour_tune_enable",
     "colour_tune_tolerance", "kalman_tracking",

@@ -32,6 +32,7 @@ OCR_ENGINE_CHOICES = (
     "easyocr",
     "opencv",
 )
+RAPIDOCR_VARIANT_CHOICES = ("v6", "v5")
 
 
 def normalize_ocr_engine(value: object) -> str:
@@ -45,6 +46,22 @@ def normalize_ocr_engine(value: object) -> str:
     }
     normalized = aliases.get(normalized, normalized)
     return normalized if normalized in OCR_ENGINE_CHOICES else "auto"
+
+
+def normalize_rapidocr_variant(value: object) -> str:
+    """Normalize the selectable RapidOCR model generation."""
+    text = str(value or "v6").strip().lower().replace("_", "-")
+    aliases = {
+        "5": "v5",
+        "v5": "v5",
+        "pp-ocrv5": "v5",
+        "ppocrv5": "v5",
+        "6": "v6",
+        "v6": "v6",
+        "pp-ocrv6": "v6",
+        "ppocrv6": "v6",
+    }
+    return aliases.get(text, "v6")
 
 
 def _surya_allowed() -> bool:
@@ -165,14 +182,66 @@ def _rapidocr_openvino_params(rapid_module, device: str) -> Optional[Dict[str, A
     }
 
 
-def _build_rapidocr(rapid_cls, device: str, rapid_module=None):
+def _rapidocr_variant_params(rapid_module, variant: str) -> Dict[str, Any]:
+    """Return RapidOCR 3.x enum parameters for the requested model family.
+
+    RapidOCR 3.9 validates these values as ``OCRVersion`` enum members rather
+    than accepting their display strings. Older 1.x/2.x packages do not expose
+    that enum, so an empty mapping preserves their package default behavior.
+    """
+    enum_type = getattr(rapid_module, "OCRVersion", None)
+    member = getattr(enum_type, f"PPOCR{variant.upper()}", None)
+    if member is None:
+        if variant == "v5":
+            logger.warning(
+                "RapidOCR does not expose OCRVersion.PPOCRV5; "
+                "using the installed package default instead."
+            )
+        return {}
+    params = {
+        "Det.ocr_version": member,
+        "Rec.ocr_version": member,
+    }
+    if variant == "v5":
+        # RapidOCR 3.9's v6 default is the ``small`` family, while PP-OCRv5
+        # exposes the ONNX mobile/server families.  Leaving the v6 model type
+        # in place makes the package reject the otherwise valid v5 enum.
+        model_type = getattr(getattr(rapid_module, "ModelType", None),
+                             "MOBILE", None)
+        if model_type is not None:
+            params.update({
+                "Det.model_type": model_type,
+                "Rec.model_type": model_type,
+            })
+    return params
+
+
+def _merge_rapidocr_params(*groups: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    for group in groups:
+        if group:
+            merged.update(group)
+    return merged
+
+
+def _build_rapidocr(
+    rapid_cls,
+    device: str,
+    rapid_module=None,
+    variant: str = "v6",
+):
+    variant_params = _rapidocr_variant_params(
+        rapid_module, normalize_rapidocr_variant(variant)
+    )
     openvino_params = (
         _rapidocr_openvino_params(rapid_module, device)
         if rapid_module is not None else None
     )
     if openvino_params:
         try:
-            return rapid_cls(params=openvino_params), "OpenVINO"
+            return rapid_cls(
+                params=_merge_rapidocr_params(variant_params, openvino_params)
+            ), "OpenVINO"
         except Exception as exc:
             logger.warning(
                 "RapidOCR OpenVINO engine init failed; retrying ONNX "
@@ -181,15 +250,30 @@ def _build_rapidocr(rapid_cls, device: str, rapid_module=None):
     directml_params = _rapidocr_directml_params(device)
     if directml_params:
         try:
-            return rapid_cls(params=directml_params), "DirectML"
+            return rapid_cls(
+                params=_merge_rapidocr_params(variant_params, directml_params)
+            ), "DirectML"
         except Exception as exc:
             logger.warning(
                 "RapidOCR DirectML provider init failed; retrying CPU "
                 f"provider: {exc}"
             )
     try:
+        if variant_params:
+            return rapid_cls(params=variant_params), "CPU"
         return rapid_cls(), "CPU"
-    except TypeError:
+    except (KeyError, TypeError, ValueError) as exc:
+        if variant_params:
+            logger.warning(
+                "RapidOCR %s variant is not supported by this package; "
+                "using its default model: %s",
+                normalize_rapidocr_variant(variant),
+                exc,
+            )
+            try:
+                return rapid_cls(), "CPU"
+            except TypeError:
+                return rapid_cls(params={}), "CPU"
         return rapid_cls(params={}), "CPU"
 
 
@@ -221,11 +305,13 @@ class SubtitleDetector:
     """Detects subtitle regions in video frames using text detection models."""
 
     def __init__(self, device: str = "cuda:0", lang: str = "en",
-                 vertical: bool = False, engine: str = "auto"):
+                 vertical: bool = False, engine: str = "auto",
+                 rapidocr_variant: str = "v6"):
         self.device = device
         self.lang = lang
         self.vertical = bool(vertical)
         self.engine = normalize_ocr_engine(engine)
+        self.rapidocr_variant = normalize_rapidocr_variant(rapidocr_variant)
         self._engine_name = "none"
         self._rapid_model = None
         self._paddle_model = None
@@ -288,6 +374,9 @@ class SubtitleDetector:
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
         EasyOCR > OpenCV fallback."""
         self.engine = normalize_ocr_engine(getattr(self, "engine", "auto"))
+        self.rapidocr_variant = normalize_rapidocr_variant(
+            getattr(self, "rapidocr_variant", "v6")
+        )
         if self.engine == "auto":
             try:
                 from backend.ocr_vlm import maybe_build_vlm_detector
@@ -321,8 +410,16 @@ class SubtitleDetector:
             logger.info("OpenCV fallback detection selected")
             return
 
+        if self.engine == "opencv-dnn" and self.rapidocr_variant != "v6":
+            logger.info(
+                "RapidOCR PP-OCRv5 selected; bypassing the OpenCV DNN adapter "
+                "which is pinned to PP-OCRv6."
+            )
+            self.engine = "rapidocr"
+
         if self.engine == "opencv-dnn" or (
             self.engine in {"auto", "rapidocr"}
+            and self.rapidocr_variant == "v6"
             and _should_try_opencv_dnn_ocr(self.device)
         ):
             try:
@@ -351,6 +448,7 @@ class SubtitleDetector:
                         _rapidocr_module.RapidOCR,
                         self.device,
                         _rapidocr_module,
+                        variant=self.rapidocr_variant,
                     )
                 elif _module_can_import("rapidocr_onnxruntime"):
                     import rapidocr_onnxruntime as _rapidocr_module
@@ -358,6 +456,7 @@ class SubtitleDetector:
                         _rapidocr_module.RapidOCR,
                         self.device,
                         _rapidocr_module,
+                        variant=self.rapidocr_variant,
                     )
                 else:
                     raise ImportError("RapidOCR unavailable or failed import probe")

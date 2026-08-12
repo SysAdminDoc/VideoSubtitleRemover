@@ -802,8 +802,10 @@ class ProcessingControllerMixin:
                 item.config.use_gpu, item.config.gpu_id)
             lang = getattr(item.config, 'detection_lang', 'en')
             ocr_engine = getattr(item.config, 'detection_engine', 'auto')
+            ocr_variant = getattr(item.config, 'rapidocr_variant', 'v6')
             vertical = bool(getattr(item.config, 'detection_vertical', False))
-            cache_key = (backend_mode, device, lang, ocr_engine, vertical)
+            cache_key = (
+                backend_mode, device, lang, ocr_engine, ocr_variant, vertical)
 
             backend_config = gui_to_backend_config(item.config)
 
@@ -822,6 +824,7 @@ class ProcessingControllerMixin:
                         device=device,
                         detection_lang=lang,
                         detection_engine=ocr_engine,
+                        rapidocr_variant=ocr_variant,
                         detection_threshold=getattr(item.config, 'detection_threshold', 0.5),
                     )
                     probe = BackendRemover(probe_cfg)
@@ -1261,6 +1264,8 @@ class ProcessingControllerMixin:
                 lang = first_video.config.detection_lang or "en"
                 engine = getattr(
                     first_video.config, "detection_engine", "auto") or "auto"
+                variant = getattr(
+                    first_video.config, "rapidocr_variant", "v6") or "v6"
                 with self._detector_lock:
                     detector = self._preview_detector
                     if (
@@ -1268,11 +1273,18 @@ class ProcessingControllerMixin:
                         or self._preview_detector_lang != lang
                         or getattr(
                             self, "_preview_detector_engine", None) != engine
+                        or (getattr(
+                            self, "_preview_detector_variant", None) or "v6") != variant
                     ):
-                        detector = SubtitleDetector(lang=lang, engine=engine)
+                        detector = SubtitleDetector(
+                            lang=lang,
+                            engine=engine,
+                            rapidocr_variant=variant,
+                        )
                         self._preview_detector = detector
                         self._preview_detector_lang = lang
                         self._preview_detector_engine = engine
+                        self._preview_detector_variant = variant
                 threshold = getattr(first_video.config, "detection_threshold", 0.5)
                 t0 = time.monotonic()
                 frames_done = 0
@@ -1520,4 +1532,3 @@ class ProcessingControllerMixin:
             ctypes.windll.user32.MessageBeep(0)
         except Exception:
             pass
-

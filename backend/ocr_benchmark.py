@@ -254,8 +254,9 @@ def run_ocr_detection_benchmark(detector, *, threshold: float = 0.3,
 
 def run_default_detector_benchmark(*, device: str = "cpu", lang: str = "en",
                                    threshold: float = 0.3,
-                                   engine: str = "auto") -> dict:
-    """Build the default detector cascade and benchmark it."""
+                                   engine: str = "auto",
+                                   variant: str = "v6") -> dict:
+    """Build the selected detector and benchmark it on the fixed fixtures."""
     from backend.detection import SubtitleDetector
     preferences = {
         "auto": (None, "auto"),
@@ -276,7 +277,11 @@ def run_default_detector_benchmark(*, device: str = "cpu", lang: str = "en",
         else:
             os.environ["VSR_RAPIDOCR_ENGINE"] = preference
         detector = SubtitleDetector(
-            device=device, lang=lang, engine=detector_engine)
+            device=device,
+            lang=lang,
+            engine=detector_engine,
+            rapidocr_variant=variant,
+        )
     finally:
         if old_preference is None:
             os.environ.pop("VSR_RAPIDOCR_ENGINE", None)
@@ -287,6 +292,8 @@ def run_default_detector_benchmark(*, device: str = "cpu", lang: str = "en",
     before_rss = before_load.get("rssBytes")
     after_rss = after_load.get("rssBytes")
     result["requested_engine"] = engine
+    result["requested_variant"] = variant
+    result["variant"] = getattr(detector, "rapidocr_variant", variant)
     result["memory"].update({
         "beforeLoadRssBytes": before_rss,
         "afterLoadRssBytes": after_rss,
@@ -296,3 +303,31 @@ def run_default_detector_benchmark(*, device: str = "cpu", lang: str = "en",
         ),
     })
     return result
+
+
+def run_rapidocr_variant_benchmark(*, device: str = "cpu",
+                                   lang: str = "en",
+                                   threshold: float = 0.3) -> dict:
+    """Benchmark PP-OCRv6 and PP-OCRv5 over the identical fixture set."""
+    variants = {}
+    for variant in ("v6", "v5"):
+        variants[variant] = run_default_detector_benchmark(
+            device=device,
+            lang=lang,
+            threshold=threshold,
+            engine="rapidocr",
+            variant=variant,
+        )
+    return {
+        "schema": OCR_BENCHMARK_SCHEMA,
+        "benchmark": "rapidocr-variant-comparison",
+        "engine": "rapidocr",
+        "variant_order": ["v6", "v5"],
+        "fixtures": len(_FIXTURE_TEXTS),
+        "same_fixtures": True,
+        "variants": variants,
+        "meets_floors": all(
+            bool(result.get("meets_floors"))
+            for result in variants.values()
+        ),
+    }

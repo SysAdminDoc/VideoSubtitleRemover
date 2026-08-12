@@ -908,16 +908,20 @@ class RegionSelectorWindow:
         try:
             from backend.detection import SubtitleDetector
             with self._detector_lock:
+                variant = getattr(self.config, "rapidocr_variant", "v6")
                 if (
                     self._preview_detector is None
                     or self._preview_detector_lang != lang
                     or getattr(
                         self, "_preview_detector_engine", None) != engine
+                    or (getattr(
+                        self, "_preview_detector_variant", None) or "v6") != variant
                 ):
                     self._preview_detector = SubtitleDetector(
-                        lang=lang, engine=engine)
+                        lang=lang, engine=engine, rapidocr_variant=variant)
                     self._preview_detector_lang = lang
                     self._preview_detector_engine = engine
+                    self._preview_detector_variant = variant
                 results = self._preview_detector.detect_with_confidence(
                     crop, threshold)
         except Exception as exc:

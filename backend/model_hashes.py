@@ -58,6 +58,25 @@ KNOWN_WEIGHT_HASHES: Dict[str, str] = {
 }
 
 
+# Reviewed RapidOCR 3.9.2 ONNX assets.  These are kept separate from the
+# optional inpainter hashes above because RapidOCR owns the download/cache
+# lifecycle and its filenames are generation-specific.
+RAPIDOCR_MODEL_HASHES: Dict[str, str] = {
+    "PP-OCRv6_det_small.onnx": (
+        "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94"
+    ),
+    "PP-OCRv6_rec_small.onnx": (
+        "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884"
+    ),
+    "ch_PP-OCRv5_det_mobile.onnx": (
+        "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae"
+    ),
+    "ch_PP-OCRv5_rec_mobile.onnx": (
+        "5825fc7ebf84ae7a412be049820b4d86d77620f204a041697b0494669b1742c5"
+    ),
+}
+
+
 _CHUNK = 1 * 1024 * 1024  # 1 MiB streaming reads
 
 

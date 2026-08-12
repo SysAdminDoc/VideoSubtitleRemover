@@ -6,7 +6,7 @@ that metadata would make optional ONNX paths heavier, so this module uses
 the protobuf wire format directly.
 
 Model-opset audit (RM-119): PP-OCR ONNX models bundled by RapidOCR use
-opset 11 (PaddleOCR v4 ONNX exports). LaMa-ONNX (Carve/LaMa-ONNX on
+opset 11 (PaddleOCR v4-v6 ONNX exports). LaMa-ONNX (Carve/LaMa-ONNX on
 HuggingFace) uses opset 9. MI-GAN-ONNX uses opset 11. All are well
 below the DirectML EP ceiling of opset 20. The guard in
 ``inpainters_onnx._providers_after_opset_audit`` handles future models
@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from backend.model_hashes import hash_file
+from backend.model_hashes import RAPIDOCR_MODEL_HASHES, hash_file
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,10 @@ KNOWN_MODEL_OPSETS: Dict[str, int] = {
     "PP-OCRv4 det (RapidOCR bundled)": 11,
     "PP-OCRv4 cls (RapidOCR bundled)": 11,
     "PP-OCRv4 rec (RapidOCR bundled)": 11,
+    "PP-OCRv5 det (RapidOCR bundled)": 11,
+    "PP-OCRv5 rec (RapidOCR bundled)": 11,
+    "PP-OCRv6 det (RapidOCR bundled)": 11,
+    "PP-OCRv6 rec (RapidOCR bundled)": 11,
     "LaMa-ONNX (Carve/LaMa-ONNX)": 9,
     "MI-GAN-ONNX (Picsart)": 11,
 }
@@ -407,12 +411,24 @@ def rapidocr_release_provenance(
                     "bytes": onnx_file.stat().st_size,
                     "sha256": hash_file(onnx_file),
                 })
+                expected_hash = RAPIDOCR_MODEL_HASHES.get(onnx_file.name)
+                record.update({
+                    "reviewed_sha256": expected_hash,
+                    "reviewed_hash_match": (
+                        expected_hash is not None
+                        and record["sha256"].lower() == expected_hash.lower()
+                        if expected_hash is not None else None
+                    ),
+                })
             except OSError as exc:
                 record.update({
                     "filename": onnx_file.name,
                     "relative_path": str(rel).replace(os.sep, "/"),
                     "bytes": None,
                     "sha256": None,
+                    "reviewed_sha256": RAPIDOCR_MODEL_HASHES.get(
+                        onnx_file.name),
+                    "reviewed_hash_match": None,
                     "error": str(exc),
                 })
             models.append(record)
@@ -423,6 +439,14 @@ def rapidocr_release_provenance(
     )
     required_assets, packaging_compatible, model_families = (
         _rapidocr_required_assets(models, config_files, resolved_version)
+    )
+    reviewed_models = [
+        item for item in models
+        if item.get("reviewed_sha256") is not None
+    ]
+    reviewed_hashes_ok = all(
+        item.get("reviewed_hash_match") is not False
+        for item in reviewed_models
     )
     return {
         "package": {
@@ -435,6 +459,8 @@ def rapidocr_release_provenance(
         "model_families": model_families,
         "required_assets": required_assets,
         "packaging_compatible": packaging_compatible,
+        "reviewed_model_count": len(reviewed_models),
+        "reviewed_hashes_ok": reviewed_hashes_ok,
         "models": models,
         "missing": not models,
     }

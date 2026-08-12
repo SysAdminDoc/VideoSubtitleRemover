@@ -672,6 +672,32 @@ class LayoutBuildMixin:
             tr("Automatic uses the best installed detector. Select an engine "
                "to compare results or reproduce a run."),
         )
+        variant_row = tk.Frame(det_frame, bg=Theme.BG_CARD)
+        variant_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
+        tk.Label(
+            variant_row,
+            text=tr("RapidOCR model generation"),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        rapidocr_variant_combo = ttk.Combobox(
+            variant_row,
+            textvariable=self.rapidocr_variant_var,
+            values=("v6", "v5"),
+            width=9,
+            state="readonly",
+            style="Dark.TCombobox",
+            font=f(Theme.F_BODY_SM),
+        )
+        rapidocr_variant_combo.pack(side="right")
+        rapidocr_variant_combo.bind(
+            "<<ComboboxSelected>>", self._on_rapidocr_variant_changed)
+        Tooltip(
+            rapidocr_variant_combo,
+            tr("PP-OCRv6 is the default RapidOCR generation. Keep PP-OCRv5 "
+               "for regression comparison or a known-compatible run."),
+        )
         self.language_filter_var = tk.BooleanVar(
             value=self.config.language_mask_filter)
         self.language_filter_toggle = ModernToggle(

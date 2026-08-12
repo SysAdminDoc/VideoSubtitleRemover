@@ -132,6 +132,7 @@ class ProcessingConfig:
     detection_threshold: float = 0.5
     detection_lang: str = "en"
     detection_engine: str = "auto"
+    rapidocr_variant: str = "v6"
     language_mask_filter: bool = False
     detection_frame_skip: int = 0  # 0=detect every frame, N=reuse mask for N frames
     # RM-24 vertical-text mode: when on, detectors that support a
@@ -660,6 +661,12 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
     }:
         config.detection_engine = "auto"
+    config.rapidocr_variant = _coerce_text(
+        getattr(config, "rapidocr_variant", "v6"), "v6", 16).lower()
+    if config.rapidocr_variant in {"5", "pp-ocrv5", "ppocrv5"}:
+        config.rapidocr_variant = "v5"
+    elif config.rapidocr_variant not in {"v5", "v6"}:
+        config.rapidocr_variant = "v6"
     config.language_mask_filter = _coerce_bool(
         config.language_mask_filter, False)
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)

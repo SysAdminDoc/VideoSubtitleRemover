@@ -169,6 +169,82 @@ class DetectionCascadeTests(unittest.TestCase):
         self.assertIn("params", calls[0])
         self.assertEqual(calls[1], {})
 
+    def test_rapidocr_v5_uses_the_3x_ocr_version_enum(self):
+        calls = []
+        v5 = object()
+
+        class FakeRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        rapid = types.ModuleType("rapidocr")
+        rapid.RapidOCR = FakeRapidOCR
+        rapid.OCRVersion = types.SimpleNamespace(PPOCRV5=v5, PPOCRV6=object())
+        mobile = object()
+        rapid.ModelType = types.SimpleNamespace(MOBILE=mobile)
+
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                sys.modules,
+                {
+                    "backend.ocr_vlm": self._vlm_disabled_module(),
+                    "rapidocr": rapid,
+                },
+            ):
+                with mock.patch.dict(
+                    os.environ,
+                    {"VSR_RAPIDOCR_ENGINE": "onnxruntime"},
+                    clear=False,
+                ):
+                    detector = detection.SubtitleDetector(
+                        device="cpu",
+                        lang="en",
+                        engine="rapidocr",
+                        rapidocr_variant="v5",
+                    )
+
+        self.assertEqual(detector.rapidocr_variant, "v5")
+        self.assertIs(calls[0]["params"]["Det.ocr_version"], v5)
+        self.assertIs(calls[0]["params"]["Rec.ocr_version"], v5)
+        self.assertIs(calls[0]["params"]["Det.model_type"], mobile)
+        self.assertIs(calls[0]["params"]["Rec.model_type"], mobile)
+
+    def test_rapidocr_v5_bypasses_the_v6_only_opencv_adapter(self):
+        calls = []
+        v5 = object()
+        mobile = object()
+
+        class FakeRapidOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        rapid = types.ModuleType("rapidocr")
+        rapid.RapidOCR = FakeRapidOCR
+        rapid.OCRVersion = types.SimpleNamespace(PPOCRV5=v5)
+        rapid.ModelType = types.SimpleNamespace(MOBILE=mobile)
+
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                sys.modules,
+                {
+                    "backend.ocr_vlm": self._vlm_disabled_module(),
+                    "rapidocr": rapid,
+                },
+            ):
+                with mock.patch.object(
+                    detection,
+                    "_should_try_opencv_dnn_ocr",
+                    return_value=True,
+                ):
+                    detector = detection.SubtitleDetector(
+                        device="cpu",
+                        lang="en",
+                        rapidocr_variant="v5",
+                    )
+
+        self.assertEqual(detector._engine_name, "RapidOCR")
+        self.assertIs(calls[0]["params"]["Det.ocr_version"], v5)
+
     def test_paddle_used_when_rapidocr_is_unavailable(self):
         blocked = {"rapidocr", "rapidocr_onnxruntime"}
         real_import = builtins.__import__
@@ -450,6 +526,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         cfg = ProcessingConfig()
         cfg.detection_lang = "ja"
         cfg.detection_engine = "paddleocr"
+        cfg.rapidocr_variant = "v5"
         cfg.language_mask_filter = True
         cfg.output_quality = 18
         cfg.output_codec = "h265"
@@ -464,6 +541,7 @@ class CliCommandBuilderTests(unittest.TestCase):
         cmd = _build_cli_command(item)
         self.assertIn("-l ja", cmd)
         self.assertIn("--ocr-engine paddleocr", cmd)
+        self.assertIn("--rapidocr-variant v5", cmd)
         self.assertIn("--language-filter", cmd)
         self.assertIn("--crf 18", cmd)
         self.assertIn("--codec h265", cmd)
@@ -687,6 +765,35 @@ class OcrBenchmarkHarnessTests(unittest.TestCase):
         self.assertEqual(result["recognition_mean"], 1.0)
         self.assertTrue(result["recognition_meets_floor"])
         self.assertTrue(result["meets_floors"])
+
+    def test_rapidocr_variant_benchmark_uses_identical_fixtures(self):
+        from backend import ocr_benchmark
+
+        calls = []
+
+        def fake_benchmark(**kwargs):
+            calls.append(kwargs)
+            return {
+                "variant": kwargs["variant"],
+                "fixtures": len(ocr_benchmark._FIXTURE_TEXTS),
+                "meets_floors": True,
+            }
+
+        with mock.patch.object(
+            ocr_benchmark,
+            "run_default_detector_benchmark",
+            side_effect=fake_benchmark,
+        ):
+            result = ocr_benchmark.run_rapidocr_variant_benchmark()
+
+        self.assertEqual(result["variant_order"], ["v6", "v5"])
+        self.assertTrue(result["same_fixtures"])
+        self.assertEqual(result["fixtures"], len(ocr_benchmark._FIXTURE_TEXTS))
+        self.assertEqual(
+            [call["variant"] for call in calls],
+            ["v6", "v5"],
+        )
+        self.assertTrue(all(call["engine"] == "rapidocr" for call in calls))
 
 
 if __name__ == "__main__":

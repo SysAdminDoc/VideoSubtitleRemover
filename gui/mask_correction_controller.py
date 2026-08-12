@@ -495,17 +495,23 @@ class MaskCorrectionWindow:
                 lang = getattr(self.item.config, "detection_lang", "en")
                 engine = getattr(
                     self.item.config, "detection_engine", "auto")
+                variant = getattr(
+                    self.item.config, "rapidocr_variant", "v6")
                 if (
                     detector is None
                     or getattr(
                         self, "_preview_detector_lang", None) != lang
                     or getattr(
                         self, "_preview_detector_engine", None) != engine
+                    or (getattr(
+                        self, "_preview_detector_variant", None) or "v6") != variant
                 ):
-                    detector = SubtitleDetector(lang=lang, engine=engine)
+                    detector = SubtitleDetector(
+                        lang=lang, engine=engine, rapidocr_variant=variant)
                     self._preview_detector = detector
                     self._preview_detector_lang = lang
                     self._preview_detector_engine = engine
+                    self._preview_detector_variant = variant
                 # Inference stays under the same lock as the cache write:
                 # this editor's frame loader can race a review-mask preview
                 # or the batch ETA probe on one shared, non-thread-safe

@@ -750,13 +750,6 @@ RESEARCH.md instead of appearing here.
 
 ### P1
 
-- [ ] P1 -- RM-252: Detection is a full PP-OCR generation behind, and the upgrade is Apache-2.0 ONNX with no new runtime
-  Why: Better detection recall directly reduces the missed-glyph and under-dilated-mask failures that dominate user-visible quality, and this upgrade costs a version pin rather than a new dependency.
-  Evidence: RapidOCR 3.9.2 (2026-07-21) added PP-OCRv6 for both detection and recognition on ONNX Runtime and OpenVINO -- https://github.com/RapidAI/RapidOCR/releases; `dependency_profiles.json` pins `rapidocr==3.9.1`. PP-OCRv6 ships Tiny/Small/Medium variants with one unified CJK + 46-Latin model; PaddleOCR reports the Medium variant at +5.1% recognition and +4.6% detection over PP-OCRv5-server, with OpenVINO CPU inference up to 5.2x faster -- https://arxiv.org/html/2606.13108v1, https://github.com/PaddlePaddle/PaddleOCR/releases. Apache-2.0.
-  Touches: `dependency_profiles.json`, `dependency_profiles/*.txt`, `backend/detection.py` (`_detect_rapid`), `backend/onnx_model_info.py`, `backend/model_hashes.py`, `README.md`, `tests/`
-  Acceptance: The RapidOCR pin moves to 3.9.2 with a refreshed reviewed artifact hash; PP-OCRv6 is selectable as a detector variant with PP-OCRv5 retained as the fallback for regression comparison; `backend/ocr_benchmark.py` records both over the same fixtures; the RapidOCR 1.x/2.x output-shape handling documented in CLAUDE.md is confirmed or extended for the v6 models.
-  Complexity: M
-
 ### P2
 
 - [ ] P2 -- RM-253: numpy is pinned 14 months stale, and the obvious bump collides with the declared Python 3.11 floor

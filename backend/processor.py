@@ -642,6 +642,7 @@ class SubtitleRemover(
             lang=self.config.detection_lang,
             vertical=self.config.detection_vertical,
             engine=self.config.detection_engine,
+            rapidocr_variant=getattr(self.config, "rapidocr_variant", "v6"),
         )
         if self.config.language_mask_filter and not any(
             name in self.detector._engine_name

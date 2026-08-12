@@ -70,6 +70,10 @@ class RapidOcrProvenanceTests(unittest.TestCase):
             self.assertEqual(record["relative_path"], "PP-OCRv6_det_small.onnx")
             self.assertEqual(record["bytes"], len(payload))
             self.assertEqual(record["sha256"], hashlib.sha256(payload).hexdigest())
+            self.assertIsNotNone(record["reviewed_sha256"])
+            self.assertFalse(record["reviewed_hash_match"])
+            self.assertEqual(result["reviewed_model_count"], 2)
+            self.assertFalse(result["reviewed_hashes_ok"])
             self.assertEqual(record["max_default_opset"], 11)
             self.assertTrue(record["directml_compatible"])
 

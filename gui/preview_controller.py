@@ -1181,6 +1181,7 @@ class PreviewControllerMixin:
             self._preview_photo = None
             lang = self.lang_var.get()
             ocr_engine = getattr(self.config, "detection_engine", "auto")
+            ocr_variant = getattr(self.config, "rapidocr_variant", "v6")
             threshold = getattr(self.config, 'detection_threshold', 0.5)
             timed_spans = getattr(self.config, "subtitle_region_spans", None) or []
             keyframe_tracks = (
@@ -1234,7 +1235,8 @@ class PreviewControllerMixin:
                             mask_corrections=mask_corrections,
                             mask_import_path=mask_import_path,
                             mask_import_mode=mask_import_mode,
-                            mask_dilate_px=mask_dilate_px)
+                            mask_dilate_px=mask_dilate_px,
+                            ocr_variant=ocr_variant)
                     else:
                         self._preview_bg_normal(
                             raw_frame, item_file, item_id, item_status,
@@ -1269,7 +1271,8 @@ class PreviewControllerMixin:
                           item_file, item_id, preview_request_id,
                           max_w, max_h, _cv2, to_pil,
                           mask_corrections=None, mask_import_path="",
-                          mask_import_mode="replace", mask_dilate_px=0):
+                          mask_import_mode="replace", mask_dilate_px=0,
+                          ocr_variant="v6"):
         try:
             from backend.detection import SubtitleDetector
             with self._detector_lock:
@@ -1278,11 +1281,17 @@ class PreviewControllerMixin:
                     or self._preview_detector_lang != lang
                     or getattr(
                         self, "_preview_detector_engine", None) != ocr_engine
+                    or (getattr(
+                        self, "_preview_detector_variant", None) or "v6") != ocr_variant
                 ):
                     self._preview_detector = SubtitleDetector(
-                        lang=lang, engine=ocr_engine)
+                        lang=lang,
+                        engine=ocr_engine,
+                        rapidocr_variant=ocr_variant,
+                    )
                     self._preview_detector_lang = lang
                     self._preview_detector_engine = ocr_engine
+                    self._preview_detector_variant = ocr_variant
                 det = self._preview_detector
                 frame_copy = raw_frame.copy()
                 if sub_areas or manual_shapes:
@@ -1519,4 +1528,3 @@ class PreviewControllerMixin:
             self.preview_meta_label.config(text=meta)
             self._preview_label.config(image=self._preview_photo, text="")
         self._dispatch_preview_ui(_update_normal)
-

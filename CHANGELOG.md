@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **RapidOCR now runs the reviewed 3.9.2 PP-OCRv6 generation by default.**
+  PP-OCRv5 remains selectable for regression comparison, with a CLI benchmark
+  that evaluates both generations on identical fixtures and release evidence
+  recording the reviewed ONNX model hashes.
+
 - **Temporal background recovery now compensates for global camera motion.**
   Each scene segment is affine-registered to a reference before aggregation,
   rejects weak RANSAC fits, and keeps optional dense flow as a residual

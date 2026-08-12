@@ -351,6 +351,7 @@ class GuiToBackendFieldWiringTests(unittest.TestCase):
     EXPECTED_GUI_FIELDS = (
         "loudnorm_target", "multi_audio_passthrough", "decode_hw_accel",
         "prefetch_decode", "prefetch_queue_size", "input_fps",
+        "rapidocr_variant",
         "quality_report_sheet", "rife_fast_stride",
         "remove_subtitles", "remove_chyrons",
         "chyron_min_hits", "karaoke_grouping", "karaoke_x_gap_px",

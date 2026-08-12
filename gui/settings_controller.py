@@ -582,10 +582,29 @@ class AdvancedSettingsControllerMixin:
                 self._preview_detector = None
                 self._preview_detector_lang = None
                 self._preview_detector_engine = None
+                self._preview_detector_variant = None
         else:
             self._preview_detector = None
             self._preview_detector_lang = None
             self._preview_detector_engine = None
+            self._preview_detector_variant = None
+
+    def _on_rapidocr_variant_changed(self, event=None):
+        """Persist the OCR generation and invalidate detector caches."""
+        del event
+        self.config.rapidocr_variant = self.rapidocr_variant_var.get()
+        lock = getattr(self, "_detector_lock", None)
+        if lock is not None:
+            with lock:
+                self._preview_detector = None
+                self._preview_detector_lang = None
+                self._preview_detector_engine = None
+                self._preview_detector_variant = None
+        else:
+            self._preview_detector = None
+            self._preview_detector_lang = None
+            self._preview_detector_engine = None
+            self._preview_detector_variant = None
 
     def _on_gpu_changed(self, event=None):
         """Handle GPU device selection change."""

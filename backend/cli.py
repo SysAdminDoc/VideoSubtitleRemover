@@ -115,7 +115,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--audit-onnx", "--audit-windows-ml", "--scan-weights", "--cache-info",
             "--cache-clean", "--model-cache-export", "--model-cache-import",
             "--support-bundle", "--validate-config", "--self-test",
-            "--inference-smoke", "--ocr-benchmark", "--ocr-engine", "--dry-run",
+            "--inference-smoke", "--ocr-benchmark", "--ocr-engine",
+            "--rapidocr-variant", "--ocr-compare-variants", "--dry-run",
             "--json", "--auto-lang-probe", "--intent", "--json-log",
             "--dump-cli-reference",
         ),
@@ -911,6 +912,17 @@ def _build_parser(mode_choices):
         help=("Select the OCR detector for processing or --ocr-benchmark; "
               "auto uses the best available engine."),
     )
+    parser.add_argument(
+        "--rapidocr-variant",
+        choices=("v6", "v5"),
+        default="v6",
+        help="Select RapidOCR PP-OCR generation (v6 default, v5 fallback).",
+    )
+    parser.add_argument(
+        "--ocr-compare-variants",
+        action="store_true",
+        help="Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures.",
+    )
     parser.add_argument("--dry-run", action="store_true",
                        help="Validate the run without encoding: probe each input, "
                             "run detection on a few sampled frames, check the "
@@ -1043,12 +1055,21 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
         sys.exit(0)
 
     if getattr(args, "ocr_benchmark", False):
-        from backend.ocr_benchmark import run_default_detector_benchmark
-        device = f"cuda:{args.gpu}" if getattr(args, "gpu", 0) >= 0 else "cpu"
-        result = run_default_detector_benchmark(
-            device=device,
-            engine=args.ocr_engine,
+        from backend.ocr_benchmark import (
+            run_default_detector_benchmark,
+            run_rapidocr_variant_benchmark,
         )
+        device = f"cuda:{args.gpu}" if getattr(args, "gpu", 0) >= 0 else "cpu"
+        if args.ocr_compare_variants:
+            if args.ocr_engine not in {"auto", "rapidocr"}:
+                parser.error("--ocr-compare-variants requires --ocr-engine auto or rapidocr")
+            result = run_rapidocr_variant_benchmark(device=device)
+        else:
+            result = run_default_detector_benchmark(
+                device=device,
+                engine=args.ocr_engine,
+                variant=args.rapidocr_variant,
+            )
         print(json.dumps(result, indent=2))
         sys.exit(0 if result["meets_floors"] else 1)
 
@@ -1344,6 +1365,7 @@ def _build_processing_config(
         preserve_audio=not args.no_audio,
         detection_lang=args.lang,
         detection_engine=args.ocr_engine,
+        rapidocr_variant=args.rapidocr_variant,
         language_mask_filter=args.language_filter,
         detection_threshold=args.threshold,
         detection_vertical=args.vertical,

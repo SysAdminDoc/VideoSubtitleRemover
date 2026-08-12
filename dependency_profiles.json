@@ -1,6 +1,6 @@
 {
   "schema": "vsr.dependency_profiles.v1",
-  "reviewedAt": "2026-07-29",
+  "reviewedAt": "2026-08-12",
   "python": ">=3.11,<3.15",
   "commonConstraints": [
     "numpy==2.2.6",
@@ -9,7 +9,7 @@
     "opencv-python-headless==5.0.0.93",
     "Pillow==12.3.0",
     "idna==3.15",
-    "rapidocr==3.9.1",
+    "rapidocr==3.9.2",
     "paddleocr==3.6.0",
     "easyocr==1.7.2",
     "simple-lama-inpainting==0.1.2"
@@ -61,7 +61,7 @@
     }
   },
   "reviewedArtifactHashes": {
-    "rapidocr==3.9.1": "600885e4e94e0b427abad394fccb0ec1d3c9118a215ca435bf7680aeae0e292b",
+    "rapidocr==3.9.2": "04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0",
     "paddleocr==3.6.0": "76a03d260a2b5f7f3f1af017fbdc0cae3ccb2a538d40ba898a3a791711c34c33",
     "easyocr==1.7.2": "5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c"
   },

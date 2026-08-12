@@ -30,7 +30,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
 - **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
 - **AUTO Inpaint Routing** -- Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
-- **Multi-Engine Detection** -- RapidOCR PP-OCRv6 through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR > threshold fallback (automatic)
+- **Multi-Engine Detection** -- RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR > threshold fallback (automatic)
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
@@ -171,10 +171,14 @@ Those profiles report missing filters such as `loudnorm`, `libvmaf`, or
 before a long batch starts.
 
 Run `python -m backend.cli --ocr-benchmark` to score the active OCR detector
-(RapidOCR ships PP-OCRv6) on synthetic ground-truth subtitle fixtures --
+(RapidOCR 3.9.2 defaults to PP-OCRv6) on synthetic ground-truth subtitle
+fixtures --
 detection recall plus per-frame latency -- and print JSON evidence. Any change
 to the default detector should be gated on the `meets_floors` verdict (recall
 >= 0.8); latency is reported as device-dependent evidence, not a hard gate.
+Use `--rapidocr-variant v5` for the retained PP-OCRv5 fallback, or
+`--ocr-compare-variants` to benchmark both generations over the same fixtures
+and receive one comparable JSON result.
 
 Run `python -m backend.cli --inference-smoke` to prove the OCR and inpaint
 backends actually execute: it pushes a generated text image and masked frame
@@ -291,7 +295,7 @@ languages such as English and French intentionally share one family.
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
-| 1 | **RapidOCR** (OpenCV/ONNX/OpenVINO PP-OCRv6) | `pip install "rapidocr>=2.0.0,<4.0.0"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | OpenCV 5 DNN is the dependency-light CPU path; accelerated providers remain available |
+| 1 | **RapidOCR 3.9.2** (OpenCV/ONNX/OpenVINO PP-OCRv6; PP-OCRv5 fallback) | `pip install "rapidocr==3.9.2"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | OpenCV 5 DNN is the dependency-light PP-OCRv6 CPU path; RapidOCR providers can compare v6 and v5 |
 | 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.6.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | High accuracy reference implementation; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
 | 4 | EasyOCR | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Legacy fallback; installs its own OpenCV wheel |
@@ -344,6 +348,9 @@ Runtime reports `DmlExecutionProvider`,
 RapidOCR is initialized with its DirectML provider settings; unsupported
 RapidOCR versions or missing providers fall back to CPU automatically.
 OpenVINO initialization failures also fall back to ONNX Runtime. RapidOCR
+3.9.2 exposes PP-OCRv6 by default; choose PP-OCRv5 with
+`--rapidocr-variant v5` when running a regression comparison. RapidOCR 1.x/2.x
+packages that do not expose the `OCRVersion` enum retain their package default.
 legacy tuple output and current structured object/dict output are both
 normalized to the same axis-aligned detector boxes.
 Opt-in ONNX inpainters inspect their model `opset_import` metadata before
@@ -834,6 +841,8 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--inference-smoke` | Run a generated text image and masked frame through the OCR and inpaint backends to prove they actually execute (records provider/timing), then exit. No model downloads. Uses --gpu to pick the device. | Off | - | Public |
 | `--ocr-benchmark` | Benchmark the active OCR detector on synthetic ground-truth subtitle fixtures (recall, latency, and memory) and print JSON evidence, then exit. Use --gpu to pick the device. Gate any default-detector swap on the meets_floors verdict. | Off | - | Public |
 | `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| easyocr \| opencv | Public |
+| `--rapidocr-variant` | Select RapidOCR PP-OCR generation (v6 default, v5 fallback). | v6 | v6 \| v5 | Public |
+| `--ocr-compare-variants` | Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures. | Off | - | Public |
 | `--dry-run` | Validate the run without encoding: probe each input, run detection on a few sampled frames, check the requested codec is available, and print a per-file plan, then exit. Combine with --json for machine output. | Off | - | Public |
 | `--json` | Emit a machine-readable JSON result to stdout (the --dry-run plan, or the batch/file result). | Off | - | Public |
 | `--auto-lang-probe` | Probe the first frame for script/language and print a suggestion, then exit. Requires -i. | Off | - | Public |
@@ -907,6 +916,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `detection_threshold` | `float` | `0.5` |
 | `detection_lang` | `str` | `en` |
 | `detection_engine` | `str` | `auto` |
+| `rapidocr_variant` | `str` | `v6` |
 | `language_mask_filter` | `bool` | `Off` |
 | `detection_frame_skip` | `int` | `0` |
 | `detection_vertical` | `bool` | `Off` |

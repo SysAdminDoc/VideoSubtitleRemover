@@ -80,6 +80,9 @@ def _build_cli_command(item: QueueItem) -> str:
     ocr_engine = getattr(cfg, "detection_engine", "auto") or "auto"
     if ocr_engine != "auto":
         args.extend(["--ocr-engine", ocr_engine])
+    ocr_variant = getattr(cfg, "rapidocr_variant", "v6") or "v6"
+    if ocr_variant != "v6":
+        args.extend(["--rapidocr-variant", str(ocr_variant)])
     if getattr(cfg, "language_mask_filter", False):
         args.append("--language-filter")
     crf = getattr(cfg, "output_quality", 23)

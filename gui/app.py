@@ -224,6 +224,7 @@ class VideoSubtitleRemoverApp(
         self._preview_detector = None  # cached SubtitleDetector for mask preview
         self._preview_detector_lang = None  # lang the cached detector was created with
         self._preview_detector_engine = None
+        self._preview_detector_variant = None
         self._detector_lock = threading.Lock()  # serializes _preview_detector access
         self._preview_mask_cache = None
         self._preview_mask_render_after_id = None
@@ -277,6 +278,8 @@ class VideoSubtitleRemoverApp(
             "Automatic (recommended)",
         )
         self.ocr_engine_var = tk.StringVar(value=current_label)
+        self.rapidocr_variant_var = tk.StringVar(
+            value=getattr(self.config, "rapidocr_variant", "v6"))
 
         # Build UI
         self._setup_styles()
