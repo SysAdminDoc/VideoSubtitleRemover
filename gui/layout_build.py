@@ -25,7 +25,7 @@ from gui.widgets import (
     ModernSlider, SegmentedPicker, DragDropFrame,
 )
 from backend.a11y import set_accessible_metadata
-from backend.i18n import N_, available_catalogs, tr
+from backend.i18n import N_, ntr, available_catalogs, tr
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +360,7 @@ class LayoutBuildMixin:
         """Build the output destination group inside the inspector."""
         out_surface = self._create_card(parent)
         out_surface.pack(fill="x")
-        self._card_header(out_surface, N_("Output"), N_("Output"))
+        self._card_header(out_surface, N_("Output"))
 
         out_row = tk.Frame(out_surface, bg=Theme.BG_CARD)
         out_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
@@ -414,7 +414,7 @@ class LayoutBuildMixin:
         profile_panel = self._create_card(settings)
         profile_panel.pack(fill="x")
 
-        self._card_header(profile_panel, N_("Cleanup profile"), N_("Cleanup profile"))
+        self._card_header(profile_panel, N_("Cleanup profile"))
 
         self.inspector_mode_value = tk.Label(
             profile_panel, textvariable=self.mode_var,
@@ -552,7 +552,7 @@ class LayoutBuildMixin:
         workflow_panel = self._create_card(settings)
         workflow_panel.pack(fill="x")
 
-        self._card_header(workflow_panel, N_("Subtitle region"), N_("Subtitle region"))
+        self._card_header(workflow_panel, N_("Subtitle region"))
 
         workflow_details = tk.Frame(workflow_panel, bg=Theme.BG_CARD)
         self._inspector_workflow_details = workflow_details
@@ -633,7 +633,7 @@ class LayoutBuildMixin:
         # STTN Motion card
         sttn_frame = self._create_card(self.adv_panel)
         sttn_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
-        self._card_header(sttn_frame, N_("STTN motion"), N_("Motion smoothing"))
+        self._card_header(sttn_frame, N_("Motion smoothing"))
 
         self._create_slider(sttn_frame, N_("Neighbor stride"), 5, 30,
                             self.config.sttn_neighbor_stride, "sttn_neighbor_stride",
@@ -653,7 +653,7 @@ class LayoutBuildMixin:
         # Detection Precision card
         det_frame = self._create_card(self.adv_panel)
         det_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(det_frame, N_("Detection"), N_("Precision tuning"))
+        self._card_header(det_frame, N_("Precision tuning"))
 
         self._create_slider(det_frame, N_("Sensitivity"), 10, 90,
                             int(self.config.detection_threshold * 100),
@@ -854,7 +854,7 @@ class LayoutBuildMixin:
         # Output Quality card
         quality_frame = self._create_card(self.adv_panel)
         quality_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(quality_frame, N_("Output"), N_("Encoding quality"))
+        self._card_header(quality_frame, N_("Encoding quality"))
 
         self._create_slider(quality_frame, N_("CRF target"), 15, 35,
                             self.config.output_quality, "output_quality",
@@ -1034,7 +1034,7 @@ class LayoutBuildMixin:
         translation_frame = self._create_card(self.adv_panel)
         translation_frame.pack(fill="x", pady=(0, Theme.S_SM))
         self._card_header(
-            translation_frame, N_("Localization"), N_("Erase, translate, and re-embed"))
+            translation_frame, N_("Erase, translate, and re-embed"))
 
         self.translation_enabled_var = tk.BooleanVar(
             value=self.config.translation_enabled)
@@ -1204,7 +1204,7 @@ class LayoutBuildMixin:
         # Video Range card
         time_frame = self._create_card(self.adv_panel)
         time_frame.pack(fill="x")
-        self._card_header(time_frame, N_("Video range"), N_("Trim (videos only)"))
+        self._card_header(time_frame, N_("Trim (videos only)"))
 
         time_inner = tk.Frame(time_frame, bg=Theme.BG_CARD)
         time_inner.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_MD))
@@ -1243,7 +1243,7 @@ class LayoutBuildMixin:
         # Editorial: chyron vs subtitle filter + karaoke grouping
         editorial_frame = self._create_card(self.adv_panel)
         editorial_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
-        self._card_header(editorial_frame, N_("Editorial"), N_("Filter what gets removed"))
+        self._card_header(editorial_frame, N_("Filter what gets removed"))
 
         self.remove_subs_var = tk.BooleanVar(value=self.config.remove_subtitles)
         remove_subs_toggle = ModernToggle(
@@ -1277,7 +1277,7 @@ class LayoutBuildMixin:
         # Audio card: loudnorm target + multi-track passthrough
         audio_frame = self._create_card(self.adv_panel)
         audio_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(audio_frame, N_("Audio"), N_("Loudness + tracks"))
+        self._card_header(audio_frame, N_("Loudness + tracks"))
 
         self.multi_audio_var = tk.BooleanVar(value=self.config.multi_audio_passthrough)
         multi_audio_toggle = ModernToggle(
@@ -1310,7 +1310,7 @@ class LayoutBuildMixin:
         # Performance card: decode HW accel + prefetch
         perf_frame = self._create_card(self.adv_panel)
         perf_frame.pack(fill="x", pady=(0, Theme.S_SM))
-        self._card_header(perf_frame, N_("Performance"), N_("Decode pipeline"))
+        self._card_header(perf_frame, N_("Decode pipeline"))
 
         accel_row = tk.Frame(perf_frame, bg=Theme.BG_CARD)
         accel_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 0))
@@ -1505,7 +1505,6 @@ class LayoutBuildMixin:
         storage_frame.pack(fill="x", pady=(Theme.S_MD, Theme.S_SM))
         self._card_header(
             storage_frame,
-            N_("Storage"),
             N_("Temporary, mask, checkpoint, and resume files"),
         )
         storage_row = tk.Frame(storage_frame, bg=Theme.BG_CARD)
@@ -1931,7 +1930,7 @@ class LayoutBuildMixin:
 
         self.queue_total_pill.pack(side="left")
         # done/err pills get shown conditionally in _update_queue_display
-        self.queue_count.config(text=tr("{count} items").format(count=0))
+        self.queue_count.config(text=ntr("{n} item", "{n} items", 0).format(n=0))
 
         # Sort button -- hidden until queue has >= 3 items
         self._sort_btn = ModernButton(
@@ -2081,6 +2080,7 @@ class LayoutBuildMixin:
         self.queue_move_up_btn = ModernButton(
             btn_frame,
             text="^",
+            accessible_label=N_("Move item up"),
             width=40,
             command=lambda: self._move_selected_queue_item(-1),
             style="toolbar",
@@ -2089,6 +2089,7 @@ class LayoutBuildMixin:
         self.queue_move_down_btn = ModernButton(
             btn_frame,
             text="v",
+            accessible_label=N_("Move item down"),
             width=40,
             command=lambda: self._move_selected_queue_item(1),
             style="toolbar",

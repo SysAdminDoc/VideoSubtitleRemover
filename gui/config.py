@@ -198,7 +198,7 @@ _STATUS_LABELS = {
     ProcessingStatus.PROCESSING: N_("Removing"),
     ProcessingStatus.MERGING: N_("Finishing"),
     ProcessingStatus.COMPLETE: N_("Complete"),
-    ProcessingStatus.ERROR: N_("Needs Attention"),
+    ProcessingStatus.ERROR: N_("Needs attention"),
     ProcessingStatus.PAUSED: N_("Paused"),
     ProcessingStatus.CANCELLED: N_("Stopped"),
 }

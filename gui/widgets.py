@@ -406,7 +406,7 @@ class ModernButton(tk.Canvas):
     def __init__(self, parent, text="Button", command=None, width=120, height=None,
                  bg=None, hover_bg=None, fg=Theme.TEXT_PRIMARY,
                  corner_radius=None, font_size=None, style="primary",
-                 size="md", icon=None, **kwargs):
+                 size="md", icon=None, accessible_label=None, **kwargs):
         if height is None:
             height = self.SIZES.get(size, self.SIZES["md"])[0]
         if font_size is None:
@@ -461,6 +461,9 @@ class ModernButton(tk.Canvas):
 
         self._apply_style(style)
         self.current_bg = self.bg_color
+        # A glyph-only caption like "^" is meaningless when read
+        # aloud; let the caller name the action instead.
+        self.accessible_label = accessible_label
         self._sync_a11y()
         self._draw()
 
@@ -586,7 +589,7 @@ class ModernButton(tk.Canvas):
         set_accessible_metadata(
             self,
             role="button",
-            label=self.text,
+            label=self.accessible_label or self.text,
             state=state,
             description=self.disabled_reason if not self.enabled else "",
         )

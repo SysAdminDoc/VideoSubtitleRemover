@@ -90,7 +90,7 @@ class LayoutHelpersMixin:
         """Create a borderless tonal group."""
         return tk.Frame(parent, bg=bg, highlightthickness=0)
 
-    def _card_header(self, parent, eyebrow: str, title: str, bg=Theme.BG_CARD,
+    def _card_header(self, parent, title: str, bg=Theme.BG_CARD,
                      pad_x: int = 12, pad_top: int = 10):
         """Card-internal section header with a single clear title."""
         tk.Label(parent, text=tr(title), font=f(Theme.F_TITLE, "bold"),

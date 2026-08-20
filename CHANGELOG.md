@@ -20,6 +20,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Small copy and consistency fixes across the queue.** The error status
+  reads "Needs attention" in sentence case like every other status, the empty
+  queue count uses the same plural-aware pattern as the live count, the move
+  up and move down buttons carry real accessible names instead of announcing
+  "^" to a screen reader, and the card headers stopped accepting a second
+  caption they never rendered, which also removes seven strings from the
+  translation catalog that no translator should have spent time on.
+
 - **Tooltips and dialogs now respect multi-monitor layouts.** Both clamped
   against the primary display's size, so on a second monitor the tooltip
   jumped to the primary screen's edge and every dialog opened on the wrong

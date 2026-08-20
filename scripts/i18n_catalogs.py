@@ -112,7 +112,7 @@ CAPTION_CALLS = frozenset({
 # lint model prevents a new deferred literal from bypassing the catalog.
 CAPTION_POSITIONS = {
     "_update_status": (0,),
-    "_card_header": (1, 2),
+    "_card_header": (1,),
     "_create_slider": (1,),
 }
 
