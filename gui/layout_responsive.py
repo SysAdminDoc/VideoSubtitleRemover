@@ -33,17 +33,6 @@ class ResponsiveLayoutMixin:
             self._content_canvas.configure(
                 scrollregion=self._content_canvas.bbox("all"))
 
-    def _on_content_mousewheel(self, event):
-        """Scroll the workbench unless the content already fits."""
-        if not hasattr(self, "_content_canvas"):
-            return
-        bbox = self._content_canvas.bbox("all")
-        if not bbox:
-            return
-        if bbox[3] <= self._content_canvas.winfo_height():
-            return
-        self._content_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
     def _on_root_configure(self, event):
         """Keep layout responsive as the window width changes."""
         if event.widget is not self.root:

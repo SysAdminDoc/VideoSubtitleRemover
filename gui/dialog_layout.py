@@ -48,32 +48,69 @@ def work_area(root) -> tuple[int, int]:
     )
 
 
-def _bind_wheel(canvas: tk.Canvas) -> None:
-    def _on_wheel(event):
+def register_wheel_surface(canvas) -> None:
+    """Mark a canvas as a scroll target for the application wheel router."""
+    canvas._vsr_wheel_surface = True
+    ensure_wheel_router(canvas)
+
+
+def ensure_wheel_router(widget) -> None:
+    """Install the application-wide wheel router once per interpreter.
+
+    On Windows the wheel event goes to the widget under the pointer, so a
+    binding on the canvas leaves every card, toggle, and label inside it a
+    dead zone, and per-child rebinding never keeps up. One ``bind_all``
+    handler walks up from ``event.widget`` to the nearest registered
+    scrollable surface instead. The old dialog variant bound and unbound on
+    the canvas's Enter/Leave, so crossing from the canvas onto its own body
+    frame turned scrolling off.
+    """
+    try:
+        root = widget.winfo_toplevel().nametowidget(".")
+    except (tk.TclError, KeyError):
+        root = widget.winfo_toplevel()
+    if getattr(root, "_vsr_wheel_router_installed", False):
+        return
+
+    def _scroll(canvas, event):
+        try:
+            if canvas.yview() == (0.0, 1.0):
+                # Everything is visible; let the event fall through so a
+                # parent surface (if any) can take it.
+                return None
+        except tk.TclError:
+            return None
         delta = getattr(event, "delta", 0)
         if delta:
-            canvas.yview_scroll(int(-1 * (delta / 120)) or -1, "units")
+            step = int(-1 * (delta / 120)) or (-1 if delta > 0 else 1)
         elif getattr(event, "num", 0) == 4:
-            canvas.yview_scroll(-1, "units")
+            step = -1
         elif getattr(event, "num", 0) == 5:
-            canvas.yview_scroll(1, "units")
+            step = 1
+        else:
+            return None
+        canvas.yview_scroll(step, "units")
         return "break"
 
-    def _bind(_event=None):
-        canvas.bind_all("<MouseWheel>", _on_wheel)
-        canvas.bind_all("<Button-4>", _on_wheel)
-        canvas.bind_all("<Button-5>", _on_wheel)
+    def _route(event):
+        widget = event.widget
+        if isinstance(widget, str):
+            return None
+        while widget is not None:
+            if getattr(widget, "_vsr_wheel_surface", False):
+                outcome = _scroll(widget, event)
+                if outcome is not None:
+                    return outcome
+            widget = getattr(widget, "master", None)
+        return None
 
-    def _unbind(_event=None):
-        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
-            try:
-                canvas.unbind_all(sequence)
-            except tk.TclError:
-                pass
+    for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+        root.bind_all(sequence, _route, add="+")
+    root._vsr_wheel_router_installed = True
 
-    canvas.bind("<Enter>", _bind)
-    canvas.bind("<Leave>", _unbind)
-    canvas.bind("<Destroy>", _unbind)
+
+def _bind_wheel(canvas: tk.Canvas) -> None:
+    register_wheel_surface(canvas)
 
 
 def scrollable_dialog_body(dialog, *, bg: str = "") -> tk.Frame:

@@ -1198,8 +1198,14 @@ class ModernSlider(tk.Frame):
 
     def _on_wheel(self, event):
         if not self.enabled:
-            return
+            return None
+        if not self._focused:
+            # Scrolling the settings column must not change a value just
+            # because the pointer crossed a slider. Without focus the event
+            # falls through to the application wheel router.
+            return None
         self._step(1 if event.delta > 0 else -1)
+        return "break"
 
     def _step(self, direction):
         if not self.enabled:

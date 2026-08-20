@@ -340,12 +340,9 @@ class QueueViewMixin:
                                              on_freeze_matte=self._set_frozen_matte_for_item)
                     widget.pack(fill="x")
                     self.queue_widgets[item.id] = widget
-                    # Forward mousewheel to queue canvas
-                    widget.bind("<MouseWheel>", self._on_mousewheel)
-                    for child in widget.winfo_children():
-                        child.bind("<MouseWheel>", self._on_mousewheel)
-                        for subchild in child.winfo_children():
-                            subchild.bind("<MouseWheel>", self._on_mousewheel)
+                    # No per-child wheel forwarding: the application wheel
+                    # router walks up from the hovered widget to the queue
+                    # canvas, so rows and their labels are not dead zones.
                 else:
                     self.queue_widgets[item.id].update_item(item)
 

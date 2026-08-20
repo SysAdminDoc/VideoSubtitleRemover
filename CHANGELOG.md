@@ -20,6 +20,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The mouse wheel now scrolls from anywhere over a scrollable area.** On
+  Windows the wheel goes to the widget under the pointer, so hovering a card,
+  a toggle, or a queue row's label used to do nothing, and in dialogs the
+  scroll stopped working when the pointer moved from the canvas onto its own
+  content. One application-wide router walks up from the hovered widget to
+  the nearest scrollable surface instead. Sliders only respond to the wheel
+  when focused, so scrolling the settings column past one no longer silently
+  changes its value.
+
 - **Dropping a folder no longer freezes the window while it is scanned.** The
   walk ran synchronously in the drop callback, materialising and sorting the
   entire tree, so a large library or a slow network share locked the UI for

@@ -11,6 +11,7 @@ try:
 except ImportError:
     pass
 
+from gui.dialog_layout import register_wheel_surface
 from gui.theme import (
     Theme, f, text_scale_percent,
 )
@@ -85,8 +86,7 @@ class LayoutBuildMixin:
             (0, 0), window=content, anchor="nw")
         content.bind("<Configure>", self._on_content_configure)
         self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
-        self._content_canvas.bind("<MouseWheel>", self._on_content_mousewheel)
-        content.bind("<MouseWheel>", self._on_content_mousewheel)
+        register_wheel_surface(self._content_canvas)
         content.columnconfigure(0, weight=1, minsize=620, uniform="")
         content.columnconfigure(1, weight=0, minsize=380, uniform="")
         content.columnconfigure(2, weight=0, minsize=0)
@@ -2045,8 +2045,7 @@ class LayoutBuildMixin:
         self.queue_canvas.bind("<Configure>", self._on_canvas_configure)
 
         # Mousewheel scrolling
-        self.queue_canvas.bind("<Enter>", self._bind_mousewheel)
-        self.queue_canvas.bind("<Leave>", self._unbind_mousewheel)
+        register_wheel_surface(self.queue_canvas)
 
         self._build_queue_empty_state()
 

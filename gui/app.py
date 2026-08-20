@@ -1506,20 +1506,6 @@ class VideoSubtitleRemoverApp(
         if hasattr(self, "_filter_empty_container") and self._filter_empty_container.winfo_exists():
             self._filter_empty_container.pack_forget()
 
-    def _bind_mousewheel(self, event):
-        self._mousewheel_bound = True
-        self.queue_canvas.bind("<MouseWheel>", self._on_mousewheel)
-        # Also bind on children so scroll works when hovering queue items
-        for child in self.queue_frame.winfo_children():
-            child.bind("<MouseWheel>", self._on_mousewheel)
-
-    def _unbind_mousewheel(self, event):
-        self._mousewheel_bound = False
-        self.queue_canvas.unbind("<MouseWheel>")
-
-    def _on_mousewheel(self, event):
-        self.queue_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
     def _scroll_queue_to_item(self, item_id: str):
         """Scroll the queue canvas so the given item is fully visible."""
         widget = self.queue_widgets.get(item_id)
