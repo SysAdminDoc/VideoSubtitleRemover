@@ -654,6 +654,32 @@ class _MangaOcrDetector(_BaseVlmDetector):
         return out
 
 
+# The four names the GUI engine picker and --ocr-engine accept with a
+# "vlm-" prefix. Order matters only for documentation.
+VLM_ENGINE_NAMES = (
+    "florence2", "qwen25vl", "paddleocr-vl", "paddleocr-vl-llama")
+
+
+def build_named_vlm_detector(name: str, device: str) -> Optional[object]:
+    """Build one specific VLM detector, or None for an unknown name.
+
+    Shared by the env-var opt-in and the explicit ``vlm-<name>`` engine
+    selection, so both go through the same llama.cpp warm-load gate.
+    """
+    if name == "florence2":
+        return _Florence2Detector(device=device)
+    if name == "qwen25vl":
+        return _Qwen25VLDetector(device=device)
+    if name == "paddleocr-vl":
+        return _PaddleOcrVlDetector(device=device)
+    if name == "paddleocr-vl-llama":
+        detector = _PaddleOcrVlLlamaCppDetector(device=device)
+        if detector._warm_load():
+            return detector
+        return None
+    return None
+
+
 def maybe_build_vlm_detector(device: str, lang: str) -> Optional[object]:
     """Return a VLM detector instance when the user opted in via env var
     or via a special lang token ("manga"). None means "leave the default
@@ -661,15 +687,6 @@ def maybe_build_vlm_detector(device: str, lang: str) -> Optional[object]:
     if lang and lang.strip().lower() == "manga":
         return _MangaOcrDetector(device=device)
     selected = selected_vlm_backend()
-    if selected == "florence2":
-        return _Florence2Detector(device=device)
-    if selected == "qwen25vl":
-        return _Qwen25VLDetector(device=device)
-    if selected == "paddleocr-vl":
-        return _PaddleOcrVlDetector(device=device)
-    if selected == "paddleocr-vl-llama":
-        detector = _PaddleOcrVlLlamaCppDetector(device=device)
-        if detector._warm_load():
-            return detector
+    if selected is None:
         return None
-    return None
+    return build_named_vlm_detector(selected, device)

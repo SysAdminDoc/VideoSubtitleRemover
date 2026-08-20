@@ -652,7 +652,9 @@ class ProcessingConfig:
         self.detection_engine = _coerce_text(
             self.detection_engine, "auto", 24).lower()
         if self.detection_engine not in {
-            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
+            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr",
+            "opencv", "surya", "vlm-florence2", "vlm-qwen25vl",
+            "vlm-paddleocr-vl", "vlm-paddleocr-vl-llama",
         }:
             self.detection_engine = "auto"
         self.rapidocr_variant = _coerce_text(

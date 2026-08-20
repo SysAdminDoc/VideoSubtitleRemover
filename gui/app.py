@@ -277,6 +277,11 @@ class VideoSubtitleRemoverApp(
             "PaddleOCR": "paddleocr",
             easyocr_label: "easyocr",
             "OpenCV fallback": "opencv",
+            "Surya (GPL opt-in)": "surya",
+            "Florence-2 VLM (optional install)": "vlm-florence2",
+            "Qwen2.5-VL (optional install)": "vlm-qwen25vl",
+            "PaddleOCR-VL (optional install)": "vlm-paddleocr-vl",
+            "PaddleOCR-VL via llama server": "vlm-paddleocr-vl-llama",
         }
         current_engine = getattr(self.config, "detection_engine", "auto")
         current_label = next(

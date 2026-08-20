@@ -576,11 +576,35 @@ class AdvancedSettingsControllerMixin:
             self.lang_var.set(code)
             self.config.detection_lang = code
 
+    # Selecting an optional engine explains what it needs; the run itself
+    # falls back to the automatic cascade when the dependency is absent.
+    _OPTIONAL_ENGINE_GUIDANCE = {
+        "surya": N_(
+            "Surya is GPL-licensed: install it yourself and set "
+            "VSR_ALLOW_GPL=1, or the run uses the automatic cascade"),
+        "vlm-florence2": N_(
+            "Florence-2 needs the optional transformers install; without it "
+            "the run uses the automatic cascade"),
+        "vlm-qwen25vl": N_(
+            "Qwen2.5-VL needs the optional transformers install; without it "
+            "the run uses the automatic cascade"),
+        "vlm-paddleocr-vl": N_(
+            "PaddleOCR-VL needs the optional paddleocr install; without it "
+            "the run uses the automatic cascade"),
+        "vlm-paddleocr-vl-llama": N_(
+            "PaddleOCR-VL via llama.cpp needs a reachable llama server; "
+            "without one the run uses the automatic cascade"),
+    }
+
     def _on_ocr_engine_changed(self, event=None):
         """Persist the selected detector and invalidate preview model caches."""
         del event
         self.config.detection_engine = self._ocr_engine_by_label.get(
             self.ocr_engine_var.get(), "auto")
+        guidance = self._OPTIONAL_ENGINE_GUIDANCE.get(
+            self.config.detection_engine)
+        if guidance:
+            self._update_status(guidance, "info")
         # Take the same lock the preview/probe paths hold across inference,
         # so the cache cannot be dropped out from under a running detect.
         lock = getattr(self, "_detector_lock", None)

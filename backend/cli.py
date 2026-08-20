@@ -1069,11 +1069,15 @@ def _build_parser(mode_choices):
     parser.add_argument(
         "--ocr-engine",
         choices=(
-            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
+            "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr",
+            "opencv", "surya", "vlm-florence2", "vlm-qwen25vl",
+            "vlm-paddleocr-vl", "vlm-paddleocr-vl-llama",
         ),
         default="auto",
         help=("Select the OCR detector for processing or --ocr-benchmark; "
-              "auto uses the best available engine."),
+              "auto uses the best available engine. surya needs the GPL "
+              "opt-in (VSR_ALLOW_GPL=1); vlm-* engines need their optional "
+              "dependencies installed and fall back to auto when missing."),
     )
     parser.add_argument(
         "--rapidocr-variant",

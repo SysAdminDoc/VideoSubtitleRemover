@@ -822,5 +822,84 @@ class OcrBenchmarkHarnessTests(unittest.TestCase):
         self.assertTrue(all(call["engine"] == "rapidocr" for call in calls))
 
 
+class ExplicitVlmAndSuryaEngineTests(unittest.TestCase):
+    """RM-274: the picker's vlm-* and surya values behave predictably."""
+
+    def test_an_explicit_vlm_engine_is_built_by_name(self):
+        class FakeVlm:
+            name = "florence2"
+            provider = "cpu"
+            model = object()  # satisfies the usability probe
+
+        built = []
+        vlm_module = types.ModuleType("backend.ocr_vlm")
+        vlm_module.build_named_vlm_detector = (
+            lambda name, device: built.append((name, device)) or FakeVlm())
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                    sys.modules, {"backend.ocr_vlm": vlm_module}):
+                detector = detection.SubtitleDetector(
+                    device="cpu", lang="en", engine="vlm-florence2")
+
+        self.assertEqual(built, [("florence2", "cpu")])
+        self.assertEqual(detector._engine_name, "VLM (florence2)")
+
+    def test_an_unloadable_vlm_engine_falls_back_to_the_cascade(self):
+        vlm_module = types.ModuleType("backend.ocr_vlm")
+        vlm_module.build_named_vlm_detector = lambda name, device: None
+        vlm_module.maybe_build_vlm_detector = lambda device, lang: None
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                    sys.modules, {"backend.ocr_vlm": vlm_module}):
+                with mock.patch.object(
+                        detection, "_surya_allowed", return_value=False):
+                    detector = detection.SubtitleDetector(
+                        device="cpu", lang="en",
+                        engine="vlm-paddleocr-vl-llama")
+
+        # It must land on a real cascade engine, not a dead VLM handle.
+        self.assertIsNone(detector._vlm_detector)
+        self.assertEqual(detector.engine, "auto")
+
+    def test_surya_without_the_gpl_opt_in_falls_back(self):
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(
+                    sys.modules,
+                    {"backend.ocr_vlm": types.ModuleType("backend.ocr_vlm")}):
+                sys.modules["backend.ocr_vlm"].maybe_build_vlm_detector = (
+                    lambda device, lang: None)
+                with mock.patch.object(
+                        detection, "_surya_allowed", return_value=False):
+                    detector = detection.SubtitleDetector(
+                        device="cpu", lang="en", engine="surya")
+
+        self.assertEqual(detector.engine, "auto")
+        self.assertIsNone(detector._surya_det)
+
+    def test_surya_with_the_opt_in_loads_when_selected_directly(self):
+        class FakePredictor:
+            pass
+
+        surya_detection = types.ModuleType("surya.detection")
+        surya_detection.DetectionPredictor = FakePredictor
+        surya_pkg = types.ModuleType("surya")
+        surya_pkg.detection = surya_detection
+        vlm_module = types.ModuleType("backend.ocr_vlm")
+        vlm_module.maybe_build_vlm_detector = lambda device, lang: None
+        with _fresh_detection_module() as detection:
+            with mock.patch.dict(sys.modules, {
+                "backend.ocr_vlm": vlm_module,
+                "surya": surya_pkg,
+                "surya.detection": surya_detection,
+            }):
+                with mock.patch.object(
+                        detection, "_surya_allowed", return_value=True):
+                    detector = detection.SubtitleDetector(
+                        device="cpu", lang="en", engine="surya")
+
+        self.assertEqual(detector._engine_name, "Surya")
+        self.assertIsInstance(detector._surya_det, FakePredictor)
+
+
 if __name__ == "__main__":
     unittest.main()

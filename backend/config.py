@@ -669,7 +669,9 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.detection_engine = _coerce_text(
         config.detection_engine, "auto", 24).lower()
     if config.detection_engine not in {
-        "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv"
+        "auto", "rapidocr", "opencv-dnn", "paddleocr", "easyocr", "opencv",
+        "surya", "vlm-florence2", "vlm-qwen25vl", "vlm-paddleocr-vl",
+        "vlm-paddleocr-vl-llama"
     }:
         config.detection_engine = "auto"
     config.rapidocr_variant = _coerce_text(

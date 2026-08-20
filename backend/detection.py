@@ -35,6 +35,11 @@ OCR_ENGINE_CHOICES = (
     "paddleocr",
     "easyocr",
     "opencv",
+    "surya",
+    "vlm-florence2",
+    "vlm-qwen25vl",
+    "vlm-paddleocr-vl",
+    "vlm-paddleocr-vl-llama",
 )
 RAPIDOCR_VARIANT_CHOICES = ("v6", "v5")
 PADDLEOCR_VARIANT_CHOICES = ("mobile", "server")
@@ -400,6 +405,37 @@ class SubtitleDetector:
         self.paddleocr_variant = normalize_paddleocr_variant(
             getattr(self, "paddleocr_variant", "mobile")
         )
+        if self.engine.startswith("vlm-"):
+            # An explicitly picked VLM engine, no env var involved. A pick
+            # whose model cannot load falls back to the automatic cascade,
+            # mirroring the warm-load rule below: a detector that silently
+            # returns [] forever would report success with every subtitle
+            # still burned in.
+            requested = self.engine[len("vlm-"):]
+            try:
+                from backend.ocr_vlm import build_named_vlm_detector
+                vlm = build_named_vlm_detector(requested, self.device)
+                if vlm is not None and not _vlm_detector_is_usable(vlm):
+                    vlm = None
+                if vlm is not None:
+                    self._vlm_detector = vlm
+                    self._engine_name = f"VLM ({vlm.name})"
+                    self._provider_name = (
+                        getattr(vlm, "provider", "") or self.device)
+                    logger.info(f"VLM OCR detector active: {vlm.name}")
+                    return
+            except Exception as exc:
+                logger.warning(f"VLM engine {requested} failed to load: {exc}")
+            logger.warning(
+                "Selected VLM engine %s is unavailable; using the automatic "
+                "cascade instead", requested)
+            self.engine = "auto"
+        if self.engine == "surya" and not _surya_allowed():
+            logger.warning(
+                "Surya is GPL-licensed and needs the VSR_ALLOW_GPL=1 opt-in; "
+                "using the automatic cascade instead")
+            self.engine = "auto"
+
         if self.engine == "auto":
             try:
                 from backend.ocr_vlm import maybe_build_vlm_detector
@@ -532,7 +568,7 @@ class SubtitleDetector:
 
         # Surya (GPL, opt-in via VSR_ALLOW_GPL) remains auto-only because it
         # cannot be offered as a bundled MIT-clean selector.
-        if self.engine == "auto" and _surya_allowed():
+        if self.engine in {"auto", "surya"} and _surya_allowed():
             try:
                 from surya.detection import DetectionPredictor
                 self._surya_det = DetectionPredictor()

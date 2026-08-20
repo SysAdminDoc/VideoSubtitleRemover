@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **The Surya and vision-language detectors are ordinary engine choices
+  now.** Florence-2, Qwen2.5-VL, PaddleOCR-VL, and the llama.cpp-served
+  PaddleOCR-VL were reachable only through environment variables; they join
+  Surya in the engine picker and `--ocr-engine`. Picking one explains what it
+  needs, the selection round-trips through saved settings, and a pick whose
+  dependency is missing falls back to the automatic cascade with a warning
+  instead of silently detecting nothing. Surya still requires its GPL opt-in.
+
 - **The GUI test files were retired to `tests/archive/`.** They exercised the
   tkinter layer and churned with every visual change while catching little.
   The backend, controller-logic, catalog, and release-gate tests all remain
