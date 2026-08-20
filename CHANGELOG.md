@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **Review every text track before anything is destroyed.** The new Track
+  plan action scans the whole file and lists each temporal text track with
+  its frame span, a sample of the recognized text, and a thumbnail. Keep or
+  remove each one; a kept track is excluded from cleanup for exactly its
+  frames and region. Plans save as JSON, rerun deterministically through
+  `--plan-out` and `--plan-in`, and a plan-driven run with `--export-mask`
+  produces a matte manifest that `--frozen-matte` can reuse.
+
 - **The Surya and vision-language detectors are ordinary engine choices
   now.** Florence-2, Qwen2.5-VL, PaddleOCR-VL, and the llama.cpp-served
   PaddleOCR-VL were reachable only through environment variables; they join

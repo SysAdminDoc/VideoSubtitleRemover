@@ -123,6 +123,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--inference-smoke", "--ocr-benchmark", "--ocr-engine",
             "--rapidocr-variant", "--paddleocr-variant",
             "--ocr-compare-variants", "--dry-run",
+            "--plan-out", "--plan-in",
             "--json", "--auto-lang-probe", "--intent", "--json-log",
             "--dump-cli-reference",
         ),
@@ -1098,6 +1099,20 @@ def _build_parser(mode_choices):
         action="store_true",
         help="Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures.",
     )
+    parser.add_argument(
+        "--plan-out", metavar="PATH", default="",
+        help=("Scan the input for temporal text tracks and write a "
+              "reviewable track plan JSON (frame span, sample text, "
+              "thumbnail per track), then exit. Edit the plan's keep flags "
+              "and pass it back with --plan-in. Requires -i."),
+    )
+    parser.add_argument(
+        "--plan-in", metavar="PATH", default="",
+        help=("Apply an edited track plan: every track marked keep is "
+              "excluded from the inpaint mask for exactly its frame span. "
+              "A plan-driven run with --export-mask yields a matte "
+              "manifest reusable via --frozen-matte."),
+    )
     parser.add_argument("--dry-run", action="store_true",
                        help="Validate the run without encoding: probe each input, "
                             "run detection on a few sampled frames, check the "
@@ -1227,6 +1242,30 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
             for entry in entries:
                 mark = "OK" if entry["available"] else "  "
                 print(f"  [{mark}] {entry['name']}: {entry['reason']}")
+        sys.exit(0)
+
+    if getattr(args, "plan_out", ""):
+        if not args.input:
+            parser.error("--plan-out requires -i INPUT")
+        from backend.track_plan import save_track_plan, scan_track_plan
+        device = f"cuda:{args.gpu}" if getattr(args, "gpu", 0) >= 0 else "cpu"
+        try:
+            plan = scan_track_plan(
+                args.input,
+                device=device,
+                lang=args.lang,
+                threshold=args.threshold,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        save_track_plan(plan, args.plan_out)
+        tracks = plan["tracks"]
+        print(f"Track plan written to {args.plan_out}: "
+              f"{len(tracks)} track(s)")
+        for track in tracks:
+            text = track.get("sample_text") or "(no text)"
+            print(f"  #{track['id']} frames {track['start_frame']}-"
+                  f"{track['end_frame']}  {text[:60]}")
         sys.exit(0)
 
     if getattr(args, "ocr_benchmark", False):
@@ -1544,6 +1583,27 @@ def _prepare_cli_args(args, parser, argv=None):
     return soft_action, dry_run_only, translation_enabled
 
 
+def _apply_track_plan_args(args, parser, config) -> None:
+    """RM-275: merge an edited --plan-in track plan into the run config.
+
+    Every track marked keep becomes a frame-bounded subtract correction, so
+    exactly its span and region are excluded from the inpaint mask.
+    """
+    if not getattr(args, "plan_in", ""):
+        return
+    from backend.track_plan import load_track_plan, plan_to_mask_corrections
+    try:
+        plan = load_track_plan(args.plan_in)
+    except (OSError, ValueError) as exc:
+        parser.error(f"--plan-in: {exc}")
+    exclusions = plan_to_mask_corrections(plan)
+    existing = list(getattr(config, "manual_mask_corrections", None) or [])
+    config.manual_mask_corrections = existing + exclusions
+    kept = sum(1 for track in plan["tracks"] if track.get("keep"))
+    print(f"Track plan applied: {kept} track(s) kept "
+          f"(excluded from cleanup), {len(plan['tracks']) - kept} to remove")
+
+
 def _frozen_matte_from_args(args) -> dict:
     """RM-153: build a frozen-matte record from `--frozen-matte MANIFEST`.
 
@@ -1729,6 +1789,7 @@ def _apply_cli_config_overlays(args, parser, config):
         resolved = serialize_backend_config(config)
         print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
         sys.exit(0)
+    _apply_track_plan_args(args, parser, config)
     return config, ffmpeg_ready
 
 

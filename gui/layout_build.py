@@ -1820,6 +1820,15 @@ class LayoutBuildMixin:
         self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_inpaint_btn,
                 tr("Run detection and cleanup on one sample frame."))
+        self.preview_track_plan_btn = ModernButton(
+            preview_actions, text=tr("Track plan"), width=104,
+            command=self._open_track_plan_review,
+            style="ghost", size="sm",
+        )
+        self.preview_track_plan_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        Tooltip(self.preview_track_plan_btn,
+                tr("Scan the whole file and review every text track "
+                   "before cleanup."))
 
         self.preview_zoom_btn = ModernButton(
             preview_actions, text=tr("Full size"), width=86,

@@ -46,6 +46,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
 - **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
 - **Confidence-Gated Clean Plates** -- Attach a same-size clean reference image to each timed rectangle, preview translation or homography alignment and per-frame color matching, and fall back to normal inpainting whenever alignment is uncertain
+- **Reviewable Track Plans** -- Scan a file first and get every detected text track with its frame span, a text sample, and a thumbnail. Keep or remove each track before any pixel changes, save the plan as JSON, and reuse it from the CLI with `--plan-out` / `--plan-in`
 - **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
 - **Lossless Matte Interchange** -- Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
 - **Erase, Translate, and Re-embed** -- Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
@@ -929,6 +930,8 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--rapidocr-variant` | Select RapidOCR PP-OCR generation (v6 default, v5 fallback). | v6 | v6 \| v5 | Public |
 | `--paddleocr-variant` | Select PaddleOCR models: PP-OCRv5 mobile (default, smaller/faster) or server, or a PP-OCRv6 tier (tiny/small/medium) from paddleocr 3.7.0. | mobile | mobile \| server \| tiny \| small \| medium | Public |
 | `--ocr-compare-variants` | Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures. | Off | - | Public |
+| `--plan-out` | Scan the input for temporal text tracks and write a reviewable track plan JSON (frame span, sample text, thumbnail per track), then exit. Edit the plan's keep flags and pass it back with --plan-in. Requires -i. | - | - | Public |
+| `--plan-in` | Apply an edited track plan: every track marked keep is excluded from the inpaint mask for exactly its frame span. A plan-driven run with --export-mask yields a matte manifest reusable via --frozen-matte. | - | - | Public |
 | `--dry-run` | Validate the run without encoding: probe each input, run detection on a few sampled frames, check the requested codec is available, and print a per-file plan, then exit. Combine with --json for machine output. | Off | - | Public |
 | `--json` | Emit a machine-readable JSON result to stdout (the --dry-run plan, or the batch/file result). | Off | - | Public |
 | `--auto-lang-probe` | Probe the first frame for script/language and print a suggestion, then exit. Requires -i. | Off | - | Public |

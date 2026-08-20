@@ -45,6 +45,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- settings_controller.py        # Settings widgets, presets, mode selection.
 |   |-- support_controller.py         # Support bundle, model cache, log panel, About.
 |   |-- theme.py                      # Design tokens, colors, spacing, typography, text scale.
+|   |-- track_plan_controller.py      # Pre-run track plan scan and review dialog.
 |   |-- utils.py                      # File helpers, media type checks, formatting.
 |   `-- widgets.py                    # Custom controls (ModernButton/Toggle/Slider/Picker/...).
 |-- backend/
@@ -124,6 +125,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- support_bundle.py           # Redacted diagnostics zip export.
 |   |-- temporal_profile.py         # Mask-aware temporal regression metrics and fixtures.
 |   |-- tensorrt_compile.py         # Optional TensorRT engine compilation.
+|   |-- track_plan.py               # Reviewable pre-run text track plans.
 |   |-- tracking.py                 # Kalman tracking, pHash reuse, karaoke grouping.
 |   |-- update_check.py             # Startup version check (opt-in).
 |   |-- vapoursynth_bridge.py       # VapourSynth bridge (opt-in).

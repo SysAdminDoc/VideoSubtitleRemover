@@ -73,6 +73,7 @@ from gui.preview_controller import PreviewControllerMixin
 from gui.mask_correction_controller import MaskCorrectionControllerMixin
 from gui.processing_controller import ProcessingControllerMixin
 from gui.quality_controller import QualityReviewControllerMixin
+from gui.track_plan_controller import TrackPlanControllerMixin
 from gui.region_controller import RegionEditorControllerMixin
 from gui.settings_controller import AdvancedSettingsControllerMixin
 from gui.support_controller import SupportControllerMixin
@@ -86,6 +87,7 @@ logger = logging.getLogger(__name__)
 
 
 class VideoSubtitleRemoverApp(
+    TrackPlanControllerMixin,
     RegionEditorControllerMixin,
     AdvancedSettingsControllerMixin,
     MaskCorrectionControllerMixin,
