@@ -27,7 +27,7 @@ class DependencyProfileTests(unittest.TestCase):
             self.assertIn("numpy==2.4.6", text)
             self.assertIn("Pillow==12.3.0", text)
 
-        self.assertIn("onnxruntime==1.28.0", (
+        self.assertIn("onnxruntime==1.29.0", (
             dependency_profiles.profile_constraint_path("cpu").read_text(
                 encoding="utf-8")))
         self.assertIn("onnxruntime-gpu==1.26.0", (

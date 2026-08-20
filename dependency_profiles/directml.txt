@@ -2,8 +2,8 @@
 #   python -m backend.dependency_profiles update
 # Profile: directml
 # Provider: DmlExecutionProvider
-# Reviewed: 2026-08-12
-# Manifest-SHA256: 4eac14b8bc74f917d6942185a6e5fcae2711f1fe30a27338511ca9bb045ac3e4
+# Reviewed: 2026-08-20
+# Manifest-SHA256: b69238b9147a8b2ab5546483ed5b258d6345b12ea6cffde86425d54309f87b8c
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c

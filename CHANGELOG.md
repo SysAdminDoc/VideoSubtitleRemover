@@ -28,6 +28,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   CVE-2026-2297, CVE-2026-4224 and CVE-2026-3644. A release line newer than
   the reviewed table is reported as unclassified rather than flagged.
 
+- **The CPU dependency profile now requires ONNX Runtime 1.29.0.** That release
+  fixes a TensorRT engine-refit path traversal, adds missing rank and shape
+  validation across pooling, LSTM, QLinearConv and GridSample, validates
+  DirectML constant-tensor byte sizes, and corrects a packed sub-byte over-copy
+  in `OrtApi::GetValue`. VSR runs untrusted OCR and inpaint models through this
+  runtime. The NVIDIA lane deliberately stays on the CUDA 12 wheel it has
+  confirmed, and the DirectML lane stays at 1.24.4 because that is still the
+  newest published DirectML wheel; both decisions are recorded in the manifest.
+
 ### Fixed
 
 - **Backend audit fixes harden resumed jobs and optional engines.** Completion

@@ -75,12 +75,20 @@ ONNXRUNTIME_PACKAGES = (
 # RM-140: the CPU line is not pinned to the CUDA 12 ceiling. ONNX Runtime keeps
 # shipping CPU fixes on 1.27/1.28 while the CUDA 12 build stopped at 1.26.x, so
 # each provider lane below carries its own reviewed/tested version window.
-ONNXRUNTIME_CPU_TESTED_VERSION = "1.28.0"
+# 2026-08-20: the CPU lane moves to 1.29.0, which carries ONNX Runtime's
+# 1.29 security fixes (TensorRT engine-refit path traversal, missing
+# rank/shape validation across pooling/LSTM/QLinearConv/GridSample, DML
+# constant-tensor byte-size validation, packed sub-byte over-copy in
+# OrtApi::GetValue). The CUDA 12 lane stays on 1.26.x: 1.29 does publish a
+# CUDA 12.8 Windows build, but which CUDA the default PyPI onnxruntime-gpu
+# wheel targets is not verifiable from wheel metadata alone, so the reviewed
+# lane keeps the last wheel this project confirmed as CUDA 12.
+ONNXRUNTIME_CPU_TESTED_VERSION = "1.29.0"
 ONNXRUNTIME_CUDA12_TESTED_VERSION = "1.26.0"
 ONNXRUNTIME_CUDA13_TESTED_VERSION = "1.28.0"
 ONNXRUNTIME_CUDA13_MIN = "1.27.0"
-ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE = "1.29.0"
-ONNXRUNTIME_CPU_MAX_EXCLUSIVE = "1.29.0"
+ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE = "1.30.0"
+ONNXRUNTIME_CPU_MAX_EXCLUSIVE = "1.30.0"
 ONNXRUNTIME_CUDA_MATRIX_SOURCE = (
     "https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html"
 )
