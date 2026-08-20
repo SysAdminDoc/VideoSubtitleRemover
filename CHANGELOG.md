@@ -396,6 +396,24 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   cue-length and block-count limits had no coverage, so they could have been
   deleted without a red test.
 
+- **An isolated job that finishes just before its deadline is no longer thrown
+  away.** If the worker published its result and then failed to close stdout
+  before the wall-clock timeout, the job was reported as a timeout, so the
+  queue retried or failed an item whose output was already written.
+
+- **Pausing an isolated job now reports when it cannot be delivered.** A failed
+  control-file write was discarded silently, leaving the interface showing a
+  paused job that was still processing. Cancel already recovered through its
+  watchdog; pause had nothing.
+
+- **Retrying an isolated job no longer leaks watchdog threads or scratch
+  directories.** Each attempt started another control watchdog while the
+  previous one kept polling a dead supervisor, and a cancel during a later
+  attempt made those stale watchdogs recreate scratch directories that had
+  already been cleaned up. Scratch removal now waits briefly for a killed
+  worker to be reaped and keeps its handle for a retry instead of leaking the
+  directory permanently when Windows reports a sharing violation.
+
 ## [3.33.0] - 2026-08-02
 
 ### Fixed

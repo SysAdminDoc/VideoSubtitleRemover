@@ -27,6 +27,7 @@ from backend.job_worker import (
     write_control_file,
 )
 from gui.job_supervisor import (
+    SCRATCH_REAP_TIMEOUT,
     JobOutcome,
     JobSupervisor,
     build_request,
@@ -729,6 +730,97 @@ class FrozenEntryPointTests(unittest.TestCase):
                 del sys.frozen
             else:
                 sys.frozen = original
+
+
+class SupervisorReliabilityTests(unittest.TestCase):
+    """Termination, cleanup and control-publish edges around a child job."""
+
+    def _supervisor(self):
+        request = build_request(
+            input_path="a.mp4", output_path="b.mp4",
+            config_payload={}, is_image=False,
+        )
+        supervisor = JobSupervisor(request)
+        self.addCleanup(supervisor._cleanup_scratch)
+        return supervisor
+
+    def test_a_published_result_beats_the_wall_clock_timeout(self):
+        """The child wrote its output and cleaned its checkpoint, then hung
+        before stdout reached EOF. Reporting worker_timeout made the caller
+        retry or fail an item that had already succeeded."""
+        supervisor = self._supervisor()
+        supervisor._timed_out = True
+        supervisor._result = {
+            "status": "complete",
+            "success": True,
+            "evidence": {"last_stage_timings": {"total": 1.0}},
+        }
+
+        outcome = supervisor._build_outcome(0)
+
+        self.assertEqual(outcome.status, "complete")
+        self.assertTrue(outcome.success)
+        self.assertNotEqual(outcome.reason, "worker_timeout")
+        self.assertEqual(outcome.evidence["last_stage_timings"], {"total": 1.0})
+
+    def test_a_timeout_without_a_result_still_reports_the_timeout(self):
+        supervisor = self._supervisor()
+        supervisor._timed_out = True
+        supervisor._result = None
+
+        outcome = supervisor._build_outcome(None)
+
+        self.assertEqual(outcome.reason, "worker_timeout")
+        self.assertFalse(outcome.success)
+
+    def test_scratch_cleanup_keeps_its_handle_when_removal_fails(self):
+        """Dropping the handle after a sharing violation leaked the
+        directory permanently, because nothing retried it."""
+        supervisor = self._supervisor()
+        owned = supervisor._owned_scratch
+        self.assertIsNotNone(owned)
+        calls = []
+
+        def failing_cleanup():
+            calls.append(1)
+            if len(calls) == 1:
+                raise OSError("being used by another process")
+
+        owned.cleanup = failing_cleanup
+
+        supervisor._cleanup_scratch()
+        # Still held, so a later pass can try again.
+        self.assertIsNotNone(supervisor._owned_scratch)
+
+        supervisor._cleanup_scratch()
+        self.assertIsNone(supervisor._owned_scratch)
+        self.assertEqual(len(calls), 2)
+
+    def test_scratch_cleanup_waits_for_a_live_child_before_removing(self):
+        supervisor = self._supervisor()
+        waited = []
+
+        class LiveProcess:
+            def poll(self):
+                return None
+
+            def wait(self, timeout=None):
+                waited.append(timeout)
+                return 0
+
+        supervisor._process = LiveProcess()
+        supervisor._cleanup_scratch()
+
+        self.assertEqual(waited, [SCRATCH_REAP_TIMEOUT])
+
+    def test_control_publish_does_not_recreate_a_cleaned_scratch_dir(self):
+        """A stale watchdog publishing a control file used to resurrect the
+        directory the supervisor had already removed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "gone" / "control.json"
+            with self.assertRaises(OSError):
+                write_control_file(missing, cancel=True)
+            self.assertFalse(missing.parent.exists())
 
 
 if __name__ == "__main__":

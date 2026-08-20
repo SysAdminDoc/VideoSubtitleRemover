@@ -50,6 +50,11 @@ TERMINATE_GRACE_SECONDS = 10.0
 # before dying, and that is the only diagnostic that survives.
 STDERR_TAIL_LINES = 40
 
+# How long to wait for a killed child to be reaped before attempting to
+# remove its scratch directory. A process that still holds request.json or
+# a preview PNG open makes the removal fail with a sharing violation.
+SCRATCH_REAP_TIMEOUT = 5.0
+
 
 @dataclass
 class JobOutcome:
@@ -258,17 +263,45 @@ class JobSupervisor:
         write_control_file(self._control_path, cancel=False, pause=False)
 
     def _cleanup_scratch(self) -> None:
-        if self._owned_scratch is not None:
+        if self._owned_scratch is None:
+            return
+        # A killed child that has not been reaped can still hold
+        # request.json, control.json, or a preview PNG open, and Windows
+        # then fails the directory removal with a sharing violation. Give
+        # it a bounded moment to die before trying.
+        process = self._process
+        if process is not None and process.poll() is None:
             try:
-                self._owned_scratch.cleanup()
-            except OSError:
-                pass
-            self._owned_scratch = None
+                process.wait(timeout=SCRATCH_REAP_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "Job worker did not exit within %.1fs; its scratch "
+                    "directory may be retried later.", SCRATCH_REAP_TIMEOUT)
+        try:
+            self._owned_scratch.cleanup()
+        except OSError:
+            # Keep the handle so a later call (or interpreter shutdown) can
+            # retry. Dropping it here leaked %TEMP%\vsr_job_* permanently.
+            logger.warning(
+                "Could not remove the job scratch directory yet; it will be "
+                "retried.", exc_info=True)
+            return
+        self._owned_scratch = None
 
     def _pump_events(self) -> None:
         stream = self._process.stdout
         if stream is None:
             return
+        try:
+            self._pump_event_lines(stream)
+        except ValueError:
+            # _close_streams() closes stdout while this daemon thread is
+            # still iterating it, which raises "I/O operation on closed
+            # file" here and produced a threading excepthook traceback on
+            # stderr during an otherwise clean shutdown.
+            logger.debug("Worker stdout closed while draining", exc_info=True)
+
+    def _pump_event_lines(self, stream) -> None:
         for raw in stream:
             line = raw.strip()
             if not line:
@@ -399,7 +432,18 @@ class JobSupervisor:
 
     def _build_outcome(self, code: Optional[int]) -> JobOutcome:
         tail = "\n".join(self._stderr_lines[-STDERR_TAIL_LINES:])
-        if self._timed_out and not self._cancel_sent:
+        if self._timed_out and self._result is not None:
+            # The child published a result -- output written, checkpoint
+            # cleaned -- and only then failed to reach EOF before the
+            # deadline. Classifying that as worker_timeout made the caller
+            # retry or fail an item whose output already exists, so the
+            # received result wins and the late termination is logged.
+            logger.warning(
+                "Job worker published %s and was then terminated at its "
+                "wall-clock deadline; reporting the published result.",
+                self._result.get("status") or "a result",
+            )
+        elif self._timed_out and not self._cancel_sent:
             return JobOutcome(
                 status="error",
                 success=False,

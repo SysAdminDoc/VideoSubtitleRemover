@@ -610,6 +610,7 @@ class ProcessingControllerMixin:
         retry_backoff = max(0.0, float(getattr(
             item.config, 'batch_retry_backoff_seconds', 5.0)))
         attempt = 0
+        watchdog_stops: list[threading.Event] = []
         while True:
             supervisor = JobSupervisor(
                 request, on_progress=on_progress, on_warning=on_warning,
@@ -617,9 +618,20 @@ class ProcessingControllerMixin:
             self._active_supervisor = supervisor
             # Cancel and pause are polled by the child, so the existing GUI
             # events keep working: publish the state, then let it observe it.
+            # One watchdog at a time. On a retry the item goes back to
+            # LOADING rather than a terminal status, so the previous
+            # watchdog never stood down: it kept polling a dead supervisor
+            # at 10 Hz and, on a later cancel, published a control file
+            # that recreated the already-cleaned scratch directory.
+            watchdog_stop = threading.Event()
+            if watchdog_stops:
+                for previous in watchdog_stops:
+                    previous.set()
+                watchdog_stops.clear()
+            watchdog_stops.append(watchdog_stop)
             watchdog = threading.Thread(
                 target=self._watch_isolated_controls,
-                args=(supervisor, item),
+                args=(supervisor, item, watchdog_stop),
                 name="vsr-job-controls",
                 daemon=True,
             )
@@ -735,7 +747,22 @@ class ProcessingControllerMixin:
     # without this escalation a per-item cancel could wait forever.
     _ISOLATED_CANCEL_GRACE_SECONDS = 30.0
 
-    def _watch_isolated_controls(self, supervisor, item: QueueItem) -> None:
+    def _report_control_publish_failure(
+            self, item: QueueItem, wanted_pause: bool) -> None:
+        """Tell the user a pause/resume never reached the isolated worker."""
+        message = (
+            N_("Could not pause the running job; it is still processing.")
+            if wanted_pause
+            else N_("Could not resume the paused job.")
+        )
+        try:
+            self.root.after(0, self._update_status, message, "error", True)
+        except (RuntimeError, AttributeError, tk.TclError):
+            logger.debug("Could not surface a control failure", exc_info=True)
+
+    def _watch_isolated_controls(
+            self, supervisor, item: QueueItem,
+            stop: Optional[threading.Event] = None) -> None:
         """Forward GUI cancel/pause requests to a running child."""
         cancelled = False
         cancel_deadline = 0.0
@@ -744,17 +771,23 @@ class ProcessingControllerMixin:
             ProcessingStatus.COMPLETE, ProcessingStatus.ERROR,
             ProcessingStatus.CANCELLED, ProcessingStatus.PAUSED,
         )
+
+        def done() -> bool:
+            # A retry leaves the item at LOADING, so the terminal status
+            # alone is not enough to stand this thread down.
+            return (stop is not None and stop.is_set()) or item.status in terminal
+
         while supervisor.pid is None:
             # A failed spawn never produces a pid; the item going terminal
             # is this thread's signal to stand down instead of spinning.
-            if item.status in terminal:
+            if done():
                 return
             if self.cancel_event.is_set() or getattr(
                     item, "cancel_requested", False):
                 break
             time.sleep(0.05)
         while True:
-            if item.status in terminal:
+            if done():
                 return
             want_cancel = bool(
                 self.cancel_event.is_set()
@@ -776,7 +809,17 @@ class ProcessingControllerMixin:
                 return
             elif want_pause != paused:
                 paused = want_pause
-                supervisor.pause() if want_pause else supervisor.resume()
+                published = (
+                    supervisor.pause() if want_pause else supervisor.resume())
+                if not published:
+                    # Cancel has a watchdog that escalates to terminate, but
+                    # a pause that never reaches the child just leaves the UI
+                    # claiming "paused" while the job keeps running. Say so.
+                    logger.error(
+                        "Could not publish the %s request to the job worker",
+                        "pause" if want_pause else "resume")
+                    self._report_control_publish_failure(item, want_pause)
+                    paused = not want_pause
             time.sleep(0.1)
 
     def _process_item(self, item: QueueItem):

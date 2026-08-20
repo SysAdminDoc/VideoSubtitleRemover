@@ -666,6 +666,10 @@ msgstr "[!! Çöûŀð ńöţ ðéţéçţ ŀåńĝûåĝé ƒŕöḿ ţħîš �
 msgid "Could not open input/output for compare"
 msgstr "[!! Çöûŀð ńöţ öƥéń îńƥûţ/öûţƥûţ ƒöŕ çöḿƥåŕé ! ! ! !!]"
 
+#: gui/processing_controller.py:754
+msgid "Could not pause the running job; it is still processing."
+msgstr "[!! Çöûŀð ńöţ ƥåûšé ţħé ŕûńńîńĝ ĵöƀ; îţ îš šţîŀŀ ƥŕöçéššîńĝ. ! ! ! ! !!]"
+
 #: gui/quality_controller.py:654
 msgid "Could not prepare suggested retry: {}"
 msgstr "[!! Çöûŀð ńöţ ƥŕéƥåŕé šûĝĝéšţéð ŕéţŕý: {} ! ! ! !!]"
@@ -677,6 +681,10 @@ msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ƒîŀé ƒöŕ �
 #: gui/mask_correction_controller.py:543
 msgid "Could not read the selected review frame"
 msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ŕéṽîéŵ ƒŕåḿé ! ! ! !!]"
+
+#: gui/processing_controller.py:756
+msgid "Could not resume the paused job."
+msgstr "[!! Çöûŀð ńöţ ŕéšûḿé ţħé ƥåûšéð ĵöƀ. ! ! !!]"
 
 #: gui/settings_controller.py:539
 msgid "Could not save preset '{}'"
@@ -2024,7 +2032,7 @@ msgstr "[!! Ƥŕîṽåţé, ŀöçåŀ çŀéåńûƥ ! !!]"
 msgid "Process"
 msgstr "[!! Ƥŕöçéšš ! !!]"
 
-#: gui/processing_controller.py:1191
+#: gui/processing_controller.py:1234
 msgid "Processing failed"
 msgstr "[!! Ƥŕöçéššîńĝ ƒåîŀéð ! !!]"
 
@@ -2092,7 +2100,7 @@ msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕö�
 msgid "Reading first frame..."
 msgstr "[!! Ŕéåðîńĝ ƒîŕšţ ƒŕåḿé... ! !!]"
 
-#: gui/app.py:1110 gui/config.py:195 gui/layout_build.py:1939 gui/layout_build.py:2164 gui/layout_build.py:2175 gui/layout_helpers.py:48 gui/processing_controller.py:1363 gui/processing_controller.py:1398 gui/support_controller.py:592
+#: gui/app.py:1110 gui/config.py:195 gui/layout_build.py:1939 gui/layout_build.py:2164 gui/layout_build.py:2175 gui/layout_helpers.py:48 gui/processing_controller.py:1406 gui/processing_controller.py:1441 gui/support_controller.py:592
 msgid "Ready"
 msgstr "[!! Ŕéåðý ! !!]"
 
@@ -2610,7 +2618,7 @@ msgstr "[!! Šţåŕţ (š) ! !!]"
 msgid "Start and end frames must be whole numbers"
 msgstr "[!! Šţåŕţ åńð éńð ƒŕåḿéš ḿûšţ ƀé ŵħöŀé ńûḿƀéŕš ! ! ! !!]"
 
-#: gui/layout_build.py:2098 gui/processing_controller.py:1395 gui/processing_controller.py:144
+#: gui/layout_build.py:2098 gui/processing_controller.py:1438 gui/processing_controller.py:144
 msgid "Start batch"
 msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
 

@@ -136,9 +136,14 @@ CONTROL_POLL_SECONDS = 0.2
 
 def write_control_file(path: str | Path, *, cancel: bool = False,
                        pause: bool = False) -> None:
-    """Publish the current control state for a running job, atomically."""
+    """Publish the current control state for a running job, atomically.
+
+    The parent directory is NOT created here. The supervisor owns the
+    scratch directory and creates it at spawn; recreating it on write let a
+    stale watchdog resurrect a directory that had already been cleaned up,
+    leaking one orphan per retry attempt.
+    """
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(target.name + ".tmp")
     temp.write_text(
         json.dumps({"cancel": bool(cancel), "pause": bool(pause)}),
