@@ -385,6 +385,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   recording them as excluded modules in the published evidence and SBOM. Both
   sides now normalise through one helper, and a test pins them together.
 
+- **Three tests that read stronger than they were now check what they claim.**
+  The isolated-worker crash test asserted only the status mapping, never the
+  "keeps its logs" half of its own name, and drove a status table instead of
+  the real outcome path; it now runs the actual branch and asserts the child's
+  stderr tail survives onto the item. The translation timeout test asserted
+  bare `Exception` and was in fact passing on a pre-spawn "command not found"
+  error, because the provider takes one command rather than an argv list, so
+  the timeout was never exercised at all. And the WebVTT parser's cue-count,
+  cue-length and block-count limits had no coverage, so they could have been
+  deleted without a red test.
+
 ## [3.33.0] - 2026-08-02
 
 ### Fixed

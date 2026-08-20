@@ -331,18 +331,28 @@ class TranslationProviderBoundsTests(unittest.TestCase):
         self.assertEqual(started, [])
 
     def test_provider_that_never_reads_stdin_times_out(self):
+        """This used to assert only `Exception`, and passed on a pre-spawn
+        "command was not found" error: `command` takes a single command, not
+        an argv list, so the sleeper was never even launched and the timeout
+        path went untested."""
+        import subprocess
+
         from backend import subtitle_translation
 
-        with self.assertRaises(Exception) as ctx:
-            subtitle_translation._command_provider(
-                ["hello"], "en", "es",
-                {
-                    "command": [
-                        sys.executable, "-c", "import time; time.sleep(30)"],
-                    "timeout": 5.0,
-                },
-            )
-        self.assertNotIsInstance(ctx.exception, AssertionError)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sleeper = Path(tmpdir) / "never_reads_stdin.py"
+            sleeper.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+
+            with self.assertRaises(subprocess.TimeoutExpired) as ctx:
+                subtitle_translation._command_provider(
+                    ["hello"], "en", "es",
+                    {"command": str(sleeper), "timeout": 5.0},
+                )
+
+        # The configured budget expired, not some other default.
+        self.assertEqual(float(ctx.exception.timeout), 5.0)
+        # And it really was the sleeper that was launched.
+        self.assertIn(str(sleeper), " ".join(map(str, ctx.exception.cmd)))
 
 
 class SupportBundlePolicyTests(unittest.TestCase):

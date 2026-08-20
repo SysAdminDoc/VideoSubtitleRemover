@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -590,6 +591,59 @@ class ContainerReembedTests(unittest.TestCase):
         action, codec, reason = self._decide(".mp4", codec="subrip")
         self.assertEqual((action, codec), ("transcode", "mov_text"))
         self.assertNotIn("regions", reason)
+
+
+class ParseLimitTests(unittest.TestCase):
+    """The parse-side DoS bounds had no coverage: only read_vtt's byte cap
+    and the translated-payload cap were tested, so MAX_CUES, MAX_CUE_TEXT
+    and MAX_BLOCKS could be deleted without a red test. The module
+    constants are patched down so each case stays fast."""
+
+    def _vtt(self, cues):
+        parts = ["WEBVTT", ""]
+        for index, text in enumerate(cues):
+            parts.append("00:00:%02d.000 --> 00:00:%02d.500" % (index, index))
+            parts.append(text)
+            parts.append("")
+        return chr(10).join(parts)
+
+    def test_cue_count_limit_is_enforced(self):
+        text = self._vtt(["one", "two", "three"])
+        with mock.patch.object(W, "MAX_CUES", 2):
+            with self.assertRaises(W.WebVttError) as ctx:
+                W.parse_vtt(text)
+        self.assertIn("cue count", str(ctx.exception))
+        # At the limit it still parses, so the bound is off-by-one safe.
+        with mock.patch.object(W, "MAX_CUES", 3):
+            self.assertEqual(len(W.parse_vtt(text).cues), 3)
+
+    def test_cue_text_length_limit_is_enforced(self):
+        text = self._vtt(["x" * 40])
+        with mock.patch.object(W, "MAX_CUE_TEXT", 10):
+            with self.assertRaises(W.WebVttError) as ctx:
+                W.parse_vtt(text)
+        self.assertIn("cue text", str(ctx.exception))
+        with mock.patch.object(W, "MAX_CUE_TEXT", 40):
+            self.assertEqual(len(W.parse_vtt(text).cues), 1)
+
+    def test_block_count_limit_is_enforced(self):
+        text = chr(10).join([
+            "WEBVTT",
+            "",
+            "NOTE first",
+            "",
+            "NOTE second",
+            "",
+            "NOTE third",
+            "",
+            "00:00:00.000 --> 00:00:01.000",
+            "hello",
+            "",
+        ])
+        with mock.patch.object(W, "MAX_BLOCKS", 2):
+            with self.assertRaises(W.WebVttError) as ctx:
+                W.parse_vtt(text)
+        self.assertIn("block count", str(ctx.exception))
 
 
 if __name__ == "__main__":

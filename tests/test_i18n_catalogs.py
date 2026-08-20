@@ -189,8 +189,11 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
     def test_release_build_checks_and_packages_catalogs(self):
         build = (ROOT / "build_exe.bat").read_text(encoding="ascii")
         self.assertIn("scripts\\i18n_catalogs.py check", build)
-        self.assertIn('if exist "locale" set "DATA_ARGS=%DATA_ARGS% --add-data locale;locale"', build)
         self.assertIn('set "VSR_SMOKE_LOCALE=qps-Ploc"', build)
+        # The catalogs are bundled by the spec, which is what builds the
+        # artifact; the build script's old DATA_ARGS copy was never read.
+        spec = (ROOT / "VideoSubtitleRemoverPro.spec").read_text(encoding="utf-8")
+        self.assertIn("('locale', 'locale')", spec)
         installer = (ROOT / "installer" / "vsr.nsi").read_text(encoding="utf-8")
         self.assertIn('File /r "${DIST_DIR}\\*.*"', installer)
 

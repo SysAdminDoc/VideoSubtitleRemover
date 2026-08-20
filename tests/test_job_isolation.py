@@ -493,19 +493,54 @@ class ControllerIntegrationTests(unittest.TestCase):
         return Host(), item, updates
 
     def test_a_crashed_outcome_marks_only_that_item_and_keeps_its_logs(self):
+        """Drive the real outcome branch, not just the status table: the
+        stderr tail is the only surviving evidence of a native fault, so
+        losing it is the failure this test exists to catch."""
+        import threading
+        from unittest import mock
+
         from gui.config import ProcessingStatus
 
-        host, item, _updates = self._host()
+        host, item, updates = self._host()
+        tail = "cudnn: CUDNN_STATUS_NOT_INITIALIZED"
         outcome = JobOutcome(
             status="crashed",
             error="The job worker stopped before finishing.",
             reason="worker_crashed",
             exit_code=0xC0000005,
-            stderr_tail="cudnn: CUDNN_STATUS_NOT_INITIALIZED",
+            stderr_tail=tail,
         )
-        host._apply_isolated_evidence(item, outcome.evidence)
-        item.status = host._ISOLATED_STATUS[outcome.status]
+
+        class FakeSupervisor:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def run(self):
+                return outcome
+
+        host.cancel_event = threading.Event()
+        host.pause_event = threading.Event()
+        host.queue = [item]
+        host._batch_report_records = {}
+        host._watch_isolated_controls = lambda *a, **k: None
+        host._announce_model_download_guidance = lambda *a, **k: None
+        host._push_live_preview = lambda *a, **k: None
+        host._update_status = lambda *a, **k: None
+        host._dispatch_preview_ui = lambda *a, **k: None
+        host.root = None
+
+        with mock.patch("gui.job_supervisor.JobSupervisor", FakeSupervisor):
+            host._process_item_isolated(item)
+
         self.assertEqual(item.status, ProcessingStatus.ERROR)
+        # Only this item is touched.
+        self.assertEqual(len(host.queue), 1)
+        # The half of this test's own name that was never checked: the
+        # child's diagnostics survive onto the item.
+        self.assertIn(tail, item.retry_errors or [])
+        self.assertEqual(item.error, "The job worker stopped before finishing.")
+        # The fixture records display updates; a crashed item must refresh.
+        self.assertIn(ProcessingStatus.ERROR, updates)
 
     def test_every_child_status_maps_to_a_queue_status(self):
         from gui.config import ProcessingStatus
