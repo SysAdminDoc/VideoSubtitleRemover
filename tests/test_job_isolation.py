@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 import cv2
 import numpy as np
@@ -26,6 +27,7 @@ from backend.job_worker import (
     describe_exit_code,
     write_control_file,
 )
+from gui import job_supervisor
 from gui.job_supervisor import (
     SCRATCH_REAP_TIMEOUT,
     JobOutcome,
@@ -821,6 +823,167 @@ class SupervisorReliabilityTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 write_control_file(missing, cancel=True)
             self.assertFalse(missing.parent.exists())
+
+
+class _RecordingJob:
+    """Stand-in for the Windows job object, so the wiring is testable."""
+
+    instances = []
+
+    def __init__(self, assign_ok=True):
+        self.assign_ok = assign_ok
+        self.assigned = []
+        self.terminated = 0
+        self.closed = 0
+        _RecordingJob.instances.append(self)
+
+    @classmethod
+    def create(cls):
+        return cls()
+
+    def assign_pid(self, pid):
+        self.assigned.append(pid)
+        return self.assign_ok
+
+    def terminate(self, exit_code=1):
+        self.terminated += 1
+        return True
+
+    def close(self):
+        self.closed += 1
+
+
+class JobContainmentTests(unittest.TestCase):
+    """RM-209: the worker and everything it spawns die together."""
+
+    def setUp(self):
+        _RecordingJob.instances = []
+
+    def _supervisor(self, command):
+        request = build_request(
+            input_path="a.mp4", output_path="b.mp4",
+            config_payload={}, is_image=False,
+        )
+        supervisor = JobSupervisor(request, command=command)
+        self.addCleanup(supervisor._cleanup_scratch)
+        return supervisor
+
+    def test_the_worker_is_put_in_a_job_and_the_job_is_released(self):
+        supervisor = self._supervisor([sys.executable, "-c", "pass"])
+        with unittest.mock.patch.object(
+                job_supervisor, "ProcessJob", _RecordingJob):
+            supervisor.run(timeout=30)
+
+        self.assertEqual(len(_RecordingJob.instances), 1)
+        job = _RecordingJob.instances[0]
+        self.assertEqual(len(job.assigned), 1)
+        self.assertIsInstance(job.assigned[0], int)
+        # Released once the outcome is known, before the scratch removal.
+        self.assertEqual(job.closed, 1)
+
+    def test_a_job_that_cannot_hold_the_worker_is_closed_immediately(self):
+        """A kill-on-close handle we failed to assign must not be kept: it
+        would take the worker down when the supervisor is collected."""
+        supervisor = self._supervisor([sys.executable, "-c", "pass"])
+
+        class RefusingJob(_RecordingJob):
+            @classmethod
+            def create(cls):
+                return cls(assign_ok=False)
+
+        with unittest.mock.patch.object(
+                job_supervisor, "ProcessJob", RefusingJob):
+            supervisor.run(timeout=30)
+
+        job = _RecordingJob.instances[0]
+        self.assertEqual(job.closed, 1)
+        self.assertIsNone(supervisor._job)
+
+    def test_killing_a_stuck_worker_also_terminates_its_job(self):
+        supervisor = self._supervisor(
+            [sys.executable, "-c", "import time; time.sleep(30)"])
+        with unittest.mock.patch.object(
+                job_supervisor, "ProcessJob", _RecordingJob):
+            outcome = supervisor.run(timeout=1.5)
+
+        job = _RecordingJob.instances[0]
+        self.assertEqual(outcome.reason, "worker_timeout")
+        self.assertGreaterEqual(job.terminated, 1)
+        self.assertEqual(job.closed, 1)
+
+
+@unittest.skipUnless(sys.platform == "win32", "job objects are Windows only")
+class ProcessJobTests(unittest.TestCase):
+    """The real Windows API path, exercised against real processes."""
+
+    @staticmethod
+    def _alive(pid):
+        import ctypes
+        SYNCHRONIZE = 0x00100000
+        handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+        if not handle:
+            return False
+        try:
+            # WAIT_OBJECT_0 means the process is signaled, so it has exited.
+            return ctypes.windll.kernel32.WaitForSingleObject(handle, 0) != 0
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+
+    def test_terminating_the_job_reaps_a_grandchild(self):
+        from gui.process_job import ProcessJob
+
+        job = ProcessJob.create()
+        self.assertIsNotNone(job, "expected a job object on Windows")
+        child = subprocess.Popen(
+            [sys.executable, "-c",
+             "import subprocess, sys, time;"
+             "p = subprocess.Popen([sys.executable, '-c',"
+             " 'import time; time.sleep(60)']);"
+             "print(p.pid, flush=True); time.sleep(60)"],
+            stdout=subprocess.PIPE, text=True,
+        )
+        self.addCleanup(child.kill)
+        self.assertTrue(job.assign_pid(child.pid))
+        grandchild = int(child.stdout.readline().strip())
+        self.addCleanup(job.close)
+        self.assertTrue(self._alive(grandchild))
+
+        self.assertTrue(job.terminate())
+
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and self._alive(grandchild):
+            time.sleep(0.05)
+        self.assertFalse(
+            self._alive(grandchild),
+            "the ffmpeg-equivalent grandchild outlived the job")
+        self.assertIsNotNone(child.poll() or child.wait(timeout=5))
+
+    def test_closing_the_job_kills_what_is_left_in_it(self):
+        """The case no cleanup code covers: the GUI process itself dying."""
+        from gui.process_job import ProcessJob
+
+        job = ProcessJob.create()
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"])
+        self.addCleanup(child.kill)
+        self.assertTrue(job.assign_pid(child.pid))
+
+        job.close()
+
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and self._alive(child.pid):
+            time.sleep(0.05)
+        self.assertFalse(self._alive(child.pid))
+        self.assertFalse(job.active)
+
+    def test_a_released_job_reports_nothing_to_do(self):
+        from gui.process_job import ProcessJob
+
+        job = ProcessJob.create()
+        job.close()
+        self.assertFalse(job.terminate())
+        self.assertFalse(job.assign_pid(os.getpid()))
+        job.close()
 
 
 if __name__ == "__main__":

@@ -29,6 +29,7 @@ DESCRIPTIONS: dict[str, str] = {
     "gui/config.py": "APP_VERSION, QueueItem, GUI ProcessingConfig, settings I/O.",
     "gui/dialog_layout.py": "Work-area fitting and scrollable dialog bodies.",
     "gui/job_supervisor.py": "Parent-side supervisor for isolated queue jobs.",
+    "gui/process_job.py": "Windows job object containment for worker process trees.",
     "gui/direction.py": "Logical-to-physical RTL mirror for Tk options.",
     "gui/layout_build.py": "Builder mixin: header, settings, queue, preview.",
     "gui/layout_helpers.py": "Shared layout primitives for the builder mixins.",

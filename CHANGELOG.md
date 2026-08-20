@@ -49,6 +49,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Cancelling or timing out an isolated job no longer leaves ffmpeg
+  running.** Terminating the worker reached that process only, so an in-flight
+  mux or post-restore ran to completion, held the output and temp files open,
+  and could hand back a finished file for an item already reported as
+  cancelled; an immediate retry then failed with a sharing violation. The
+  worker now runs inside a Windows job object, so the whole process tree is
+  reaped together. That also covers the case no cleanup code can reach: if the
+  application itself dies, the job closes with it and the worker stops instead
+  of processing to completion unattended.
+
 - **The release gate is trustworthy again: five tests were failing on a clean
   checkout.** Three were regressions from the backend audit pass. A zero or
   missing frame rate was divided by an epsilon, turning frame 15 into 15

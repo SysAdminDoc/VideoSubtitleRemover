@@ -37,6 +37,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- mask_correction_controller.py # Mask paint/erase review and selective rerun.
 |   |-- onboarding.py                 # First-run onboarding modal mixin.
 |   |-- preview_controller.py         # Preview pane, A/B compare, live frames, zoom.
+|   |-- process_job.py                # Windows job object containment for worker process trees.
 |   |-- processing_controller.py      # Queue worker, pause/stop, reports, notifications.
 |   |-- quality_controller.py         # Quality review, retry, batch-report helpers.
 |   |-- queue_view.py                 # Queue table rendering and row state mixin.

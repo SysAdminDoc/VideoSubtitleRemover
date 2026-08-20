@@ -38,6 +38,7 @@ from backend.job_worker import (
     describe_exit_code,
     write_control_file,
 )
+from gui.process_job import ProcessJob
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ class JobSupervisor:
         self._cancel_sent = False
         self._paused = False
         self._timed_out = False
+        self._job: Optional[ProcessJob] = None
         self._owned_scratch: Optional[tempfile.TemporaryDirectory] = None
         if scratch_dir:
             self._scratch = Path(scratch_dir)
@@ -181,7 +183,12 @@ class JobSupervisor:
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         command = self._explicit_command or worker_command(
             str(self._request_path))
-        return subprocess.Popen(
+        # Create the job before the child exists so the window between spawn
+        # and containment is a handle assignment, not a job creation. The
+        # child is a cold Python interpreter and cannot reach the first
+        # ffmpeg spawn in that time.
+        self._job = ProcessJob.create()
+        process = subprocess.Popen(
             command,
             # Closed on purpose: the child reads its job from a file and
             # its control state from another, so nothing needs stdin --
@@ -198,6 +205,12 @@ class JobSupervisor:
             bufsize=1,
             creationflags=creationflags,
         )
+        if self._job is not None and not self._job.assign_pid(process.pid):
+            # Containment failed, so do not keep a kill-on-close handle that
+            # would take the worker down when this object is collected.
+            self._job.close()
+            self._job = None
+        return process
 
     def run(self, timeout: Optional[float] = None) -> JobOutcome:
         """Start the child, pump its events, and return the outcome.
@@ -252,8 +265,20 @@ class JobSupervisor:
             event_thread.join(timeout=join_timeout)
             stderr_thread.join(timeout=join_timeout)
         outcome = self._build_outcome(code)
+        # Reap the tree before the scratch cleanup, not after: a surviving
+        # ffmpeg grandchild holds the output and preview files open, and
+        # Windows fails the directory removal with a sharing violation.
+        self._release_job()
         self._cleanup_scratch()
         return outcome
+
+    def _release_job(self) -> None:
+        """Kill anything still in the job and drop the handle."""
+        job, self._job = self._job, None
+        if job is None:
+            return
+        job.terminate()
+        job.close()
 
     def _write_request(self) -> None:
         self._request_path.write_text(
@@ -412,6 +437,11 @@ class JobSupervisor:
                 self._process.kill()
             except OSError:
                 pass
+        # kill() reaches the worker only. Its ffmpeg children would otherwise
+        # run the mux to completion and hand back an output file for an item
+        # already reported as cancelled.
+        if self._job is not None:
+            self._job.terminate()
         if deadline is None:
             try:
                 self._process.wait(timeout=TERMINATE_GRACE_SECONDS)
