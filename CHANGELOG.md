@@ -20,6 +20,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Dropping a folder no longer freezes the window while it is scanned.** The
+  walk ran synchronously in the drop callback, materialising and sorting the
+  entire tree, so a large library or a slow network share locked the UI for
+  the whole enumeration. Folders are now scanned on a worker thread with a
+  progress line, enumeration stops at the queue's 500-file capacity, and the
+  found files are added in small batches so the window stays responsive.
+
 - **Small copy and consistency fixes across the queue.** The error status
   reads "Needs attention" in sentence case like every other status, the empty
   queue count uses the same plural-aware pattern as the live count, the move

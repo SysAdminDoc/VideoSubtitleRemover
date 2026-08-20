@@ -38,6 +38,7 @@ from gui.config import (
     set_persistence_observer, settings_read_only_version,
 )
 from gui.utils import (
+    collect_supported_files,
     desktop_bounds,
     dispatch_to_ui,
     get_app_dir, detect_gpu, is_video_file, is_image_file,
@@ -224,6 +225,7 @@ class VideoSubtitleRemoverApp(
         self._hardware_probe_thread: Optional[threading.Thread] = None
         self._elapsed_timer_id = None
         self._output_dir: Optional[Path] = None  # None = use input_dir/output/
+        self._folder_scan_active = False  # RM-218 async folder walk
         self._preview_detector = None  # cached SubtitleDetector for mask preview
         self._preview_detector_lang = None  # lang the cached detector was created with
         self._preview_detector_engine = None
@@ -1877,29 +1879,79 @@ class VideoSubtitleRemoverApp(
     def _on_files_dropped(self, files: List[str]):
         """Handle dropped files."""
         stats = self._new_import_stats()
+        folders = []
         for file_path in files:
             if Path(file_path).is_dir():
-                self._merge_import_stats(stats, self._add_folder_to_queue(file_path))
+                folders.append(file_path)
             else:
                 result = self._add_to_queue(file_path)
                 stats[result] = stats.get(result, 0) + 1
-        self._announce_import_summary(stats)
+        if not folders:
+            self._announce_import_summary(stats)
+            return
+        # Folders are walked off the main thread: the old synchronous
+        # sorted(rglob) froze the window for the whole walk of a large
+        # library or a slow network share.
+        if self._folder_scan_active:
+            self._update_status(
+                N_("A folder scan is already running"), "warning")
+            self._announce_import_summary(stats)
+            return
+        self._folder_scan_active = True
+        stats["folders"] = len(folders)
+        self._update_status(N_("Scanning folders..."), "info")
+        threading.Thread(
+            target=self._scan_folders_worker,
+            args=(list(folders), stats),
+            name="vsr-folder-scan",
+            daemon=True,
+        ).start()
 
-    def _add_folder_to_queue(self, folder_path: str):
-        """Recursively add all supported files from a folder."""
-        folder = Path(folder_path)
-        stats = self._new_import_stats()
-        stats["folders"] = 1
-        for candidate in sorted(folder.rglob("*")):
-            if candidate.is_file() and (
-                is_video_file(str(candidate)) or is_image_file(str(candidate))
-            ):
-                stats["supported_in_folders"] += 1
-                result = self._add_to_queue(str(candidate))
-                stats[result] = stats.get(result, 0) + 1
-                if result == "queue_full":
-                    break
-        return stats
+    def _scan_folders_worker(self, folders: List[str], stats: dict):
+        """Enumerate folder contents on a worker thread, then apply."""
+        def _progress(scanned: int):
+            dispatch_to_ui(
+                self.root, self._update_status,
+                tr("Scanning folders... {n} entries checked").format(n=scanned),
+                "info")
+
+        try:
+            candidates, hit_cap = collect_supported_files(
+                folders, cap=500, on_progress=_progress)
+        except Exception:
+            logger.warning("Folder scan failed", exc_info=True)
+            candidates, hit_cap = [], False
+        stats["supported_in_folders"] = len(candidates)
+        if hit_cap:
+            logger.info(
+                "Folder scan stopped at the 500-file queue capacity")
+        dispatch_to_ui(
+            self.root, self._apply_folder_scan, list(candidates), stats)
+
+    def _apply_folder_scan(self, candidates: List[str], stats: dict,
+                           start: int = 0):
+        """Add scanned files to the queue in chunks on the main thread.
+
+        One chunk per event-loop turn keeps a multi-hundred-file add from
+        freezing the window the way the synchronous walk used to.
+        """
+        CHUNK = 25
+        end = min(start + CHUNK, len(candidates))
+        for path_text in candidates[start:end]:
+            result = self._add_to_queue(path_text)
+            stats[result] = stats.get(result, 0) + 1
+            if result == "queue_full":
+                end = len(candidates)
+                break
+        if end < len(candidates):
+            self._update_status(
+                tr("Adding files... {done} of {total}").format(
+                    done=end, total=len(candidates)), "info")
+            dispatch_to_ui(
+                self.root, self._apply_folder_scan, candidates, stats, end)
+            return
+        self._folder_scan_active = False
+        self._announce_import_summary(stats)
 
     def _try_enqueue_queue_item(self, item: QueueItem) -> tuple[str, int]:
         """Atomically enforce queue capacity/deduplication and append *item*."""

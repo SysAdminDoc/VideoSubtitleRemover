@@ -21,6 +21,7 @@ from backend.language_support import (
 )
 
 __all__ = (
+    "collect_supported_files",
     "desktop_bounds",
     "dispatch_to_ui",
     "_CURATED_LANG_NAMES",
@@ -38,6 +39,61 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+def collect_supported_files(
+    folders,
+    *,
+    cap: int,
+    on_progress=None,
+    progress_every: int = 200,
+) -> tuple[list[str], bool]:
+    """Walk folders and return (supported file paths, hit_cap).
+
+    Pure filesystem work so it can run on a worker thread: the old
+    implementation ran ``sorted(folder.rglob("*"))`` inside the drop
+    callback, which materialised and sorted the whole tree on the Tk main
+    thread and froze the window for the entire walk of a large library or a
+    slow network share. Only the matches are sorted here, and enumeration
+    stops at ``cap`` because the queue cannot accept more than that anyway.
+
+    ``on_progress(scanned_count)`` is invoked every ``progress_every``
+    directory entries; exceptions from it are the caller's problem.
+    """
+    matches: list[str] = []
+    scanned = 0
+    hit_cap = False
+    for folder in folders:
+        root = Path(folder)
+        if hit_cap:
+            break
+        try:
+            walker = root.rglob("*")
+        except OSError:
+            continue
+        while True:
+            try:
+                candidate = next(walker)
+            except StopIteration:
+                break
+            except OSError:
+                continue
+            scanned += 1
+            if on_progress is not None and scanned % max(1, progress_every) == 0:
+                on_progress(scanned)
+            try:
+                path_text = str(candidate)
+                if not candidate.is_file():
+                    continue
+            except OSError:
+                continue
+            if is_video_file(path_text) or is_image_file(path_text):
+                matches.append(path_text)
+                if len(matches) >= cap:
+                    hit_cap = True
+                    break
+    matches.sort()
+    return matches, hit_cap
 
 
 def desktop_bounds(primary_w: int, primary_h: int) -> tuple:
