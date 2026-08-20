@@ -242,7 +242,9 @@ if not "!RELEASE_EXIT!"=="0" (
 :: move. Nothing is published from the reusable scratch directory.
 echo.
 echo Staging the versioned release artifact set...
-for /f "delims=" %%V in ('"%PYTHON%" -c "from gui.config import APP_VERSION; print(APP_VERSION)"') do set "APP_VERSION=%%V"
+:: %PYTHON% is the space-free venv path; quoting it here makes cmd
+:: strip the outer quote pair and mangle the whole command.
+for /f "delims=" %%V in ('%PYTHON% -c "from gui.config import APP_VERSION; print(APP_VERSION)"') do set "APP_VERSION=%%V"
 if not defined APP_VERSION (
     echo ERROR: Could not read APP_VERSION.
     exit /b 1
