@@ -297,3 +297,102 @@ class DirectMlDeviceMappingTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["device"], "cuda:1")
+
+
+class PreviewMatchesBatchConfigTests(unittest.TestCase):
+    """The previews exist to A/B settings, so they must be built from the
+    same configuration the run would use."""
+
+    def _preview_source(self):
+        return (ROOT / "gui" / "preview_controller.py").read_text(
+            encoding="utf-8")
+
+    def test_test_cleanup_converts_the_whole_config(self):
+        source = self._preview_source()
+        self.assertIn("backend_cfg = gui_to_backend_config(snapshot_cfg)", source)
+        # A hand-built partial copy silently dropped detector fields.
+        self.assertNotIn("_BackendCfg(", source)
+
+    def test_test_cleanup_overrides_only_the_device(self):
+        source = self._preview_source()
+        converted = source.index("backend_cfg = gui_to_backend_config")
+        self.assertLess(converted, source.index("backend_cfg.device", converted))
+
+    def test_converter_carries_the_fields_the_partial_copy_dropped(self):
+        from backend.config_schema import gui_to_backend_config
+        from gui.config import ProcessingConfig as GuiConfig
+
+        gui_cfg = GuiConfig()
+        gui_cfg.detection_engine = "easyocr"
+        gui_cfg.detection_lang = "ja"
+        backend_cfg = gui_to_backend_config(gui_cfg)
+        self.assertEqual(backend_cfg.detection_engine, "easyocr")
+        self.assertEqual(backend_cfg.detection_lang, "ja")
+        for field in (
+            "detection_vertical",
+            "language_mask_filter",
+            "lama_super_fast",
+        ):
+            self.assertTrue(hasattr(backend_cfg, field), field)
+
+    def test_mask_preview_reads_detector_settings_from_the_item(self):
+        source = self._preview_source()
+        start = source.index("ocr_engine = getattr(")
+        block = source[start - 120:start + 320]
+        # Engine, variant and threshold must come from the item, which is
+        # where a per-file override lives.
+        self.assertIn('getattr(item_config, "detection_engine"', block)
+        self.assertIn('getattr(item_config, "rapidocr_variant"', block)
+        self.assertIn("getattr(item_config, 'detection_threshold'", block)
+        self.assertNotIn('getattr(self.config, "detection_engine"', block)
+
+
+class SoftSubtitleCancelTests(unittest.TestCase):
+    """Per-item Stop must reach the soft-subtitle remux path."""
+
+    def test_cancel_check_honours_item_cancel_requested(self):
+        import threading
+        from datetime import datetime
+
+        from gui.processing_controller import ProcessingControllerMixin
+
+        captured = {}
+
+        def fake_remux(src, dst, *, action, on_process, cancel_check):
+            captured["cancel_check"] = cancel_check
+
+        controller = ProcessingControllerMixin.__new__(ProcessingControllerMixin)
+        controller.cancel_event = threading.Event()
+        controller._set_active_subprocess = lambda proc: None
+        controller._update_item_display = lambda _item: None
+        controller._batch_times = []
+
+        item = SimpleNamespace(
+            soft_subtitle_action="strip",
+            file_path="in.mkv",
+            output_path="out.mkv",
+            cancel_requested=False,
+            status=None,
+            progress=0.0,
+            error="x",
+            quality_report={},
+            started_at=datetime.now(),
+            completed_at=None,
+            stage_timings=None,
+            message="",
+            soft_subtitle_summary=None,
+        )
+
+        with mock.patch("backend.remux.remux_soft_subtitles", fake_remux), \
+                mock.patch("pathlib.Path.mkdir", lambda *a, **k: None):
+            controller._process_soft_subtitle_item(item)
+
+        cancel_check = captured["cancel_check"]
+        self.assertFalse(cancel_check())
+        # The global Stop still works...
+        controller.cancel_event.set()
+        self.assertTrue(cancel_check())
+        controller.cancel_event.clear()
+        # ...and so does one item's Stop, which previously did nothing here.
+        item.cancel_requested = True
+        self.assertTrue(cancel_check())

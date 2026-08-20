@@ -679,7 +679,7 @@ class PreviewControllerMixin:
             import cv2 as _cv2
             try:
                 from backend.processor import SubtitleRemover as _Remover
-                from backend.config import ProcessingConfig as _BackendCfg
+                from backend.config_schema import gui_to_backend_config
                 if is_image_file(source_path):
                     frame = safe_imread(source_path)
                 elif is_video_file(source_path):
@@ -702,22 +702,22 @@ class PreviewControllerMixin:
                     )
                     return
 
-                # Build a backend config snapshot from the item.
-                backend_cfg = _BackendCfg(
-                    mode=self._gui_to_backend_mode(snapshot_cfg.mode.value),
-                    device=self._gui_to_backend_device(
-                        snapshot_cfg.use_gpu, snapshot_cfg.gpu_id),
-                    detection_lang=snapshot_cfg.detection_lang,
-                    detection_threshold=snapshot_cfg.detection_threshold,
-                    subtitle_area=snapshot_cfg.subtitle_area,
-                    subtitle_areas=snapshot_cfg.subtitle_areas,
-                    subtitle_region_spans=snapshot_cfg.subtitle_region_spans,
-                    subtitle_region_keyframes=(
-                        snapshot_cfg.subtitle_region_keyframes),
-                    mask_dilate_px=snapshot_cfg.mask_dilate_px,
-                    mask_feather_px=snapshot_cfg.mask_feather_px,
-                    tbe_enable=snapshot_cfg.tbe_enable,
-                )
+                # Convert the whole item config instead of hand-picking
+                # fields. The previous partial copy built a bare
+                # ProcessingConfig from thirteen named arguments, which
+                # silently dropped detection_engine, detection_vertical,
+                # language_mask_filter, manual_mask_corrections and
+                # lama_super_fast; each fell back to a backend default.
+                # This preview exists to A/B settings, so a user who chose
+                # EasyOCR because RapidOCR misreads their language was shown
+                # the auto cascade instead, and the result disagreed with the
+                # mask preview, which does honour detection_engine. The shared
+                # converter keeps both previews and the batch on one
+                # definition of the job. Only the device is overridden,
+                # because the preview runs wherever the GUI decided.
+                backend_cfg = gui_to_backend_config(snapshot_cfg)
+                backend_cfg.device = self._gui_to_backend_device(
+                    snapshot_cfg.use_gpu, snapshot_cfg.gpu_id)
                 remover = _Remover(backend_cfg)
                 # Single-frame inpaint -- detect, build mask, inpaint.
                 timed_fixed = self._active_timed_region_rects(
@@ -1183,10 +1183,10 @@ class PreviewControllerMixin:
             self.preview_meta_label.config(text=tr("Reading first frame..."))
             self._preview_label.config(image="", text="")
             self._preview_photo = None
-            lang = self.lang_var.get()
-            ocr_engine = getattr(self.config, "detection_engine", "auto")
-            ocr_variant = getattr(self.config, "rapidocr_variant", "v6")
-            threshold = getattr(self.config, 'detection_threshold', 0.5)
+            lang = getattr(item_config, "detection_lang", "") or self.lang_var.get()
+            ocr_engine = getattr(item_config, "detection_engine", "auto")
+            ocr_variant = getattr(item_config, "rapidocr_variant", "v6")
+            threshold = getattr(item_config, 'detection_threshold', 0.5)
             timed_spans = getattr(self.config, "subtitle_region_spans", None) or []
             keyframe_tracks = (
                 getattr(self.config, "subtitle_region_keyframes", None) or [])

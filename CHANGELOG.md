@@ -364,6 +364,20 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   reviewed CPU profile. The support-bundle subprocess test also gets a
   realistic timeout so it stops failing spuriously under full-suite load.
 
+- **Stopping a single embedded-subtitle item now actually stops it.** The
+  soft-subtitle remux polled only the batch-wide Stop, so an item cancelled on
+  its own ran to completion and then reported Complete after the UI had already
+  said it was stopping.
+
+- **Both previews now use the settings the run would use.** "Test cleanup"
+  built its backend config from a hand-picked subset that dropped the
+  detection engine, vertical detection, the language mask filter, manual mask
+  corrections and the LaMa speed switch, so choosing EasyOCR previewed the
+  automatic cascade instead. The mask preview took the language, engine and
+  threshold from the global settings while reading dilation and corrections
+  from the item, so a per-file override previewed a mask the run would not
+  produce. Both now read the item, and the two previews agree with each other.
+
 ## [3.33.0] - 2026-08-02
 
 ### Fixed

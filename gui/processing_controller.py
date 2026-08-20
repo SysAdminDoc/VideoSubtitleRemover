@@ -446,7 +446,7 @@ class ProcessingControllerMixin:
             item.output_path,
             action=action,
             on_process=self._set_active_subprocess,
-            cancel_check=self.cancel_event.is_set,
+            cancel_check=lambda: (self.cancel_event.is_set() or item.cancel_requested),
         )
 
         item.status = ProcessingStatus.COMPLETE
