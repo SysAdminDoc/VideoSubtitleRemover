@@ -24,6 +24,9 @@ from backend.mask_corrections import (
     normalize_mask_correction,
     normalize_mask_correction_list,
 )
+from backend.ocr_variants import (
+    normalize_paddleocr_variant as _normalize_paddleocr_variant,
+)
 from backend.region_keyframes import normalize_region_keyframe_tracks
 
 logger = logging.getLogger(__name__)
@@ -675,19 +678,13 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         config.rapidocr_variant = "v5"
     elif config.rapidocr_variant not in {"v5", "v6"}:
         config.rapidocr_variant = "v6"
-    config.paddleocr_variant = _coerce_text(
-        getattr(config, "paddleocr_variant", "mobile"), "mobile", 24
-    ).lower().replace("_", "-")
-    if config.paddleocr_variant in {
-        "pp-ocrv5-mobile", "ppocrv5-mobile"
-    }:
-        config.paddleocr_variant = "mobile"
-    elif config.paddleocr_variant in {
-        "pp-ocrv5-server", "ppocrv5-server"
-    }:
-        config.paddleocr_variant = "server"
-    elif config.paddleocr_variant not in {"mobile", "server"}:
-        config.paddleocr_variant = "mobile"
+    # PP-OCRv5 families plus the PP-OCRv6 tiers from paddleocr 3.7.0. The
+    # shared alias table lives in backend.ocr_variants.
+    config.paddleocr_variant = _normalize_paddleocr_variant(
+        _coerce_text(
+            getattr(config, "paddleocr_variant", "mobile"), "mobile", 24
+        )
+    )
     config.language_mask_filter = _coerce_bool(
         config.language_mask_filter, False)
     config.detection_frame_skip = _coerce_int(config.detection_frame_skip, 0, 0, 240)

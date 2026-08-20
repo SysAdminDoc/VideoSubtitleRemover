@@ -31,6 +31,51 @@ class PaddleCompatTests(unittest.TestCase):
         self.assertEqual(normalize_paddleocr_variant("PP-OCRv5_mobile"), "mobile")
         self.assertEqual(normalize_paddleocr_variant("unknown"), "mobile")
 
+    def test_ppocrv6_tiers_map_to_upstream_model_names(self):
+        """Identifiers verified against the PaddlePaddle model repositories."""
+        from backend.paddle_compat import (
+            paddleocr_model_names,
+            paddleocr_variant_generation,
+        )
+
+        for tier in ("tiny", "small", "medium"):
+            for spelling in (tier, f"v6-{tier}", f"PP-OCRv6_{tier}"):
+                self.assertEqual(
+                    normalize_paddleocr_variant(spelling), f"v6-{tier}",
+                    spelling)
+            self.assertEqual(
+                paddleocr_model_names(tier),
+                (f"PP-OCRv6_{tier}_det", f"PP-OCRv6_{tier}_rec"))
+            self.assertEqual(paddleocr_variant_generation(tier), "v6")
+
+        # The reviewed default stays on PP-OCRv5 so upgrading paddleocr does
+        # not silently swap model weights for existing users.
+        self.assertEqual(normalize_paddleocr_variant(None), "mobile")
+        self.assertEqual(paddleocr_variant_generation("mobile"), "v5")
+        self.assertEqual(
+            paddleocr_model_names("mobile"),
+            ("PP-OCRv5_mobile_det", "PP-OCRv5_mobile_rec"))
+
+    def test_v6_builder_sends_matching_ocr_version(self):
+        calls = []
+
+        class PaddleOCR:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        paddle = types.ModuleType("paddleocr")
+        paddle.PaddleOCR = PaddleOCR
+        paddle.__version__ = "3.7.0"
+        with mock.patch.dict("sys.modules", {"paddleocr": paddle}):
+            build_paddleocr("en", "cpu", variant="medium")
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["ocr_version"], "PP-OCRv6")
+        self.assertEqual(
+            calls[0]["text_detection_model_name"], "PP-OCRv6_medium_det")
+        self.assertEqual(
+            calls[0]["text_recognition_model_name"], "PP-OCRv6_medium_rec")
+
     def test_v3_builder_names_selected_models_explicitly(self):
         calls = []
 

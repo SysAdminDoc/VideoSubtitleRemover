@@ -342,7 +342,7 @@ languages such as English and French intentionally share one family.
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
 | 1 | **RapidOCR 3.9.2** (OpenCV/ONNX/OpenVINO PP-OCRv6; PP-OCRv5 fallback) | `pip install "rapidocr==3.9.2"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | OpenCV 5 DNN is the dependency-light PP-OCRv6 CPU path; RapidOCR providers can compare v6 and v5 |
-| 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.6.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | Explicit PP-OCRv5 mobile (default, smaller/faster) or server (larger/higher accuracy) models via `--paddleocr-variant`; installs its own OpenCV wheel |
+| 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.7.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | Explicit PP-OCRv5 mobile (default, smaller/faster) or server models, or a PP-OCRv6 tier (`tiny`, `small`, `medium`) via `--paddleocr-variant`; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
 | 4 | EasyOCR (frozen) | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Frozen legacy fallback; last release 2024-09-24; installs its own OpenCV wheel |
 | 5 | OpenCV fallback | Built-in | Any | Threshold-based |
@@ -927,7 +927,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--ocr-benchmark` | Benchmark the active OCR detector on synthetic ground-truth subtitle fixtures (recall, latency, and memory) and print JSON evidence, then exit. Use --gpu to pick the device. Gate any default-detector swap on the meets_floors verdict. | Off | - | Public |
 | `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| easyocr \| opencv | Public |
 | `--rapidocr-variant` | Select RapidOCR PP-OCR generation (v6 default, v5 fallback). | v6 | v6 \| v5 | Public |
-| `--paddleocr-variant` | Select PaddleOCR PP-OCRv5 models: mobile is smaller/faster; server is larger/higher accuracy. | mobile | mobile \| server | Public |
+| `--paddleocr-variant` | Select PaddleOCR models: PP-OCRv5 mobile (default, smaller/faster) or server, or a PP-OCRv6 tier (tiny/small/medium) from paddleocr 3.7.0. | mobile | mobile \| server \| tiny \| small \| medium | Public |
 | `--ocr-compare-variants` | Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures. | Off | - | Public |
 | `--dry-run` | Validate the run without encoding: probe each input, run detection on a few sampled frames, check the requested codec is available, and print a per-file plan, then exit. Combine with --json for machine output. | Off | - | Public |
 | `--json` | Emit a machine-readable JSON result to stdout (the --dry-run plan, or the batch/file result). | Off | - | Public |

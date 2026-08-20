@@ -18,7 +18,7 @@ class DependencyCapTests(unittest.TestCase):
         self.assertIn("rapidocr>=2.0.0,<4.0.0", requirements)
         self.assertIn("rapidocr>=2.0.0,<4.0.0", setup)
         self.assertIn("paddleocr>=3.0.0,<4.0.0", requirements)
-        self.assertIn("paddleocr==3.6.0", profiles)
+        self.assertIn("paddleocr==3.7.0", profiles)
 
         self.assertNotIn("rapidocr-onnxruntime", requirements)
         self.assertIn("opencv-python>=5.0.0.93", requirements)

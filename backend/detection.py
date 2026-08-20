@@ -21,6 +21,10 @@ import cv2
 import numpy as np
 
 from backend.import_safety import module_can_import as _module_can_import
+from backend.ocr_variants import (
+    normalize_paddleocr_variant as _normalize_paddleocr_variant,
+    paddleocr_model_names as _paddleocr_model_names,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,17 +70,11 @@ def normalize_rapidocr_variant(value: object) -> str:
 
 
 def normalize_paddleocr_variant(value: object) -> str:
-    """Normalize the explicit PaddleOCR PP-OCRv5 model family."""
-    text = str(value or "mobile").strip().lower().replace("_", "-")
-    aliases = {
-        "mobile": "mobile",
-        "pp-ocrv5-mobile": "mobile",
-        "ppocrv5-mobile": "mobile",
-        "server": "server",
-        "pp-ocrv5-server": "server",
-        "ppocrv5-server": "server",
-    }
-    return aliases.get(text, "mobile")
+    """Normalize the explicit PaddleOCR model family (PP-OCRv5 or v6).
+
+    Re-exported from backend.ocr_variants so the alias table has one owner.
+    """
+    return _normalize_paddleocr_variant(value)
 
 
 def _surya_allowed() -> bool:
@@ -510,14 +508,16 @@ class SubtitleDetector:
             except Exception as e:
                 logger.warning(f"RapidOCR init failed: {e}")
 
-        # PaddleOCR PP-OCRv5 with an explicit mobile/server family.
+        # PaddleOCR with an explicit model family: a PP-OCRv5 mobile/server
+        # build or a PP-OCRv6 tiny/small/medium tier.
         if self.engine in {"auto", "paddleocr"}:
             try:
                 from backend.paddle_compat import build_paddleocr
                 self._paddle_model = build_paddleocr(
                     self.lang, self.device, variant=self.paddleocr_variant)
-                self._paddle_model_variant = (
-                    f"PP-OCRv5_{self.paddleocr_variant}")
+                det_model, _rec_model = _paddleocr_model_names(
+                    self.paddleocr_variant)
+                self._paddle_model_variant = det_model[: -len("_det")]
                 self._engine_name = "PaddleOCR"
                 self._provider_name = (
                     "cuda" if self._is_gpu_device() else "cpu")

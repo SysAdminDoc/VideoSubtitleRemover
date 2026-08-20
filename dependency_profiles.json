@@ -10,7 +10,7 @@
     "Pillow==12.3.0",
     "idna==3.15",
     "rapidocr==3.9.2",
-    "paddleocr==3.6.0",
+    "paddleocr==3.7.0",
     "easyocr==1.7.2",
     "simple-lama-inpainting==0.1.2"
   ],
@@ -61,9 +61,9 @@
     }
   },
   "reviewedArtifactHashes": {
-    "rapidocr==3.9.2": "04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0",
-    "paddleocr==3.6.0": "76a03d260a2b5f7f3f1af017fbdc0cae3ccb2a538d40ba898a3a791711c34c33",
-    "easyocr==1.7.2": "5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c"
+    "easyocr==1.7.2": "5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c",
+    "paddleocr==3.7.0": "c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338",
+    "rapidocr==3.9.2": "04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0"
   },
   "intentionalExceptions": [
     "The NVIDIA profile pins onnxruntime-gpu to the CUDA 12 line (1.26.x). ONNX Runtime 1.27 shipped a CUDA-13-only default GPU wheel; 1.29.0 (2026-08-12) again builds both a CUDA 12.8 and a CUDA 13.x Windows x64 lane, but which CUDA the default PyPI onnxruntime-gpu wheel targets is not determinable from wheel metadata, so 2026-08-20 keeps the last confirmed CUDA 12 wheel pinned and leaves CUDA 13 as a separate untested manual lane (see backend.dependency_caps.PROVIDER_LANES).",
@@ -74,6 +74,7 @@
     "Native wheel hashes are not embedded in pip constraints because the supported Python, Windows, Linux, CPU, CUDA, and DirectML matrix produces different artifacts; exact versions, profile hashes, the frozen SBOM, and pip-audit evidence remain mandatory.",
     "PyTorch and PaddlePaddle use vendor indexes whose platform-specific wheels are resolved during setup; release evidence records the reviewed index list and resolved artifact versions.",
     "The Docker image installs the maintained CPU runtime from requirements.txt with the CPU profile constraints, including RapidOCR and ONNX Runtime for LaMa; optional PaddleOCR, EasyOCR, and PyTorch backends remain outside the container image, which is not the frozen Windows distribution.",
-    "2026-08-20: the CPU profile moves to onnxruntime 1.29.0 for its security fixes (TensorRT engine-refit path traversal, missing rank/shape validation across pooling/LSTM/QLinearConv/GridSample, DML constant-tensor byte-size validation, packed sub-byte over-copy in OrtApi::GetValue). onnxruntime-directml remains at 1.24.4, the newest DirectML wheel on PyPI: the DirectML EP is in sustained engineering and Windows ML is the forward path, so the widening gap to the CPU/GPU lines is expected, not drift."
+    "2026-08-20: the CPU profile moves to onnxruntime 1.29.0 for its security fixes (TensorRT engine-refit path traversal, missing rank/shape validation across pooling/LSTM/QLinearConv/GridSample, DML constant-tensor byte-size validation, packed sub-byte over-copy in OrtApi::GetValue). onnxruntime-directml remains at 1.24.4, the newest DirectML wheel on PyPI: the DirectML EP is in sustained engineering and Windows ML is the forward path, so the widening gap to the CPU/GPU lines is expected, not drift.",
+    "2026-08-20: paddleocr moves to 3.7.0, which publishes PP-OCRv6 (tiny/small/medium, one 50-language model, reported +4.6% detection and +5.1% recognition over PP-OCRv5-server). The reviewed DEFAULT deliberately stays PP-OCRv5 mobile so an upgrade does not silently change model weights, latency, or memory for existing users; the v6 tiers are opt-in through --paddleocr-variant tiny|small|medium."
   ]
 }

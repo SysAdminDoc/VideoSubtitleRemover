@@ -4,6 +4,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **PaddleOCR moves to 3.7.0 and can now use PP-OCRv6 models.** `tiny`, `small`
+  and `medium` are selectable with `--paddleocr-variant`; PaddleOCR reports the
+  medium tier at +4.6% detection and +5.1% recognition over PP-OCRv5-server,
+  with one model covering 50 languages. The default deliberately stays
+  PP-OCRv5 mobile, so upgrading changes nothing about model weights, latency,
+  or memory unless a tier is chosen. The family alias table now has a single
+  owner instead of four copies that could drift apart.
+
 ### Security
 
 - **FFmpeg builds must now be 9.0.1 or newer.** The 8.x series ended at

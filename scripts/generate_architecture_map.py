@@ -95,6 +95,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/opencv_ocr.py": "PP-OCRv6 via OpenCV 5 DNN and the engine contract.",
     "backend/output_contract.py": "Frozen per-job output policy.",
     "backend/output_quality_preflight.py": "Pre-run output quality warnings.",
+    "backend/ocr_variants.py": "Canonical PaddleOCR model families and aliases.",
     "backend/paddle_compat.py": "PaddleOCR 2.x / 3.x API compatibility layer.",
     "backend/post_restore.py": "Post-inpaint temporal smoothing and burn-in.",
     "backend/preprocess.py": "Deinterlacing and keyframe enumeration.",

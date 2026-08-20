@@ -661,19 +661,15 @@ class ProcessingConfig:
             self.rapidocr_variant = "v5"
         elif self.rapidocr_variant not in {"v5", "v6"}:
             self.rapidocr_variant = "v6"
-        self.paddleocr_variant = _coerce_text(
-            self.paddleocr_variant, "mobile", 24
-        ).lower().replace("_", "-")
-        if self.paddleocr_variant in {
-            "pp-ocrv5-mobile", "ppocrv5-mobile"
-        }:
-            self.paddleocr_variant = "mobile"
-        elif self.paddleocr_variant in {
-            "pp-ocrv5-server", "ppocrv5-server"
-        }:
-            self.paddleocr_variant = "server"
-        elif self.paddleocr_variant not in {"mobile", "server"}:
-            self.paddleocr_variant = "mobile"
+        # PP-OCRv5 families plus the PP-OCRv6 tiers added in paddleocr 3.7.0.
+        # The canonical v6 form is "v6-<tier>"; see backend.ocr_variants.
+        # Imported here rather than at module scope to keep the translated
+        # string line references in this file stable.
+        from backend.ocr_variants import normalize_paddleocr_variant
+
+        self.paddleocr_variant = normalize_paddleocr_variant(
+            _coerce_text(self.paddleocr_variant, "mobile", 24)
+        )
         self.language_mask_filter = _coerce_bool(
             self.language_mask_filter, False)
         self.detection_threshold = _coerce_float(self.detection_threshold, 0.5, 0.1, 0.9)

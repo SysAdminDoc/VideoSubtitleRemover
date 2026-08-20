@@ -3,11 +3,11 @@
 # Profile: cpu
 # Provider: CPUExecutionProvider
 # Reviewed: 2026-08-20
-# Manifest-SHA256: b69238b9147a8b2ab5546483ed5b258d6345b12ea6cffde86425d54309f87b8c
+# Manifest-SHA256: a4287940fcbafe7e8cbac7b3a5c9bc50ed77db28bb72eda87f61225e79fc30c6
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
-#   paddleocr==3.6.0 sha256=76a03d260a2b5f7f3f1af017fbdc0cae3ccb2a538d40ba898a3a791711c34c33
+#   paddleocr==3.7.0 sha256=c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338
 #   rapidocr==3.9.2 sha256=04d6b8d151f823d930bd91910555f57bea897c0c44fa6794267b94cf9c1ef9a0
 
 # Exact reviewed direct-dependency constraints.
@@ -18,7 +18,7 @@ opencv-python-headless==5.0.0.93
 Pillow==12.3.0
 idna==3.15
 rapidocr==3.9.2
-paddleocr==3.6.0
+paddleocr==3.7.0
 easyocr==1.7.2
 simple-lama-inpainting==0.1.2
 onnxruntime==1.29.0

@@ -90,6 +90,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- nle_sidecar.py              # EDL / FCPXML sidecar export.
 |   |-- ocr_benchmark.py            # OCR engine recall / precision benchmark.
 |   |-- ocr_fix.py                  # Per-language OCR replace lists for exported SRT.
+|   |-- ocr_variants.py             # Canonical PaddleOCR model families and aliases.
 |   |-- ocr_vlm.py                  # Optional VLM detectors (Florence-2, Qwen2.5-VL).
 |   |-- onnx_model_info.py          # ONNX opset audit and Windows ML probe.
 |   |-- onnxruntime_cuda.py         # CUDA preload status for ONNX Runtime.

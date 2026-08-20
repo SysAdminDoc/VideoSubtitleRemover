@@ -1083,10 +1083,11 @@ def _build_parser(mode_choices):
     )
     parser.add_argument(
         "--paddleocr-variant",
-        choices=("mobile", "server"),
+        choices=("mobile", "server", "tiny", "small", "medium"),
         default="mobile",
-        help=("Select PaddleOCR PP-OCRv5 models: mobile is smaller/faster; "
-              "server is larger/higher accuracy."),
+        help=("Select PaddleOCR models: PP-OCRv5 mobile (default, "
+              "smaller/faster) or server, or a PP-OCRv6 tier "
+              "(tiny/small/medium) from paddleocr 3.7.0."),
     )
     parser.add_argument(
         "--ocr-compare-variants",

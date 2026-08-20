@@ -30,25 +30,23 @@ _PADDLEOCR_V3_MODEL_KEYS = frozenset({
 })
 
 
-def normalize_paddleocr_variant(value: object) -> str:
-    """Normalize the explicit PP-OCRv5 model family selection."""
-    text = str(value or "mobile").strip().lower().replace("_", "-")
-    aliases = {
-        "mobile": "mobile",
-        "pp-ocrv5-mobile": "mobile",
-        "ppocrv5-mobile": "mobile",
-        "server": "server",
-        "pp-ocrv5-server": "server",
-        "ppocrv5-server": "server",
-    }
-    return aliases.get(text, "mobile")
+# The alias table lives in backend.ocr_variants, a dependency-free leaf
+# module, so the detection cascade can normalize a variant without importing
+# this module (its tests block it to simulate PaddleOCR being absent).
+from backend.ocr_variants import (  # noqa: E402
+    normalize_paddleocr_variant,
+    paddleocr_model_names,
+    paddleocr_variant_generation,
+)
 
-
-def paddleocr_model_names(variant: object = "mobile") -> tuple[str, str]:
-    """Return the explicit PP-OCRv5 detection and recognition model names."""
-    normalized = normalize_paddleocr_variant(variant)
-    prefix = f"PP-OCRv5_{normalized}"
-    return f"{prefix}_det", f"{prefix}_rec"
+__all__ = [
+    "build_paddleocr",
+    "extract_paddle_boxes",
+    "extract_paddle_text_boxes",
+    "normalize_paddleocr_variant",
+    "paddleocr_model_names",
+    "paddleocr_variant_generation",
+]
 
 
 def build_paddleocr(lang: str, device: str, *, variant: str = "mobile", **extra):
@@ -74,7 +72,12 @@ def build_paddleocr(lang: str, device: str, *, variant: str = "mobile", **extra)
     use_cuda = "cuda" in device
     v3_extra = dict(extra)
     v3_extra.update({
-        "ocr_version": "PP-OCRv5",
+        # Must follow the selected family: a PP-OCRv6 tier with a PP-OCRv5
+        # ocr_version would contradict the explicit model names below.
+        "ocr_version": (
+            "PP-OCRv6" if paddleocr_variant_generation(variant) == "v6"
+            else "PP-OCRv5"
+        ),
         "text_detection_model_name": det_model,
         "text_recognition_model_name": rec_model,
     })
