@@ -53,6 +53,45 @@ class PreviewControllerHost(Protocol):
 class PreviewControllerMixin:
     """Focused controller methods mixed into VideoSubtitleRemoverApp."""
 
+    # One window means one preview backend. Held at class scope because
+    # preview workers are threads and two rapid clicks would otherwise load
+    # two model sets at once, which is the cost this cache exists to avoid.
+    _preview_remover_lock = threading.Lock()
+
+    def _preview_remover_for(self, backend_cfg):
+        """Return a preview backend, reusing one when settings allow.
+
+        Constructing a SubtitleRemover initialises OCR and the inpainter:
+        seconds of latency and hundreds of megabytes, and a fresh set of GPU
+        allocations on CUDA. Every "Test cleanup" click used to pay that in
+        full and rely on garbage collection to release the previous set, so
+        repeated clicks could hold several model sets at the same time. The
+        batch path caches on the same key; this keeps the two consistent.
+        """
+        from backend.config import normalize_processing_config
+        from backend.processor import SubtitleRemover as _Remover
+
+        key = (
+            getattr(backend_cfg, "mode", None),
+            getattr(backend_cfg, "device", None),
+            getattr(backend_cfg, "lang", None),
+            getattr(backend_cfg, "detection_engine", "auto"),
+            getattr(backend_cfg, "rapidocr_variant", "v6"),
+            bool(getattr(backend_cfg, "detection_vertical", False)),
+        )
+        with self._preview_remover_lock:
+            cached = getattr(self, "_preview_remover", None)
+            if (cached is not None
+                    and getattr(self, "_preview_remover_key", None) == key):
+                # Everything outside the key is per-run: re-normalise so a bad
+                # override cannot reach the pipeline through the cached object.
+                cached.config = normalize_processing_config(backend_cfg)
+                return cached
+            remover = _Remover(backend_cfg)
+            self._preview_remover = remover
+            self._preview_remover_key = key
+            return remover
+
     def _dispatch_preview_ui(self, callback, *args):
         """Marshal preview work without leaking teardown races from workers."""
         if getattr(self, "_shutdown_started", False):
@@ -536,7 +575,7 @@ class PreviewControllerMixin:
         import cv2 as _cv2
 
         win = tk.Toplevel(self.root)
-        win.title(f"A/B compare: {Path(in_path).name}")
+        win.title(tr("A/B compare: {name}").format(name=Path(in_path).name))
         win.configure(bg=Theme.BG_OVERLAY)
         win.resizable(False, False)
 
@@ -678,7 +717,6 @@ class PreviewControllerMixin:
         def _worker():
             import cv2 as _cv2
             try:
-                from backend.processor import SubtitleRemover as _Remover
                 from backend.config_schema import gui_to_backend_config
                 if is_image_file(source_path):
                     frame = safe_imread(source_path)
@@ -718,7 +756,7 @@ class PreviewControllerMixin:
                 backend_cfg = gui_to_backend_config(snapshot_cfg)
                 backend_cfg.device = self._gui_to_backend_device(
                     snapshot_cfg.use_gpu, snapshot_cfg.gpu_id)
-                remover = _Remover(backend_cfg)
+                remover = self._preview_remover_for(backend_cfg)
                 # Single-frame inpaint -- detect, build mask, inpaint.
                 timed_fixed = self._active_timed_region_rects(
                     getattr(snapshot_cfg, "subtitle_region_spans", None), 0.0,
@@ -826,7 +864,8 @@ class PreviewControllerMixin:
 
         win = tk.Toplevel(self.root)
         win.withdraw()
-        win.title(f"Preview - {Path(item.file_path).name}")
+        win.title(tr("Preview - {name}").format(
+            name=Path(item.file_path).name))
         win.configure(bg=Theme.BG_DARK)
         win.transient(self.root)
 

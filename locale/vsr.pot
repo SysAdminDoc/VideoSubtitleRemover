@@ -8,6 +8,12 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: gui/utils.py:338
+msgid " across {count} sampled frame"
+msgid_plural " across {count} sampled frames"
+msgstr[0] ""
+msgstr[1] ""
+
 #: gui/settings_controller.py:144
 msgid "'{mode}' is not a supported profile; keeping {current}"
 msgstr ""
@@ -50,6 +56,10 @@ msgstr ""
 msgid "A polygon needs at least three vertices"
 msgstr ""
 
+#: gui/preview_controller.py:578
+msgid "A/B compare: {name}"
+msgstr ""
+
 #: gui/support_controller.py:64
 msgid "ACTIVITY"
 msgstr ""
@@ -74,7 +84,7 @@ msgstr ""
 msgid "Adaptive edge padding"
 msgstr ""
 
-#: gui/preview_controller.py:430
+#: gui/preview_controller.py:469
 msgid "Add a file to the queue first"
 msgstr ""
 
@@ -230,7 +240,7 @@ msgstr ""
 msgid "Automatic detection only. Carry recent text masks forward for a few frames so a single missed detection does not leave a flash."
 msgstr ""
 
-#: gui/layout_helpers.py:157
+#: gui/layout_helpers.py:159
 msgid "Automatic subtitle detection"
 msgstr ""
 
@@ -334,7 +344,7 @@ msgstr ""
 msgid "CRF target"
 msgstr ""
 
-#: gui/mask_correction_controller.py:289 gui/queue_view.py:251 gui/region_controller.py:674 gui/settings_controller.py:495
+#: gui/mask_correction_controller.py:289 gui/queue_view.py:252 gui/region_controller.py:674 gui/settings_controller.py:495
 msgid "Cancel"
 msgstr ""
 
@@ -438,6 +448,10 @@ msgstr ""
 msgid "Choose local translation command"
 msgstr ""
 
+#: gui/region_controller.py:183
+msgid "Choose subtitle region"
+msgstr ""
+
 #: gui/layout_build.py:1059
 msgid "Choose translated SRT"
 msgstr ""
@@ -486,7 +500,7 @@ msgstr ""
 msgid "Cleanup algorithm"
 msgstr ""
 
-#: gui/preview_controller.py:766
+#: gui/preview_controller.py:804
 msgid "Cleanup preview failed"
 msgstr ""
 
@@ -558,7 +572,7 @@ msgstr ""
 msgid "Click Import or drag files onto the queue"
 msgstr ""
 
-#: gui/preview_controller.py:845 gui/quality_controller.py:346 gui/support_controller.py:635
+#: gui/preview_controller.py:884 gui/quality_controller.py:346 gui/support_controller.py:635
 msgid "Close"
 msgstr ""
 
@@ -598,7 +612,7 @@ msgstr ""
 msgid "Completed {}"
 msgstr ""
 
-#: gui/preview_controller.py:1453
+#: gui/preview_controller.py:1492
 msgid "Composed mask for {name}"
 msgstr ""
 
@@ -658,15 +672,15 @@ msgstr ""
 msgid "Correction stroke added; undo is available"
 msgstr ""
 
-#: gui/preview_controller.py:465
+#: gui/preview_controller.py:504
 msgid "Could not detect language from this frame"
 msgstr ""
 
-#: gui/preview_controller.py:514
+#: gui/preview_controller.py:553
 msgid "Could not open input/output for compare"
 msgstr ""
 
-#: gui/processing_controller.py:754
+#: gui/processing_controller.py:763
 msgid "Could not pause the running job; it is still processing."
 msgstr ""
 
@@ -674,7 +688,7 @@ msgstr ""
 msgid "Could not prepare suggested retry: {}"
 msgstr ""
 
-#: gui/preview_controller.py:900
+#: gui/preview_controller.py:939
 msgid "Could not read the selected file for region editing"
 msgstr ""
 
@@ -682,7 +696,7 @@ msgstr ""
 msgid "Could not read the selected review frame"
 msgstr ""
 
-#: gui/processing_controller.py:756
+#: gui/processing_controller.py:765
 msgid "Could not resume the paused job."
 msgstr ""
 
@@ -702,7 +716,7 @@ msgstr ""
 msgid "Custom location"
 msgstr ""
 
-#: gui/preview_controller.py:130
+#: gui/preview_controller.py:169
 msgid "DETECTING"
 msgstr ""
 
@@ -738,11 +752,11 @@ msgstr ""
 msgid "Detect subtitles and inspect the first-frame mask."
 msgstr ""
 
-#: gui/preview_controller.py:476
+#: gui/preview_controller.py:515
 msgid "Detected {} script, suggested language: {} (confidence {})"
 msgstr ""
 
-#: gui/preview_controller.py:104
+#: gui/preview_controller.py:143
 msgid "Detecting"
 msgstr ""
 
@@ -754,7 +768,7 @@ msgstr ""
 msgid "Detecting hardware..."
 msgstr ""
 
-#: gui/preview_controller.py:432
+#: gui/preview_controller.py:471
 msgid "Detecting language..."
 msgstr ""
 
@@ -766,7 +780,7 @@ msgstr ""
 msgid "Detection engines"
 msgstr ""
 
-#: gui/preview_controller.py:1456
+#: gui/preview_controller.py:1495
 msgid "Dilation: {px} px; detection cached."
 msgstr ""
 
@@ -778,7 +792,7 @@ msgstr ""
 msgid "Double-click for full size, draw a region, or right-click for preview tools."
 msgstr ""
 
-#: gui/preview_controller.py:1098
+#: gui/preview_controller.py:1137
 msgid "Drag a larger subtitle region before releasing."
 msgstr ""
 
@@ -794,7 +808,7 @@ msgstr ""
 msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
 msgstr ""
 
-#: gui/preview_controller.py:948
+#: gui/preview_controller.py:987
 msgid "Drag over the subtitle text. Release to save and refresh the mask."
 msgstr ""
 
@@ -814,7 +828,7 @@ msgstr ""
 msgid "Draw exactly one rectangle or polygon for this keyframe"
 msgstr ""
 
-#: gui/preview_controller.py:944
+#: gui/preview_controller.py:983
 msgid "Draw subtitle region for {name}"
 msgstr ""
 
@@ -1060,7 +1074,7 @@ msgstr ""
 msgid "Finish processing an item to open its output folder."
 msgstr ""
 
-#: gui/preview_controller.py:284
+#: gui/preview_controller.py:323
 msgid "Finish processing this item before using A/B compare."
 msgstr ""
 
@@ -1072,11 +1086,11 @@ msgstr ""
 msgid "Fit frame batches to GPU memory"
 msgstr ""
 
-#: gui/layout_helpers.py:155
+#: gui/layout_helpers.py:157
 msgid "Fixed mask region"
 msgstr ""
 
-#: gui/layout_helpers.py:147
+#: gui/layout_helpers.py:149
 msgid "Fixed mask regions"
 msgstr ""
 
@@ -1084,7 +1098,7 @@ msgstr ""
 msgid "Focused {}{}"
 msgstr ""
 
-#: gui/preview_controller.py:583 gui/region_controller.py:278
+#: gui/preview_controller.py:622 gui/region_controller.py:278
 msgid "Frame"
 msgstr ""
 
@@ -1096,7 +1110,7 @@ msgstr ""
 msgid "Frame skip"
 msgstr ""
 
-#: gui/preview_controller.py:164
+#: gui/preview_controller.py:203
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr ""
 
@@ -1204,6 +1218,10 @@ msgstr ""
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr ""
 
+#: gui/utils.py:251
+msgid "Image ({ext}) - {size}"
+msgstr ""
+
 #: gui/widgets.py:2018
 msgid "Image Files"
 msgstr ""
@@ -1264,15 +1282,15 @@ msgstr ""
 msgid "Improve detection for top-to-bottom Japanese or Chinese text. Saved masks stay aligned to the source."
 msgstr ""
 
-#: gui/preview_controller.py:221
+#: gui/preview_controller.py:260
 msgid "Info"
 msgstr ""
 
-#: gui/preview_controller.py:956
+#: gui/preview_controller.py:995
 msgid "Inline region editor unavailable. Opening the full selector is still available."
 msgstr ""
 
-#: gui/preview_controller.py:783
+#: gui/preview_controller.py:821
 msgid "Inpaint preview"
 msgstr ""
 
@@ -1284,7 +1302,7 @@ msgstr ""
 msgid "Inpainting engines"
 msgstr ""
 
-#: gui/preview_controller.py:666
+#: gui/preview_controller.py:705
 msgid "Inpainting {name}"
 msgstr ""
 
@@ -1292,7 +1310,7 @@ msgstr ""
 msgid "Input"
 msgstr ""
 
-#: gui/preview_controller.py:244
+#: gui/preview_controller.py:283
 msgid "Install Pillow to enable image preview tools."
 msgstr ""
 
@@ -1300,11 +1318,11 @@ msgstr ""
 msgid "Install Pillow to enable mask correction"
 msgstr ""
 
-#: gui/preview_controller.py:879
+#: gui/preview_controller.py:918
 msgid "Install Pillow to enable preview region editing"
 msgstr ""
 
-#: gui/preview_controller.py:301
+#: gui/preview_controller.py:340
 msgid "Install Pillow to enable previews and visual inspection tools."
 msgstr ""
 
@@ -1320,7 +1338,7 @@ msgstr ""
 msgid "Interface text size (restart required)"
 msgstr ""
 
-#: gui/layout_helpers.py:132
+#: gui/layout_helpers.py:133
 msgid "Interpolated keyframe masks"
 msgstr ""
 
@@ -1392,7 +1410,7 @@ msgstr ""
 msgid "Limited"
 msgstr ""
 
-#: gui/preview_controller.py:162
+#: gui/preview_controller.py:201
 msgid "Live preview: {file_name}"
 msgstr ""
 
@@ -1412,7 +1430,7 @@ msgstr ""
 msgid "Loading review frame..."
 msgstr ""
 
-#: gui/preview_controller.py:1181
+#: gui/preview_controller.py:1220
 msgid "Loading {name}..."
 msgstr ""
 
@@ -1452,11 +1470,11 @@ msgstr ""
 msgid "Manual region"
 msgstr ""
 
-#: gui/layout_helpers.py:151
+#: gui/layout_helpers.py:153
 msgid "Manual region: ({x1}, {y1}) to ({x2}, {y2})"
 msgstr ""
 
-#: gui/layout_helpers.py:144
+#: gui/layout_helpers.py:146
 msgid "Manual regions: {count} fixed rectangles"
 msgstr ""
 
@@ -1484,7 +1502,7 @@ msgstr ""
 msgid "Mask feather"
 msgstr ""
 
-#: gui/preview_controller.py:1405
+#: gui/preview_controller.py:1444
 msgid "Mask preview failed"
 msgstr ""
 
@@ -1581,8 +1599,10 @@ msgid "Moved {} {}"
 msgstr ""
 
 #: gui/layout_helpers.py:127
-msgid "Moving manual regions: {count} track{suffix}"
-msgstr ""
+msgid "Moving manual regions: {count} track"
+msgid_plural "Moving manual regions: {count} tracks"
+msgstr[0] ""
+msgstr[1] ""
 
 #: gui/layout_build.py:1276
 msgid "Mux every audio stream from the source. Off keeps only the first track."
@@ -1596,7 +1616,7 @@ msgstr ""
 msgid "Needs Attention"
 msgstr ""
 
-#: gui/preview_controller.py:219 gui/preview_controller.py:220
+#: gui/preview_controller.py:258 gui/preview_controller.py:259
 msgid "Needs attention"
 msgstr ""
 
@@ -1648,7 +1668,7 @@ msgstr ""
 msgid "No exported matte was found beside this output. Enable matte export and run the item again."
 msgstr ""
 
-#: gui/preview_controller.py:1228 gui/preview_controller.py:700
+#: gui/preview_controller.py:1267 gui/preview_controller.py:738
 msgid "No frame available"
 msgstr ""
 
@@ -1656,7 +1676,7 @@ msgstr ""
 msgid "No imported matte"
 msgstr ""
 
-#: gui/queue_view.py:414
+#: gui/queue_view.py:430
 msgid "No items match \"{needle}\""
 msgstr ""
 
@@ -1684,7 +1704,7 @@ msgstr ""
 msgid "No supported videos or images were found in the selected folder"
 msgstr ""
 
-#: gui/preview_controller.py:1465
+#: gui/preview_controller.py:1504
 msgid "No text detected"
 msgstr ""
 
@@ -1820,7 +1840,7 @@ msgstr ""
 msgid "Output codec"
 msgstr ""
 
-#: gui/preview_controller.py:502
+#: gui/preview_controller.py:541
 msgid "Output file is missing"
 msgstr ""
 
@@ -1853,7 +1873,7 @@ msgid "Override settings: {name}"
 msgstr ""
 
 #: gui/queue_view.py:246
-msgid "Overrides saved for {}"
+msgid "Overrides saved for {name}"
 msgstr ""
 
 #: gui/quality_controller.py:182
@@ -1888,7 +1908,7 @@ msgstr ""
 msgid "Pause is already in progress."
 msgstr ""
 
-#: gui/preview_controller.py:660
+#: gui/preview_controller.py:699
 msgid "Pause the batch before previewing"
 msgstr ""
 
@@ -1924,11 +1944,11 @@ msgstr ""
 msgid "Pick a preset first, then export"
 msgstr ""
 
-#: gui/preview_controller.py:505
+#: gui/preview_controller.py:544
 msgid "Pillow required for A/B compare"
 msgstr ""
 
-#: gui/preview_controller.py:663
+#: gui/preview_controller.py:702
 msgid "Pillow required for inpaint preview"
 msgstr ""
 
@@ -1988,7 +2008,11 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
-#: gui/preview_controller.py:1258 gui/preview_controller.py:1269
+#: gui/preview_controller.py:867
+msgid "Preview - {name}"
+msgstr ""
+
+#: gui/preview_controller.py:1297 gui/preview_controller.py:1308
 msgid "Preview failed"
 msgstr ""
 
@@ -2004,23 +2028,23 @@ msgstr ""
 msgid "Preview tools"
 msgstr ""
 
-#: gui/preview_controller.py:240
+#: gui/preview_controller.py:279
 msgid "Preview tools are locked while a batch is running."
 msgstr ""
 
-#: gui/preview_controller.py:295
+#: gui/preview_controller.py:334
 msgid "Preview tools are locked while the batch is running."
 msgstr ""
 
-#: gui/preview_controller.py:310
+#: gui/preview_controller.py:349
 msgid "Preview tools are ready. Review the mask or test cleanup before starting."
 msgstr ""
 
-#: gui/preview_controller.py:307
+#: gui/preview_controller.py:346
 msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
 msgstr ""
 
-#: gui/preview_controller.py:1150
+#: gui/preview_controller.py:1189
 msgid "Preview tools need Pillow"
 msgstr ""
 
@@ -2032,7 +2056,7 @@ msgstr ""
 msgid "Process"
 msgstr ""
 
-#: gui/processing_controller.py:1234
+#: gui/processing_controller.py:1243
 msgid "Processing failed"
 msgstr ""
 
@@ -2096,11 +2120,11 @@ msgstr ""
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr ""
 
-#: gui/preview_controller.py:1183
+#: gui/preview_controller.py:1222
 msgid "Reading first frame..."
 msgstr ""
 
-#: gui/app.py:1110 gui/config.py:195 gui/layout_build.py:1939 gui/layout_build.py:2164 gui/layout_build.py:2175 gui/layout_helpers.py:48 gui/processing_controller.py:1406 gui/processing_controller.py:1441 gui/support_controller.py:592
+#: gui/app.py:1110 gui/config.py:195 gui/layout_build.py:1939 gui/layout_build.py:2164 gui/layout_build.py:2175 gui/layout_helpers.py:48 gui/processing_controller.py:1417 gui/processing_controller.py:1452 gui/support_controller.py:592
 msgid "Ready"
 msgstr ""
 
@@ -2120,7 +2144,7 @@ msgstr ""
 msgid "Ready to rerun corrected frames"
 msgstr ""
 
-#: gui/layout_helpers.py:158
+#: gui/layout_helpers.py:160
 msgid "Recommended default"
 msgstr ""
 
@@ -2180,7 +2204,7 @@ msgstr ""
 msgid "Register each scene's frames to a reference before temporal background recovery. Recommended for pans, zooms, and handheld footage."
 msgstr ""
 
-#: gui/preview_controller.py:1079
+#: gui/preview_controller.py:1118
 msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
 msgstr ""
 
@@ -2330,7 +2354,7 @@ msgstr ""
 msgid "Run each job in a separate process"
 msgstr ""
 
-#: gui/preview_controller.py:668
+#: gui/preview_controller.py:707
 msgid "Running detect + inpaint on the first frame..."
 msgstr ""
 
@@ -2358,7 +2382,7 @@ msgstr ""
 msgid "Sampled quality check"
 msgstr ""
 
-#: gui/queue_view.py:253 gui/region_controller.py:671
+#: gui/queue_view.py:254 gui/region_controller.py:671
 msgid "Save"
 msgstr ""
 
@@ -2438,11 +2462,11 @@ msgstr ""
 msgid "Select Processing Work Directory"
 msgstr ""
 
-#: gui/preview_controller.py:497
+#: gui/preview_controller.py:536
 msgid "Select a completed item first"
 msgstr ""
 
-#: gui/preview_controller.py:282
+#: gui/preview_controller.py:321
 msgid "Select a completed queue item to compare source and output."
 msgstr ""
 
@@ -2450,11 +2474,11 @@ msgstr ""
 msgid "Select a queue item before correcting its mask"
 msgstr ""
 
-#: gui/preview_controller.py:657
+#: gui/preview_controller.py:696
 msgid "Select a queue item first"
 msgstr ""
 
-#: gui/preview_controller.py:298
+#: gui/preview_controller.py:337
 msgid "Select a queue item to enable mask review, test cleanup, and zoom."
 msgstr ""
 
@@ -2474,7 +2498,7 @@ msgstr ""
 msgid "Select a queue item to remove."
 msgstr ""
 
-#: gui/preview_controller.py:242
+#: gui/preview_controller.py:281
 msgid "Select a queued item to enable preview tools."
 msgstr ""
 
@@ -2618,7 +2642,7 @@ msgstr ""
 msgid "Start and end frames must be whole numbers"
 msgstr ""
 
-#: gui/layout_build.py:2098 gui/processing_controller.py:1438 gui/processing_controller.py:144
+#: gui/layout_build.py:2098 gui/processing_controller.py:144 gui/processing_controller.py:1449
 msgid "Start batch"
 msgstr ""
 
@@ -2646,7 +2670,7 @@ msgstr ""
 msgid "Stop is already in progress."
 msgstr ""
 
-#: gui/preview_controller.py:873
+#: gui/preview_controller.py:912
 msgid "Stop the active batch before changing the subtitle region"
 msgstr ""
 
@@ -2778,7 +2802,7 @@ msgstr ""
 msgid "The clean reference image could not be read"
 msgstr ""
 
-#: gui/preview_controller.py:286
+#: gui/preview_controller.py:325
 msgid "The cleaned output file is not available on disk."
 msgstr ""
 
@@ -2862,13 +2886,15 @@ msgstr ""
 msgid "Time must be zero or greater"
 msgstr ""
 
-#: gui/layout_helpers.py:140
+#: gui/layout_helpers.py:142
 msgid "Time-ranged mask regions"
 msgstr ""
 
-#: gui/layout_helpers.py:136
-msgid "Timed manual regions: {count} rectangle{suffix}"
-msgstr ""
+#: gui/layout_helpers.py:137
+msgid "Timed manual regions: {count} rectangle"
+msgid_plural "Timed manual regions: {count} rectangles"
+msgstr[0] ""
+msgstr[1] ""
 
 #: gui/region_controller.py:1631
 msgid "Timed region end must be after start"
@@ -2906,7 +2932,7 @@ msgstr ""
 msgid "Try FFmpeg D3D12 acceleration (experimental)"
 msgstr ""
 
-#: gui/queue_view.py:417
+#: gui/queue_view.py:433
 msgid "Try a shorter filename search, or clear the filter to see the full batch again."
 msgstr ""
 
@@ -3010,6 +3036,10 @@ msgstr ""
 msgid "Vertices"
 msgstr ""
 
+#: gui/utils.py:249
+msgid "Video ({ext}) - {size}"
+msgstr ""
+
 #: gui/widgets.py:2017
 msgid "Video Files"
 msgstr ""
@@ -3030,11 +3060,11 @@ msgstr ""
 msgid "Wait for the active batch to finish before clearing completed items"
 msgstr ""
 
-#: gui/preview_controller.py:280
+#: gui/preview_controller.py:319
 msgid "Wait for the active batch to finish before comparing output."
 msgstr ""
 
-#: gui/preview_controller.py:251
+#: gui/preview_controller.py:290
 msgid "Wait for the active batch to finish before editing regions."
 msgstr ""
 
@@ -3050,7 +3080,7 @@ msgstr ""
 msgid "Wait for the current batch to finish."
 msgstr ""
 
-#: gui/layout_build.py:1721 gui/preview_controller.py:225 gui/preview_controller.py:323
+#: gui/layout_build.py:1721 gui/preview_controller.py:264 gui/preview_controller.py:362
 msgid "Waiting"
 msgstr ""
 
@@ -3066,6 +3096,10 @@ msgstr ""
 msgid "Welcome to {app_name}"
 msgstr ""
 
+#: gui/onboarding.py:36
+msgid "Welcome to {app}"
+msgstr ""
+
 #: gui/layout_build.py:1489
 msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
 msgstr ""
@@ -3078,7 +3112,7 @@ msgstr ""
 msgid "Windows only. Requires FFmpeg 8.1 or newer and uses D3D12 only after a byte-valid runtime test; NVENC, QSV, AMF, or CPU encoding remains the automatic fallback."
 msgstr ""
 
-#: gui/preview_controller.py:614
+#: gui/preview_controller.py:653
 msgid "Wipe"
 msgstr ""
 
@@ -3130,6 +3164,10 @@ msgstr ""
 msgid "You can change every setting later."
 msgstr ""
 
+#: gui/processing_controller.py:1407
+msgid "[{current}/{total}] {app} v{version}"
+msgstr ""
+
 #: gui/widgets.py:1983
 msgid "disabled"
 msgstr ""
@@ -3158,6 +3196,10 @@ msgstr ""
 msgid "ready"
 msgstr ""
 
+#: gui/utils.py:395
+msgid "request"
+msgstr ""
+
 #: gui/widgets.py:2495
 msgid "selected"
 msgstr ""
@@ -3168,7 +3210,7 @@ msgid_plural "skipped {n} unsafe or invalid files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/preview_controller.py:616
+#: gui/preview_controller.py:655
 msgid "source <-> cleaned"
 msgstr ""
 
@@ -3179,6 +3221,12 @@ msgstr ""
 #: gui/support_controller.py:583
 msgid "{count} GPU{suffix}"
 msgstr ""
+
+#: gui/utils.py:292
+msgid "{count} embedded subtitle track: {names}"
+msgid_plural "{count} embedded subtitle tracks: {names}"
+msgstr[0] ""
+msgstr[1] ""
 
 #: gui/support_controller.py:155
 msgid "{count} error{suffix}"
@@ -3196,8 +3244,12 @@ msgstr ""
 msgid "{count} warning{suffix}"
 msgstr ""
 
-#: gui/preview_controller.py:1464
+#: gui/preview_controller.py:1503
 msgid "{engine}: {n} detected"
+msgstr ""
+
+#: gui/utils.py:252
+msgid "{ext} - {size}"
 msgstr ""
 
 #: gui/mask_correction_controller.py:158
@@ -3214,17 +3266,17 @@ msgid_plural "{n} active items will be cancelled."
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/queue_view.py:291
+#: gui/queue_view.py:292
 msgid "{n} done"
 msgstr ""
 
-#: gui/queue_view.py:285 gui/queue_view.py:408
+#: gui/queue_view.py:286 gui/queue_view.py:424
 msgid "{n} item"
 msgid_plural "{n} items"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/queue_view.py:296
+#: gui/queue_view.py:297
 msgid "{n} needs attention"
 msgid_plural "{n} need attention"
 msgstr[0] ""
@@ -3240,11 +3292,15 @@ msgstr[1] ""
 msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
 msgstr ""
 
+#: gui/utils.py:394
+msgid "{summary}  [fallback from {device}]"
+msgstr ""
+
 #: gui/widgets.py:1143
 msgid "{value} (range {low} to {high})"
 msgstr ""
 
-#: gui/queue_view.py:404
+#: gui/queue_view.py:420
 msgid "{visible} of {total} shown"
 msgstr ""
 

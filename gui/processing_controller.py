@@ -271,9 +271,18 @@ class ProcessingControllerMixin:
                 return
             try:
                 for widget in list(self.queue_widgets.values()):
-                    if widget.item.started_at and not widget.item.completed_at:
-                        elapsed = (datetime.now() - widget.item.started_at).total_seconds()
-                        widget.time_label.config(text=format_time(elapsed))
+                    item = widget.item
+                    if item.started_at and not item.completed_at:
+                        elapsed = (
+                            datetime.now() - item.started_at).total_seconds()
+                        # The row composes this label as "42% / 1m 3s".
+                        # Writing bare elapsed time here dropped the percent
+                        # on every tick, so it flickered off and back between
+                        # progress events.
+                        meta = format_time(elapsed)
+                        if item.progress > 0:
+                            meta = f"{int(item.progress * 100)}% / {meta}"
+                        widget.time_label.config(text=meta)
             except Exception:
                 pass
             self._elapsed_timer_id = self.root.after(1000, tick)
@@ -701,7 +710,7 @@ class ProcessingControllerMixin:
             item.progress = 1.0
             item.error = None
             item.correction_retry = None
-            item.message = "Complete!"
+            item.message = "Complete"
             note = format_quality_report(item.quality_report, compact=True)
             if note:
                 item.message = f"Complete - {note}"
@@ -1160,7 +1169,7 @@ class ProcessingControllerMixin:
                 item.error = None
                 item.quality_report = getattr(remover, "last_quality_report", None)
                 item.correction_retry = None
-                item.message = "Complete!"
+                item.message = "Complete"
                 quality_note = format_quality_report(item.quality_report, compact=True)
                 if quality_note:
                     item.message = f"Complete - {quality_note}"
@@ -1395,7 +1404,9 @@ class ProcessingControllerMixin:
                 label += f"   -   about {eta} left"
             self.batch_label.config(text=label, fg=Theme.TEXT_SECONDARY)
             self.batch_percent_label.config(text=f"{pct}%", fg=Theme.BLUE_PRIMARY)
-            self.root.title(f"[{current}/{total}] {APP_NAME} v{APP_VERSION}")
+            self.root.title(tr("[{current}/{total}] {app} v{version}").format(
+                current=current, total=total,
+                app=APP_NAME, version=APP_VERSION))
             # Windows taskbar
             self._ensure_taskbar()
             if self._taskbar:

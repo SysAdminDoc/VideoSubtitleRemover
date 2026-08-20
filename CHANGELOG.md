@@ -49,6 +49,30 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Clearing the queue filter no longer scrambles the visible order.**
+  Re-showing a row put it at the end of the list, so filtering to one item and
+  then clearing left the queue displayed in an order that disagreed with the
+  order it would actually process in, which made Move up and Move down look
+  wrong. Rows are now restored in queue order.
+
+- **A second "Test cleanup" click reuses the models it already loaded.** Each
+  click built a whole new backend, paying the OCR and inpainter initialisation
+  again, and left the previous one for the garbage collector, so repeated
+  clicks could hold several model sets in memory at once. The preview now
+  caches on the same key the batch does.
+
+- **The queue row keeps its percentage between progress updates.** The
+  once-a-second elapsed timer overwrote the combined "42% / 1m 3s" label with
+  the elapsed time alone, so the percentage flickered off and back.
+
+- **Window titles and queue descriptions are translatable.** The region
+  selector, onboarding, preview and A/B compare titles, the per-file override
+  confirmation, and the file-type descriptions in the queue were all
+  English-only literals that never reached the catalog. Plural text built by
+  gluing an "s" onto a translated singular now uses proper plural entries, and
+  the catalog lint understands `.title()`, so a new untranslated window title
+  fails the check instead of shipping.
+
 - **Cancelling or timing out an isolated job no longer leaves ffmpeg
   running.** Terminating the worker reached that process only, so an in-flight
   mux or post-restore ran to completion, held the output and temp files open,

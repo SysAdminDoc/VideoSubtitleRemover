@@ -100,6 +100,9 @@ CAPTION_KEYWORDS = frozenset({
 # Callables whose leading positional argument is a caption.
 CAPTION_CALLS = frozenset({
     "set_text", "set_status", "set_title", "set_heading", "set_caption",
+    # A window title is prose. str.title() takes no argument, so a bare
+    # .title() call cannot be confused with one that sets a caption.
+    "title",
     "showinfo", "showerror", "showwarning", "askyesno", "askokcancel",
     "askquestion", "askretrycancel",
 })

@@ -180,7 +180,7 @@ class RegionSelectorWindow:
             self.rects.extend([tuple(r) for r in preload if r])
 
             self.win = tk.Toplevel(self.root)
-            self.win.title("Choose subtitle region")
+            self.win.title(tr("Choose subtitle region"))
             self.win.configure(bg=Theme.BG_OVERLAY)
             # RM-148: the editor grows with text scale, so it builds into a
             # scrollable body clamped to the screen work area.

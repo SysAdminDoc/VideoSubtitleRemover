@@ -241,6 +241,172 @@ class WindowGeometryRestoreTests(unittest.TestCase):
                 app._desktop_bounds(1920, 1080), (0, 0, 1920, 1080))
 
 
+class _PackOrder:
+    """A faithful model of Tk's packing order for the rows of one parent."""
+
+    def __init__(self):
+        self.rows = []
+
+
+class _FakeRow:
+    def __init__(self, name, order, packed=True):
+        self.name = name
+        self._order = order
+        self._packed = packed
+        if packed:
+            order.rows.append(self)
+
+    def winfo_manager(self):
+        return "pack" if self._packed else ""
+
+    def winfo_ismapped(self):
+        return self._packed
+
+    def pack(self, before=None, **kwargs):
+        if self in self._order.rows:
+            self._order.rows.remove(self)
+        if before is None:
+            self._order.rows.append(self)
+        else:
+            self._order.rows.insert(self._order.rows.index(before), self)
+        self._packed = True
+
+    def pack_forget(self):
+        if self in self._order.rows:
+            self._order.rows.remove(self)
+        self._packed = False
+
+
+class QueueFilterOrderTests(unittest.TestCase):
+    """RM-214: clearing a filter must not reorder the visible queue."""
+
+    def _host(self, names):
+        from gui.queue_view import QueueViewMixin
+
+        host = type("Host", (QueueViewMixin,), {
+            "_hide_filter_empty_state": lambda self: None,
+            "_ensure_filter_empty_state": lambda self: None,
+        })()
+        order = _PackOrder()
+        host.queue = [
+            SimpleNamespace(id=name, file_path=f"C:/clips/{name}.mp4")
+            for name in names
+        ]
+        host.queue_widgets = {
+            name: _FakeRow(name, order) for name in names
+        }
+        host.queue_count = SimpleNamespace(config=lambda **kwargs: None)
+        host._queue_filter_var = SimpleNamespace(get=lambda: host._query)
+        host._query = ""
+        return host, order
+
+    def _visible(self, order):
+        return [row.name for row in order.rows]
+
+    def test_a_filter_round_trip_restores_model_order(self):
+        host, order = self._host(["alpha", "bravo", "charlie", "delta"])
+
+        host._query = "charlie"
+        host._apply_queue_filter()
+        self.assertEqual(self._visible(order), ["charlie"])
+
+        host._query = ""
+        host._apply_queue_filter()
+
+        # pack() appends, so the naive re-show left this as charlie, alpha,
+        # bravo, delta while the queue still processed alpha first.
+        self.assertEqual(
+            self._visible(order), ["alpha", "bravo", "charlie", "delta"])
+
+    def test_narrowing_then_widening_keeps_order_for_a_middle_match(self):
+        host, order = self._host(["one", "two", "three", "four"])
+
+        host._query = "t"
+        host._apply_queue_filter()
+        self.assertEqual(self._visible(order), ["two", "three"])
+
+        host._query = "o"
+        host._apply_queue_filter()
+
+        self.assertEqual(self._visible(order), ["one", "two", "four"])
+
+    def test_rows_already_on_screen_are_not_repacked(self):
+        host, order = self._host(["alpha", "bravo"])
+        host._query = ""
+        host._apply_queue_filter()
+
+        rows = host.queue_widgets
+        packed = []
+        for row in rows.values():
+            row.pack = lambda **kwargs: packed.append(1)
+        host._apply_queue_filter()
+
+        self.assertEqual(packed, [], "an unchanged filter repacked the queue")
+
+
+class PreviewRemoverCacheTests(unittest.TestCase):
+    """RM-219: a second Test cleanup click must not reload every model."""
+
+    def _host(self):
+        return type("Host", (PreviewControllerMixin,), {})()
+
+    def _config(self, **overrides):
+        from backend.config import ProcessingConfig
+
+        config = ProcessingConfig()
+        for key, value in overrides.items():
+            setattr(config, key, value)
+        return config
+
+    def test_identical_settings_reuse_the_backend(self):
+        host = self._host()
+        built = []
+
+        class FakeRemover:
+            def __init__(self, config):
+                built.append(config)
+                self.config = config
+
+        with mock.patch("backend.processor.SubtitleRemover", FakeRemover):
+            first = host._preview_remover_for(self._config())
+            second = host._preview_remover_for(self._config())
+
+        self.assertIs(first, second)
+        self.assertEqual(len(built), 1)
+
+    def test_a_changed_engine_builds_a_new_backend(self):
+        host = self._host()
+        built = []
+
+        class FakeRemover:
+            def __init__(self, config):
+                built.append(config)
+                self.config = config
+
+        with mock.patch("backend.processor.SubtitleRemover", FakeRemover):
+            host._preview_remover_for(self._config(detection_engine="rapidocr"))
+            host._preview_remover_for(self._config(detection_engine="easyocr"))
+
+        self.assertEqual(len(built), 2)
+
+    def test_reuse_renormalises_the_config_it_hands_back(self):
+        """Per-run settings still have to reach the reused instance, and a
+        bad override must not survive the shortcut."""
+        host = self._host()
+
+        class FakeRemover:
+            def __init__(self, config):
+                self.config = config
+
+        with mock.patch("backend.processor.SubtitleRemover", FakeRemover):
+            first = host._preview_remover_for(self._config())
+            second = host._preview_remover_for(
+                self._config(mask_feather_px=9))
+
+        self.assertIs(first, second)
+        self.assertEqual(second.config.mask_feather_px, 9)
+
+
 if __name__ == "__main__":
     unittest.main()
 

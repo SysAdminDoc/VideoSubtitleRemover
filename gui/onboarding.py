@@ -33,7 +33,7 @@ class OnboardingMixin:
     def _show_onboarding(self):
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
-        dialog.title(f"Welcome to {APP_NAME}")
+        dialog.title(tr("Welcome to {app}").format(app=APP_NAME))
         dialog.configure(bg=Theme.BG_OVERLAY)
         # RM-148: sized to the work area with an internal scroll path so high
         # text scale cannot push the actions off screen.

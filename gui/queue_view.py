@@ -243,7 +243,8 @@ class QueueViewMixin:
                 self.queue_widgets[item.id].update_item(item)
             save_queue_state(self.queue)
             self._update_status(
-                N_(f"Overrides saved for {Path(item.file_path).name}"),
+                tr("Overrides saved for {name}").format(
+                    name=Path(item.file_path).name),
                 "success",
             )
             dialog.destroy()
@@ -387,6 +388,7 @@ class QueueViewMixin:
         """Hide/show queue widgets whose filename doesn't match the filter."""
         query = (self._queue_filter_var.get() or "").strip().lower()
         visible = 0
+        shown = []
         total = len(self.queue)
         for item in self.queue:
             widget = self.queue_widgets.get(item.id)
@@ -395,11 +397,25 @@ class QueueViewMixin:
             fname = Path(item.file_path).name.lower()
             match = (query in fname) or (query in item.file_path.lower())
             if not query or match:
-                if not widget.winfo_ismapped():
-                    widget.pack(fill="x")
+                shown.append(widget)
                 visible += 1
             else:
                 widget.pack_forget()
+        # pack() appends to the end of the packing order, so re-showing row 1
+        # after a narrower filter hid it would place it after rows 2..n and
+        # leave the visible order disagreeing with the processing order.
+        # Anchor each row being restored ahead of the next row still packed.
+        for index, widget in enumerate(shown):
+            if widget.winfo_manager():
+                continue
+            anchor = next(
+                (later for later in shown[index + 1:] if later.winfo_manager()),
+                None,
+            )
+            if anchor is None:
+                widget.pack(fill="x")
+            else:
+                widget.pack(fill="x", before=anchor)
         if query:
             self.queue_count.config(text=tr(
                 "{visible} of {total} shown").format(

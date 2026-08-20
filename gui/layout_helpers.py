@@ -18,7 +18,7 @@ from gui.utils import (
 from gui.widgets import (
     Tooltip,
 )
-from backend.i18n import tr
+from backend.i18n import ntr, tr
 
 logger = logging.getLogger(__name__)
 
@@ -124,17 +124,19 @@ class LayoutHelpersMixin:
         areas = getattr(self.config, "subtitle_areas", None) or []
         if keyframe_tracks:
             self.region_label.config(
-                text=tr("Moving manual regions: {count} track{suffix}").format(
-                    count=len(keyframe_tracks),
-                    suffix="s" if len(keyframe_tracks) != 1 else ""),
+                text=ntr("Moving manual regions: {count} track",
+                         "Moving manual regions: {count} tracks",
+                         len(keyframe_tracks)).format(
+                    count=len(keyframe_tracks)),
                 fg=Theme.TEXT_PRIMARY,
             )
             self.region_meta.config(text=tr("Interpolated keyframe masks"),
                                     fg=Theme.SUCCESS)
         elif spans:
             self.region_label.config(
-                text=tr("Timed manual regions: {count} rectangle{suffix}").format(
-                    count=len(spans), suffix="s" if len(spans) != 1 else ""),
+                text=ntr("Timed manual regions: {count} rectangle",
+                         "Timed manual regions: {count} rectangles",
+                         len(spans)).format(count=len(spans)),
                 fg=Theme.TEXT_PRIMARY,
             )
             self.region_meta.config(text=tr("Time-ranged mask regions"),

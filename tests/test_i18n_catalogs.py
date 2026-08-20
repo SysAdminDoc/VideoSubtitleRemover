@@ -115,12 +115,16 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         ):
             self.assertIn("qps-Ploc", i18n.available_catalogs())
         self.assertEqual(i18n.bind_locale("qps_ploc"), "qps-Ploc")
-        source = "Moving manual regions: {count} track{suffix}"
+        source = "Moving manual regions: {count} track"
         translated = i18n.tr(source)
         self.assertNotEqual(translated, source)
         self.assertIn("{count}", translated)
-        self.assertIn("{suffix}", translated)
-        self.assertIn("3", translated.format(count=3, suffix="s"))
+        self.assertIn("3", translated.format(count=3))
+        # The plural form is a separate catalog entry, not an English "s"
+        # glued onto the singular by the caller.
+        plural = i18n.ntr(source, "Moving manual regions: {count} tracks", 3)
+        self.assertNotEqual(plural, translated)
+        self.assertIn("{count}", plural)
 
     def test_compiled_catalog_is_valid_gnu_mo(self):
         entries = i18n_catalogs.pseudo_entries({

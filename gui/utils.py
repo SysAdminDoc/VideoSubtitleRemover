@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
-from backend.i18n import N_, tr
+from backend.i18n import N_, ntr, tr
 from backend.dependency_caps import FROZEN_OPTIONAL_DEPENDENCIES
 from backend.import_safety import module_can_import
 from backend.inpainters.lama import _pytorch_lama_allowed
@@ -246,10 +246,10 @@ def get_file_info(path: str) -> str:
         size = "?"
     ext = p.suffix.lower()
     if is_video_file(path):
-        return f"Video ({ext}) - {size}"
+        return tr("Video ({ext}) - {size}").format(ext=ext, size=size)
     elif is_image_file(path):
-        return f"Image ({ext}) - {size}"
-    return f"{ext} - {size}"
+        return tr("Image ({ext}) - {size}").format(ext=ext, size=size)
+    return tr("{ext} - {size}").format(ext=ext, size=size)
 
 
 def truncate_middle(text: str, max_length: int = 56) -> str:
@@ -289,8 +289,10 @@ def _format_soft_subtitle_summary(streams: List[dict]) -> str:
         labels.append(f"{language}/{codec}{suffix}")
     if len(streams) > 3:
         labels.append(f"+{len(streams) - 3} more")
-    noun = "track" if len(streams) == 1 else "tracks"
-    return f"{len(streams)} embedded subtitle {noun}: {', '.join(labels)}"
+    return ntr("{count} embedded subtitle track: {names}",
+               "{count} embedded subtitle tracks: {names}",
+               len(streams)).format(
+        count=len(streams), names=", ".join(labels))
 
 
 def format_quality_report(
@@ -333,10 +335,9 @@ def format_quality_report(
 
     suffix = ""
     if sample_count > 0:
-        suffix = (
-            f" across {sample_count} sampled "
-            f"frame{'s' if sample_count != 1 else ''}"
-        )
+        suffix = ntr(" across {count} sampled frame",
+                     " across {count} sampled frames",
+                     sample_count).format(count=sample_count)
     if roi_psnr is not None and roi_ssim is not None:
         return (
             f"inpaint region PSNR {roi_psnr:.2f} dB and "
@@ -390,7 +391,8 @@ def _queue_item_execution_text(item) -> str:
         return ""
     if payload.get("anyFallback"):
         requested = str(payload.get("requestedDevice") or "").upper()
-        return f"{summary}  [fallback from {requested or 'request'}]"
+        return tr("{summary}  [fallback from {device}]").format(
+            summary=summary, device=requested or tr("request"))
     return summary
 
 
@@ -401,7 +403,7 @@ def _queue_item_info_text(item) -> str:
             _format_soft_subtitle_summary(item.soft_subtitle_streams))
     elif (is_video_file(item.file_path)
           and not getattr(item, "soft_subtitle_probe_done", False)):
-        parts.append("checking embedded subtitle tracks")
+        parts.append(tr(QUEUE_MESSAGE_PROBING))
     execution = _queue_item_execution_text(item)
     if execution:
         parts.append(execution)
