@@ -83,5 +83,78 @@ class MaskCorrectionTests(unittest.TestCase):
         self.assertEqual(record["mask_review_spans"], [span])
 
 
+class TimedCorrectionGateTests(unittest.TestCase):
+    """RM-191: mask reuse has to know a correction is time-gated."""
+
+    def test_untimed_corrections_do_not_trip_the_gate(self):
+        from backend.mask_corrections import has_timed_corrections
+
+        self.assertFalse(has_timed_corrections(None))
+        self.assertFalse(has_timed_corrections([]))
+        self.assertFalse(has_timed_corrections(
+            [{"mode": "add", "polygons": [[0, 0, 8, 0, 8, 8, 0, 8]]}]))
+
+    def test_each_kind_of_bound_trips_the_gate(self):
+        from backend.mask_corrections import has_timed_corrections
+
+        base = {"mode": "add", "polygons": [[0, 0, 8, 0, 8, 8, 0, 8]]}
+        for bound in ({"start_frame": 100}, {"end_frame": 200},
+                      {"start": 1.5}, {"end": 9.0}):
+            with self.subTest(bound=bound):
+                self.assertTrue(has_timed_corrections([dict(base, **bound)]))
+
+
+class FrameOnlyCorrectionBoundTests(unittest.TestCase):
+    """RM-243b: an end_frame with no start_frame must still bound by frame."""
+
+    def _correction(self, **bounds):
+        return {"mode": "add", "polygons": [[0, 0, 8, 0, 8, 8, 0, 8]],
+                **bounds}
+
+    def test_end_frame_alone_is_honoured(self):
+        from backend.mask_corrections import correction_is_active
+
+        correction = self._correction(end_frame=200)
+        self.assertTrue(correction_is_active(correction, 0.0, frame_index=199))
+        self.assertFalse(correction_is_active(correction, 0.0, frame_index=200))
+
+    def test_start_frame_alone_is_honoured(self):
+        from backend.mask_corrections import correction_is_active
+
+        correction = self._correction(start_frame=100)
+        self.assertFalse(correction_is_active(correction, 0.0, frame_index=99))
+        self.assertTrue(correction_is_active(correction, 0.0, frame_index=100))
+
+
+class ReviewSpanMergeTests(unittest.TestCase):
+    """RM-243b: merging only against the previous span left duplicates."""
+
+    def test_an_interleaved_other_kind_does_not_block_the_merge(self):
+        from backend.mask_corrections import merge_review_spans
+
+        merged = merge_review_spans([
+            {"kind": "low_confidence", "start_frame": 0, "end_frame": 10},
+            {"kind": "residual", "start_frame": 4, "end_frame": 6},
+            {"kind": "low_confidence", "start_frame": 10, "end_frame": 20},
+        ])
+
+        by_kind = {}
+        for span in merged:
+            by_kind.setdefault(span["kind"], []).append(span)
+        self.assertEqual(len(by_kind["low_confidence"]), 1)
+        self.assertEqual(by_kind["low_confidence"][0]["end_frame"], 20)
+
+    def test_output_is_ordered_by_start_frame(self):
+        from backend.mask_corrections import merge_review_spans
+
+        merged = merge_review_spans([
+            {"kind": "residual", "start_frame": 50, "end_frame": 60},
+            {"kind": "low_confidence", "start_frame": 0, "end_frame": 10},
+        ])
+
+        self.assertEqual(
+            [span["start_frame"] for span in merged], [0, 50])
+
+
 if __name__ == "__main__":
     unittest.main()

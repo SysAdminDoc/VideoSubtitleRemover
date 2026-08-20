@@ -4,6 +4,30 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A time-gated mask correction now applies to exactly the frames it covers.**
+  Mask reuse caches the mask with whatever corrections were active at the frame
+  it was built from, and the phash, keyframe and frame-skip reuse paths all
+  re-attached it verbatim. On a static scene, which is exactly when phash
+  skipping fires, a correction starting mid-scene was ignored and one ending
+  mid-scene kept being applied until the next real detection frame. Reuse is
+  now suppressed whenever any correction carries a time or frame bound.
+
+- **Six small robustness gaps closed.** A non-finite tracker width or height
+  reached `int(round(...))` and failed the whole job with an OverflowError. A
+  correction carrying only an end frame ignored that bound, and could raise a
+  TypeError out of the frame loop. Overlapping review spans of the same kind
+  were left unmerged when a span of another kind fell between them, which
+  duplicated review work. A bare list of detections from a vision-language
+  model was collapsed into one union box, turning two far-apart captions into a
+  single frame-spanning mask. The output-quality preflight marked anything
+  needing an override as already overridden, so the field could never gate.
+  Scene detection drove a private PySceneDetect function whose signature has
+  shifted between releases; it now goes through the public API with an
+  in-memory video stream.
+
+
 ## [3.34.0] - 2026-08-20
 
 ### Changed
@@ -3252,7 +3276,7 @@ byte-identical for users who do not opt in.
   `uuid.uuid4()` so IDs are collision-proof even when many files are added
   simultaneously.
 - **`_coerce_int` / `_coerce_float` NaN/inf**: both coercers now reject
-  non-finite floats (NaN, ±Inf) and fall back to the specified default, matching
+  non-finite floats (NaN, Â±Inf) and fall back to the specified default, matching
   the stricter guard already present in the backend.
 - **`from_dict` pre-sanitisation crash**: `subtitle_area` and `subtitle_areas`
   in `ProcessingConfig.from_dict` now go through `_coerce_rect` /
@@ -3286,7 +3310,7 @@ byte-identical for users who do not opt in.
 ### UI/UX improvements
 
 - **Workflow step pills**: the header guidance panel now renders three compact
-  step pills (Import → Inspect → Run) that highlight the current stage as the
+  step pills (Import â†’ Inspect â†’ Run) that highlight the current stage as the
   user moves through the workflow. The pills were wired to `_set_workflow_stage`
   but never built; they are now constructed at startup.
 - **Section eyebrow labels**: `_section_title` now renders the `eyebrow`
@@ -3303,16 +3327,16 @@ byte-identical for users who do not opt in.
 - **Log badge pluralization**: "1 warn" is now "1 warning"; counts > 1 use the
   correct plural form for both warnings and errors.
 - **Queue item default message**: new queue items show "Ready to process" instead
-  of "Waiting…" for consistency with the `update_item()` fallback text.
+  of "Waitingâ€¦" for consistency with the `update_item()` fallback text.
 - **Status badge padding tokens**: `padx=10, pady=4` on queue item status badges
   replaced with `padx=Theme.S_SM, pady=Theme.S_XS` (8 and 4 respectively) for
   design-system consistency.
 - **Slider hint indent**: `padx=(Theme.S_LG + 128, Theme.S_LG)` (magic-number
   approximation) simplified to `padx=(Theme.S_LG, Theme.S_LG)`.
-- **Queue empty-state spacing**: `pady=(Theme.S_3XL + 20, …)` magic number
-  replaced with `pady=(Theme.S_3XL, …)`.
+- **Queue empty-state spacing**: `pady=(Theme.S_3XL + 20, â€¦)` magic number
+  replaced with `pady=(Theme.S_3XL, â€¦)`.
 - **Footer hint text**: shortened from a 13-word instructional sentence to
-  "Add files, review a sample frame, then start." — concise and calm.
+  "Add files, review a sample frame, then start." â€” concise and calm.
 - **Activity log height**: increased from 5 to 6 text rows for better context
   visibility without dominating the layout.
 - **Progress bar height parity**: batch-level progress bar harmonised to
@@ -3609,7 +3633,7 @@ Premium polish pass. No behavioral changes; dramatic UX/UI refinement.
 - v3.3.0: Real AI inpainting, multi-engine detection, comprehensive GUI overhaul
 - Added: Add files via upload
 
-## Roadmap archive — 2026-08-10 — ROADMAP.md
+## Roadmap archive â€” 2026-08-10 â€” ROADMAP.md
 
 <details>
 <summary>Original roadmap snapshot</summary>

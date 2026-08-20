@@ -465,6 +465,15 @@ def _collect_vl_boxes(payload: Any, threshold: float,
                 boxes.extend(_collect_vl_boxes(value, threshold, frame_shape))
         return boxes
     if isinstance(payload, (list, tuple)):
+        try:
+            array = np.asarray(payload)
+            if array.ndim == 2 and array.shape[1] == 4 and array.shape[0] > 1:
+                for row in array:
+                    boxes.extend(_collect_vl_boxes(
+                        row.tolist(), threshold, frame_shape))
+                return boxes
+        except (TypeError, ValueError):
+            pass
         box = _box_from_coords(payload, frame_shape)
         if box:
             return [box]

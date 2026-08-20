@@ -113,6 +113,7 @@ from backend.mask_corrections import (
     make_review_span as make_review_span,
     merge_frame_ranges,
     merge_review_spans as merge_review_spans,
+    has_timed_corrections,
 )
 from backend.frozen_matte import (
     FrozenMatteError,
@@ -424,6 +425,7 @@ class _FrameLoopContext:
     keyframe_set: Optional[set]
     whisper_spans: List[Tuple[int, int]]
     timed_region_spans: bool
+    timed_mask_corrections: bool
     static_fixed_shapes: Any
     selective_ranges: List[Tuple[int, int]]
     reader: Any
@@ -1768,6 +1770,7 @@ class SubtitleRemover(
             reuse_by_phash = False
             cur_hash = None
             if (not ctx.timed_region_spans
+                    and not ctx.timed_mask_corrections
                     and self.config.phash_skip_enable
                     and state.last_mask is not None
                     and state.last_hash is not None):
@@ -1779,6 +1782,7 @@ class SubtitleRemover(
 
             reuse_by_keyframe = False
             if (not ctx.timed_region_spans
+                    and not ctx.timed_mask_corrections
                     and ctx.keyframe_set
                     and state.last_mask is not None):
                 if absolute_idx not in ctx.keyframe_set:
@@ -1792,6 +1796,7 @@ class SubtitleRemover(
                 state.frame_idx += 1
                 continue
             if (not ctx.timed_region_spans
+                    and not ctx.timed_mask_corrections
                     and ctx.frame_skip > 0
                     and state.last_mask is not None
                     and state.frame_idx % (ctx.frame_skip + 1) != 0):
@@ -2020,6 +2025,7 @@ class SubtitleRemover(
                     segment_frames, segment_masks)
                 if (self.config.temporal_mask_union
                         and not ctx.timed_region_spans
+                        and not ctx.timed_mask_corrections
                         and not self.config.sttn_skip_detection
                         and len(segment_masks) > 1):
                     scene_starts = _detect_scene_cuts(segment_frames)
@@ -2892,6 +2898,9 @@ class SubtitleRemover(
                 getattr(self.config, "subtitle_region_spans", None)
                 or getattr(self.config, "subtitle_region_keyframes", None)
             )
+            timed_mask_corrections = has_timed_corrections(
+                getattr(self.config, "manual_mask_corrections", None)
+            )
             static_fixed_shapes = (
                 None if timed_region_spans else self._fixed_region_shapes())
 
@@ -2911,6 +2920,7 @@ class SubtitleRemover(
                 keyframe_set=keyframe_set,
                 whisper_spans=whisper_spans,
                 timed_region_spans=timed_region_spans,
+                timed_mask_corrections=timed_mask_corrections,
                 static_fixed_shapes=static_fixed_shapes,
                 selective_ranges=selective_ranges,
                 reader=reader,

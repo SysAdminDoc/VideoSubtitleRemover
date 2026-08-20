@@ -92,10 +92,12 @@ def _box_from_state(state: np.ndarray) -> Tuple[int, int, int, int]:
     an inverted box."""
     cx = float(state[0])
     cy = float(state[1])
-    w = max(1.0, float(state[2]))
-    h = max(1.0, float(state[3]))
-    if not (np.isfinite(cx) and np.isfinite(cy)):
+    w = float(state[2])
+    h = float(state[3])
+    if not all(np.isfinite(value) for value in (cx, cy, w, h)):
         return (0, 0, 1, 1)
+    w = max(1.0, w)
+    h = max(1.0, h)
     x1 = int(round(cx - w / 2.0))
     y1 = int(round(cy - h / 2.0))
     x2 = int(round(cx + w / 2.0))

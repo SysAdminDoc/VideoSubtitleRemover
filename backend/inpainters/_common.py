@@ -653,13 +653,86 @@ def _detect_scene_cuts_pyscenedetect(frames: List[np.ndarray]) -> Optional[List[
     try:
         from scenedetect import SceneManager  # type: ignore
         from scenedetect.detectors import AdaptiveDetector  # type: ignore
+        from scenedetect.common import FrameTimecode  # type: ignore
+        from scenedetect.video_stream import VideoStream  # type: ignore
+        from fractions import Fraction
     except ImportError:
         return None
     try:
+        if not frames:
+            return [0]
+
+        class _MemoryVideoStream(VideoStream):
+            BACKEND_NAME = "vsr-memory"
+
+            def __init__(self, values):
+                self._frames = values
+                self._index = 0
+                height, width = values[0].shape[:2]
+                self._size = (int(width), int(height))
+                self._rate = Fraction(30, 1)
+
+            @property
+            def path(self):
+                return "<memory>"
+
+            @property
+            def name(self):
+                return "memory"
+
+            @property
+            def is_seekable(self):
+                return True
+
+            @property
+            def frame_rate(self):
+                return self._rate
+
+            @property
+            def duration(self):
+                return FrameTimecode(len(self._frames), fps=self._rate)
+
+            @property
+            def frame_size(self):
+                return self._size
+
+            @property
+            def aspect_ratio(self):
+                return self._size[0] / max(self._size[1], 1)
+
+            @property
+            def position(self):
+                return FrameTimecode(self._index, fps=self._rate)
+
+            @property
+            def position_ms(self):
+                return 1000.0 * self._index / float(self._rate)
+
+            @property
+            def frame_number(self):
+                return self._index
+
+            def read(self, decode=True):
+                if self._index >= len(self._frames):
+                    return False
+                frame = self._frames[self._index]
+                self._index += 1
+                return frame.copy() if decode else True
+
+            def reset(self):
+                self._index = 0
+
+            def seek(self, target):
+                if isinstance(target, FrameTimecode):
+                    target = target.get_frames()
+                self._index = max(0, min(len(self._frames), int(target)))
+
         sm = SceneManager()
         sm.add_detector(AdaptiveDetector())
-        for i, f in enumerate(frames):
-            sm._process_frame(i, f, callback=None)  # type: ignore[attr-defined]
+        sm.detect_scenes(
+            video=_MemoryVideoStream(frames),
+            show_progress=False,
+        )
         scene_list = sm.get_scene_list()
         if not scene_list:
             return [0]

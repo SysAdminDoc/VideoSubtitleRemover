@@ -101,6 +101,19 @@ def normalize_mask_correction_list(value: Any) -> Optional[list[dict]]:
     return corrections or None
 
 
+def has_timed_corrections(value: Any) -> bool:
+    """Return whether any correction is gated by time or frame boundaries."""
+    for correction in normalize_mask_correction_list(value) or []:
+        if (
+            correction.get("start_frame") is not None
+            or correction.get("end_frame") is not None
+            or float(correction.get("start", 0.0)) > 0.0
+            or float(correction.get("end", 0.0)) > 0.0
+        ):
+            return True
+    return False
+
+
 def correction_is_active(
     correction: dict,
     frame_seconds: float,
@@ -108,8 +121,15 @@ def correction_is_active(
 ) -> bool:
     start_frame = _optional_frame(correction.get("start_frame"))
     end_frame = _optional_frame(correction.get("end_frame"))
-    if frame_index is not None and start_frame is not None:
-        return int(frame_index) >= start_frame and (
+    if frame_index is not None and (
+        start_frame is not None or end_frame is not None
+    ):
+        # Either bound may be absent: normalize_mask_correction keeps an
+        # end_frame that carries no start_frame, and comparing against a
+        # missing start raised TypeError out of the frame loop.
+        return (
+            start_frame is None or int(frame_index) >= start_frame
+        ) and (
             end_frame is None or int(frame_index) < end_frame
         )
     start = _finite_nonnegative(correction.get("start", 0.0))
@@ -207,12 +227,20 @@ def merge_review_spans(spans: Iterable[dict], *, gap_frames: int = 1) -> list[di
         if not merged:
             merged.append(span)
             continue
-        previous = merged[-1]
-        if (
-            previous.get("kind") == span.get("kind")
-            and int(span.get("start_frame", 0))
-            <= int(previous.get("end_frame", 0)) + max(0, int(gap_frames))
-        ):
+        start_frame = int(span.get("start_frame", 0))
+        previous_index = next(
+            (
+                index for index in range(len(merged) - 1, -1, -1)
+                if (
+                    merged[index].get("kind") == span.get("kind")
+                    and start_frame <= int(merged[index].get("end_frame", 0))
+                    + max(0, int(gap_frames))
+                )
+            ),
+            None,
+        )
+        if previous_index is not None:
+            previous = merged[previous_index]
             previous["end_frame"] = max(
                 int(previous.get("end_frame", 0)),
                 int(span.get("end_frame", 0)),
@@ -230,7 +258,13 @@ def merge_review_spans(spans: Iterable[dict], *, gap_frames: int = 1) -> list[di
                 previous["score"] = round(max(scores), 6)
             continue
         merged.append(span)
-    return merged
+    return sorted(
+        merged,
+        key=lambda span: (
+            int(span.get("start_frame", 0)),
+            str(span.get("kind", "")),
+        ),
+    )
 
 
 def merge_frame_ranges(ranges: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:

@@ -106,7 +106,7 @@ def evaluate_output_quality_preflight(
     payload["warnings"] = warnings
     payload["recommendation"] = _recommendation_text(payload)
     payload["overrideRequired"] = bool(warnings)
-    payload["overridden"] = bool(warnings)
+    payload["overridden"] = False
     return payload
 
 

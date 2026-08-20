@@ -47,7 +47,7 @@ class BatchReportTests(unittest.TestCase):
         self.assertEqual(preflight["schema"], "vsr.output_quality_preflight.v1")
         self.assertEqual(preflight["status"], "warning")
         self.assertTrue(preflight["overrideRequired"])
-        self.assertTrue(preflight["overridden"])
+        self.assertFalse(preflight["overridden"])
         self.assertEqual(preflight["source"]["bitrate_bps"], 14_000_000)
         self.assertIn("CRF", output_quality_preflight_messages(preflight)[0])
         self.assertIn("Suggested safer output setting", preflight["recommendation"])
@@ -246,6 +246,9 @@ class BatchReportTests(unittest.TestCase):
             payload["files"][0]["output_quality_preflight"]["status"],
             "warning",
         )
+        # The fixture above sets overridden=True, so this asserts the
+        # report carries the caller's value through rather than
+        # substituting the evaluator default.
         self.assertTrue(payload["files"][0]["output_quality_preflight"]["overridden"])
         self.assertIn("Stage timing summary", markdown)
         self.assertIn("Per-item stage timings", markdown)

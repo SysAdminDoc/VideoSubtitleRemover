@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 def _frame_seconds(index: int, fps: float,
                    timing=None) -> float:
     if timing is not None:
-        pts = getattr(timing, "frame_pts", None)
+        pts = getattr(timing, "timestamps", None)
         if pts and 0 <= index < len(pts):
             return float(pts[index])
     return float(index) / max(float(fps), 0.001)

@@ -75,5 +75,26 @@ class SubtitleTrackerTests(unittest.TestCase):
             )
 
 
+class BoxFromStateTests(unittest.TestCase):
+    """RM-243a: a non-finite width used to raise OverflowError out of update."""
+
+    def test_non_finite_width_or_height_falls_back(self):
+        import numpy as np
+        from backend.tracking import _box_from_state
+
+        for index in (2, 3):
+            state = np.array([10.0, 10.0, 4.0, 4.0], dtype=float)
+            state[index] = np.inf
+            with self.subTest(index=index):
+                self.assertEqual(_box_from_state(state), (0, 0, 1, 1))
+
+    def test_a_finite_state_still_produces_its_box(self):
+        import numpy as np
+        from backend.tracking import _box_from_state
+
+        box = _box_from_state(np.array([10.0, 10.0, 4.0, 6.0], dtype=float))
+        self.assertEqual(box, (8, 7, 12, 13))
+
+
 if __name__ == "__main__":
     unittest.main()
