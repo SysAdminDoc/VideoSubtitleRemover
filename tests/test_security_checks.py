@@ -15,11 +15,9 @@ from backend.security_checks import (
     FFMPEG_SECURITY_ADVISORY_URL,
     FFMPEG_SECURITY_BRANCH_FLOORS,
     FFMPEG_SECURITY_FLOOR,
-    FFMPEG_SECURITY_LTS_FLOOR,
     LIBPNG_FIXED_VERSION,
     ffmpeg_security_floor_str,
     ffmpeg_security_affected_range,
-    ffmpeg_security_lts_floor_str,
     libpng_fixed_version_str,
     libpng_is_vulnerable,
 )
@@ -97,11 +95,25 @@ def test_ffmpeg_policy_is_shared_with_classifier():
         assert ffmpeg_profiles._FFMPEG_VULNERABLE_LINES[branch] == (
             floor[2], ".".join(str(part) for part in floor)
         )
-    assert FFMPEG_SECURITY_FLOOR == (8, 1, 2)
-    assert FFMPEG_SECURITY_LTS_FLOOR == (8, 0, 3)
-    assert ffmpeg_security_floor_str() == "8.1.2"
-    assert ffmpeg_security_lts_floor_str() == "8.0.3"
-    assert ffmpeg_security_affected_range() == "8.1.0-8.1.1, 8.0.0-8.0.2"
+    assert FFMPEG_SECURITY_FLOOR == (9, 0, 1)
+    assert ffmpeg_security_floor_str() == "9.0.1"
+    assert sc.FFMPEG_SECURITY_EOL_BRANCHES == ((8, 1), (8, 0))
+    assert sc.ffmpeg_security_eol_branch_str() == "8.1.x, 8.0.x"
+    assert ffmpeg_security_affected_range() == (
+        "9.0.0-9.0.0, 8.1.x (no fixed release), 8.0.x (no fixed release)"
+    )
+    # The 2026-07-24 batch and the RASC use-after-free must be named, and the
+    # advisory with no identified upstream fix must stay separate.
+    for advisory_id in (
+        "CVE-2026-66037",
+        "CVE-2026-66038",
+        "CVE-2026-66039",
+        "CVE-2026-64830",
+        "CVE-2026-12706",
+    ):
+        assert advisory_id in FFMPEG_SECURITY_ADVISORY_IDS
+    assert sc.FFMPEG_SECURITY_UNFIXED_ADVISORY_IDS == ("CVE-2026-58049",)
+    assert "CVE-2026-58049" not in FFMPEG_SECURITY_ADVISORY_IDS
 
 
 def test_ffmpeg_vulnerability_warning_carries_cves_and_advisory_url():
@@ -111,8 +123,45 @@ def test_ffmpeg_vulnerability_warning_carries_cves_and_advisory_url():
     assert status["advisories"] == list(FFMPEG_SECURITY_ADVISORY_IDS)
     assert status["advisory_url"] == FFMPEG_SECURITY_ADVISORY_URL
     assert FFMPEG_SECURITY_ADVISORY_URL in status["reason"]
+
+
+def test_ffmpeg_open_branch_behind_point_release_claims_no_cve():
+    """9.0.0 carries the July 2026 fixes, so it must not be CVE-accused."""
+    from backend import ffmpeg_profiles
+
+    status = ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 9.0.0")
+    assert status["classification"] == "outdated"
+    assert status["supported"] is True
+    assert status["safe"] is False
+    # Fail-closed for release gating, but with no fabricated CVE attribution.
+    assert status["vulnerable"] is False
+    assert status["advisories"] == []
+    assert status["fixed_in"] == "9.0.1"
     for advisory_id in FFMPEG_SECURITY_ADVISORY_IDS:
-        assert advisory_id in status["reason"]
+        assert advisory_id not in status["reason"]
+
+
+def test_ffmpeg_closed_branch_is_vulnerable_at_every_patch_level():
+    """The 8.x series ended at 8.1.2, so its final release is still exposed."""
+    from backend import ffmpeg_profiles
+
+    for banner in ("ffmpeg version 8.1.2", "ffmpeg version 8.0.3"):
+        status = ffmpeg_profiles.classify_ffmpeg_security(banner)
+        assert status["classification"] == "vulnerable", banner
+        assert status["vulnerable"] is True
+        assert status["safe"] is False
+        # The remedy is a cross-branch upgrade, not a patch on that branch.
+        assert status["fixed_in"] == "9.0.1"
+        assert "closed" in status["reason"]
+        assert "CVE-2026-64830" in status["reason"]
+
+
+def test_ffmpeg_open_advisory_is_reported_even_when_safe():
+    from backend import ffmpeg_profiles
+
+    status = ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 9.0.1")
+    assert status["classification"] == "safe"
+    assert status["open_advisories"] == ["CVE-2026-58049"]
 
 
 def test_ffmpeg_probe_records_pass_fail():
@@ -124,18 +173,19 @@ def test_ffmpeg_probe_records_pass_fail():
         return_value={
             "available": True,
             "path": "ffmpeg",
-            "version": "ffmpeg version 8.1.2",
+            "version": "ffmpeg version 9.0.1",
         },
     ):
         assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is True
 
-    with mock.patch.object(
-        ffmpeg_profiles,
-        "_tool_status",
-        return_value={
-            "available": True,
-            "path": "ffmpeg",
-            "version": "ffmpeg version 8.1.1",
-        },
-    ):
-        assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is False
+    for banner in ("ffmpeg version 9.0.0", "ffmpeg version 8.1.2"):
+        with mock.patch.object(
+            ffmpeg_profiles,
+            "_tool_status",
+            return_value={
+                "available": True,
+                "path": "ffmpeg",
+                "version": banner,
+            },
+        ):
+            assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is False

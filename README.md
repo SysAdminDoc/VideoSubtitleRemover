@@ -6,7 +6,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.33.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.34.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
@@ -69,7 +69,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
 - **Pause/Resume Checkpointing** -- SHA-256 input fingerprint per file; finished files are skipped and paused videos resume from durable checkpoint frames
 - **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
-- **Premium Dark UI** -- Media-first preview, flat four-row inspector, readable typography, quiet queue actions, responsive scrolling, taskbar progress, and onboarding
+- **Premium Dark UI.** Media-first preview, fixed-width inspector, 14 to 15 px working text, compact command bar, quieter queue controls, and focused onboarding
 - **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
 - **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, and support bundles
 
@@ -170,13 +170,18 @@ next coordinated dependency review.
 winget install ffmpeg
 ```
 
-Use **FFmpeg 8.1.2+ on the 8.1 branch, or 8.0.3+ on the 8.0 branch.** VSR
-decodes untrusted media through FFmpeg, and builds `8.1.0-8.1.1` and
-`8.0.0-8.0.2` predate the security backports for CVE-2026-8461 (MagicYUV heap
-out-of-bounds write, RCE) and CVE-2026-30999. Older branches are outside VSR's
-reviewed support policy; development snapshots and future branches remain
-unknown until explicitly classified. The self-test, support bundle, and strict
-release validation block vulnerable, unsupported, and unknown runtimes.
+Use **FFmpeg 9.0.1 or newer.** VSR decodes untrusted media through FFmpeg,
+and the 8.x series ended at 8.1.2 (2026-06-17) without the fixes for
+CVE-2026-66037 (IAMF demuxer allocation), CVE-2026-66038 (LCL decoder heap
+disclosure), CVE-2026-66039 (MACE6 decoder overflow), CVE-2026-64830 (VobSub
+subtitle demuxer overflow) and CVE-2026-12706 (RASC use-after-free). Because
+upstream closed those branches, no 8.x build can be patched in place and the
+only remedy is moving to the 9.0 line. CVE-2026-58049 has no upstream fixed
+version yet and is reported as an open advisory regardless of your build.
+Older branches are outside VSR's reviewed support policy; development
+snapshots and future branches remain unknown until explicitly classified.
+The self-test, support bundle, and strict release validation block
+vulnerable, outdated, unsupported, and unknown runtimes.
 
 **Build toolchain floors:** the local build requires **PyInstaller >= 6.10.0**
 (CVE-2025-59042 writable-CWD LPE) and the installer requires **NSIS >= 3.12**

@@ -17,9 +17,11 @@ from backend.security_checks import (
     FFMPEG_SECURITY_ADVISORY_IDS,
     FFMPEG_SECURITY_ADVISORY_URL,
     FFMPEG_SECURITY_BRANCH_FLOORS,
+    FFMPEG_SECURITY_EOL_BRANCHES,
+    FFMPEG_SECURITY_EOL_FINAL_RELEASES,
     FFMPEG_SECURITY_RELEASE_URL,
+    FFMPEG_SECURITY_UNFIXED_ADVISORY_IDS,
     ffmpeg_security_floor_str,
-    ffmpeg_security_lts_floor_str,
 )
 from backend.subprocess_policy import run_process
 
@@ -79,6 +81,15 @@ _FFMPEG_VULNERABLE_LINES: dict[tuple[int, int], tuple[int, str]] = {
     branch: (floor[2], ".".join(str(part) for part in floor))
     for branch, floor in FFMPEG_SECURITY_BRANCH_FLOORS.items()
 }
+# Closed branches keep their final upstream release for diagnostics, but no
+# patch level on them can satisfy the floor.
+_FFMPEG_EOL_LINES: dict[tuple[int, int], str] = {
+    branch: ".".join(str(part) for part in FFMPEG_SECURITY_EOL_FINAL_RELEASES[branch])
+    for branch in FFMPEG_SECURITY_EOL_BRANCHES
+}
+_FFMPEG_LOWEST_SUPPORTED_MAJOR = min(
+    major for major, _ in FFMPEG_SECURITY_BRANCH_FLOORS
+)
 
 _FFMPEG_VERSION_RE = re.compile(r"version\s+n?(\d+)\.(\d+)(?:\.(\d+))?")
 
@@ -118,19 +129,33 @@ def classify_ffmpeg_security(version_text: object) -> dict:
         payload["reason"] = (
             "FFmpeg version is unknown (development snapshot, missing, or "
             "unrecognized); use a reviewed stable "
-            f"{ffmpeg_security_floor_str()}+ or "
-            f"{ffmpeg_security_lts_floor_str()}+ build"
+            f"{ffmpeg_security_floor_str()}+ build"
         )
         return payload
     major, minor, patch = parsed
     line = _FFMPEG_VULNERABLE_LINES.get((major, minor))
-    if major < 8:
+    eol_final = _FFMPEG_EOL_LINES.get((major, minor))
+    if eol_final is not None:
+        # Upstream closed this branch, so no on-branch patch can clear the
+        # advisories. Report the cross-branch upgrade target instead.
+        payload["classification"] = "vulnerable"
+        payload["supported"] = True
+        payload["vulnerable"] = True
+        payload["fixed_in"] = ffmpeg_security_floor_str()
+        payload["advisories"] = list(FFMPEG_SECURITY_ADVISORY_IDS)
+        payload["advisory_url"] = FFMPEG_SECURITY_ADVISORY_URL
+        payload["reason"] = (
+            f"FFmpeg {payload['version']} is on the closed {major}.{minor} "
+            f"branch, which ended at {eol_final} and never received the "
+            f"{', '.join(FFMPEG_SECURITY_ADVISORY_IDS[:4])} fixes; upgrade to "
+            f"{ffmpeg_security_floor_str()} or newer; see "
+            f"{FFMPEG_SECURITY_ADVISORY_URL}"
+        )
+    elif major < _FFMPEG_LOWEST_SUPPORTED_MAJOR:
         payload["classification"] = "unsupported"
         payload["reason"] = (
-            f"FFmpeg {payload['version']} is outside VSR's reviewed 8.0/8.1 "
-            "security branches; use a stable "
-            f"{ffmpeg_security_floor_str()}+ or "
-            f"{ffmpeg_security_lts_floor_str()}+ build"
+            f"FFmpeg {payload['version']} is outside VSR's reviewed security "
+            f"branches; use a stable {ffmpeg_security_floor_str()}+ build"
         )
     elif line is None:
         payload["reason"] = (
@@ -138,16 +163,18 @@ def classify_ffmpeg_security(version_text: object) -> dict:
             "branch; update VSR's security policy before treating it as safe"
         )
     elif patch < line[0]:
-        payload["classification"] = "vulnerable"
+        # An open branch below its reviewed point release. The advisories in
+        # FFMPEG_SECURITY_ADVISORY_IDS were fixed upstream before this branch
+        # opened, so naming them here would falsely accuse a patched build.
+        # Report the version gap itself, stay fail-closed, and claim no CVE.
+        payload["classification"] = "outdated"
         payload["supported"] = True
-        payload["vulnerable"] = True
         payload["fixed_in"] = line[1]
-        payload["advisories"] = list(FFMPEG_SECURITY_ADVISORY_IDS)
-        payload["advisory_url"] = FFMPEG_SECURITY_ADVISORY_URL
         payload["reason"] = (
-            f"FFmpeg {payload['version']} predates {line[1]} security "
-            f"backports ({', '.join(FFMPEG_SECURITY_ADVISORY_IDS)}); "
-            f"upgrade to {line[1]} or newer; see {FFMPEG_SECURITY_ADVISORY_URL}"
+            f"FFmpeg {payload['version']} predates the reviewed {line[1]} "
+            f"point release on the {major}.{minor} branch; no CVE is "
+            f"attributed to {payload['version']} in VSR's policy, but the "
+            "newest reviewed point release is required before shipping"
         )
     else:
         payload["classification"] = "safe"
@@ -158,6 +185,10 @@ def classify_ffmpeg_security(version_text: object) -> dict:
             f"FFmpeg {payload['version']} is on the reviewed {major}.{minor} "
             f"branch and meets its {line[1]} security floor"
         )
+    # Advisories with no identified upstream fix are reported on every
+    # classification, including "safe", so meeting the floor is never
+    # presented as remediating them.
+    payload["open_advisories"] = list(FFMPEG_SECURITY_UNFIXED_ADVISORY_IDS)
     return payload
 
 

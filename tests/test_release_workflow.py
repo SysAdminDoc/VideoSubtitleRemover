@@ -626,27 +626,41 @@ class ReleaseVerificationTests(unittest.TestCase):
     def test_ffmpeg_version_classifier_flags_vulnerable_lines(self):
         from backend import ffmpeg_profiles
 
+        # The 8.x series is closed upstream, so every patch level on it stays
+        # vulnerable and the remedy is a cross-branch upgrade.
         for banner in (
             "ffmpeg version 8.1.1-full_build-www.gyan.dev",
             "ffmpeg version 8.1.0",
             "ffmpeg version 8.0.2",
             "ffmpeg version n8.0.0",
-        ):
-            status = ffmpeg_profiles.classify_ffmpeg_security(banner)
-            self.assertTrue(status["vulnerable"], banner)
-            self.assertIn(status["fixed_in"], ("8.1.2", "8.0.3"))
-            self.assertIn("CVE-2026-8461", status["advisories"])
-
-        for banner in (
             "ffmpeg version 8.1.2-full_build",
             "ffmpeg version 8.0.3",
             "ffmpeg version 8.1.9",
-            "ffmpeg version 8.0.4",
+        ):
+            status = ffmpeg_profiles.classify_ffmpeg_security(banner)
+            self.assertTrue(status["vulnerable"], banner)
+            self.assertFalse(status["safe"], banner)
+            self.assertEqual(status["fixed_in"], "9.0.1", banner)
+            self.assertIn("CVE-2026-64830", status["advisories"], banner)
+
+        for banner in (
+            "ffmpeg version 9.0.1-full_build",
+            "ffmpeg version 9.0.2",
         ):
             status = ffmpeg_profiles.classify_ffmpeg_security(banner)
             self.assertFalse(status["vulnerable"], banner)
             self.assertTrue(status["safe"], banner)
             self.assertEqual(status["classification"], "safe")
+
+        # Below the reviewed point release on an open branch: fail closed,
+        # but attribute no CVE to a build that already carries those fixes.
+        outdated = ffmpeg_profiles.classify_ffmpeg_security(
+            "ffmpeg version 9.0-full_build-www.gyan.dev"
+        )
+        self.assertEqual(outdated["classification"], "outdated")
+        self.assertFalse(outdated["safe"])
+        self.assertFalse(outdated["vulnerable"])
+        self.assertEqual(outdated["advisories"], [])
 
         unsupported = ffmpeg_profiles.classify_ffmpeg_security(
             "ffmpeg version 7.1.5"
@@ -654,7 +668,13 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertEqual(unsupported["classification"], "unsupported")
         self.assertFalse(unsupported["safe"])
 
-        for banner in ("ffmpeg version 8.2.0", "ffmpeg version 9.0"):
+        # 8.x is closed upstream, so any other 8.x line is out of support.
+        eight_x = ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 8.2.0")
+        self.assertEqual(eight_x["classification"], "unsupported")
+        self.assertFalse(eight_x["safe"])
+
+        # Branches newer than the reviewed one stay unknown until classified.
+        for banner in ("ffmpeg version 9.1.0", "ffmpeg version 10.0.0"):
             status = ffmpeg_profiles.classify_ffmpeg_security(banner)
             self.assertEqual(status["classification"], "unknown", banner)
             self.assertFalse(status["safe"], banner)

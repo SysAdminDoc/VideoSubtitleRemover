@@ -19,18 +19,43 @@ LIBPNG_AFFECTED_RANGE = ">=1.6.26,<1.6.54"
 LIBPNG_ADVISORY_URL = "https://nvd.nist.gov/vuln/detail/CVE-2026-22801"
 
 
-# Single source of truth for the FFmpeg runtime security floor. FFmpeg 8.1.2
-# contains the security backports for the current line; 8.0.3 is the
-# equivalent reviewed floor for the supported LTS line. Keep the advisory
-# identifiers and source URL beside the floors so diagnostics, release
-# evidence, and cross-source tests cannot drift independently.
-FFMPEG_SECURITY_FLOOR = (8, 1, 2)
-FFMPEG_SECURITY_LTS_FLOOR = (8, 0, 3)
+# Single source of truth for the FFmpeg runtime security floor. FFmpeg 9.0.1
+# is the reviewed floor: the 8.x series ended at 8.1.2 (2026-06-17), so the
+# 2026-07-24 advisory batch below has no fix on any 8.x branch and the only
+# remedy is moving to the 9.0 line. Keep the advisory identifiers and source
+# URL beside the floors so diagnostics, release evidence, and cross-source
+# tests cannot drift independently. Raise the floor only alongside a newly
+# cited FFmpeg CVE, never speculatively.
+FFMPEG_SECURITY_FLOOR = (9, 0, 1)
 FFMPEG_SECURITY_BRANCH_FLOORS = {
-    (8, 1): FFMPEG_SECURITY_FLOOR,
-    (8, 0): FFMPEG_SECURITY_LTS_FLOOR,
+    (9, 0): FFMPEG_SECURITY_FLOOR,
 }
-FFMPEG_SECURITY_ADVISORY_IDS = ("CVE-2026-8461", "CVE-2026-30999")
+# Branches that carry published advisories and will never receive a fix
+# because upstream has closed them. Any patch level on these lines is
+# vulnerable, so the remedy is a cross-branch upgrade to the floor above.
+FFMPEG_SECURITY_EOL_BRANCHES = ((8, 1), (8, 0))
+FFMPEG_SECURITY_EOL_FINAL_RELEASES = {
+    (8, 1): (8, 1, 2),
+    (8, 0): (8, 0, 3),
+}
+# Reachable from crafted media that VSR decodes: IAMF demuxer allocation,
+# LCL/ZLIB uninitialized-heap disclosure, MACE6 decoder overflow, and the
+# VobSub subtitle demuxer overflow that sits on the soft-subtitle remux path.
+# The two 8.1.2-era identifiers stay listed because builds below that release
+# remain exposed to them as well.
+FFMPEG_SECURITY_ADVISORY_IDS = (
+    "CVE-2026-66037",
+    "CVE-2026-66038",
+    "CVE-2026-66039",
+    "CVE-2026-64830",
+    "CVE-2026-12706",
+    "CVE-2026-8461",
+    "CVE-2026-30999",
+)
+# Published advisories with no upstream fixed version identified yet. These
+# are reported as open risk and must never be presented as remediated by
+# meeting the floor above.
+FFMPEG_SECURITY_UNFIXED_ADVISORY_IDS = ("CVE-2026-58049",)
 FFMPEG_SECURITY_ADVISORY_URL = "https://ffmpeg.org/security.html"
 FFMPEG_SECURITY_RELEASE_URL = "https://ffmpeg.org/download.html"
 
@@ -44,18 +69,27 @@ def ffmpeg_security_floor_str() -> str:
     return format_ffmpeg_version(FFMPEG_SECURITY_FLOOR)
 
 
-def ffmpeg_security_lts_floor_str() -> str:
-    """Return the reviewed FFmpeg LTS floor as dotted text."""
-    return format_ffmpeg_version(FFMPEG_SECURITY_LTS_FLOOR)
+def ffmpeg_security_eol_branch_str() -> str:
+    """Return the closed FFmpeg branches as dotted text."""
+    return ", ".join(
+        f"{major}.{minor}.x" for major, minor in FFMPEG_SECURITY_EOL_BRANCHES
+    )
 
 
 def ffmpeg_security_affected_range() -> str:
-    """Return the below-floor branch ranges used by release advisories."""
+    """Return the affected version ranges used by release advisories.
+
+    Covers both the reviewed branches that have a fixed release and the
+    closed branches where every patch level stays affected.
+    """
     ranges = []
     for (major, minor), floor in FFMPEG_SECURITY_BRANCH_FLOORS.items():
-        ranges.append(
-            f"{major}.{minor}.0-{major}.{minor}.{floor[2] - 1}"
-        )
+        if floor[2] > 0:
+            ranges.append(
+                f"{major}.{minor}.0-{major}.{minor}.{floor[2] - 1}"
+            )
+    for major, minor in FFMPEG_SECURITY_EOL_BRANCHES:
+        ranges.append(f"{major}.{minor}.x (no fixed release)")
     return ", ".join(ranges)
 
 

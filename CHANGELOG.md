@@ -4,6 +4,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **FFmpeg builds must now be 9.0.1 or newer.** The 8.x series ended at
+  8.1.2 without fixes for CVE-2026-66037 (IAMF demuxer allocation),
+  CVE-2026-66038 (LCL decoder heap disclosure), CVE-2026-66039 (MACE6
+  decoder overflow), CVE-2026-64830 (VobSub subtitle demuxer overflow), and
+  CVE-2026-12706 (RASC use-after-free), all reachable from crafted media.
+  Because upstream closed those branches, the self-test, support bundle, and
+  release validation now report every 8.x build as vulnerable with a
+  cross-branch upgrade target instead of an unreachable on-branch patch.
+  A build on a reviewed branch that merely predates its point release is
+  reported as outdated and blocks a release without being accused of a CVE
+  it already carries the fix for. CVE-2026-58049 has no upstream fixed
+  version and is surfaced as an open advisory on every result.
+
 ### Fixed
 
 - **Backend audit fixes harden resumed jobs and optional engines.** Completion

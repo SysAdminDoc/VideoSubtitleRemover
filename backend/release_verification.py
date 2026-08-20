@@ -58,7 +58,7 @@ from backend.security_checks import (
     LIBPNG_CVE,
     ffmpeg_security_floor_str,
     ffmpeg_security_affected_range,
-    ffmpeg_security_lts_floor_str,
+    ffmpeg_security_eol_branch_str,
     libpng_fixed_version_str,
     opencv_libpng_status,
 )
@@ -691,9 +691,16 @@ def ffmpeg_security_advisory(
         advisory_id = advisories[0] if advisories else FFMPEG_SECURITY_ADVISORY_IDS[0]
         affected = ffmpeg_security_affected_range()
         source = FFMPEG_SECURITY_SOURCE
+    elif classification == "outdated":
+        # Below the reviewed point release on an open branch: a version gap,
+        # not an attributed vulnerability.
+        advisory_id = "FFMPEG-BELOW-REVIEWED-POINT-RELEASE"
+        affected = f"below {ffmpeg_security_floor_str()} on a reviewed branch"
+        fixed_in = ffmpeg_security_floor_str()
+        source = FFMPEG_RELEASE_SOURCE
     elif classification == "unsupported":
         advisory_id = "FFMPEG-UNSUPPORTED-BRANCH"
-        affected = "outside VSR's reviewed 8.0/8.1 branches"
+        affected = "outside VSR's reviewed security branches"
         fixed_in = f"{ffmpeg_security_floor_str()} (reviewed stable branch)"
         source = FFMPEG_RELEASE_SOURCE
     else:
@@ -711,9 +718,10 @@ def ffmpeg_security_advisory(
         source=source,
         mitigation=(
             "VSR decodes untrusted media through FFmpeg; install a reviewed "
-            f"stable FFmpeg {ffmpeg_security_floor_str()}+ build (or "
-            f"{ffmpeg_security_lts_floor_str()}+ on the 8.0 branch) before "
-            f"shipping. Probe result: {status.get('reason') or classification}. "
+            f"stable FFmpeg {ffmpeg_security_floor_str()}+ build before "
+            f"shipping. The {ffmpeg_security_eol_branch_str()} branches are "
+            "closed upstream and cannot be patched in place. Probe result: "
+            f"{status.get('reason') or classification}. "
             f"Advisory: {FFMPEG_SECURITY_ADVISORY_URL}."
         ),
     )
