@@ -54,20 +54,22 @@ class AutoDilationTests(unittest.TestCase):
         import cv2
         from backend.segmentation import estimate_auto_dilation_radius
 
+        # OpenCV 5 saturates putText thickness at about two pixels, so a
+        # wider dark stroke under the glyph renders no halo at all. Build the
+        # outline by dilating the glyph mask instead, which is both faithful
+        # to a real outlined subtitle and independent of the font renderer.
+        glyph = np.zeros((100, 200), dtype=np.uint8)
+        cv2.putText(
+            glyph, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
+            1.5, 255, 3, cv2.LINE_AA,
+        )
+        halo = cv2.dilate(glyph, np.ones((7, 7), np.uint8))
+
         plain = np.full((100, 200, 3), 80, dtype=np.uint8)
-        cv2.putText(
-            plain, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
-            1.5, (240, 240, 240), 3, cv2.LINE_AA,
-        )
+        plain[glyph > 40] = (240, 240, 240)
         outlined = np.full((100, 200, 3), 80, dtype=np.uint8)
-        cv2.putText(
-            outlined, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
-            1.5, (20, 20, 20), 8, cv2.LINE_AA,
-        )
-        cv2.putText(
-            outlined, "TEST", (40, 60), cv2.FONT_HERSHEY_SIMPLEX,
-            1.5, (240, 240, 240), 3, cv2.LINE_AA,
-        )
+        outlined[halo > 40] = (20, 20, 20)
+        outlined[glyph > 40] = (240, 240, 240)
         box = (35, 25, 170, 70)
 
         plain_radius = estimate_auto_dilation_radius(plain, box)

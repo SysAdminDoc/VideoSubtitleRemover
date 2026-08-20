@@ -75,8 +75,8 @@
       "filename": "static_dialogue.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.962553,
-        "ssim": 0.676109
+        "psnr": 9.91274,
+        "ssim": 0.672729
       },
       "sha256": "3d9bffa859a245e7adb7cfb926f24b970d99c9032934ae5d5cdeb0a7e4f0848a"
     },
@@ -84,7 +84,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "cd70d2f010cb662ba76238a54259cd1c863b758eefa3dc67e5c48cc1232dd726",
+        "output_frames_sha256": "b3e420d7dd550f193b5cbdb0fbff4b5eb3b1ba6b23cde86be5ec28550801c98a",
         "width": 160
       },
       "config": {
@@ -111,8 +111,8 @@
       "filename": "motion_pan.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 11.511254,
-        "ssim": 0.708984
+        "psnr": 11.453744,
+        "ssim": 0.705444
       },
       "sha256": "ab124826841d308c1c2df9d4e0d7a9c4e403bd3810c06d672e4deae254eee069"
     },
@@ -147,8 +147,8 @@
       "filename": "karaoke_burnin.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 13.008877,
-        "ssim": 0.801191
+        "psnr": 12.943833,
+        "ssim": 0.797337
       },
       "sha256": "381f7fef152e2c664c2ea20b7a7a039c073281d762fbe552f65f7889252099e9"
     },
@@ -183,8 +183,8 @@
       "filename": "vertical_jp.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 11.595561,
-        "ssim": 0.790289
+        "psnr": 11.537584,
+        "ssim": 0.786338
       },
       "sha256": "d306e04ed99d56b312740a0060793663ef3bec6728f8235bb18e1f8e6dff4e18"
     },
@@ -219,8 +219,8 @@
       "filename": "dissolve_cuts.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.573811,
-        "ssim": 0.683976
+        "psnr": 9.525943,
+        "ssim": 0.680557
       },
       "sha256": "872be31164688de1aa439fd707f72be800f24250a7729a291c0c1304c902744c"
     },
@@ -228,7 +228,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "75359ec955e421a82accaea12f35e90cc38761b506116730202af0d07261dbe1",
+        "output_frames_sha256": "608d017e2a999e95d05bbbcc2c4c5a1ebea74b72ace13593eb3da9b90189f82b",
         "width": 160
       },
       "config": {
@@ -255,8 +255,8 @@
       "filename": "thin_font.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 16.815226,
-        "ssim": 0.727273
+        "psnr": 16.742013,
+        "ssim": 0.723431
       },
       "sha256": "589690cb8875c5f97727afdec51f073bd407cd12abc3981f70d145699be1b7e2"
     },
@@ -291,8 +291,8 @@
       "filename": "thick_font.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.924463,
-        "ssim": 0.626864
+        "psnr": 9.874841,
+        "ssim": 0.62373
       },
       "sha256": "bf66844f2212ec19c0f149420afe99305faabf3fb24f3bf32c9a2f81c55c180d"
     },
@@ -327,8 +327,8 @@
       "filename": "hdr_tone_ramp.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 11.080396,
-        "ssim": 0.727572
+        "psnr": 11.024994,
+        "ssim": 0.723934
       },
       "sha256": "8dd768d00cc843c592818a01c92a9a75c3827004e29fafd0bba8c6b197f0ebd7"
     },
@@ -363,8 +363,8 @@
       "filename": "shadow_outline.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.72442,
-        "ssim": 0.657428
+        "psnr": 9.675798,
+        "ssim": 0.654141
       },
       "sha256": "4860837a0a59c8a44ca923b713e23bac692c13f3dab0b7548b7dd1eac0a4a6b5"
     },
@@ -372,7 +372,7 @@
       "baseline": {
         "frame_count": 16,
         "height": 96,
-        "output_frames_sha256": "dfddb73935359e35c41994801083c65f3ce3253082146db4e3eb5c1a4e0b803a",
+        "output_frames_sha256": "5a3338e5b4726547ea875b484ae7245e771d59c3f104014d6ad0df27419eee93",
         "width": 160
       },
       "config": {
@@ -415,8 +415,8 @@
       "filename": "moving_lower_third.mkv",
       "license": "MIT",
       "metric_floors": {
-        "psnr": 9.579225,
-        "ssim": 0.678142
+        "psnr": 9.531329,
+        "ssim": 0.674757
       },
       "sha256": "74340c4c5f03ce3e9d42b28e8712d765f257c91aea6853b90b5334ca10f95872"
     }

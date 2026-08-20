@@ -598,5 +598,89 @@ class RealClipManifestTests(unittest.TestCase):
             self.assertIn(required, text)
 
 
+class ReferenceBlessTests(unittest.TestCase):
+    """The blessing path folds a run back into the manifest."""
+
+    def _manifest(self):
+        return {
+            "clips": [{
+                "filename": "a.mkv",
+                "baseline": {"output_frames_sha256": "old", "frame_count": 4,
+                             "width": 8, "height": 6},
+                "metric_floors": {"psnr": 20.0, "ssim": 0.9},
+            }]
+        }
+
+    def _result(self, *, psnr=30.0, ssim=0.8):
+        return [{
+            "filename": "a.mkv",
+            "outputFrames": {"sha256": "new", "frame_count": 5,
+                             "width": 10, "height": 12},
+            "metrics": {"psnr": psnr, "ssim": ssim},
+            "failures": [],
+        }]
+
+    def test_bless_rewrites_baseline_and_relaxes_floors_by_tolerance(self):
+        from backend.reference_corpus import apply_reference_bless
+
+        manifest = self._manifest()
+        changed = apply_reference_bless(manifest, self._result(), tolerance=0.01)
+
+        self.assertEqual(changed, ["a.mkv"])
+        clip = manifest["clips"][0]
+        self.assertEqual(clip["baseline"]["output_frames_sha256"], "new")
+        self.assertEqual(clip["baseline"]["frame_count"], 5)
+        # Floors sit below the measurement so a hair of drift is not a failure.
+        self.assertAlmostEqual(clip["metric_floors"]["psnr"], 29.7, places=6)
+        self.assertAlmostEqual(clip["metric_floors"]["ssim"], 0.792, places=6)
+
+    def test_bless_never_invents_a_floor_the_manifest_did_not_declare(self):
+        from backend.reference_corpus import apply_reference_bless
+
+        manifest = self._manifest()
+        del manifest["clips"][0]["metric_floors"]["ssim"]
+        apply_reference_bless(manifest, self._result())
+
+        self.assertEqual(
+            sorted(manifest["clips"][0]["metric_floors"]), ["psnr"])
+
+    def test_bless_refuses_a_clip_that_produced_no_output(self):
+        from backend.reference_corpus import (
+            ReferenceCorpusError, apply_reference_bless,
+        )
+
+        results = self._result()
+        results[0]["outputFrames"] = None
+        results[0]["failures"] = ["processing failed"]
+        with self.assertRaises(ReferenceCorpusError):
+            apply_reference_bless(self._manifest(), results)
+
+    def test_bless_refuses_when_a_declared_metric_is_missing(self):
+        from backend.reference_corpus import (
+            ReferenceCorpusError, apply_reference_bless,
+        )
+
+        results = self._result()
+        results[0]["metrics"] = {"psnr": 30.0}
+        with self.assertRaises(ReferenceCorpusError):
+            apply_reference_bless(self._manifest(), results)
+
+    def test_bless_leaves_clips_the_run_skipped_untouched(self):
+        from backend.reference_corpus import apply_reference_bless
+
+        manifest = self._manifest()
+        manifest["clips"].append({
+            "filename": "b.mkv",
+            "baseline": {"output_frames_sha256": "keep"},
+            "metric_floors": {"psnr": 11.0},
+        })
+        changed = apply_reference_bless(manifest, self._result())
+
+        self.assertEqual(changed, ["a.mkv"])
+        self.assertEqual(
+            manifest["clips"][1]["baseline"]["output_frames_sha256"], "keep")
+        self.assertEqual(manifest["clips"][1]["metric_floors"]["psnr"], 11.0)
+
+
 if __name__ == "__main__":
     unittest.main()

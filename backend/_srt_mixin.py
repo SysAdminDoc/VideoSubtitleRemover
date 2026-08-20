@@ -107,7 +107,10 @@ class _SrtMixin:
         cues and write to disk. Gaps of up to 0.5s are bridged."""
         if not self._srt_entries:
             return
-        fps = fps if fps and fps > 0 else 30.0
+        # Below one frame per second the rate is broken container metadata
+        # rather than a real timelapse: fps=0.001 would stretch a single
+        # frame into a 1000-second cue. Keep the floor at 1.0.
+        fps = fps if fps and fps > 1.0 else 30.0
         gap_tol = max(1, int(fps * 0.5))
 
         def ts(t: float) -> str:

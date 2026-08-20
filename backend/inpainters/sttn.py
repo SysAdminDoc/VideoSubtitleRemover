@@ -25,7 +25,13 @@ class STTNInpainter(BaseInpainter):
         self.device = device
         from backend.config import ProcessingConfig
         self.config = config or ProcessingConfig()
-        self._last_backend_name = "cv2"
+        # Seed the provenance from the configuration so a report taken before
+        # the first batch names the backend this instance will actually use;
+        # inpaint() then records the path it really took.
+        self._last_backend_name = (
+            "TBE (temporal background exposure)"
+            if self.config.tbe_enable else "cv2"
+        )
 
     @property
     def backend_name(self) -> str:

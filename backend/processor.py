@@ -465,7 +465,11 @@ def _frame_seconds(index: int, fps: float,
     """Return one frame index on the shared VFR/CFR processing clock."""
     if frame_timing is not None:
         return frame_timing.frame_time(index, fps)
-    return float(index) / max(float(fps), 1e-6)
+    # A missing or bogus rate must not explode the clock. Dividing by an
+    # epsilon turns frame 15 into 15 million seconds; a genuine sub-1 fps
+    # timelapse still divides by its real rate.
+    rate = float(fps)
+    return float(index) / (rate if rate > 0.0 else 1.0)
 
 
 def _spans_from_segments(segments, *, fps: float, total_frames: int,

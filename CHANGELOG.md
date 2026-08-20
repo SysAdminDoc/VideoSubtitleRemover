@@ -49,6 +49,31 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **The release gate is trustworthy again: five tests were failing on a clean
+  checkout.** Three were regressions from the backend audit pass. A zero or
+  missing frame rate was divided by an epsilon, turning frame 15 into 15
+  million seconds; the SRT writer lost its plausibility floor, so a bogus
+  0.001 fps stretched one frame into a 1000-second cue; and the STTN
+  inpainter reported "cv2" as its backend until its first batch ran, so a
+  provenance record taken before processing named the wrong engine. The
+  fourth was a test that OpenCV 5 cannot satisfy, because it built its
+  outlined glyph with a wide `putText` stroke and OpenCV 5 saturates text
+  thickness at about two pixels, rendering no outline at all. The fifth was
+  a stale reference corpus: eight intentional quality commits (translucency
+  unmixing, grain restoration, Poisson seams, DIS flow, adaptive dilation)
+  changed inpainting output without the committed baselines being
+  re-recorded.
+
+- **The reference corpus can be re-blessed instead of hand-edited.**
+  `python -m backend.reference_corpus --bless` re-records the decoded output
+  hashes and metric floors from a fresh run, refusing any clip that failed to
+  produce output or that is missing a metric the manifest gates on, and it
+  never invents a floor the manifest did not already declare. Floors are now
+  recorded just below the measurement rather than exactly at it. Every floor
+  previously sat on its measured value to six decimal places, which made it a
+  duplicate of the frame-hash check and turned a 0.0002 SSIM movement into a
+  release-gate failure.
+
 - **Backend audit fixes harden resumed jobs and optional engines.** Completion
   checkpoints now include processing settings, derived exports restart from a
   complete frame, ranged selective reruns handle range-relative outputs, and

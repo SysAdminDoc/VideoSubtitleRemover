@@ -25,6 +25,11 @@ from backend import processor
 
 REFERENCE_CORPUS_SCHEMA = "vsr.reference_corpus.v1"
 REFERENCE_CORPUS_CATEGORY = "core_reference"
+# Metric floors are blessed a little below the measured value. Recording the
+# exact measurement makes every floor duplicate the frame-hash check and turns
+# a 0.0002 SSIM movement into a release-gate failure; the hash already catches
+# any output change at all, so the floor's job is to catch a quality drop.
+BLESS_METRIC_TOLERANCE = 0.005
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "tests" / "clips" / "manifest.json"
 REFERENCE_LICENSE_ALLOWLIST = {
@@ -429,6 +434,86 @@ def run_reference_corpus(
     }
 
 
+def apply_reference_bless(
+    manifest: dict,
+    results: Sequence[Mapping[str, object]],
+    *,
+    tolerance: float = BLESS_METRIC_TOLERANCE,
+) -> list[str]:
+    """Fold a corpus run's measurements back into a manifest in place.
+
+    Only clips that actually ran are touched, and only floors the manifest
+    already declares are re-derived, so blessing can never invent a gate or
+    quietly drop one. Returns the filenames whose recorded values moved.
+    """
+    by_name = {
+        str(result.get("filename")): result
+        for result in results
+        if result.get("filename")
+    }
+    changed: list[str] = []
+    for entry in manifest.get("clips", []):
+        if not isinstance(entry, dict):
+            continue
+        result = by_name.get(str(entry.get("filename")))
+        if result is None:
+            continue
+        if not isinstance(result.get("outputFrames"), Mapping):
+            raise ReferenceCorpusError(
+                f"cannot bless {entry.get('filename')}: the run produced no "
+                f"decoded output ({'; '.join(result.get('failures') or [])})"
+            )
+        digest = result["outputFrames"]
+        baseline = dict(entry.get("baseline") or {})
+        updated = dict(baseline)
+        updated["output_frames_sha256"] = str(digest["sha256"])
+        for key in ("frame_count", "width", "height"):
+            if key in digest:
+                updated[key] = int(digest[key])
+        floors = entry.get("metric_floors")
+        new_floors = dict(floors) if isinstance(floors, Mapping) else {}
+        metrics = result.get("metrics") or {}
+        for metric_name in sorted(new_floors):
+            value = _metric_value(metrics, str(metric_name))  # type: ignore[arg-type]
+            if value is None:
+                raise ReferenceCorpusError(
+                    f"cannot bless {entry.get('filename')}: the run reported "
+                    f"no {metric_name}"
+                )
+            new_floors[metric_name] = round(value * (1.0 - tolerance), 6)
+        if updated != baseline or new_floors != (floors or {}):
+            changed.append(str(entry.get("filename")))
+        entry["baseline"] = updated
+        if new_floors:
+            entry["metric_floors"] = new_floors
+    return changed
+
+
+def bless_reference_corpus(
+    manifest_path: Path | str = DEFAULT_MANIFEST,
+    *,
+    clips_dir: Path | str | None = None,
+    output_dir: Path | str | None = None,
+    tolerance: float = BLESS_METRIC_TOLERANCE,
+) -> dict:
+    """Re-record baselines and floors from a fresh run of the corpus."""
+    path = Path(manifest_path)
+    result = run_reference_corpus(
+        path, clips_dir=clips_dir, output_dir=output_dir
+    )
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    changed = apply_reference_bless(
+        manifest, result["clips"], tolerance=tolerance
+    )
+    # newline="" keeps the committed LF manifest from being rewritten as CRLF
+    # on Windows, which would bury the real change in a whole-file diff.
+    path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8", newline="",
+    )
+    return {"changed": changed, "run": result}
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the VSR reference clip regression corpus."
@@ -437,7 +522,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--clips-dir", default="")
     parser.add_argument("--output-dir", default="")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--bless", action="store_true",
+        help="rewrite the manifest baselines and floors from this run, for "
+             "use after an intentional change to inpainting output",
+    )
     args = parser.parse_args(argv)
+    if args.bless:
+        blessed = bless_reference_corpus(
+            args.manifest,
+            clips_dir=args.clips_dir or None,
+            output_dir=args.output_dir or None,
+        )
+        changed = blessed["changed"]
+        print(f"Blessed {len(changed)} clip(s): {', '.join(changed) or 'none'}")
+        return 0
     result = run_reference_corpus(
         args.manifest,
         clips_dir=args.clips_dir or None,
