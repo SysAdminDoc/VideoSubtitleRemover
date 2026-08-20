@@ -171,7 +171,7 @@ class AccessibilitySupportMatrixTests(unittest.TestCase):
             "## Accessibility support matrix", 1)[1]
         for reference in (
             "tools/ui_scaling_probe.py",
-            "tests/test_text_scaling.py",
+            "tests/archive/test_text_scaling.py",
             "gui/dialog_layout.py",
             "scripts/i18n_catalogs.py",
             "backend/a11y.py",

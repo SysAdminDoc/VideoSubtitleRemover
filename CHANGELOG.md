@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Changed
 
+- **The GUI test files were retired to `tests/archive/`.** They exercised the
+  tkinter layer and churned with every visual change while catching little.
+  The backend, controller-logic, catalog, and release-gate tests all remain
+  active, and an archived file can be restored by moving it back up one
+  directory.
+
 - **The desktop interface now uses a calmer, denser visual system.** Larger
   working text, flatter surfaces, a fixed-width inspector, aligned preview and
   queue areas, and shorter labels make the main workflow easier to scan. The
@@ -13,6 +19,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   hierarchy and no longer open as cramped scrolling cards.
 
 ### Fixed
+
+- **Tooltips and dialogs now respect multi-monitor layouts.** Both clamped
+  against the primary display's size, so on a second monitor the tooltip
+  jumped to the primary screen's edge and every dialog opened on the wrong
+  monitor. Tooltips clamp against the full desktop, and dialogs center on the
+  window that opened them. Toggles also release their variable watch when
+  destroyed, so a dialog that shares an app-level setting no longer leaves a
+  background error behind after closing.
 
 - **Closing the app mid-batch no longer leaves an item marked as needing
   attention.** Marshalling a UI update from a worker thread raises one

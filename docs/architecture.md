@@ -412,7 +412,7 @@ honest: an untested claim is worse than a documented gap.
 
 | Surface | State | Proof |
 |---------|-------|-------|
-| Keyboard reachability of major actions | Supported and tested | `tools/ui_scaling_probe.py` asserts every major action is focusable, has non-zero geometry, and is not clipped, across the scale/theme/locale matrix in `tests/test_text_scaling.py` |
+| Keyboard reachability of major actions | Supported and tested | `tools/ui_scaling_probe.py` asserts every major action is focusable, has non-zero geometry, and is not clipped, across the scale/theme/locale matrix (pytest companion archived at `tests/archive/test_text_scaling.py`; the probe itself is the live proof) |
 | Text scaling 100-200% | Supported and tested | Same probe at 100/125/150/175/200%; fonts, control heights, and wrap lengths must all scale |
 | Dialog reflow and scrolling at high scale | Supported and tested | `gui/dialog_layout.py`; the probe opens the dialogs at 980x720 and 2752x1152 work areas and requires an internal scroll path |
 | High-contrast theme | Supported and tested | Probe runs the whole matrix under the high-contrast palette |
