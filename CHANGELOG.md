@@ -378,6 +378,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   from the item, so a per-file override previewed a mask the run would not
   produce. Both now read the item, and the two previews agree with each other.
 
+- **Release evidence can no longer contradict the artifact it describes.** The
+  PyInstaller spec treats `1`, `true`, `yes` and `on` as enabling a packaged
+  feature, but the build script only recognised `1`. Building with
+  `VSR_ENABLE_FULL_OCR=true` therefore packaged PaddleOCR and EasyOCR while
+  recording them as excluded modules in the published evidence and SBOM. Both
+  sides now normalise through one helper, and a test pins them together.
+
 ## [3.33.0] - 2026-08-02
 
 ### Fixed

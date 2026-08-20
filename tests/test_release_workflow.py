@@ -872,6 +872,32 @@ class LocalBuildScriptTests(unittest.TestCase):
     def setUp(self):
         self.bat = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
         self.nsi = (ROOT / "installer" / "vsr.nsi").read_text(encoding="utf-8")
+        self.spec = (ROOT / "VideoSubtitleRemoverPro.spec").read_text(
+            encoding="utf-8")
+
+    def test_feature_gates_agree_between_the_spec_and_the_build_script(self):
+        """The spec decides what goes into the artifact; the batch file
+        records what was excluded. If they disagree on what counts as
+        enabled, the published evidence contradicts the binary."""
+        # The spec's accepted spellings.
+        self.assertIn('in {"1", "true", "yes", "on"}', self.spec)
+        # The batch file must normalize through one helper rather than
+        # comparing the raw variable against "1".
+        self.assertIn(":truthy", self.bat)
+        for spelling in ('"1"', '"true"', '"yes"', '"on"'):
+            self.assertIn(f'if /I "!_TRUTHY_VALUE!"=={spelling}', self.bat)
+        for gate in ("VSR_ENABLE_FULL_OCR", "VSR_ENABLE_PYTORCH_LAMA"):
+            self.assertIn(f"call :truthy {gate} ", self.bat)
+            # No raw one-value comparison may survive for a gate the spec
+            # also reads, or `=true` would exclude what the spec included.
+            self.assertNotIn(f'"%{gate}%"=="1"', self.bat)
+
+    def test_installer_smoke_passes_the_nsis_directory_flag_verbatim(self):
+        """NSIS needs /D= last and unquoted, and reads it off the raw command
+        line, so it must not travel through a shell that may quote it."""
+        self.assertIn("start \"\" /wait \"!SMOKE_INSTALLER!\" /S /D=!SMOKE_INSTALL_DIR!",
+                      self.bat)
+        self.assertNotIn("-ArgumentList '/S','/D=", self.bat)
 
     def test_build_script_generates_local_release_evidence(self):
         self.assertIn("-m backend.release_verification", self.bat)
@@ -894,8 +920,12 @@ class LocalBuildScriptTests(unittest.TestCase):
         )
         self.assertIn("installer\\vsr.nsi", self.bat)
         self.assertIn("/DVSR_SMOKE_BUILD=1", self.bat)
-        self.assertIn("Start-Process -FilePath '!SMOKE_INSTALLER!'", self.bat)
-        self.assertIn("-WindowStyle Hidden -Wait -PassThru", self.bat)
+        # The smoke installer invocation itself is asserted in
+        # test_installer_smoke_passes_the_nsis_directory_flag_verbatim.
+        self.assertIn("!SMOKE_INSTALLER!", self.bat)
+        # The smoke install must block until the installer exits, whichever
+        # launcher is used.
+        self.assertIn("/wait", self.bat)
         self.assertIn("--installer-smoke-executable", self.bat)
         self.assertIn("--runtime-hook assets\\runtime_hook_mp.py", self.bat)
         self.assertNotIn("pause", self.bat.lower())
@@ -915,7 +945,11 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("call :maybe_collect_data rapidocr", self.bat)
         self.assertIn("--hidden-import backend.opencv_ocr", self.bat)
         self.assertIn("call :maybe_collect_data rapidocr_onnxruntime", self.bat)
-        self.assertIn("--add-data locale;locale", self.bat)
+        # The locale bundle is declared by the spec, which is what actually
+        # builds the artifact. Asserting it against the batch file only
+        # verified a dead variable the spec-driven build never consumed.
+        spec = (ROOT / "VideoSubtitleRemoverPro.spec").read_text(encoding="utf-8")
+        self.assertIn("('locale', 'locale')", spec)
         self.assertIn("Run_VSR_Pro.bat", self.bat)
         self.assertIn("Run_VSR_Pro_Debug.bat", self.bat)
         self.assertIn("Run_VSR_Pro.ps1", self.bat)

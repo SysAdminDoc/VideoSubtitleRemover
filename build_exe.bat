@@ -89,38 +89,34 @@ if /I "%VSR_VERIFY_SPEC_BUILD%"=="1" (
     )
 )
 
-set "ICON_ARG="
-if exist "icon.ico" set "ICON_ARG=--icon icon.ico"
 set "RUNTIME_HOOKS=--runtime-hook assets\runtime_hook_mp.py"
 
-set "DATA_ARGS=--add-data backend;backend"
-if exist "assets" set "DATA_ARGS=%DATA_ARGS% --add-data assets;assets"
-if exist "banner.png" set "DATA_ARGS=%DATA_ARGS% --add-data banner.png;."
-if exist "icon.png" set "DATA_ARGS=%DATA_ARGS% --add-data icon.png;."
-if exist "favicon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data favicon.ico;."
-if exist "icon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data icon.ico;."
-if exist "icons" set "DATA_ARGS=%DATA_ARGS% --add-data icons;icons"
-if exist "locale" set "DATA_ARGS=%DATA_ARGS% --add-data locale;locale"
+:: The build is spec-driven, so data/icon arguments live in
+:: VideoSubtitleRemoverPro.spec. The bookkeeping below exists only to record
+:: what the spec did in the release evidence, so its feature gates MUST agree
+:: with the spec's _enabled() helper, which accepts 1/true/yes/on.
+call :truthy VSR_ENABLE_FULL_OCR FULL_OCR_ON
+call :truthy VSR_ENABLE_PYTORCH_LAMA PYTORCH_LAMA_ON
 
 set "HIDDEN_IMPORTS=--hidden-import PIL._tkinter_finder --hidden-import cv2 --collect-all numpy --hidden-import backend.opencv_ocr --hidden-import tkinter --hidden-import tkinter.ttk --hidden-import tkinter.filedialog --hidden-import tkinter.messagebox"
 set "EXCLUDES="
 echo Detecting optional runtime modules for packaging...
 call :maybe_hidden_import rapidocr
 call :maybe_hidden_import rapidocr_onnxruntime
-if /I "%VSR_ENABLE_FULL_OCR%"=="1" (
+if "!FULL_OCR_ON!"=="1" (
     call :maybe_hidden_import paddleocr
     call :maybe_hidden_import easyocr
 ) else (
     set "EXCLUDES=!EXCLUDES! --exclude-module paddle --exclude-module paddleocr --exclude-module easyocr"
     echo   Heavy PaddleOCR/EasyOCR fallbacks disabled; set VSR_ENABLE_FULL_OCR=1 to include them.
 )
-if /I "%VSR_ENABLE_PYTORCH_LAMA%"=="1" (
+if "!PYTORCH_LAMA_ON!"=="1" (
     call :maybe_hidden_import simple_lama_inpainting
 ) else (
     set "EXCLUDES=!EXCLUDES! --exclude-module simple_lama_inpainting"
     echo   PyTorch LaMa fallback disabled for packaging; set VSR_ENABLE_PYTORCH_LAMA=1 to include it.
 )
-if /I not "%VSR_ENABLE_FULL_OCR%"=="1" if /I not "%VSR_ENABLE_PYTORCH_LAMA%"=="1" (
+if not "!FULL_OCR_ON!"=="1" if not "!PYTORCH_LAMA_ON!"=="1" (
     set "EXCLUDES=!EXCLUDES! --exclude-module torch --exclude-module torchvision"
     echo   PyTorch runtime disabled because no selected packaged feature requires it.
 )
@@ -194,14 +190,25 @@ echo Compiling and extracting the non-elevated installer smoke harness...
 "!MAKENSIS!" /DVSR_SMOKE_BUILD=1 "/DOUTPUT_DIR=!RELEASE_DIR!" "/DDIST_DIR=!CD!\!DIST_DIR!" installer\vsr.nsi
 if errorlevel 1 exit /b 1
 if exist "!SMOKE_INSTALL_DIR!" rmdir /s /q "!SMOKE_INSTALL_DIR!"
-powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command ^
-    "$p = Start-Process -FilePath '!SMOKE_INSTALLER!' -ArgumentList '/S','/D=!SMOKE_INSTALL_DIR!' -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode"
+:: NSIS requires /D= to be the LAST parameter, UNQUOTED, and takes the rest
+:: of the command line literally. The previous Start-Process form happened to
+:: satisfy that only because Windows PowerShell 5.1 joins -ArgumentList
+:: without adding quotes (measured 2026-08-20 via GetCommandLineW); a shell
+:: that quoted a spaced argument -- pwsh 7, or any future 5.1 fix -- would
+:: silently extract to the default directory instead. Invoke it from cmd so
+:: the tail is passed verbatim by design rather than by accident. The empty
+:: first argument is the window title `start` would otherwise consume.
+start "" /wait "!SMOKE_INSTALLER!" /S /D=!SMOKE_INSTALL_DIR!
 if errorlevel 1 (
     echo ERROR: Installer smoke extraction failed.
     exit /b 1
 )
 if not exist "!SMOKE_INSTALL_DIR!\VideoSubtitleRemoverPro.exe" (
-    echo ERROR: Installer smoke payload is missing the frozen executable.
+    echo ERROR: Installer smoke did not extract to the requested directory:
+    echo        !SMOKE_INSTALL_DIR!
+    echo        The installer reported success, so /D= was most likely not
+    echo        honoured and the payload landed in the default location.
+    echo        /D= must stay last and unquoted on the command line.
     exit /b 1
 )
 
@@ -282,6 +289,19 @@ echo.
 echo  Publish with:
 "%PYTHON%" -m backend.release_staging guidance --version "!APP_VERSION!"
 echo.
+exit /b 0
+
+:truthy
+:: Normalize an environment gate to 1/0 using the same accepted spellings as
+:: VideoSubtitleRemoverPro.spec's _enabled(): 1, true, yes, on (any case).
+:: %~1 = environment variable name, %~2 = output variable name.
+set "_TRUTHY_VALUE=!%~1!"
+set "%~2=0"
+if /I "!_TRUTHY_VALUE!"=="1" set "%~2=1"
+if /I "!_TRUTHY_VALUE!"=="true" set "%~2=1"
+if /I "!_TRUTHY_VALUE!"=="yes" set "%~2=1"
+if /I "!_TRUTHY_VALUE!"=="on" set "%~2=1"
+set "_TRUTHY_VALUE="
 exit /b 0
 
 :maybe_hidden_import
