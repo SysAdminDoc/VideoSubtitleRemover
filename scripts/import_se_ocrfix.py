@@ -101,6 +101,19 @@ def main(argv: List[str] | None = None) -> int:
     key = normalize_lang(args.lang)
     merged: Dict[str, str] = {}
     out_path = Path(args.out)
+    # backend.ocr_fix loads these by language key, reading
+    # ocr_fix_data/{key}.json. A file whose stem does not match the
+    # normalized language is never loaded by anything, so refuse it here
+    # instead of writing a file that silently does nothing.
+    if out_path.stem != key:
+        print(
+            f"error: --lang {args.lang!r} normalizes to {key!r}, but --out "
+            f"is named {out_path.name!r}. backend.ocr_fix only reads "
+            f"{key}.json, so this file would never load. Rename the output "
+            f"to {key}.json or pass the language that matches it.",
+            file=sys.stderr,
+        )
+        return 2
     if args.merge and out_path.is_file():
         try:
             existing = json.loads(out_path.read_text(encoding="utf-8"))

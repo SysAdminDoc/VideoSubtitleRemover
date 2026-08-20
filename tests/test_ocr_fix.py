@@ -131,3 +131,34 @@ def test_import_script_lang_normalization():
     assert imp.normalize_lang("eng") == "en"
     assert imp.normalize_lang("deu") == "de"
     assert imp.normalize_lang("pt_BR") == "pt"
+
+
+def test_import_script_rejects_a_language_and_filename_mismatch(tmp_path, capsys):
+    """backend.ocr_fix loads ocr_fix_data/{lang}.json by key, so a file whose
+    stem disagrees with --lang would never be read by anything."""
+    import scripts.import_se_ocrfix as imp
+
+    xml = tmp_path / "eng_OCRFixReplaceList.xml"
+    xml.write_text(
+        "<OCRFixReplaceList><WholeWords>"
+        '<WholeWord from="tbe" to="the" />'
+        "</WholeWords></OCRFixReplaceList>",
+        encoding="utf-8",
+    )
+    mismatched = tmp_path / "de.json"
+
+    code = imp.main([
+        "--lang", "eng", "--out", str(mismatched), "--input", str(xml),
+    ])
+
+    assert code == 2
+    # Nothing is written, so a mistake cannot leave a dead file behind.
+    assert not mismatched.exists()
+    assert "would never load" in capsys.readouterr().err
+
+    # The matching name still works, and --lang decides what is acceptable.
+    matching = tmp_path / "en.json"
+    assert imp.main([
+        "--lang", "eng", "--out", str(matching), "--input", str(xml),
+    ]) == 0
+    assert json.loads(matching.read_text(encoding="utf-8")) == {"tbe": "the"}
