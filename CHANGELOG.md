@@ -14,6 +14,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- **Closing the app mid-batch no longer leaves an item marked as needing
+  attention.** Marshalling a UI update from a worker thread raises one
+  exception once the main loop has exited and a different one once the Tk
+  interpreter is destroyed, and four call sites caught only the first. The
+  second escaped into the per-item error handler, which recorded the item as
+  failed with a Tk teardown message and saved that to the queue, so the next
+  session reopened asking the user to deal with a file that had merely been
+  interrupted. All worker-to-UI marshals now go through one helper.
+
 - **A time-gated mask correction now applies to exactly the frames it covers.**
   Mask reuse caches the mask with whatever corrections were active at the frame
   it was built from, and the phash, keyframe and frame-skip reuse paths all

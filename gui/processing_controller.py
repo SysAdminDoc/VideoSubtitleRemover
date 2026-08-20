@@ -19,6 +19,7 @@ from gui.config import (
     save_queue_state,
 )
 from gui.utils import (
+    dispatch_to_ui,
     format_quality_report, format_time, is_image_file, is_video_file,
     summarize_quality_reports,
 )
@@ -377,10 +378,7 @@ class ProcessingControllerMixin:
         def _show():
             self._update_status(status, "info", toast=True)
 
-        try:
-            self.root.after(0, _show)
-        except RuntimeError:
-            pass
+        dispatch_to_ui(self.root, _show)
 
     def _process_queue(self):
         """Process all items in the queue."""

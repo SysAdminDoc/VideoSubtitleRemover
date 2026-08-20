@@ -21,16 +21,41 @@ from backend.language_support import (
 )
 
 __all__ = (
+    "dispatch_to_ui",
     "_CURATED_LANG_NAMES",
     "_build_language_list",
     "_engine_supported_languages",
     "language_support_status",
 )
 
+try:
+    import tkinter as tk
+except ImportError:  # pragma: no cover - headless imports have no Tk
+    tk = None
+
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+def dispatch_to_ui(root, callback, *args):
+    """Marshal a worker-thread call onto the Tk main loop.
+
+    ``after`` raises ``RuntimeError`` once the main loop has exited but
+    ``tk.TclError`` once the interpreter itself is destroyed, and several
+    call sites caught only the first. During close-while-processing the
+    escaping TclError reached ``_process_item``'s blanket handler, which
+    marked the item ERROR with the message ``can't invoke "after" command:
+    application has been destroyed`` and persisted it, so the next session
+    restored a "needs attention" item for a file that was only interrupted.
+    A teardown race is not a processing failure.
+    """
+    errors = (RuntimeError,) if tk is None else (RuntimeError, tk.TclError)
+    try:
+        return root.after(0, callback, *args)
+    except errors:
+        return None
 
 
 # RM-152: canonical queue-item messages. The model stores stable English

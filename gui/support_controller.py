@@ -18,6 +18,7 @@ from gui.config import (
     APP_NAME, APP_VERSION, LOG_DIR, LOG_FILE, SETTINGS_FILE,
 )
 from gui.utils import (
+    dispatch_to_ui,
     truncate_middle,
 )
 from gui.widgets import (
@@ -215,10 +216,7 @@ class SupportControllerMixin:
                 except Exception:  # noqa: BLE001
                     self._update_status(tr(error_message), "error")
 
-            try:
-                self.root.after(0, _done)
-            except RuntimeError:
-                pass
+            dispatch_to_ui(self.root, _done)
 
         threading.Thread(
             target=_worker, name="vsr-support-task", daemon=True

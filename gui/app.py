@@ -38,6 +38,7 @@ from gui.config import (
     set_persistence_observer, settings_read_only_version,
 )
 from gui.utils import (
+    dispatch_to_ui,
     get_app_dir, detect_gpu, is_video_file, is_image_file,
     detect_ai_engines, detect_ffmpeg, get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
@@ -1760,11 +1761,8 @@ class VideoSubtitleRemoverApp(
             except Exception as exc:
                 logger.debug(f"Soft-subtitle probe failed for {path}: {exc}")
 
-            try:
-                self.root.after(0, self._apply_soft_subtitle_probe_records,
-                                item_id, records)
-            except RuntimeError:
-                pass
+            dispatch_to_ui(self.root, self._apply_soft_subtitle_probe_records,
+                           item_id, records)
 
         threading.Thread(
             target=_worker,
@@ -2616,10 +2614,9 @@ class VideoSubtitleRemoverApp(
                 self._update_status(N_(f"{fname}: {item.message}"), "info")
             self._refresh_action_states()
 
-        try:
-            self.root.after(0, update)
-        except RuntimeError:
-            pass  # root already destroyed during shutdown
+        # A teardown race here used to escape into _process_item's blanket
+        # handler and persist the item as ERROR.
+        dispatch_to_ui(self.root, update)
 
     def _maybe_restore_queue(self):
         """Restore saved queue items from a previous session."""

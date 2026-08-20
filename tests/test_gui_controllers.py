@@ -407,6 +407,73 @@ class PreviewRemoverCacheTests(unittest.TestCase):
         self.assertEqual(second.config.mask_feather_px, 9)
 
 
+class UiDispatchTeardownTests(unittest.TestCase):
+    """RM-215: after() raises RuntimeError or TclError depending on how far
+    teardown has progressed, and only one of the two was caught."""
+
+    def _root(self, error):
+        def after(_delay, *_args):
+            raise error
+
+        return SimpleNamespace(after=after)
+
+    def test_runtime_error_during_teardown_is_swallowed(self):
+        from gui.utils import dispatch_to_ui
+
+        self.assertIsNone(
+            dispatch_to_ui(self._root(RuntimeError("main thread is not in main loop")),
+                           lambda: None))
+
+    def test_tcl_error_during_teardown_is_swallowed(self):
+        import tkinter as tk
+
+        from gui.utils import dispatch_to_ui
+
+        error = tk.TclError(
+            'can\'t invoke "after" command: application has been destroyed')
+        self.assertIsNone(dispatch_to_ui(self._root(error), lambda: None))
+
+    def test_a_live_root_still_gets_the_callback(self):
+        from gui.utils import dispatch_to_ui
+
+        seen = []
+        root = SimpleNamespace(
+            after=lambda delay, cb, *args: seen.append((delay, cb, args)) or "id1")
+
+        handle = dispatch_to_ui(root, print, "a", "b")
+
+        self.assertEqual(handle, "id1")
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][0], 0)
+        self.assertEqual(seen[0][2], ("a", "b"))
+
+    def test_an_unrelated_error_is_not_swallowed(self):
+        """Only teardown races are ignorable. A bug in the marshal itself
+        must still surface."""
+        from gui.utils import dispatch_to_ui
+
+        with self.assertRaises(ValueError):
+            dispatch_to_ui(self._root(ValueError("boom")), lambda: None)
+
+    def test_no_worker_to_ui_marshal_catches_runtime_error_alone(self):
+        """The whole point of the helper: no site may guard `after` with a
+        bare RuntimeError again, because the TclError is the one that
+        persisted a bogus ERROR status."""
+        import re
+
+        gui_dir = Path(__file__).resolve().parents[1] / "gui"
+        offenders = []
+        for path in sorted(gui_dir.glob("*.py")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if not re.search(r"\.after\(", line):
+                    continue
+                window = "\n".join(lines[index:index + 4])
+                if re.search(r"except RuntimeError\s*:", window):
+                    offenders.append(f"{path.name}:{index + 1}")
+        self.assertEqual(offenders, [])
+
+
 if __name__ == "__main__":
     unittest.main()
 
