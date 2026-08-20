@@ -504,12 +504,12 @@ class SupportControllerMixin:
         }
 
     def _show_about(self):
-        """Open a themed About dialog with version, credits, and quick links."""
+        """Open the compact help and diagnostics surface."""
         dialog = tk.Toplevel(self.root)
         dialog.withdraw()
-        dialog.title(tr("About {app_name}").format(app_name=APP_NAME))
+        dialog.title(tr("Help & diagnostics"))
         dialog.configure(bg=Theme.BG_OVERLAY)
-        dialog.resizable(False, False)
+        dialog.resizable(True, True)
         dialog.transient(self.root)
         try:
             from backend.a11y import set_accessible_metadata
@@ -517,9 +517,10 @@ class SupportControllerMixin:
             set_accessible_metadata(
                 dialog,
                 role="dialog",
-                label=tr("About {app_name}").format(app_name=APP_NAME),
+                label=tr("Help & diagnostics"),
                 state="modal",
-                description=str(status.get("next_action") or tr("Backend status and app version.")),
+                description=str(
+                    status.get("next_action") or tr("System and runtime status.")),
             )
         except Exception:
             pass
@@ -531,50 +532,30 @@ class SupportControllerMixin:
                 pass
             dialog.destroy()
 
-        # RM-152: About was the last major dialog still sized by its own
-        # content. At 200% text scale on a short work area it grew past
-        # the screen with no way to reach the Close button, so it now
-        # uses the same scroll-and-clamp path as every other dialog.
         scroll_body = scrollable_dialog_body(dialog, bg=Theme.BG_SECONDARY)
-        outer = tk.Frame(scroll_body, bg=Theme.BORDER, padx=1, pady=1)
-        outer.pack()
-        body = tk.Frame(outer, bg=Theme.BG_SECONDARY)
-        body.pack()
+        body = tk.Frame(scroll_body, bg=Theme.BG_SECONDARY)
+        body.pack(fill="both", expand=True)
 
         content = tk.Frame(body, bg=Theme.BG_SECONDARY)
-        content.pack(padx=32, pady=(28, 14))
+        content.pack(fill="both", expand=True, padx=32, pady=(28, 24))
 
-        # Brand row
         brand_row = tk.Frame(content, bg=Theme.BG_SECONDARY)
-        brand_row.pack(anchor="w")
+        brand_row.pack(fill="x")
         if self._brand_photo:
             tk.Label(brand_row, image=self._brand_photo,
                      bg=Theme.BG_SECONDARY).pack(side="left", padx=(0, Theme.S_MD))
         title_stack = tk.Frame(brand_row, bg=Theme.BG_SECONDARY)
-        title_stack.pack(side="left")
-        tk.Label(title_stack, text=APP_NAME, font=f(Theme.F_HEADING, "bold"),
+        title_stack.pack(side="left", fill="x", expand=True)
+        tk.Label(title_stack, text=tr("Help & diagnostics"),
+                 font=f(Theme.F_DISPLAY, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
-        tk.Label(title_stack, text=tr("Version {version}").format(version=APP_VERSION),
-                 font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(anchor="w", pady=(2, 0))
-
-        # Fact rows
-        fact_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
-                             highlightbackground=Theme.BORDER_SUBTLE)
-        fact_card.pack(fill="x", pady=(Theme.S_LG, 0))
-
-        def fact(label, value, tone=Theme.TEXT_PRIMARY):
-            row = tk.Frame(fact_card, bg=Theme.BG_CARD)
-            row.pack(fill="x", padx=14, pady=6)
-            tk.Label(row, text=tr(label), font=f(Theme.F_BODY_SM),
-                     bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left")
-            display = truncate_middle(str(value), 58)
-            value_label = tk.Label(row, text=display,
-                                   font=f(Theme.F_BODY_SM, "bold"),
-                                   bg=Theme.BG_CARD, fg=tone)
-            value_label.pack(side="right")
-            if display != str(value):
-                Tooltip(value_label, str(value))
+        tk.Label(
+            title_stack,
+            text=f"{APP_NAME}  v{APP_VERSION}",
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+        ).pack(anchor="w", pady=(2, 0))
 
         det_label = ", ".join(self.ai_engines["detection"]) or tr("None")
         inp_label = ", ".join(self.ai_engines["inpainting"]) or tr("None")
@@ -584,39 +565,105 @@ class SupportControllerMixin:
                 count=gpu_count, suffix="s" if gpu_count != 1 else "")
             if self.gpus else tr("CPU only")
         )
+        cache_label = tr("Unavailable")
+        try:
+            from backend.cache_inventory import discover_caches, _format_bytes
+            total = sum(e.total_bytes for e in discover_caches())
+            cache_label = _format_bytes(total)
+        except Exception:
+            pass
 
-        fact(tr("Detection engines"), det_label, Theme.INFO)
-        fact(tr("Inpainting engines"), inp_label, Theme.SUCCESS)
-        fact(tr("Compute"), gpu_label,
-             Theme.SUCCESS if self.gpus else Theme.WARNING)
-        fact(tr("FFmpeg"), tr("Ready") if self.ffmpeg_ready else tr("Missing"),
-             Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING)
-        # RM-147: the last job's real execution, so a "CUDA" run that actually
-        # used CPU OCR / cv2 inpainting is visible here too.
+        columns = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        columns.pack(fill="both", expand=True, pady=(Theme.S_XL, 0))
+        columns.columnconfigure(0, weight=1, uniform="help")
+        columns.columnconfigure(1, weight=1, uniform="help")
+
+        system = tk.Frame(columns, bg=Theme.BG_SECONDARY)
+        system.grid(row=0, column=0, sticky="nsew", padx=(0, Theme.S_XL))
+        runtime = tk.Frame(columns, bg=Theme.BG_SECONDARY)
+        runtime.grid(row=0, column=1, sticky="nsew", padx=(Theme.S_XL, 0))
+        tk.Frame(
+            columns, bg=Theme.BORDER_SUBTLE, width=1,
+        ).grid(row=0, column=0, sticky="nse", padx=(0, 0))
+
+        def section_title(parent, text):
+            tk.Label(
+                parent, text=text, font=f(Theme.F_TITLE, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+            ).pack(anchor="w", pady=(0, Theme.S_SM))
+
+        def fact(parent, label, value, tone=Theme.TEXT_PRIMARY):
+            row = tk.Frame(parent, bg=Theme.BG_SECONDARY)
+            row.pack(fill="x", pady=Theme.S_XS)
+            tk.Label(
+                row, text=label, font=f(Theme.F_BODY_SM),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(side="left")
+            full_value = str(value)
+            display = truncate_middle(full_value, 34)
+            value_label = tk.Label(
+                row, text=display, font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY, fg=tone,
+            )
+            value_label.pack(side="right", padx=(Theme.S_SM, 0))
+            if display != full_value:
+                Tooltip(value_label, full_value)
+
+        section_title(system, tr("System"))
+        fact(system, tr("Compute"), gpu_label)
+        fact(system, tr("Detection"), det_label)
+        fact(system, tr("Inpainting"), inp_label)
+        fact(
+            system,
+            tr("FFmpeg"),
+            tr("Ready") if self.ffmpeg_ready else tr("Missing"),
+            Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING,
+        )
+        fact(system, tr("Model cache"), cache_label)
+
+        summary = (self.backend_status or {}).get("summary", {})
+        tone = str(summary.get("tone") or "neutral")
+        ready = tone == "success"
+        section_title(runtime, tr("Runtime status"))
+        status_row = tk.Frame(runtime, bg=Theme.BG_SECONDARY)
+        status_row.pack(fill="x", pady=(Theme.S_XS, Theme.S_MD))
+        tk.Label(
+            status_row, text="*", font=f(Theme.F_BODY, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.SUCCESS if ready else Theme.WARNING,
+        ).pack(side="left")
+        tk.Label(
+            status_row,
+            text=tr("Ready") if ready else tr("Needs attention"),
+            font=f(Theme.F_BODY, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.SUCCESS if ready else Theme.WARNING,
+        ).pack(side="left", padx=(Theme.S_SM, 0))
+        fact(runtime, tr("Detection"), summary.get("detection") or tr("Unknown"))
+        fact(runtime, tr("Inpainting"), summary.get("inpainting") or tr("Unknown"))
+        fact(runtime, tr("Models"), summary.get("model_files") or tr("Unknown"))
         last_execution = self._last_execution_summary()
         if last_execution:
             fact(
+                runtime,
                 tr("Last run"),
                 last_execution["summary"],
                 Theme.WARNING if last_execution["fell_back"] else Theme.SUCCESS,
             )
-        fact(tr("Input"), tr("Click Import or drag files onto the queue"))
-        fact(tr("Settings"), str(SETTINGS_FILE))
-        fact(tr("Log file"), str(LOG_FILE))
-        try:
-            from backend.cache_inventory import discover_caches, _format_bytes
-            total = sum(e.total_bytes for e in discover_caches())
-            fact(tr("Disk cache"), _format_bytes(total))
-        except Exception:
-            fact(tr("Disk cache"), tr("unavailable"))
+        next_action = str(summary.get("next_action") or tr("No action needed."))
+        tk.Label(
+            runtime, text=next_action, font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
+            wraplength=310,
+            justify="left",
+        ).pack(anchor="w", pady=(Theme.S_MD, 0))
 
-        self._build_backend_status_panel(content)
-
-        # Action row
-        actions = tk.Frame(body, bg=Theme.BG_CARD)
+        actions = tk.Frame(body, bg=Theme.BG_SECONDARY)
         actions.pack(fill="x")
-        actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
-        actions_inner.pack(side="right", padx=16, pady=14)
+        tk.Frame(actions, bg=Theme.BORDER_SUBTLE, height=1).pack(fill="x")
+        actions_inner = tk.Frame(actions, bg=Theme.BG_SECONDARY)
+        actions_inner.pack(side="right", padx=24, pady=16)
 
         ModernButton(actions_inner, text=tr("Open log"), width=96,
                      command=self._open_log_file, style="ghost", size="md").pack(side="left")
@@ -629,9 +676,6 @@ class SupportControllerMixin:
         ModernButton(actions_inner, text=tr("Support bundle"), width=128,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text=tr("Settings folder"), width=132,
-                     command=self._open_settings_folder, style="ghost",
-                     size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text=tr("Close"), width=84,
                      command=_close_about,
                      style="primary", size="md").pack(side="left", padx=(Theme.S_SM, 0))
@@ -639,8 +683,8 @@ class SupportControllerMixin:
         dialog.bind("<Escape>", lambda e: _close_about())
         dialog.protocol("WM_DELETE_WINDOW", _close_about)
 
-        dialog.update_idletasks()
-        fit_dialog_to_work_area(dialog, self.root)
+        fit_dialog_to_work_area(
+            dialog, self.root, min_width=820, min_height=560)
         dialog.deiconify()
         dialog.grab_set()
 

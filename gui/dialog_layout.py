@@ -153,8 +153,14 @@ def fit_dialog_to_work_area(
     except tk.TclError:
         return (0, 0)
     area_w, area_h = work_area(root)
-    want_w = max(int(dialog.winfo_reqwidth()), min_width)
-    want_h = max(int(dialog.winfo_reqheight()), min_height)
+    # Canvas windows do not contribute their child request size to the
+    # Toplevel. Measure the scroll body directly or wide dialogs collapse to
+    # the minimum width and immediately grow a horizontal scrollbar.
+    body = getattr(dialog, "_vsr_scroll_body", None)
+    body_w = int(body.winfo_reqwidth()) if body is not None else 0
+    body_h = int(body.winfo_reqheight()) if body is not None else 0
+    want_w = max(int(dialog.winfo_reqwidth()), body_w, min_width)
+    want_h = max(int(dialog.winfo_reqheight()), body_h, min_height)
     width = max(min(want_w, area_w), min(min_width, area_w))
     height = max(min(want_h, area_h), min(min_height, area_h))
     dialog.resizable(True, True)

@@ -180,25 +180,36 @@ class RegionSelectorWindow:
             self.rects.extend([tuple(r) for r in preload if r])
 
             self.win = tk.Toplevel(self.root)
-            self.win.title(tr("Choose subtitle region"))
+            self.win.title(tr("Set subtitle region"))
             self.win.configure(bg=Theme.BG_OVERLAY)
             # RM-148: the editor grows with text scale, so it builds into a
             # scrollable body clamped to the screen work area.
             self.win.resizable(True, True)
             body = scrollable_dialog_body(self.win, bg=Theme.BG_OVERLAY)
 
+            hero = tk.Frame(body, bg=Theme.BG_OVERLAY)
+            hero.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_SM))
+            tk.Label(
+                hero, text=tr("Set subtitle region"),
+                font=f(Theme.F_HEADING, "bold"),
+                bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY,
+            ).pack(anchor="w")
+            tk.Label(
+                hero, text=tr("Draw over the subtitle area."),
+                font=f(Theme.F_BODY_SM),
+                bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED,
+            ).pack(anchor="w", pady=(2, 0))
+
             self.canvas = tk.Canvas(
                 body,
                 width=self.disp_w,
                 height=self.disp_h,
-                highlightthickness=2,
-                highlightbackground=Theme.BORDER_SUBTLE,
-                highlightcolor=Theme.BLUE_PRIMARY,
+                highlightthickness=0,
                 bg=Theme.BG_DARK,
                 cursor="cross",
                 takefocus=True,
             )
-            self.canvas.pack()
+            self.canvas.pack(padx=Theme.S_MD)
             set_accessible_metadata(
                 self.canvas,
                 role="region editor canvas",
@@ -668,8 +679,8 @@ class RegionSelectorWindow:
                              command=self._commit_motion_track,
                              style="secondary", size="sm", width=108).pack(
                                  side="left", padx=(Theme.S_SM, 0))
-            ModernButton(actions, text=tr("Save"), command=self._save_and_close,
-                         style="primary", size="sm", width=92).pack(
+            ModernButton(actions, text=tr("Save region"), command=self._save_and_close,
+                         style="primary", size="sm", width=112).pack(
                              side="right")
             ModernButton(actions, text=tr("Cancel"), command=self.win.destroy,
                          style="ghost", size="sm", width=92).pack(
@@ -681,10 +692,6 @@ class RegionSelectorWindow:
                      text=tr("Drag to add; choose a region for exact coordinates and timing."),
                      font=f(Theme.F_BODY_SM, "bold"),
                      bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
-            tk.Label(hint_frame,
-                     text=tr("Arrow keys nudge; Shift moves 10 px; Ctrl+arrows resize; Ctrl+Z/Y undo or redo."),
-                     font=f(Theme.F_META),
-                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(pady=(2, 0))
 
             for sequence in ("<Left>", "<Right>", "<Up>", "<Down>"):
                 self.canvas.bind(sequence, self._transform_selected_region, add="+")
@@ -702,7 +709,7 @@ class RegionSelectorWindow:
             self.win.bind("<Escape>", lambda e: self.win.destroy())
             self.win.transient(self.root)
             fit_dialog_to_work_area(
-                self.win, self.root, min_width=420, min_height=320)
+                self.win, self.root, min_width=960, min_height=640)
             self.win.grab_set()
         except Exception as e:
             logger.error(f"Region selector error: {e}")

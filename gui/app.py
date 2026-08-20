@@ -139,7 +139,7 @@ class VideoSubtitleRemoverApp(
         if self._background_ui:
             self.root.withdraw()
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
-        self.root.geometry("980x720" if self._background_ui else "1380x880")
+        self.root.geometry("980x720" if self._background_ui else "1440x900")
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
         self._ui_resources_released = False
@@ -1278,7 +1278,7 @@ class VideoSubtitleRemoverApp(
             return
         for block in blocks:
             block.grid_forget()
-        for column in range(5):
+        for column in range(6):
             self._command_inner.columnconfigure(
                 column, weight=0, uniform="", minsize=0)
         if compact:
@@ -1290,11 +1290,11 @@ class VideoSubtitleRemoverApp(
             )
         else:
             self._command_inner.columnconfigure(0, minsize=176)
-            self._command_inner.columnconfigure(4, minsize=188)
             for column in (1, 2, 3):
-                self._command_inner.columnconfigure(
-                    column, weight=1, uniform="command_fields")
-            positions = ((0, 0, 1), (0, 1, 1), (0, 2, 1), (0, 3, 1), (0, 4, 1))
+                self._command_inner.columnconfigure(column, minsize=230)
+            self._command_inner.columnconfigure(4, weight=1)
+            self._command_inner.columnconfigure(5, minsize=188)
+            positions = ((0, 0, 1), (0, 1, 1), (0, 2, 1), (0, 3, 1), (0, 5, 1))
         for block, (row, column, span) in zip(blocks, positions):
             block.grid(
                 row=row, column=column, columnspan=span, sticky="ew",
@@ -1307,6 +1307,30 @@ class VideoSubtitleRemoverApp(
             return
         label = tr("Manual region") if self.skip_detection_var.get() else tr("Automatic")
         self._command_region_var.set(label)
+
+    def _sync_command_profile(self, *_args):
+        """Show friendly profile names while preserving backend mode values."""
+        if not hasattr(self, "_command_profile_var"):
+            return
+        labels = {
+            "Auto": tr("Balanced"),
+            "STTN": tr("Motion"),
+            "LAMA": tr("Detail"),
+            "ProPainter": tr("Temporal"),
+        }
+        mode = self.mode_var.get()
+        self._command_profile_var.set(labels.get(mode, mode))
+
+    def _on_command_profile_changed(self, _event=None):
+        """Translate the friendly command-bar profile back to its mode."""
+        values = {
+            tr("Balanced"): "Auto",
+            tr("Motion"): "STTN",
+            tr("Detail"): "LAMA",
+            tr("Temporal"): "ProPainter",
+        }
+        requested = values.get(self._command_profile_var.get(), "Auto")
+        self._on_mode_picker_changed(requested)
 
     def _on_command_region_changed(self, _event=None):
         """Route the compact region selector to the existing editor."""
@@ -1322,6 +1346,8 @@ class VideoSubtitleRemoverApp(
         if not hasattr(self, "_settings_col"):
             return
         try:
+            if not self.adv_visible:
+                self._toggle_advanced()
             if self._layout_mode == "stacked":
                 bbox = self._content_canvas.bbox("all")
                 if bbox and bbox[3] > 0:

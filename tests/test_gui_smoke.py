@@ -479,7 +479,7 @@ class GuiSmokeTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
-    def test_about_dialog_shows_backend_status_panel(self):
+    def test_help_dialog_shows_compact_runtime_status(self):
         app = self._make_app(withdraw=False)
         try:
             app.ai_engines = {
@@ -508,9 +508,10 @@ class GuiSmokeTests(unittest.TestCase):
             dialog = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "About Video Subtitle Remover Pro"
+                and child.title() == "Help & diagnostics"
             )
-            self.assertLessEqual(dialog.winfo_reqwidth(), 650)
+            self.assertGreaterEqual(dialog.winfo_width(), 820)
+            self.assertGreaterEqual(dialog.winfo_height(), 560)
 
             texts = []
             for widget in self._walk_widgets(app.root):
@@ -524,13 +525,8 @@ class GuiSmokeTests(unittest.TestCase):
                 if text:
                     texts.append(str(text))
 
-            self.assertIn("BACKEND STATUS", texts)
+            self.assertIn("Runtime status", texts)
             self.assertIn("LaMa ONNX ready", texts)
-            self.assertIn("CPUExecutionProvider", texts)
-            self.assertIn(
-                "GUI picker: 52 selectable OCR codes; installed OCR capacity: RapidOCR 100+.",
-                texts,
-            )
             self.assertIn("Model cache", texts)
             self.assertIn("No backend setup action needed.", texts)
             try:
@@ -646,7 +642,7 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertIsNotNone(app._preview_region_editor_state)
             self.assertFalse(any(
                 isinstance(child, tk.Toplevel)
-                and child.title() == "Choose subtitle region"
+                and child.title() == "Set subtitle region"
                 for child in app.root.winfo_children()
             ))
 
@@ -716,7 +712,7 @@ class GuiSmokeTests(unittest.TestCase):
             selector = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "Choose subtitle region"
+                and child.title() == "Set subtitle region"
             )
             canvas = next(
                 widget for widget in self._walk_widgets(selector)
@@ -755,7 +751,7 @@ class GuiSmokeTests(unittest.TestCase):
             save_button = next(
                 widget for widget in self._walk_widgets(selector)
                 if isinstance(widget, ModernButton)
-                and getattr(widget, "text", "") == "Save"
+                and getattr(widget, "text", "") == "Save region"
             )
             save_button.command()
             app.root.update()
@@ -788,7 +784,7 @@ class GuiSmokeTests(unittest.TestCase):
             selector = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "Choose subtitle region"
+                and child.title() == "Set subtitle region"
             )
             canvas = next(
                 widget for widget in self._walk_widgets(selector)
@@ -823,7 +819,7 @@ class GuiSmokeTests(unittest.TestCase):
             save_button = next(
                 widget for widget in self._walk_widgets(selector)
                 if isinstance(widget, ModernButton)
-                and getattr(widget, "text", "") == "Save"
+                and getattr(widget, "text", "") == "Save region"
             )
             save_button.command()
             app.root.update()
@@ -889,7 +885,7 @@ class GuiSmokeTests(unittest.TestCase):
             editor = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "Correct subtitle mask"
+                and child.title() == "Review mask"
             )
             canvas = editor._vsr_correction_canvas
             self.assertEqual(
@@ -1042,7 +1038,7 @@ class GuiSmokeTests(unittest.TestCase):
             selector = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "Choose subtitle region"
+                and child.title() == "Set subtitle region"
             )
             canvas = next(
                 widget for widget in self._walk_widgets(selector)
@@ -1061,7 +1057,7 @@ class GuiSmokeTests(unittest.TestCase):
             save_button = next(
                 widget for widget in self._walk_widgets(selector)
                 if isinstance(widget, ModernButton)
-                and getattr(widget, "text", "") == "Save"
+                and getattr(widget, "text", "") == "Save region"
             )
             save_button.command()
             app.root.update()
@@ -1111,7 +1107,7 @@ class GuiSmokeTests(unittest.TestCase):
             selector = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "Choose subtitle region")
+                and child.title() == "Set subtitle region")
             canvas = next(
                 widget for widget in self._walk_widgets(selector)
                 if isinstance(widget, tk.Canvas)
@@ -1140,7 +1136,7 @@ class GuiSmokeTests(unittest.TestCase):
             save_button = next(
                 widget for widget in self._walk_widgets(selector)
                 if isinstance(widget, ModernButton)
-                and getattr(widget, "text", "") == "Save")
+                and getattr(widget, "text", "") == "Save region")
             save_button.command()
             app.root.update()
 
@@ -1195,7 +1191,7 @@ class GuiSmokeTests(unittest.TestCase):
             selector = next(
                 child for child in app.root.winfo_children()
                 if isinstance(child, tk.Toplevel)
-                and child.title() == "Choose subtitle region"
+                and child.title() == "Set subtitle region"
             )
             canvas = next(
                 widget for widget in self._walk_widgets(selector)
@@ -1234,7 +1230,7 @@ class GuiSmokeTests(unittest.TestCase):
             save_button = next(
                 widget for widget in self._walk_widgets(selector)
                 if isinstance(widget, ModernButton)
-                and getattr(widget, "text", "") == "Save"
+                and getattr(widget, "text", "") == "Save region"
             )
             save_button.command()
             app.root.update()
@@ -1533,11 +1529,11 @@ class GuiSmokeTests(unittest.TestCase):
                 (960, 540),
             )
             self.assertEqual(Theme.BG_DARK, "#080d15")
-            self.assertEqual(Theme.BLUE_PRIMARY, "#4f7cff")
+            self.assertEqual(Theme.BLUE_PRIMARY, "#2f78ff")
             self.assertEqual(Theme.TEXT_PRIMARY, "#f5f7fb")
             self.assertEqual(Theme.BG_CARD, Theme.BG_SECONDARY)
-            self.assertGreaterEqual(Theme.F_BODY_SM, 12)
-            self.assertGreaterEqual(Theme.F_META, 11)
+            self.assertGreaterEqual(Theme.F_BODY_SM, 14)
+            self.assertGreaterEqual(Theme.F_META, 13)
             self.assertEqual(int(app._preview_frame.cget("highlightthickness")), 0)
             self.assertEqual(int(app._settings_col.winfo_children()[0].cget(
                 "highlightthickness")), 0)
@@ -1567,9 +1563,12 @@ class GuiSmokeTests(unittest.TestCase):
             self.assertEqual(app.queue_move_up_btn.winfo_manager(), "pack")
             self.assertEqual(app.queue_move_down_btn.winfo_manager(), "pack")
             self.assertEqual(
-                int(app._content.grid_columnconfigure(0)["weight"]), 17)
+                int(app._content.grid_columnconfigure(0)["weight"]), 1)
             self.assertEqual(
-                int(app._content.grid_columnconfigure(1)["weight"]), 8)
+                int(app._content.grid_columnconfigure(1)["weight"]), 0)
+            self.assertGreaterEqual(
+                int(app._content.grid_columnconfigure(1)["minsize"]), 380)
+            self.assertEqual(app._queue_inspector_spacer.winfo_manager(), "pack")
         finally:
             self._destroy_app(app)
 

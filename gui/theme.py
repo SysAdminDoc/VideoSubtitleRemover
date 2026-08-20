@@ -38,9 +38,9 @@ class Theme:
     GREEN_PRESS = "#12a77d"
     GREEN_MUTED = "#10382f"
 
-    BLUE_PRIMARY = "#4f7cff"
-    BLUE_HOVER = "#668cff"
-    BLUE_PRESS = "#3d66df"
+    BLUE_PRIMARY = "#2f78ff"
+    BLUE_HOVER = "#4b8aff"
+    BLUE_PRESS = "#2267dd"
     BLUE_MUTED = "#1a2d5a"
     CYAN = "#36c5f0"
 
@@ -52,7 +52,7 @@ class Theme:
 
     # Ink: dark foreground for bright-filled controls
     INK_ON_GREEN = "#04120b"
-    INK_ON_BLUE = "#071226"
+    INK_ON_BLUE = "#ffffff"
     INK_ON_DANGER = "#2a0505"
 
     # Danger / destructive action
@@ -74,7 +74,7 @@ class Theme:
     BORDER = "#2a3548"
     BORDER_STRONG = "#3a4962"
     BORDER_SUBTLE = "#1c2635"
-    BORDER_FOCUS = "#4f7cff"
+    BORDER_FOCUS = BLUE_PRIMARY
 
     # Progress
     PROGRESS_BG = "#182236"
@@ -86,15 +86,15 @@ class Theme:
     RTL_LAYOUT = False
 
     # Size tokens
-    F_DISPLAY = 17
-    F_HEADING = 15
-    F_TITLE = 13
-    F_BODY = 13
-    F_BODY_SM = 12
-    F_LABEL = 12
-    F_META = 11
-    F_EYEBROW = 10
-    F_MICRO = 10
+    F_DISPLAY = 20
+    F_HEADING = 17
+    F_TITLE = 15
+    F_BODY = 15
+    F_BODY_SM = 14
+    F_LABEL = 14
+    F_META = 13
+    F_EYEBROW = 12
+    F_MICRO = 12
 
     # Spacing rhythm (4pt baseline)
     S_XS = 4

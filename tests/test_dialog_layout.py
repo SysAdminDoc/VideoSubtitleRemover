@@ -9,9 +9,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import tkinter as tk
+import tkinter as tk  # noqa: E402
 
-from gui import dialog_layout
+from gui import dialog_layout  # noqa: E402
 
 
 class _TkTestCase(unittest.TestCase):
@@ -97,6 +97,17 @@ class ScrollableDialogTests(_TkTestCase):
             dialog, self.root)
         self.assertLess(height, 720)
         self.assertLessEqual(width, 980)
+
+    def test_wide_scroll_body_sets_the_dialog_width(self):
+        self.root._vsr_work_area_override = (1200, 800)
+        dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
+        self.addCleanup(dialog.destroy)
+        body = dialog_layout.scrollable_dialog_body(dialog)
+        tk.Frame(body, width=780, height=120).pack()
+        width, _height = dialog_layout.fit_dialog_to_work_area(
+            dialog, self.root, min_width=320)
+        self.assertGreaterEqual(width, 780)
 
     def test_dialog_becomes_resizable_with_a_work_area_ceiling(self):
         self.root._vsr_work_area_override = (980, 720)

@@ -54,9 +54,9 @@ class ResponsiveLayoutMixin:
         """Reflow the workbench without changing its workflow order."""
         if not hasattr(self, "_content"):
             return
-        if width < 1180 and getattr(self, "_log_visible", False):
+        if width < 1260 and getattr(self, "_log_visible", False):
             self._toggle_log_panel()
-        compact = width < 1180 or self._text_scale_percent >= 150
+        compact = width < 1260 or self._text_scale_percent >= 150
         self._layout_command_strip(compact=compact)
         if hasattr(self, "_header_title_label"):
             title_wrap = (
@@ -82,6 +82,12 @@ class ResponsiveLayoutMixin:
                 self._log_clear_btn.pack(side="right", padx=(0, Theme.S_SM))
 
         mode = "stacked" if compact else "wide"
+        spacer = getattr(self, "_queue_inspector_spacer", None)
+        if spacer is not None:
+            if mode == "stacked":
+                spacer.pack_forget()
+            elif not spacer.winfo_manager():
+                spacer.pack(side="right", fill="y")
         if mode == self._layout_mode:
             self._layout_queue_actions(
                 compact=compact,
@@ -137,9 +143,9 @@ class ResponsiveLayoutMixin:
             self.status_hint.pack_forget()
         else:
             self._content.columnconfigure(
-                0, weight=17, minsize=500, uniform="workbench")
+                0, weight=1, minsize=620, uniform="")
             self._content.columnconfigure(
-                1, weight=8, minsize=360, uniform="workbench")
+                1, weight=0, minsize=380, uniform="")
             self._content.columnconfigure(2, weight=0, minsize=0, uniform="")
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
@@ -150,7 +156,7 @@ class ResponsiveLayoutMixin:
 
             self._header_left.pack(side="left", fill="y")
             self._header_right.pack(side="right", anchor="n")
-            if width >= 1180 and self._text_scale_percent < 150:
+            if width >= 1260 and self._text_scale_percent < 150:
                 self._header_chips.pack(side="right",
                                         padx=(Theme.S_XL, Theme.S_LG))
 

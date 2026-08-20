@@ -392,10 +392,10 @@ class ModernButton(tk.Canvas):
     crisply regardless of ttk theme.
 
     Style variants: primary, accent, secondary, ghost, danger, success
-    Size variants: sm (30), md (34), lg (38)
+    Size variants: sm (32), md (36), lg (40)
     """
 
-    SIZES = {"sm": (30, Theme.F_META), "md": (34, Theme.F_LABEL), "lg": (38, Theme.F_BODY_SM)}
+    SIZES = {"sm": (32, Theme.F_META), "md": (36, Theme.F_LABEL), "lg": (40, Theme.F_BODY_SM)}
 
     def __init__(self, parent, text="Button", command=None, width=120, height=None,
                  bg=None, hover_bg=None, fg=Theme.TEXT_PRIMARY,
@@ -1829,9 +1829,9 @@ class _Segment(tk.Canvas):
             fg = Theme.TEXT_DISABLED
             border = Theme.BORDER_SUBTLE
         elif self.selected:
-            bg = Theme.GREEN_MUTED
-            fg = Theme.GREEN_PRIMARY
-            border = Theme.GREEN_HOVER
+            bg = Theme.BLUE_MUTED
+            fg = Theme.BLUE_HOVER
+            border = Theme.BLUE_PRIMARY
         elif self.hovered:
             bg = Theme.BG_CARD_HOVER
             fg = Theme.TEXT_PRIMARY

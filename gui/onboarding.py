@@ -6,6 +6,7 @@ import logging
 
 try:
     import tkinter as tk
+    from tkinter import ttk
 except ImportError:
     pass
 
@@ -35,8 +36,6 @@ class OnboardingMixin:
         dialog.withdraw()
         dialog.title(tr("Welcome to {app}").format(app=APP_NAME))
         dialog.configure(bg=Theme.BG_OVERLAY)
-        # RM-148: sized to the work area with an internal scroll path so high
-        # text scale cannot push the actions off screen.
         dialog.resizable(True, True)
         dialog.transient(self.root)
         try:
@@ -46,137 +45,133 @@ class OnboardingMixin:
                 role="dialog",
                 label=tr("Welcome to {app_name}").format(app_name=APP_NAME),
                 state="modal",
-                description=(
-                    tr("Three first-run cues: import media, inspect the "
-                       "region, and run the batch.")
-                ),
+                description=tr("Choose a cleanup profile and start locally."),
             )
         except Exception:
             pass
 
         scroll_body = scrollable_dialog_body(dialog, bg=Theme.BG_OVERLAY)
-        outer = tk.Frame(scroll_body, bg=Theme.BORDER, padx=1, pady=1)
-        outer.pack()
-        body = tk.Frame(outer, bg=Theme.BG_SECONDARY)
-        body.pack()
+        body = tk.Frame(scroll_body, bg=Theme.BG_SECONDARY)
+        body.pack(fill="both", expand=True)
 
         content = tk.Frame(body, bg=Theme.BG_SECONDARY)
-        content.pack(padx=36, pady=(28, 16))
+        content.pack(fill="both", expand=True, padx=32, pady=(28, 24))
+        content.columnconfigure(0, weight=3, minsize=400)
+        content.columnconfigure(1, weight=2, minsize=280)
 
-        # Headline
-        hero = tk.Frame(content, bg=Theme.BG_SECONDARY)
-        hero.pack(anchor="w")
-        tk.Label(hero, text=tr("Welcome"), font=f(Theme.F_DISPLAY, "bold"),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(
-                     side="left")
-        tk.Label(hero, text=f"v{APP_VERSION}", font=f(Theme.F_BODY_SM),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(
-                     side="left", padx=(Theme.S_SM, 0), pady=(14, 0))
+        left = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 36))
+        brand = tk.Frame(left, bg=Theme.BG_SECONDARY)
+        brand.pack(anchor="w")
+        tk.Label(
+            brand, text=APP_NAME, font=f(Theme.F_TITLE, "bold"),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+        ).pack(side="left")
+        tk.Label(
+            brand, text=f"v{APP_VERSION}", font=f(Theme.F_META),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+        ).pack(side="left", padx=(Theme.S_SM, 0), pady=(3, 0))
 
-        tk.Label(content,
-                 text=tr("Three things that make batch cleanup painless."),
-                 font=f(Theme.F_BODY),
-                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY).pack(
-                     anchor="w", pady=(4, Theme.S_LG))
+        tk.Label(
+            left, text=tr("Remove subtitles. Keep the frame."),
+            font=f(Theme.F_DISPLAY, "bold"), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(anchor="w", pady=(Theme.S_LG, Theme.S_XS))
+        tk.Label(
+            left, text=tr("A short workflow for clean, local processing."),
+            font=f(Theme.F_BODY), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(anchor="w", pady=(0, Theme.S_XL))
 
-        # Cue cards
-        cards = tk.Frame(content, bg=Theme.BG_SECONDARY)
-        cards.pack(anchor="w")
+        def step(number: str, heading: str, body_text: str):
+            row = tk.Frame(left, bg=Theme.BG_SECONDARY)
+            row.pack(fill="x", pady=(0, Theme.S_LG))
+            tk.Label(
+                row, text=number, font=f(Theme.F_BODY, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.BLUE_HOVER, width=2,
+                anchor="w",
+            ).pack(side="left", anchor="n")
+            copy = tk.Frame(row, bg=Theme.BG_SECONDARY)
+            copy.pack(side="left", fill="x", expand=True)
+            tk.Label(
+                copy, text=tr(heading), font=f(Theme.F_BODY, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+            ).pack(anchor="w")
+            tk.Label(
+                copy, text=tr(body_text), font=f(Theme.F_BODY_SM),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                wraplength=350, justify="left",
+            ).pack(anchor="w", pady=(2, 0))
 
-        def card(num: str, heading: str, body_text: str, tone: str):
-            c = tk.Frame(cards, bg=Theme.BG_CARD, highlightthickness=1,
-                         highlightbackground=Theme.BORDER)
-            inner = tk.Frame(c, bg=Theme.BG_CARD)
-            inner.pack(fill="both", expand=True, padx=16, pady=14)
-            top = tk.Frame(inner, bg=Theme.BG_CARD)
-            top.pack(anchor="w")
-            # Numbered step badge
-            badge_bg = {"info": Theme.INFO_BG, "success": Theme.SUCCESS_BG,
-                        "warning": Theme.WARNING_BG}.get(tone, Theme.BG_TERTIARY)
-            badge_fg = {"info": Theme.INFO, "success": Theme.SUCCESS,
-                        "warning": Theme.WARNING}.get(tone, Theme.TEXT_SECONDARY)
-            tk.Label(top, text=num, font=f(Theme.F_BODY_SM, "bold"),
-                     bg=badge_bg, fg=badge_fg, padx=8, pady=2).pack(side="left")
-            tk.Label(top, text=tr(heading), font=f(Theme.F_BODY, "bold"),
-                     bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY).pack(
-                         side="left", padx=(Theme.S_SM, 0))
-            tk.Label(inner, text=tr(body_text), font=f(Theme.F_BODY_SM),
-                     bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY,
-                     wraplength=220, justify="left", anchor="w").pack(
-                         anchor="w", pady=(Theme.S_SM, 0))
-            return c
+        step("1", "Add media", "Drop in videos, images, or a folder.")
+        step("2", "Set the region", "Use automatic detection or draw the subtitle area.")
+        step("3", "Start cleanup", "Review the queue, then process the batch.")
 
-        card("1", "Import media",
-             "Drop videos or images on the left, or pick an entire folder. "
-             "Originals are never modified.",
-             "info").pack(side="left", fill="both", expand=True,
-                          padx=(0, Theme.S_SM))
-        card("2", "Inspect the region",
-             "Click a queue item, then use Set region to draw the subtitle band "
-             "or Review mask to see what the detector finds.",
-             "warning").pack(side="left", fill="both", expand=True,
-                             padx=(0, Theme.S_SM))
-        card("3", "Run the batch",
-             "Hit Start batch when the framing looks right. Progress, ETA, "
-             "and completion summary are all live.",
-             "success").pack(side="left", fill="both", expand=True)
-
-        # First-run profile chooser. These use the normal preset application
-        # path so every dependent toggle and slider refreshes immediately.
         starter = tk.Frame(content, bg=Theme.BG_SECONDARY)
-        starter.pack(fill="x", pady=(Theme.S_LG, 0))
+        starter.grid(row=0, column=1, sticky="nsew")
         tk.Label(
             starter,
-            text=tr("Choose a starting profile"),
+            text=tr("Cleanup profile"),
+            font=f(Theme.F_TITLE, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(anchor="w")
+        tk.Label(
+            starter,
+            text=tr("Choose a starting point. Every setting remains editable."),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+            wraplength=280, justify="left",
+        ).pack(anchor="w", pady=(Theme.S_XS, Theme.S_MD))
+        onboarding_choice_var = tk.StringVar(value=tr("Balanced"))
+        profile_combo = ttk.Combobox(
+            starter,
+            textvariable=onboarding_choice_var,
+            values=(tr("Balanced"), tr("Film"), tr("Fast")),
+            state="readonly",
+            style="Dark.TCombobox",
+            font=f(Theme.F_BODY),
+            width=24,
+        )
+        profile_combo.pack(fill="x")
+
+        def _choose_preset(_event=None):
+            profiles = {
+                tr("Balanced"): "YouTube (default)",
+                tr("Film"): "Film / Live action",
+                tr("Fast"): "Fast",
+            }
+            self._apply_onboarding_preset(
+                profiles.get(onboarding_choice_var.get(), "YouTube (default)"))
+
+        profile_combo.bind("<<ComboboxSelected>>", _choose_preset)
+
+        tk.Frame(
+            starter, bg=Theme.BORDER_SUBTLE, height=1,
+        ).pack(fill="x", pady=Theme.S_XL)
+        tk.Label(
+            starter,
+            text=tr("Local processing"),
             font=f(Theme.F_BODY, "bold"),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_PRIMARY,
         ).pack(anchor="w")
         tk.Label(
             starter,
-            text=tr("You can change every setting later."),
-            font=f(Theme.F_META),
+            text=tr("Media stays on this computer. The app checks required models before the first run."),
+            font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED,
-        ).pack(anchor="w", pady=(2, Theme.S_SM))
-        starter_buttons = tk.Frame(starter, bg=Theme.BG_SECONDARY)
-        starter_buttons.pack(anchor="w")
-        onboarding_choice_var = tk.StringVar(value="")
+            wraplength=280,
+            justify="left",
+        ).pack(anchor="w", pady=(Theme.S_XS, 0))
 
-        def _choose_preset(name: str):
-            self._apply_onboarding_preset(name)
-            onboarding_choice_var.set(
-                tr("Selected: {profile}").format(profile=name)
-            )
-
-        for index, (label, preset_name) in enumerate((
-            ("YouTube", "YouTube (default)"),
-            ("Film", "Film / Live action"),
-            ("Fast", "Fast"),
-        )):
-            ModernButton(
-                starter_buttons,
-                text=tr(label),
-                width=104,
-                command=lambda name=preset_name: _choose_preset(name),
-                style="ghost",
-                size="sm",
-            ).pack(side="left", padx=(0 if index == 0 else Theme.S_SM, 0))
-        tk.Label(
-            starter_buttons,
-            textvariable=onboarding_choice_var,
-            font=f(Theme.F_META),
-            bg=Theme.BG_SECONDARY,
-            fg=Theme.SUCCESS,
-        ).pack(side="left", padx=(Theme.S_MD, 0))
-
-        # Action row
-        actions = tk.Frame(body, bg=Theme.BG_CARD)
+        actions = tk.Frame(body, bg=Theme.BG_SECONDARY)
         actions.pack(fill="x")
-        quick_actions = tk.Frame(actions, bg=Theme.BG_CARD)
-        quick_actions.pack(side="left", padx=16, pady=14)
-        actions_inner = tk.Frame(actions, bg=Theme.BG_CARD)
-        actions_inner.pack(side="right", padx=16, pady=14)
+        tk.Frame(actions, bg=Theme.BORDER_SUBTLE, height=1).pack(fill="x")
+        actions_inner = tk.Frame(actions, bg=Theme.BG_SECONDARY)
+        actions_inner.pack(side="right", padx=24, pady=16)
 
         def _close():
             self.config.onboarding_seen = True
@@ -184,36 +179,26 @@ class OnboardingMixin:
             dialog.grab_release()
             dialog.destroy()
 
-        def _try_cleanup():
+        def _continue():
+            _choose_preset()
             _close()
-            self._schedule_onboarding_test_cleanup()
 
         ModernButton(
-            quick_actions,
-            text=tr("Enable auto-detect"),
-            width=156,
-            command=self._enable_onboarding_auto_band,
-            style="ghost",
-            size="sm",
+            actions_inner, text=tr("Skip"), width=88,
+            command=_close, style="ghost", size="md",
         ).pack(side="left")
         ModernButton(
-            quick_actions,
-            text=tr("Try test cleanup"),
-            width=142,
-            command=_try_cleanup,
-            style="ghost",
-            size="sm",
+            actions_inner, text=tr("Continue"), width=118,
+            command=_continue, style="primary", size="md",
         ).pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text=tr("Got it"), width=118,
-                     command=_close, style="primary", size="md").pack(
-                         side="left")
 
         dialog.bind("<Escape>", lambda e: _close())
         dialog.bind("<Return>", lambda e: _close())
         dialog.protocol("WM_DELETE_WINDOW", _close)
 
         try:
-            fit_dialog_to_work_area(dialog, self.root)
+            fit_dialog_to_work_area(
+                dialog, self.root, min_width=760, min_height=500)
         except Exception:
             logger.warning("Onboarding dialog fit failed", exc_info=True)
         dialog.deiconify()

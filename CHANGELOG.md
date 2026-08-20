@@ -4,6 +4,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **The desktop interface now uses a calmer, denser visual system.** Larger
+  working text, flatter surfaces, a fixed-width inspector, aligned preview and
+  queue areas, and shorter labels make the main workflow easier to scan. The
+  onboarding, help, region, and mask review windows now share the same compact
+  hierarchy and no longer open as cramped scrolling cards.
+
 ### Fixed
 
 - **A time-gated mask correction now applies to exactly the frames it covers.**

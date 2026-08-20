@@ -324,7 +324,8 @@ class I18nScaffoldTests(unittest.TestCase):
         for expected in (
             'msgid "Start batch"',
             'msgid "Settings"',
-            'msgid "Backend status and app version."',
+            'msgid "Help & diagnostics"',
+            'msgid "Runtime status"',
             'msgid "Per-file overrides"',
             'msgid "Preview tools are locked while a batch is running."',
         ):

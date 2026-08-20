@@ -52,7 +52,19 @@ class LayoutBuildMixin:
         queue_row = tk.Frame(main_container, bg=Theme.BG_DARK)
         queue_row.pack(side="bottom", fill="x")
         self._queue_row = queue_row
-        self._build_queue_section(queue_row)
+        self._queue_inspector_spacer = tk.Frame(
+            queue_row,
+            bg=Theme.BG_SECONDARY,
+            width=380,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER_SUBTLE,
+        )
+        self._queue_inspector_spacer.pack(side="right", fill="y")
+        self._queue_inspector_spacer.pack_propagate(False)
+        queue_main = tk.Frame(queue_row, bg=Theme.BG_DARK)
+        queue_main.pack(side="left", fill="both", expand=True)
+        self._queue_main = queue_main
+        self._build_queue_section(queue_main)
 
         # A single scroll surface keeps the three-part workbench usable at the
         # 980x720 minimum without compromising the desktop hierarchy.
@@ -75,10 +87,8 @@ class LayoutBuildMixin:
         self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
         self._content_canvas.bind("<MouseWheel>", self._on_content_mousewheel)
         content.bind("<MouseWheel>", self._on_content_mousewheel)
-        content.columnconfigure(
-            0, weight=17, minsize=500, uniform="workbench")
-        content.columnconfigure(
-            1, weight=8, minsize=360, uniform="workbench")
+        content.columnconfigure(0, weight=1, minsize=620, uniform="")
+        content.columnconfigure(1, weight=0, minsize=380, uniform="")
         content.columnconfigure(2, weight=0, minsize=0)
         content.rowconfigure(0, weight=1)
         self._content = content
@@ -123,15 +133,18 @@ class LayoutBuildMixin:
             mode_block, text=tr("Cleanup profile"), font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
+        self._command_profile_var = tk.StringVar()
         self._command_mode_combo = ttk.Combobox(
-            mode_block, textvariable=self.mode_var,
-            values=[mode.value for mode in InpaintMode], state="readonly",
+            mode_block, textvariable=self._command_profile_var,
+            values=(tr("Balanced"), tr("Motion"), tr("Detail"), tr("Temporal")),
+            state="readonly",
             style="Dark.TCombobox", font=f(Theme.F_BODY_SM), width=18,
         )
         self._command_mode_combo.pack(fill="x")
         self._command_mode_combo.bind(
-            "<<ComboboxSelected>>", lambda _event: self._on_mode_picker_changed(
-                self.mode_var.get()))
+            "<<ComboboxSelected>>", self._on_command_profile_changed)
+        self.mode_var.trace_add("write", self._sync_command_profile)
+        self._sync_command_profile()
 
         region_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         tk.Label(
@@ -165,7 +178,7 @@ class LayoutBuildMixin:
         start_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         self.command_start_btn = ModernButton(
             start_block, text=tr("Start cleanup"), width=176,
-            command=self._start_processing, style="primary", size="lg", icon=">",
+            command=self._start_processing, style="primary", size="lg",
         )
         self.command_start_btn.pack(fill="x", pady=(Theme.S_LG, 0))
 
@@ -1550,13 +1563,13 @@ class LayoutBuildMixin:
             fg=Theme.TEXT_PRIMARY,
         ).pack(anchor="w")
         self._inspector_profile_summary_var = tk.StringVar()
-        tk.Label(
+        self._inspector_profile_summary_label = tk.Label(
             header,
             textvariable=self._inspector_profile_summary_var,
             font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED,
-        ).pack(anchor="w", pady=(Theme.S_XS, 0))
+        )
 
         self._inspector_encoding_var = tk.StringVar(
             value=str(getattr(self.config, "output_codec", "h264")).upper())
@@ -1588,7 +1601,7 @@ class LayoutBuildMixin:
                 takefocus=1,
                 cursor="hand2",
                 padx=0,
-                pady=Theme.S_LG,
+                pady=Theme.S_MD,
             )
             button.pack(side="left", fill="x", expand=True)
             chevron = tk.Label(
@@ -1741,8 +1754,7 @@ class LayoutBuildMixin:
         )
 
         media_surface = tk.Frame(
-            section, bg=Theme.BG_CARD, highlightthickness=1,
-            highlightbackground=Theme.BORDER_SUBTLE,
+            section, bg=Theme.BG_DARK, highlightthickness=0,
         )
         media_surface.pack(
             fill="both", expand=True, padx=Theme.S_MD,
@@ -1750,12 +1762,11 @@ class LayoutBuildMixin:
         self._preview_media_surface = media_surface
 
         self._preview_label = tk.Label(
-            media_surface, bg=Theme.BG_CARD, text="",
+            media_surface, bg=Theme.BG_DARK, text="",
             font=f(Theme.F_META), fg=Theme.TEXT_MUTED,
             compound="bottom", justify="center", cursor="hand2", takefocus=1,
         )
-        self._preview_label.pack(fill="both", expand=True, padx=Theme.S_SM,
-                                 pady=Theme.S_SM)
+        self._preview_label.pack(fill="both", expand=True)
         self._preview_photo = None
         self._preview_label.bind("<Double-Button-1>", self._open_preview_zoom)
         self._preview_label.bind(

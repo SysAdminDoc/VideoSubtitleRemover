@@ -144,13 +144,26 @@ class MaskCorrectionWindow:
             self.display_h = max(1, int(self.height * self.scale))
 
             self.win = tk.Toplevel(self.root)
-            self.win.title(tr("Correct subtitle mask"))
+            self.win.title(tr("Review mask"))
             self.win.configure(bg=Theme.BG_DARK)
             # RM-148: scrollable body + work-area clamp so high text scale cannot
             # push the review actions off screen.
             self.win.resizable(True, True)
             self.win.transient(self.root)
             body = scrollable_dialog_body(self.win, bg=Theme.BG_DARK)
+
+            hero = tk.Frame(body, bg=Theme.BG_DARK)
+            hero.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_SM))
+            tk.Label(
+                hero, text=tr("Review mask"),
+                font=f(Theme.F_HEADING, "bold"),
+                bg=Theme.BG_DARK, fg=Theme.TEXT_PRIMARY,
+            ).pack(anchor="w")
+            tk.Label(
+                hero, text=tr("Paint only where the automatic mask needs correction."),
+                font=f(Theme.F_BODY_SM),
+                bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED,
+            ).pack(anchor="w", pady=(2, 0))
 
             header = tk.Frame(body, bg=Theme.BG_SECONDARY)
             header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_SM))
@@ -236,9 +249,7 @@ class MaskCorrectionWindow:
 
             self.canvas = tk.Canvas(
                 body, width=self.display_w, height=self.display_h, bg=Theme.BG_TERTIARY,
-                cursor="crosshair", takefocus=True, highlightthickness=2,
-                highlightbackground=Theme.BORDER_SUBTLE,
-                highlightcolor=Theme.BLUE_PRIMARY)
+                cursor="crosshair", takefocus=True, highlightthickness=0)
             self.canvas.pack(padx=Theme.S_MD)
             self.image_id = self.canvas.create_image(0, 0, anchor="nw")
             self.canvas._photo = None
@@ -283,7 +294,7 @@ class MaskCorrectionWindow:
                 command=self.clear_corrections, style="ghost", size="sm").pack(
                     side="left", padx=(Theme.S_SM, 0))
             ModernButton(
-                actions, text=tr("Prepare selective rerun"), width=184,
+                actions, text=tr("Save corrections"), width=152,
                 command=self.prepare_rerun, style="primary", size="sm").pack(side="right")
             ModernButton(
                 actions, text=tr("Cancel"), width=82,
@@ -314,7 +325,7 @@ class MaskCorrectionWindow:
             self.update_history_buttons()
             self.span_changed()
             fit_dialog_to_work_area(
-                self.win, self.root, min_width=420, min_height=320)
+                self.win, self.root, min_width=960, min_height=640)
             self.win.grab_set()
             return True
         except Exception as exc:
