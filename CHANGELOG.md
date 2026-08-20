@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.34.0] - 2026-08-20
+
 ### Changed
 
 - **PaddleOCR moves to 3.7.0 and can now use PP-OCRv6 models.** `tiny`, `small`
