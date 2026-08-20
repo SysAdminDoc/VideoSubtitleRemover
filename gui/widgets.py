@@ -25,6 +25,7 @@ from gui.theme import (
 )
 from gui.config import ProcessingStatus, QueueItem, status_ui
 from gui.utils import (
+    desktop_bounds,
     IMAGE_EXTENSIONS,
     SUPPORTED_EXTENSIONS,
     VIDEO_EXTENSIONS,
@@ -364,14 +365,19 @@ class Tooltip:
             self._tip.update_idletasks()
             x = self.widget.winfo_rootx() + 14
             y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
-            sw = self._tip.winfo_screenwidth()
-            sh = self._tip.winfo_screenheight()
+            # Clamp against the whole desktop. Screen metrics describe the
+            # primary display only, so on a monitor to its right the overflow
+            # test was always true and the tip jumped to the primary screen.
+            bx, by, bw, bh = desktop_bounds(
+                self._tip.winfo_screenwidth(), self._tip.winfo_screenheight())
             tw = self._tip.winfo_reqwidth()
             th = self._tip.winfo_reqheight()
-            if x + tw > sw:
-                x = sw - tw - 6
-            if y + th > sh:
+            if x + tw > bx + bw:
+                x = bx + bw - tw - 6
+            if y + th > by + bh:
                 y = self.widget.winfo_rooty() - th - 6
+            x = max(bx, x)
+            y = max(by, y)
             self._tip.wm_geometry(f"+{x}+{y}")
         except tk.TclError:
             self._tip = None
@@ -874,8 +880,24 @@ class ModernToggle(tk.Canvas):
         self.bind("<Leave>", self._on_leave)
         self.bind("<FocusIn>", self._on_focus_in)
         self.bind("<FocusOut>", self._on_focus_out)
+        self._variable_trace = None
         if self.variable is not None:
-            self.variable.trace_add("write", lambda *_: self._on_variable_changed())
+            # Keep the id so <Destroy> can release it. A trace left on a
+            # variable that outlives its widget turns every later set() into
+            # a background TclError inside this callback.
+            self._variable_trace = self.variable.trace_add(
+                "write", lambda *_: self._on_variable_changed())
+            self.bind("<Destroy>", self._release_variable_trace, add="+")
+
+    def _release_variable_trace(self, _event=None):
+        trace = self._variable_trace
+        self._variable_trace = None
+        if trace is None or self.variable is None:
+            return
+        try:
+            self.variable.trace_remove("write", trace)
+        except (tk.TclError, ValueError):
+            pass
 
     def _on_variable_changed(self):
         self._sync_a11y()

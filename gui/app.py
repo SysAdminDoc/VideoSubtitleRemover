@@ -38,6 +38,7 @@ from gui.config import (
     set_persistence_observer, settings_read_only_version,
 )
 from gui.utils import (
+    desktop_bounds,
     dispatch_to_ui,
     get_app_dir, detect_gpu, is_video_file, is_image_file,
     detect_ai_engines, detect_ffmpeg, get_file_info,
@@ -2827,18 +2828,7 @@ class VideoSubtitleRemoverApp(
         origins). Falls back to the primary bounds off-Windows or when
         the metrics are unavailable.
         """
-        if sys.platform == "win32":
-            try:
-                user32 = ctypes.windll.user32
-                vx = int(user32.GetSystemMetrics(76))  # SM_XVIRTUALSCREEN
-                vy = int(user32.GetSystemMetrics(77))  # SM_YVIRTUALSCREEN
-                vw = int(user32.GetSystemMetrics(78))  # SM_CXVIRTUALSCREEN
-                vh = int(user32.GetSystemMetrics(79))  # SM_CYVIRTUALSCREEN
-                if vw > 0 and vh > 0:
-                    return (vx, vy, vw, vh)
-            except Exception:
-                pass
-        return (0, 0, int(primary_w), int(primary_h))
+        return desktop_bounds(primary_w, primary_h)
 
     @staticmethod
     def _saved_position_visible(x: int, y: int, bounds: tuple) -> bool:

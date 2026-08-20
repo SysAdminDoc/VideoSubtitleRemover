@@ -21,6 +21,7 @@ from backend.language_support import (
 )
 
 __all__ = (
+    "desktop_bounds",
     "dispatch_to_ui",
     "_CURATED_LANG_NAMES",
     "_build_language_list",
@@ -37,6 +38,32 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+def desktop_bounds(primary_w: int, primary_h: int) -> tuple:
+    """Return (x, y, w, h) covering every monitor, not just the primary.
+
+    ``winfo_screenwidth``/``winfo_screenheight`` report the primary display
+    only on Windows, so anything that clamps against them is pinned to the
+    primary screen. Monitors left of or above the primary have negative
+    origins, which is why this returns an origin as well as a size. Falls
+    back to the primary bounds off Windows or when the metrics are
+    unavailable.
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            vx = int(user32.GetSystemMetrics(76))   # SM_XVIRTUALSCREEN
+            vy = int(user32.GetSystemMetrics(77))   # SM_YVIRTUALSCREEN
+            vw = int(user32.GetSystemMetrics(78))   # SM_CXVIRTUALSCREEN
+            vh = int(user32.GetSystemMetrics(79))   # SM_CYVIRTUALSCREEN
+            if vw > 0 and vh > 0:
+                return (vx, vy, vw, vh)
+        except Exception:
+            pass
+    return (0, 0, int(primary_w), int(primary_h))
 
 
 def dispatch_to_ui(root, callback, *args):

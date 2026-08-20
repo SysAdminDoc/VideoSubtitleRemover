@@ -16,6 +16,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from gui.theme import Theme
+from gui.utils import desktop_bounds
 
 
 # Reserve room for the taskbar / dock and the window chrome. Deliberately
@@ -167,13 +168,28 @@ def fit_dialog_to_work_area(
     dialog.minsize(min(min_width, width), min(min_height, height))
     dialog.maxsize(area_w, area_h)
     if center:
+        # Center on the parent window. Centering on the primary screen put
+        # every dialog on the wrong monitor whenever the app was moved.
+        try:
+            parent_x = int(root.winfo_rootx())
+            parent_y = int(root.winfo_rooty())
+            parent_w = int(root.winfo_width())
+            parent_h = int(root.winfo_height())
+        except Exception:
+            parent_x = parent_y = 0
+            parent_w, parent_h = area_w, area_h
+        if parent_w <= 1 or parent_h <= 1:
+            parent_w, parent_h = area_w, area_h
         try:
             screen_w = int(root.winfo_screenwidth())
             screen_h = int(root.winfo_screenheight())
         except Exception:
             screen_w, screen_h = area_w, area_h
-        x = max(0, (screen_w - width) // 2)
-        y = max(0, (screen_h - height) // 3)
+        bx, by, bw, bh = desktop_bounds(screen_w, screen_h)
+        x = parent_x + (parent_w - width) // 2
+        y = parent_y + max(0, (parent_h - height) // 3)
+        x = min(max(x, bx), bx + bw - width)
+        y = min(max(y, by), by + bh - height)
         dialog.geometry(f"{width}x{height}+{x}+{y}")
     else:
         dialog.geometry(f"{width}x{height}")
