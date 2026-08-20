@@ -165,7 +165,11 @@ class SupportBundleTests(unittest.TestCase):
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                # This asserts dependency weight, not speed. A 30 s budget
+                # made it flaky inside the full suite on a loaded machine
+                # while passing in isolation, which trains people to re-run
+                # instead of reading failures.
+                timeout=180,
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)

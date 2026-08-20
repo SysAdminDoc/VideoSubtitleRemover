@@ -519,13 +519,16 @@ class DependencyFloorTests(unittest.TestCase):
         setup_text = (root / "setup.py").read_text(encoding="utf-8")
         self.assertIn("Pillow>=12.3.0", setup_text)
 
-    def test_pillow_floor_is_12_3_0_in_build_workflow(self):
+    def test_pillow_floor_is_12_3_0_in_the_local_build_gate(self):
+        # This assertion used to target .github/workflows/build.yml, which was
+        # deleted permanently under the no-GitHub-Actions policy, so it could
+        # only ever skip. Builds are local, so the floor is checked where it
+        # now lives.
         root = Path(__file__).resolve().parents[1]
-        workflow_path = root / ".github" / "workflows" / "build.yml"
-        if not workflow_path.exists():
-            self.skipTest("GitHub Actions workflow is absent in local-build mode")
-        workflow = workflow_path.read_text(encoding="utf-8")
-        self.assertIn("Pillow>=12.3.0", workflow)
+        profile = (
+            root / "dependency_profiles" / "cpu.txt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Pillow==12.3.0", profile)
 
 
 class CanonicalConfigSchemaTests(unittest.TestCase):

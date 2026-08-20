@@ -347,6 +347,22 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   collection is a strict superset, and a new invariant test fails if a
   bare-function module is ever paired with a runner that cannot see it.
 
+- **README pip commands no longer lose their version pins.** `pip install
+  torch>=2.11.0` is a redirection in PowerShell, cmd and bash alike, so the
+  specifier was silently dropped and a file named `=2.11.0` was created
+  instead. Every specifier is now quoted, and the Blackwell repair command
+  pins the reviewed versions exactly rather than an open-ended range.
+
+- **`setup.py` now runs from its own directory.** Invoking it by absolute path
+  from somewhere else created `venv/`, wrote the launcher scripts into the
+  caller's directory, and skipped `requirements.txt` entirely, falling back to
+  a hardcoded package list.
+
+- **A permanently-skipped dependency test now checks the real gate.** It
+  asserted the Pillow floor inside a GitHub Actions workflow that was deleted
+  under the local-build policy, so it could only ever skip; it now reads the
+  reviewed CPU profile. The support-bundle subprocess test also gets a
+  realistic timeout so it stops failing spuriously under full-suite load.
 
 ## [3.33.0] - 2026-08-02
 

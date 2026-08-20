@@ -9,6 +9,7 @@ build
 dist
 venv
 output
+out
 models
 *.log
 *.exe

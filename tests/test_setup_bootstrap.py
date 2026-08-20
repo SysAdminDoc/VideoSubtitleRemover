@@ -487,3 +487,48 @@ class PowerShellLauncherRobustnessTests(unittest.TestCase):
             "Start-Process -FilePath $exe -WorkingDirectory $PSScriptRoot",
             text,
         )
+
+
+class WorkingDirectoryAnchorTests(unittest.TestCase):
+    """setup.py builds venv/, launchers and reads requirements.txt by
+    relative path, so it must run from its own directory regardless of
+    where the user invoked it from."""
+
+    def setUp(self):
+        self.module = _load_setup_module()
+        self.root = Path(__file__).resolve().parents[1]
+        self.original = os.getcwd()
+        self.addCleanup(os.chdir, self.original)
+
+    def test_anchor_moves_into_the_setup_directory(self):
+        with tempfile.TemporaryDirectory() as elsewhere:
+            os.chdir(elsewhere)
+            previous = self.module._anchor_working_directory()
+            self.assertEqual(
+                os.path.normcase(os.getcwd()),
+                os.path.normcase(str(self.root)),
+            )
+            # The caller's directory is reported back so it can be restored.
+            self.assertEqual(
+                os.path.normcase(previous),
+                os.path.normcase(os.path.realpath(elsewhere)),
+            )
+        # The real requirements file is now reachable by relative path.
+        self.assertTrue(os.path.exists("requirements.txt"))
+
+    def test_anchor_is_a_no_op_when_already_correct(self):
+        os.chdir(str(self.root))
+        previous = self.module._anchor_working_directory()
+        self.assertEqual(
+            os.path.normcase(previous), os.path.normcase(str(self.root))
+        )
+        self.assertEqual(
+            os.path.normcase(os.getcwd()), os.path.normcase(str(self.root))
+        )
+
+    def test_main_anchors_before_touching_relative_paths(self):
+        source = (self.root / "setup.py").read_text(encoding="utf-8")
+        main_body = source.split("def main(argv=None):", 1)[1]
+        anchor_at = main_body.index("_anchor_working_directory()")
+        banner_at = main_body.index("print_banner()")
+        self.assertLess(anchor_at, banner_at)

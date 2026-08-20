@@ -134,9 +134,9 @@ $profile = "cpu"
 
 # Install PyTorch (Python 3.12/3.13 recommended for CUDA):
 # NVIDIA RTX 20/30/40/50-series:
-pip install torch>=2.11.0 torchvision>=0.26.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cu128
+pip install "torch>=2.11.0" "torchvision>=0.26.0" --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cu128
 # CPU:
-pip install torch>=2.11.0 torchvision>=0.26.0 --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cpu
+pip install "torch>=2.11.0" "torchvision>=0.26.0" --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cpu
 
 # Install dependencies
 pip install -r requirements.txt --constraint "dependency_profiles/$profile.txt"
@@ -1185,7 +1185,7 @@ the `cu128` build. To fix an existing environment manually:
 ```powershell
 .\venv\Scripts\activate
 pip uninstall -y torch torchvision
-pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cu128
+pip install "torch==2.11.0" "torchvision==0.26.0" --index-url https://download.pytorch.org/whl/cu128
 ```
 
 The reviewed NVIDIA CUDA 12.8 lane uses torch 2.11.0/torchvision 0.26.0;

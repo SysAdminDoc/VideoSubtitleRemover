@@ -917,9 +917,34 @@ def parse_setup_args(argv=None):
     return parser.parse_args(argv)
 
 
+def _anchor_working_directory():
+    """Change into setup.py's own directory.
+
+    Returns the directory that was current before the change so callers and
+    tests can restore it. A failure to change directory is reported rather
+    than silently ignored, because every later path depends on it.
+    """
+    previous = os.getcwd()
+    target = os.path.dirname(os.path.abspath(__file__))
+    if os.path.normcase(previous) == os.path.normcase(target):
+        return previous
+    try:
+        os.chdir(target)
+    except OSError as exc:
+        print(f"{Colors.RED}Cannot enter {target}: {exc}{Colors.END}")
+        raise
+    print(f"{Colors.BLUE}Working directory: {target}{Colors.END}")
+    return previous
+
+
 def main(argv=None):
     """Main setup function."""
     args = parse_setup_args(argv)
+    # Every path below (venv/, requirements.txt, the generated launchers) is
+    # relative, so running `python C:\\path\\to\\setup.py` from another
+    # directory would bootstrap into the caller's cwd and silently skip
+    # requirements.txt. Anchor to this file's directory first.
+    _anchor_working_directory()
     write_setup_progress("Checking Python runtime...", 8)
     print_banner()
     
