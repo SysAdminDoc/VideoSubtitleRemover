@@ -189,3 +189,57 @@ def test_ffmpeg_probe_records_pass_fail():
             },
         ):
             assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is False
+
+
+def test_cpython_floors_cover_every_supported_release_line():
+    """3.11 and 3.12 were previously unguarded by the self-test."""
+    assert sc.CPYTHON_SECURITY_FLOORS == {
+        (3, 11): (3, 11, 16),
+        (3, 12): (3, 12, 14),
+        (3, 13): (3, 13, 15),
+        (3, 14): (3, 14, 7),
+    }
+    for advisory_id in ("CVE-2026-2297", "CVE-2026-4224", "CVE-2026-3644"):
+        assert advisory_id in sc.CPYTHON_SECURITY_ADVISORY_IDS
+
+
+def test_cpython_status_flags_one_stale_and_one_current_per_line():
+    for line, floor in sc.CPYTHON_SECURITY_FLOORS.items():
+        stale = (floor[0], floor[1], floor[2] - 1)
+        status = sc.cpython_security_status(stale)
+        assert status["safe"] is False, stale
+        assert status["classified"] is True, stale
+        assert status["floor"] == sc.format_cpython_version(floor)
+        assert "CVE-2026-2297" in status["advisories"], stale
+        # The tarfile fixes are the reason this matters for VSR.
+        assert "tarfile" in status["reason"], stale
+
+        current = sc.cpython_security_status(floor)
+        assert current["safe"] is True, floor
+        assert current["advisories"] == []
+        newer = sc.cpython_security_status((floor[0], floor[1], floor[2] + 5))
+        assert newer["safe"] is True, floor
+        assert line == (floor[0], floor[1])
+
+
+def test_cpython_status_handles_lines_outside_the_reviewed_table():
+    # Newer than the table: postdates the advisories, so no false alarm.
+    future = sc.cpython_security_status((3, 15, 0))
+    assert future["safe"] is True
+    assert future["classified"] is False
+    assert "not explicitly classified" in future["reason"]
+
+    # Older than the project's supported floor.
+    ancient = sc.cpython_security_status((3, 10, 21))
+    assert ancient["safe"] is False
+    assert ancient["classified"] is False
+    assert "below" in ancient["reason"]
+
+
+def test_cpython_status_defaults_to_the_running_interpreter():
+    import sys
+
+    status = sc.cpython_security_status()
+    assert status["version"] == sc.format_cpython_version(
+        tuple(sys.version_info[:3])
+    )

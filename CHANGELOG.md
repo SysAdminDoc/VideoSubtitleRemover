@@ -19,6 +19,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   it already carries the fix for. CVE-2026-58049 has no upstream fixed
   version and is surfaced as an open advisory on every result.
 
+- **The interpreter security self-test now covers every supported Python
+  line.** It previously checked only 3.13 and 3.14 against CVE-2026-6100, so
+  3.11 and 3.12 were unguarded. The floors now live beside the libpng and
+  FFmpeg policies and require the 2026-08 security releases (3.11.16, 3.12.14,
+  3.13.15, 3.14.7), which close the tarfile path-traversal bypasses and
+  Windows symlink validation that VSR's archive extraction depends on, plus
+  CVE-2026-2297, CVE-2026-4224 and CVE-2026-3644. A release line newer than
+  the reviewed table is reported as unclassified rather than flagged.
+
 ### Fixed
 
 - **Backend audit fixes harden resumed jobs and optional engines.** Completion

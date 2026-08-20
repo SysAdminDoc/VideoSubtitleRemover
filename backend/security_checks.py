@@ -93,6 +93,98 @@ def ffmpeg_security_affected_range() -> str:
     return ", ".join(ranges)
 
 
+# Single source of truth for the CPython security floors, one per supported
+# release line. The 2026-08 security releases close tarfile path-traversal
+# bypasses (including Windows symlink validation), CVE-2026-2297
+# (SourcelessFileLoader), CVE-2026-4224 (expat unbounded recursion) and
+# CVE-2026-3644 (http.cookies control characters); they also supersede the
+# earlier CVE-2026-6100 decompressor use-after-free floors. VSR extracts
+# untrusted archives in cache_inventory, release_staging and support_bundle,
+# so the tarfile fixes sit on this application's own surface.
+CPYTHON_SECURITY_FLOORS = {
+    (3, 11): (3, 11, 16),
+    (3, 12): (3, 12, 14),
+    (3, 13): (3, 13, 15),
+    (3, 14): (3, 14, 7),
+}
+CPYTHON_SECURITY_ADVISORY_IDS = (
+    "CVE-2026-2297",
+    "CVE-2026-4224",
+    "CVE-2026-3644",
+    "CVE-2026-6100",
+)
+CPYTHON_SECURITY_ADVISORY_URL = (
+    "https://blog.python.org/2026/08/python-31214-31116-31021/"
+)
+
+
+def format_cpython_version(version: Tuple[int, int, int]) -> str:
+    return ".".join(str(part) for part in version[:3])
+
+
+def cpython_security_status(
+    version: Optional[Tuple[int, ...]] = None,
+) -> dict:
+    """Classify an interpreter against the reviewed CPython floors.
+
+    Lines newer than the reviewed table postdate the advisories and are
+    reported as unclassified-but-acceptable rather than falsely flagged;
+    lines older than the table are below the project's supported floor.
+    """
+    if version is None:
+        import sys
+
+        version = tuple(sys.version_info[:3])
+    version = tuple(int(part) for part in version[:3])
+    while len(version) < 3:
+        version = version + (0,)
+    line = (version[0], version[1])
+    payload = {
+        "version": format_cpython_version(version),
+        "line": f"{line[0]}.{line[1]}",
+        "classified": False,
+        "safe": True,
+        "floor": "",
+        "advisories": [],
+        "advisory_url": CPYTHON_SECURITY_ADVISORY_URL,
+        "reason": "",
+    }
+    floor = CPYTHON_SECURITY_FLOORS.get(line)
+    if floor is not None:
+        payload["classified"] = True
+        payload["floor"] = format_cpython_version(floor)
+        if version < floor:
+            payload["safe"] = False
+            payload["advisories"] = list(CPYTHON_SECURITY_ADVISORY_IDS)
+            payload["reason"] = (
+                f"Python {payload['version']} predates the "
+                f"{payload['floor']} security release "
+                f"({', '.join(CPYTHON_SECURITY_ADVISORY_IDS)} and the "
+                "tarfile path-traversal fixes); upgrade to "
+                f"{payload['floor']} or newer"
+            )
+        else:
+            payload["reason"] = (
+                f"Python {payload['version']} meets the {payload['floor']} "
+                "security floor"
+            )
+        return payload
+    known_lines = sorted(CPYTHON_SECURITY_FLOORS)
+    if line < known_lines[0]:
+        payload["safe"] = False
+        payload["reason"] = (
+            f"Python {payload['version']} is below VSR's supported "
+            f"{known_lines[0][0]}.{known_lines[0][1]} floor"
+        )
+    else:
+        payload["reason"] = (
+            f"Python {payload['version']} is newer than VSR's reviewed "
+            "release lines; it postdates the tracked advisories but is not "
+            "explicitly classified"
+        )
+    return payload
+
+
 def libpng_fixed_version_str() -> str:
     """Return the libpng security floor as a dotted string (single source)."""
     return format_libpng_version(LIBPNG_FIXED_VERSION)

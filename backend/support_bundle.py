@@ -33,6 +33,7 @@ from backend.opencv_ocr import collect_opencv_dnn_ocr_status
 from backend.security_checks import (
     FFMPEG_SECURITY_ADVISORY_IDS,
     FFMPEG_SECURITY_ADVISORY_URL,
+    cpython_security_status,
     opencv_libpng_status,
 )
 from backend.subprocess_policy import run_process
@@ -579,24 +580,11 @@ def run_self_test() -> dict:
             "reason": str(exc)[:200],
         })
 
-    import sys
-    py = sys.version_info
-    cpython_safe = True
-    if py[:2] == (3, 13) and py < (3, 13, 14):
-        cpython_safe = False
-    elif py[:2] == (3, 14) and py < (3, 14, 5):
-        cpython_safe = False
+    cpython_status = cpython_security_status()
     results["security"].append({
-        "name": "CPython CVE-2026-6100",
-        "available": cpython_safe,
-        "reason": (
-            f"Python {py.major}.{py.minor}.{py.micro}"
-            if cpython_safe
-            else f"Python {py.major}.{py.minor}.{py.micro} is below the "
-                 "fix for CVE-2026-6100 (decompressor use-after-free); "
-                 f"upgrade to {py.major}.{py.minor}."
-                 f"{'14' if py[:2] == (3, 13) else '5'}+"
-        ),
+        "name": "CPython security floor",
+        "available": bool(cpython_status["safe"]),
+        "reason": cpython_status["reason"],
     })
 
     try:
