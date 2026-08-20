@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.35.0] - 2026-08-20
+
 ### Changed
 
 - **Review every text track before anything is destroyed.** The new Track
