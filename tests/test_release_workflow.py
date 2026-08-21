@@ -652,15 +652,15 @@ class ReleaseVerificationTests(unittest.TestCase):
             self.assertTrue(status["safe"], banner)
             self.assertEqual(status["classification"], "safe")
 
-        # Below the reviewed point release on an open branch: fail closed,
-        # but attribute no CVE to a build that already carries those fixes.
+        # Below the reviewed point release on an open branch: fail closed.
+        # 9.0.0 already has the July 2026 batch, but not CVE-2026-58049.
         outdated = ffmpeg_profiles.classify_ffmpeg_security(
             "ffmpeg version 9.0-full_build-www.gyan.dev"
         )
         self.assertEqual(outdated["classification"], "outdated")
         self.assertFalse(outdated["safe"])
         self.assertFalse(outdated["vulnerable"])
-        self.assertEqual(outdated["advisories"], [])
+        self.assertEqual(outdated["advisories"], ["CVE-2026-58049"])
 
         unsupported = ffmpeg_profiles.classify_ffmpeg_security(
             "ffmpeg version 7.1.5"

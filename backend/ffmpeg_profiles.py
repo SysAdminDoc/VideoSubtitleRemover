@@ -15,6 +15,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from backend.security_checks import (
     FFMPEG_SECURITY_ADVISORY_IDS,
+    FFMPEG_FLOOR_ONLY_ADVISORY_IDS,
     FFMPEG_SECURITY_ADVISORY_URL,
     FFMPEG_SECURITY_BRANCH_FLOORS,
     FFMPEG_SECURITY_EOL_BRANCHES,
@@ -163,18 +164,20 @@ def classify_ffmpeg_security(version_text: object) -> dict:
             "branch; update VSR's security policy before treating it as safe"
         )
     elif patch < line[0]:
-        # An open branch below its reviewed point release. The advisories in
-        # FFMPEG_SECURITY_ADVISORY_IDS were fixed upstream before this branch
-        # opened, so naming them here would falsely accuse a patched build.
-        # Report the version gap itself, stay fail-closed, and claim no CVE.
+        # An open branch below its reviewed point release. The July 2026
+        # batch in FFMPEG_SECURITY_ADVISORY_IDS landed before 9.0 branched,
+        # so naming those IDs would falsely accuse 9.0.0. Advisories that
+        # arrived only with the floor (CVE-2026-58049) still apply.
         payload["classification"] = "outdated"
         payload["supported"] = True
         payload["fixed_in"] = line[1]
+        payload["advisories"] = list(FFMPEG_FLOOR_ONLY_ADVISORY_IDS)
+        named = ", ".join(FFMPEG_FLOOR_ONLY_ADVISORY_IDS)
         payload["reason"] = (
             f"FFmpeg {payload['version']} predates the reviewed {line[1]} "
-            f"point release on the {major}.{minor} branch; no CVE is "
-            f"attributed to {payload['version']} in VSR's policy, but the "
-            "newest reviewed point release is required before shipping"
+            f"point release on the {major}.{minor} branch"
+            + (f" ({named})" if named else "")
+            + "; upgrade to the newest reviewed point release before shipping"
         )
     else:
         payload["classification"] = "safe"

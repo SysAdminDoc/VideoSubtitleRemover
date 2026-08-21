@@ -177,8 +177,7 @@ CVE-2026-66037 (IAMF demuxer allocation), CVE-2026-66038 (LCL decoder heap
 disclosure), CVE-2026-66039 (MACE6 decoder overflow), CVE-2026-64830 (VobSub
 subtitle demuxer overflow) and CVE-2026-12706 (RASC use-after-free). Because
 upstream closed those branches, no 8.x build can be patched in place and the
-only remedy is moving to the 9.0 line. CVE-2026-58049 has no upstream fixed
-version yet and is reported as an open advisory regardless of your build.
+only remedy is moving to the 9.0 line. CVE-2026-58049 (RASC DLTA overflow) is fixed in FFmpeg 9.0.1; 8.x remains exposed because those branches closed without a backport.
 Older branches are outside VSR's reviewed support policy; development
 snapshots and future branches remain unknown until explicitly classified.
 The self-test, support bundle, and strict release validation block

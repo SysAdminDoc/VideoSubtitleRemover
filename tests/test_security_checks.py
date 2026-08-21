@@ -102,18 +102,20 @@ def test_ffmpeg_policy_is_shared_with_classifier():
     assert ffmpeg_security_affected_range() == (
         "9.0.0-9.0.0, 8.1.x (no fixed release), 8.0.x (no fixed release)"
     )
-    # The 2026-07-24 batch and the RASC use-after-free must be named, and the
-    # advisory with no identified upstream fix must stay separate.
+    # The 2026-07-24 batch plus the RASC DLTA bounds check (CVE-2026-58049)
+    # which n9.0.1 carries. There is no remaining unfixed FFmpeg advisory
+    # in this table.
     for advisory_id in (
         "CVE-2026-66037",
         "CVE-2026-66038",
         "CVE-2026-66039",
         "CVE-2026-64830",
         "CVE-2026-12706",
+        "CVE-2026-58049",
     ):
         assert advisory_id in FFMPEG_SECURITY_ADVISORY_IDS
-    assert sc.FFMPEG_SECURITY_UNFIXED_ADVISORY_IDS == ("CVE-2026-58049",)
-    assert "CVE-2026-58049" not in FFMPEG_SECURITY_ADVISORY_IDS
+    assert sc.FFMPEG_SECURITY_UNFIXED_ADVISORY_IDS == ()
+    assert "CVE-2026-58049" in FFMPEG_SECURITY_ADVISORY_IDS
 
 
 def test_ffmpeg_vulnerability_warning_carries_cves_and_advisory_url():
@@ -125,19 +127,21 @@ def test_ffmpeg_vulnerability_warning_carries_cves_and_advisory_url():
     assert FFMPEG_SECURITY_ADVISORY_URL in status["reason"]
 
 
-def test_ffmpeg_open_branch_behind_point_release_claims_no_cve():
-    """9.0.0 carries the July 2026 fixes, so it must not be CVE-accused."""
+def test_ffmpeg_open_branch_behind_point_release_names_floor_only_cves():
+    """9.0.0 has the July 2026 batch but not the n9.0.1 RASC DLTA check."""
     from backend import ffmpeg_profiles
 
     status = ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 9.0.0")
     assert status["classification"] == "outdated"
     assert status["supported"] is True
     assert status["safe"] is False
-    # Fail-closed for release gating, but with no fabricated CVE attribution.
     assert status["vulnerable"] is False
-    assert status["advisories"] == []
+    assert status["advisories"] == ["CVE-2026-58049"]
     assert status["fixed_in"] == "9.0.1"
+    assert "CVE-2026-58049" in status["reason"]
     for advisory_id in FFMPEG_SECURITY_ADVISORY_IDS:
+        if advisory_id == "CVE-2026-58049":
+            continue
         assert advisory_id not in status["reason"]
 
 
@@ -156,12 +160,12 @@ def test_ffmpeg_closed_branch_is_vulnerable_at_every_patch_level():
         assert "CVE-2026-64830" in status["reason"]
 
 
-def test_ffmpeg_open_advisory_is_reported_even_when_safe():
+def test_ffmpeg_safe_build_has_no_open_advisories():
     from backend import ffmpeg_profiles
 
     status = ffmpeg_profiles.classify_ffmpeg_security("ffmpeg version 9.0.1")
     assert status["classification"] == "safe"
-    assert status["open_advisories"] == ["CVE-2026-58049"]
+    assert status["open_advisories"] == []
 
 
 def test_ffmpeg_probe_records_pass_fail():
@@ -199,8 +203,35 @@ def test_cpython_floors_cover_every_supported_release_line():
         (3, 13): (3, 13, 15),
         (3, 14): (3, 14, 7),
     }
-    for advisory_id in ("CVE-2026-2297", "CVE-2026-4224", "CVE-2026-3644"):
+    for advisory_id in (
+        "CVE-2026-11940",
+        "CVE-2026-2297",
+        "CVE-2026-4224",
+        "CVE-2026-3644",
+        "CVE-2026-6100",
+    ):
         assert advisory_id in sc.CPYTHON_SECURITY_ADVISORY_IDS
+
+
+def test_cpython_advisories_are_per_line_not_a_flat_tuple():
+    """A below-floor 3.14 build must not cite CVEs already fixed in 3.14.4."""
+    # 3.14.6 is below the 3.14.7 tarfile floor but already has the April
+    # three (3.14.4) and the decompressor UAF (3.14.5).
+    status = sc.cpython_security_status((3, 14, 6))
+    assert status["safe"] is False
+    assert status["advisories"] == ["CVE-2026-11940"]
+    assert "CVE-2026-2297" not in status["advisories"]
+    # 3.11.15 is below 3.11.16, which is the shared fix for every listed CVE.
+    old_line = sc.cpython_security_status((3, 11, 15))
+    assert old_line["safe"] is False
+    for advisory_id in (
+        "CVE-2026-11940",
+        "CVE-2026-2297",
+        "CVE-2026-4224",
+        "CVE-2026-3644",
+        "CVE-2026-6100",
+    ):
+        assert advisory_id in old_line["advisories"]
 
 
 def test_cpython_status_flags_one_stale_and_one_current_per_line():
@@ -210,9 +241,9 @@ def test_cpython_status_flags_one_stale_and_one_current_per_line():
         assert status["safe"] is False, stale
         assert status["classified"] is True, stale
         assert status["floor"] == sc.format_cpython_version(floor)
-        assert "CVE-2026-2297" in status["advisories"], stale
-        # The tarfile fixes are the reason this matters for VSR.
-        assert "tarfile" in status["reason"], stale
+        assert "CVE-2026-11940" in status["advisories"], stale
+        # The tarfile identifier is why the floor sits where it does.
+        assert "CVE-2026-11940" in status["reason"], stale
 
         current = sc.cpython_security_status(floor)
         assert current["safe"] is True, floor
