@@ -36,6 +36,17 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         self.assertIn("qps-Ploc:", result.stdout)
         self.assertIn("100.0%", result.stdout)
 
+    def test_no_deferred_marker_wraps_an_f_string(self):
+        """RM-294: `rg "N_\\(f" gui` must stay empty."""
+        offenders = []
+        for path in sorted((ROOT / "gui").glob("*.py")):
+            for number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), 1
+            ):
+                if "N_(f" in line:
+                    offenders.append(f"{path.name}:{number}")
+        self.assertEqual(offenders, [], f"N_(f-string) found at {offenders}")
+
     def test_no_user_visible_string_bypasses_the_catalog(self):
         """RM-152: the runtime-string gate over the real GUI tree."""
         findings = i18n_catalogs.untranslated_literals()
@@ -62,6 +73,11 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
             "deferred card title": 'self._card_header(root, "Card", "A new card")',
             "deferred slider label": 'self._create_slider(root, "A new slider", 0, 1, 0, "x")',
             "deferred slider hint": 'self._create_slider(root, "Slider", 0, 1, 0, "x", hint="A new hint")',
+            # RM-294: N_ marks a msgid for extraction; an f-string inside it
+            # can never become one, so the string ships untranslatable while
+            # looking wrapped.
+            "f-string inside a deferred marker":
+                'self._update_status(N_(f"Completed {name}"))',
         }
         for name, source in cases.items():
             with self.subTest(sink=name):
@@ -87,6 +103,7 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
             "model record": 'QueueItem(message="Ready to process")',
             "dynamic value": 'label.config(text=some_variable)',
             "deferred marker": 'self._update_status(N_("Marked status"))',
+            "deferred plural marker": 'self._update_status(N_("{n} items"))',
         }
         for name, source in cases.items():
             with self.subTest(value=name):
@@ -114,7 +131,11 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         messages = i18n_catalogs.extract_messages()
         self.assertIn("Ready to process", messages)
         self.assertIn("Checking embedded subtitle tracks...", messages)
-        self.assertIn("Hardware detected: {}; {}", messages)
+        # RM-294: this used to be N_(f"Hardware detected: {gpu}; {audio}"),
+        # which extracted as the positional "{}; {}" -- a msgid no translator
+        # can place. It is now a tr() template with named placeholders.
+        self.assertIn("Hardware detected: {gpu}; {audio}", messages)
+        self.assertNotIn("Hardware detected: {}; {}", messages)
 
     def test_pseudo_catalog_loads_and_preserves_placeholders(self):
         with mock.patch.dict(

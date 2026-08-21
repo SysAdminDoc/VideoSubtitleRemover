@@ -23,7 +23,7 @@ from gui.widgets import (
     ModernButton,
 )
 from gui.failure_copy import MSG_READY_RETRY
-from backend.i18n import N_, tr
+from backend.i18n import N_, ntr, tr
 
 logger = logging.getLogger(__name__)
 
@@ -434,9 +434,14 @@ class QualityReviewControllerMixin:
         count = len(warning_items)
         first_name, first_messages = warning_items[0]
         first = first_messages[0] if first_messages else "review output settings"
-        item_word = "item" if count == 1 else "items"
         self._update_status(
-            N_(f"Output quality preflight warning for {count} {item_word}: {first_name} - {first}"),
+            ntr(
+                "Output quality preflight warning for {count} item: "
+                "{name} - {detail}",
+                "Output quality preflight warning for {count} items: "
+                "{name} - {detail}",
+                count,
+            ).format(count=count, name=first_name, detail=first),
             "warning",
             toast=True,
         )
@@ -556,13 +561,19 @@ class QualityReviewControllerMixin:
         quality_report = record.get("quality_report") or {}
         gate = record.get("quality_gate") or {}
         stage_text = self._dominant_stage_text(record.get("dominant_stage"))
-        stage_suffix = f"; slowest stage {stage_text}" if stage_text else ""
+        stage_suffix = (
+            tr("; slowest stage {stage}").format(stage=stage_text)
+            if stage_text else ""
+        )
         mask_spans = quality_report.get("mask_review_spans") or []
         if item is not None and mask_spans:
             if self._open_mask_correction_editor(item, initial_span=mask_spans[0]):
                 self._update_status(
-                    N_(f"Opened frame-level mask review for "
-                    f"{record.get('output_name', 'output')}{stage_suffix}"),
+                    tr("Opened frame-level mask review for {name}{stage}")
+                    .format(
+                        name=record.get("output_name", "output"),
+                        stage=stage_suffix,
+                    ),
                     "warning",
                 )
                 return
@@ -581,7 +592,10 @@ class QualityReviewControllerMixin:
                 try:
                     os.startfile(str(path))
                     self._update_status(
-                        N_(f"Opened quality review for {record.get('output_name', 'output')}{stage_suffix}"),
+                        tr("Opened quality review for {name}{stage}").format(
+                            name=record.get("output_name", "output"),
+                            stage=stage_suffix,
+                        ),
                         "warning",
                     )
                     return
@@ -589,12 +603,16 @@ class QualityReviewControllerMixin:
                     logger.warning("Could not open quality review artifact", exc_info=True)
         if self._open_batch_report_path(getattr(self, "_last_batch_report_paths", [])):
             self._update_status(
-                N_(f"Opened batch report for review{stage_suffix}"),
+                tr("Opened batch report for review{stage}").format(
+                    stage=stage_suffix),
                 "warning",
             )
             return
         self._update_status(
-            N_(f"Focused {record.get('output_name', 'the first review item')}{stage_suffix}"),
+            tr("Focused {name}{stage}").format(
+                name=record.get("output_name", tr("the first review item")),
+                stage=stage_suffix,
+            ),
             "warning",
         )
 
@@ -700,7 +718,10 @@ class QualityReviewControllerMixin:
             patch = retry_config_patch_for_gate(gate, item.config.to_dict())
         except Exception as exc:
             logger.warning("Could not build quality retry config", exc_info=True)
-            self._update_status(N_(f"Could not prepare suggested retry: {exc}"), "warning")
+            self._update_status(
+                tr("Could not prepare suggested retry: {error}").format(
+                    error=exc),
+                "warning")
             return False
         if not patch:
             self._update_status(N_("No automatic retry settings are available for this review item"), "warning")
@@ -740,7 +761,8 @@ class QualityReviewControllerMixin:
         save_queue_state(self.queue)
         changed_keys = ", ".join(changes)
         self._update_status(
-            N_(f"Prepared retry for {Path(item.file_path).name}: {changed_keys}"),
+            tr("Prepared retry for {name}: {changes}").format(
+                name=Path(item.file_path).name, changes=changed_keys),
             "success",
             toast=True,
         )

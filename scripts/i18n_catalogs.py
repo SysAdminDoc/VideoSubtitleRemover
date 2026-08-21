@@ -91,6 +91,10 @@ TRANSLATION_CALLS = frozenset({
     "_", "tr", "ntr", "N_", "gettext_passthrough",
 })
 
+# Markers that only record a msgid for extraction; the actual translation
+# happens later. They must be given a plain literal.
+DEFERRED_MARKER_CALLS = frozenset({"N_", "gettext_passthrough"})
+
 # Keyword arguments that carry a caption to the user.
 CAPTION_KEYWORDS = frozenset({
     "text", "title", "label", "message", "placeholder", "prompt",
@@ -191,6 +195,17 @@ def untranslated_literals(root: Path = ROOT) -> list[tuple[str, int, str, str]]:
                 called = node.func.id
             else:
                 called = ""
+            if called in DEFERRED_MARKER_CALLS and node.args:
+                # RM-294: N_ is an extraction marker, not a translator. An
+                # f-string inside it never becomes a catalog msgid, so the
+                # string ships untranslatable and looks wrapped.
+                if isinstance(node.args[0], ast.JoinedStr):
+                    findings.append((
+                        relative,
+                        node.args[0].lineno,
+                        f"{called}(f-string)",
+                        _fstring_template(node.args[0]),
+                    ))
             if called in TRANSLATION_CALLS or called in MODEL_CONSTRUCTORS:
                 continue
             candidates: list[tuple[str, ast.AST]] = []

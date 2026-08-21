@@ -176,7 +176,8 @@ class AdvancedSettingsControllerMixin:
         if name == "(custom)":
             return
         if not apply_preset(self.config, name):
-            self._update_status(N_(f"Preset '{name}' not found"), "warning")
+            self._update_status(
+                tr("Preset '{name}' not found").format(name=name), "warning")
             return
         # Reflect preset changes in the mode picker + toggle vars that back
         # the detection / quality / output cards. The dataclass carries the
@@ -210,7 +211,8 @@ class AdvancedSettingsControllerMixin:
                 if self.config.mask_import_path else tr("No imported matte"))
         self._on_mode_changed()
         save_settings(self.config)
-        self._update_status(N_(f"Applied preset '{name}'"), "success")
+        self._update_status(
+            tr("Applied preset '{name}'").format(name=name), "success")
 
     def _choose_mask_import_manifest(self):
         path = filedialog.askopenfilename(
@@ -328,7 +330,8 @@ class AdvancedSettingsControllerMixin:
             else:
                 self._update_status(result.message(), "error")
         except Exception as exc:
-            self._update_status(N_(f"Export failed: {exc}"), "error")
+            self._update_status(
+                tr("Export failed: {error}").format(error=exc), "error")
 
     def _export_preset_dialog(self):
         """Export the currently-selected preset to a shareable JSON file."""
@@ -349,11 +352,15 @@ class AdvancedSettingsControllerMixin:
             if not path:
                 return
             if export_preset(name, path):
-                self._update_status(N_(f"Exported '{name}' to {Path(path).name}"), "success")
+                self._update_status(
+                    tr("Exported '{name}' to {file}").format(
+                        name=name, file=Path(path).name),
+                    "success")
             else:
                 self._update_status(N_("Export failed"), "error")
         except Exception as exc:
-            self._update_status(N_(f"Export failed: {exc}"), "error")
+            self._update_status(
+                tr("Export failed: {error}").format(error=exc), "error")
 
     def _import_preset_dialog(self):
         """Import a preset JSON into the user library and select it."""
@@ -377,13 +384,17 @@ class AdvancedSettingsControllerMixin:
             notice = consume_preset_import_notice()
             if notice:
                 self._update_status(
-                    N_(f"Imported preset '{new_name}'. {notice}"),
+                    tr("Imported preset '{name}'. {notice}").format(
+                        name=new_name, notice=notice),
                     "warning",
                 )
             else:
-                self._update_status(N_(f"Imported preset '{new_name}'"), "success")
+                self._update_status(
+                    tr("Imported preset '{name}'").format(name=new_name),
+                    "success")
         except Exception as exc:
-            self._update_status(N_(f"Import failed: {exc}"), "error")
+            self._update_status(
+                tr("Import failed: {error}").format(error=exc), "error")
 
     def _prompt_preset_details(self) -> Optional[Tuple[str, str]]:
         """Open a themed modal for naming and describing a user preset."""
@@ -534,11 +545,16 @@ class AdvancedSettingsControllerMixin:
                 self.preset_combo['values'] = ["(custom)"] + [n for n, _ in list_presets()]
                 self.preset_var.set(name)
                 verb = "Updated" if existing_user else "Saved"
-                self._update_status(N_(f"{verb} preset '{name}'"), "success")
+                self._update_status(
+                    tr("{verb} preset '{name}'").format(verb=verb, name=name),
+                    "success")
             else:
-                self._update_status(N_(f"Could not save preset '{name}'"), "error")
+                self._update_status(
+                    tr("Could not save preset '{name}'").format(name=name),
+                    "error")
         except Exception as exc:
-            self._update_status(N_(f"Save preset failed: {exc}"), "error")
+            self._update_status(
+                tr("Save preset failed: {error}").format(error=exc), "error")
 
     def _update_mode_options(self):
         """Enable/disable mode-specific toggles based on selected algorithm."""
@@ -645,7 +661,10 @@ class AdvancedSettingsControllerMixin:
             if label == selection:
                 self.config.gpu_id = gpu['index']
                 self.config.use_gpu = True
-                self._update_status(N_(f"Compute device set to {gpu['name']}"), "info")
+                self._update_status(
+                    tr("Compute device set to {device}").format(
+                        device=gpu["name"]),
+                    "info")
                 logger.info(f"GPU set to: {gpu['name']} (index {gpu['index']})")
                 break
 

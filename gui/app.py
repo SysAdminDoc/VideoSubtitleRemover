@@ -45,6 +45,7 @@ from gui.utils import (
     detect_ai_engines, detect_ffmpeg, get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
     truncate_middle,
+    queue_message_text,
     QUEUE_MESSAGE_PROBING, QUEUE_MESSAGE_READY,
     QUEUE_MESSAGE_SOFT_SUBS_FOUND,
 )
@@ -887,7 +888,10 @@ class VideoSubtitleRemoverApp(
 
         gpu_label = self.gpus[0]["name"] if self.gpus else tr("CPU mode")
         audio_label = "FFmpeg ready" if self.ffmpeg_ready else "FFmpeg missing"
-        self._update_status(N_(f"Hardware detected: {gpu_label}; {audio_label}"), "info")
+        self._update_status(
+            tr("Hardware detected: {gpu}; {audio}").format(
+                gpu=gpu_label, audio=audio_label),
+            "info")
         logger.info(
             "Startup hardware probe complete: gpus=%s detection=%s inpainting=%s ffmpeg=%s",
             len(self.gpus),
@@ -1799,7 +1803,10 @@ class VideoSubtitleRemoverApp(
         if item.id in self.queue_widgets:
             self.queue_widgets[item.id].update_item(item)
         save_queue_state(self.queue)
-        self._update_status(N_(f"{Path(item.file_path).name}: {labels[action]}"), "info")
+        self._update_status(
+            tr("{name}: {action}").format(
+                name=Path(item.file_path).name, action=labels[action]),
+            "info")
 
     def _refresh_idle_output_paths(self) -> int:
         """Recompute output paths for idle items that still follow the live output rule."""
@@ -2045,7 +2052,8 @@ class VideoSubtitleRemoverApp(
             return
         item.cancel_requested = True
         self._update_status(
-            N_(f"Stopping {Path(item.file_path).name}"), "warning", toast=True,
+            tr("Stopping {name}").format(name=Path(item.file_path).name),
+            "warning", toast=True,
         )
 
     def _repeat_item_with_settings(self, item_id: str):
@@ -2082,7 +2090,8 @@ class VideoSubtitleRemoverApp(
         self._refresh_action_states()
         save_queue_state(self.queue)
         self._update_status(
-            N_(f"Re-queued {Path(template.file_path).name} with the same settings"),
+            tr("Re-queued {name} with the same settings").format(
+                name=Path(template.file_path).name),
             "info", toast=True,
         )
 
@@ -2127,12 +2136,15 @@ class VideoSubtitleRemoverApp(
         save_queue_state(self.queue)
         if self._normalized_path_key(new_path) != self._normalized_path_key(resolved_path):
             self._update_status(
-                N_(f"Output renamed to {resolved_path.name} to avoid an overwrite"),
+                tr("Output renamed to {name} to avoid an overwrite").format(
+                    name=resolved_path.name),
                 "success",
             )
         else:
             self._update_status(
-                N_(f"Output renamed to {resolved_path.name}"), "success")
+                tr("Output renamed to {name}").format(
+                    name=resolved_path.name),
+                "success")
 
     def _try_dequeue_queue_item(
         self, item_id: str,
@@ -2165,7 +2177,9 @@ class VideoSubtitleRemoverApp(
             self._selected_queue_item_id = None
         self._update_queue_display()
         if item:
-            self._update_status(N_(f"Removed {Path(item.file_path).name} from the queue"))
+            self._update_status(
+                tr("Removed {name} from the queue").format(
+                    name=Path(item.file_path).name))
         save_queue_state(self.queue)
 
     def _remove_selected_queue_item(self):
@@ -2204,7 +2218,9 @@ class VideoSubtitleRemoverApp(
             clear_queue_state()
         count = len(completed_ids)
         self._update_status(
-            N_(f"Cleared {count} completed item{'s' if count != 1 else ''}"))
+            ntr("Cleared {count} completed item",
+                "Cleared {count} completed items",
+                count).format(count=count))
 
     def _move_selected_queue_item(self, direction: int):
         """Move the selected inactive queue item one position."""
@@ -2232,8 +2248,9 @@ class VideoSubtitleRemoverApp(
         self._update_queue_display()
         save_queue_state(self.queue)
         self._update_status(
-            N_(f"Moved {Path(item.file_path).name} "
-            f"{'up' if step < 0 else 'down'}"))
+            (tr("Moved {name} up") if step < 0
+             else tr("Moved {name} down")).format(
+                name=Path(item.file_path).name))
 
     def _clear_queue(self):
         """Clear all items from the queue."""
@@ -2384,7 +2401,11 @@ class VideoSubtitleRemoverApp(
                 if item.message == "Ready to retry" and item.id in self.queue_widgets:
                     self.queue_widgets[item.id].update_item(item)
             save_queue_state(self.queue)
-            self._update_status(N_(f"Reset {count} item{'s' if count != 1 else ''} for retry"), "success")
+            self._update_status(
+                ntr("Reset {count} item for retry",
+                    "Reset {count} items for retry",
+                    count).format(count=count),
+                "success")
         else:
             self._update_status(N_("There are no failed items to retry"), "warning")
 
@@ -2431,8 +2452,9 @@ class VideoSubtitleRemoverApp(
             self._update_queue_display()
             save_queue_state(self.queue)
             self._update_status(
-                N_(f"Queued {added} file{'s' if added != 1 else ''} "
-                f"with the last job's settings"),
+                ntr("Queued {count} file with the last job's settings",
+                    "Queued {count} files with the last job's settings",
+                    added).format(count=added),
                 "success", toast=True,
             )
         self._refresh_action_states()
@@ -2549,11 +2571,15 @@ class VideoSubtitleRemoverApp(
             for status in assess_storage_volumes(requirements):
                 if status.free_bytes < status.required_bytes:
                     self._update_status(
-                        N_(f"Low disk space at {status.path}: about "
-                        f"{status.required_bytes / (1024 ** 3):.1f} GB is "
-                        f"estimated for {', '.join(status.purposes)}, but "
-                        f"{status.free_bytes / (1024 ** 3):.1f} GB is free. "
-                        "The backend will run an exact frame-based check."),
+                        tr("Low disk space at {path}: about {needed} GB is "
+                           "estimated for {purposes}, but {free} GB is free. "
+                           "The backend will run an exact frame-based check."
+                           ).format(
+                            path=status.path,
+                            needed=f"{status.required_bytes / (1024 ** 3):.1f}",
+                            purposes=", ".join(status.purposes),
+                            free=f"{status.free_bytes / (1024 ** 3):.1f}",
+                        ),
                         "warning",
                         toast=True,
                     )
@@ -2656,19 +2682,33 @@ class VideoSubtitleRemoverApp(
             if item.status == ProcessingStatus.COMPLETE:
                 if self._queue_item_needs_quality_review(item):
                     self._update_status(
-                        N_(f"{fname} completed; quality review recommended"),
+                        tr("{name} completed; quality review recommended")
+                        .format(name=fname),
                         "warning",
                     )
                 else:
-                    self._update_status(N_(f"Completed {fname}"), "success")
+                    self._update_status(
+                        tr("Completed {name}").format(name=fname), "success")
             elif item.status == ProcessingStatus.ERROR:
-                self._update_status(N_(f"{fname} needs attention: {item.message}"), "error")
+                self._update_status(
+                    tr("{name} needs attention: {detail}").format(
+                        name=fname,
+                        detail=queue_message_text(item.message)),
+                    "error")
             elif item.status == ProcessingStatus.PAUSED:
-                self._update_status(N_(f"Paused {fname}: resume from checkpoint"), "warning")
+                self._update_status(
+                    tr("Paused {name}: resume from checkpoint").format(
+                        name=fname),
+                    "warning")
             elif item.status == ProcessingStatus.CANCELLED:
-                self._update_status(N_(f"Stopped {fname}"), "warning")
+                self._update_status(
+                    tr("Stopped {name}").format(name=fname), "warning")
             else:
-                self._update_status(N_(f"{fname}: {item.message}"), "info")
+                self._update_status(
+                    tr("{name}: {detail}").format(
+                        name=fname,
+                        detail=queue_message_text(item.message)),
+                    "info")
             self._refresh_action_states()
 
         # A teardown race here used to escape into _process_item's blanket
@@ -2833,7 +2873,10 @@ class VideoSubtitleRemoverApp(
         # Replace the consumed snapshot with the reconstructed queue. Keeping
         # this atomic snapshot makes a second crash/restore cycle lossless.
         save_queue_state(self.queue)
-        self._update_status(N_(f"Restored {n} item{'s' if n != 1 else ''} from last session"))
+        self._update_status(
+            ntr("Restored {count} item from last session",
+                "Restored {count} items from last session",
+                n).format(count=n))
 
     def _queue_argv_files(self):
         """RM-58: queue files passed via sys.argv (e.g. 'Send to VSR')."""
@@ -2872,7 +2915,8 @@ class VideoSubtitleRemoverApp(
                 # the user can actually reach it.
                 logger.info(f"Update {tag} available: {url}")
                 self._update_status(
-                    N_(f"Update {tag} available -- link in the log panel"),
+                    tr("Update {tag} available -- link in the log panel")
+                    .format(tag=tag),
                     "info",
                 )
         except Exception:

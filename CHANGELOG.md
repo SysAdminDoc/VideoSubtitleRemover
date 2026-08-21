@@ -34,6 +34,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   text track, covering the frames where the glyphs are visible but too faint
   for OCR. The fade-out hold carries across decode batches; the fade-in hold
   reaches back within the current batch.
+- Every status message that names a file, a preset, a device or a count now
+  reaches the translation catalog. Around forty of them were wrapped in a
+  marker that records a msgid but cannot translate an f-string, so they always
+  showed in English, and counts now use real plural forms. The catalog lint
+  fails if a new one is written that way.
 
 ## [3.36.0] - 2026-08-21
 

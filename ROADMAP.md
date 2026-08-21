@@ -12,9 +12,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 
 Implementer index -- drain in this order.
 
-P2:
-- RM-294 S -- wrap remaining `N_(f"...")` status toasts so they extract and translate
-
 P3:
 - RM-286 S -- Last FFmpeg commands view + support-bundle ring buffer
 - RM-288 S -- record `SOURCE_DATE_EPOCH` / `PYTHONHASHSEED`; claim semantic rebuilds only
@@ -22,16 +19,6 @@ P3:
 - RM-293 S -- README Detection / Troubleshooting copy still describes the 3.8 picker
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 - RM-296 M -- make the fade-in hold exact across decode-batch boundaries
-
-### P2
-
-- [ ] P2 -- RM-294: Replace remaining `N_(f"...")` status toasts with extractable `tr()`/`ntr()` templates
-  Why: `N_` is an extraction marker, not a translator, and an f-string inside it never becomes a catalog msgid.
-  Evidence: still present in `gui/app.py` (about 20 sites), `gui/settings_controller.py` (about 12), `gui/quality_controller.py` (about 7), `gui/preview_controller.py` (1). Region editor save/keyframe copy was wrapped in the 2026-08-21 audit.
-  Touches: those GUI files, `locale/vsr.pot`.
-  Acceptance: `rg "N_\\(f" gui` is empty; each former site uses `tr("...{name}...").format(...)` or `ntr()`; catalogs updated last.
-  Confidence: Verified
-  Complexity: S
 
 ### P3
 

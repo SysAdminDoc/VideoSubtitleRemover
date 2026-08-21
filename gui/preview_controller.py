@@ -513,8 +513,9 @@ class PreviewControllerMixin:
                     self.lang_var.set(lang)
                     break
             self._update_status(
-                N_(f"Detected {script} script, suggested language: {lang} "
-                f"(confidence {conf:.0%})"),
+                tr("Detected {script} script, suggested language: {lang} "
+                   "(confidence {confidence})").format(
+                    script=script, lang=lang, confidence=f"{conf:.0%}"),
                 "success",
             )
 
