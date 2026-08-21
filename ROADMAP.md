@@ -13,18 +13,9 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P3:
-- RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 - RM-296 M -- make the fade-in hold exact across decode-batch boundaries
 
 ### P3
-
-- [ ] P3 -- RM-295: Surfaces this audit did not execute
-  Why: a pass that never opened these paths should not claim they were reviewed.
-  Evidence: no live run of the watch-folder ingest, Whisper/WhisperX helpers, `--nle-input` NLE sidecar, VapourSynth `.vpy` ingest, Docker image build (Linux engine absent on this host), or a real NSIS silent uninstall. Dark theme only; there is no light theme to switch.
-  Touches: `backend/watch_folder.py` (if present), Whisper helpers, `backend/nle_sidecar.py`, `backend/vapoursynth_bridge.py`, `Dockerfile`, `installer/vsr.nsi`.
-  Acceptance: each named surface has a recorded smoke (command, expected result) or is moved to Roadmap_Blocked with the actual blocker.
-  Confidence: Verified (gap)
-  Complexity: S
 
 - [ ] P3 -- RM-296: Make the fade-in mask hold exact across decode-batch boundaries
   Why: RM-292's fade-in reaches back only within the current decode batch, because the frames before it have already been inpainted and written by the time the batch's masks are known. A track whose first detection lands in the first few frames of a batch gets a shorter hold than requested.

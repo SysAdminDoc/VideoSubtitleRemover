@@ -57,6 +57,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   the picker and `--ocr-engine` instead of environment variables, and the
   Troubleshooting advice points at RapidOCR and the picker rather than telling
   everyone to install PaddleOCR.
+- The watch folder, the NLE sidecar round trip, and the VapourSynth bridge
+  guard now have tests that actually run them. The previous watch-folder tests
+  all mocked the processing call, so none of them proved a drain writes a file.
 
 ## [3.36.0] - 2026-08-21
 

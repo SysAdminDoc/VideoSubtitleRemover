@@ -702,6 +702,109 @@ class FrozenMatteCliErrorTests(unittest.TestCase):
             self.assertNotIn("Traceback", proc.stderr)
 
 
+class ExecutedSurfaceTests(unittest.TestCase):
+    """RM-295: surfaces an audit claimed to cover but never actually ran.
+
+    Every other watch-folder test mocks process_video, so none of them
+    proved a drain writes a real file. These run the surfaces for real on
+    a tiny clip.
+    """
+
+    @staticmethod
+    def _write_clip(path, frames=8, size=(160, 120), fps=10.0):
+        import cv2
+        import numpy as np
+
+        writer = cv2.VideoWriter(
+            str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, size)
+        for index in range(frames):
+            frame = np.full((size[1], size[0], 3), 40, dtype=np.uint8)
+            cv2.putText(frame, f"SUB {index}", (12, size[1] - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            writer.write(frame)
+        writer.release()
+        return path
+
+    def _run_real_cli(self, args):
+        import subprocess
+        import sys
+
+        return subprocess.run(
+            [sys.executable, "-m", "backend.cli", *args],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            capture_output=True, text=True, timeout=900,
+        )
+
+    def test_a_watch_drain_actually_writes_an_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            watch_dir = work / "incoming"
+            out_dir = work / "out"
+            watch_dir.mkdir()
+            self._write_clip(watch_dir / "clip.mp4")
+            proc = self._run_real_cli([
+                "--watch", str(watch_dir), "--watch-once",
+                "--watch-stable-seconds", "0", "--watch-interval", "0.1",
+                "--out-dir", str(out_dir), "--mode", "sttn", "--gpu", "-1",
+                "--no-audio", "--skip-detection", "--end", "0.4",
+            ])
+            outputs = sorted(path.name for path in out_dir.glob("*.mp4"))
+            summary = out_dir / "vsr-batch-summary.json"
+            self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+            self.assertEqual(outputs, ["clip_no_sub.mp4"])
+            self.assertTrue(summary.is_file())
+            payload = json.loads(summary.read_text(encoding="utf-8"))
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["counts"].get("hardcoded-processed"), 1)
+
+    def test_the_nle_sidecar_round_trips_through_nle_input(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            clip = self._write_clip(work / "clip.mp4")
+            output = work / "clip_clean.mp4"
+            export = self._run_real_cli([
+                "-i", str(clip), "-o", str(output), "--nle-sidecar", "edl",
+                "--mode", "sttn", "--gpu", "-1", "--no-audio",
+                "--skip-detection", "--end", "0.4",
+            ])
+            self.assertEqual(
+                export.returncode, 0, export.stderr or export.stdout)
+            edls = sorted(work.glob("*.edl"))
+            self.assertEqual(
+                len(edls), 1, f"expected one EDL, found {edls}")
+            reimport = self._run_real_cli([
+                "-i", str(clip), "--nle-input", str(edls[0]),
+                "--validate-config",
+            ])
+        self.assertEqual(
+            reimport.returncode, 0, reimport.stderr or reimport.stdout)
+        self.assertIn("resolved_config", reimport.stdout)
+
+    def test_the_vapoursynth_bridge_declines_cleanly_when_absent(self):
+        """It must return None, not raise, when VapourSynth is not installed."""
+        from backend import vapoursynth_bridge
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script = Path(tmpdir) / "probe.vpy"
+            script.write_text("import vapoursynth as vs\n", encoding="utf-8")
+            try:
+                import vapoursynth  # noqa: F401
+            except ImportError:
+                self.assertIsNone(vapoursynth_bridge.try_open_vpy(str(script)))
+            else:
+                self.skipTest("VapourSynth is installed on this host")
+
+    def test_the_whisper_helpers_convert_segments_to_frame_spans(self):
+        from backend import whisper_fallback
+
+        spans = whisper_fallback.segments_to_frame_spans(
+            [(0.0, 1.0, "hello"), (2.0, 3.0, "world")], fps=10.0)
+        self.assertEqual(spans, [(0, 10), (20, 30)])
+        self.assertIsInstance(whisper_fallback.is_available(), bool)
+        self.assertIsInstance(
+            whisper_fallback.ffmpeg_whisper_available(), bool)
+
+
 if __name__ == "__main__":
     unittest.main()
 
