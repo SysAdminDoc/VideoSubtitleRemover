@@ -29,6 +29,18 @@ from gui.widgets import (
 from backend.i18n import N_, tr
 from backend.job_worker import describe_exit_code
 from backend.resume_checkpoint import ProcessingPaused
+from gui.failure_copy import (
+    MSG_CANCELLED,
+    MSG_COMPLETE,
+    MSG_FAILED,
+    MSG_INITIALIZING,
+    MSG_PAUSED,
+    MSG_PREPARING_MODELS,
+    MSG_STRIP_SOFT,
+    MSG_COPY_SOFT,
+    user_facing_isolated_error,
+    user_facing_processing_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +157,8 @@ class ProcessingControllerMixin:
             self.start_btn.set_text(tr("Start batch"))
             self._refresh_action_states()
             self._update_status(
-                N_(f"Could not start batch: {exc}"), "error", toast=True)
+                tr("Could not start batch: {error}").format(error=exc),
+                "error", toast=True)
 
     def _pause_processing(self):
         """Pause the current processing at the next checkpoint boundary."""
@@ -371,7 +384,7 @@ class ProcessingControllerMixin:
             "Keep this window open; failures will appear in the log."
         )
         logger.info("%s. %s", status, detail)
-        item.message = "Preparing model downloads if needed..."
+        item.message = MSG_PREPARING_MODELS
         item.progress = max(float(getattr(item, "progress", 0.0) or 0.0), 0.02)
         self._update_item_display(item)
 
@@ -441,9 +454,9 @@ class ProcessingControllerMixin:
         item.status = ProcessingStatus.MERGING
         item.progress = 0.2
         item.message = (
-            "Removing embedded subtitle tracks..."
+            MSG_STRIP_SOFT
             if action == SoftSubtitleAction.STRIP else
-            "Copying embedded subtitle tracks..."
+            MSG_COPY_SOFT
         )
         self._update_item_display(item)
 
@@ -708,10 +721,10 @@ class ProcessingControllerMixin:
             item.progress = 1.0
             item.error = None
             item.correction_retry = None
-            item.message = "Complete"
+            item.message = MSG_COMPLETE
             note = format_quality_report(item.quality_report, compact=True)
             if note:
-                item.message = f"Complete - {note}"
+                item.message = f"{MSG_COMPLETE} - {note}"
             elapsed = (item.completed_at - item.started_at).total_seconds()
             self._batch_times.append(elapsed)
             logger.info(
@@ -720,12 +733,13 @@ class ProcessingControllerMixin:
             )
         elif outcome.status == "paused":
             item.error = None
-            item.message = outcome.error or "Paused at checkpoint"
+            item.message = MSG_PAUSED
         elif outcome.status == "cancelled":
             item.error = None
-            item.message = "Cancelled"
+            item.message = MSG_CANCELLED
         else:
-            item.error = outcome.error or "Processing failed"
+            raw = outcome.error or MSG_FAILED
+            item.error = user_facing_isolated_error(raw)
             item.message = item.error
             item.quality_report = None
             if outcome.crashed:
@@ -836,7 +850,7 @@ class ProcessingControllerMixin:
             item.started_at = datetime.now()
             item.completed_at = None
             item.progress = 0.0
-            item.message = "Initializing..."
+            item.message = MSG_INITIALIZING
             item.error = None
             item.quality_report = None
             item.retry_attempts = 0
@@ -1167,10 +1181,10 @@ class ProcessingControllerMixin:
                 item.error = None
                 item.quality_report = getattr(remover, "last_quality_report", None)
                 item.correction_retry = None
-                item.message = "Complete"
+                item.message = MSG_COMPLETE
                 quality_note = format_quality_report(item.quality_report, compact=True)
                 if quality_note:
-                    item.message = f"Complete - {quality_note}"
+                    item.message = f"{MSG_COMPLETE} - {quality_note}"
                 item.completed_at = datetime.now()
                 elapsed = (item.completed_at - item.started_at).total_seconds()
                 # Track for ETA rolling average
@@ -1182,7 +1196,7 @@ class ProcessingControllerMixin:
                 )
                 failure_message = (
                     getattr(remover, "last_error_message", None)
-                    or "Processing failed"
+                    or MSG_FAILED
                 )
                 item.status = ProcessingStatus.ERROR
                 item.message = failure_message
@@ -1192,7 +1206,7 @@ class ProcessingControllerMixin:
                 logger.error(f"Failed: {file_name}: {failure_message}")
             self._update_item_display(item)
 
-        except ProcessingPaused as exc:
+        except ProcessingPaused:
             remover_obj = locals().get("remover")
             item.stage_timings = dict(
                 getattr(remover_obj, "last_stage_timings", {}) or {}
@@ -1211,7 +1225,7 @@ class ProcessingControllerMixin:
                 if remover_obj is not None else ""
             )
             item.status = ProcessingStatus.PAUSED
-            item.message = str(exc) or "Paused at checkpoint"
+            item.message = MSG_PAUSED
             item.error = None
             item.quality_report = None
             item.completed_at = datetime.now()
@@ -1223,7 +1237,7 @@ class ProcessingControllerMixin:
                 getattr(remover_obj, "last_stage_timings", {}) or {}
             )
             item.status = ProcessingStatus.CANCELLED
-            item.message = "Cancelled"
+            item.message = MSG_CANCELLED
             item.error = None
             item.quality_report = None
             item.completed_at = datetime.now()
@@ -1235,10 +1249,10 @@ class ProcessingControllerMixin:
                 getattr(remover_obj, "last_stage_timings", {}) or {}
             )
             item.status = ProcessingStatus.ERROR
-            item.error = str(e)
-            # The row/status already signal an error state; avoid the redundant
-            # "Error:" prefix (which reads as "needs attention: Error: ...").
-            item.message = str(e) or tr("Processing failed")
+            item.error = type(e).__name__
+            # Queue rows and persisted queue_state must not carry paths or
+            # traceback fragments; the log already has the full exception.
+            item.message = user_facing_processing_error(e)
             item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
@@ -1397,9 +1411,10 @@ class ProcessingControllerMixin:
             pct = int(progress * 100)
             self.batch_progress.set_progress(progress)
             eta = self._compute_eta(current, total)
-            label = f"{current} of {total} complete"
+            label = tr("{current} of {total} complete").format(
+                current=current, total=total)
             if eta:
-                label += f"   -   about {eta} left"
+                label += tr("   -   about {eta} left").format(eta=eta)
             self.batch_label.config(text=label, fg=Theme.TEXT_SECONDARY)
             self.batch_percent_label.config(text=f"{pct}%", fg=Theme.BLUE_PRIMARY)
             self.root.title(tr("[{current}/{total}] {app} v{version}").format(

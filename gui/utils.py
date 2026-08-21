@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
 from backend.i18n import N_, ntr, tr
+from gui.failure_copy import CANONICAL_FAILURE_MESSAGES
 from backend.dependency_caps import FROZEN_OPTIONAL_DEPENDENCIES
 from backend.import_safety import module_can_import
 from backend.inpainters.lama import _pytorch_lama_allowed
@@ -155,7 +156,7 @@ CANONICAL_QUEUE_MESSAGES = frozenset({
     QUEUE_MESSAGE_READY,
     QUEUE_MESSAGE_PROBING,
     QUEUE_MESSAGE_SOFT_SUBS_FOUND,
-})
+}) | CANONICAL_FAILURE_MESSAGES
 
 
 def queue_message_text(message: Optional[str]) -> str:

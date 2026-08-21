@@ -734,6 +734,8 @@ class NsisInstallerArtefactTests(unittest.TestCase):
         self.assertIn("SetShellVarContext all", text)
         self.assertNotIn('RMDir /r "$INSTDIR"', text)
         self.assertIn('RMDir "$INSTDIR"', text)
+        self.assertIn("QuietUninstallString", text)
+        self.assertIn('uninstall.exe$\\" /S', text)
 
     def test_nsi_version_matches_app_version(self):
         """The installer version defines must track gui.config.APP_VERSION so
