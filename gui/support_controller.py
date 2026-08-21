@@ -30,7 +30,7 @@ from gui.dialog_layout import (
     scrollable_dialog_body,
 )
 from backend.ffmpeg_profiles import ffmpeg_profile_entries
-from backend.i18n import ntr, tr
+from backend.i18n import N_, ntr, tr
 from backend.model_downloads import installed_backend_status
 
 logger = logging.getLogger(__name__)
@@ -501,6 +501,105 @@ class SupportControllerMixin:
             "fell_back": bool(best.get("anyFallback")),
         }
 
+    def _show_ffmpeg_commands(self):
+        """RM-286: show the last FFmpeg invocations as copyable lines."""
+        from backend.support_bundle import ffmpeg_command_log_text
+
+        text = ffmpeg_command_log_text()
+        if not text:
+            self._update_status(
+                N_("No FFmpeg commands have run yet"), "info")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.withdraw()
+        dialog.title(tr("Last FFmpeg commands"))
+        dialog.configure(bg=Theme.BG_OVERLAY)
+        dialog.transient(self.root)
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                dialog, role="dialog", label=tr("Last FFmpeg commands"),
+                state="modal")
+        except Exception:
+            pass
+
+        body = tk.Frame(dialog, bg=Theme.BG_SECONDARY)
+        body.pack(fill="both", expand=True)
+        tk.Label(
+            body, text=tr("Last FFmpeg commands"),
+            font=f(Theme.F_HEADING, "bold"),
+            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+        ).pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_LG, 0))
+        tk.Label(
+            body,
+            text=tr(
+                "Each line runs as-is once its directories are restored. "
+                "Paths are reduced to file names before display."
+            ),
+            font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED, wraplength=700, justify="left",
+        ).pack(anchor="w", padx=Theme.S_LG, pady=(4, Theme.S_MD))
+
+        text_frame = tk.Frame(body, bg=Theme.BG_SECONDARY)
+        text_frame.pack(fill="both", expand=True,
+                        padx=Theme.S_LG, pady=(0, Theme.S_MD))
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+        widget = tk.Text(
+            text_frame, wrap="none", height=18, width=100,
+            bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+            insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+            font=f(Theme.F_MONO) if hasattr(Theme, "F_MONO") else f(Theme.F_META),
+            yscrollcommand=scrollbar.set,
+        )
+        widget.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=widget.yview)
+        widget.insert("1.0", text)
+        widget.configure(state="disabled")
+        try:
+            from backend.a11y import set_accessible_metadata
+            set_accessible_metadata(
+                widget, role="text box", label=tr("Last FFmpeg commands"))
+        except Exception:
+            pass
+
+        def _close():
+            dialog.grab_release()
+            dialog.destroy()
+
+        def _copy():
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self._update_status(
+                    N_("FFmpeg commands copied to the clipboard"), "success")
+            except Exception:
+                self._update_status(
+                    N_("Could not copy to the clipboard"), "warning")
+
+        actions = tk.Frame(body, bg=Theme.BG_SECONDARY)
+        actions.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_LG))
+        close_button = ModernButton(
+            actions, text=tr("Close"), width=84, command=_close,
+            style="primary", size="md")
+        close_button.pack(side="right")
+        ModernButton(
+            actions, text=tr("Copy"), width=84, command=_copy,
+            style="ghost", size="md").pack(
+                side="right", padx=(0, Theme.S_SM))
+
+        dialog.bind("<Escape>", lambda _event: _close())
+        dialog.protocol("WM_DELETE_WINDOW", _close)
+        fit_dialog_to_work_area(
+            dialog, self.root, min_width=760, min_height=420)
+        dialog.deiconify()
+        dialog.grab_set()
+        try:
+            close_button.focus_set()
+        except Exception:
+            pass
+
     def _show_about(self):
         """Open the compact help and diagnostics surface."""
         dialog = tk.Toplevel(self.root)
@@ -676,6 +775,9 @@ class SupportControllerMixin:
             lambda btn=model_cache_btn: self._open_model_cache_menu(btn)
         )
         model_cache_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        ModernButton(actions_inner, text=tr("FFmpeg commands"), width=142,
+                     command=self._show_ffmpeg_commands, style="ghost",
+                     size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(actions_inner, text=tr("Support bundle"), width=128,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))

@@ -258,6 +258,126 @@ class AdapterConformanceMatrixTests(unittest.TestCase):
 
 
 
+class FfmpegCommandLogTests(unittest.TestCase):
+    """RM-286: an FFmpeg failure must leave a runnable line behind."""
+
+    def setUp(self):
+        from backend import subprocess_policy
+
+        subprocess_policy.clear_ffmpeg_command_log()
+
+    def tearDown(self):
+        from backend import subprocess_policy
+
+        subprocess_policy.clear_ffmpeg_command_log()
+
+    def test_only_the_ffmpeg_family_is_recorded(self):
+        from backend import subprocess_policy
+
+        subprocess_policy.record_command(["ffmpeg", "-i", "a.mkv", "b.mp4"])
+        subprocess_policy.record_command(["ffprobe", "-v", "quiet", "a.mkv"])
+        subprocess_policy.record_command(["python", "-c", "print(1)"])
+        subprocess_policy.record_command(["notffmpeg", "-i", "a.mkv"])
+        commands = [
+            entry["command"]
+            for entry in subprocess_policy.recent_ffmpeg_commands()
+        ]
+        self.assertEqual(len(commands), 2, commands)
+        self.assertTrue(commands[0].startswith("ffmpeg "))
+        self.assertTrue(commands[1].startswith("ffprobe "))
+
+    def test_a_full_path_binary_is_recognised(self):
+        from backend import subprocess_policy
+
+        subprocess_policy.record_command(
+            [r"C:\tools\ffmpeg-9.0.1\bin\ffmpeg.exe", "-i", "a.mkv"])
+        self.assertEqual(len(subprocess_policy.recent_ffmpeg_commands()), 1)
+
+    def test_arguments_with_spaces_are_quoted_so_the_line_runs(self):
+        from backend import subprocess_policy
+
+        subprocess_policy.record_command(
+            ["ffmpeg", "-i", "my clip.mkv", "-vf", "scale=1280:-2", "out.mp4"])
+        line = subprocess_policy.recent_ffmpeg_commands()[0]["command"]
+        # The spaced argument must survive as ONE token when the line is
+        # re-parsed, which is the whole point of quoting it.
+        if os.name == "nt":
+            parsed = subprocess_policy.subprocess.list2cmdline
+            self.assertIn('"my clip.mkv"', line)
+            self.assertTrue(callable(parsed))
+        else:
+            import shlex
+
+            self.assertIn("my clip.mkv", shlex.split(line))
+
+    def test_the_buffer_is_bounded(self):
+        from backend import subprocess_policy
+
+        for index in range(subprocess_policy.FFMPEG_COMMAND_LOG_SIZE * 3):
+            subprocess_policy.record_command(
+                ["ffmpeg", "-i", f"clip{index}.mkv"])
+        entries = subprocess_policy.recent_ffmpeg_commands()
+        self.assertEqual(
+            len(entries), subprocess_policy.FFMPEG_COMMAND_LOG_SIZE)
+        self.assertIn("clip119.mkv", entries[-1]["command"])
+
+    def test_recording_never_raises_on_an_odd_command(self):
+        from backend import subprocess_policy
+
+        subprocess_policy.record_command([])
+        subprocess_policy.record_command("")
+        subprocess_policy.record_command(["ffmpeg"])
+        self.assertEqual(len(subprocess_policy.recent_ffmpeg_commands()), 1)
+
+    def test_the_rendered_log_redacts_directories_and_keeps_file_names(self):
+        from backend import subprocess_policy
+        from backend.support_bundle import ffmpeg_command_log_text
+
+        subprocess_policy.record_command([
+            "ffmpeg", "-i", r"C:\Users\someone\Videos\my clip.mkv",
+            r"C:\Users\someone\out\cleaned.mp4",
+        ])
+        text = ffmpeg_command_log_text()
+        self.assertIn("my clip.mkv", text)
+        self.assertIn("cleaned.mp4", text)
+        self.assertNotIn("someone", text)
+
+    def test_the_rendered_log_is_empty_when_nothing_ran(self):
+        from backend.support_bundle import ffmpeg_command_log_text
+
+        self.assertEqual(ffmpeg_command_log_text(), "")
+
+    def test_the_support_bundle_carries_the_commands(self):
+        import zipfile
+
+        from backend import subprocess_policy
+        from backend.support_bundle import create_support_bundle
+
+        subprocess_policy.record_command(["ffmpeg", "-i", "a.mkv", "b.mp4"])
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = create_support_bundle(
+                Path(tmp) / "bundle.zip", app_version="3.36.0")
+            with zipfile.ZipFile(bundle) as archive:
+                names = archive.namelist()
+                self.assertIn("ffmpeg-commands.redacted.txt", names)
+                body = archive.read(
+                    "ffmpeg-commands.redacted.txt").decode("utf-8")
+        self.assertIn("ffmpeg -i a.mkv b.mp4", body)
+
+    def test_popen_records_through_the_shared_policy(self):
+        """Every child goes through popen_process, so nothing can bypass it."""
+        from unittest import mock
+
+        from backend import subprocess_policy
+
+        with mock.patch.object(subprocess_policy.subprocess, "Popen") as popen:
+            popen.return_value = object()
+            subprocess_policy.popen_process(["ffmpeg", "-version"])
+        commands = subprocess_policy.recent_ffmpeg_commands()
+        self.assertEqual(len(commands), 1)
+        self.assertIn("-version", commands[0]["command"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

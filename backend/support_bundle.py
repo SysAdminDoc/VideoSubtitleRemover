@@ -168,6 +168,18 @@ def create_support_bundle(
             if log_text is not None:
                 _write_text(bundle, "vsr_pro.redacted.log", log_text, included)
 
+            # RM-286: an FFmpeg failure is the most opaque error class in the
+            # app. The invocations go in as runnable lines so a maintainer
+            # can reproduce one without reconstructing the argv.
+            commands_text = ffmpeg_command_log_text()
+            if commands_text:
+                _write_text(
+                    bundle,
+                    "ffmpeg-commands.redacted.txt",
+                    commands_text,
+                    included,
+                )
+
             for index, report_path in enumerate(_unique_existing(reports), 1):
                 _write_redacted_report(bundle, report_path, index, included)
 
@@ -339,6 +351,29 @@ def _read_tail_text(path: Path, max_bytes: int) -> Optional[str]:
         return None
     prefix = "[truncated to last %d bytes]\n" % max_bytes if size > max_bytes else ""
     return prefix + redact_text(raw.decode("utf-8", errors="replace"))
+
+
+def ffmpeg_command_log_text() -> str:
+    """Render the recent FFmpeg invocations as redacted runnable lines."""
+    from backend.subprocess_policy import recent_ffmpeg_commands
+
+    entries = recent_ffmpeg_commands()
+    if not entries:
+        return ""
+    lines = [
+        "# Recent FFmpeg / ffprobe invocations, oldest first.",
+        "# Paths are reduced to file names by the same redaction policy as "
+        "the log, so a line may need its directories restored before it runs.",
+        "",
+    ]
+    for entry in entries:
+        stamp = _dt.datetime.fromtimestamp(
+            float(entry["timestamp"]), _dt.timezone.utc
+        ).isoformat(timespec="seconds")
+        lines.append(f"# {stamp}")
+        lines.append(redact_text(str(entry["command"])))
+        lines.append("")
+    return "\n".join(lines)
 
 
 def redact_text(text: str) -> str:

@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P3:
-- RM-286 S -- Last FFmpeg commands view + support-bundle ring buffer
 - RM-288 S -- record `SOURCE_DATE_EPOCH` / `PYTHONHASHSEED`; claim semantic rebuilds only
 - RM-289 S -- PyInstaller floor 6.22.2 + onedir tripwire (advisory does not apply today)
 - RM-293 S -- README Detection / Troubleshooting copy still describes the 3.8 picker
@@ -21,14 +20,6 @@ P3:
 - RM-296 M -- make the fade-in hold exact across decode-batch boundaries
 
 ### P3
-
-- [ ] P3 -- RM-286: Add a "Last FFmpeg commands" diagnostics view
-  Why: FFmpeg failures are the most opaque error class in the app, and the argv is already built.
-  Evidence: LosslessCut's Last FFmpeg commands; VSR invokes FFmpeg from `_encode_mixin.py`, `backend/io.py`, and deinterlace, all through `backend/subprocess_policy.py`.
-  Touches: `backend/subprocess_policy.py`, `gui/support_controller.py`, `backend/support_bundle.py`.
-  Acceptance: the last N FFmpeg/ffprobe invocations are viewable and copyable from Help and included in the support bundle, quoted so each line runs as-is; paths honour the existing redaction policy; the buffer is bounded.
-  Confidence: Verified
-  Complexity: S
 
 - [ ] P3 -- RM-288: Pin the reproducible-build envelope and state it honestly
   Why: the release publishes checksums and an SBOM but not the two settings that make a rebuild comparable.

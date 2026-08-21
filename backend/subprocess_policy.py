@@ -10,9 +10,11 @@ closing their explicitly requested pipes before calling :func:`terminate_process
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Sequence
 from typing import Any, Optional, Union
 
@@ -23,6 +25,75 @@ WINDOWS_CREATE_NO_WINDOW = int(
 )
 
 Command = Union[str, Sequence[Union[str, os.PathLike[str]]]]
+
+# -- RM-286: the last FFmpeg invocations -----------------------------------
+#
+# An FFmpeg failure is the most opaque error the app produces: the argv is
+# built across three modules and the user sees a return code. The argv is
+# already assembled here, so recording it costs nothing and turns "encode
+# failed" into a line the user can paste into a terminal.
+#
+# Bounded on purpose: a long batch runs thousands of children, and this is
+# read only when something went wrong.
+FFMPEG_COMMAND_LOG_SIZE = 40
+_FFMPEG_BINARIES = ("ffmpeg", "ffprobe", "ffplay")
+_command_log: "deque[tuple[float, str]]" = deque(maxlen=FFMPEG_COMMAND_LOG_SIZE)
+_command_log_lock = threading.Lock()
+
+
+def _is_ffmpeg_command(command: Command) -> bool:
+    if isinstance(command, (str, bytes)):
+        head = str(command).split()[0] if str(command).strip() else ""
+    else:
+        parts = list(command)
+        head = str(parts[0]) if parts else ""
+    if not head:
+        return False
+    name = os.path.basename(head).lower()
+    if name.endswith(".exe"):
+        name = name[:-4]
+    return name in _FFMPEG_BINARIES
+
+
+def quote_command(command: Command) -> str:
+    """Render a command as one line that runs as-is in the host's shell."""
+    if isinstance(command, (str, bytes)):
+        return command.decode(errors="replace") if isinstance(
+            command, bytes) else command
+    parts = [str(part) for part in command]
+    if os.name == "nt":
+        return subprocess.list2cmdline(parts)
+    return shlex.join(parts)
+
+
+def record_command(command: Command) -> None:
+    """Append an FFmpeg-family invocation to the bounded log."""
+    try:
+        if not _is_ffmpeg_command(command):
+            return
+        line = quote_command(command)
+    except Exception:
+        return
+    with _command_log_lock:
+        _command_log.append((time.time(), line))
+
+
+def recent_ffmpeg_commands(limit: int = FFMPEG_COMMAND_LOG_SIZE) -> list[dict]:
+    """Return the most recent invocations, newest last."""
+    with _command_log_lock:
+        entries = list(_command_log)
+    if limit > 0:
+        entries = entries[-limit:]
+    return [
+        {"timestamp": stamp, "command": line} for stamp, line in entries
+    ]
+
+
+def clear_ffmpeg_command_log() -> None:
+    with _command_log_lock:
+        _command_log.clear()
+
+
 
 
 def _hidden_creationflags(existing: int = 0) -> int:
@@ -47,6 +118,7 @@ def popen_process(command: Command, **kwargs: Any) -> subprocess.Popen:
     creationflags = _hidden_creationflags(kwargs.pop("creationflags", 0))
     if creationflags:
         kwargs["creationflags"] = creationflags
+    record_command(command)
     return subprocess.Popen(command, **kwargs)
 
 

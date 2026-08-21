@@ -356,7 +356,7 @@ msgstr ""
 msgid "CPU mode"
 msgstr ""
 
-#: gui/support_controller.py:564
+#: gui/support_controller.py:663
 msgid "CPU only"
 msgstr ""
 
@@ -608,7 +608,7 @@ msgid_plural "Cleared {count} completed items"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/preview_controller.py:906 gui/quality_controller.py:391 gui/support_controller.py:682
+#: gui/preview_controller.py:906 gui/quality_controller.py:391 gui/support_controller.py:584 gui/support_controller.py:784
 msgid "Close"
 msgstr ""
 
@@ -652,7 +652,7 @@ msgstr ""
 msgid "Composed mask for {name}"
 msgstr ""
 
-#: gui/support_controller.py:611
+#: gui/support_controller.py:710
 msgid "Compute"
 msgstr ""
 
@@ -678,6 +678,10 @@ msgstr ""
 
 #: gui/onboarding.py:191
 msgid "Continue"
+msgstr ""
+
+#: gui/support_controller.py:588
+msgid "Copy"
 msgstr ""
 
 #: gui/widgets.py:2324
@@ -710,6 +714,10 @@ msgstr ""
 
 #: gui/mask_correction_controller.py:482
 msgid "Correction stroke added; undo is available"
+msgstr ""
+
+#: gui/support_controller.py:579
+msgid "Could not copy to the clipboard"
 msgstr ""
 
 #: gui/preview_controller.py:505
@@ -752,7 +760,7 @@ msgstr ""
 msgid "Could not write the output file"
 msgstr ""
 
-#: gui/support_controller.py:624
+#: gui/support_controller.py:723
 msgid "Ctrl+O open, Ctrl+L log, Ctrl+F filter, F1 help"
 msgstr ""
 
@@ -820,7 +828,7 @@ msgstr ""
 msgid "Detecting language..."
 msgstr ""
 
-#: gui/layout_build.py:1589 gui/support_controller.py:411 gui/support_controller.py:612 gui/support_controller.py:645
+#: gui/layout_build.py:1589 gui/support_controller.py:411 gui/support_controller.py:711 gui/support_controller.py:744
 msgid "Detection"
 msgstr ""
 
@@ -898,6 +906,10 @@ msgstr ""
 
 #: gui/layout_build.py:1305
 msgid "EBU R128 loudness target"
+msgstr ""
+
+#: gui/support_controller.py:536
+msgid "Each line runs as-is once its directories are restored. Paths are reduced to file names before display."
 msgstr ""
 
 #: gui/utils.py:151
@@ -1022,7 +1034,7 @@ msgstr[1] ""
 msgid "FAILED"
 msgstr ""
 
-#: gui/layout_helpers.py:46 gui/support_controller.py:616
+#: gui/layout_helpers.py:46 gui/support_controller.py:715
 msgid "FFmpeg"
 msgstr ""
 
@@ -1036,6 +1048,14 @@ msgstr ""
 
 #: gui/support_controller.py:429
 msgid "FFmpeg codecs"
+msgstr ""
+
+#: gui/support_controller.py:778
+msgid "FFmpeg commands"
+msgstr ""
+
+#: gui/support_controller.py:576
+msgid "FFmpeg commands copied to the clipboard"
 msgstr ""
 
 #: gui/processing_controller.py:103
@@ -1254,7 +1274,7 @@ msgstr ""
 msgid "Help"
 msgstr ""
 
-#: gui/support_controller.py:508 gui/support_controller.py:518 gui/support_controller.py:547
+#: gui/support_controller.py:607 gui/support_controller.py:617 gui/support_controller.py:646
 msgid "Help & diagnostics"
 msgstr ""
 
@@ -1382,7 +1402,7 @@ msgstr ""
 msgid "Inpaint preview"
 msgstr ""
 
-#: gui/layout_build.py:1590 gui/support_controller.py:412 gui/support_controller.py:613 gui/support_controller.py:646
+#: gui/layout_build.py:1590 gui/support_controller.py:412 gui/support_controller.py:712 gui/support_controller.py:745
 msgid "Inpainting"
 msgstr ""
 
@@ -1474,7 +1494,11 @@ msgstr ""
 msgid "Languages"
 msgstr ""
 
-#: gui/support_controller.py:652
+#: gui/support_controller.py:516 gui/support_controller.py:522 gui/support_controller.py:530 gui/support_controller.py:563
+msgid "Last FFmpeg commands"
+msgstr ""
+
+#: gui/support_controller.py:751
 msgid "Last run"
 msgstr ""
 
@@ -1618,7 +1642,7 @@ msgstr ""
 msgid "Mirrors rows, anchors, and directional arrows for Arabic, Hebrew, Persian, and Urdu. Persists across sessions."
 msgstr ""
 
-#: gui/support_controller.py:617
+#: gui/support_controller.py:716
 msgid "Missing"
 msgstr ""
 
@@ -1626,7 +1650,7 @@ msgstr ""
 msgid "Mode"
 msgstr ""
 
-#: gui/support_controller.py:620 gui/support_controller.py:673
+#: gui/support_controller.py:719 gui/support_controller.py:772
 msgid "Model cache"
 msgstr ""
 
@@ -1638,7 +1662,7 @@ msgstr ""
 msgid "Model files"
 msgstr ""
 
-#: gui/support_controller.py:647
+#: gui/support_controller.py:746
 msgid "Models"
 msgstr ""
 
@@ -1708,7 +1732,7 @@ msgstr ""
 msgid "Name the current cleanup settings and save them to the user preset library."
 msgstr ""
 
-#: gui/config.py:202 gui/preview_controller.py:259 gui/preview_controller.py:260 gui/support_controller.py:640
+#: gui/config.py:202 gui/preview_controller.py:259 gui/preview_controller.py:260 gui/support_controller.py:739
 msgid "Needs attention"
 msgstr ""
 
@@ -1724,7 +1748,11 @@ msgstr ""
 msgid "No FFmpeg"
 msgstr ""
 
-#: gui/support_controller.py:417 gui/support_controller.py:656
+#: gui/support_controller.py:511
+msgid "No FFmpeg commands have run yet"
+msgstr ""
+
+#: gui/support_controller.py:417 gui/support_controller.py:755
 msgid "No action needed."
 msgstr ""
 
@@ -1820,7 +1848,7 @@ msgstr ""
 msgid "No valid correction frame ranges are available"
 msgstr ""
 
-#: gui/region_controller.py:1194 gui/support_controller.py:558 gui/support_controller.py:559
+#: gui/region_controller.py:1194 gui/support_controller.py:657 gui/support_controller.py:658
 msgid "None"
 msgstr ""
 
@@ -1872,7 +1900,7 @@ msgstr ""
 msgid "Open frame"
 msgstr ""
 
-#: gui/quality_controller.py:374 gui/support_controller.py:671
+#: gui/quality_controller.py:374 gui/support_controller.py:770
 msgid "Open log"
 msgstr ""
 
@@ -2264,7 +2292,7 @@ msgstr ""
 msgid "Reading first frame..."
 msgstr ""
 
-#: gui/app.py:1126 gui/config.py:196 gui/layout_build.py:1971 gui/layout_build.py:2203 gui/layout_build.py:2214 gui/layout_helpers.py:48 gui/processing_controller.py:1453 gui/processing_controller.py:1488 gui/support_controller.py:617 gui/support_controller.py:640
+#: gui/app.py:1126 gui/config.py:196 gui/layout_build.py:1971 gui/layout_build.py:2203 gui/layout_build.py:2214 gui/layout_helpers.py:48 gui/processing_controller.py:1453 gui/processing_controller.py:1488 gui/support_controller.py:716 gui/support_controller.py:739
 msgid "Ready"
 msgstr ""
 
@@ -2522,7 +2550,7 @@ msgstr ""
 msgid "Runtime log"
 msgstr ""
 
-#: gui/support_controller.py:630
+#: gui/support_controller.py:729
 msgid "Runtime status"
 msgstr ""
 
@@ -2764,7 +2792,7 @@ msgstr ""
 msgid "Shape"
 msgstr ""
 
-#: gui/support_controller.py:623
+#: gui/support_controller.py:722
 msgid "Shortcuts"
 msgstr ""
 
@@ -2960,7 +2988,7 @@ msgstr ""
 msgid "Suggested retry settings already match this item"
 msgstr ""
 
-#: gui/support_controller.py:236 gui/support_controller.py:679
+#: gui/support_controller.py:236 gui/support_controller.py:781
 msgid "Support bundle"
 msgstr ""
 
@@ -2972,11 +3000,11 @@ msgstr ""
 msgid "Switched to the {profile} profile"
 msgstr ""
 
-#: gui/layout_build.py:1432 gui/layout_build.py:1447 gui/support_controller.py:610
+#: gui/layout_build.py:1432 gui/layout_build.py:1447 gui/support_controller.py:709
 msgid "System"
 msgstr ""
 
-#: gui/support_controller.py:521
+#: gui/support_controller.py:620
 msgid "System and runtime status."
 msgstr ""
 
@@ -3182,7 +3210,7 @@ msgstr ""
 msgid "Type a filename to hide non-matching queue items"
 msgstr ""
 
-#: gui/support_controller.py:566
+#: gui/support_controller.py:665
 msgid "Unavailable"
 msgstr ""
 
@@ -3198,7 +3226,7 @@ msgstr ""
 msgid "Undo"
 msgstr ""
 
-#: gui/support_controller.py:411 gui/support_controller.py:412 gui/support_controller.py:413 gui/support_controller.py:414 gui/support_controller.py:415 gui/support_controller.py:416 gui/support_controller.py:645 gui/support_controller.py:646 gui/support_controller.py:647
+#: gui/support_controller.py:411 gui/support_controller.py:412 gui/support_controller.py:413 gui/support_controller.py:414 gui/support_controller.py:415 gui/support_controller.py:416 gui/support_controller.py:744 gui/support_controller.py:745 gui/support_controller.py:746
 msgid "Unknown"
 msgstr ""
 
@@ -3456,7 +3484,7 @@ msgstr ""
 msgid "the first review item"
 msgstr ""
 
-#: gui/support_controller.py:562
+#: gui/support_controller.py:661
 msgid "{count} GPU"
 msgid_plural "{count} GPUs"
 msgstr[0] ""

@@ -39,6 +39,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   marker that records a msgid but cannot translate an f-string, so they always
   showed in English, and counts now use real plural forms. The catalog lint
   fails if a new one is written that way.
+- Help has a Last FFmpeg commands view. The recent FFmpeg and ffprobe
+  invocations are shown as quoted lines that run as-is, can be copied in one
+  click, and are included in the support bundle. Paths are reduced to file
+  names by the same redaction policy as the log, and the buffer is bounded.
 
 ## [3.36.0] - 2026-08-21
 
