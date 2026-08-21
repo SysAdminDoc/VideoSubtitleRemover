@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.36.0] - 2026-08-21
+
 ### Added
 
 - Failed batch items now carry a classified reason (out of disk space,
@@ -63,8 +65,6 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - The watch folder, the NLE sidecar round trip, and the VapourSynth bridge
   guard now have tests that actually run them. The previous watch-folder tests
   all mocked the processing call, so none of them proved a drain writes a file.
-
-## [3.36.0] - 2026-08-21
 
 ### Security
 
