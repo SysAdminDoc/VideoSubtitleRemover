@@ -513,6 +513,8 @@ def _advisory(
 PYINSTALLER_CVE_2025_59042_FIXED = "6.10.0"
 PYINSTALLER_GHSA_9FXF_FIXED = "6.22.1"
 PYINSTALLER_FLOOR = "6.22.2"
+TORCH_CVE_2025_32434_FIXED = "2.6.0"
+TORCH_CVE_2026_24747_FIXED = "2.10.0"
 
 
 def collect_release_advisories(
@@ -523,18 +525,39 @@ def collect_release_advisories(
     """Collect deterministic release advisory evidence for strict builds."""
     findings = []
     torch_version = _dependency_version(dependencies, "torch", "pytorch")
-    if torch_version and _version_lt(torch_version, "2.6.0"):
+    if torch_version and _version_lt(
+            torch_version, TORCH_CVE_2025_32434_FIXED):
         findings.append(_advisory(
             advisory_id="CVE-2025-32434",
             package="torch",
             installed_version=torch_version,
             affected="<=2.5.1",
-            fixed_in="2.6.0",
+            fixed_in=TORCH_CVE_2025_32434_FIXED,
             severity="critical",
             source="https://nvd.nist.gov/vuln/detail/CVE-2025-32434",
             mitigation=(
                 "Do not ship builds with vulnerable torch; PyTorch LaMa is "
-                "packaging opt-in and should use torch >= 2.6.0."
+                "packaging opt-in and should use torch >= "
+                f"{TORCH_CVE_2025_32434_FIXED}."
+            ),
+        ))
+    if torch_version and _version_lt(
+            torch_version, TORCH_CVE_2026_24747_FIXED):
+        findings.append(_advisory(
+            advisory_id="CVE-2026-24747",
+            package="torch",
+            installed_version=torch_version,
+            affected="<=2.9.1",
+            fixed_in=TORCH_CVE_2026_24747_FIXED,
+            severity="high",
+            source=(
+                "https://github.com/pytorch/pytorch/security/advisories/"
+                "GHSA-63cw-57p8-fm3p"
+            ),
+            mitigation=(
+                "Do not ship builds with vulnerable torch; use torch >= "
+                f"{TORCH_CVE_2026_24747_FIXED}. Reviewed release profiles "
+                "remain pinned to torch >= 2.11.0."
             ),
         ))
 

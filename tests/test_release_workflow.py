@@ -587,6 +587,48 @@ class ReleaseVerificationTests(unittest.TestCase):
                     )
 
         self.assertIn("CVE-2025-32434", str(ctx.exception))
+        self.assertIn("CVE-2026-24747", str(ctx.exception))
+
+    def test_torch_release_advisory_boundaries(self):
+        cases = (
+            ("2.5.1", {"CVE-2025-32434", "CVE-2026-24747"}),
+            ("2.9.1", {"CVE-2026-24747"}),
+            ("2.10.0", set()),
+            ("2.11.0+cu128", set()),
+            ("2.13.0", set()),
+        )
+        with mock.patch(
+            "backend.release_verification.opencv_libpng_status",
+            return_value={"vulnerable": False},
+        ), mock.patch(
+            "backend.release_verification.collect_onnxruntime_provider_status",
+            return_value={"warnings": []},
+        ), mock.patch(
+            "backend.release_verification.protobuf_release_advisory",
+            return_value=None,
+        ), mock.patch(
+            "backend.release_verification.ffmpeg_security_advisory",
+            return_value=None,
+        ), mock.patch(
+            "backend.release_verification.nsis_security_advisory",
+            return_value=None,
+        ):
+            for version, expected_ids in cases:
+                with self.subTest(version=version):
+                    result = release_verification.collect_release_advisories(
+                        [{"name": "torch", "version": version}],
+                    )
+                    torch_findings = [
+                        item for item in result["advisories"]
+                        if item["package"] == "torch"
+                    ]
+                    self.assertEqual(
+                        {item["id"] for item in torch_findings},
+                        expected_ids,
+                    )
+                    self.assertTrue(all(
+                        item["blocking"] for item in torch_findings
+                    ))
 
     def test_release_advisories_include_onnxruntime_cuda_warnings(self):
         deps = [{"name": "onnxruntime-gpu", "version": "1.17.3"}]

@@ -250,7 +250,9 @@ include those optional runtimes intentionally. `sbom.cdx.json` is derived from
 PyInstaller's `Analysis-00.toc`: required Python libraries and hashed native
 files reflect the folder that actually ships, while PyInstaller and other
 build tools are marked with excluded scope. `release-verification.json` and
-`pip-audit.json` record the remaining release proof.
+`pip-audit.json` record the remaining release proof. Strict evidence rejects
+Torch through 2.5.1 for CVE-2025-32434 and through 2.9.1 for CVE-2026-24747.
+Reviewed profiles stay on Torch 2.11.0 or newer.
 
 Every release is staged as one atomic, version-derived artifact set. After
 the strict gates pass, `backend.release_staging` copies the installer,

@@ -4,6 +4,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Strict release evidence now blocks Torch 2.9.1 and older for
+  CVE-2026-24747. The existing CVE-2025-32434 check remains independent, and
+  boundary coverage confirms that Torch 2.10.0 passes the advisory gate while
+  reviewed 2.11.0 and 2.13.0 profiles remain accepted.
+
 ## [3.36.0] - 2026-08-21
 
 ### Added

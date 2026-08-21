@@ -17,21 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P0 — RM-297 Correct the PyTorch release security gate
-  - Why: Strict release verification can approve Torch 2.6.0 through 2.9.1 even
-    though those versions are affected by CVE-2026-24747. Current dependency
-    profiles are safe, but the release gate is not.
-  - Evidence: backend/release_verification.py:525-539,
-    dependency_profiles.json, and
-    https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p.
-  - Touches: backend/release_verification.py,
-    tests/test_release_workflow.py.
-  - Acceptance: Reject Torch 2.9.1 and every lower affected version; accept 2.10.0
-    for this advisory check; keep exact profile validation independent; name the
-    2025 and 2026 advisories in release evidence; add boundary tests for 2.9.1,
-    2.10.0, and the current 2.11.0 or 2.13.0 profile.
-  - Complexity: Low. Regression risk is low. No new dependency.
-
 - [ ] P0 — RM-298 Enforce the VLM endpoint privacy boundary
   - Why: The optional PaddleOCR-VL llama.cpp path is described as local but accepts
     any HTTP or HTTPS host. A configured remote endpoint can receive frame content
