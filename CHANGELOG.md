@@ -52,6 +52,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   that bear on it and reports GHSA-9fxf-4qw3-ghmr as informational, because a
   onedir build with an asInvoker manifest is not what it reaches. A test fails
   if the spec ever stops being onedir while the floor is behind that fix.
+- README describes the engine picker that actually shipped. The Detection list
+  names Surya and all four vision-language tiers, the VLM section leads with
+  the picker and `--ocr-engine` instead of environment variables, and the
+  Troubleshooting advice points at RapidOCR and the picker rather than telling
+  everyone to install PaddleOCR.
 
 ## [3.36.0] - 2026-08-21
 

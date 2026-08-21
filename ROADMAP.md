@@ -13,19 +13,10 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P3:
-- RM-293 S -- README Detection / Troubleshooting copy still describes the 3.8 picker
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 - RM-296 M -- make the fade-in hold exact across decode-batch boundaries
 
 ### P3
-
-- [ ] P3 -- RM-293: Bring README Detection and Troubleshooting in line with the engine picker
-  Why: the docs still tell users to install PaddleOCR for best accuracy and to activate VLM via env vars.
-  Evidence: README pin list omits Surya/VLM; Troubleshooting still leads with PaddleOCR; `backend/detection.py` module doc still says VLM is env-only.
-  Touches: `README.md` (byte-precise; mixed CRLF/LF -- do not whole-file rewrite), `backend/detection.py` module docstring. Do not hand-edit the generated CLI table.
-  Acceptance: Detection pin list names every engine the picker offers; VLM section says the GUI/`--ocr-engine` path first; Troubleshooting recommends RapidOCR (default) and names PaddleOCR as opt-in; `tests/test_documentation_drift.py` still passes.
-  Confidence: Verified
-  Complexity: S
 
 - [ ] P3 -- RM-295: Surfaces this audit did not execute
   Why: a pass that never opened these paths should not claim they were reviewed.

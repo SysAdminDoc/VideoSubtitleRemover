@@ -1,10 +1,12 @@
 """Subtitle detector cascade (VLM > RapidOCR > PaddleOCR > Surya >
 EasyOCR frozen fallback > OpenCV fallback).
 
-Extracted from processor.py as part of RFP-L-1. The cascade dispatches
-through `backend.ocr_vlm.maybe_build_vlm_detector` first when the user
-opted in via VSR_VLM_OCR / lang="manga", then walks the historical
-order. Surya stays gated behind VSR_ALLOW_GPL (RM-B-2).
+Extracted from processor.py as part of RFP-L-1. Every engine in the
+cascade is a first-class choice in Advanced > Detection and through
+`--ocr-engine`; `backend.ocr_vlm.maybe_build_vlm_detector` also still
+honours the VSR_VLM_OCR environment variable and lang="manga" for
+scripted runs, and dispatches before the historical order. Surya stays
+gated behind VSR_ALLOW_GPL (RM-B-2).
 
 Vertical-text mode (RM-24) lives here as a wrapper that rotates the
 frame, runs the underlying detector, then rotates the boxes back into

@@ -55,6 +55,40 @@ class ArchitectureMapTests(unittest.TestCase):
                 self.assertIn(name, real)
 
 
+class DetectionDocsTests(unittest.TestCase):
+    """RM-293: the docs must describe the engine picker that shipped."""
+
+    def test_readme_names_every_engine_the_picker_offers(self):
+        from backend.detection import OCR_ENGINE_CHOICES
+
+        readme = README.read_text(encoding="utf-8")
+        missing = [
+            choice for choice in OCR_ENGINE_CHOICES if choice not in readme
+        ]
+        self.assertEqual(
+            missing, [],
+            f"--ocr-engine accepts values the README never mentions: {missing}",
+        )
+
+    def test_troubleshooting_leads_with_the_default_engine(self):
+        """It used to tell users to install PaddleOCR for best accuracy."""
+        readme = README.read_text(encoding="utf-8")
+        section = readme.split("Poor detection accuracy", 1)[1].split(
+            "</details>", 1)[0]
+        self.assertIn("RapidOCR is the default", section)
+        self.assertIn("opt-in install", section)
+        self.assertNotIn("Install PaddleOCR for best detection accuracy", readme)
+
+    def test_the_detection_module_does_not_call_vlm_env_only(self):
+        from pathlib import Path as _Path
+
+        doc = (_Path(__file__).resolve().parents[1]
+               / "backend" / "detection.py").read_text(encoding="utf-8")
+        header = doc.split('"""', 2)[1]
+        self.assertIn("--ocr-engine", header)
+        self.assertIn("first-class choice", header)
+
+
 class ChangelogStructureTests(unittest.TestCase):
     def test_exactly_one_unreleased_section(self):
         text = CHANGELOG.read_text(encoding="utf-8")

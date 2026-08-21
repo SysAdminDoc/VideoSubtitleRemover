@@ -347,11 +347,14 @@ that run.
 ### Detection Engines
 
 The app automatically selects the best available engine. Advanced > Detection
-can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, EasyOCR (frozen; last release
-2024-09-24), or the dependency-free
-OpenCV fallback for comparison and reproducible runs; unavailable pinned
-engines fall back safely instead of silently switching to another OCR model.
-The same selector is available as `--ocr-engine` on the CLI:
+can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, Surya (GPL opt-in), EasyOCR
+(frozen; last release 2024-09-24), any of the four vision-language tiers, or
+the dependency-free OpenCV fallback for comparison and reproducible runs;
+unavailable pinned engines fall back safely instead of silently switching to
+another OCR model. The same selector is available as `--ocr-engine` on the
+CLI, which accepts `auto`, `rapidocr`, `opencv-dnn`, `paddleocr`, `easyocr`,
+`opencv`, `surya`, `vlm-florence2`, `vlm-qwen25vl`, `vlm-paddleocr-vl`, and
+`vlm-paddleocr-vl-llama`:
 
 Advanced > Detection also offers **Only remove the selected language**. It is
 opt-in and requires recognized text from RapidOCR, PaddleOCR, or EasyOCR;
@@ -367,14 +370,17 @@ languages such as English and French intentionally share one family.
 | 4 | EasyOCR (frozen) | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Frozen legacy fallback; last release 2024-09-24; installs its own OpenCV wheel |
 | 5 | OpenCV fallback | Built-in | Any | Threshold-based |
 
-Experimental VLM OCR tiers stay default-off. `VSR_VLM_OCR=florence2`,
-`VSR_VLM_OCR=qwen25vl`, and `VSR_VLM_OCR=paddleocr-vl` try the heavier
-transformer/PaddleOCR adapters before the table above. For CPU/edge
-PaddleOCR-VL-1.5, start a local llama.cpp OpenAI-compatible server with the
-GGUF model, then set `VSR_PADDLEOCR_VL=1`; use
-`VSR_PADDLEOCR_VL_SERVER_URL` when the server is not at
-`http://127.0.0.1:8080/v1`. If the server or PaddleOCRVL entrypoint is not
-available, detection falls back to the normal cascade.
+The vision-language tiers stay default-off and are picked the same way as
+every other engine: choose one in Advanced > Detection or pass
+`--ocr-engine vlm-florence2`, `vlm-qwen25vl`, `vlm-paddleocr-vl`, or
+`vlm-paddleocr-vl-llama`. Picking one explains what it needs, and a pick
+whose dependency is missing falls back to the automatic cascade with a
+warning rather than detecting nothing. The `VSR_VLM_OCR=florence2` /
+`VSR_VLM_OCR=qwen25vl` / `VSR_VLM_OCR=paddleocr-vl` environment variables
+still work for scripted runs. For CPU/edge PaddleOCR-VL-1.5, start a local
+llama.cpp OpenAI-compatible server with the GGUF model, then set
+`VSR_PADDLEOCR_VL=1`; use `VSR_PADDLEOCR_VL_SERVER_URL` when the server is
+not at `http://127.0.0.1:8080/v1`.
 
 On NVIDIA systems, setup installs `onnxruntime-gpu>=1.26.0,<1.27.0` for the
 tested CUDA 12.x ONNX Runtime path. ONNX Runtime 1.27 dropped CUDA 12 (its
@@ -1298,7 +1304,15 @@ content, colors are preserved. If you still see a mismatch, attach the
 
 - Try changing the detection language to match your subtitles
 - Use "Set Region" to manually define the subtitle area
-- Install PaddleOCR for best detection accuracy
+- RapidOCR is the default and is the engine to stay on for most footage. If
+  a clip defeats it, pin a different engine in Advanced > Detection rather
+  than installing anything: OpenCV 5 DNN, Surya (GPL opt-in), or one of the
+  vision-language tiers all run from the picker
+- PaddleOCR is an opt-in install for the cases where its model reads a
+  script better; it pulls in its own OpenCV wheel, so install it in an
+  isolated environment as the Detection Engines table describes
+- For fading subtitles, raise the Fade-in and Fade-out holds so the mask
+  covers the frames where the glyphs are too faint to recognize
 
 </details>
 
