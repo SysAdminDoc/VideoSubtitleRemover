@@ -1221,6 +1221,51 @@ def _run_temporal_profile() -> dict:
         }
 
 
+# RM-288: the two settings that decide whether a rebuild is comparable at
+# all. PyInstaller stamps the PE header from SOURCE_DATE_EPOCH, and
+# PYTHONHASHSEED fixes the hash randomisation the build itself runs under.
+# Recording them is what turns "the checksums differ" into a question with
+# an answer.
+REPRODUCIBILITY_ENV_KEYS = ("SOURCE_DATE_EPOCH", "PYTHONHASHSEED")
+
+
+def collect_reproducibility_envelope(
+    env: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Record the build-environment settings a rebuild has to match.
+
+    The output is deliberately not called reproducible: this build is not
+    path-invariant, so an identical rebuild elsewhere still differs. What
+    these settings buy is a rebuild whose *contents* can be compared.
+    """
+    source = os.environ if env is None else env
+    values = {}
+    for key in REPRODUCIBILITY_ENV_KEYS:
+        raw = source.get(key)
+        values[key] = None if raw is None or raw == "" else str(raw)
+    missing = [key for key, value in values.items() if value is None]
+    return {
+        "schema": "vsr.reproducibility_envelope.v1",
+        "env": values,
+        "missing": missing,
+        "buildRoot": str(ROOT),
+        # Said plainly so nothing downstream can imply otherwise: the build
+        # embeds its own absolute paths, so two rebuilds are compared by
+        # what they contain, not by hashing the artifacts against each other.
+        "comparison": "semantic",
+        "pathInvariant": False,
+        "note": (
+            "Rebuild verification is semantic: compare the SBOM, dependency "
+            "versions and bundled file list, not artifact checksums. The "
+            "build is not path-invariant."
+            if missing else
+            "SOURCE_DATE_EPOCH and PYTHONHASHSEED were pinned for this "
+            "build. Rebuild verification is still semantic: the build is "
+            "not path-invariant, so compare contents rather than checksums."
+        ),
+    }
+
+
 def build_release_evidence(
     *,
     dist_dir: str | Path,
@@ -1337,6 +1382,7 @@ def build_release_evidence(
         "hiddenImports": list(hidden),
         "runtimeHooks": list(hooks),
         "excludedModules": list(excluded),
+        "reproducibility": collect_reproducibility_envelope(env=env),
         "adapterSecurity": list(release_manifest_status(env=env)),
         "remoteModelSecurity": list(release_remote_model_status(env=env)),
         "rapidocrModels": rapidocr_release_provenance(),

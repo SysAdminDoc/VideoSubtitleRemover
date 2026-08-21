@@ -43,6 +43,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   invocations are shown as quoted lines that run as-is, can be copied in one
   click, and are included in the support bundle. Paths are reduced to file
   names by the same redaction policy as the log, and the buffer is bounded.
+- The build pins SOURCE_DATE_EPOCH and PYTHONHASHSEED and records both in the
+  release evidence, so a rebuild starts from the same envelope. README now
+  says plainly that rebuild verification is semantic: the frozen build embeds
+  its own absolute paths, so matching checksums were never on offer.
 
 ## [3.36.0] - 2026-08-21
 

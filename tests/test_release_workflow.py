@@ -1088,5 +1088,61 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("multiprocessing.freeze_support()", hook)
 
 
+class ReproducibilityEnvelopeTests(unittest.TestCase):
+    """RM-288: record the envelope, and do not overclaim what it buys."""
+
+    def test_the_envelope_records_both_settings(self):
+        from backend.release_verification import (
+            REPRODUCIBILITY_ENV_KEYS,
+            collect_reproducibility_envelope,
+        )
+
+        envelope = collect_reproducibility_envelope({
+            "SOURCE_DATE_EPOCH": "1735689600",
+            "PYTHONHASHSEED": "0",
+        })
+        self.assertEqual(
+            sorted(envelope["env"]), sorted(REPRODUCIBILITY_ENV_KEYS))
+        self.assertEqual(envelope["env"]["SOURCE_DATE_EPOCH"], "1735689600")
+        self.assertEqual(envelope["env"]["PYTHONHASHSEED"], "0")
+        self.assertEqual(envelope["missing"], [])
+
+    def test_an_unset_setting_is_reported_as_missing_not_defaulted(self):
+        from backend.release_verification import (
+            collect_reproducibility_envelope,
+        )
+
+        envelope = collect_reproducibility_envelope({"PYTHONHASHSEED": "0"})
+        self.assertIsNone(envelope["env"]["SOURCE_DATE_EPOCH"])
+        self.assertEqual(envelope["missing"], ["SOURCE_DATE_EPOCH"])
+
+    def test_the_envelope_never_claims_a_bit_for_bit_rebuild(self):
+        from backend.release_verification import (
+            collect_reproducibility_envelope,
+        )
+
+        for env in ({}, {"SOURCE_DATE_EPOCH": "1", "PYTHONHASHSEED": "0"}):
+            with self.subTest(env=sorted(env)):
+                envelope = collect_reproducibility_envelope(env)
+                self.assertEqual(envelope["comparison"], "semantic")
+                self.assertFalse(envelope["pathInvariant"])
+                self.assertIn("semantic", envelope["note"])
+                self.assertNotIn("bit-for-bit", envelope["note"])
+
+    def test_the_build_script_pins_both_settings(self):
+        script = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
+        self.assertIn(
+            'if not defined SOURCE_DATE_EPOCH set "SOURCE_DATE_EPOCH=', script)
+        self.assertIn(
+            'if not defined PYTHONHASHSEED set "PYTHONHASHSEED=', script)
+
+    def test_the_readme_calls_rebuild_verification_semantic(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("Rebuild verification is semantic", readme)
+        self.assertIn("SOURCE_DATE_EPOCH", readme)
+        self.assertIn("PYTHONHASHSEED", readme)
+        self.assertNotIn("bit-for-bit reproducible build", readme)
+
+
 if __name__ == "__main__":
     unittest.main()

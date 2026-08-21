@@ -12,6 +12,14 @@ echo.
 
 set "PYTHON=venv\Scripts\python.exe"
 
+REM RM-288: pin the two settings that make a rebuild comparable. PyInstaller
+REM stamps the PE timestamp from SOURCE_DATE_EPOCH; PYTHONHASHSEED fixes the
+REM hash randomisation the build runs under. Both are recorded in the release
+REM evidence. This does NOT make the build bit-for-bit reproducible -- it is
+REM not path-invariant -- it makes two rebuilds comparable by content.
+if not defined SOURCE_DATE_EPOCH set "SOURCE_DATE_EPOCH=1735689600"
+if not defined PYTHONHASHSEED set "PYTHONHASHSEED=0"
+
 :: Check for venv
 if not exist "%PYTHON%" (
     echo ERROR: Virtual environment not found.

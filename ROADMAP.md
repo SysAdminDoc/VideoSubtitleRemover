@@ -13,21 +13,12 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P3:
-- RM-288 S -- record `SOURCE_DATE_EPOCH` / `PYTHONHASHSEED`; claim semantic rebuilds only
 - RM-289 S -- PyInstaller floor 6.22.2 + onedir tripwire (advisory does not apply today)
 - RM-293 S -- README Detection / Troubleshooting copy still describes the 3.8 picker
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 - RM-296 M -- make the fade-in hold exact across decode-batch boundaries
 
 ### P3
-
-- [ ] P3 -- RM-288: Pin the reproducible-build envelope and state it honestly
-  Why: the release publishes checksums and an SBOM but not the two settings that make a rebuild comparable.
-  Evidence: PyInstaller honours `SOURCE_DATE_EPOCH` for the PE timestamp; `PYTHONHASHSEED` affects the build run; output is not build-path invariant.
-  Touches: `build_exe.bat`, `backend/release_verification.py`, `backend/release_staging.py`, README release section.
-  Acceptance: the build sets and records `SOURCE_DATE_EPOCH` and `PYTHONHASHSEED` in the release evidence; the README describes rebuild verification as semantic rather than bit-for-bit.
-  Confidence: Verified
-  Complexity: S
 
 - [ ] P3 -- RM-289: Raise the PyInstaller floor to 6.22.2 and guard the onedir assumption
   Why: the toolchain floor predates GHSA-9fxf-4qw3-ghmr (patched in 6.22.1; 6.22.2 is current). The advisory does not apply to this onedir/`asInvoker` build, so this is floor hygiene plus a tripwire.

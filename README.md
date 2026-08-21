@@ -261,6 +261,16 @@ enabled so a published tag's assets cannot be replaced. Artifacts are
 intentionally UNSIGNED; `SHA256SUMS.txt` from the same staged set is the
 only integrity reference.
 
+The build pins `SOURCE_DATE_EPOCH` and `PYTHONHASHSEED` and records both
+in the release evidence under `reproducibility`, so a rebuild starts from
+the same envelope. Do not expect matching checksums: the frozen build
+embeds its own absolute paths, so it is not path-invariant and an
+identical rebuild in a different directory produces different bytes.
+Rebuild verification is semantic. Compare the SBOM, the dependency
+versions, and the bundled file list from the two evidence sets; the
+checksums in `SHA256SUMS.txt` prove that a downloaded asset matches the
+one that was published, which is a different question.
+
 For an isolated CPU smoke without touching the Windows launcher, run the same
 check in the local container recipe:
 
