@@ -883,6 +883,9 @@ class VideoSubtitleRemoverApp(
         self._apply_gpu_selection_from_config()
         self._refresh_gpu_selector()
         self._render_header_chips()
+        refresh_privacy = getattr(self, "_refresh_vlm_privacy_notice", None)
+        if callable(refresh_privacy):
+            refresh_privacy()
         self._refresh_ffmpeg_warning()
         self._refresh_action_states()
 

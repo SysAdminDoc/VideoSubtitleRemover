@@ -382,7 +382,13 @@ warning rather than detecting nothing. The `VSR_VLM_OCR=florence2` /
 still work for scripted runs. For CPU/edge PaddleOCR-VL-1.5, start a local
 llama.cpp OpenAI-compatible server with the GGUF model, then set
 `VSR_PADDLEOCR_VL=1`; use `VSR_PADDLEOCR_VL_SERVER_URL` when the server is
-not at `http://127.0.0.1:8080/v1`.
+not at `http://127.0.0.1:8080/v1`. HTTP is accepted only when every resolved
+address is IPv4 or IPv6 loopback. Any endpoint outside this computer must use
+HTTPS and also requires `VSR_ALLOW_REMOTE_VLM=1`. That acknowledgement means
+the service receives full video frames as PNG images. URLs with credentials,
+unsupported schemes, and redirects that cross the approved boundary are
+blocked. `VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE=1` skips only the health check;
+it never skips the endpoint policy or the DNS check before a frame request.
 
 On NVIDIA systems, setup installs `onnxruntime-gpu>=1.26.0,<1.27.0` for the
 tested CUDA 12.x ONNX Runtime path. ONNX Runtime 1.27 dropped CUDA 12 (its

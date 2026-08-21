@@ -10,6 +10,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   CVE-2026-24747. The existing CVE-2025-32434 check remains independent, and
   boundary coverage confirms that Torch 2.10.0 passes the advisory gate while
   reviewed 2.11.0 and 2.13.0 profiles remain accepted.
+- The optional PaddleOCR-VL llama.cpp endpoint is local by default in policy,
+  not just in documentation. Plain HTTP is limited to resolved loopback
+  addresses. Remote use requires HTTPS and `VSR_ALLOW_REMOTE_VLM=1`, URL
+  credentials and unsafe redirects are refused, and DNS is checked again
+  before each frame request. Settings and `--self-test` keep the frame-transfer
+  warning visible.
 
 ## [3.36.0] - 2026-08-21
 

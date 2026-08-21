@@ -354,6 +354,12 @@ class FfmpegProfileTests(unittest.TestCase):
         self.assertIn("FFmpeg runtime CVE floor", security)
         self.assertFalse(security["FFmpeg runtime CVE floor"]["available"])
         self.assertIn("8.1.2", security["FFmpeg runtime CVE floor"]["reason"])
+        self.assertIn("VLM endpoint privacy", security)
+        self.assertTrue(security["VLM endpoint privacy"]["available"])
+        self.assertIn(
+            "Frame pixels stay",
+            security["VLM endpoint privacy"]["reason"],
+        )
 
     def test_self_test_flags_unclassified_ffmpeg_runtime(self):
         from backend import support_bundle

@@ -685,6 +685,24 @@ class LayoutBuildMixin:
             tr("Automatic uses the best installed detector. Select an engine "
                "to compare results or reproduce a run."),
         )
+        self.vlm_privacy_label = tk.Label(
+            det_frame,
+            text="",
+            font=f(Theme.F_META),
+            bg=Theme.BG_CARD,
+            fg=Theme.TEXT_MUTED,
+            anchor="w",
+            justify="left",
+            wraplength=500,
+        )
+        self.vlm_privacy_label.pack(
+            fill="x",
+            padx=Theme.S_LG,
+            pady=(Theme.S_XS, 0),
+        )
+        refresh_privacy = getattr(self, "_refresh_vlm_privacy_notice", None)
+        if callable(refresh_privacy):
+            refresh_privacy()
         variant_row = tk.Frame(det_frame, bg=Theme.BG_CARD)
         variant_row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, 0))
         tk.Label(

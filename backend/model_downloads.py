@@ -811,6 +811,13 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
     inpaint_items = list(status.get("inpainting", []))
     providers = status.get("providers", {})
     selected_mode = str(status.get("selected_mode") or "sttn").lower()
+    selected_detection = str(
+        status.get("selected_detection") or "auto"
+    ).lower()
+    vlm_privacy = status.get("vlm_endpoint_privacy", {})
+    if not isinstance(vlm_privacy, Mapping):
+        vlm_privacy = {}
+    vlm_active = selected_detection == "vlm-paddleocr-vl-llama"
     detection = next(
         (item for item in detection_items if item.get("available")),
         detection_items[-1] if detection_items else {},
@@ -862,6 +869,11 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
             next_action = str(onnx.get("next_action") or "")
     if not next_action:
         next_action = "No backend setup action needed."
+    if vlm_active and not vlm_privacy.get("allowed"):
+        next_action = str(
+            vlm_privacy.get("message")
+            or "Repair the VLM endpoint privacy configuration."
+        )
     rapid_hash = (
         "RapidOCR hashes recorded"
         if rapid.get("model_count") else "RapidOCR hashes unavailable"
@@ -869,6 +881,13 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
     lama_hash = (
         str(ready_lama.get("hash_status"))
         if ready_lama else "LaMa missing"
+    )
+    warning_tone = bool(
+        vlm_active
+        and (
+            not vlm_privacy.get("allowed")
+            or vlm_privacy.get("remote")
+        )
     )
     return {
         "detection": (
@@ -894,8 +913,18 @@ def _summarize_backend_status(status: Mapping[str, Any]) -> dict:
         ),
         "model_files": f"{rapid_text}; {lama_text}",
         "hash_status": f"{rapid_hash}; {lama_hash}",
+        "privacy": str(
+            vlm_privacy.get("message")
+            or "No remote VLM frame transfer is configured."
+        ),
         "next_action": next_action,
-        "tone": "success" if ready_lama or detection.get("name") == "RapidOCR" else "warning",
+        "tone": (
+            "warning"
+            if warning_tone else
+            "success"
+            if ready_lama or detection.get("name") == "RapidOCR" else
+            "warning"
+        ),
     }
 
 
@@ -905,6 +934,11 @@ def installed_backend_status(
 ) -> dict:
     """Return privacy-safe installed backend/model status for UI and support."""
     source_env = os.environ if env is None else env
+    from backend.ocr_vlm import vlm_endpoint_privacy_status
+
+    selected_detection = str(
+        getattr(config or object(), "detection_engine", "auto") or "auto"
+    )
     providers = {
         "onnxruntime": _onnxruntime_provider_status(),
         "opencv": _opencv_runtime_status(),
@@ -947,11 +981,13 @@ def installed_backend_status(
     status = {
         "schema": "vsr.backend_status.v1",
         "selected_mode": _mode_value(config or object()),
+        "selected_detection": selected_detection,
         "providers": providers,
         "detection": detection,
         "language_support": language_support_status(detection),
         "inpainting": inpainting,
         "pending_downloads": hints,
+        "vlm_endpoint_privacy": vlm_endpoint_privacy_status(source_env),
     }
     status["summary"] = _summarize_backend_status(status)
     return status

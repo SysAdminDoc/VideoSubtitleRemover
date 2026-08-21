@@ -414,6 +414,7 @@ class SupportControllerMixin:
             (tr("Languages"), summary.get("language_support") or tr("Unknown")),
             (tr("Model files"), summary.get("model_files") or tr("Unknown")),
             (tr("Hash status"), summary.get("hash_status") or tr("Unknown")),
+            (tr("VLM privacy"), summary.get("privacy") or tr("Unknown")),
             (tr("Next action"), summary.get("next_action") or tr("No action needed.")),
         ]
         profile_rows = [

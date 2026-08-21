@@ -17,25 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P0 — RM-298 Enforce the VLM endpoint privacy boundary
-  - Why: The optional PaddleOCR-VL llama.cpp path is described as local but accepts
-    any HTTP or HTTPS host. A configured remote endpoint can receive frame content
-    without a dedicated remote-processing acknowledgement, and plaintext HTTP is
-    accepted outside loopback.
-  - Evidence: README.md:380-383, backend/ocr_vlm.py:311-344,
-    backend/ocr_vlm.py:490-521.
-  - Touches: backend/ocr_vlm.py, the detection status copy in gui/,
-    README.md, and VLM backend tests.
-  - Acceptance: Permit HTTP automatically only for IPv4 and IPv6 loopback; require
-    HTTPS plus an explicit remote-processing flag for every non-loopback endpoint;
-    reject URL credentials, unsupported schemes, and redirects outside the approved
-    boundary; resolve and recheck host addresses at connection time; show a
-    persistent privacy warning in GUI and CLI status; capture a test request to
-    document the transmitted payload; cover localhost, mapped addresses, malformed
-    URLs, DNS changes, redirects, and the probe-bypass path.
-  - Complexity: Medium. Regression risk is low for the default local path. No new
-    runtime dependency.
-
 - [ ] P1 — RM-299 Restore GUI workflow and accessibility release proof
   - Why: Active tests prove GUI imports but not the queue, manual-region, Test
     Cleanup, scaling, high-contrast, RTL, or collapsed-control workflows. The

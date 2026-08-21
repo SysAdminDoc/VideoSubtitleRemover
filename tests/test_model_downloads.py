@@ -292,6 +292,9 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertIn("RapidOCR 100+", status["summary"]["language_support"])
         self.assertIn("LaMa neural weights not ready",
                       status["summary"]["model_files"])
+        self.assertTrue(status["vlm_endpoint_privacy"]["allowed"])
+        self.assertFalse(status["vlm_endpoint_privacy"]["remote"])
+        self.assertIn("Frame pixels stay", status["summary"]["privacy"])
         self.assertIn("VSR_LAMA_ONNX", status["summary"]["next_action"])
         self.assertNotIn(tmpdir, repr(status))
 

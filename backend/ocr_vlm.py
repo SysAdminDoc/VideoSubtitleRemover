@@ -33,11 +33,15 @@ from __future__ import annotations
 import logging
 import os
 import json
+import ipaddress
+import socket
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Tuple
 from urllib import error as urlerror
 from urllib import request as urlrequest
+from urllib.parse import urljoin, urlsplit
 
 import cv2
 import numpy as np
@@ -54,6 +58,8 @@ _PADDLEOCR_VL_LLAMA_VALUES = {
     "paddleocr-vl-1.5",
 }
 _PADDLEOCR_VL_LLAMA_DEFAULT_URL = "http://127.0.0.1:8080/v1"
+_PADDLEOCR_VL_REMOTE_ACK_ENV = "VSR_ALLOW_REMOTE_VLM"
+_PADDLEOCR_VL_SKIP_PROBE_ENV = "VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE"
 Box = Tuple[int, int, int, int]
 
 
@@ -313,27 +319,198 @@ def _normalise_vl_server_url(raw: str) -> str:
     return value.rstrip("/")
 
 
+class VlmEndpointPolicyError(ValueError):
+    """Raised when a llama.cpp endpoint crosses the privacy boundary."""
+
+
+@dataclass(frozen=True)
+class VlmEndpointPolicy:
+    """Validated endpoint facts used immediately before network access."""
+
+    url: str
+    scheme: str
+    host: str
+    port: int
+    addresses: Tuple[str, ...]
+    loopback: bool
+    remote: bool
+    acknowledged: bool
+
+
+def _ip_is_loopback(value: str) -> bool:
+    """Treat IPv4-mapped loopback addresses as loopback too."""
+    address = ipaddress.ip_address(str(value).split("%", 1)[0])
+    mapped = getattr(address, "ipv4_mapped", None)
+    return bool(mapped.is_loopback if mapped is not None else address.is_loopback)
+
+
+def _resolve_vlm_endpoint(host: str, port: int) -> Tuple[str, ...]:
+    """Resolve every stream address for an endpoint without connecting."""
+    try:
+        records = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except (OSError, UnicodeError) as exc:
+        raise VlmEndpointPolicyError(
+            "The VLM endpoint hostname could not be resolved."
+        ) from exc
+    addresses = []
+    for record in records:
+        try:
+            address = str(record[4][0]).split("%", 1)[0]
+            ipaddress.ip_address(address)
+        except (IndexError, TypeError, ValueError):
+            continue
+        if address not in addresses:
+            addresses.append(address)
+    if not addresses:
+        raise VlmEndpointPolicyError(
+            "The VLM endpoint did not resolve to an IP address."
+        )
+    return tuple(addresses)
+
+
+def validate_vlm_server_endpoint(
+    server_url: str,
+    env: Optional[Mapping[str, str]] = None,
+) -> VlmEndpointPolicy:
+    """Resolve and enforce the local-by-default VLM endpoint policy.
+
+    HTTP is accepted only when every resolved address is loopback. Remote
+    endpoints require HTTPS and an explicit acknowledgement that frame pixels
+    leave this computer. Callers invoke this again immediately before each
+    probe or inference request so a DNS change cannot bypass the decision.
+    """
+    source_env = os.environ if env is None else env
+    value = _normalise_vl_server_url(server_url)
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise VlmEndpointPolicyError("The VLM endpoint URL is malformed.") from exc
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise VlmEndpointPolicyError(
+            "The VLM endpoint must use HTTP or HTTPS."
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise VlmEndpointPolicyError(
+            "Credentials are not allowed in the VLM endpoint URL."
+        )
+    if not parsed.hostname:
+        raise VlmEndpointPolicyError("The VLM endpoint URL needs a hostname.")
+    if parsed.query or parsed.fragment:
+        raise VlmEndpointPolicyError(
+            "The VLM endpoint URL cannot contain a query or fragment."
+        )
+    resolved_port = int(port or (443 if scheme == "https" else 80))
+    addresses = _resolve_vlm_endpoint(parsed.hostname, resolved_port)
+    loopback = all(_ip_is_loopback(address) for address in addresses)
+    remote = not loopback
+    acknowledged = _env_truthy(source_env, _PADDLEOCR_VL_REMOTE_ACK_ENV)
+    if scheme == "http" and remote:
+        raise VlmEndpointPolicyError(
+            "Remote VLM endpoints must use HTTPS because video frames leave "
+            "this computer."
+        )
+    if remote and not acknowledged:
+        raise VlmEndpointPolicyError(
+            "Remote VLM processing is blocked. Set VSR_ALLOW_REMOTE_VLM=1 "
+            "only after accepting that video frames leave this computer."
+        )
+    return VlmEndpointPolicy(
+        url=value,
+        scheme=scheme,
+        host=parsed.hostname,
+        port=resolved_port,
+        addresses=addresses,
+        loopback=loopback,
+        remote=remote,
+        acknowledged=acknowledged,
+    )
+
+
+def vlm_endpoint_privacy_status(
+    env: Optional[Mapping[str, str]] = None,
+) -> dict:
+    """Return endpoint privacy status without exposing its host or address."""
+    source_env = os.environ if env is None else env
+    server_url = str(source_env.get(
+        "VSR_PADDLEOCR_VL_SERVER_URL",
+        _PADDLEOCR_VL_LLAMA_DEFAULT_URL,
+    ))
+    try:
+        policy = validate_vlm_server_endpoint(server_url, source_env)
+    except VlmEndpointPolicyError as exc:
+        return {
+            "schema": "vsr.vlm_endpoint_privacy.v1",
+            "allowed": False,
+            "remote": None,
+            "loopback": False,
+            "acknowledged": _env_truthy(
+                source_env, _PADDLEOCR_VL_REMOTE_ACK_ENV
+            ),
+            "transport": "",
+            "message": str(exc),
+        }
+    if policy.remote:
+        message = (
+            "Remote VLM enabled. Video frames are sent to an HTTPS service "
+            "outside this computer."
+        )
+    else:
+        message = (
+            "Local VLM endpoint. Frame pixels stay on this computer."
+        )
+    return {
+        "schema": "vsr.vlm_endpoint_privacy.v1",
+        "allowed": True,
+        "remote": policy.remote,
+        "loopback": policy.loopback,
+        "acknowledged": policy.acknowledged,
+        "transport": policy.scheme,
+        "message": message,
+    }
+
+
 def _llama_cpp_models_url(server_url: str) -> str:
     return f"{_normalise_vl_server_url(server_url)}/models"
 
 
-def _llama_cpp_server_reachable(server_url: str, timeout: float = 0.75) -> bool:
-    if _env_truthy(os.environ, "VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE"):
-        return True
-    models_url = _llama_cpp_models_url(server_url)
-    # Only probe HTTP(S) endpoints. urlopen would otherwise honour file://,
-    # ftp:// and other schemes, turning a misconfigured server URL into a
-    # local-file / SSRF read.
-    from urllib.parse import urlparse
-    if urlparse(models_url).scheme not in ("http", "https"):
+class _VlmRedirectHandler(urlrequest.HTTPRedirectHandler):
+    """Apply the same privacy policy to every probe redirect."""
+
+    def __init__(self, env: Mapping[str, str]):
+        super().__init__()
+        self.env = env
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urljoin(req.full_url, newurl)
+        validate_vlm_server_endpoint(target, self.env)
+        return super().redirect_request(
+            req, fp, code, msg, headers, target
+        )
+
+
+def _llama_cpp_server_reachable(
+    server_url: str,
+    timeout: float = 0.75,
+    env: Optional[Mapping[str, str]] = None,
+) -> bool:
+    source_env = os.environ if env is None else env
+    try:
+        policy = validate_vlm_server_endpoint(server_url, source_env)
+    except VlmEndpointPolicyError as exc:
         logger.info(
-            "PaddleOCR-VL server URL scheme is not http(s); refusing to probe %s",
-            models_url,
+            "PaddleOCR-VL server endpoint rejected by privacy policy: %s",
+            exc,
         )
         return False
+    if _env_truthy(source_env, _PADDLEOCR_VL_SKIP_PROBE_ENV):
+        return True
+    models_url = _llama_cpp_models_url(policy.url)
     try:
         req = urlrequest.Request(models_url, method="GET")
-        with urlrequest.urlopen(req, timeout=timeout) as response:
+        opener = urlrequest.build_opener(_VlmRedirectHandler(source_env))
+        with opener.open(req, timeout=timeout) as response:
             return 200 <= int(getattr(response, "status", 200)) < 500
     except urlerror.HTTPError as exc:
         return 200 <= exc.code < 500
@@ -514,7 +691,7 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
 
     def __init__(self, device: str = "cpu", env: Optional[Mapping[str, str]] = None):
         super().__init__(device="cpu")
-        self.env = env or os.environ
+        self.env = os.environ if env is None else env
         self.server_url = _normalise_vl_server_url(
             str(self.env.get(
                 "VSR_PADDLEOCR_VL_SERVER_URL",
@@ -528,7 +705,7 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
         return self._model is not None
 
     def _load(self):
-        if not _llama_cpp_server_reachable(self.server_url):
+        if not _llama_cpp_server_reachable(self.server_url, env=self.env):
             logger.info(
                 "PaddleOCR-VL-1.5 llama.cpp detector disabled; start "
                 "llama-server and expose %s before setting VSR_PADDLEOCR_VL=1.",
@@ -563,6 +740,14 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
             return None
 
     def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Box]:
+        try:
+            validate_vlm_server_endpoint(self.server_url, self.env)
+        except VlmEndpointPolicyError as exc:
+            logger.warning(
+                "PaddleOCR-VL frame request blocked by privacy policy: %s",
+                exc,
+            )
+            return []
         fd, path = tempfile.mkstemp(prefix="vsr_paddleocr_vl_", suffix=".png")
         os.close(fd)
         try:

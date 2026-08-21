@@ -89,6 +89,7 @@ _SENSITIVE_SUFFIXES = (
 _ENV_FLAG_KEYS = (
     "VSR_ALLOW_GPL",
     "VSR_ALLOW_REMOTE_CODE",
+    "VSR_ALLOW_REMOTE_VLM",
     "VSR_CRASH_REPORTS",
     "VSR_DISABLE_UPDATE_CHECK",
     "VSR_FORCE_CPU",
@@ -621,6 +622,21 @@ def run_self_test() -> dict:
         "available": bool(cpython_status["safe"]),
         "reason": cpython_status["reason"],
     })
+
+    try:
+        from backend.ocr_vlm import vlm_endpoint_privacy_status
+        vlm_privacy = vlm_endpoint_privacy_status()
+        results["security"].append({
+            "name": "VLM endpoint privacy",
+            "available": bool(vlm_privacy.get("allowed")),
+            "reason": str(vlm_privacy.get("message") or "unknown"),
+        })
+    except Exception as exc:
+        results["security"].append({
+            "name": "VLM endpoint privacy",
+            "available": False,
+            "reason": str(exc)[:200],
+        })
 
     try:
         from backend.device_provider import windowsml_status

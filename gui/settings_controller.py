@@ -608,9 +608,54 @@ class AdvancedSettingsControllerMixin:
             "PaddleOCR-VL needs the optional paddleocr install; without it "
             "the run uses the automatic cascade"),
         "vlm-paddleocr-vl-llama": N_(
-            "PaddleOCR-VL via llama.cpp needs a reachable llama server; "
-            "without one the run uses the automatic cascade"),
+            "PaddleOCR-VL via llama.cpp stays local by default. A remote "
+            "endpoint sends video frames outside this computer and requires "
+            "HTTPS plus VSR_ALLOW_REMOTE_VLM=1"),
     }
+
+    def _refresh_vlm_privacy_notice(self):
+        """Keep the selected llama.cpp endpoint boundary visible in Settings."""
+        label = getattr(self, "vlm_privacy_label", None)
+        if label is None:
+            return
+        engine = str(getattr(
+            self.config, "detection_engine", "auto"
+        ) or "auto")
+        if engine != "vlm-paddleocr-vl-llama":
+            label.config(text="")
+            return
+        backend_status = getattr(self, "backend_status", {}) or {}
+        privacy = (
+            backend_status.get("vlm_endpoint_privacy", {})
+            if isinstance(backend_status, dict) else {}
+        )
+        if not privacy:
+            label.config(
+                text=tr("Checking VLM endpoint privacy..."),
+                fg=Theme.TEXT_MUTED,
+            )
+        elif privacy.get("remote"):
+            label.config(
+                text=tr(
+                    "Remote VLM enabled. Video frames are sent to an HTTPS "
+                    "service outside this computer."
+                ),
+                fg=Theme.WARNING,
+            )
+        elif privacy.get("allowed"):
+            label.config(
+                text=tr(
+                    "Local VLM endpoint. Frame pixels stay on this computer."
+                ),
+                fg=Theme.INFO,
+            )
+        else:
+            label.config(
+                text=tr("VLM endpoint blocked: {reason}").format(
+                    reason=str(privacy.get("message") or tr("invalid endpoint"))
+                ),
+                fg=Theme.ERROR,
+            )
 
     def _on_ocr_engine_changed(self, event=None):
         """Persist the selected detector and invalidate preview model caches."""
@@ -621,6 +666,7 @@ class AdvancedSettingsControllerMixin:
             self.config.detection_engine)
         if guidance:
             self._update_status(guidance, "info")
+        self._refresh_vlm_privacy_notice()
         # Take the same lock the preview/probe paths hold across inference,
         # so the cache cannot be dropped out from under a running detect.
         lock = getattr(self, "_detector_lock", None)
