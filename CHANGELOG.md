@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.36.0] - 2026-08-21
+
 ### Security
 
 - CPython self-test advisories are now per release line, and they name
