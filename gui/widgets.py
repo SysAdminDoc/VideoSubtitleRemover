@@ -40,6 +40,7 @@ from backend.a11y import (
     announce,
     announce_widget,
     set_accessible_metadata,
+    set_tooltip_help,
 )
 
 logger = logging.getLogger(__name__)
@@ -321,6 +322,12 @@ class Tooltip:
         self.text = text
         self._tip = None
         self._after_id = None
+        # RM-282: the tip is a separate Toplevel that never takes focus, so
+        # without this a screen reader never learns the widget has help.
+        try:
+            set_tooltip_help(widget, text)
+        except Exception:
+            pass
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self._hide, add="+")
         widget.bind("<ButtonPress>", self._hide, add="+")
@@ -750,7 +757,20 @@ class ModernProgressBar(tk.Canvas):
         self._tween_id = None
 
         self.bind("<Configure>", self._on_configure, add="+")
+        self._sync_a11y()
         self._draw()
+
+    def _sync_a11y(self):
+        set_accessible_metadata(
+            self,
+            role="progressbar",
+            label=tr("Progress"),
+            value=tr("{percent} percent").format(
+                percent=int(round(self._target * 100))),
+        )
+
+    def accessibility_snapshot(self) -> dict:
+        return accessible_metadata(self)
 
     def _on_configure(self, event):
         """Redraw to the allocated width without inflating requested size."""
@@ -790,6 +810,9 @@ class ModernProgressBar(tk.Canvas):
         if prefers_reduced_motion():
             animate = False
         self._target = target
+        # Annotate from the target, not each tween frame: the tween runs at
+        # 60fps and a COM call per frame would be absurd.
+        self._sync_a11y()
         if self._tween_id:
             try:
                 self.after_cancel(self._tween_id)

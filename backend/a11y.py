@@ -41,19 +41,29 @@ def set_accessible_metadata(
     state: str = "",
     value: str = "",
     description: str = "",
+    help_text: str = "",
+    live_region: bool = False,
 ) -> dict:
-    """Attach a testable accessibility description to a custom Tk widget."""
+    """Attach a testable accessibility description to a custom Tk widget.
+
+    RM-282: the same metadata is pushed onto the widget's own HWND with
+    MSAA Dynamic Annotation, so a screen reader reads a role and a name
+    instead of an anonymous pane. Annotation failure is silent -- the
+    in-process metadata is the contract, the HWND push is a bonus.
+    """
     metadata = {
         "role": str(role or "").strip(),
         "label": str(label or "").strip(),
         "state": str(state or "").strip(),
         "value": str(value or "").strip(),
         "description": str(description or "").strip(),
+        "help": str(help_text or "").strip(),
     }
     try:
         setattr(widget, "_vsr_a11y", metadata)
     except Exception:
         pass
+    annotate_widget(widget, live_region=live_region)
     return metadata
 
 
@@ -66,7 +76,7 @@ def accessible_metadata(widget: Any) -> dict:
 def accessible_text(metadata: dict) -> str:
     """Format metadata into a concise screen-reader announcement."""
     parts = []
-    for key in ("label", "role", "state", "value", "description"):
+    for key in ("label", "role", "state", "value", "description", "help"):
         value = str(metadata.get(key) or "").strip()
         if value:
             parts.append(value)
@@ -202,3 +212,299 @@ def _root_hwnd() -> Optional[int]:
         return hwnd or None
     except Exception:
         return None
+
+
+# -- RM-282: MSAA Dynamic Annotation on the widget's own HWND ---------------
+#
+# Tk 8.6.15 has no `tk accessible` (TIP 733 lands in Tk 9.1), and a full UI
+# Automation provider means answering WM_GETOBJECT with a custom
+# IRawElementProviderSimple -- a separate, much larger project. Dynamic
+# Annotation sits in between: every Tk widget on Windows is a real HWND, so
+# IAccPropServices::SetHwndProp can give that HWND a role, a name, a value
+# and help text without registering anything. The MSAA-to-UIA bridge then
+# surfaces those to NVDA and Narrator.
+#
+# LiveSetting is deliberately absent here: it is a UIA-only property and the
+# MSAA bridge cannot carry it. A widget marked `live_region=True` gets its
+# value spoken through the existing UIA notification path instead, which is
+# what a reader actually consumes for a changing status line.
+
+_ACC_PROBED = False
+_ACC_SERVICES = None
+
+# oleacc.h role constants, mapped from this app's role vocabulary.
+_MSAA_ROLES = {
+    "button": 0x2B,          # ROLE_SYSTEM_PUSHBUTTON
+    "checkbox": 0x2C,        # ROLE_SYSTEM_CHECKBUTTON
+    "radio button": 0x2D,    # ROLE_SYSTEM_RADIOBUTTON
+    "slider": 0x33,          # ROLE_SYSTEM_SLIDER
+    "progressbar": 0x30,     # ROLE_SYSTEM_PROGRESSBAR
+    "progress": 0x30,
+    "status": 0x29,          # ROLE_SYSTEM_STATICTEXT
+    "text": 0x2A,            # ROLE_SYSTEM_TEXT
+    "link": 0x1E,            # ROLE_SYSTEM_LINK
+    "dialog": 0x12,          # ROLE_SYSTEM_DIALOG
+    "drop target": 0x14,     # ROLE_SYSTEM_GROUPING
+    "group": 0x14,
+}
+_MSAA_ROLE_DEFAULT = 0x14    # ROLE_SYSTEM_GROUPING
+
+_OBJID_CLIENT = 0xFFFFFFFC
+_CHILDID_SELF = 0
+_VT_I4 = 3
+
+# oleacc.h MSAAPROPID GUIDs, as (Data1, Data2, Data3, Data4-bytes).
+_PROPID_SPECS = {
+    "name": (0x608D3DF8, 0x8128, 0x4AA7,
+             (0xA4, 0x28, 0xF5, 0x5E, 0x49, 0x26, 0x72, 0x91)),
+    "value": (0x123FE443, 0x211A, 0x4615,
+              (0x95, 0x27, 0xC4, 0x5A, 0x7E, 0x93, 0x71, 0x7A)),
+    "description": (0x4D48DFE4, 0xBD3F, 0x491F,
+                    (0xA6, 0x48, 0x49, 0x2D, 0x6F, 0x20, 0xC5, 0x88)),
+    "role": (0xCB905FF2, 0x7BD1, 0x4C05,
+             (0xB3, 0xC8, 0xE6, 0xC2, 0x41, 0x36, 0x4D, 0x70)),
+    "help": (0xC831E11F, 0x44DB, 0x4A99,
+             (0x97, 0x68, 0xCB, 0x8F, 0x97, 0x8B, 0x72, 0x31)),
+    "rolemap": (0xF79ACDA2, 0x140D, 0x4FE6,
+                (0x89, 0x14, 0x20, 0x84, 0x76, 0x32, 0x82, 0x69)),
+}
+
+_CLSID_ACC_PROP_SERVICES = (0xB5F8350B, 0x0548, 0x48B1,
+                            (0xA6, 0xEE, 0x88, 0xBD, 0x00, 0xB4, 0xA5, 0xE7))
+_IID_IACC_PROP_SERVICES = (0x6E26E776, 0x04F0, 0x495D,
+                           (0x80, 0xE4, 0x33, 0x30, 0x35, 0x2E, 0x31, 0x69))
+
+
+_ACC_TYPES = None
+
+
+def _acc_types():
+    """Return the ctypes structures the annotation calls need.
+
+    Built once and cached: ctypes compares argument types by class
+    identity, so handing a freshly-built GUID class to a prototype
+    declared with a different one fails with "expected GUID instead of
+    GUID".
+    """
+    global _ACC_TYPES
+    if _ACC_TYPES is not None:
+        return _ACC_TYPES
+    import ctypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", ctypes.c_ulong),
+            ("Data2", ctypes.c_ushort),
+            ("Data3", ctypes.c_ushort),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
+
+    class VARIANT(ctypes.Structure):
+        # VARTYPE + three reserved WORDs, then the union. The union holds a
+        # BRECORD (two pointers), so sizing it from the pointer width gives
+        # the right total on both 32- and 64-bit builds.
+        _fields_ = [
+            ("vt", ctypes.c_ushort),
+            ("wReserved1", ctypes.c_ushort),
+            ("wReserved2", ctypes.c_ushort),
+            ("wReserved3", ctypes.c_ushort),
+            ("data", ctypes.c_byte * (2 * ctypes.sizeof(ctypes.c_void_p))),
+        ]
+
+    _ACC_TYPES = (GUID, VARIANT)
+    return _ACC_TYPES
+
+
+def _make_guid(spec) -> Any:
+    import ctypes
+
+    GUID, _ = _acc_types()
+    data1, data2, data3, data4 = spec
+    return GUID(data1, data2, data3, (ctypes.c_ubyte * 8)(*data4))
+
+
+def _acc_prop_services():
+    """Return the cached IAccPropServices pointer, or None."""
+    global _ACC_PROBED, _ACC_SERVICES
+    if _ACC_PROBED:
+        return _ACC_SERVICES
+    _ACC_PROBED = True
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        ole32 = ctypes.windll.ole32
+        # S_FALSE (already initialised) and RPC_E_CHANGED_MODE (Tk got
+        # there first with a different model) are both fine: some other
+        # component already set the thread's apartment up for us.
+        ole32.CoInitializeEx(None, 0x2)
+        clsid = _make_guid(_CLSID_ACC_PROP_SERVICES)
+        iid = _make_guid(_IID_IACC_PROP_SERVICES)
+        services = ctypes.c_void_p()
+        hr = ole32.CoCreateInstance(
+            ctypes.byref(clsid), None, 1,  # CLSCTX_INPROC_SERVER
+            ctypes.byref(iid), ctypes.byref(services),
+        )
+        if hr != 0 or not services:
+            logger.info(
+                f"IAccPropServices unavailable (hr=0x{hr & 0xFFFFFFFF:08x}); "
+                "custom controls stay unannotated"
+            )
+            return None
+        _ACC_SERVICES = services
+        logger.info("MSAA dynamic annotation ready")
+        return _ACC_SERVICES
+    except Exception as exc:
+        logger.info(f"MSAA dynamic annotation unavailable: {exc}")
+        return None
+
+
+def _acc_method(services, index, restype, argtypes):
+    import ctypes
+
+    vtable = ctypes.cast(
+        services, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+    ).contents
+    prototype = ctypes.WINFUNCTYPE(restype, *argtypes)
+    return prototype(vtable[index])
+
+
+def annotate_hwnd(
+    hwnd: int,
+    *,
+    role: str = "",
+    name: str = "",
+    value: str = "",
+    description: str = "",
+    help_text: str = "",
+) -> bool:
+    """Push MSAA properties onto ``hwnd``. True when anything was set."""
+    services = _acc_prop_services()
+    if services is None or not hwnd:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        GUID, VARIANT = _acc_types()
+        set_str = _acc_method(
+            services, 7, ctypes.HRESULT,
+            [ctypes.c_void_p, wintypes.HWND, wintypes.DWORD, wintypes.DWORD,
+             GUID, ctypes.c_wchar_p],
+        )
+        applied = False
+        strings = (
+            ("name", name),
+            ("value", value),
+            ("description", description),
+            ("help", help_text),
+        )
+        for key, text in strings:
+            # Empty strings are pushed too: a control whose description was
+            # cleared must stop reading the stale one.
+            if _acc_call(set_str, services, hwnd,
+                         _make_guid(_PROPID_SPECS[key]), str(text)):
+                applied = True
+        if role:
+            set_prop = _acc_method(
+                services, 6, ctypes.HRESULT,
+                [ctypes.c_void_p, wintypes.HWND, wintypes.DWORD,
+                 wintypes.DWORD, GUID, VARIANT],
+            )
+            var = VARIANT()
+            var.vt = _VT_I4
+            ctypes.memmove(
+                ctypes.byref(var, VARIANT.data.offset),
+                ctypes.byref(ctypes.c_int32(
+                    _MSAA_ROLES.get(role, _MSAA_ROLE_DEFAULT))),
+                4,
+            )
+            if _acc_call(set_prop, services, hwnd,
+                         _make_guid(_PROPID_SPECS["role"]), var):
+                applied = True
+            elif _acc_call(set_str, services, hwnd,
+                           _make_guid(_PROPID_SPECS["rolemap"]), str(role)):
+                # Older shells reject the VARIANT role; the localized role
+                # string is read by NVDA and Narrator just the same.
+                applied = True
+        return applied
+    except Exception as exc:
+        logger.debug(f"HWND annotation failed: {exc}")
+        return False
+
+
+def _acc_call(method, services, hwnd, prop, payload) -> bool:
+    """Invoke one Set*Prop* method, treating any HRESULT failure as False."""
+    try:
+        method(services, hwnd, _OBJID_CLIENT, _CHILDID_SELF, prop, payload)
+    except OSError as exc:
+        logger.debug(f"HWND annotation call rejected: {exc}")
+        return False
+    return True
+
+
+def annotate_widget(widget: Any, *, live_region: bool = False) -> bool:
+    """Annotate ``widget``'s own HWND from its stored metadata.
+
+    Re-annotating on every hover and focus change would mean a COM call per
+    mouse move, so the last applied snapshot is cached on the widget and an
+    unchanged one is skipped.
+    """
+    metadata = accessible_metadata(widget)
+    # A tooltip attaches help before the widget has any other metadata, so a
+    # bare tooltip is still worth annotating on its own.
+    tooltip_help = str(getattr(widget, "_vsr_a11y_help", "") or "")
+    if not metadata and not tooltip_help:
+        return False
+    snapshot = (
+        metadata.get("role", ""),
+        metadata.get("label", ""),
+        metadata.get("state", ""),
+        metadata.get("value", ""),
+        metadata.get("description", ""),
+        metadata.get("help", "") or tooltip_help,
+    )
+    if getattr(widget, "_vsr_a11y_hwnd_applied", None) == snapshot:
+        return False
+    try:
+        hwnd = int(widget.winfo_id())
+    except Exception:
+        return False
+    role, label, state, value, description, help_text = snapshot
+    # MSAA has no separate state string, so it rides along with the value --
+    # that is the field a reader re-reads when the control changes.
+    spoken_value = "; ".join(part for part in (value, state) if part)
+    applied = annotate_hwnd(
+        hwnd,
+        role=role,
+        name=label,
+        value=spoken_value,
+        description=description,
+        help_text=help_text,
+    )
+    try:
+        setattr(widget, "_vsr_a11y_hwnd_applied", snapshot)
+    except Exception:
+        pass
+    if live_region and spoken_value:
+        announce(spoken_value)
+    return applied
+
+
+def set_tooltip_help(widget: Any, text: str) -> None:
+    """Record a widget's tooltip text as its accessible help.
+
+    A sighted user gets the tooltip on hover; without this a screen-reader
+    user gets nothing at all, because the tooltip is a separate Toplevel
+    that never takes focus.
+    """
+    help_text = str(text or "").strip()
+    if not help_text:
+        return
+    try:
+        setattr(widget, "_vsr_a11y_help", help_text)
+        setattr(widget, "_vsr_a11y_hwnd_applied", None)
+    except Exception:
+        return
+    annotate_widget(widget)

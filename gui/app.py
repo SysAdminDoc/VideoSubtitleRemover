@@ -2320,14 +2320,19 @@ class VideoSubtitleRemoverApp(
         self._status_tone = tone
         try:
             from backend.a11y import announce, set_accessible_metadata
+            # RM-282: the footer is the app's live region. Routine updates
+            # are spoken through the annotation path; the loud tones keep
+            # their own explicit, higher-priority announcement.
+            loud = toast or tone in {"error", "warning", "success"}
             set_accessible_metadata(
                 self.status_label,
                 role="status",
                 label=tr("Application status"),
                 state=tone,
                 value=display_message,
+                live_region=not loud,
             )
-            if toast or tone in {"error", "warning", "success"}:
+            if loud:
                 announce(display_message, importance="high" if tone == "error" else "normal")
         except Exception:
             pass

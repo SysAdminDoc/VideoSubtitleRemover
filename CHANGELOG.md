@@ -14,6 +14,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   and names the worst sampled frame with its score. A run whose average looks
   fine but whose worst frame does not now goes to review, and the batch
   summary has an Open frame button that takes the A/B compare straight there.
+- Screen readers now get a role, a name, a value and the tooltip text for
+  every custom control (buttons, toggles, sliders, the progress bar, the drop
+  target) instead of an anonymous pane, and the footer status line reads out
+  as it changes. Annotation failure is silent, so nothing changes on a machine
+  where it is unavailable.
 
 ## [3.36.0] - 2026-08-21
 

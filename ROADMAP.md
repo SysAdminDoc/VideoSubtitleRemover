@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-282 M -- HWND Dynamic Annotation on custom Canvas controls (not a UIA provider)
 - RM-284 S -- gate language picker on catalog coverage; document translation policy
 - RM-283 L -- donor-video clean reference (still-plate path already exists)
 - RM-292 M -- fade-in / fade-out mask temporal extension
@@ -27,14 +26,6 @@ P3:
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 
 ### P2
-
-- [ ] P2 -- RM-282: Annotate custom Canvas controls for Windows accessibility
-  Why: every custom control is an anonymous pane to a screen reader, and the cheap annotation route was never separated from the blocked full-provider route.
-  Evidence: Tk 8.6.15 is on this machine, so `tk accessible` (TIP 733, Tk 9.1) is unreachable. Each Tk widget is a real HWND via `winfo_id()`, and `IAccPropServices::SetHwndProp` can set role, name, help and a LiveRegion. Distinct from the blocked full UIA provider item.
-  Touches: `backend/a11y.py`, `gui/widgets.py`, `gui/layout_build.py`.
-  Acceptance: each custom control annotates a role and name on its own HWND; tooltip text is attached as help; the footer/progress surface is a LiveRegion; annotation failure degrades silently.
-  Confidence: Verified (mechanism) / Needs live validation (speech quality)
-  Complexity: M
 
 - [ ] P2 -- RM-283: Accept a donor video as a clean reference, not just a still plate
   Why: when a clean or differently-subbed release exists the background does not need to be invented.
