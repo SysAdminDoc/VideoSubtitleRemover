@@ -183,6 +183,12 @@ Stale / not acted on: discussion #8 still advertising 3.31.0 while the tag is
   2026-08-20; reasons stand. EffectLearner still "coming soon" (issue #1, 2026-08-08).
 - **VapourSynth exec hardening, preset trust-gating, queue crash recovery** --
   already implemented. Re-verified 2026-08-21.
+- **RM-280 "the lint does not flag `.config(text=)`"** -- premise measured false.
+  `text` has been in `CAPTION_KEYWORDS` all along, so `.config(text=)`,
+  `.configure(text=)`, and a widget `text=` kwarg are each flagged, and a
+  `tr()`-wrapped value passes. Verified 2026-08-21 against a probe package;
+  the three forms are now pinned by `test_the_lint_catches_each_kind_of_caption_sink`.
+  Source: `scripts/i18n_catalogs.py:94-100`.
 
 ## Sources
 

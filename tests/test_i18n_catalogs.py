@@ -52,6 +52,10 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
             "positional captions": 'widget.set_text("Start the batch")',
             "file filters": 'ask(filetypes=[("Video files", "*.mp4")])',
             "interpolated sentences": 'label.config(text=f"{n} of {t} shown")',
+            "config caption": 'label.config(text="Detection finished")',
+            "configure caption": 'label.configure(text="Detection finished")',
+            "configure interpolation":
+                'label.configure(text=f"{n} regions found")',
             "menu entries": 'menu.add_command(label="Sort by name")',
             "deferred status": 'self._update_status("A new status")',
             "deferred card title": 'self._card_header(root, "Card", "A new card")',
@@ -72,6 +76,8 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
             "wrapped": 'tk.Label(root, text=tr("Start the batch"))',
             "wrapped and formatted":
                 'label.config(text=tr("{n} shown").format(n=n))',
+            "wrapped configure":
+                'label.configure(text=tr("Detection finished"))',
             "wrapped plural":
                 'label.config(text=ntr("{n} item", "{n} items", n))',
             "wrapped filter": 'ask(filetypes=[(tr("Video files"), "*.mp4")])',

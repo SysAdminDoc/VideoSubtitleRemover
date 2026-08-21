@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-280 M -- lint unwrapped `.config(text=)` / widget `text=` kwargs
 - RM-281 S -- quality report harmonic mean + worst-frame index, seek preview to it
 - RM-282 M -- HWND Dynamic Annotation on custom Canvas controls (not a UIA provider)
 - RM-284 S -- gate language picker on catalog coverage; document translation policy
@@ -29,14 +28,6 @@ P3:
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 
 ### P2
-
-- [ ] P2 -- RM-280: Close the runtime status-string i18n bypass at the lint level
-  Why: wrapping today's offenders does not stop the next unwrapped `.config(text=)` sink.
-  Evidence: batch ETA, region plurals, preview meta, update toast, and retry copy now go through `tr()`/`ntr()`. `scripts/i18n_catalogs.py` still does not flag an unwrapped literal passed to `.config(text=)` / `.configure(text=)` / a widget `text=` kwarg. Remaining `N_(f"...")` toasts in `gui/app.py` and `gui/settings_controller.py` are RM-294.
-  Touches: `scripts/i18n_catalogs.py`.
-  Acceptance: `python scripts/i18n_catalogs.py lint` flags an unwrapped literal or f-string passed to `.config(text=)` / `.configure(text=)` / a widget `text=` kwarg, and passes on a wrapped one.
-  Confidence: Verified
-  Complexity: M
 
 - [ ] P2 -- RM-281: Report harmonic mean and the worst-frame index in the quality report
   Why: this product's characteristic defect is a handful of bad frames on an otherwise sharp clip, and a mean is structurally blind to exactly that.
