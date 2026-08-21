@@ -522,16 +522,16 @@ def _resolve_frame_range(cap, total_frames: int, fps: float,
     else:
         if time_start_s > 0:
             start_frame = max(
-                0, min(total_frames - 1, int(time_start_s * fps)))
+                0, min(total_frames, int(time_start_s * fps)))
         if time_end_s > 0:
             end_frame = max(
                 0, min(total_frames, int(time_end_s * fps)))
-    if start_frame > 0:
-        _seek_capture_to_frame(cap, start_frame)
     if end_frame <= start_frame:
         raise ValueError(
             f"Invalid time range: end ({time_end_s}s) "
             f"must be after start ({time_start_s}s)")
+    if start_frame > 0:
+        _seek_capture_to_frame(cap, start_frame)
     frames_to_process = end_frame - start_frame
     selected_frame_durations = (
         frame_timing.range_durations(start_frame, end_frame, fps)

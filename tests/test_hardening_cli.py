@@ -817,3 +817,36 @@ class PresetFlagPrecedenceTests(unittest.TestCase):
         parser = self._parser()
         with self.assertRaises(SystemExit):
             parser.parse_args(["--thresho", "0.8"])
+
+
+class CliConfigOverlayTests(unittest.TestCase):
+    def test_unknown_config_field_fails_closed(self):
+        import argparse
+        from unittest import mock
+
+        from backend import cli as _cli
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "cfg.json"
+            path.write_text(
+                '{"not_a_real_field": 1, "output_quality": 20}',
+                encoding="utf-8",
+            )
+            args = SimpleNamespace(
+                config=str(path),
+                config_schema_version=None,
+                config_overrides=None,
+                validate_config=False,
+                plan_in="",
+                _preset_backend_overrides=None,
+            )
+            parser = argparse.ArgumentParser(prog="vsr")
+            stderr = io.StringIO()
+            with mock.patch("sys.stderr", stderr):
+                with self.assertRaises(SystemExit) as caught:
+                    _cli._apply_cli_config_overlays(
+                        args, parser, ProcessingConfig())
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("not_a_real_field", stderr.getvalue())
+        self.assertIn("unknown config field", stderr.getvalue())

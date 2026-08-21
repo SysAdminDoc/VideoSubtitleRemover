@@ -814,17 +814,18 @@ def _config_snapshot(config: Any) -> dict:
     return serialize_backend_config(config)
 
 
-def _detection_engine_status() -> str:
-    """Return the name of the active OCR detection engine."""
-    try:
-        import importlib.util
-        for name in ("rapidocr", "rapidocr_onnxruntime", "paddleocr",
-                     "easyocr", "surya"):
-            if importlib.util.find_spec(name) is not None:
-                return name
-    except Exception:
-        pass
-    return "opencv-fallback"
+def _ocr_engine_from_provenance(execution_provenance: Any) -> str:
+    """Return the OCR engine the job actually ran, if provenance recorded it."""
+    if not isinstance(execution_provenance, dict):
+        return ""
+    stages = execution_provenance.get("stages")
+    if not isinstance(stages, dict):
+        return ""
+    ocr = stages.get("ocr")
+    if not isinstance(ocr, dict):
+        return ""
+    engine = str(ocr.get("engine") or "").strip()
+    return engine
 
 
 def build_output_sidecar(
@@ -885,7 +886,9 @@ def build_output_sidecar(
             "bytes": output_bytes,
         },
         "config": _config_snapshot(config),
-        "engine": _detection_engine_status(),
+        "engine": (
+            _ocr_engine_from_provenance(execution_provenance) or "unrecorded"
+        ),
         "status": status,
         "checkpointResumed": checkpoint_resumed,
     }

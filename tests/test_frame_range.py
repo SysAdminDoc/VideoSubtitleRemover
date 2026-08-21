@@ -65,6 +65,31 @@ def test_empty_window_raises():
         _resolve_frame_range(_FakeCap(), 300, 30.0, None, 5.0, 1.0)
 
 
+def test_cfr_start_at_or_past_duration_raises():
+    """A start that maps onto the last frame used to process 1 leftover frame."""
+    with pytest.raises(ValueError):
+        _resolve_frame_range(_FakeCap(), 300, 30.0, None, 10.0, 0)
+    with pytest.raises(ValueError):
+        _resolve_frame_range(_FakeCap(), 300, 30.0, None, 12.0, 20.0)
+
+
+def test_vfr_start_past_last_timestamp_is_empty():
+    from backend.io import VideoFrameTiming
+
+    timing = VideoFrameTiming(
+        timestamps=[0.0, 0.04, 0.12, 0.16, 0.28],
+        durations=[0.04, 0.08, 0.04, 0.12, 0.06],
+        time_base=0.001,
+        average_fps=14.705882,
+        source_start=0.0,
+        is_vfr=True,
+    )
+    assert timing.frame_range(0.05, 0.20, 5) == (2, 4)
+    assert timing.frame_range(0.50, 0.60, 5) == (5, 5)
+    with pytest.raises(ValueError):
+        _resolve_frame_range(_FakeCap(), 5, 25.0, timing, 0.50, 0.60)
+
+
 class _FakeTiming:
     """Minimal VFR timing: constant 0.04s frames but exercises the VFR path."""
 

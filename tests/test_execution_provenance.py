@@ -205,6 +205,23 @@ class SidecarAndReportTests(unittest.TestCase):
             )
         self.assertIn("executionProvenance", payload)
         self.assertTrue(payload["executionProvenance"]["anyFallback"])
+        self.assertEqual(payload["engine"], "RapidOCR")
+
+    def test_sidecar_engine_is_unrecorded_without_provenance(self):
+        from backend.batch_report import build_output_sidecar
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "in.mp4"
+            source.write_bytes(b"video")
+            payload = build_output_sidecar(
+                input_path=str(source),
+                output_path=str(Path(tmpdir) / "out.mp4"),
+                config=ProcessingConfig(),
+                status="processed",
+            )
+        self.assertEqual(payload["engine"], "unrecorded")
+        self.assertNotIn("executionProvenance", payload)
 
     def test_batch_record_carries_execution_provenance(self):
         from backend.batch_report import finish_batch_item

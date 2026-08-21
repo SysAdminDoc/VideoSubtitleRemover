@@ -1766,8 +1766,11 @@ def _apply_cli_config_overlays(args, parser, config):
             if schema_version is not None:
                 ensure_supported_schema_version(schema_version)
             allowed = set(processing_field_names())
-            for name in sorted(set(overlay) - allowed):
-                logger.warning(f"Ignoring unknown config field: {name}")
+            unknown = sorted(set(overlay) - allowed)
+            if unknown:
+                parser.error(
+                    "unknown config field: " + ", ".join(unknown)
+                )
             config = apply_backend_payload(
                 config,
                 {name: value for name, value in overlay.items() if name in allowed},

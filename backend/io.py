@@ -106,7 +106,12 @@ class VideoFrameTiming:
             bisect.bisect_left(values, max(0.0, float(end_seconds)))
             if end_seconds > 0 else limit
         )
-        return min(start, limit - 1), min(max(0, end), limit)
+        # Clamp to [0, limit], not [0, limit-1]. A start at or past the last
+        # timestamp is an empty window; squeezing it onto the last frame
+        # would process one unexpected frame instead of failing closed.
+        start = min(max(0, start), limit)
+        end = min(max(0, end), limit)
+        return start, end
 
     def range_durations(
         self,
