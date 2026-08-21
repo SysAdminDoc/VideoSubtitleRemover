@@ -4,6 +4,40 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- CPython self-test advisories are now per release line, and they name
+  CVE-2026-11940 (the tarfile fix that actually sets the floor). A below-floor
+  3.14 build no longer cites CVEs already fixed in 3.14.4.
+- CVE-2026-58049 is treated as fixed in FFmpeg 9.0.1. A host on the reviewed
+  floor is no longer told it still has an open RASC advisory.
+
+### Fixed
+
+- Output sidecars record the OCR engine that actually ran, not whichever OCR
+  package happens to be importable.
+- `--config` JSON with unknown keys now fails closed instead of silently
+  dropping the typo and running with defaults.
+- A time range that starts at or past the end of the clip is rejected instead
+  of processing a leftover last frame.
+- Queue rows no longer persist raw traceback fragments or absolute paths
+  from raised exceptions. Curated backend messages (corrupt file, frozen
+  matte) still surface on the row.
+- The installer writes QuietUninstallString so a silent uninstall is possible.
+- Onboarding Enter continues instead of skipping. The batch summary Enter key
+  runs the default action. Ctrl+F focuses the queue filter. Filtering no
+  longer leaves a hidden row selected. The track-review dialog is modal.
+- Preview zoom centers on the window's monitor, not the primary display.
+- First-run, Help, and track-review dialogs take initial keyboard focus.
+  Scrollable dialog canvases are out of the tab order.
+
+### Changed
+
+- Batch progress, region-editor summaries, inpaint-preview captions, and the
+  Help shortcut list are translatable. Mask-correction overlays follow the
+  theme tokens, including high contrast.
+
+
 ## [3.35.0] - 2026-08-20
 
 ### Changed

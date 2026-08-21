@@ -126,7 +126,7 @@ def scrollable_dialog_body(dialog, *, bg: str = "") -> tk.Frame:
     container.columnconfigure(0, weight=1)
 
     canvas = tk.Canvas(
-        container, bg=background, highlightthickness=0, takefocus=True)
+        container, bg=background, highlightthickness=0, takefocus=False)
     canvas.grid(row=0, column=0, sticky="nsew")
     vbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
     hbar = ttk.Scrollbar(container, orient="horizontal", command=canvas.xview)

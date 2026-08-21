@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - Pillow is optional for headless import
     PIL_AVAILABLE = False
 
 from backend.a11y import set_accessible_metadata
-from backend.i18n import N_, tr
+from backend.i18n import N_, ntr, tr
 from backend.region_editing import (
     RegionEditHistory,
     format_polygon_vertices,
@@ -364,16 +364,7 @@ class RegionSelectorWindow:
                     relief="flat",
                 )
                 end_frame_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
-                self.span_summary_var.set(
-                    (
-                        f"{len(self.keyframe_tracks)} motion track"
-                        f"{'s' if len(self.keyframe_tracks) != 1 else ''}"
-                    ) if self.keyframe_tracks else (
-                        f"{len(self.region_spans)} timed region"
-                        f"{'s' if len(self.region_spans) != 1 else ''}"
-                        if self.region_spans else tr("Optional")
-                    )
-                )
+                self.span_summary_var.set(self._region_editor_span_summary())
                 span_label = tk.Label(
                     time_row, textvariable=self.span_summary_var,
                     font=f(Theme.F_META),
@@ -1584,8 +1575,23 @@ class RegionSelectorWindow:
         self._draw_saved_rects()
         self._refresh_region_editor(f"pending:{len(self.pending_keyframes) - 1}")
         self._update_status(
-            N_(f"Added motion keyframe at {seconds:.3f} seconds"), "success")
+            tr("Added motion keyframe at {seconds:.3f} seconds").format(
+                seconds=seconds),
+            "success")
         return True
+
+    def _region_editor_span_summary(self) -> str:
+        if self.keyframe_tracks:
+            count = len(self.keyframe_tracks)
+            return ntr(
+                "{n} motion track", "{n} motion tracks", count,
+            ).format(n=count)
+        if self.region_spans:
+            count = len(self.region_spans)
+            return ntr(
+                "{n} timed region", "{n} timed regions", count,
+            ).format(n=count)
+        return tr("Optional")
 
     def _commit_motion_track(self) -> bool:
         if len(self.pending_keyframes) < 2:
@@ -1606,10 +1612,7 @@ class RegionSelectorWindow:
         self._record_history()
         self.keyframe_tracks.append(track[0])
         self.pending_keyframes.clear()
-        self.span_summary_var.set(
-            f"{len(self.keyframe_tracks)} motion track"
-            f"{'s' if len(self.keyframe_tracks) != 1 else ''}"
-        )
+        self.span_summary_var.set(self._region_editor_span_summary())
         self._draw_saved_rects()
         self._refresh_region_editor(f"track:{len(self.keyframe_tracks) - 1}:0")
         self._update_status(N_("Saved interpolated motion track"), "success")
@@ -1672,10 +1675,7 @@ class RegionSelectorWindow:
         self.rects.clear()
         self.start_var.set("")
         self.end_var.set("")
-        self.span_summary_var.set(
-            f"{len(self.region_spans)} timed region"
-            f"{'s' if len(self.region_spans) != 1 else ''}"
-        )
+        self.span_summary_var.set(self._region_editor_span_summary())
         self._draw_saved_rects()
         self._refresh_region_editor(
             f"span:{len(self.region_spans) - 1}" if self.region_spans else None)
@@ -1727,8 +1727,11 @@ class RegionSelectorWindow:
                 )
             else:
                 self._update_status(
-                    N_(f"Saved {len(tracks)} moving subtitle track"
-                    f"{'s' if len(tracks) != 1 else ''}"),
+                    ntr(
+                        "Saved {n} moving subtitle track",
+                        "Saved {n} moving subtitle tracks",
+                        len(tracks),
+                    ).format(n=len(tracks)),
                     "success",
                 )
         elif self.rects:
@@ -1737,7 +1740,11 @@ class RegionSelectorWindow:
             self.config.subtitle_region_spans = None
             self.config.subtitle_region_keyframes = None
             self._update_status(
-                N_(f"Saved {len(self.rects)} subtitle region{'s' if len(self.rects) != 1 else ''}"),
+                ntr(
+                    "Saved {n} subtitle region",
+                    "Saved {n} subtitle regions",
+                    len(self.rects),
+                ).format(n=len(self.rects)),
                 "success",
             )
         elif spans:
@@ -1746,8 +1753,11 @@ class RegionSelectorWindow:
             self.config.subtitle_area = None
             self.config.subtitle_region_keyframes = None
             self._update_status(
-                N_(f"Saved {len(spans)} timed subtitle region"
-                f"{'s' if len(spans) != 1 else ''}"),
+                ntr(
+                    "Saved {n} timed subtitle region",
+                    "Saved {n} timed subtitle regions",
+                    len(spans),
+                ).format(n=len(spans)),
                 "success",
             )
         else:

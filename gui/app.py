@@ -1139,6 +1139,11 @@ class VideoSubtitleRemoverApp(
             lambda _event: self._show_about(),
             add="+",
         )
+        self.root.bind(
+            "<Control-f>",
+            self._focus_queue_filter,
+            add="+",
+        )
 
     def _open_file_picker(self):
         if hasattr(self, "drop_area"):
@@ -2849,7 +2854,11 @@ class VideoSubtitleRemoverApp(
 
     def _show_update_toast(self, tag, url):
         try:
-            Toast.show(self.root, f"Update available: {tag}", "info")
+            Toast.show(
+                self.root,
+                tr("Update available: {tag}").format(tag=tag),
+                "info",
+            )
             if url:
                 # The toast is transient; surface the release link where
                 # the user can actually reach it.

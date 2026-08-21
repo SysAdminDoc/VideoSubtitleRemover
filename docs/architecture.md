@@ -30,6 +30,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- config.py                     # APP_VERSION, QueueItem, GUI ProcessingConfig, settings I/O.
 |   |-- dialog_layout.py              # Work-area fitting and scrollable dialog bodies.
 |   |-- direction.py                  # Logical-to-physical RTL mirror for Tk options.
+|   |-- failure_copy.py               # Stable English queue-row failure and status copy.
 |   |-- job_supervisor.py             # Parent-side supervisor for isolated queue jobs.
 |   |-- layout_build.py               # Builder mixin: header, settings, queue, preview.
 |   |-- layout_helpers.py             # Shared layout primitives for the builder mixins.

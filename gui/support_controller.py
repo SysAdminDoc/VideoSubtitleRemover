@@ -559,8 +559,8 @@ class SupportControllerMixin:
         inp_label = ", ".join(self.ai_engines["inpainting"]) or tr("None")
         gpu_count = len(self.gpus)
         gpu_label = (
-            tr("{count} GPU{suffix}").format(
-                count=gpu_count, suffix="s" if gpu_count != 1 else "")
+            ntr("{count} GPU", "{count} GPUs", gpu_count).format(
+                count=gpu_count)
             if self.gpus else tr("CPU only")
         )
         cache_label = tr("Unavailable")
@@ -618,6 +618,11 @@ class SupportControllerMixin:
             Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING,
         )
         fact(system, tr("Model cache"), cache_label)
+        fact(
+            system,
+            tr("Shortcuts"),
+            tr("Ctrl+O open, Ctrl+L log, Ctrl+F filter, F1 help"),
+        )
 
         summary = (self.backend_status or {}).get("summary", {})
         tone = str(summary.get("tone") or "neutral")
@@ -674,9 +679,10 @@ class SupportControllerMixin:
         ModernButton(actions_inner, text=tr("Support bundle"), width=128,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text=tr("Close"), width=84,
+        close_btn = ModernButton(actions_inner, text=tr("Close"), width=84,
                      command=_close_about,
-                     style="primary", size="md").pack(side="left", padx=(Theme.S_SM, 0))
+                     style="primary", size="md")
+        close_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         dialog.bind("<Escape>", lambda e: _close_about())
         dialog.protocol("WM_DELETE_WINDOW", _close_about)
@@ -685,4 +691,8 @@ class SupportControllerMixin:
             dialog, self.root, min_width=820, min_height=560)
         dialog.deiconify()
         dialog.grab_set()
+        try:
+            close_btn.focus_set()
+        except Exception:
+            pass
 

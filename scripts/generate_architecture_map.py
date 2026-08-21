@@ -28,6 +28,7 @@ DESCRIPTIONS: dict[str, str] = {
     "gui/app.py": "Tk shell, shared state, queue model, settings.",
     "gui/config.py": "APP_VERSION, QueueItem, GUI ProcessingConfig, settings I/O.",
     "gui/dialog_layout.py": "Work-area fitting and scrollable dialog bodies.",
+    "gui/failure_copy.py": "Stable English queue-row failure and status copy.",
     "gui/job_supervisor.py": "Parent-side supervisor for isolated queue jobs.",
     "gui/process_job.py": "Windows job object containment for worker process trees.",
     "gui/track_plan_controller.py": "Pre-run track plan scan and review dialog.",

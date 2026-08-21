@@ -23,6 +23,7 @@ from gui.theme import Theme, f
 from gui.dialog_layout import fit_dialog_to_work_area, scrollable_dialog_body
 from gui.utils import dispatch_to_ui
 from gui.widgets import ModernButton, ModernToggle
+from backend.a11y import set_accessible_metadata
 from backend.i18n import N_, ntr, tr
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,16 @@ class TrackPlanControllerMixin:
         dialog.title(tr("Review text tracks"))
         dialog.configure(bg=Theme.BG_OVERLAY)
         dialog.transient(self.root)
+        try:
+            set_accessible_metadata(
+                dialog,
+                role="dialog",
+                label=tr("Review text tracks"),
+                state="modal",
+                description=tr("Choose which detected text tracks to keep or remove"),
+            )
+        except Exception:
+            pass
         body = scrollable_dialog_body(dialog, bg=Theme.BG_SECONDARY)
         content = tk.Frame(body, bg=Theme.BG_SECONDARY)
         content.pack(fill="both", expand=True, padx=24, pady=(20, 12))
@@ -171,11 +182,18 @@ class TrackPlanControllerMixin:
         # the dialog for its lifetime.
         dialog._vsr_track_thumbnails = thumbnails
 
+        def _close():
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.destroy()
+
         def _apply():
             for track, var in remove_vars:
                 track["keep"] = not bool(var.get())
             self._apply_track_plan(item_id, plan)
-            dialog.destroy()
+            _close()
 
         def _save():
             for track, var in remove_vars:
@@ -196,23 +214,34 @@ class TrackPlanControllerMixin:
 
         actions = tk.Frame(content, bg=Theme.BG_SECONDARY)
         actions.pack(fill="x", pady=(Theme.S_LG, 0))
-        ModernButton(
+        apply_btn = ModernButton(
             actions, text=tr("Apply to this file"), width=150,
             command=_apply, style="primary", size="md",
-        ).pack(side="left")
+        )
+        apply_btn.pack(side="left")
         ModernButton(
             actions, text=tr("Save plan..."), width=120,
             command=_save, style="ghost", size="md",
         ).pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(
             actions, text=tr("Cancel"), width=96,
-            command=dialog.destroy, style="ghost", size="md",
+            command=_close, style="ghost", size="md",
         ).pack(side="right")
 
-        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.bind("<Escape>", lambda _event: _close())
+        dialog.bind(
+            "<Return>",
+            lambda _event: apply_btn.command() if apply_btn.command else None,
+        )
+        dialog.protocol("WM_DELETE_WINDOW", _close)
         fit_dialog_to_work_area(dialog, self.root, min_width=560,
                                 min_height=360)
         dialog.deiconify()
+        dialog.grab_set()
+        try:
+            apply_btn.focus_set()
+        except Exception:
+            pass
 
     def _apply_track_plan(self, item_id: str, plan: dict):
         """Merge the plan's kept tracks into the item's mask corrections."""

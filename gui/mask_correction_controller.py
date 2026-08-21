@@ -47,6 +47,11 @@ from gui.widgets import ModernButton
 logger = logging.getLogger(__name__)
 
 
+def _theme_rgb(token: str) -> tuple:
+    hex_str = str(token or "").lstrip("#")
+    return tuple(int(hex_str[i:i + 2], 16) for i in (0, 2, 4))
+
+
 class MaskCorrectionControllerHost(Protocol):
     """Selection and status surface required by mask correction."""
 
@@ -374,9 +379,9 @@ class MaskCorrectionWindow:
         base = self.state["base_mask"] > 0
         rgb = self.cv2.cvtColor(frame, self.cv2.COLOR_BGR2RGB).astype(np.float32)
         for selector, color, alpha in (
-            (base & final, (245, 190, 55), 0.26),
-            (final & ~base, (239, 68, 68), 0.52),
-            (base & ~final, (59, 130, 246), 0.58),
+            (base & final, _theme_rgb(Theme.WARNING), 0.26),
+            (final & ~base, _theme_rgb(Theme.DANGER), 0.52),
+            (base & ~final, _theme_rgb(Theme.BLUE_PRIMARY), 0.58),
         ):
             if np.any(selector):
                 rgb[selector] = (

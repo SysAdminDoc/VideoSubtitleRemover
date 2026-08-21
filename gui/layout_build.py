@@ -1992,6 +1992,12 @@ class LayoutBuildMixin:
             font=f(Theme.F_BODY_SM), relief="flat", bd=6,
             highlightthickness=0)
         self._queue_filter_entry.pack(side="left", fill="x", expand=True)
+        set_accessible_metadata(
+            self._queue_filter_entry,
+            role="search box",
+            label=tr("Filter queue"),
+            description=tr("Type a filename to hide non-matching queue items"),
+        )
         self._queue_filter_entry.bind(
             "<FocusIn>",
             lambda e: self._queue_filter_frame.config(highlightbackground=Theme.BORDER_FOCUS),

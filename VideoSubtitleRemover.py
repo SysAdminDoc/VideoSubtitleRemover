@@ -70,11 +70,22 @@ def crash_handler(exc_type, exc_value, exc_tb):
     msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
     logger.critical(f"UNHANDLED EXCEPTION:\n{msg}")
     try:
+        from backend.i18n import tr
         import tkinter.messagebox as mb
-        mb.showerror("Fatal Error",
-                     f"{APP_NAME} crashed.\n\n{exc_value}\n\nLog: {LOG_FILE}")
+        mb.showerror(
+            tr("Something went wrong"),
+            tr(
+                "{app} had to close.\n\n{error}\n\nA full report is in the log:\n{log}"
+            ).format(app=APP_NAME, error=exc_value, log=LOG_FILE),
+        )
     except Exception:
-        pass
+        try:
+            import tkinter.messagebox as mb
+            mb.showerror(
+                "Fatal Error",
+                f"{APP_NAME} crashed.\n\n{exc_value}\n\nLog: {LOG_FILE}")
+        except Exception:
+            pass
     sys.__excepthook__(exc_type, exc_value, exc_tb)
 
 

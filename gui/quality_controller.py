@@ -22,6 +22,7 @@ from gui.utils import (
 from gui.widgets import (
     ModernButton,
 )
+from gui.failure_copy import MSG_READY_RETRY
 from backend.i18n import N_, tr
 
 logger = logging.getLogger(__name__)
@@ -351,7 +352,10 @@ class QualityReviewControllerMixin:
             default_button = close_button
 
         dialog.bind("<Escape>", lambda e: _close())
-        dialog.bind("<Return>", lambda e: _close())
+        dialog.bind(
+            "<Return>",
+            lambda e: default_button.command() if default_button.command else None,
+        )
         dialog.protocol("WM_DELETE_WINDOW", _close)
 
         dialog.update_idletasks()
@@ -670,7 +674,7 @@ class QualityReviewControllerMixin:
         item.config = after_config
         item.status = ProcessingStatus.IDLE
         item.progress = 0.0
-        item.message = "Ready to retry with suggested settings"
+        item.message = MSG_READY_RETRY
         item.error = None
         item.quality_report = None
         item.started_at = None

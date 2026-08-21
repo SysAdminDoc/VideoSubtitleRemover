@@ -434,3 +434,17 @@ class QueueViewMixin:
                     pady=(Theme.S_3XL, Theme.S_LG), fill="x")
         else:
             self._hide_filter_empty_state()
+
+        selected = self._selected_queue_item_id
+        if selected:
+            selected_widget = self.queue_widgets.get(selected)
+            if selected_widget is None or selected_widget not in shown:
+                if shown:
+                    first_id = next(
+                        (iid for iid, widget in self.queue_widgets.items()
+                         if widget is shown[0]),
+                        None,
+                    )
+                    self._set_selected_queue_item(first_id)
+                else:
+                    self._set_selected_queue_item(None)

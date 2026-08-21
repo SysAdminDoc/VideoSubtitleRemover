@@ -187,13 +187,14 @@ class OnboardingMixin:
             actions_inner, text=tr("Skip"), width=88,
             command=_close, style="ghost", size="md",
         ).pack(side="left")
-        ModernButton(
+        continue_btn = ModernButton(
             actions_inner, text=tr("Continue"), width=118,
             command=_continue, style="primary", size="md",
-        ).pack(side="left", padx=(Theme.S_SM, 0))
+        )
+        continue_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         dialog.bind("<Escape>", lambda e: _close())
-        dialog.bind("<Return>", lambda e: _close())
+        dialog.bind("<Return>", lambda e: _continue())
         dialog.protocol("WM_DELETE_WINDOW", _close)
 
         try:
@@ -203,6 +204,10 @@ class OnboardingMixin:
             logger.warning("Onboarding dialog fit failed", exc_info=True)
         dialog.deiconify()
         dialog.grab_set()
+        try:
+            continue_btn.focus_set()
+        except Exception:
+            pass
         # The dialog is now on screen; mark it seen in memory. The close path
         # persists the flag so a background-scheduled dialog cannot write
         # unrelated in-progress settings before the user dismisses it.

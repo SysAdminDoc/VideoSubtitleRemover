@@ -24,12 +24,13 @@ from gui.config import (
     save_queue_state, save_settings, status_ui,
 )
 from gui.utils import (
-    _format_soft_subtitle_summary, format_quality_report, is_image_file, is_video_file,
+    _format_soft_subtitle_summary, desktop_bounds, format_quality_report,
+    is_image_file, is_video_file,
 )
 from gui.widgets import (
     ModernButton,
 )
-from backend.i18n import N_, tr
+from backend.i18n import N_, ntr, tr
 from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
@@ -785,14 +786,18 @@ class PreviewControllerMixin:
                     # No detection -- show the source with a hint.
                     pil = Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
                     self._dispatch_preview_ui(lambda: self._apply_inpaint_preview(
-                        pil, "No text detected on the first frame", request_id, item.id))
+                        pil, tr("No text detected on the first frame"),
+                        request_id, item.id))
                     return
                 mask = remover._create_mask(frame.shape, boxes)
                 mask = remover._apply_polygon_region_shapes(mask, active_shapes)
                 [filled] = remover.inpainter.inpaint([frame], [mask])
                 pil = Image.fromarray(_cv2.cvtColor(filled, _cv2.COLOR_BGR2RGB))
-                meta = (f"Cleanup preview using {snapshot_cfg.mode.value}; "
-                        f"{len(boxes)} region{'s' if len(boxes) != 1 else ''} masked.")
+                meta = ntr(
+                    "Cleanup preview using {mode}; {n} region masked.",
+                    "Cleanup preview using {mode}; {n} regions masked.",
+                    len(boxes),
+                ).format(mode=snapshot_cfg.mode.value, n=len(boxes))
                 self._dispatch_preview_ui(lambda: self._apply_inpaint_preview(
                     pil, meta, request_id, item.id))
             except Exception:
@@ -855,10 +860,14 @@ class PreviewControllerMixin:
         except Exception:
             return
 
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        max_w = int(screen_w * 0.82)
-        max_h = int(screen_h * 0.82)
+        vx, vy, vw, vh = desktop_bounds(
+            self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        # Size against the parent window, not the virtual desktop: a 2x
+        # 4K span would otherwise produce a zoom larger than either monitor.
+        max_w = max(640, int(max(1, self.root.winfo_width()) * 1.25))
+        max_h = max(360, int(max(1, self.root.winfo_height()) * 1.25))
+        max_w = min(max_w, max(320, vw))
+        max_h = min(max_h, max(240, vh))
         if img.width > max_w or img.height > max_h:
             img.thumbnail((max_w, max_h), Image.LANCZOS)
 
@@ -898,8 +907,14 @@ class PreviewControllerMixin:
         try:
             w = win.winfo_reqwidth()
             h = win.winfo_reqheight()
-            x = (screen_w - w) // 2
-            y = max(20, (screen_h - h) // 2)
+            px = self.root.winfo_rootx()
+            py = self.root.winfo_rooty()
+            pw = max(1, self.root.winfo_width())
+            ph = max(1, self.root.winfo_height())
+            x = px + (pw - w) // 2
+            y = py + (ph - h) // 3
+            x = max(vx, min(x, vx + vw - w))
+            y = max(vy, min(y, vy + vh - h))
             win.geometry(f"+{x}+{y}")
         except Exception:
             pass
