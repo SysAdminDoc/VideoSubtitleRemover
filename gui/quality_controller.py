@@ -476,6 +476,7 @@ class QualityReviewControllerMixin:
                 stage_timings=item.stage_timings,
                 detection_stats=getattr(item, "detection_stats", {}),
                 output_contract=getattr(item, "output_contract_report", {}),
+                failure_reason=getattr(item, "failure_reason", ""),
             )
             finished.append(record)
         return finished

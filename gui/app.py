@@ -59,6 +59,7 @@ from backend.ffmpeg_profiles import (
 )
 from backend.model_downloads import installed_backend_status
 from backend.dependency_caps import FROZEN_OPTIONAL_DEPENDENCIES
+from backend.failure_reason import normalize_failure_reason
 from backend.i18n import N_, bind_locale, ntr, tr
 from backend.region_keyframes import (
     normalize_region_keyframe_tracks,
@@ -2742,6 +2743,8 @@ class VideoSubtitleRemoverApp(
                     str(record.get("error"))
                     if record.get("error") is not None else None
                 ),
+                failure_reason=normalize_failure_reason(
+                    record.get("failure_reason")),
                 stage_timings=(
                     dict(record.get("stage_timings"))
                     if isinstance(record.get("stage_timings"), dict)

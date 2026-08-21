@@ -269,7 +269,10 @@ class BatchReportTests(unittest.TestCase):
         self.assertIn("reasons", payload["files"][0]["quality_gate"])
         self.assertIsInstance(payload["files"][0]["quality_gate"]["reasons"], list)
         self.assertIn("degradedMetrics", payload["files"][0]["quality_gate"])
-        self.assertIn("| review-needed | clip.mkv | clip_no_sub.mkv |", markdown)
+        # RM-279 inserted a Reason column after Status; a review-needed row
+        # is not a failure, so its reason cell is empty.
+        self.assertIn(
+            "| review-needed |  | clip.mkv | clip_no_sub.mkv |", markdown)
         self.assertIn("Output quality preflight notes", markdown)
         self.assertIn("Suggested safer output setting", markdown)
         self.assertIn("review (manual-review)", markdown)

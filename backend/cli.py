@@ -1897,6 +1897,7 @@ def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
                             message=str(exc),
                             elapsed_seconds=time.monotonic() - started,
                             stage_timings={"mux": time.monotonic() - started},
+                            error=exc,
                         )
             except KeyboardInterrupt:
                 print("\n[soft-subtitles] Interrupted by user -- partial results kept on disk.")
@@ -2203,6 +2204,8 @@ def _run_processing(
                     detection_stats=getattr(remover, "last_detection_stats", None),
                     execution_provenance=_provenance_dict(remover),
                     output_contract=getattr(remover, "last_output_contract", None),
+                    failure_reason=getattr(remover, "last_error_reason", None),
+                    error=exc,
                 )
                 return False, False
 
@@ -2226,6 +2229,7 @@ def _run_processing(
                 detection_stats=getattr(remover, "last_detection_stats", None),
                 execution_provenance=_provenance_dict(remover),
                 output_contract=getattr(remover, "last_output_contract", None),
+                failure_reason=getattr(remover, "last_error_reason", None),
             )
             return bool(ok), False
 
@@ -2443,6 +2447,8 @@ def _run_processing(
                         detection_stats=getattr(remover, "last_detection_stats", None),
                         execution_provenance=_provenance_dict(remover),
                         output_contract=getattr(remover, "last_output_contract", None),
+                        failure_reason=getattr(remover, "last_error_reason", None),
+                        error=exc,
                     )
                 else:
                     quality_report = (
@@ -2466,6 +2472,7 @@ def _run_processing(
                         detection_stats=getattr(remover, "last_detection_stats", None),
                         execution_provenance=_provenance_dict(remover),
                         output_contract=getattr(remover, "last_output_contract", None),
+                        failure_reason=getattr(remover, "last_error_reason", None),
                     )
         except KeyboardInterrupt:
             print("\n[batch] Interrupted by user -- partial results kept on disk.")

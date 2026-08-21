@@ -24,6 +24,7 @@ from backend.config_schema import (
     migrate_gui_settings,
     serialize_dataclass_config,
 )
+from backend.failure_reason import normalize_failure_reason
 from backend.region_keyframes import normalize_region_keyframe_tracks
 from backend.mask_corrections import normalize_mask_correction_list
 from gui.theme import Theme, normalize_text_scale_percent
@@ -143,7 +144,7 @@ LOG_FILE = LOG_DIR / "vsr_pro.log"
 SETTINGS_FILE = LOG_DIR / "settings.json"
 QUEUE_STATE_FILE = LOG_DIR / "queue_state.json"
 MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
-QUEUE_STATE_SCHEMA = 4
+QUEUE_STATE_SCHEMA = 5
 _queue_state_io_lock = threading.RLock()
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
@@ -943,6 +944,9 @@ class QueueItem:
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+    # RM-279: closed-set classification of the last failure. Blank while the
+    # item has not failed; see backend.failure_reason for the vocabulary.
+    failure_reason: str = ""
     quality_report: Optional[dict] = None
     stage_timings: dict = field(default_factory=dict)
     detection_stats: dict = field(default_factory=dict)
@@ -1229,6 +1233,8 @@ def save_queue_state(queue_items):
                     "message": message,
                     "error": (
                         str(item.error) if item.error is not None else None),
+                    "failure_reason": normalize_failure_reason(
+                        getattr(item, "failure_reason", "")),
                     "stage_timings": dict(
                         getattr(item, "stage_timings", {}) or {}),
                     "detection_stats": dict(
@@ -1321,7 +1327,7 @@ def load_queue_state():
                 _quarantine_queue_state("unreadable JSON object")
                 return None
             schema = data.get("schema")
-            if schema not in (1, 2, 3, QUEUE_STATE_SCHEMA):
+            if schema not in (1, 2, 3, 4, QUEUE_STATE_SCHEMA):
                 _quarantine_queue_state(f"unsupported schema {schema!r}")
                 return None
             items = data.get("items")

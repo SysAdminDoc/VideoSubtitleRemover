@@ -73,6 +73,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- device_provider.py          # Device strategy and inpainter construction.
 |   |-- encoder.py                  # Output codec probing and HW encoder selection.
 |   |-- execution_provenance.py     # Requested vs. effective device/engine record.
+|   |-- failure_reason.py           # Closed-set failure classification for rows and reports.
 |   |-- ffmpeg_profiles.py          # FFmpeg capability profiles and security probe.
 |   |-- frozen_matte.py             # Freeze an approved matte as a reusable input.
 |   |-- hdr.py                      # Color metadata preservation and HDR handling.

@@ -4,6 +4,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Failed batch items now carry a classified reason (out of disk space,
+  writer failed, FFmpeg failed, source could not be decoded, and so on)
+  alongside the existing message. The batch summary counts them and shows
+  a Reason column, and the queue keeps the classification across a restart.
+
 ## [3.36.0] - 2026-08-21
 
 ### Security

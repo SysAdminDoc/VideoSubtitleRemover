@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-279 M -- classified FailureReason enum on QueueItem and the batch report
 - RM-280 M -- lint unwrapped `.config(text=)` / widget `text=` kwargs
 - RM-281 S -- quality report harmonic mean + worst-frame index, seek preview to it
 - RM-282 M -- HWND Dynamic Annotation on custom Canvas controls (not a UIA provider)
@@ -30,14 +29,6 @@ P3:
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 
 ### P2
-
-- [ ] P2 -- RM-279: Persist a classified FailureReason on queue items and the batch report
-  Why: queue rows no longer show `str(e)`, but the batch report and QueueItem schema still cannot filter or aggregate failures.
-  Evidence: `gui/failure_copy.py` maps exceptions to stable English copy and `gui/processing_controller.py` stores that on the row. FileFlows models a bounded `FailureReason` with per-element failure outputs. Remaining: no enum field on `QueueItem`, no schema bump, no batch-report reason column. `gui/utils.py` `CANONICAL_QUEUE_MESSAGES` covers display only.
-  Touches: `gui/config.py` (`QueueItem` field + schema bump), `backend/batch_report.py`, `gui/processing_controller.py`, `locale/vsr.pot`.
-  Acceptance: every failure path assigns one of a fixed enum (at minimum `no_space`, `writer_failed`, `output_empty`, `ffmpeg_failed`, `model_missing`, `decode_failed`, `cancelled`, `unknown`); the reason appears in the batch report; curated `last_error_message` values stay intact; the config schema bump keeps the existing read-only newer-schema path intact.
-  Confidence: Verified
-  Complexity: M
 
 - [ ] P2 -- RM-280: Close the runtime status-string i18n bypass at the lint level
   Why: wrapping today's offenders does not stop the next unwrapped `.config(text=)` sink.

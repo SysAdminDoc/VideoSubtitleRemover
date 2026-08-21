@@ -71,6 +71,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/device_provider.py": "Device strategy and inpainter construction.",
     "backend/encoder.py": "Output codec probing and HW encoder selection.",
     "backend/execution_provenance.py": "Requested vs. effective device/engine record.",
+    "backend/failure_reason.py": "Closed-set failure classification for rows and reports.",
     "backend/ffmpeg_profiles.py": "FFmpeg capability profiles and security probe.",
     "backend/hdr.py": "Color metadata preservation and HDR handling.",
     "backend/i18n.py": "gettext localisation runtime.",

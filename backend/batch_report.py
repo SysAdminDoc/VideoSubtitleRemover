@@ -18,6 +18,14 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from backend.config_schema import CONFIG_SCHEMA_VERSION
+from backend.failure_reason import (
+    FAILURE_REASON_LABELS,
+    REASON_CANCELLED,
+    REASON_NONE,
+    REASON_PAUSED,
+    classify_failure_reason,
+    normalize_failure_reason,
+)
 from backend.io import (
     _choose_available_output_path,
     _path_key,
@@ -154,6 +162,7 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "planned_result": planned_result,
         "status": STATUS_PENDING,
         "message": "",
+        "failure_reason": REASON_NONE,
         "elapsed_seconds": None,
         "stage_timings": _empty_stage_timings(),
         "dominant_stage": None,
@@ -255,6 +264,23 @@ def _output_quality_preflight_for_record(
     return evaluate_output_quality_preflight(str(input_file), config)
 
 
+def _failure_reason_for(status: str, message: str,
+                        failure_reason: Optional[str],
+                        error: Optional[BaseException]) -> str:
+    """Return the closed-set reason for a finished item (blank if it worked)."""
+    if status == STATUS_CANCELLED:
+        return REASON_CANCELLED
+    if status == STATUS_PAUSED:
+        return REASON_PAUSED
+    if status != STATUS_FAILED:
+        return REASON_NONE
+    explicit = normalize_failure_reason(failure_reason)
+    if explicit:
+        return explicit
+    return classify_failure_reason(
+        exc=error, reason=failure_reason, message=message)
+
+
 def finish_batch_item(record: dict, status: str, *,
                       message: str = "",
                       elapsed_seconds: Optional[float] = None,
@@ -262,9 +288,15 @@ def finish_batch_item(record: dict, status: str, *,
                       stage_timings: Optional[dict] = None,
                       detection_stats: Optional[dict] = None,
                       execution_provenance: Optional[dict] = None,
-                      output_contract: Optional[dict] = None) -> dict:
+                      output_contract: Optional[dict] = None,
+                      failure_reason: Optional[str] = None,
+                      error: Optional[BaseException] = None) -> dict:
     record["status"] = status
     record["message"] = message
+    # RM-279: the curated message stays as written; the reason is a closed
+    # set so a batch can be counted and filtered by how its items died.
+    record["failure_reason"] = _failure_reason_for(
+        status, message, failure_reason, error)
     if elapsed_seconds is not None:
         record["elapsed_seconds"] = round(max(0.0, float(elapsed_seconds)), 3)
     if stage_timings is not None:
@@ -347,6 +379,7 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
         "elapsed_seconds": round(max(0.0, (completed - started).total_seconds()), 3),
         "count": len(records),
         "counts": _counts(records),
+        "failure_reason_counts": _failure_reason_counts(records),
         "stage_summary": stage_summary,
         "detection_summary": detection_summary,
         "optimization_hint": _optimization_hint(
@@ -438,6 +471,16 @@ def _counts(records: list[dict]) -> dict:
     for record in records:
         status = str(record.get("status") or STATUS_PENDING)
         counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _failure_reason_counts(records: list[dict]) -> dict:
+    counts: dict[str, int] = {}
+    for record in records:
+        reason = str(record.get("failure_reason") or "")
+        if not reason:
+            continue
+        counts[reason] = counts.get(reason, 0) + 1
     return counts
 
 
@@ -555,6 +598,13 @@ def _as_utc(value: _dt.datetime) -> _dt.datetime:
     return value.astimezone(_dt.timezone.utc)
 
 
+def _failure_reason_label(reason: Any) -> str:
+    text = str(reason or "")
+    if not text:
+        return ""
+    return FAILURE_REASON_LABELS.get(text, text)
+
+
 def _markdown_summary(payload: dict) -> str:
     lines = [
         "# VSR Batch Summary",
@@ -584,10 +634,17 @@ def _markdown_summary(payload: dict) -> str:
     optimization_hint = str(payload.get("optimization_hint") or "")
     if optimization_hint:
         lines.append(f"- Optimization: {_escape_md(optimization_hint)}")
+    reason_counts = payload.get("failure_reason_counts")
+    if isinstance(reason_counts, dict) and reason_counts:
+        summary = "; ".join(
+            f"{_failure_reason_label(reason)}: {count}"
+            for reason, count in sorted(reason_counts.items())
+        )
+        lines.append(f"- Failure reasons: {_escape_md(summary)}")
     lines.extend([
         "",
-        "| Status | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Color | Message |",
-        "|---|---|---|---|---:|---|---:|---:|---|---|---|---|",
+        "| Status | Reason | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Color | Message |",
+        "|---|---|---|---|---|---:|---|---:|---:|---|---|---|---|",
     ])
     review_notes: List[str] = []
     preflight_notes: List[str] = []
@@ -598,6 +655,7 @@ def _markdown_summary(payload: dict) -> str:
             "| "
             + " | ".join([
                 _escape_md(record.get("status", "")),
+                _escape_md(_failure_reason_label(record.get("failure_reason"))),
                 _escape_md(record.get("input_name", "")),
                 _escape_md(record.get("output_name", "")),
                 _escape_md(record.get("planned_result", "")),

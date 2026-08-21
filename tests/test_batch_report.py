@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 from backend import batch_report as br
+from backend import failure_reason as fr
 
 
 def _record(status: str, *, input_path: str, output_path: str) -> dict:
@@ -141,6 +142,125 @@ class WriteBatchReportsTests(unittest.TestCase):
     def test_redaction_can_be_disabled(self):
         payload, _ = self._write(redact_paths=False)
         self.assertTrue(any("input" in row for row in payload["files"]))
+
+
+class FailureReasonTests(unittest.TestCase):
+    """RM-279: every terminal outcome carries a closed-set reason."""
+
+    def test_reason_vocabulary_covers_the_required_classes(self):
+        for required in (
+            fr.REASON_NO_SPACE,
+            fr.REASON_WRITER_FAILED,
+            fr.REASON_OUTPUT_EMPTY,
+            fr.REASON_FFMPEG_FAILED,
+            fr.REASON_MODEL_MISSING,
+            fr.REASON_DECODE_FAILED,
+            fr.REASON_CANCELLED,
+            fr.REASON_UNKNOWN,
+        ):
+            self.assertIn(required, fr.FAILURE_REASONS)
+            self.assertIn(required, fr.FAILURE_REASON_LABELS)
+
+    def test_processor_reason_codes_map_onto_the_closed_set(self):
+        cases = {
+            "truncated_decode": fr.REASON_DECODE_FAILED,
+            "unsupported_codec": fr.REASON_DECODE_FAILED,
+            "intermediate_writer_timeout": fr.REASON_WRITER_FAILED,
+            "frame_write_failed": fr.REASON_WRITER_FAILED,
+            "frozen_matte_artifact_changed": fr.REASON_FROZEN_MATTE,
+        }
+        for code, expected in cases.items():
+            with self.subTest(code=code):
+                self.assertEqual(
+                    fr.classify_failure_reason(reason=code), expected)
+
+    def test_exceptions_and_text_are_classified(self):
+        self.assertEqual(
+            fr.classify_failure_reason(exc=FileNotFoundError("gone")),
+            fr.REASON_INPUT_MISSING,
+        )
+        self.assertEqual(
+            fr.classify_failure_reason(exc=OSError(28, "No space left on device")),
+            fr.REASON_NO_SPACE,
+        )
+        self.assertEqual(
+            fr.classify_failure_reason(
+                message="Insufficient disk space at 'D:/out' for output"),
+            fr.REASON_NO_SPACE,
+        )
+        self.assertEqual(
+            fr.classify_failure_reason(message="ffmpeg exited with code 1"),
+            fr.REASON_FFMPEG_FAILED,
+        )
+
+    def test_an_unrecognised_failure_is_unknown_not_blank(self):
+        self.assertEqual(
+            fr.classify_failure_reason(message="Processing failed"),
+            fr.REASON_UNKNOWN,
+        )
+
+    def test_finish_batch_item_records_a_reason_and_keeps_the_message(self):
+        record = _record(
+            br.STATUS_PENDING, input_path="a.mp4", output_path="a_out.mp4")
+        curated = "The selected video appears corrupt or incomplete."
+        br.finish_batch_item(
+            record,
+            br.STATUS_FAILED,
+            message=curated,
+            failure_reason="corrupt_or_truncated",
+        )
+        self.assertEqual(record["message"], curated)
+        self.assertEqual(record["failure_reason"], fr.REASON_DECODE_FAILED)
+
+    def test_non_failures_carry_no_reason(self):
+        record = _record(
+            br.STATUS_PENDING, input_path="a.mp4", output_path="a_out.mp4")
+        br.finish_batch_item(
+            record, br.STATUS_HARDCODED_PROCESSED, message="Processed")
+        self.assertEqual(record["failure_reason"], fr.REASON_NONE)
+
+    def test_cancel_and_pause_are_their_own_reasons(self):
+        for status, expected in (
+            (br.STATUS_CANCELLED, fr.REASON_CANCELLED),
+            (br.STATUS_PAUSED, fr.REASON_PAUSED),
+        ):
+            record = _record(
+                br.STATUS_PENDING, input_path="a.mp4", output_path="a_out.mp4")
+            br.finish_batch_item(record, status, message="Interrupted")
+            self.assertEqual(record["failure_reason"], expected)
+
+    def test_summary_aggregates_and_prints_failure_reasons(self):
+        records = []
+        for name, reason in (
+            ("a", "intermediate_writer_failed"),
+            ("b", "frame_write_failed"),
+            ("c", "unsupported_codec"),
+        ):
+            record = _record(
+                br.STATUS_PENDING,
+                input_path=f"{name}.mp4",
+                output_path=f"{name}_out.mp4",
+            )
+            record["input_name"] = f"{name}.mp4"
+            record["output_name"] = f"{name}_out.mp4"
+            br.finish_batch_item(
+                record, br.STATUS_FAILED, message="boom",
+                failure_reason=reason,
+            )
+            records.append(record)
+        with tempfile.TemporaryDirectory() as tmp:
+            started = _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc)
+            json_path, md_path = br.write_batch_reports(
+                Path(tmp), records, kind="batch", started_at=started)
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            md = md_path.read_text(encoding="utf-8")
+        self.assertEqual(
+            payload["failure_reason_counts"],
+            {fr.REASON_WRITER_FAILED: 2, fr.REASON_DECODE_FAILED: 1},
+        )
+        self.assertIn("| Status | Reason |", md)
+        self.assertIn(
+            fr.FAILURE_REASON_LABELS[fr.REASON_WRITER_FAILED], md)
 
 
 if __name__ == "__main__":

@@ -42,3 +42,49 @@ def test_isolated_crash_and_timeout_are_classified():
     assert "C:" not in crash
     assert "onnx" not in crash.lower()
     assert crash in CANONICAL_QUEUE_MESSAGES
+
+
+def test_queue_state_round_trips_the_failure_reason():
+    """RM-279: the classified reason survives a save/load of queue_state."""
+    from unittest import mock
+
+    from backend import failure_reason as fr
+    from gui import config as gcfg
+
+    item = gcfg.QueueItem(
+        id="1", file_path="a.mp4", output_path="b.mp4",
+        config=gcfg.ProcessingConfig(),
+        status=gcfg.ProcessingStatus.ERROR,
+        message=MSG_FAILED,
+        failure_reason=fr.REASON_WRITER_FAILED,
+    )
+    captured: dict = {}
+    with mock.patch.object(
+        gcfg, "_write_json_atomic",
+        side_effect=lambda path, payload: captured.update(payload),
+    ):
+        gcfg.save_queue_state([item])
+    record = captured["items"][0]
+    assert record["failure_reason"] == fr.REASON_WRITER_FAILED
+    assert record["message"] == MSG_FAILED
+    assert captured["schema"] == gcfg.QUEUE_STATE_SCHEMA
+
+
+def test_an_off_vocabulary_reason_is_dropped_on_save():
+    from unittest import mock
+
+    from gui import config as gcfg
+
+    item = gcfg.QueueItem(
+        id="1", file_path="a.mp4", output_path="b.mp4",
+        config=gcfg.ProcessingConfig(),
+        status=gcfg.ProcessingStatus.ERROR,
+        failure_reason="something_invented",
+    )
+    captured: dict = {}
+    with mock.patch.object(
+        gcfg, "_write_json_atomic",
+        side_effect=lambda path, payload: captured.update(payload),
+    ):
+        gcfg.save_queue_state([item])
+    assert captured["items"][0]["failure_reason"] == ""

@@ -26,6 +26,12 @@ from gui.utils import (
 from gui.widgets import (
     TaskbarProgress,
 )
+from backend.failure_reason import (
+    REASON_CANCELLED,
+    REASON_NONE,
+    REASON_PAUSED,
+    classify_failure_reason,
+)
 from backend.i18n import N_, tr
 from backend.job_worker import describe_exit_code
 from backend.resume_checkpoint import ProcessingPaused
@@ -417,6 +423,7 @@ class ProcessingControllerMixin:
                 for remaining in items_to_process[idx:]:
                     remaining.status = ProcessingStatus.CANCELLED
                     remaining.message = "Cancelled"
+                    remaining.failure_reason = REASON_CANCELLED
                     remaining.completed_at = now
                     self._update_item_display(remaining)
                 break
@@ -472,6 +479,7 @@ class ProcessingControllerMixin:
         item.status = ProcessingStatus.COMPLETE
         item.progress = 1.0
         item.error = None
+        item.failure_reason = REASON_NONE
         item.quality_report = None
         item.completed_at = datetime.now()
         elapsed = (item.completed_at - item.started_at).total_seconds()
@@ -720,6 +728,7 @@ class ProcessingControllerMixin:
         if outcome.status == "complete":
             item.progress = 1.0
             item.error = None
+            item.failure_reason = REASON_NONE
             item.correction_retry = None
             item.message = MSG_COMPLETE
             note = format_quality_report(item.quality_report, compact=True)
@@ -733,14 +742,18 @@ class ProcessingControllerMixin:
             )
         elif outcome.status == "paused":
             item.error = None
+            item.failure_reason = REASON_PAUSED
             item.message = MSG_PAUSED
         elif outcome.status == "cancelled":
             item.error = None
+            item.failure_reason = REASON_CANCELLED
             item.message = MSG_CANCELLED
         else:
             raw = outcome.error or MSG_FAILED
             item.error = user_facing_isolated_error(raw)
             item.message = item.error
+            item.failure_reason = classify_failure_reason(
+                reason=outcome.reason, message=raw)
             item.quality_report = None
             if outcome.crashed:
                 # Retain the child's diagnostics: a native fault usually
@@ -852,6 +865,7 @@ class ProcessingControllerMixin:
             item.progress = 0.0
             item.message = MSG_INITIALIZING
             item.error = None
+            item.failure_reason = REASON_NONE
             item.quality_report = None
             item.retry_attempts = 0
             item.retry_errors = []
@@ -1179,6 +1193,7 @@ class ProcessingControllerMixin:
                 item.status = ProcessingStatus.COMPLETE
                 item.progress = 1.0
                 item.error = None
+                item.failure_reason = REASON_NONE
                 item.quality_report = getattr(remover, "last_quality_report", None)
                 item.correction_retry = None
                 item.message = MSG_COMPLETE
@@ -1201,6 +1216,10 @@ class ProcessingControllerMixin:
                 item.status = ProcessingStatus.ERROR
                 item.message = failure_message
                 item.error = failure_message
+                item.failure_reason = classify_failure_reason(
+                    reason=getattr(remover, "last_error_reason", None),
+                    message=failure_message,
+                )
                 item.quality_report = None
                 item.completed_at = datetime.now()
                 logger.error(f"Failed: {file_name}: {failure_message}")
@@ -1227,6 +1246,7 @@ class ProcessingControllerMixin:
             item.status = ProcessingStatus.PAUSED
             item.message = MSG_PAUSED
             item.error = None
+            item.failure_reason = REASON_PAUSED
             item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
@@ -1239,6 +1259,7 @@ class ProcessingControllerMixin:
             item.status = ProcessingStatus.CANCELLED
             item.message = MSG_CANCELLED
             item.error = None
+            item.failure_reason = REASON_CANCELLED
             item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
@@ -1253,6 +1274,8 @@ class ProcessingControllerMixin:
             # Queue rows and persisted queue_state must not carry paths or
             # traceback fragments; the log already has the full exception.
             item.message = user_facing_processing_error(e)
+            item.failure_reason = classify_failure_reason(
+                exc=e, reason=getattr(remover_obj, "last_error_reason", None))
             item.quality_report = None
             item.completed_at = datetime.now()
             self._update_item_display(item)
