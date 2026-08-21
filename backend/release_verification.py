@@ -506,6 +506,15 @@ def _advisory(
     }
 
 
+# RM-289: PyInstaller floors. CVE-2025-59042 is the one that applies to
+# this build; GHSA-9fxf-4qw3-ghmr is reported for floor hygiene only,
+# because a onedir/asInvoker distribution is not the configuration it
+# reaches. Keep both named so neither turns into folklore.
+PYINSTALLER_CVE_2025_59042_FIXED = "6.10.0"
+PYINSTALLER_GHSA_9FXF_FIXED = "6.22.1"
+PYINSTALLER_FLOOR = "6.22.2"
+
+
 def collect_release_advisories(
     dependencies: Sequence[Mapping[str, object]],
     *,
@@ -585,18 +594,42 @@ def collect_release_advisories(
         findings.append(ffmpeg_advisory)
 
     pyinstaller_version = _dependency_version(dependencies, "pyinstaller")
-    if pyinstaller_version and _version_lt(pyinstaller_version, "6.10.0"):
+    if pyinstaller_version and _version_lt(
+            pyinstaller_version, PYINSTALLER_CVE_2025_59042_FIXED):
         findings.append(_advisory(
             advisory_id="CVE-2025-59042",
             package="pyinstaller",
             installed_version=pyinstaller_version,
-            affected="<6.10.0",
-            fixed_in="6.10.0",
+            affected=f"<{PYINSTALLER_CVE_2025_59042_FIXED}",
+            fixed_in=PYINSTALLER_CVE_2025_59042_FIXED,
             severity="high",
             source="https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9w2p-rh8c-v9g5",
             mitigation=(
-                "Build with PyInstaller >= 6.10.0; older bootloaders allow a "
-                "writable-CWD sys.path injection (local privilege escalation)."
+                f"Build with PyInstaller >= {PYINSTALLER_CVE_2025_59042_FIXED}; "
+                "older bootloaders allow a writable-CWD sys.path injection "
+                "(local privilege escalation)."
+            ),
+        ))
+    if pyinstaller_version and _version_lt(
+            pyinstaller_version, PYINSTALLER_FLOOR):
+        findings.append(_advisory(
+            advisory_id="GHSA-9fxf-4qw3-ghmr",
+            package="pyinstaller",
+            installed_version=pyinstaller_version,
+            affected=f"<{PYINSTALLER_GHSA_9FXF_FIXED}",
+            fixed_in=PYINSTALLER_GHSA_9FXF_FIXED,
+            # Deliberately informational. This build is onedir with an
+            # asInvoker manifest, which is the configuration the advisory
+            # does not reach; saying "high" here would be a false alarm, and
+            # saying nothing would hide that the floor is behind.
+            severity="low",
+            source="https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr",
+            mitigation=(
+                f"Build with PyInstaller >= {PYINSTALLER_FLOOR}. The advisory "
+                "itself does not apply to this build: the spec produces a "
+                "onedir distribution with an asInvoker manifest, not a "
+                "onefile extraction into a world-writable temp directory. "
+                "This is toolchain floor hygiene."
             ),
         ))
 

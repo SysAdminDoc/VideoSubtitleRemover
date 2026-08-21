@@ -13,20 +13,11 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P3:
-- RM-289 S -- PyInstaller floor 6.22.2 + onedir tripwire (advisory does not apply today)
 - RM-293 S -- README Detection / Troubleshooting copy still describes the 3.8 picker
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 - RM-296 M -- make the fade-in hold exact across decode-batch boundaries
 
 ### P3
-
-- [ ] P3 -- RM-289: Raise the PyInstaller floor to 6.22.2 and guard the onedir assumption
-  Why: the toolchain floor predates GHSA-9fxf-4qw3-ghmr (patched in 6.22.1; 6.22.2 is current). The advisory does not apply to this onedir/`asInvoker` build, so this is floor hygiene plus a tripwire.
-  Evidence: current floor is 6.10.0 in `build_exe.bat`, `backend/release_verification.py`, and `README.md`. `VideoSubtitleRemoverPro.spec` builds onedir.
-  Touches: `build_exe.bat`, `backend/release_verification.py`, `README.md`, `tests/test_release_workflow.py`.
-  Acceptance: the floor reads 6.22.2 in all three places; verification names both GHSA-9w2p-rh8c-v9g5 and GHSA-9fxf-4qw3-ghmr with onedir/`asInvoker` non-applicability stated; a test fails if the spec ever stops being onedir while the floor sits below 6.22.1.
-  Confidence: Verified
-  Complexity: S
 
 - [ ] P3 -- RM-293: Bring README Detection and Troubleshooting in line with the engine picker
   Why: the docs still tell users to install PaddleOCR for best accuracy and to activate VLM via env vars.

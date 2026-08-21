@@ -1144,5 +1144,91 @@ class ReproducibilityEnvelopeTests(unittest.TestCase):
         self.assertNotIn("bit-for-bit reproducible build", readme)
 
 
+class PyInstallerFloorTests(unittest.TestCase):
+    """RM-289: the floor is stated once, and the onedir claim is guarded."""
+
+    def test_the_floor_reads_the_same_in_all_three_places(self):
+        from backend.release_verification import PYINSTALLER_FLOOR
+
+        self.assertEqual(PYINSTALLER_FLOOR, "6.22.2")
+        script = (ROOT / "build_exe.bat").read_text(encoding="utf-8")
+        self.assertIn(f'"pyinstaller>={PYINSTALLER_FLOOR}"', script)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"PyInstaller >= {PYINSTALLER_FLOOR}", readme)
+
+    def test_both_advisories_are_named_with_their_own_fix_versions(self):
+        from backend.release_verification import collect_release_advisories
+
+        result = collect_release_advisories(
+            [{"name": "pyinstaller", "version": "6.9.0"}])
+        found = {
+            item["id"]: item
+            for item in result["advisories"]
+            if item.get("package") == "pyinstaller"
+        }
+        self.assertIn("CVE-2025-59042", found)
+        self.assertIn("GHSA-9fxf-4qw3-ghmr", found)
+        self.assertEqual(found["CVE-2025-59042"]["fixedIn"], "6.10.0")
+        self.assertEqual(found["GHSA-9fxf-4qw3-ghmr"]["fixedIn"], "6.22.1")
+
+    def test_the_inapplicable_advisory_is_informational_not_blocking(self):
+        """A onedir/asInvoker build is not what GHSA-9fxf-4qw3-ghmr reaches."""
+        from backend.release_verification import collect_release_advisories
+
+        result = collect_release_advisories(
+            [{"name": "pyinstaller", "version": "6.10.0"}])
+        pyinstaller = [
+            item for item in result["advisories"]
+            if item.get("package") == "pyinstaller"
+        ]
+        self.assertEqual(len(pyinstaller), 1)
+        self.assertEqual(pyinstaller[0]["id"], "GHSA-9fxf-4qw3-ghmr")
+        self.assertEqual(pyinstaller[0]["severity"], "low")
+        self.assertFalse(pyinstaller[0].get("blocking"))
+        self.assertIn("onedir", pyinstaller[0]["mitigation"])
+
+    def test_a_build_on_the_floor_reports_no_pyinstaller_advisory(self):
+        from backend.release_verification import (
+            PYINSTALLER_FLOOR,
+            collect_release_advisories,
+        )
+
+        result = collect_release_advisories(
+            [{"name": "pyinstaller", "version": PYINSTALLER_FLOOR}])
+        self.assertEqual(
+            [item for item in result["advisories"]
+             if item.get("package") == "pyinstaller"],
+            [],
+        )
+
+    def test_the_spec_must_stay_onedir_while_the_floor_is_below_the_fix(self):
+        """The tripwire: a onefile spec makes GHSA-9fxf-4qw3-ghmr apply.
+
+        If the spec ever stops producing a COLLECT (onedir) distribution
+        while the floor sits below the version that fixes the advisory, the
+        "does not apply to this build" reasoning silently becomes false.
+        """
+        from backend.release_verification import (
+            PYINSTALLER_FLOOR,
+            PYINSTALLER_GHSA_9FXF_FIXED,
+            _version_lt,
+        )
+
+        spec = (ROOT / "VideoSubtitleRemoverPro.spec").read_text(
+            encoding="utf-8")
+        onedir = "COLLECT(" in spec.replace(" ", "")
+        if not onedir:
+            self.assertFalse(
+                _version_lt(PYINSTALLER_FLOOR, PYINSTALLER_GHSA_9FXF_FIXED),
+                "the spec is no longer onedir, so the PyInstaller floor must "
+                f"be at least {PYINSTALLER_GHSA_9FXF_FIXED}",
+            )
+        self.assertTrue(
+            onedir,
+            "VideoSubtitleRemoverPro.spec must build onedir; the release "
+            "advisory reasoning and the installer layout both depend on it",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

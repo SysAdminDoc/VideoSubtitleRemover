@@ -30,11 +30,12 @@ if not exist "%PYTHON%" (
 :: Activate venv
 call venv\Scripts\activate.bat
 
-:: Install/upgrade PyInstaller. >=6.10.0 carries the fix for CVE-2025-59042
-:: (writable-CWD bootstrap local privilege escalation); older bootloaders let
-:: an attacker inject Python via sys.path beside the frozen exe.
+:: Install/upgrade PyInstaller. >=6.22.2 is the floor. 6.10.0 carried the fix
+:: for CVE-2025-59042 (writable-CWD bootstrap local privilege escalation);
+:: GHSA-9fxf-4qw3-ghmr was patched in 6.22.1 and does not apply to this
+:: onedir/asInvoker build, so the raise is floor hygiene, not a live exposure.
 echo Ensuring release tooling...
-"%PYTHON%" -m pip install "pyinstaller>=6.10.0" "pip-audit>=2.10.0" "pytest>=9.0.0" "ruff==0.15.20"
+"%PYTHON%" -m pip install "pyinstaller>=6.22.2" "pip-audit>=2.10.0" "pytest>=9.0.0" "ruff==0.15.20"
 if errorlevel 1 (
     echo Failed to install PyInstaller, pip-audit, pytest, or Ruff.
     exit /b 1

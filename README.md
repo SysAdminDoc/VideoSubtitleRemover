@@ -185,11 +185,19 @@ snapshots and future branches remain unknown until explicitly classified.
 The self-test, support bundle, and strict release validation block
 vulnerable, outdated, unsupported, and unknown runtimes.
 
-**Build toolchain floors:** the local build requires **PyInstaller >= 6.10.0**
-(CVE-2025-59042 writable-CWD LPE) and the installer requires **NSIS >= 3.12**
-(elevated Low IL temp-directory privilege-escalation hardening);
-`installer/vsr.nsi` fails to compile on an older NSIS, and strict release
-validation flags both.
+**Build toolchain floors:** the local build requires **PyInstaller >= 6.22.2**
+and the installer requires **NSIS >= 3.12** (elevated Low IL temp-directory
+privilege-escalation hardening); `installer/vsr.nsi` fails to compile on an
+older NSIS, and strict release validation flags both.
+
+Two PyInstaller advisories set that floor, and they are not equally relevant.
+CVE-2025-59042 (writable-CWD sys.path injection, fixed in 6.10.0) does apply
+to this build. GHSA-9fxf-4qw3-ghmr (fixed in 6.22.1) does not: it concerns a
+onefile build extracting into a world-writable temp directory, while
+`VideoSubtitleRemoverPro.spec` produces a onedir distribution with an
+`asInvoker` manifest. The floor sits at 6.22.2 as toolchain hygiene, and
+release validation reports the second advisory as informational rather than
+blocking so the distinction stays visible instead of becoming folklore.
 
 Run `python -m backend.processor --self-test` to confirm the installed build's
 `basic`, `advanced_quality`, `speech_fallback`, and `modern_codec` profiles.

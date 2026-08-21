@@ -47,6 +47,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   release evidence, so a rebuild starts from the same envelope. README now
   says plainly that rebuild verification is semantic: the frozen build embeds
   its own absolute paths, so matching checksums were never on offer.
+- The PyInstaller floor moves to 6.22.2 in the build script, the release
+  validation, and the README. Release validation now names both advisories
+  that bear on it and reports GHSA-9fxf-4qw3-ghmr as informational, because a
+  onedir build with an asInvoker manifest is not what it reaches. A test fails
+  if the spec ever stops being onedir while the floor is behind that fix.
 
 ## [3.36.0] - 2026-08-21
 
