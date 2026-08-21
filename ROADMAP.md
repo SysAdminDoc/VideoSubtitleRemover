@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-281 S -- quality report harmonic mean + worst-frame index, seek preview to it
 - RM-282 M -- HWND Dynamic Annotation on custom Canvas controls (not a UIA provider)
 - RM-284 S -- gate language picker on catalog coverage; document translation policy
 - RM-283 L -- donor-video clean reference (still-plate path already exists)
@@ -28,14 +27,6 @@ P3:
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 
 ### P2
-
-- [ ] P2 -- RM-281: Report harmonic mean and the worst-frame index in the quality report
-  Why: this product's characteristic defect is a handful of bad frames on an otherwise sharp clip, and a mean is structurally blind to exactly that.
-  Evidence: libvmaf's `pooled_metrics` reports min/max/mean/harmonic_mean per metric; harmonic mean weights low frames more heavily.
-  Touches: `backend/quality.py`, `backend/_quality_mixin.py` (`_compute_quality_report`), `backend/quality_gate.py`, `gui/quality_controller.py`, `tests/test_hardening_quality.py`.
-  Acceptance: the report carries `harmonic_mean` alongside `mean` for PSNR and SSIM plus the index and score of the worst sampled frame; the GUI quality pane shows that frame number as a control that seeks the preview to it (not a dead label); a synthetic clip with one badly-filled frame shows a measurable mean/harmonic-mean gap in a test; existing sidecar consumers tolerate the added keys.
-  Confidence: Verified
-  Complexity: S
 
 - [ ] P2 -- RM-282: Annotate custom Canvas controls for Windows accessibility
   Why: every custom control is an anonymous pane to a screen reader, and the cheap annotation route was never separated from the blocked full-provider route.

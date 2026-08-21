@@ -10,6 +10,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   writer failed, FFmpeg failed, source could not be decoded, and so on)
   alongside the existing message. The batch summary counts them and shows
   a Reason column, and the queue keeps the classification across a restart.
+- The quality report pools a harmonic mean beside the average PSNR and SSIM,
+  and names the worst sampled frame with its score. A run whose average looks
+  fine but whose worst frame does not now goes to review, and the batch
+  summary has an Open frame button that takes the A/B compare straight there.
 
 ## [3.36.0] - 2026-08-21
 

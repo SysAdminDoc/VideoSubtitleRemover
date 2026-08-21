@@ -462,7 +462,8 @@ def summarize_quality_reports(
 ) -> Optional[dict]:
     valid = []
     total_samples = 0
-    for report in reports:
+    worst: Optional[dict] = None
+    for position, report in enumerate(reports):
         if not report:
             continue
         try:
@@ -473,6 +474,22 @@ def summarize_quality_reports(
             continue
         valid.append((psnr, ssim, samples))
         total_samples += max(0, samples)
+        # RM-281: carry the single worst sampled frame across the batch, and
+        # which report it came from, so the caller can open it.
+        candidate = report.get("worst_frame")
+        if isinstance(candidate, dict):
+            try:
+                candidate_ssim = float(candidate.get("ssim"))
+                candidate_frame = int(candidate.get("frame"))
+            except (TypeError, ValueError):
+                continue
+            if worst is None or candidate_ssim < worst["ssim"]:
+                worst = {
+                    "position": position,
+                    "frame": candidate_frame,
+                    "ssim": candidate_ssim,
+                    "psnr": _optional_float(candidate.get("psnr")),
+                }
 
     if not valid:
         return None
@@ -481,9 +498,26 @@ def summarize_quality_reports(
     return {
         "psnr": sum(item[0] for item in valid) / count,
         "ssim": sum(item[1] for item in valid) / count,
+        "harmonic_psnr": _harmonic_mean([item[0] for item in valid]),
+        "harmonic_ssim": _harmonic_mean([item[1] for item in valid]),
         "items": count,
         "samples": total_samples,
+        "worst_frame": worst,
     }
+
+
+def _optional_float(value) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _harmonic_mean(values: List[float]) -> Optional[float]:
+    positive = [value for value in values if value > 0.0]
+    if not positive:
+        return None
+    return len(positive) / sum(1.0 / value for value in positive)
 
 
 def _queue_item_execution_text(item) -> str:

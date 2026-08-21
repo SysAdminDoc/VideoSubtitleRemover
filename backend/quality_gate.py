@@ -40,6 +40,10 @@ _LADDER_SEVERITY = {
 }
 
 SSIM_FLOOR = 0.95
+# RM-281: a single ruined frame in an otherwise clean run does not move the
+# mean far enough to trip SSIM_FLOOR. This is a separate, much lower bar
+# applied to the worst sampled frame on its own.
+WORST_FRAME_SSIM_FLOOR = 0.80
 VMAF_FLOOR = 90.0
 TEMPORAL_FLICKER_CEILING = 0.08
 RESIDUAL_TEXT_SCORE_CEILING = 0.025
@@ -105,6 +109,7 @@ def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
         })
 
     _check_ssim(metrics, violations)
+    _check_worst_frame(metrics, violations)
     _check_vmaf(metrics, violations)
     _check_flicker(metrics, violations)
     _check_residual_text(metrics, violations)
@@ -281,6 +286,29 @@ def _check_ssim(metrics: dict,
             "detail": f"{label} {ssim:.4f} below {SSIM_FLOOR:.4f}",
             "ladder": LADDER_ALTERNATE_INPAINTER,
         })
+
+
+def _check_worst_frame(metrics: dict,
+                       violations: List[Dict[str, Any]]) -> None:
+    """Flag a run whose worst sampled frame is bad even though the mean is fine."""
+    worst = metrics.get("worst_frame")
+    if not isinstance(worst, Mapping):
+        return
+    ssim = _number(worst.get("ssim"))
+    frame = worst.get("frame")
+    if ssim is None or frame is None or ssim >= WORST_FRAME_SSIM_FLOOR:
+        return
+    violations.append({
+        "metric": "worst_frame",
+        "value": ssim,
+        "threshold": WORST_FRAME_SSIM_FLOOR,
+        "frame": int(frame),
+        "detail": (
+            f"worst sampled frame {int(frame)} SSIM {ssim:.4f} "
+            f"below {WORST_FRAME_SSIM_FLOOR:.4f}"
+        ),
+        "ladder": LADDER_TEMPORAL_SMOOTH,
+    })
 
 
 def _check_vmaf(metrics: dict,

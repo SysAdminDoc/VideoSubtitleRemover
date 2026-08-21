@@ -318,6 +318,49 @@ def _mean_optional(values: Sequence[Optional[float]]) -> Optional[float]:
     return float(np.mean(clean)) if clean else None
 
 
+def harmonic_mean(values: Sequence[Optional[float]]) -> Optional[float]:
+    """Harmonic mean of the finite positive samples, or None.
+
+    RM-281: a handful of badly filled frames on an otherwise sharp clip is
+    this product's characteristic defect, and an arithmetic mean is
+    structurally blind to it. The harmonic mean weights the low samples
+    much more heavily, which is why libvmaf pools it alongside the mean.
+    Non-positive samples (a zero SSIM, an undefined PSNR) are dropped
+    rather than making the whole pool zero or undefined.
+    """
+    clean = [
+        float(v) for v in values
+        if v is not None and np.isfinite(v) and float(v) > 0.0
+    ]
+    if not clean:
+        return None
+    return float(len(clean) / np.sum(1.0 / np.asarray(clean, dtype=np.float64)))
+
+
+def worst_sample(
+    frames: Sequence[int],
+    psnrs: Sequence[float],
+    ssims: Sequence[float],
+) -> Optional[dict]:
+    """Return the lowest-SSIM sample as ``{frame, psnr, ssim}``.
+
+    Ties break on PSNR so the returned frame is the worst on both axes when
+    SSIM cannot separate them.
+    """
+    count = min(len(frames), len(psnrs), len(ssims))
+    if count <= 0:
+        return None
+    best_index = min(
+        range(count),
+        key=lambda i: (float(ssims[i]), float(psnrs[i])),
+    )
+    return {
+        "frame": int(frames[best_index]),
+        "psnr": float(psnrs[best_index]),
+        "ssim": float(ssims[best_index]),
+    }
+
+
 def _static_logo_mask_coverage(masks: Sequence[np.ndarray]) -> float:
     total_pixels = 0
     masked_pixels = 0

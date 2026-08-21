@@ -21,10 +21,12 @@ from backend.quality import (
     _ssim,
     compute_vmaf,
     compute_extended_metrics,
+    harmonic_mean,
     temporal_consistency_score,
     residual_text_score,
     temporal_flicker_score,
     mask_boundary_seam_score,
+    worst_sample,
 )
 from backend.quality_gate import (
     RESIDUAL_TEXT_SCORE_CEILING,
@@ -124,8 +126,10 @@ class _QualityMixin:
 
             psnrs: List[float] = []
             ssims: List[float] = []
+            sample_frames: List[int] = []
             roi_psnrs: List[float] = []
             roi_ssims: List[float] = []
+            roi_sample_frames: List[int] = []
             temporal_samples: List[Tuple[int, np.ndarray]] = []
             residual_scores: List[float] = []
             review_spans = list(
@@ -182,11 +186,13 @@ class _QualityMixin:
                 s = _ssim(a, b)
                 psnrs.append(p)
                 ssims.append(s)
+                sample_frames.append(start_frame + idx)
                 if a_roi is not None and b_roi is not None:
                     if a_roi.size and a_roi.shape == b_roi.shape:
                         try:
                             roi_psnrs.append(float(cv2.PSNR(a_roi, b_roi)))
                             roi_ssims.append(_ssim(a_roi, b_roi))
+                            roi_sample_frames.append(start_frame + idx)
                         except Exception:
                             logger.warning(
                                 "Quality ROI metric calculation failed",
@@ -200,6 +206,13 @@ class _QualityMixin:
             mean_psnr = float(np.mean(psnrs))
             roi_mean_ssim = float(np.mean(roi_ssims)) if roi_ssims else None
             roi_mean_psnr = float(np.mean(roi_psnrs)) if roi_psnrs else None
+            # RM-281: the arithmetic mean hides a few ruined frames on an
+            # otherwise sharp clip. Pool the harmonic mean beside it and
+            # name the single worst frame so the user can go look at it.
+            worst_frame = (
+                worst_sample(roi_sample_frames, roi_psnrs, roi_ssims)
+                or worst_sample(sample_frames, psnrs, ssims)
+            )
             flicker_score = temporal_flicker_score(temporal_samples)
             for left, right in zip(temporal_samples, temporal_samples[1:]):
                 if right[0] != left[0] + 1:
@@ -276,8 +289,13 @@ class _QualityMixin:
             metrics = {
                 'psnr': mean_psnr,
                 'ssim': mean_ssim,
+                'psnr_harmonic_mean': harmonic_mean(psnrs),
+                'ssim_harmonic_mean': harmonic_mean(ssims),
                 'roi_psnr': roi_mean_psnr,
                 'roi_ssim': roi_mean_ssim,
+                'roi_psnr_harmonic_mean': harmonic_mean(roi_psnrs),
+                'roi_ssim_harmonic_mean': harmonic_mean(roi_ssims),
+                'worst_frame': worst_frame,
                 'vmaf': vmaf,
                 'roi_vmaf': roi_vmaf,
                 'roi_bbox': list(roi) if roi else None,

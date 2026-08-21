@@ -257,6 +257,50 @@ class QualityReviewControllerMixin:
                  Theme.INFO, Theme.INFO_BG).pack(side="left")
             stat(metrics, "AVG SSIM", f"{quality_summary['ssim']:.4f}",
                  Theme.SUCCESS, Theme.SUCCESS_BG).pack(side="left", padx=(Theme.S_SM, 0))
+            harmonic_ssim = quality_summary.get("harmonic_ssim")
+            if isinstance(harmonic_ssim, float):
+                # RM-281: the harmonic mean sits beside the arithmetic one
+                # because a gap between them IS the finding.
+                stat(metrics, "HARM SSIM", f"{harmonic_ssim:.4f}",
+                     Theme.WARNING if harmonic_ssim < quality_summary["ssim"] - 0.01
+                     else Theme.SUCCESS,
+                     Theme.WARNING_BG if harmonic_ssim < quality_summary["ssim"] - 0.01
+                     else Theme.SUCCESS_BG).pack(side="left", padx=(Theme.S_SM, 0))
+
+            worst = quality_summary.get("worst_frame")
+            if isinstance(worst, dict) and worst.get("item_id"):
+                worst_row = tk.Frame(quality_card, bg=Theme.BG_CARD)
+                worst_row.pack(anchor="w", fill="x",
+                               padx=Theme.S_LG, pady=(0, Theme.S_MD))
+                tk.Label(
+                    worst_row,
+                    text=tr(
+                        "Worst sampled frame: {frame} in {name} "
+                        "(SSIM {ssim:.4f})."
+                    ).format(
+                        frame=worst["frame"],
+                        name=worst.get("item_name", ""),
+                        ssim=worst["ssim"],
+                    ),
+                    font=f(Theme.F_META),
+                    bg=Theme.BG_CARD,
+                    fg=Theme.TEXT_MUTED,
+                    wraplength=300,
+                    justify="left",
+                ).pack(side="left")
+
+                def _open_worst_frame_and_close(
+                        frame=int(worst["frame"]),
+                        item_id=str(worst["item_id"])):
+                    _close()
+                    self._open_ab_scrubber(
+                        start_frame=frame, item_id=item_id)
+
+                ModernButton(
+                    worst_row, text=tr("Open frame"), width=110,
+                    command=_open_worst_frame_and_close,
+                    style="ghost", size="sm",
+                ).pack(side="right")
 
         # Actions row
         actions = tk.Frame(body, bg=Theme.BG_CARD)

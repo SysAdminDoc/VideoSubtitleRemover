@@ -5,7 +5,7 @@ import threading
 import time
 import numpy as np
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
 
 try:
     import tkinter as tk
@@ -524,15 +524,21 @@ class PreviewControllerMixin:
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _open_ab_scrubber(self):
+    def _open_ab_scrubber(self, start_frame: int = 0,
+                          item_id: Optional[str] = None):
         """RM-30: open a Toplevel that lets the user scrub frames AND
         wipe a vertical seam left/right to compare the original vs the
         cleaned output side-by-side at any frame.
 
         The window opens both video captures, holds them open for the
         duration of the modal, and composes a single image per scrub.
+        RM-281: ``start_frame``/``item_id`` let the quality pane open this
+        directly on the worst sampled frame of a specific item.
         """
-        item = self._get_selected_queue_item(fallback_to_first=True)
+        item = (
+            self._queue_item_by_id(item_id) if item_id
+            else self._get_selected_queue_item(fallback_to_first=True)
+        )
         if item is None or item.status != ProcessingStatus.COMPLETE:
             self._update_status(N_("Select a completed item first"), "warning")
             return
@@ -565,14 +571,16 @@ class PreviewControllerMixin:
 
         try:
             self._open_ab_scrubber_window(
-                in_path, cap_a, cap_b, n_a, n_b, n_total, fps, max_w, max_h)
+                in_path, cap_a, cap_b, n_a, n_b, n_total, fps, max_w, max_h,
+                start_frame=start_frame)
         except Exception:
             cap_a.release()
             cap_b.release()
             raise
 
     def _open_ab_scrubber_window(self, in_path, cap_a, cap_b,
-                                  n_a, n_b, n_total, fps, max_w, max_h):
+                                  n_a, n_b, n_total, fps, max_w, max_h,
+                                  start_frame: int = 0):
         import cv2 as _cv2
 
         win = tk.Toplevel(self.root)
@@ -586,7 +594,8 @@ class PreviewControllerMixin:
         image_id = canvas.create_image(0, 0, anchor="nw")
         canvas._photo = None
 
-        state = {"frame_idx": 0, "seam": max_w // 2}
+        opening_frame = max(0, min(n_total - 1, int(start_frame or 0)))
+        state = {"frame_idx": opening_frame, "seam": max_w // 2}
 
         def _render():
             cap_a.set(_cv2.CAP_PROP_POS_FRAMES, state["frame_idx"])
@@ -647,6 +656,9 @@ class PreviewControllerMixin:
             activebackground=Theme.BLUE_PRIMARY, highlightthickness=0,
         )
         frame_slider.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+        if opening_frame:
+            # Drives _on_frame, which updates the timestamp label and renders.
+            frame_slider.set(opening_frame)
 
         # Seam slider (wipe boundary).
         seam_row = tk.Frame(win, bg=Theme.BG_OVERLAY)

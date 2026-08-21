@@ -1506,9 +1506,22 @@ class ProcessingControllerMixin:
         if cancelled:
             summary += f", {cancelled} stopped"
         is_clean = errors == 0 and paused == 0 and cancelled == 0 and review_count == 0
+        completed_items = [
+            item for item in self.queue
+            if item.status == ProcessingStatus.COMPLETE
+        ]
         quality_summary = summarize_quality_reports(
-            [item.quality_report for item in self.queue if item.status == ProcessingStatus.COMPLETE]
+            [item.quality_report for item in completed_items]
         )
+        # RM-281: attribute the batch's worst sampled frame back to its item
+        # so the summary can open the A/B compare directly on it.
+        if quality_summary and isinstance(quality_summary.get("worst_frame"), dict):
+            worst = quality_summary["worst_frame"]
+            position = int(worst.get("position", -1))
+            if 0 <= position < len(completed_items):
+                worst["item_id"] = completed_items[position].id
+                worst["item_name"] = Path(
+                    completed_items[position].file_path).name
         stage_summary = {}
         try:
             from backend.batch_report import summarize_stage_timings

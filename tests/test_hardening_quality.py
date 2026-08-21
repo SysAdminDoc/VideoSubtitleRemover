@@ -238,6 +238,162 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         self.assertEqual(metrics["quality_gate"]["status"], "passed")
 
 
+class WorstFrameQualityTests(unittest.TestCase):
+    """RM-281: one badly filled frame must be visible in the report."""
+
+    @staticmethod
+    def _capture_class(processor_module):
+        class PositionalCapture:
+            """A capture whose frames depend on the requested position."""
+
+            def __init__(self, frame_for, total):
+                self.frame_for = frame_for
+                self.total = total
+                self._pos = 0
+
+            def isOpened(self):
+                return True
+
+            def get(self, prop):
+                if prop == processor_module.cv2.CAP_PROP_FRAME_COUNT:
+                    return self.total
+                if prop == processor_module.cv2.CAP_PROP_POS_FRAMES:
+                    return float(self._pos)
+                return 0
+
+            def set(self, prop, value):
+                if prop == processor_module.cv2.CAP_PROP_POS_FRAMES:
+                    self._pos = int(value)
+                return True
+
+            def grab(self):
+                self._pos += 1
+                return True
+
+            def read(self):
+                frame = self.frame_for(self._pos)
+                self._pos += 1
+                return True, frame
+
+            def release(self):
+                return None
+
+        return PositionalCapture
+
+    def _report(self, span=40, n_samples=8, ruin_sample=3):
+        from unittest import mock
+        import numpy as _np
+
+        rng = _np.random.default_rng(seed=42)
+        metric_indices = sorted(
+            set(rng.integers(0, span, size=n_samples).tolist()))
+        ruined_index = metric_indices[ruin_sample]
+
+        clean = _np.full((80, 96, 3), 128, dtype=_np.uint8)
+        ruined = _np.zeros((80, 96, 3), dtype=_np.uint8)
+        ruined[::2, ::3] = 255
+
+        capture_class = self._capture_class(processor)
+        cap_in = capture_class(lambda pos: clean.copy(), span)
+        cap_out = capture_class(
+            lambda pos: (ruined if pos == ruined_index else clean).copy(),
+            span,
+        )
+
+        r = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        r.config = processor.ProcessingConfig(quality_report=True)
+        r._quality_mask_bbox = None
+        with mock.patch(
+            "backend._quality_mixin._open_capture",
+            side_effect=[cap_in, cap_out],
+        ), mock.patch(
+            "backend._quality_mixin.compute_vmaf", return_value=None,
+        ):
+            metrics = r._compute_quality_report(
+                "input.mp4", "output.mp4", 0, span, 24.0, n_samples=n_samples,
+            )
+        return metrics, ruined_index, len(metric_indices)
+
+    def test_one_ruined_frame_opens_a_mean_to_harmonic_gap(self):
+        metrics, _, _ = self._report()
+        self.assertIsNotNone(metrics)
+        self.assertIn("ssim_harmonic_mean", metrics)
+        self.assertIn("psnr_harmonic_mean", metrics)
+        self.assertLess(
+            metrics["ssim_harmonic_mean"], metrics["ssim"],
+            "harmonic mean must sit below the arithmetic mean",
+        )
+        self.assertGreater(
+            metrics["ssim"] - metrics["ssim_harmonic_mean"], 0.01,
+            "one ruined frame must open a measurable gap",
+        )
+        self.assertLess(
+            metrics["psnr_harmonic_mean"], metrics["psnr"])
+
+    def test_the_worst_sampled_frame_is_named_with_its_score(self):
+        metrics, ruined_index, sample_count = self._report()
+        worst = metrics["worst_frame"]
+        self.assertEqual(worst["frame"], ruined_index)
+        self.assertLess(worst["ssim"], metrics["ssim"])
+        self.assertEqual(metrics["samples"], sample_count)
+        self.assertIn(
+            f"worst sampled frame {ruined_index}",
+            metrics["quality_gate"]["reason"],
+        )
+
+    def test_a_sharp_mean_with_one_bad_frame_still_goes_to_review(self):
+        from backend.quality_gate import evaluate_quality_gate
+
+        gate = evaluate_quality_gate({
+            "samples": 20,
+            "tag": "Good",
+            "ssim": 0.981,
+            "psnr": 42.0,
+            "ssim_harmonic_mean": 0.910,
+            "worst_frame": {"frame": 512, "ssim": 0.41, "psnr": 12.0},
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "temporal-smooth")
+        self.assertIn("worst sampled frame 512", gate["reason"])
+
+    def test_a_sharp_mean_with_a_merely_soft_frame_still_passes(self):
+        from backend.quality_gate import evaluate_quality_gate
+
+        gate = evaluate_quality_gate({
+            "samples": 20,
+            "tag": "Good",
+            "ssim": 0.981,
+            "psnr": 42.0,
+            "worst_frame": {"frame": 512, "ssim": 0.93, "psnr": 30.0},
+        })
+        self.assertEqual(gate["status"], "passed")
+
+    def test_a_clean_run_reports_a_worst_frame_without_a_gap(self):
+        from unittest import mock
+        import numpy as _np
+
+        clean = _np.full((80, 96, 3), 128, dtype=_np.uint8)
+        capture_class = self._capture_class(processor)
+        r = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        r.config = processor.ProcessingConfig(quality_report=True)
+        r._quality_mask_bbox = None
+        with mock.patch(
+            "backend._quality_mixin._open_capture",
+            side_effect=[
+                capture_class(lambda pos: clean.copy(), 40),
+                capture_class(lambda pos: clean.copy(), 40),
+            ],
+        ), mock.patch(
+            "backend._quality_mixin.compute_vmaf", return_value=None,
+        ):
+            metrics = r._compute_quality_report(
+                "input.mp4", "output.mp4", 0, 40, 24.0, n_samples=8)
+        self.assertIsNotNone(metrics["worst_frame"])
+        self.assertAlmostEqual(
+            metrics["ssim"], metrics["ssim_harmonic_mean"], places=6)
+        self.assertEqual(metrics["quality_gate"]["status"], "passed")
+
+
 class QualityGateTests(unittest.TestCase):
     """#108: quality metrics produce graduated ladder steps with
     actionable remediations, not just binary pass/review."""
