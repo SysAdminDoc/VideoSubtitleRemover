@@ -742,7 +742,7 @@ class SubtitleRemover(
                 "pending" if clean_reference_requested else "not-requested"
             ),
         }
-        self._clean_reference_cache: dict[int, np.ndarray] = {}
+        self._clean_reference_cache: dict = {}
         self._clean_reference_warned: set[int] = set()
         self.last_timing_report: dict = {
             "mode": "unknown",
@@ -3170,6 +3170,14 @@ class SubtitleRemover(
                 except Exception:
                     logger.warning(
                         "Selective-rerun capture release failed", exc_info=True)
+            # RM-283: a donor-video reference holds its own capture open for
+            # the whole job; leaving it open would keep a handle on the donor
+            # file after the run ends.
+            try:
+                self._release_clean_references()
+            except Exception:
+                logger.warning(
+                    "Clean reference release failed", exc_info=True)
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             # RM-27: Whisper audio temp dir is created lazily inside the

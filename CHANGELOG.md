@@ -22,6 +22,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - The Settings language picker now lists only catalogs that have at least 90%
   of the interface translated, so choosing a language cannot leave most of the
   window in English. README documents the bar.
+- A timed region can now take a whole donor video as its clean reference, not
+  just a still plate. When a clean or differently-subbed release exists the
+  background comes from it: frames are matched by timestamp with an offset you
+  set, anything the offset does not cover falls back to the inpainter, and the
+  sidecar records the donor hash, frame rate and offset. `--clean-reference`
+  and `--clean-reference-offset` do the same from the CLI.
 
 ## [3.36.0] - 2026-08-21
 

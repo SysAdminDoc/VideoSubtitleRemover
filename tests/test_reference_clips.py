@@ -350,6 +350,219 @@ class CleanReferenceFillTests(unittest.TestCase):
         self.assertIn("confidence", result.reason)
         self.assertTrue(np.array_equal(result.composite, observed))
 
+    def test_a_still_plate_normalizes_to_the_v1_behaviour(self):
+        """A v1 payload must keep working byte-for-byte."""
+        from backend.reference_fill import normalize_clean_reference
+
+        spec = normalize_clean_reference({
+            "path": "clean.png",
+            "alignment": "homography",
+            "color_match": False,
+            "min_confidence": 0.81,
+        })
+        self.assertEqual(spec["kind"], "plate")
+        self.assertEqual(spec["offset_seconds"], 0.0)
+        self.assertEqual(spec["alignment"], "homography")
+        self.assertFalse(spec["color_match"])
+
+    def test_an_offset_on_a_still_plate_is_dropped_not_stored(self):
+        """A plate has no timeline, so a stored offset would silently do nothing."""
+        from backend.reference_fill import normalize_clean_reference
+
+        spec = normalize_clean_reference(
+            {"path": "clean.png", "offset_seconds": 12.5})
+        self.assertEqual(spec["offset_seconds"], 0.0)
+
+    def test_a_donor_video_path_is_recognised_and_keeps_its_offset(self):
+        from backend.reference_fill import normalize_clean_reference
+
+        spec = normalize_clean_reference(
+            {"path": "donor_release.mkv", "offset_seconds": -2.25})
+        self.assertEqual(spec["kind"], "video")
+        self.assertEqual(spec["offset_seconds"], -2.25)
+
+    def test_an_absurd_offset_is_clamped_not_accepted(self):
+        from backend.reference_fill import (
+            MAX_CLEAN_REFERENCE_OFFSET_SECONDS,
+            normalize_clean_reference,
+        )
+
+        spec = normalize_clean_reference(
+            {"path": "donor.mkv", "offset_seconds": 1e12})
+        self.assertEqual(
+            spec["offset_seconds"], MAX_CLEAN_REFERENCE_OFFSET_SECONDS)
+
+    def test_donor_frame_index_maps_by_timestamp(self):
+        from backend.reference_fill import donor_frame_index
+
+        self.assertEqual(donor_frame_index(4.0, 0.0, 25.0), 100)
+        self.assertEqual(donor_frame_index(4.0, -2.0, 25.0), 50)
+        self.assertEqual(donor_frame_index(4.0, 2.0, 25.0), 150)
+
+    def test_a_timestamp_before_the_donor_starts_maps_to_nothing(self):
+        """Clamping to frame zero would paint a background from the wrong scene."""
+        from backend.reference_fill import donor_frame_index
+
+        self.assertEqual(donor_frame_index(1.0, -5.0, 25.0), -1)
+        self.assertEqual(donor_frame_index(1.0, 0.0, 0.0), -1)
+
+    def test_the_schema_version_bumped_rather_than_mutating_v1(self):
+        from backend.reference_fill import (
+            CLEAN_REFERENCE_SCHEMA,
+            CLEAN_REFERENCE_SCHEMA_V1,
+        )
+
+        self.assertEqual(CLEAN_REFERENCE_SCHEMA_V1, "vsr.clean_reference.v1")
+        self.assertEqual(CLEAN_REFERENCE_SCHEMA, "vsr.clean_reference.v2")
+
+    def test_a_donor_video_fills_the_region_and_records_its_provenance(self):
+        import cv2
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        clean = self._pattern()
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        observed = clean.copy()
+        observed[mask > 0] = 245
+        with tempfile.TemporaryDirectory() as tmpdir:
+            donor = _write_synthetic(
+                Path(tmpdir) / "donor.mkv",
+                [clean.copy() for _ in range(10)],
+                fps=10.0,
+            )
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[{
+                    "rect": self.RECT,
+                    "start": 0.0,
+                    "end": 0.0,
+                    "clean_reference": self._spec(
+                        str(donor), offset_seconds=0.0),
+                }],
+            ))
+            self.assertEqual(
+                remover.config.subtitle_region_spans[0]
+                ["clean_reference"]["kind"],
+                "video",
+            )
+            remover._initialize_clean_references(self.W, self.H)
+            try:
+                composite, remaining = (
+                    remover._apply_clean_reference_overrides(
+                        observed, mask, 0.5))
+                evidence = remover._clean_reference_sidecar_evidence()
+            finally:
+                remover._release_clean_references()
+
+        self.assertFalse(np.any(remaining[y1:y2, x1:x2]))
+        self.assertLess(
+            np.abs(
+                composite[y1:y2, x1:x2].astype(np.float32)
+                - clean[y1:y2, x1:x2].astype(np.float32)
+            ).mean(),
+            12.0,
+            "the donor background should have replaced the covered region",
+        )
+        record = evidence["references"][0]
+        self.assertEqual(evidence["status"], "applied")
+        self.assertEqual(record["kind"], "video")
+        self.assertEqual(record["offsetSeconds"], 0.0)
+        self.assertEqual(len(record["source"]["sha256"]), 64)
+        self.assertAlmostEqual(record["donorFps"], 10.0, places=3)
+        self.assertNotIn(tmpdir, str(evidence))
+
+    def test_an_unmapped_timestamp_falls_back_to_inpainting(self):
+        """Past the donor's end there is no reference, so the mask must survive."""
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        clean = self._pattern()
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        observed = clean.copy()
+        observed[mask > 0] = 245
+        with tempfile.TemporaryDirectory() as tmpdir:
+            donor = _write_synthetic(
+                Path(tmpdir) / "donor.mkv",
+                [clean.copy() for _ in range(4)],
+                fps=10.0,
+            )
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[{
+                    "rect": self.RECT,
+                    "start": 0.0,
+                    "end": 0.0,
+                    "clean_reference": self._spec(
+                        str(donor), offset_seconds=0.0),
+                }],
+            ))
+            remover._initialize_clean_references(self.W, self.H)
+            try:
+                composite, remaining = (
+                    remover._apply_clean_reference_overrides(
+                        observed, mask, 60.0))
+                evidence = remover._clean_reference_sidecar_evidence()
+            finally:
+                remover._release_clean_references()
+
+        self.assertTrue(np.all(remaining[y1:y2, x1:x2] == 255))
+        self.assertTrue(np.array_equal(composite, observed))
+        self.assertEqual(evidence["references"][0]["unmappedFrames"], 1)
+        self.assertEqual(evidence["status"], "fallback")
+
+    def test_a_donor_offset_selects_a_different_donor_frame(self):
+        """The offset must actually move which donor frame is read."""
+        import cv2
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        base = self._pattern()
+        frames = []
+        for index in range(10):
+            frame = base.copy()
+            cv2.rectangle(frame, self.RECT[:2], self.RECT[2:],
+                          (index * 25, 40, 200 - index * 15), -1)
+            frames.append(frame)
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        observed = base.copy()
+        observed[mask > 0] = 245
+
+        def _fill(offset_seconds):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                donor = _write_synthetic(
+                    Path(tmpdir) / "donor.mkv", frames, fps=10.0)
+                remover = processor.SubtitleRemover.__new__(
+                    processor.SubtitleRemover)
+                remover.config = normalize_processing_config(ProcessingConfig(
+                    subtitle_region_spans=[{
+                        "rect": self.RECT,
+                        "start": 0.0,
+                        "end": 0.0,
+                        "clean_reference": self._spec(
+                            str(donor), offset_seconds=offset_seconds,
+                            min_confidence=0.05),
+                    }],
+                ))
+                remover._initialize_clean_references(self.W, self.H)
+                try:
+                    composite, _ = remover._apply_clean_reference_overrides(
+                        observed, mask, 0.0)
+                finally:
+                    remover._release_clean_references()
+                return composite[y1:y2, x1:x2].astype(np.float32)
+
+        at_zero = _fill(0.0)
+        at_half_second = _fill(0.5)
+        self.assertGreater(
+            np.abs(at_zero - at_half_second).mean(), 5.0,
+            "a 0.5s offset should read a visibly different donor frame",
+        )
+
     def test_processor_scopes_reference_and_emits_redacted_evidence(self):
         import cv2
         from backend.config import ProcessingConfig, normalize_processing_config

@@ -15,6 +15,59 @@ from backend.tracking import apply_clean_reference
 logger = logging.getLogger(__name__)
 
 
+class DonorReference:
+    """A donor video standing in for a still clean plate.
+
+    Holds the capture open for the job and remembers the last decoded frame,
+    because consecutive source frames usually map to the same donor frame at
+    a matching frame rate and re-seeking each time would dominate the run.
+    """
+
+    def __init__(self, path: str, capture, fps: float, frame_count: int,
+                 offset_seconds: float):
+        self.path = path
+        self.capture = capture
+        self.fps = float(fps)
+        self.frame_count = int(frame_count)
+        self.offset_seconds = float(offset_seconds)
+        self._cached_index = -1
+        self._cached_frame = None
+
+    def frame_at(self, seconds: float):
+        """Return the donor frame for a source timestamp, or None."""
+        from backend.reference_fill import donor_frame_index
+
+        index = donor_frame_index(seconds, self.offset_seconds, self.fps)
+        if index < 0:
+            return None
+        if self.frame_count > 0 and index >= self.frame_count:
+            return None
+        if index == self._cached_index and self._cached_frame is not None:
+            return self._cached_frame
+        try:
+            from backend.processor import _seek_capture_to_frame
+
+            _seek_capture_to_frame(self.capture, index)
+            ok, frame = self.capture.read()
+        except Exception as exc:
+            logger.debug("Donor seek to frame %d failed: %s", index, exc)
+            return None
+        if not ok or frame is None:
+            return None
+        if frame.ndim == 2:
+            frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        self._cached_index = index
+        self._cached_frame = frame
+        return frame
+
+    def release(self) -> None:
+        self._cached_frame = None
+        try:
+            self.capture.release()
+        except Exception:
+            logger.debug("Donor capture release failed", exc_info=True)
+
+
 class _CleanRefMixin:
     """Clean-reference image attachment, region shapes, and polygon masks."""
 
@@ -92,28 +145,43 @@ class _CleanRefMixin:
             spec = span.get("clean_reference") if isinstance(span, dict) else None
             if not spec:
                 continue
-            source = safe_imread(spec["path"])
-            if source is None:
-                raise ValueError(
-                    f"Clean reference image could not be read: {spec['path']}")
-            if source.ndim == 2:
-                source = cv2.cvtColor(source, cv2.COLOR_GRAY2BGR)
-            if source.shape[:2] != (height, width):
-                raise ValueError(
-                    "Clean reference dimensions must match the source video: "
-                    f"expected {width}x{height}, got "
-                    f"{source.shape[1]}x{source.shape[0]}")
-            self._clean_reference_cache[span_index] = source
+            kind = str(spec.get("kind", "plate") or "plate")
+            if kind == "video":
+                donor = self._open_donor_reference(spec, width, height)
+                self._clean_reference_cache[span_index] = donor
+                donor_fields = {
+                    "donorFps": round(donor.fps, 6),
+                    "donorFrameCount": donor.frame_count,
+                    "offsetSeconds": round(donor.offset_seconds, 6),
+                }
+            else:
+                source = safe_imread(spec["path"])
+                if source is None:
+                    raise ValueError(
+                        "Clean reference image could not be read: "
+                        f"{spec['path']}")
+                if source.ndim == 2:
+                    source = cv2.cvtColor(source, cv2.COLOR_GRAY2BGR)
+                if source.shape[:2] != (height, width):
+                    raise ValueError(
+                        "Clean reference dimensions must match the source "
+                        f"video: expected {width}x{height}, got "
+                        f"{source.shape[1]}x{source.shape[0]}")
+                self._clean_reference_cache[span_index] = source
+                donor_fields = {}
             records.append({
                 "spanIndex": span_index,
                 "startSeconds": float(span.get("start", 0.0)),
                 "endSeconds": float(span.get("end", 0.0)),
                 "rect": list(span["rect"]),
+                "kind": kind,
                 "alignment": spec["alignment"],
                 "minimumConfidence": float(spec["min_confidence"]),
                 "colorMatch": bool(spec["color_match"]),
                 "source": clean_reference_source_evidence(spec["path"]),
+                **donor_fields,
                 "attemptedFrames": 0,
+                "unmappedFrames": 0,
                 "acceptedFrames": 0,
                 "fallbackFrames": 0,
                 "methodCounts": {},
@@ -131,6 +199,48 @@ class _CleanRefMixin:
             "references": records,
         }
 
+    def _open_donor_reference(self, spec: dict, width: int, height: int):
+        """Open a donor video and check it can stand in for this source."""
+        from backend.io import _open_capture
+
+        path = spec["path"]
+        capture = _open_capture(path)
+        if capture is None or not capture.isOpened():
+            if capture is not None:
+                capture.release()
+            raise ValueError(
+                f"Clean reference video could not be opened: {path}")
+        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
+        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        donor_w = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        donor_h = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        if not np.isfinite(fps) or fps <= 0.0:
+            capture.release()
+            raise ValueError(
+                "Clean reference video reports no usable frame rate: "
+                f"{path}")
+        if donor_w <= 0 or donor_h <= 0:
+            capture.release()
+            raise ValueError(
+                f"Clean reference video reports invalid dimensions: {path}")
+        if (donor_w, donor_h) != (width, height):
+            logger.info(
+                "Donor reference %sx%s differs from the source %sx%s; "
+                "frames will be scaled before alignment",
+                donor_w, donor_h, width, height,
+            )
+        return DonorReference(
+            path, capture, fps, frame_count,
+            float(spec.get("offset_seconds", 0.0) or 0.0),
+        )
+
+    def _release_clean_references(self) -> None:
+        """Close any donor captures. Safe to call more than once."""
+        for entry in list(
+                getattr(self, "_clean_reference_cache", {}).values()):
+            if isinstance(entry, DonorReference):
+                entry.release()
+
     def _apply_clean_reference_overrides(
         self,
         frame: np.ndarray,
@@ -147,7 +257,7 @@ class _CleanRefMixin:
             int(record["spanIndex"]): record
             for record in self.last_clean_reference.get("references", [])
         }
-        for span_index, reference in self._clean_reference_cache.items():
+        for span_index, entry in self._clean_reference_cache.items():
             span = spans[span_index]
             start = float(span.get("start", 0.0))
             end = float(span.get("end", 0.0))
@@ -162,6 +272,26 @@ class _CleanRefMixin:
             scoped_mask[y1:y2, x1:x2] = remaining[y1:y2, x1:x2]
             if not np.any(scoped_mask > 0):
                 continue
+            record = records[span_index]
+            if isinstance(entry, DonorReference):
+                reference = entry.frame_at(seconds)
+                if reference is None:
+                    # No donor frame maps here. Leaving the mask intact sends
+                    # these pixels down the normal inpaint path, which is the
+                    # documented fallback.
+                    record["unmappedFrames"] += 1
+                    record["lastFallbackReason"] = (
+                        "no donor frame maps to this timestamp")
+                    self.last_clean_reference["fallbackFrames"] += 1
+                    continue
+                if reference.shape[:2] != frame.shape[:2]:
+                    reference = cv2.resize(
+                        reference,
+                        (frame.shape[1], frame.shape[0]),
+                        interpolation=cv2.INTER_AREA,
+                    )
+            else:
+                reference = entry
             result = apply_clean_reference(
                 frame,
                 reference,
@@ -169,7 +299,6 @@ class _CleanRefMixin:
                 span["clean_reference"],
                 alignment_mask=final_mask,
             )
-            record = records[span_index]
             record["attemptedFrames"] += 1
             record["_confidenceTotal"] += float(result.confidence)
             record["methodCounts"][result.method] = (

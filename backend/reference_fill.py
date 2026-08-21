@@ -9,8 +9,30 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 
-CLEAN_REFERENCE_SCHEMA = "vsr.clean_reference.v1"
+# v1 described a still plate only. v2 adds `kind` and `offset_seconds` so a
+# donor video can stand in for the plate; a v1 payload normalizes to
+# kind="plate" with a zero offset, which is byte-identical behaviour.
+CLEAN_REFERENCE_SCHEMA_V1 = "vsr.clean_reference.v1"
+CLEAN_REFERENCE_SCHEMA = "vsr.clean_reference.v2"
 ALIGNMENT_MODES = ("auto", "translation", "homography")
+CLEAN_REFERENCE_KINDS = ("plate", "video")
+
+# Extensions that mean "this is a donor release, not a still frame". Used only
+# when the caller did not say which kind it is.
+_VIDEO_SUFFIXES = frozenset({
+    ".mp4", ".mkv", ".mov", ".avi", ".m4v", ".webm", ".wmv", ".flv",
+    ".mpg", ".mpeg", ".ts", ".m2ts", ".mts", ".vob", ".ogv",
+})
+
+# A donor cut can legitimately sit hours away from the source (different
+# intro, different edit), but not days. The clamp keeps a typo from seeking
+# to an absurd timestamp on every frame.
+MAX_CLEAN_REFERENCE_OFFSET_SECONDS = 86400.0
+
+
+def clean_reference_kind_for(path: str) -> str:
+    """Infer whether a path is a donor video or a still plate."""
+    return "video" if Path(path).suffix.lower() in _VIDEO_SUFFIXES else "plate"
 
 
 def _finite_float(value: object, default: float, low: float, high: float) -> float:
@@ -48,12 +70,27 @@ def normalize_clean_reference(value: object) -> Optional[dict]:
     alignment = str(value.get("alignment", "auto") or "auto").strip().lower()
     if alignment not in ALIGNMENT_MODES:
         alignment = "auto"
+    kind = str(
+        value.get("kind", value.get("source_kind", "")) or ""
+    ).strip().lower()
+    if kind not in CLEAN_REFERENCE_KINDS:
+        kind = clean_reference_kind_for(path)
+    offset = _finite_float(
+        value.get("offset_seconds", value.get("offsetSeconds", 0.0)),
+        0.0,
+        -MAX_CLEAN_REFERENCE_OFFSET_SECONDS,
+        MAX_CLEAN_REFERENCE_OFFSET_SECONDS,
+    )
     return {
         "path": path,
+        "kind": kind,
         "alignment": alignment,
         "color_match": _boolean(value.get("color_match", True), True),
         "min_confidence": _finite_float(
             value.get("min_confidence", 0.75), 0.75, 0.05, 0.99),
+        # A still plate has no timeline, so its offset is always zero rather
+        # than a value that silently does nothing.
+        "offset_seconds": offset if kind == "video" else 0.0,
     }
 
 
@@ -73,6 +110,29 @@ def clean_reference_source_evidence(path: str | Path) -> dict:
         "bytes": int(stat.st_size),
         "sha256": clean_reference_sha256(source),
     }
+
+
+def donor_frame_index(
+    seconds: float,
+    offset_seconds: float,
+    donor_fps: float,
+) -> int:
+    """Map a source timestamp onto a donor frame index.
+
+    Returns -1 when the mapped time lands before the donor starts, which the
+    caller treats as "no reference for this frame" rather than clamping to
+    frame zero and painting the wrong background.
+    """
+    try:
+        donor_seconds = float(seconds) + float(offset_seconds)
+        fps = float(donor_fps)
+    except (TypeError, ValueError):
+        return -1
+    if not math.isfinite(donor_seconds) or not math.isfinite(fps) or fps <= 0.0:
+        return -1
+    if donor_seconds < 0.0:
+        return -1
+    return int(round(donor_seconds * fps))
 
 
 @dataclass

@@ -74,6 +74,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--auto-threshold", "--keep-chyrons", "--keep-subtitles",
             "--chyron-min-hits", "--karaoke-grouping", "--karaoke-x-gap",
             "--karaoke-y-overlap",
+            "--clean-reference", "--clean-reference-offset",
+            "--clean-reference-alignment", "--clean-reference-confidence",
         ),
     ),
     (
@@ -137,6 +139,7 @@ _CLI_VALUE_RANGES = {
     "--end": "0 or >= start",
     "--threshold": "0.1..1.0",
     "--film-grain": "0..0.5",
+    "--clean-reference-confidence": "0.05..0.99",
     "--watermark-opacity": "0..1",
     "--watermark-margin": "0..500 pixels",
     "--ffmpeg-whisper-queue": "0.02..3600 seconds",
@@ -1115,6 +1118,32 @@ def _build_parser(mode_choices):
         help="Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures.",
     )
     parser.add_argument(
+        "--clean-reference", metavar="PATH", default="",
+        help=("Attach a clean plate or a donor video to every timed region "
+              "that does not already have one. When the background exists "
+              "somewhere (a clean release, a differently-subbed cut) it is "
+              "used directly instead of being invented; frames whose "
+              "alignment falls below the confidence floor fall back to the "
+              "normal inpaint path."),
+    )
+    parser.add_argument(
+        "--clean-reference-offset", metavar="SECONDS", type=float, default=0.0,
+        help=("Seconds to add to the source timestamp when looking up a "
+              "donor frame. Use a negative value when the donor starts "
+              "later than the source. Ignored for a still plate."),
+    )
+    parser.add_argument(
+        "--clean-reference-alignment", default="auto",
+        choices=("auto", "translation", "homography"),
+        help="How a reference frame is aligned to the source frame.",
+    )
+    parser.add_argument(
+        "--clean-reference-confidence", metavar="FLOAT", type=float,
+        default=0.75,
+        help=("Alignment confidence a reference frame must reach before it "
+              "is used (0.05-0.99). Below it, the frame is inpainted."),
+    )
+    parser.add_argument(
         "--plan-out", metavar="PATH", default="",
         help=("Scan the input for temporal text tracks and write a "
               "reviewable track plan JSON (frame span, sample text, "
@@ -1619,6 +1648,47 @@ def _apply_track_plan_args(args, parser, config) -> None:
           f"(excluded from cleanup), {len(plan['tracks']) - kept} to remove")
 
 
+def _apply_clean_reference_args(args, parser, config) -> None:
+    """RM-283: attach `--clean-reference` to every timed region.
+
+    Attaching to spans rather than introducing a new global field keeps one
+    representation of the feature: the GUI already stores the reference on
+    the span, and the sidecar provenance is written per span.
+    """
+    path = str(getattr(args, "clean_reference", "") or "").strip()
+    if not path:
+        return
+    if not Path(path).is_file():
+        parser.error(f"--clean-reference: file not found: {path}")
+    spans = list(getattr(config, "subtitle_region_spans", None) or [])
+    if not spans:
+        parser.error(
+            "--clean-reference needs at least one timed region; define "
+            "subtitle_region_spans in --config or draw them in the GUI"
+        )
+    from backend.reference_fill import normalize_clean_reference
+
+    spec = normalize_clean_reference({
+        "path": path,
+        "offset_seconds": getattr(args, "clean_reference_offset", 0.0),
+        "alignment": getattr(args, "clean_reference_alignment", "auto"),
+        "min_confidence": getattr(args, "clean_reference_confidence", 0.75),
+    })
+    if spec is None:
+        parser.error(f"--clean-reference: unusable reference: {path}")
+    attached = 0
+    for span in spans:
+        if not isinstance(span, dict) or span.get("clean_reference"):
+            continue
+        span["clean_reference"] = dict(spec)
+        attached += 1
+    config.subtitle_region_spans = spans
+    print(
+        f"Clean reference attached to {attached} timed region(s) "
+        f"as a {spec['kind']}"
+    )
+
+
 def _frozen_matte_from_args(args) -> dict:
     """RM-153: build a frozen-matte record from `--frozen-matte MANIFEST`.
 
@@ -1808,6 +1878,7 @@ def _apply_cli_config_overlays(args, parser, config):
         print(json.dumps({"resolved_config": resolved}, indent=2, sort_keys=True))
         sys.exit(0)
     _apply_track_plan_args(args, parser, config)
+    _apply_clean_reference_args(args, parser, config)
     return config, ffmpeg_ready
 
 

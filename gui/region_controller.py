@@ -492,6 +492,7 @@ class RegionSelectorWindow:
             self.reference_alignment_var = tk.StringVar(value="Auto")
             self.reference_color_match_var = tk.BooleanVar(value=True)
             self.reference_confidence_var = tk.StringVar(value="0.75")
+            self.reference_offset_var = tk.StringVar(value="0")
             reference_top = tk.Frame(reference_frame, bg=Theme.BG_SECONDARY)
             reference_top.pack(
                 fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
@@ -555,6 +556,22 @@ class RegionSelectorWindow:
                 insertbackground=Theme.TEXT_PRIMARY, relief="flat",
             )
             self.reference_confidence_entry.pack(side="left")
+            # RM-283: only meaningful for a donor video, so the label says so
+            # rather than leaving a dead field on a still plate.
+            self.reference_offset_label = tk.Label(
+                reference_options, text=tr("Donor offset (s)"),
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED,
+            )
+            self.reference_offset_label.pack(
+                side="left", padx=(Theme.S_MD, Theme.S_XS))
+            self.reference_offset_entry = tk.Entry(
+                reference_options, width=7,
+                textvariable=self.reference_offset_var,
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+            )
+            self.reference_offset_entry.pack(side="left")
             tk.Label(
                 reference_frame, textvariable=self.reference_status_var,
                 font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
@@ -617,6 +634,11 @@ class RegionSelectorWindow:
                 lambda _event: self._save_clean_reference_options(),
             )
             self.reference_confidence_entry.bind(
+                "<FocusOut>",
+                lambda _event: self._save_clean_reference_options(),
+                add="+",
+            )
+            self.reference_offset_entry.bind(
                 "<FocusOut>",
                 lambda _event: self._save_clean_reference_options(),
                 add="+",
@@ -1139,6 +1161,18 @@ class RegionSelectorWindow:
         self.reference_confidence_entry.configure(
             state="normal" if enabled else "disabled")
         self.reference_color_toggle.set_enabled(bool(enabled))
+        self._set_donor_offset_enabled(bool(enabled) and self._donor_selected())
+
+    def _donor_selected(self) -> bool:
+        _record, span = self._selected_clean_reference_span()
+        spec = (span or {}).get("clean_reference") or {}
+        return str(spec.get("kind", "plate")) == "video"
+
+    def _set_donor_offset_enabled(self, enabled: bool) -> None:
+        self.reference_offset_entry.configure(
+            state="normal" if enabled else "disabled")
+        self.reference_offset_label.configure(
+            fg=Theme.TEXT_MUTED if enabled else Theme.TEXT_DISABLED)
 
     def _selected_clean_reference_span(self):
         record = self._record_by_key(self.selected_region_key[0])
@@ -1169,9 +1203,20 @@ class RegionSelectorWindow:
             bool(spec.get("color_match", True)))
         self.reference_confidence_var.set(
             f"{float(spec.get('min_confidence', 0.75)):g}")
-        self.reference_status_var.set(
-            tr("Ready to preview alignment.") if spec else tr(
-                "Choose a same-size clean image for this timed region."))
+        self.reference_offset_var.set(
+            f"{float(spec.get('offset_seconds', 0.0)):g}")
+        is_donor = str(spec.get("kind", "plate")) == "video"
+        self._set_donor_offset_enabled(bool(spec) and is_donor)
+        if not spec:
+            self.reference_status_var.set(tr(
+                "Choose a clean plate or a donor video for this timed "
+                "region."))
+        elif is_donor:
+            self.reference_status_var.set(tr(
+                "Donor video attached. Frames are matched by timestamp plus "
+                "the offset."))
+        else:
+            self.reference_status_var.set(tr("Ready to preview alignment."))
 
     def _save_clean_reference_options(self):
         record, span = self._selected_clean_reference_span()
@@ -1192,13 +1237,30 @@ class RegionSelectorWindow:
                 "warning",
             )
             return False
-        from backend.reference_fill import normalize_clean_reference
+        from backend.reference_fill import (
+            MAX_CLEAN_REFERENCE_OFFSET_SECONDS,
+            normalize_clean_reference,
+        )
+        try:
+            offset = float(self.reference_offset_var.get().strip() or "0")
+            if (
+                not math.isfinite(offset)
+                or abs(offset) > MAX_CLEAN_REFERENCE_OFFSET_SECONDS
+            ):
+                raise ValueError
+        except (TypeError, ValueError):
+            self._update_status(
+                tr("Donor offset must be a number of seconds"),
+                "warning",
+            )
+            return False
         updated = normalize_clean_reference({
             **span["clean_reference"],
             "alignment": mode_values.get(
                 self.reference_alignment_var.get(), "auto"),
             "color_match": self.reference_color_match_var.get(),
             "min_confidence": confidence,
+            "offset_seconds": offset,
         })
         if updated != span.get("clean_reference"):
             self._record_history()
@@ -1216,42 +1278,76 @@ class RegionSelectorWindow:
             return
         path = filedialog.askopenfilename(
             parent=self.win,
-            title=tr("Choose clean reference image"),
+            title=tr("Choose a clean plate or donor video"),
             filetypes=[
+                (tr("Clean plates and donor videos"),
+                 "*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff "
+                 "*.mp4 *.mkv *.mov *.avi *.m4v *.webm *.ts"),
                 (tr("Image files"),
                  "*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff"),
+                (tr("Video files"),
+                 "*.mp4 *.mkv *.mov *.avi *.m4v *.webm *.ts"),
                 (tr("All files"), "*.*"),
             ],
         )
         if not path:
             return
-        reference = safe_imread(path)
-        if reference is None:
-            self._update_status(
-                tr("The clean reference image could not be read"),
-                "warning",
-            )
-            return
-        if reference.shape[:2] != (self.orig_h, self.orig_w):
-            self._update_status(
-                tr("Clean reference must be {width}x{height}").format(
-                    width=self.orig_w, height=self.orig_h),
-                "warning",
-            )
-            return
-        from backend.reference_fill import normalize_clean_reference
+        from backend.reference_fill import (
+            clean_reference_kind_for,
+            normalize_clean_reference,
+        )
+        if clean_reference_kind_for(path) == "video":
+            if not self._donor_video_is_usable(path):
+                return
+        else:
+            reference = safe_imread(path)
+            if reference is None:
+                self._update_status(
+                    tr("The clean reference image could not be read"),
+                    "warning",
+                )
+                return
+            if reference.shape[:2] != (self.orig_h, self.orig_w):
+                self._update_status(
+                    tr("Clean reference must be {width}x{height}").format(
+                        width=self.orig_w, height=self.orig_h),
+                    "warning",
+                )
+                return
         self._record_history()
         span["clean_reference"] = normalize_clean_reference({
             "path": path,
             "alignment": "auto",
             "color_match": True,
             "min_confidence": 0.75,
+            "offset_seconds": 0.0,
         })
         self._load_clean_reference_controls(record)
         self._update_status(
             tr("Clean reference attached to the timed region"),
             "success",
         )
+
+    def _donor_video_is_usable(self, path) -> bool:
+        """Reject a donor the run would only fail on later."""
+        import cv2
+
+        capture = cv2.VideoCapture(str(path))
+        try:
+            if not capture.isOpened():
+                self._update_status(
+                    tr("The donor video could not be opened"), "warning")
+                return False
+            fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
+            if not math.isfinite(fps) or fps <= 0.0:
+                self._update_status(
+                    tr("The donor video reports no usable frame rate"),
+                    "warning",
+                )
+                return False
+        finally:
+            capture.release()
+        return True
 
     def _clear_clean_reference(self):
         record, span = self._selected_clean_reference_span()

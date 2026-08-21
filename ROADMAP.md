@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-283 L -- donor-video clean reference (still-plate path already exists)
 - RM-292 M -- fade-in / fade-out mask temporal extension
 - RM-294 S -- wrap remaining `N_(f"...")` status toasts so they extract and translate
 
@@ -25,14 +24,6 @@ P3:
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
 
 ### P2
-
-- [ ] P2 -- RM-283: Accept a donor video as a clean reference, not just a still plate
-  Why: when a clean or differently-subbed release exists the background does not need to be invented.
-  Evidence: `backend/reference_fill.py` already ships alignment modes under `CLEAN_REFERENCE_SCHEMA`, but `normalize_clean_reference` only reads a still plate per timed region.
-  Touches: `backend/reference_fill.py`, `backend/_clean_ref_mixin.py`, `backend/config.py` with the `gui/config.py` mirror, `backend/cli.py` (via `_apply_cli_config_overlays`, not `main()`), `gui/region_controller.py`.
-  Acceptance: a donor video path can be attached as a clean reference; frames are matched by timestamp with a configurable offset; a per-frame alignment-confidence floor falls back to the normal inpaint path; provenance records donor hash and offset; schema version bumps rather than mutating v1.
-  Confidence: Verified (gap and foundation) / Needs live validation
-  Complexity: L
 
 - [ ] P2 -- RM-292: Extend detected subtitle masks across fade-in and fade-out frames
   Why: fading hardsubs are the case where per-frame detection and steady-state alpha unmix both miss.
