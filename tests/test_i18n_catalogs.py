@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gettext
 import io
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -206,6 +207,105 @@ class I18nCatalogLifecycleTests(unittest.TestCase):
         self.assertIn("('locale', 'locale')", spec)
         installer = (ROOT / "installer" / "vsr.nsi").read_text(encoding="utf-8")
         self.assertIn('File /r "${DIST_DIR}\\*.*"', installer)
+
+
+
+class CatalogCoverageGateTests(unittest.TestCase):
+    """RM-284: the picker must not advertise a language the build cannot show."""
+
+    def setUp(self):
+        from backend import i18n
+
+        self._saved_dirs = i18n._candidate_locale_dirs
+        i18n._coverage_cache.clear()
+
+    def tearDown(self):
+        from backend import i18n
+
+        i18n._candidate_locale_dirs = self._saved_dirs
+        i18n._coverage_cache.clear()
+
+    @staticmethod
+    def _write_catalog(root: Path, tag: str, translated: int, total: int):
+        """Write a compiled catalog whose stamped coverage is translated/total."""
+        entries = [
+            i18n_catalogs.PoEntry(
+                msgid="", msgstr={0: i18n_catalogs._header(tag)})
+        ]
+        for index in range(total):
+            entries.append(i18n_catalogs.PoEntry(
+                msgid=f"string {index}",
+                msgstr={0: f"traduit {index}" if index < translated else ""},
+            ))
+        percent = i18n_catalogs.catalog_coverage_percent(entries)
+        target = root / tag / "LC_MESSAGES"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "vsr.mo").write_bytes(
+            i18n_catalogs.compile_mo(entries, percent))
+        return percent
+
+    def _catalogs_in(self, root: Path):
+        from backend import i18n
+
+        i18n._candidate_locale_dirs = lambda: [root]
+        i18n._coverage_cache.clear()
+        return i18n.available_catalogs()
+
+    def test_a_thin_catalog_is_hidden_from_the_picker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            percent = self._write_catalog(root, "fr", translated=40, total=100)
+            self.assertLess(percent, 90.0)
+            self.assertEqual(self._catalogs_in(root), ())
+
+    def test_a_covered_catalog_is_offered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_catalog(root, "fr", translated=95, total=100)
+            self.assertEqual(self._catalogs_in(root), ("fr",))
+
+    def test_a_catalog_at_the_bar_exactly_is_offered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            percent = self._write_catalog(root, "fr", translated=90, total=100)
+            self.assertEqual(percent, 90.0)
+            self.assertEqual(self._catalogs_in(root), ("fr",))
+
+    def test_an_unstamped_catalog_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entries = [
+                i18n_catalogs.PoEntry(
+                    msgid="", msgstr={0: i18n_catalogs._header("fr")}),
+                i18n_catalogs.PoEntry(msgid="one", msgstr={0: "un"}),
+            ]
+            target = root / "fr" / "LC_MESSAGES"
+            target.mkdir(parents=True)
+            (target / "vsr.mo").write_bytes(i18n_catalogs.compile_mo(entries))
+            self.assertEqual(self._catalogs_in(root), ())
+
+    def test_the_pseudo_locale_is_exempt_from_the_bar(self):
+        from backend import i18n
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_catalog(root, "qps-Ploc", translated=1, total=100)
+            i18n._candidate_locale_dirs = lambda: [root]
+            i18n._coverage_cache.clear()
+            with mock.patch.dict(
+                os.environ, {"VSR_PSEUDO_LOCALE": "1"}, clear=False
+            ):
+                self.assertEqual(i18n.available_catalogs(), ("qps-Ploc",))
+
+    def test_the_shipped_catalog_carries_a_coverage_stamp(self):
+        from backend import i18n
+
+        stamped = ROOT / "locale" / "qps-Ploc" / "LC_MESSAGES" / "vsr.mo"
+        self.assertTrue(stamped.is_file())
+        self.assertIsNotNone(
+            i18n.catalog_coverage(stamped),
+            "compile must stamp coverage; without it every locale is hidden",
+        )
 
 
 if __name__ == "__main__":

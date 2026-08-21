@@ -512,11 +512,16 @@ def validate_po(path: Path, entries: list[PoEntry] | None = None) -> None:
                 )
 
 
-def compile_mo(entries: list[PoEntry]) -> bytes:
+def compile_mo(entries: list[PoEntry], coverage: float | None = None) -> bytes:
     pairs: list[tuple[str, str]] = []
-    for entry in entries:
+    for index, entry in enumerate(entries):
         original = entry.msgid
         translated = entry.msgstr.get(0, "")
+        if index == 0 and coverage is not None:
+            # RM-284: the runtime only ships .mo files, so the coverage the
+            # picker gates on has to travel inside the catalog metadata.
+            translated = translated.rstrip("\n") + (
+                f"\n{COVERAGE_HEADER}: {coverage:.1f}\n")
         if entry.msgid_plural:
             original += "\0" + entry.msgid_plural
             translated = "\0".join(
@@ -551,6 +556,13 @@ def compile_mo(entries: list[PoEntry]) -> bytes:
         struct.pack("<2I", *item) for item in translation_descriptors
     )
     return header + tables + original_blob + translation_blob
+
+
+# Catalog metadata key carrying translated-percent, and the bar a catalog
+# must clear to appear in the language picker. Below this a user picks a
+# language and most of the interface stays English, which reads as a bug.
+COVERAGE_HEADER = "X-VSR-Coverage"
+MINIMUM_CATALOG_COVERAGE = 90.0
 
 
 def _catalog_paths(locale_dir: Path = LOCALE_DIR) -> list[Path]:
@@ -595,11 +607,17 @@ def update_catalogs(locale_dir: Path = LOCALE_DIR) -> None:
     report_coverage(locale_dir)
 
 
+def catalog_coverage_percent(entries: list[PoEntry]) -> float:
+    translated, total = _coverage(entries)
+    return 100.0 if total == 0 else translated * 100.0 / total
+
+
 def compile_catalogs(locale_dir: Path = LOCALE_DIR) -> None:
     for path in _catalog_paths(locale_dir):
         entries = parse_po(path)
         validate_po(path, entries)
-        path.with_suffix(".mo").write_bytes(compile_mo(entries))
+        path.with_suffix(".mo").write_bytes(
+            compile_mo(entries, catalog_coverage_percent(entries)))
 
 
 def check_catalogs(locale_dir: Path = LOCALE_DIR) -> None:
@@ -623,7 +641,7 @@ def check_catalogs(locale_dir: Path = LOCALE_DIR) -> None:
         if actual_ids != expected_ids:
             raise ValueError(f"{path}: catalog keys do not match the POT template")
         mo_path = path.with_suffix(".mo")
-        expected_mo = compile_mo(entries)
+        expected_mo = compile_mo(entries, catalog_coverage_percent(entries))
         if not mo_path.is_file() or mo_path.read_bytes() != expected_mo:
             raise ValueError(f"{mo_path}: compiled catalog drifted")
     report_coverage(locale_dir)

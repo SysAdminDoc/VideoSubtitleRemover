@@ -19,6 +19,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   target) instead of an anonymous pane, and the footer status line reads out
   as it changes. Annotation failure is silent, so nothing changes on a machine
   where it is unavailable.
+- The Settings language picker now lists only catalogs that have at least 90%
+  of the interface translated, so choosing a language cannot leave most of the
+  window in English. README documents the bar.
 
 ## [3.36.0] - 2026-08-21
 

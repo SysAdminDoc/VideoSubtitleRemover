@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-284 S -- gate language picker on catalog coverage; document translation policy
 - RM-283 L -- donor-video clean reference (still-plate path already exists)
 - RM-292 M -- fade-in / fade-out mask temporal extension
 - RM-294 S -- wrap remaining `N_(f"...")` status toasts so they extract and translate
@@ -34,14 +33,6 @@ P3:
   Acceptance: a donor video path can be attached as a clean reference; frames are matched by timestamp with a configurable offset; a per-frame alignment-confidence floor falls back to the normal inpaint path; provenance records donor hash and offset; schema version bumps rather than mutating v1.
   Confidence: Verified (gap and foundation) / Needs live validation
   Complexity: L
-
-- [ ] P2 -- RM-284: Gate the language picker on catalog coverage and document the translation policy
-  Why: the picker advertises localization the build does not have -- only the `qps-Ploc` pseudo-locale ships -- so choosing a language appears to do nothing.
-  Evidence: `gui/layout_build.py` builds the picker from `available_catalogs()`, and `locale/` contains only `vsr.pot` and `qps-Ploc`.
-  Touches: `scripts/i18n_catalogs.py`, `gui/layout_build.py`, `backend/i18n.py`, README localization section.
-  Acceptance: a catalog below a documented coverage threshold is excluded from the picker (pseudo-locale exempt); the picker shows English only when no catalog qualifies.
-  Confidence: Verified
-  Complexity: S
 
 - [ ] P2 -- RM-292: Extend detected subtitle masks across fade-in and fade-out frames
   Why: fading hardsubs are the case where per-frame detection and steady-state alpha unmix both miss.

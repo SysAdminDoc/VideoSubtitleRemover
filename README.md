@@ -1388,6 +1388,20 @@ To add a new language:
 5. Commit the `.po` and generated `.mo`, and open a pull request. Only the
    files under `locale/<your tag>/` should change.
 
+### Which languages the picker offers
+
+The Settings language picker lists English plus every catalog that has at
+least **90%** of the interface translated. Anything thinner is hidden, because
+picking a language and watching most of the window stay English reads as a
+broken feature rather than a partial translation. The percentage is measured
+by `coverage` and stamped into the compiled `.mo`, so the picker gates on what
+the shipped catalog actually contains. A catalog with no stamp (built by an
+older toolchain) counts as unmeasured and stays hidden.
+
+Today only the `qps-Ploc` pseudo-locale ships, and it is exempt from the bar
+and hidden from end users unless `VSR_PSEUDO_LOCALE=1` is set. So a stock
+build shows System and English until a community catalog clears 90%.
+
 Set the interface language at runtime in the GUI (Settings) or override with
 `VSR_UI_LOCALE=<tag>`; `VSR_UI_LOCALE=qps-Ploc` forces the pseudo-locale for
 testing.

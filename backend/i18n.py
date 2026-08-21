@@ -33,6 +33,35 @@ logger = logging.getLogger(__name__)
 
 DOMAIN = "vsr"
 
+# RM-284: a catalog is only offered once it can carry the interface. Below
+# this bar a user picks a language, most of the window stays English, and
+# the feature reads as broken. The percentage is stamped into the compiled
+# catalog's metadata by scripts/i18n_catalogs.py; a catalog with no stamp
+# predates the gate and is treated as unmeasured, which fails closed.
+COVERAGE_HEADER = "x-vsr-coverage"
+MINIMUM_CATALOG_COVERAGE = 90.0
+
+_coverage_cache: dict = {}
+
+
+def catalog_coverage(path) -> Optional[float]:
+    """Return a compiled catalog's translated percentage, or None."""
+    key = str(path)
+    if key in _coverage_cache:
+        return _coverage_cache[key]
+    percent = None
+    try:
+        with open(path, "rb") as handle:
+            info = gettext.GNUTranslations(handle).info()
+        raw = info.get(COVERAGE_HEADER)
+        if raw is not None:
+            percent = float(str(raw).strip().rstrip("%"))
+    except Exception as exc:
+        logger.debug(f"Could not read catalog coverage from {path}: {exc}")
+        percent = None
+    _coverage_cache[key] = percent
+    return percent
+
 
 def _candidate_locale_dirs() -> list:
     """Return directories that might hold compiled `.mo` catalogs.
@@ -148,8 +177,19 @@ def available_catalogs() -> tuple[str, ...]:
                 pseudo_enabled or smoke_locale == tag
             ):
                 continue
-            if tag and catalog.is_file():
-                found.setdefault(tag.lower(), tag)
+            if not (tag and catalog.is_file()):
+                continue
+            exempt = tag.lower().startswith("qps-") or smoke_locale == tag
+            if not exempt:
+                percent = catalog_coverage(catalog)
+                if percent is None or percent < MINIMUM_CATALOG_COVERAGE:
+                    logger.info(
+                        f"Hiding locale {tag}: coverage "
+                        f"{'unmeasured' if percent is None else f'{percent:.1f}%'}"
+                        f" is below the {MINIMUM_CATALOG_COVERAGE:.0f}% bar"
+                    )
+                    continue
+            found.setdefault(tag.lower(), tag)
     return tuple(sorted(found.values(), key=str.lower))
 
 
