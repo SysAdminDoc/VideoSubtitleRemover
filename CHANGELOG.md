@@ -32,8 +32,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   Fade-in hold and Fade-out hold settings (`--fade-in` / `--fade-out`, 0-15
   frames, off by default) reuse the nearest confident mask on either side of a
   text track, covering the frames where the glyphs are visible but too faint
-  for OCR. The fade-out hold carries across decode batches; the fade-in hold
-  reaches back within the current batch.
+  for OCR. Both holds are exact across decode batches: the fade-out hold
+  carries its mask forward, and the fade-in hold defers the tail of each
+  batch until the following one exists so it can see what comes next.
+  Pausing mid-run flushes that tail, which keeps the checkpoint on a batch
+  boundary so a resumed run produces the same frames as an uninterrupted one.
 - Every status message that names a file, a preset, a device or a count now
   reaches the translation catalog. Around forty of them were wrapped in a
   marker that records a msgid but cannot translate an f-string, so they always

@@ -14,12 +14,15 @@ from backend.processor import (
 )
 
 
-def test_frame_loop_state_has_only_six_carried_mutables():
+def test_frame_loop_state_has_only_eight_carried_mutables():
     # This list is a guardrail against state creep in the frame loop, so it
     # is updated only when a new carried value is a deliberate design choice.
     # fade_carry (RM-292) is one: a fade-out hold has to survive the batch
     # boundary, and the alternative -- parking it on the remover instance --
-    # is the same state in a worse place.
+    # is the same state in a worse place. fade_pending and written_idx
+    # (RM-296) are the other two: a fade-in hold looks forward, so the tail
+    # of a batch has to wait for the next one, which means the decode cursor
+    # and the write cursor stop being the same number.
     assert [item.name for item in fields(_FrameLoopState)] == [
         "frame_idx",
         "last_mask",
@@ -27,7 +30,63 @@ def test_frame_loop_state_has_only_six_carried_mutables():
         "tracker",
         "fixed_mask_cache",
         "fade_carry",
+        "fade_pending",
+        "written_idx",
     ]
+
+
+def test_the_write_cursor_never_runs_ahead_of_the_decode_cursor():
+    # written_idx is what the checkpoint resume point means, so a batch that
+    # is still held back must leave it behind frame_idx, never ahead.
+    state = _FrameLoopState(
+        frame_idx=30, last_mask=None, last_hash=None, tracker=None,
+        fixed_mask_cache={}, written_idx=0,
+    )
+    assert state.written_idx <= state.frame_idx
+    assert state.fade_pending is None
+
+
+def test_split_tail_and_prepend_keep_the_parallel_payloads_aligned():
+    batch = _FrameBatch()
+    for index in range(5):
+        batch.add(
+            np.full((4, 4, 3), index, dtype=np.uint8),
+            np.full((4, 4), index, dtype=np.uint8),
+            None,
+            passthrough=index % 2 == 0,
+        )
+    tail = batch.split_tail(2)
+    assert len(batch.frames) == 3
+    assert len(tail.frames) == 2
+    for held in (batch, tail):
+        assert len(held.frames) == len(held.masks)
+        assert len(held.frames) == len(held.source_frames)
+        assert len(held.frames) == len(held.passthrough_flags)
+    assert tail.passthrough_flags == [False, True]
+
+    following = _FrameBatch()
+    following.add(
+        np.full((4, 4, 3), 9, dtype=np.uint8),
+        np.full((4, 4), 9, dtype=np.uint8),
+        None,
+        passthrough=False,
+    )
+    following.prepend(tail)
+    assert [int(frame[0, 0, 0]) for frame in following.frames] == [3, 4, 9]
+    assert following.passthrough_flags == [False, True, False]
+
+
+def test_split_tail_of_zero_is_a_no_op():
+    batch = _FrameBatch()
+    batch.add(
+        np.zeros((4, 4, 3), dtype=np.uint8),
+        np.zeros((4, 4), dtype=np.uint8),
+        None,
+        passthrough=False,
+    )
+    tail = batch.split_tail(0)
+    assert not tail.frames
+    assert len(batch.frames) == 1
 
 
 def test_frame_loop_context_is_frozen():
@@ -97,13 +156,19 @@ def test_process_video_handles_media_write_error_before_generic_exception():
 
 
 def test_process_video_delegates_each_frame_loop_stage():
+    # RM-296 moved refine/inpaint/write behind _process_batch, because a
+    # pause has to run that same sequence a second time to flush the held
+    # tail. The guardrail is unchanged in intent: process_video orchestrates
+    # and must not inline the loop body.
     source = inspect.getsource(SubtitleRemover.process_video)
     for method in (
         "_decode_and_build_batch",
-        "_refine_batch_masks",
-        "_inpaint_batch",
-        "_write_batch",
+        "_process_batch",
         "_checkpoint_after_batch",
     ):
         assert f"self.{method}(" in source
     assert "for _ in range(batch_size)" not in source
+
+    stage = inspect.getsource(SubtitleRemover._process_batch)
+    for method in ("_refine_batch_masks", "_inpaint_batch", "_write_batch"):
+        assert f"self.{method}(" in stage

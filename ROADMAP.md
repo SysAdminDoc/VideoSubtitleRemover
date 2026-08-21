@@ -12,15 +12,4 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 
 Implementer index -- drain in this order.
 
-P3:
-- RM-296 M -- make the fade-in hold exact across decode-batch boundaries
-
-### P3
-
-- [ ] P3 -- RM-296: Make the fade-in mask hold exact across decode-batch boundaries
-  Why: RM-292's fade-in reaches back only within the current decode batch, because the frames before it have already been inpainted and written by the time the batch's masks are known. A track whose first detection lands in the first few frames of a batch gets a shorter hold than requested.
-  Evidence: `backend/processor.py` writes per batch (`_write_batch` inside the `while True` loop), and `state.frame_idx` advances during decode, so a carry-over would desync the checkpoint contract. Batch size is `sttn_max_load_num` (default 30) and the hold is capped at 15, so the miss is bounded but real. Fade-out is already exact via `_FrameLoopState.fade_carry`.
-  Touches: `backend/processor.py` (`_decode_and_build_batch`, `_write_batch`, `_checkpoint_after_batch`), `tests/test_frame_loop.py`.
-  Acceptance: a track whose first detection falls at index 0 of a decode batch still receives the full `--fade-in N` hold; the checkpoint resume contract still holds (a resumed run produces the same frames as an uninterrupted one); `N=0` stays byte-identical on the reference corpus.
-  Confidence: Verified (gap)
-  Complexity: M
+Nothing is queued. Blocked work is in Roadmap_Blocked.md.

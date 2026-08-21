@@ -448,6 +448,12 @@ class _FrameLoopState:
     # RM-292: (mask, frames_remaining) so a fade-out hold survives a batch
     # boundary instead of ending wherever the decode happened to split.
     fade_carry: Any = None
+    # RM-296: frames decoded but deliberately not yet processed, held back so
+    # they can see the next batch's masks. frame_idx is the DECODE cursor;
+    # written_idx is how many frames have actually reached the writer, which
+    # is what the checkpoint's resume point and the preview index mean.
+    fade_pending: Any = None
+    written_idx: int = 0
 
 
 @dataclass
@@ -458,12 +464,37 @@ class _FrameBatch:
     passthrough_flags: List[bool] = field(default_factory=list)
     active_segments: List[Tuple[int, int]] = field(default_factory=list)
 
+    _PARALLEL = ("frames", "masks", "source_frames", "passthrough_flags")
+
     def add(self, frame: np.ndarray, mask: np.ndarray,
             source_frame: Optional[np.ndarray], *, passthrough: bool) -> None:
         self.frames.append(frame)
         self.masks.append(mask)
         self.source_frames.append(source_frame)
         self.passthrough_flags.append(bool(passthrough))
+
+    def split_tail(self, count: int) -> "_FrameBatch":
+        """Remove the last `count` frames and return them as a new batch.
+
+        RM-296: a held-back tail is how a fade-in hold reaches across a
+        decode boundary. The frames leave this batch entirely, so nothing
+        downstream can process them twice.
+        """
+        tail = _FrameBatch()
+        if count <= 0:
+            return tail
+        for name in self._PARALLEL:
+            values = getattr(self, name)
+            setattr(tail, name, values[-count:])
+            setattr(self, name, values[:-count])
+        return tail
+
+    def prepend(self, other: "_FrameBatch") -> None:
+        """Put `other`'s frames in front of this batch's, in order."""
+        if not other.frames:
+            return
+        for name in self._PARALLEL:
+            setattr(self, name, getattr(other, name) + getattr(self, name))
 
 
 def _frame_seconds(index: int, fps: float,
@@ -2048,7 +2079,7 @@ class SubtitleRemover(
                 batch.masks, state.fade_carry = extend_masks_across_fades(
                     batch.masks, fade_in, fade_out, state.fade_carry)
             if ctx.matte_reader is not None:
-                batch_start = state.frame_idx - len(batch.frames)
+                batch_start = state.written_idx
                 for offset, passthrough in enumerate(
                         batch.passthrough_flags):
                     if passthrough:
@@ -2093,9 +2124,7 @@ class SubtitleRemover(
             reference_frames = [frame.copy() for frame in batch.frames]
             fallback_masks = [mask.copy() for mask in batch.masks]
             if self._clean_reference_cache:
-                batch_start = (
-                    ctx.start_frame + state.frame_idx - len(batch.frames)
-                )
+                batch_start = ctx.start_frame + state.written_idx
                 for offset, (frame, mask) in enumerate(zip(
                         batch.frames, batch.masks)):
                     if batch.passthrough_flags[offset]:
@@ -2143,7 +2172,7 @@ class SubtitleRemover(
                 )
                 ctx.writer.write(write_frame)
         for offset, result in enumerate(results):
-            frame_index = state.frame_idx - len(results) + offset
+            frame_index = state.written_idx + offset
             if (self.on_preview_frame is not None
                     and frame_index % stride == 0):
                 try:
@@ -2161,15 +2190,33 @@ class SubtitleRemover(
             with self._time_stage("encode"):
                 for mask in batch.masks:
                     ctx.matte_writer.write(mask)
+        state.written_idx += len(results)
+
+    def _pause_requested(self, ctx: _FrameLoopContext) -> bool:
+        """Ask once whether the caller wants to pause after this batch."""
+        checkpoint = ctx.checkpoint
+        if not checkpoint.active or checkpoint.root is None or not checkpoint.key:
+            return False
+        return bool(checkpoint.pause_check and checkpoint.pause_check())
+
+    def _process_batch(self, ctx: _FrameLoopContext,
+                       state: _FrameLoopState,
+                       batch: _FrameBatch) -> None:
+        """Refine, inpaint, and write one batch."""
+        self._refine_batch_masks(ctx, state, batch)
+        results = self._inpaint_batch(ctx, state, batch)
+        self._write_batch(ctx, state, batch, results)
 
     def _checkpoint_after_batch(self, ctx: _FrameLoopContext,
-                                state: _FrameLoopState) -> None:
+                                state: _FrameLoopState,
+                                should_pause: Optional[bool] = None) -> None:
         """Persist running/paused state after one fully-written batch."""
         checkpoint = ctx.checkpoint
         if not checkpoint.active or checkpoint.root is None or not checkpoint.key:
             return
-        should_pause = bool(
-            checkpoint.pause_check and checkpoint.pause_check())
+        if should_pause is None:
+            should_pause = bool(
+                checkpoint.pause_check and checkpoint.pause_check())
         payload = write_pause_checkpoint(
             checkpoint.root,
             checkpoint.key,
@@ -2178,7 +2225,7 @@ class SubtitleRemover(
             config_hash=checkpoint.config_hash,
             frame_dir=checkpoint.frame_dir or pause_frame_dir(
                 checkpoint.root, checkpoint.key),
-            next_frame=state.frame_idx,
+            next_frame=state.written_idx,
             total_frames=ctx.frames_to_process,
             width=ctx.width,
             height=ctx.height,
@@ -2192,7 +2239,7 @@ class SubtitleRemover(
         if should_pause:
             message = (
                 f"Processing paused at frame "
-                f"{state.frame_idx}/{ctx.frames_to_process}"
+                f"{state.written_idx}/{ctx.frames_to_process}"
             )
             logger.info(message)
             raise ProcessingPaused(message, checkpoint.state_path)
@@ -2960,16 +3007,51 @@ class SubtitleRemover(
                 last_hash=last_hash,
                 tracker=tracker,
                 fixed_mask_cache=fixed_mask_cache,
+                written_idx=frame_idx,
+            )
+            # RM-296: a fade-in hold looks FORWARD, so the last `fade_in`
+            # frames of a batch cannot be finalised until the next batch's
+            # masks exist. Hold them back and re-attach them to the front of
+            # the next batch, which always brings at least batch_size frames
+            # of lookahead with it.
+            fade_in_hold = (
+                int(getattr(self.config, "mask_fade_in_frames", 0) or 0)
+                if not loop_ctx.frozen_matte else 0
             )
             while True:
                 batch = self._decode_and_build_batch(loop_ctx, loop_state)
+                decoded = len(batch.frames)
+                if loop_state.fade_pending is not None:
+                    batch.prepend(loop_state.fade_pending)
+                    loop_state.fade_pending = None
                 if not batch.frames:
                     break
-                self._refine_batch_masks(loop_ctx, loop_state, batch)
-                results = self._inpaint_batch(loop_ctx, loop_state, batch)
-                self._write_batch(loop_ctx, loop_state, batch, results)
-                self._checkpoint_after_batch(loop_ctx, loop_state)
-            frame_idx = loop_state.frame_idx
+                at_end = (
+                    decoded < loop_ctx.batch_size
+                    or loop_ctx.start_frame + loop_state.frame_idx
+                    >= loop_ctx.end_frame
+                )
+                if (
+                    fade_in_hold > 0
+                    and not at_end
+                    and len(batch.frames) > fade_in_hold
+                ):
+                    loop_state.fade_pending = batch.split_tail(fade_in_hold)
+                self._process_batch(loop_ctx, loop_state, batch)
+                should_pause = self._pause_requested(loop_ctx)
+                if should_pause and loop_state.fade_pending is not None:
+                    # A pause has to leave the checkpoint on a decode-batch
+                    # boundary. STTN pools a whole batch, so a resume that
+                    # regrouped the frames would produce different pixels
+                    # from an uninterrupted run. Flushing the held tail
+                    # costs it the lookahead it was waiting for -- bounded
+                    # by fade_in, and only when a human pauses.
+                    tail = loop_state.fade_pending
+                    loop_state.fade_pending = None
+                    self._process_batch(loop_ctx, loop_state, tail)
+                self._checkpoint_after_batch(
+                    loop_ctx, loop_state, should_pause=should_pause)
+            frame_idx = loop_state.written_idx
 
             if frame_idx < frames_to_process:
                 raise _video_decode_error(

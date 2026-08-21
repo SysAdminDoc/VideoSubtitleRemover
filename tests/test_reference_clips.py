@@ -1053,5 +1053,238 @@ class ReferenceBlessTests(unittest.TestCase):
         self.assertEqual(manifest["clips"][1]["metric_floors"]["psnr"], 11.0)
 
 
+class FadeInAcrossBatchBoundaryTests(unittest.TestCase):
+    """RM-296: the hold must not be cut short by where the decode split.
+
+    A track whose first detection lands at the start of a decode batch used
+    to get a shorter hold than requested, because the frames before it were
+    already inpainted and written.
+    """
+
+    W, H = 96, 72
+    BAND = (10, 40, 86, 64)
+
+    def _clip(self, path, frames, first_text_frame):
+        import cv2
+        import numpy as np
+
+        writer = cv2.VideoWriter(
+            str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, (self.W, self.H))
+        for index in range(frames):
+            frame = np.full((self.H, self.W, 3), 30, dtype=np.uint8)
+            if index >= first_text_frame:
+                cv2.rectangle(frame, self.BAND[:2], self.BAND[2:],
+                              (250, 250, 250), -1)
+            writer.write(frame)
+        writer.release()
+        return path
+
+    def _remover(self, fade_in, batch_size, first_text_frame=16):
+        """A minimally wired SubtitleRemover for the frame loop."""
+        config = processor.normalize_processing_config(
+            processor.ProcessingConfig(
+                mode=processor.InpaintMode.STTN,
+                device="cpu",
+                sttn_skip_detection=True,
+                sttn_max_load_num=batch_size,
+                adaptive_batch=False,
+                mask_fade_in_frames=fade_in,
+                subtitle_region_spans=[{
+                    "rect": list(self.BAND),
+                    "start": first_text_frame / 10.0,
+                    "end": 0.0,
+                }],
+                preserve_audio=False,
+                use_hw_encode=False,
+                output_quality=20,
+            ))
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = config
+        remover.detector = processor.SubtitleDetector.__new__(
+            processor.SubtitleDetector)
+        remover.detector.device = "cpu"
+        remover.detector.lang = "en"
+        remover.detector.vertical = False
+        remover.detector._engine_name = "fade-boundary-test"
+        remover.detector._rapid_model = None
+        remover.detector._paddle_model = None
+        remover.detector._surya_det = None
+        remover.detector._surya_processor = None
+        remover.detector._easyocr_reader = None
+        remover.inpainter = processor.STTNInpainter("cpu", config)
+        remover.on_progress = None
+        remover.on_preview_frame = None
+        remover.live_preview_stride = 1000
+        remover._hw_encoder = None
+        remover.last_quality_report = None
+        remover._color_metadata = None
+        remover._active_writer = None
+        return remover
+
+    @staticmethod
+    def _frame_digest(path):
+        import hashlib
+
+        import cv2
+        import numpy as np
+
+        capture = cv2.VideoCapture(str(path))
+        accumulator = hashlib.sha256()
+        count = 0
+        while True:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            accumulator.update(np.ascontiguousarray(frame).tobytes())
+            count += 1
+        capture.release()
+        return accumulator.hexdigest(), count
+
+    def _masks_for(self, fade_in, batch_size, frames, first_text_frame):
+        """Run the frame loop and capture the mask handed to each write."""
+        from unittest import mock
+
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = self._clip(work / "in.mp4", frames, first_text_frame)
+            output = work / "out.mp4"
+            remover = self._remover(fade_in, batch_size, first_text_frame)
+
+            seen = []
+            real_write = processor.SubtitleRemover._write_batch
+
+            def capture(self_, ctx, state, batch, results):
+                for offset, mask in enumerate(batch.masks):
+                    seen.append((
+                        state.written_idx + offset,
+                        bool(np.any(mask)),
+                    ))
+                return real_write(self_, ctx, state, batch, results)
+
+            with mock.patch.object(
+                processor.SubtitleRemover, "_write_batch", capture
+            ):
+                self.assertTrue(
+                    remover.process_video(str(source), str(output)))
+        return seen
+
+    BATCH = 8
+    FADE = 5
+
+    @staticmethod
+    def _first_masked(seen):
+        masked = [index for index, has_mask in seen if has_mask]
+        return min(masked) if masked else None
+
+    def test_every_frame_is_written_exactly_once_and_in_order(self):
+        """Holding a tail back must not drop, duplicate, or reorder frames."""
+        seen = self._masks_for(
+            fade_in=self.FADE, batch_size=self.BATCH, frames=32,
+            first_text_frame=17)
+        indices = [index for index, _ in seen]
+        self.assertEqual(indices, sorted(indices))
+        self.assertEqual(len(indices), len(set(indices)))
+        self.assertEqual(indices, list(range(len(indices))))
+
+    def test_the_hold_reaches_back_across_the_batch_split(self):
+        """The hold is measured against the same clip run without it.
+
+        Deriving the detection frame from a second run rather than from the
+        authored frame number keeps the test independent of how the encoder
+        chose to time the synthetic clip.
+        """
+        without = self._masks_for(
+            fade_in=0, batch_size=self.BATCH, frames=32, first_text_frame=16)
+        base = self._first_masked(without)
+        self.assertIsNotNone(base, "the fixture must produce a masked region")
+        self.assertEqual(
+            base % self.BATCH, 0,
+            f"detection at frame {base} must land on a decode-batch boundary "
+            f"for this test to exercise RM-296 at all",
+        )
+
+        with_hold = self._masks_for(
+            fade_in=self.FADE, batch_size=self.BATCH, frames=32,
+            first_text_frame=16)
+        masked = {index for index, has_mask in with_hold if has_mask}
+        for index in range(base - self.FADE, base):
+            with self.subTest(frame=index):
+                self.assertIn(
+                    index, masked,
+                    f"frame {index} is within {self.FADE} frames of the first "
+                    f"detection at {base} and must inherit its mask",
+                )
+        self.assertNotIn(
+            base - self.FADE - 1, masked,
+            "the hold must stop exactly where it was asked to",
+        )
+
+    def test_a_paused_and_resumed_run_matches_an_uninterrupted_one(self):
+        """RM-296: the held tail must not move the checkpoint off the grid.
+
+        STTN pools a whole batch, so the output depends on how frames were
+        grouped. A checkpoint that lands mid-batch makes a resumed run
+        regroup and produce different pixels, which is why a pause flushes
+        the held tail first.
+        """
+        from backend.resume_checkpoint import ProcessingPaused
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = self._clip(work / "in.mp4", 32, 16)
+            clean_out = work / "clean.mp4"
+            resumed_out = work / "resumed.mp4"
+            clean_ckpt = work / "ckpt-clean"
+            resume_ckpt = work / "ckpt-resume"
+
+            clean = self._remover(self.FADE, self.BATCH)
+            self.assertTrue(clean.process_video(
+                str(source), str(clean_out),
+                checkpoint_dir=str(clean_ckpt), checkpoint_key="rm296"))
+            clean_digest, clean_count = self._frame_digest(clean_out)
+
+            batches = {"n": 0}
+
+            def pause_after_three():
+                batches["n"] += 1
+                return batches["n"] >= 3
+
+            paused = self._remover(self.FADE, self.BATCH)
+            with self.assertRaises(ProcessingPaused):
+                paused.process_video(
+                    str(source), str(resumed_out),
+                    checkpoint_dir=str(resume_ckpt), checkpoint_key="rm296",
+                    pause_check=pause_after_three)
+            next_frame = int(paused.last_pause_checkpoint["next_frame"])
+            self.assertEqual(
+                next_frame % self.BATCH, 0,
+                f"a pause must land on a decode-batch boundary, got {next_frame}",
+            )
+
+            resumed = self._remover(self.FADE, self.BATCH)
+            self.assertTrue(resumed.process_video(
+                str(source), str(resumed_out),
+                checkpoint_dir=str(resume_ckpt), checkpoint_key="rm296"))
+            resumed_digest, resumed_count = self._frame_digest(resumed_out)
+
+        self.assertEqual(resumed_count, clean_count)
+        self.assertEqual(
+            resumed_digest, clean_digest,
+            "a resumed run must produce the same frames as an uninterrupted run",
+        )
+
+    def test_a_zero_hold_leaves_the_frames_before_detection_clear(self):
+        seen = self._masks_for(
+            fade_in=0, batch_size=self.BATCH, frames=32, first_text_frame=16)
+        base = self._first_masked(seen)
+        masked = {index for index, has_mask in seen if has_mask}
+        self.assertIsNotNone(base)
+        self.assertNotIn(base - 1, masked)
+        indices = [index for index, _ in seen]
+        self.assertEqual(indices, list(range(len(indices))))
+
+
 if __name__ == "__main__":
     unittest.main()
