@@ -12,7 +12,7 @@ msgstr ""
 msgid "   -   about {eta} left"
 msgstr "[!!    -   åƀöûţ {eta} ŀéƒţ ! !!]"
 
-#: gui/utils.py:447
+#: gui/utils.py:448
 msgid " across {count} sampled frame"
 msgid_plural " across {count} sampled frames"
 msgstr[0] "[!!  åçŕöšš {count} šåḿƥŀéð ƒŕåḿé ! ! !!]"
@@ -400,7 +400,7 @@ msgstr "[!! Çħéçķîńĝ ! !!]"
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr "[!! Çħéçķîńĝ ƑƑḿƥéĝ åṽåîŀåƀîŀîţý ƒöŕ åûðîö ƥŕéšéŕṽåţîöń... ! ! ! ! !!]"
 
-#: gui/utils.py:149
+#: gui/utils.py:150
 msgid "Checking embedded subtitle tracks..."
 msgstr "[!! Çħéçķîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš... ! ! ! !!]"
 
@@ -878,7 +878,7 @@ msgstr "[!! Ðŕåŵ ŵîţħ ţħé ƥöîńţéŕ, öŕ ûšé åŕŕöŵ ķé
 msgid "EBU R128 loudness target"
 msgstr "[!! ÉƁÛ Ŕ128 ŀöûðńéšš ţåŕĝéţ ! ! !!]"
 
-#: gui/utils.py:150
+#: gui/utils.py:151
 msgid "Embedded subtitle tracks found. Right-click for fast strip/keep, or run burned-in cleanup."
 msgstr "[!! Éḿƀéððéð šûƀţîţŀé ţŕåçķš ƒöûńð. Ŕîĝħţ-çŀîçķ ƒöŕ ƒåšţ šţŕîƥ/ķééƥ, öŕ ŕûń ƀûŕńéð-îń çŀéåńûƥ. ! ! ! ! ! ! ! !!]"
 
@@ -1264,7 +1264,7 @@ msgstr "[!! Ħöŵ ḿåńý ŕéƒéŕéńçé ƒŕåḿéš åŕé ķéƥţ î
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr "[!! Îðŀé åńð ƥåûšéð îţéḿš ƒŕöḿ ýöûŕ ƥŕéṽîöûš šéššîöń ŵéŕé šåṽéð. Ŕéšţöŕé ţħéḿ ţö ţħé ɋûéûé? ! ! ! ! ! ! ! !!]"
 
-#: gui/utils.py:360
+#: gui/utils.py:361
 msgid "Image ({ext}) - {size}"
 msgstr "[!! Îḿåĝé ({ext}) - {size} ! !!]"
 
@@ -2230,7 +2230,7 @@ msgstr "[!! Ŕéåðý ƒöŕ å ƒûŀŀ ŕéŕûń ŵîţħ ḿåšķ çöŕŕ
 msgid "Ready to preview alignment."
 msgstr "[!! Ŕéåðý ţö ƥŕéṽîéŵ åŀîĝńḿéńţ. ! ! !!]"
 
-#: gui/utils.py:148 gui/widgets.py:2554
+#: gui/utils.py:149 gui/widgets.py:2554
 msgid "Ready to process"
 msgstr "[!! Ŕéåðý ţö ƥŕöçéšš ! !!]"
 
@@ -3220,7 +3220,7 @@ msgstr "[!! Ṽéŕţîçåŀ ţéẋţ ḿöðé (Ĵåƥåńéšé ţåţéĝå
 msgid "Vertices"
 msgstr "[!! Ṽéŕţîçéš ! !!]"
 
-#: gui/utils.py:358
+#: gui/utils.py:359
 msgid "Video ({ext}) - {size}"
 msgstr "[!! Ṽîðéö ({ext}) - {size} ! !!]"
 
@@ -3372,7 +3372,7 @@ msgstr "[!! ƥĦåšħ ðîšţåńçé ! !!]"
 msgid "ready"
 msgstr "[!! ŕéåðý ! !!]"
 
-#: gui/utils.py:538
+#: gui/utils.py:550
 msgid "request"
 msgstr "[!! ŕéɋûéšţ ! !!]"
 
@@ -3396,7 +3396,7 @@ msgid_plural "{count} GPUs"
 msgstr[0] "[!! {count} ĜƤÛ ! !!]"
 msgstr[1] "[!! {count} ĜƤÛš ! !!]"
 
-#: gui/utils.py:401
+#: gui/utils.py:402
 msgid "{count} embedded subtitle track: {names}"
 msgid_plural "{count} embedded subtitle tracks: {names}"
 msgstr[0] "[!! {count} éḿƀéððéð šûƀţîţŀé ţŕåçķ: {names} ! ! ! !!]"
@@ -3422,7 +3422,7 @@ msgstr "[!! {current} öƒ {total} çöḿƥŀéţé ! ! !!]"
 msgid "{engine}: {n} detected"
 msgstr "[!! {engine}: {n} ðéţéçţéð ! !!]"
 
-#: gui/utils.py:361
+#: gui/utils.py:362
 msgid "{ext} - {size}"
 msgstr "[!! {ext} - {size} ! !!]"
 
@@ -3494,7 +3494,7 @@ msgstr "[!! {percent} ƥéŕçéńţ ! !!]"
 msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
 msgstr "[!! {stage} ðöḿîńåţéð ţħîš ŕûń. Öƥéń ţħé ŕéƥöŕţ ƒöŕ ƥéŕ-îţéḿ ðéçöðé, ÖÇŔ, ḿåšķ, îńƥåîńţ, éńçöðé, ḿûẋ, åńð ɋûåŀîţý ţîḿîńĝš. ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/utils.py:537
+#: gui/utils.py:549
 msgid "{summary}  [fallback from {device}]"
 msgstr "[!! {summary}  [ƒåŀŀƀåçķ ƒŕöḿ {device}] ! ! !!]"
 

@@ -325,15 +325,21 @@ def harmonic_mean(values: Sequence[Optional[float]]) -> Optional[float]:
     this product's characteristic defect, and an arithmetic mean is
     structurally blind to it. The harmonic mean weights the low samples
     much more heavily, which is why libvmaf pools it alongside the mean.
-    Non-positive samples (a zero SSIM, an undefined PSNR) are dropped
-    rather than making the whole pool zero or undefined.
+
+    A zero sample pulls the harmonic mean to zero, which is both the
+    correct arithmetic and the correct signal: an SSIM of exactly 0 is the
+    worst frame this metric can describe, and dropping it would push the
+    result ABOVE the arithmetic mean and paint the run as healthy.
+    Non-finite samples are dropped instead -- they carry no information.
     """
     clean = [
         float(v) for v in values
-        if v is not None and np.isfinite(v) and float(v) > 0.0
+        if v is not None and np.isfinite(v)
     ]
     if not clean:
         return None
+    if any(value <= 0.0 for value in clean):
+        return 0.0
     return float(len(clean) / np.sum(1.0 / np.asarray(clean, dtype=np.float64)))
 
 
@@ -345,10 +351,19 @@ def worst_sample(
     """Return the lowest-SSIM sample as ``{frame, psnr, ssim}``.
 
     Ties break on PSNR so the returned frame is the worst on both axes when
-    SSIM cannot separate them.
+    SSIM cannot separate them. Mismatched input lengths return None.
     """
-    count = min(len(frames), len(psnrs), len(ssims))
+    count = len(frames)
     if count <= 0:
+        return None
+    if len(psnrs) != count or len(ssims) != count:
+        # Trimming to the shortest list would pair every later score with the
+        # wrong frame, which is worse than reporting no worst frame at all.
+        logger.warning(
+            "Quality samples desynchronised (%d frames, %d PSNR, %d SSIM); "
+            "skipping the worst-frame report",
+            count, len(psnrs), len(ssims),
+        )
         return None
     best_index = min(
         range(count),

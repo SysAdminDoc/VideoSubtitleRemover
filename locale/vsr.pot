@@ -12,7 +12,7 @@ msgstr ""
 msgid "   -   about {eta} left"
 msgstr ""
 
-#: gui/utils.py:447
+#: gui/utils.py:448
 msgid " across {count} sampled frame"
 msgid_plural " across {count} sampled frames"
 msgstr[0] ""
@@ -400,7 +400,7 @@ msgstr ""
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr ""
 
-#: gui/utils.py:149
+#: gui/utils.py:150
 msgid "Checking embedded subtitle tracks..."
 msgstr ""
 
@@ -878,7 +878,7 @@ msgstr ""
 msgid "EBU R128 loudness target"
 msgstr ""
 
-#: gui/utils.py:150
+#: gui/utils.py:151
 msgid "Embedded subtitle tracks found. Right-click for fast strip/keep, or run burned-in cleanup."
 msgstr ""
 
@@ -1264,7 +1264,7 @@ msgstr ""
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr ""
 
-#: gui/utils.py:360
+#: gui/utils.py:361
 msgid "Image ({ext}) - {size}"
 msgstr ""
 
@@ -2230,7 +2230,7 @@ msgstr ""
 msgid "Ready to preview alignment."
 msgstr ""
 
-#: gui/utils.py:148 gui/widgets.py:2554
+#: gui/utils.py:149 gui/widgets.py:2554
 msgid "Ready to process"
 msgstr ""
 
@@ -3220,7 +3220,7 @@ msgstr ""
 msgid "Vertices"
 msgstr ""
 
-#: gui/utils.py:358
+#: gui/utils.py:359
 msgid "Video ({ext}) - {size}"
 msgstr ""
 
@@ -3372,7 +3372,7 @@ msgstr ""
 msgid "ready"
 msgstr ""
 
-#: gui/utils.py:538
+#: gui/utils.py:550
 msgid "request"
 msgstr ""
 
@@ -3396,7 +3396,7 @@ msgid_plural "{count} GPUs"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/utils.py:401
+#: gui/utils.py:402
 msgid "{count} embedded subtitle track: {names}"
 msgid_plural "{count} embedded subtitle tracks: {names}"
 msgstr[0] ""
@@ -3422,7 +3422,7 @@ msgstr ""
 msgid "{engine}: {n} detected"
 msgstr ""
 
-#: gui/utils.py:361
+#: gui/utils.py:362
 msgid "{ext} - {size}"
 msgstr ""
 
@@ -3494,7 +3494,7 @@ msgstr ""
 msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."
 msgstr ""
 
-#: gui/utils.py:537
+#: gui/utils.py:549
 msgid "{summary}  [fallback from {device}]"
 msgstr ""
 

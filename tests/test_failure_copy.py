@@ -88,3 +88,25 @@ def test_an_off_vocabulary_reason_is_dropped_on_save():
     ):
         gcfg.save_queue_state([item])
     assert captured["items"][0]["failure_reason"] == ""
+def test_the_batch_harmonic_stat_uses_each_report_own_harmonic_mean():
+    """RM-281: pooling the per-item averages measured the wrong spread."""
+    from gui.utils import summarize_quality_reports
+
+    summary = summarize_quality_reports([{
+        "psnr": 40.0,
+        "ssim": 0.98,
+        "samples": 10,
+        "psnr_harmonic_mean": 21.0,
+        "ssim_harmonic_mean": 0.62,
+    }])
+    assert summary["ssim"] == 0.98
+    assert summary["harmonic_ssim"] == 0.62
+    assert summary["harmonic_psnr"] == 21.0
+
+
+def test_a_report_without_harmonic_keys_falls_back_to_its_mean():
+    from gui.utils import summarize_quality_reports
+
+    summary = summarize_quality_reports([{"psnr": 40.0, "ssim": 0.98, "samples": 10}])
+    assert summary["harmonic_ssim"] == 0.98
+    assert summary["harmonic_psnr"] == 40.0

@@ -414,6 +414,21 @@ def _run_soft_subtitle_only(input_path: str, output_path: str,
     return True
 
 
+def _reset_item_failure_state(remover) -> None:
+    """Clear the shared remover's last-failure fields before a new item.
+
+    One SubtitleRemover serves the whole batch, and only process_video()
+    resets these. Work that runs before it (auto-band detection, checkpoint
+    probing) can raise while item A's reason is still recorded, which then
+    outranks item B's actual exception in classify_failure_reason.
+    """
+    for name in ("last_error_message", "last_error_reason"):
+        try:
+            setattr(remover, name, None)
+        except Exception:
+            pass
+
+
 def _cancel_pending_records(records: list[dict]) -> None:
     _ensure_runtime_helpers()
     for record in records:
@@ -2144,6 +2159,7 @@ def _run_processing(
                 record.get("output_quality_preflight") or {}
             )
             print(f"\n[watch] {src.name}")
+            _reset_item_failure_state(remover)
             planned = record["planned_result"]
             if planned == STATUS_SKIPPED_EXISTING:
                 print(f"[skip] {src.name} (output exists)")
@@ -2389,6 +2405,7 @@ def _run_processing(
                     record.get("output_quality_preflight") or {}
                 )
                 print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
+                _reset_item_failure_state(remover)
                 if record["planned_result"] == STATUS_SKIPPED_EXISTING:
                     print(f"[skip] {src.name} (output exists)")
                     finish_batch_item(

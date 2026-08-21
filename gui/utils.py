@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import subprocess
 import sys
@@ -472,7 +473,16 @@ def summarize_quality_reports(
             samples = int(report.get("samples", 0) or 0)
         except (TypeError, ValueError):
             continue
-        valid.append((psnr, ssim, samples))
+        # RM-281: pool each report's OWN harmonic mean. Taking the harmonic
+        # mean of the per-item averages would measure spread between clips,
+        # which is not the defect this stat exists to expose.
+        valid.append((
+            psnr,
+            ssim,
+            samples,
+            _optional_float(report.get("psnr_harmonic_mean")),
+            _optional_float(report.get("ssim_harmonic_mean")),
+        ))
         total_samples += max(0, samples)
         # RM-281: carry the single worst sampled frame across the batch, and
         # which report it came from, so the caller can open it.
@@ -498,8 +508,10 @@ def summarize_quality_reports(
     return {
         "psnr": sum(item[0] for item in valid) / count,
         "ssim": sum(item[1] for item in valid) / count,
-        "harmonic_psnr": _harmonic_mean([item[0] for item in valid]),
-        "harmonic_ssim": _harmonic_mean([item[1] for item in valid]),
+        "harmonic_psnr": _mean_of([
+            item[3] if item[3] is not None else item[0] for item in valid]),
+        "harmonic_ssim": _mean_of([
+            item[4] if item[4] is not None else item[1] for item in valid]),
         "items": count,
         "samples": total_samples,
         "worst_frame": worst,
@@ -513,11 +525,11 @@ def _optional_float(value) -> Optional[float]:
         return None
 
 
-def _harmonic_mean(values: List[float]) -> Optional[float]:
-    positive = [value for value in values if value > 0.0]
-    if not positive:
+def _mean_of(values: List[float]) -> Optional[float]:
+    finite = [value for value in values if math.isfinite(value)]
+    if not finite:
         return None
-    return len(positive) / sum(1.0 / value for value in positive)
+    return sum(finite) / len(finite)
 
 
 def _queue_item_execution_text(item) -> str:

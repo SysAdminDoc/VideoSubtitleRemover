@@ -144,7 +144,12 @@ class _QualityMixin:
             for idx in flicker_indices:
                 _seek_capture_to_frame_deferred(cap_in, start_frame + idx)
                 ok_in, a = cap_in.read()
-                _seek_capture_to_frame_deferred(cap_out, min(out_total - 1, idx))
+                # The frame the sample actually measures in the OUTPUT file.
+                # Everything downstream (the report, the gate text, the quality
+                # sheet, the A/B compare) indexes the output, so this -- not
+                # start_frame + idx -- is the number to carry around.
+                out_idx = min(out_total - 1, idx)
+                _seek_capture_to_frame_deferred(cap_out, out_idx)
                 ok_out, b = cap_out.read()
                 if not (ok_in and ok_out):
                     continue
@@ -186,20 +191,25 @@ class _QualityMixin:
                 s = _ssim(a, b)
                 psnrs.append(p)
                 ssims.append(s)
-                sample_frames.append(start_frame + idx)
+                sample_frames.append(out_idx)
                 if a_roi is not None and b_roi is not None:
                     if a_roi.size and a_roi.shape == b_roi.shape:
                         try:
-                            roi_psnrs.append(float(cv2.PSNR(a_roi, b_roi)))
-                            roi_ssims.append(_ssim(a_roi, b_roi))
-                            roi_sample_frames.append(start_frame + idx)
+                            # Compute both before appending: a raise
+                            # between the two appends would offset the lists
+                            # permanently and misattribute every later sample.
+                            roi_psnr_sample = float(cv2.PSNR(a_roi, b_roi))
+                            roi_ssim_sample = _ssim(a_roi, b_roi)
+                            roi_psnrs.append(roi_psnr_sample)
+                            roi_ssims.append(roi_ssim_sample)
+                            roi_sample_frames.append(out_idx)
                         except Exception:
                             logger.warning(
                                 "Quality ROI metric calculation failed",
                                 exc_info=True,
                             )
                 if self.config.quality_report_sheet:
-                    pairs.append((idx, a, b, p, s))
+                    pairs.append((out_idx, a, b, p, s))
             if not psnrs:
                 return None
             mean_ssim = float(np.mean(ssims))
@@ -209,10 +219,16 @@ class _QualityMixin:
             # RM-281: the arithmetic mean hides a few ruined frames on an
             # otherwise sharp clip. Pool the harmonic mean beside it and
             # name the single worst frame so the user can go look at it.
-            worst_frame = (
-                worst_sample(roi_sample_frames, roi_psnrs, roi_ssims)
-                or worst_sample(sample_frames, psnrs, ssims)
-            )
+            #
+            # This is deliberately the WHOLE-FRAME worst, not the ROI worst.
+            # Inside the subtitle box the input has text and the output does
+            # not, so a low ROI SSIM is the job working; gating on it would
+            # send every successful removal to review. A whole-frame SSIM is
+            # dominated by the pixels that should not have changed, so it
+            # only drops when something actually went wrong.
+            worst_frame = worst_sample(sample_frames, psnrs, ssims)
+            roi_worst_frame = worst_sample(
+                roi_sample_frames, roi_psnrs, roi_ssims)
             flicker_score = temporal_flicker_score(temporal_samples)
             for left, right in zip(temporal_samples, temporal_samples[1:]):
                 if right[0] != left[0] + 1:
@@ -296,6 +312,7 @@ class _QualityMixin:
                 'roi_psnr_harmonic_mean': harmonic_mean(roi_psnrs),
                 'roi_ssim_harmonic_mean': harmonic_mean(roi_ssims),
                 'worst_frame': worst_frame,
+                'roi_worst_frame': roi_worst_frame,
                 'vmaf': vmaf,
                 'roi_vmaf': roi_vmaf,
                 'roi_bbox': list(roi) if roi else None,

@@ -280,7 +280,7 @@ class WorstFrameQualityTests(unittest.TestCase):
 
         return PositionalCapture
 
-    def _report(self, span=40, n_samples=8, ruin_sample=3):
+    def _report(self, span=40, n_samples=8, ruin_sample=3, start_frame=0):
         from unittest import mock
         import numpy as _np
 
@@ -310,7 +310,8 @@ class WorstFrameQualityTests(unittest.TestCase):
             "backend._quality_mixin.compute_vmaf", return_value=None,
         ):
             metrics = r._compute_quality_report(
-                "input.mp4", "output.mp4", 0, span, 24.0, n_samples=n_samples,
+                "input.mp4", "output.mp4", start_frame, start_frame + span,
+                24.0, n_samples=n_samples,
             )
         return metrics, ruined_index, len(metric_indices)
 
@@ -392,6 +393,65 @@ class WorstFrameQualityTests(unittest.TestCase):
         self.assertAlmostEqual(
             metrics["ssim"], metrics["ssim_harmonic_mean"], places=6)
         self.assertEqual(metrics["quality_gate"]["status"], "passed")
+
+
+    def test_the_named_frame_indexes_the_output_not_the_source(self):
+        """The label, the gate text and the A/B compare all index the output.
+
+        Reporting `start_frame + idx` made a time-ranged run name a frame the
+        scrubber could not seek to and the output file did not contain.
+        """
+        metrics, ruined_index, _ = self._report(start_frame=1000)
+        self.assertEqual(metrics["worst_frame"]["frame"], ruined_index)
+        self.assertLess(
+            metrics["worst_frame"]["frame"], 40,
+            "a frame number past the output's length cannot be seeked to",
+        )
+
+    def test_the_gate_reads_the_whole_frame_worst_not_the_roi_worst(self):
+        """A cleanly removed subtitle tanks ROI SSIM by design.
+
+        Gating on the ROI minimum would send every successful removal to
+        review, so the gate reads the whole-frame worst and the ROI worst is
+        reported separately.
+        """
+        from backend.quality_gate import evaluate_quality_gate
+
+        metrics = {
+            "samples": 10,
+            "tag": "Good",
+            "ssim": 0.985,
+            "psnr": 42.0,
+            "roi_ssim": 0.96,
+            "worst_frame": {"frame": 7, "ssim": 0.972, "psnr": 38.0},
+            "roi_worst_frame": {"frame": 7, "ssim": 0.12, "psnr": 9.0},
+        }
+        self.assertEqual(evaluate_quality_gate(metrics)["status"], "passed")
+
+    def test_the_roi_worst_frame_is_reported_separately(self):
+        metrics, _, _ = self._report()
+        self.assertIn("roi_worst_frame", metrics)
+
+    def test_a_desynchronised_sample_set_reports_nothing_not_the_wrong_frame(self):
+        """Trimming to the shortest list would misattribute every later score."""
+        from backend.quality import worst_sample
+
+        self.assertIsNone(worst_sample([1, 2, 3], [40.0, 20.0], [0.9, 0.5, 0.7]))
+        self.assertEqual(
+            worst_sample([1, 2], [40.0, 20.0], [0.9, 0.5]),
+            {"frame": 2, "psnr": 20.0, "ssim": 0.5},
+        )
+
+    def test_a_zero_sample_drags_the_harmonic_mean_down(self):
+        """Dropping a zero pushed the harmonic mean ABOVE the arithmetic one."""
+        from backend.quality import harmonic_mean
+
+        values = [0.99] * 9 + [0.0]
+        arithmetic = sum(values) / len(values)
+        self.assertEqual(harmonic_mean(values), 0.0)
+        self.assertLess(harmonic_mean(values), arithmetic)
+        self.assertIsNone(harmonic_mean([]))
+        self.assertIsNone(harmonic_mean([float("inf")]))
 
 
 class QualityGateTests(unittest.TestCase):

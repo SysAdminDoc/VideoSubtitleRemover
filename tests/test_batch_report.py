@@ -199,6 +199,38 @@ class FailureReasonTests(unittest.TestCase):
             fr.REASON_UNKNOWN,
         )
 
+    def test_an_output_integrity_failure_is_not_unknown(self):
+        """RM-279 names output_empty; nothing could reach it before."""
+        for message in (
+            "output has no decodable video stream",
+            "output duration 3.200s is shorter than the expected 60.000s",
+            "output frame count 12 is below the expected 1500 (tolerance 15)",
+        ):
+            with self.subTest(message=message):
+                self.assertEqual(
+                    fr.classify_failure_reason(message=message),
+                    fr.REASON_OUTPUT_EMPTY,
+                )
+
+    def test_the_output_integrity_exception_maps_by_type(self):
+        from backend.processor import OutputIntegrityError
+
+        self.assertEqual(
+            fr.classify_failure_reason(
+                exc=OutputIntegrityError("something opaque", {})),
+            fr.REASON_OUTPUT_EMPTY,
+        )
+
+    def test_late_added_reason_codes_are_classified(self):
+        for code, expected in (
+            ("decoder_seek_failed", fr.REASON_DECODE_FAILED),
+            ("worker_timeout", fr.REASON_TIMED_OUT),
+            ("output_integrity_failed", fr.REASON_OUTPUT_EMPTY),
+        ):
+            with self.subTest(code=code):
+                self.assertEqual(
+                    fr.classify_failure_reason(reason=code), expected)
+
     def test_finish_batch_item_records_a_reason_and_keeps_the_message(self):
         record = _record(
             br.STATUS_PENDING, input_path="a.mp4", output_path="a_out.mp4")
