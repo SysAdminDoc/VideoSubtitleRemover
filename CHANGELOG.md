@@ -28,6 +28,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   set, anything the offset does not cover falls back to the inpainter, and the
   sidecar records the donor hash, frame rate and offset. `--clean-reference`
   and `--clean-reference-offset` do the same from the CLI.
+- Subtitles that fade in or out can keep their mask through the fade. The new
+  Fade-in hold and Fade-out hold settings (`--fade-in` / `--fade-out`, 0-15
+  frames, off by default) reuse the nearest confident mask on either side of a
+  text track, covering the frames where the glyphs are visible but too faint
+  for OCR. The fade-out hold carries across decode batches; the fade-in hold
+  reaches back within the current batch.
 
 ## [3.36.0] - 2026-08-21
 

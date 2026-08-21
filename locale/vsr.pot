@@ -32,11 +32,11 @@ msgid_plural "...and {n} more queued items."
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/layout_build.py:1345
+#: gui/layout_build.py:1357
 msgid "0 cleans every frame. Values above 1 clean fewer frames and recreate the gaps when Practical-RIFE is installed. Stride 3 can reduce inpaint calls by up to about 67%."
 msgstr ""
 
-#: gui/layout_build.py:1238
+#: gui/layout_build.py:1250
 msgid "0 uses the full clip"
 msgstr ""
 
@@ -84,11 +84,11 @@ msgstr ""
 msgid "ACTIVITY"
 msgstr ""
 
-#: gui/layout_build.py:1185
+#: gui/layout_build.py:1197
 msgid "ASS style override"
 msgstr ""
 
-#: gui/app.py:1463 gui/layout_build.py:2214 gui/layout_responsive.py:320 gui/support_controller.py:141
+#: gui/app.py:1463 gui/layout_build.py:2226 gui/layout_responsive.py:320 gui/support_controller.py:141
 msgid "Activity"
 msgstr ""
 
@@ -112,7 +112,7 @@ msgstr ""
 msgid "Add files to the queue"
 msgstr ""
 
-#: gui/layout_build.py:2208
+#: gui/layout_build.py:2220
 msgid "Add files, review a sample frame, then start."
 msgstr ""
 
@@ -120,7 +120,7 @@ msgstr ""
 msgid "Add keyframe"
 msgstr ""
 
-#: gui/layout_build.py:2070 gui/widgets.py:1943
+#: gui/layout_build.py:2082 gui/widgets.py:1943
 msgid "Add media"
 msgstr ""
 
@@ -132,7 +132,7 @@ msgstr ""
 msgid "Add media to the queue before starting."
 msgstr ""
 
-#: gui/layout_build.py:1790
+#: gui/layout_build.py:1802
 msgid "Add media, then select a queue item to enable preview tools."
 msgstr ""
 
@@ -168,15 +168,15 @@ msgstr ""
 msgid "Adjust how many frames are processed together to fit available GPU memory. Recommended for 4K video."
 msgstr ""
 
-#: gui/layout_build.py:1864
+#: gui/layout_build.py:1876
 msgid "Adjust the cached detection without running OCR again."
 msgstr ""
 
-#: gui/layout_build.py:1579
+#: gui/layout_build.py:1591
 msgid "Advanced"
 msgstr ""
 
-#: gui/layout_build.py:1682 gui/settings_controller.py:112
+#: gui/layout_build.py:1694 gui/settings_controller.py:112
 msgid "Advanced settings"
 msgstr ""
 
@@ -212,11 +212,11 @@ msgstr ""
 msgid "All tracks marked for removal; nothing was excluded"
 msgstr ""
 
-#: gui/layout_build.py:1462
+#: gui/layout_build.py:1474
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr ""
 
-#: gui/app.py:2330 gui/layout_build.py:2199
+#: gui/app.py:2330 gui/layout_build.py:2211
 msgid "Application status"
 msgstr ""
 
@@ -320,11 +320,11 @@ msgstr ""
 msgid "Batch processing started"
 msgstr ""
 
-#: gui/app.py:1448 gui/layout_build.py:1738
+#: gui/app.py:1448 gui/layout_build.py:1750
 msgid "Before / after"
 msgstr ""
 
-#: gui/layout_build.py:1174
+#: gui/layout_build.py:1186
 msgid "Browse"
 msgstr ""
 
@@ -380,15 +380,15 @@ msgstr ""
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr ""
 
-#: gui/layout_build.py:1498
+#: gui/layout_build.py:1510
 msgid "Check for updates on startup"
 msgstr ""
 
-#: gui/layout_build.py:1027
+#: gui/layout_build.py:1039
 msgid "Check output quality after processing"
 msgstr ""
 
-#: gui/layout_build.py:1021
+#: gui/layout_build.py:1033
 msgid "Check text on major scene frames and reuse masks between them. Faster on long videos, less precise on motion."
 msgstr ""
 
@@ -408,7 +408,7 @@ msgstr ""
 msgid "Choose"
 msgstr ""
 
-#: gui/layout_build.py:965
+#: gui/layout_build.py:977
 msgid "Choose FFV1 video or an ordered PNG sequence."
 msgstr ""
 
@@ -464,7 +464,7 @@ msgstr ""
 msgid "Choose files to clean"
 msgstr ""
 
-#: gui/layout_build.py:1535 gui/layout_build.py:382 gui/widgets.py:1970
+#: gui/layout_build.py:1547 gui/layout_build.py:382 gui/widgets.py:1970
 msgid "Choose folder"
 msgstr ""
 
@@ -472,7 +472,7 @@ msgstr ""
 msgid "Choose local translation command"
 msgstr ""
 
-#: gui/layout_build.py:1072
+#: gui/layout_build.py:1084
 msgid "Choose translated SRT"
 msgstr ""
 
@@ -520,7 +520,7 @@ msgstr ""
 msgid "Clean references attach only to timed regions"
 msgstr ""
 
-#: gui/layout_build.py:1007
+#: gui/layout_build.py:1019
 msgid "Clean up interlaced video automatically"
 msgstr ""
 
@@ -542,11 +542,11 @@ msgstr[1] ""
 msgid "Cleanup profile"
 msgstr ""
 
-#: gui/layout_build.py:1559
+#: gui/layout_build.py:1571
 msgid "Cleanup settings"
 msgstr ""
 
-#: gui/layout_build.py:1080 gui/layout_build.py:2010 gui/region_controller.py:515 gui/support_controller.py:94
+#: gui/layout_build.py:1092 gui/layout_build.py:2022 gui/region_controller.py:515 gui/support_controller.py:94
 msgid "Clear"
 msgstr ""
 
@@ -554,7 +554,7 @@ msgstr ""
 msgid "Clear all"
 msgstr ""
 
-#: gui/layout_build.py:2088 gui/layout_responsive.py:293
+#: gui/layout_build.py:2100 gui/layout_responsive.py:293
 msgid "Clear completed"
 msgstr ""
 
@@ -570,11 +570,11 @@ msgstr ""
 msgid "Clear frozen matte"
 msgstr ""
 
-#: gui/layout_build.py:987
+#: gui/layout_build.py:999
 msgid "Clear import"
 msgstr ""
 
-#: gui/layout_build.py:2145 gui/layout_responsive.py:303
+#: gui/layout_build.py:2157 gui/layout_responsive.py:303
 msgid "Clear queue"
 msgstr ""
 
@@ -686,7 +686,7 @@ msgstr ""
 msgid "Copying embedded subtitle tracks..."
 msgstr ""
 
-#: gui/app.py:1453 gui/layout_build.py:1839
+#: gui/app.py:1453 gui/layout_build.py:1851
 msgid "Correct mask"
 msgstr ""
 
@@ -762,7 +762,7 @@ msgstr ""
 msgid "DETECTING"
 msgstr ""
 
-#: gui/layout_build.py:1313
+#: gui/layout_build.py:1325
 msgid "Decode pipeline"
 msgstr ""
 
@@ -778,7 +778,7 @@ msgstr ""
 msgid "Detailed single-frame fill for stills, animation, and clean scenes."
 msgstr ""
 
-#: gui/layout_build.py:2033
+#: gui/layout_build.py:2045
 msgid "Details"
 msgstr ""
 
@@ -786,11 +786,11 @@ msgstr ""
 msgid "Detect"
 msgstr ""
 
-#: gui/layout_build.py:1011
+#: gui/layout_build.py:1023
 msgid "Detect and remove comb-like lines from older interlaced video before cleanup."
 msgstr ""
 
-#: gui/layout_build.py:1814
+#: gui/layout_build.py:1826
 msgid "Detect subtitles and inspect the first-frame mask."
 msgstr ""
 
@@ -814,7 +814,7 @@ msgstr ""
 msgid "Detecting language..."
 msgstr ""
 
-#: gui/layout_build.py:1576 gui/support_controller.py:411 gui/support_controller.py:612 gui/support_controller.py:645
+#: gui/layout_build.py:1588 gui/support_controller.py:411 gui/support_controller.py:612 gui/support_controller.py:645
 msgid "Detection"
 msgstr ""
 
@@ -834,7 +834,7 @@ msgstr ""
 msgid "Donor video attached. Frames are matched by timestamp plus the offset."
 msgstr ""
 
-#: gui/layout_build.py:1785
+#: gui/layout_build.py:1797
 msgid "Double-click for full size, draw a region, or right-click for preview tools."
 msgstr ""
 
@@ -882,7 +882,7 @@ msgstr ""
 msgid "Draw subtitle region for {name}"
 msgstr ""
 
-#: gui/layout_build.py:1806
+#: gui/layout_build.py:1818
 msgid "Draw the subtitle region directly on the preview frame."
 msgstr ""
 
@@ -890,7 +890,7 @@ msgstr ""
 msgid "Draw with the pointer, or use arrow keys to edit the selected region."
 msgstr ""
 
-#: gui/layout_build.py:1293
+#: gui/layout_build.py:1305
 msgid "EBU R128 loudness target"
 msgstr ""
 
@@ -898,7 +898,7 @@ msgstr ""
 msgid "Embedded subtitle tracks found. Right-click for fast strip/keep, or run burned-in cleanup."
 msgstr ""
 
-#: gui/layout_build.py:1578
+#: gui/layout_build.py:1590
 msgid "Encoding"
 msgstr ""
 
@@ -906,7 +906,7 @@ msgstr ""
 msgid "Encoding quality"
 msgstr ""
 
-#: gui/layout_build.py:1225
+#: gui/layout_build.py:1237
 msgid "End (s)"
 msgstr ""
 
@@ -922,7 +922,7 @@ msgstr ""
 msgid "End sec"
 msgstr ""
 
-#: gui/layout_build.py:1421
+#: gui/layout_build.py:1433
 msgid "English"
 msgstr ""
 
@@ -942,7 +942,7 @@ msgstr ""
 msgid "Enter a whole number within the source-frame bounds."
 msgstr ""
 
-#: gui/layout_build.py:1037
+#: gui/layout_build.py:1049
 msgid "Erase, translate, and re-embed"
 msgstr ""
 
@@ -962,7 +962,7 @@ msgstr ""
 msgid "Export"
 msgstr ""
 
-#: gui/layout_build.py:932
+#: gui/layout_build.py:944
 msgid "Export detected text as .srt sidecar"
 msgstr ""
 
@@ -974,7 +974,7 @@ msgstr ""
 msgid "Export failed: {}"
 msgstr ""
 
-#: gui/layout_build.py:941
+#: gui/layout_build.py:953
 msgid "Export lossless mask / alpha matte"
 msgstr ""
 
@@ -1052,6 +1052,14 @@ msgstr ""
 msgid "FFmpeg {name}"
 msgstr ""
 
+#: gui/layout_build.py:929
+msgid "Fade-in hold"
+msgstr ""
+
+#: gui/layout_build.py:935
+msgid "Fade-out hold"
+msgstr ""
+
 #: gui/onboarding.py:131 gui/onboarding.py:143
 msgid "Fast"
 msgstr ""
@@ -1072,11 +1080,11 @@ msgstr ""
 msgid "Fast temporal recovery for live action and changing backgrounds."
 msgstr ""
 
-#: gui/layout_build.py:1017
+#: gui/layout_build.py:1029
 msgid "Faster keyframe-only detection"
 msgstr ""
 
-#: gui/layout_build.py:2033
+#: gui/layout_build.py:2045
 msgid "File name"
 msgstr ""
 
@@ -1100,15 +1108,15 @@ msgstr ""
 msgid "Film"
 msgstr ""
 
-#: gui/layout_build.py:1985
+#: gui/layout_build.py:1997
 msgid "Filter"
 msgstr ""
 
-#: gui/layout_build.py:1998
+#: gui/layout_build.py:2010
 msgid "Filter queue"
 msgstr ""
 
-#: gui/layout_build.py:1246
+#: gui/layout_build.py:1258
 msgid "Filter what gets removed"
 msgstr ""
 
@@ -1160,7 +1168,7 @@ msgstr ""
 msgid "Frame"
 msgstr ""
 
-#: gui/layout_build.py:1331
+#: gui/layout_build.py:1343
 msgid "Frame interpolation stride"
 msgstr ""
 
@@ -1180,6 +1188,14 @@ msgstr ""
 msgid "Frame-local mask correction canvas"
 msgstr ""
 
+#: gui/layout_build.py:937
+msgid "Frames after a subtitle is last recognized that reuse its mask, for subtitles that fade out."
+msgstr ""
+
+#: gui/layout_build.py:931
+msgid "Frames before a subtitle is first recognized that reuse its mask, for subtitles that fade in."
+msgstr ""
+
 #: gui/track_plan_controller.py:175
 msgid "Frames {start}-{end}  ({begin}s to {finish}s)"
 msgstr ""
@@ -1192,7 +1208,7 @@ msgstr ""
 msgid "Froze the approved matte ({summary}); reruns will skip detection"
 msgstr ""
 
-#: gui/app.py:1452 gui/layout_build.py:1834
+#: gui/app.py:1452 gui/layout_build.py:1846
 msgid "Full size"
 msgstr ""
 
@@ -1216,7 +1232,7 @@ msgstr ""
 msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
 msgstr ""
 
-#: gui/layout_build.py:1317
+#: gui/layout_build.py:1329
 msgid "Hardware-decode hint"
 msgstr ""
 
@@ -1248,7 +1264,7 @@ msgstr ""
 msgid "Hide queued files"
 msgstr ""
 
-#: gui/layout_build.py:1458
+#: gui/layout_build.py:1470
 msgid "High-contrast theme (restart required)"
 msgstr ""
 
@@ -1308,7 +1324,7 @@ msgstr ""
 msgid "Import files or choose a folder to start."
 msgstr ""
 
-#: gui/layout_build.py:979
+#: gui/layout_build.py:991
 msgid "Import matte"
 msgstr ""
 
@@ -1324,7 +1340,7 @@ msgstr ""
 msgid "Import preset"
 msgstr ""
 
-#: gui/layout_build.py:1000
+#: gui/layout_build.py:1012
 msgid "Imported matte mode"
 msgstr ""
 
@@ -1360,7 +1376,7 @@ msgstr ""
 msgid "Inpaint preview"
 msgstr ""
 
-#: gui/layout_build.py:1577 gui/support_controller.py:412 gui/support_controller.py:613 gui/support_controller.py:646
+#: gui/layout_build.py:1589 gui/support_controller.py:412 gui/support_controller.py:613 gui/support_controller.py:646
 msgid "Inpainting"
 msgstr ""
 
@@ -1388,11 +1404,11 @@ msgstr ""
 msgid "Install Pillow to enable the visual region selector"
 msgstr ""
 
-#: gui/layout_build.py:1414
+#: gui/layout_build.py:1426
 msgid "Interface language (restart required)"
 msgstr ""
 
-#: gui/layout_build.py:1388
+#: gui/layout_build.py:1400
 msgid "Interface text size (restart required)"
 msgstr ""
 
@@ -1400,7 +1416,7 @@ msgstr ""
 msgid "Interpolated keyframe masks"
 msgstr ""
 
-#: gui/layout_build.py:1490
+#: gui/layout_build.py:1502
 msgid "Isolates each queue item so a fatal crash in a native library fails only that item instead of closing the app and losing the batch. Costs a process start and a model reload per item."
 msgstr ""
 
@@ -1412,7 +1428,7 @@ msgstr ""
 msgid "JSON manifest"
 msgstr ""
 
-#: gui/layout_build.py:1271
+#: gui/layout_build.py:1283
 msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
 msgstr ""
 
@@ -1436,7 +1452,7 @@ msgstr ""
 msgid "Keyframes in one motion track need the same shape and vertex count"
 msgstr ""
 
-#: gui/layout_build.py:1306
+#: gui/layout_build.py:1318
 msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
 msgstr ""
 
@@ -1444,7 +1460,7 @@ msgstr ""
 msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
 msgstr ""
 
-#: gui/layout_build.py:1091
+#: gui/layout_build.py:1103
 msgid "Language tags"
 msgstr ""
 
@@ -1460,7 +1476,7 @@ msgstr ""
 msgid "Leave blank for the end of the video."
 msgstr ""
 
-#: gui/layout_build.py:1530
+#: gui/layout_build.py:1542
 msgid "Leave empty for the system temporary directory. The selected folder is write-tested before a batch starts."
 msgstr ""
 
@@ -1496,15 +1512,15 @@ msgstr ""
 msgid "Local processing"
 msgstr ""
 
-#: gui/layout_build.py:1140
+#: gui/layout_build.py:1152
 msgid "Local provider"
 msgstr ""
 
-#: gui/layout_build.py:964
+#: gui/layout_build.py:976
 msgid "Lossless matte format"
 msgstr ""
 
-#: gui/layout_build.py:1280
+#: gui/layout_build.py:1292
 msgid "Loudness + tracks"
 msgstr ""
 
@@ -1548,7 +1564,7 @@ msgstr ""
 msgid "Mask dilate"
 msgstr ""
 
-#: gui/layout_build.py:1857
+#: gui/layout_build.py:1869
 msgid "Mask dilation"
 msgstr ""
 
@@ -1564,7 +1580,7 @@ msgstr ""
 msgid "Match each frame's color"
 msgstr ""
 
-#: gui/layout_build.py:952
+#: gui/layout_build.py:964
 msgid "Matte format"
 msgstr ""
 
@@ -1588,11 +1604,11 @@ msgstr ""
 msgid "Media stays on this computer. The app checks required models before the first run."
 msgstr ""
 
-#: gui/layout_build.py:1470
+#: gui/layout_build.py:1482
 msgid "Mirror layout for right-to-left languages (restart required)"
 msgstr ""
 
-#: gui/layout_build.py:1474
+#: gui/layout_build.py:1486
 msgid "Mirrors rows, anchors, and directional arrows for Arabic, Hebrew, Persian, and Urdu. Persists across sessions."
 msgstr ""
 
@@ -1644,19 +1660,19 @@ msgstr ""
 msgid "Move down"
 msgstr ""
 
-#: gui/layout_build.py:2106
+#: gui/layout_build.py:2118
 msgid "Move item down"
 msgstr ""
 
-#: gui/layout_build.py:2097
+#: gui/layout_build.py:2109
 msgid "Move item up"
 msgstr ""
 
-#: gui/layout_build.py:2122
+#: gui/layout_build.py:2134
 msgid "Move the selected item down."
 msgstr ""
 
-#: gui/layout_build.py:2121
+#: gui/layout_build.py:2133
 msgid "Move the selected item up."
 msgstr ""
 
@@ -1674,7 +1690,7 @@ msgid_plural "Moving manual regions: {count} tracks"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/layout_build.py:1289
+#: gui/layout_build.py:1301
 msgid "Mux every audio stream from the source. Off keeps only the first track."
 msgstr ""
 
@@ -1738,7 +1754,7 @@ msgstr ""
 msgid "No frame available"
 msgstr ""
 
-#: gui/layout_build.py:971 gui/settings_controller.py:210 gui/settings_controller.py:297
+#: gui/layout_build.py:983 gui/settings_controller.py:210 gui/settings_controller.py:297
 msgid "No imported matte"
 msgstr ""
 
@@ -1746,7 +1762,7 @@ msgstr ""
 msgid "No items match \"{needle}\""
 msgstr ""
 
-#: gui/layout_build.py:2167
+#: gui/layout_build.py:2179
 msgid "No media queued"
 msgstr ""
 
@@ -1786,7 +1802,7 @@ msgstr ""
 msgid "No text tracks were detected in this file"
 msgstr ""
 
-#: gui/layout_build.py:1057 gui/settings_controller.py:292
+#: gui/layout_build.py:1069 gui/settings_controller.py:292
 msgid "No translated SRT selected"
 msgstr ""
 
@@ -1854,7 +1870,7 @@ msgstr ""
 msgid "Open log file"
 msgstr ""
 
-#: gui/layout_build.py:2130 gui/layout_responsive.py:299 gui/quality_controller.py:348
+#: gui/layout_build.py:2142 gui/layout_responsive.py:299 gui/quality_controller.py:348
 msgid "Open output"
 msgstr ""
 
@@ -1870,7 +1886,7 @@ msgstr ""
 msgid "Open result"
 msgstr ""
 
-#: gui/layout_build.py:1845
+#: gui/layout_build.py:1857
 msgid "Open the source frame at full size."
 msgstr ""
 
@@ -1906,7 +1922,7 @@ msgstr ""
 msgid "Optional"
 msgstr ""
 
-#: gui/layout_build.py:1198
+#: gui/layout_build.py:1210
 msgid "Optional FFmpeg force_style text, for example FontSize=24."
 msgstr ""
 
@@ -1970,7 +1986,7 @@ msgstr ""
 msgid "PaddleOCR-VL via llama.cpp needs a reachable llama server; without one the run uses the automatic cascade"
 msgstr ""
 
-#: gui/layout_build.py:1848
+#: gui/layout_build.py:1860
 msgid "Paint frame-local mask corrections for a selective rerun."
 msgstr ""
 
@@ -1986,7 +2002,7 @@ msgstr ""
 msgid "Painting mask correction"
 msgstr ""
 
-#: gui/layout_build.py:1285
+#: gui/layout_build.py:1297
 msgid "Pass through every audio stream (Bluray/DVD multi-track)"
 msgstr ""
 
@@ -2102,7 +2118,7 @@ msgstr ""
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr ""
 
-#: gui/layout_build.py:1714 gui/layout_build.py:1720 gui/region_controller.py:513
+#: gui/layout_build.py:1726 gui/layout_build.py:1732 gui/region_controller.py:513
 msgid "Preview"
 msgstr ""
 
@@ -2114,7 +2130,7 @@ msgstr ""
 msgid "Preview failed"
 msgstr ""
 
-#: gui/layout_build.py:1877
+#: gui/layout_build.py:1889
 msgid "Preview mask dilation"
 msgstr ""
 
@@ -2122,7 +2138,7 @@ msgstr ""
 msgid "Preview source frame"
 msgstr ""
 
-#: gui/layout_build.py:1748
+#: gui/layout_build.py:1760
 msgid "Preview tools"
 msgstr ""
 
@@ -2158,7 +2174,7 @@ msgstr ""
 msgid "Processing failed"
 msgstr ""
 
-#: gui/layout_build.py:1911
+#: gui/layout_build.py:1923
 msgid "Processing queue"
 msgstr ""
 
@@ -2178,7 +2194,7 @@ msgstr ""
 msgid "Providers"
 msgstr ""
 
-#: gui/layout_build.py:1367
+#: gui/layout_build.py:1379
 msgid "Quality report sheet (side-by-side PNG comparison)"
 msgstr ""
 
@@ -2186,7 +2202,7 @@ msgstr ""
 msgid "Quality review span"
 msgstr ""
 
-#: gui/layout_build.py:2151
+#: gui/layout_build.py:2163
 msgid "Queue actions"
 msgstr ""
 
@@ -2214,7 +2230,7 @@ msgstr ""
 msgid "RapidOCR model generation"
 msgstr ""
 
-#: gui/layout_build.py:1043
+#: gui/layout_build.py:1055
 msgid "Re-embed translated subtitles after cleanup"
 msgstr ""
 
@@ -2222,11 +2238,11 @@ msgstr ""
 msgid "Re-queued {} with the same settings"
 msgstr ""
 
-#: gui/layout_build.py:1352
+#: gui/layout_build.py:1364
 msgid "Read frames ahead in the background"
 msgstr ""
 
-#: gui/layout_build.py:1356
+#: gui/layout_build.py:1368
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr ""
 
@@ -2234,7 +2250,7 @@ msgstr ""
 msgid "Reading first frame..."
 msgstr ""
 
-#: gui/app.py:1122 gui/config.py:196 gui/layout_build.py:1958 gui/layout_build.py:2190 gui/layout_build.py:2201 gui/layout_helpers.py:48 gui/processing_controller.py:1453 gui/processing_controller.py:1488 gui/support_controller.py:617 gui/support_controller.py:640
+#: gui/app.py:1122 gui/config.py:196 gui/layout_build.py:1970 gui/layout_build.py:2202 gui/layout_build.py:2213 gui/layout_helpers.py:48 gui/processing_controller.py:1453 gui/processing_controller.py:1488 gui/support_controller.py:617 gui/support_controller.py:640
 msgid "Ready"
 msgstr ""
 
@@ -2326,15 +2342,15 @@ msgstr ""
 msgid "Released the frozen matte; this item will detect again"
 msgstr ""
 
-#: gui/layout_build.py:2080 gui/layout_responsive.py:291 gui/track_plan_controller.py:152 gui/widgets.py:2210
+#: gui/layout_build.py:2092 gui/layout_responsive.py:291 gui/track_plan_controller.py:152 gui/widgets.py:2210
 msgid "Remove"
 msgstr ""
 
-#: gui/layout_build.py:2119
+#: gui/layout_build.py:2131
 msgid "Remove completed items without deleting their output files."
 msgstr ""
 
-#: gui/layout_build.py:1251
+#: gui/layout_build.py:1263
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr ""
 
@@ -2342,11 +2358,11 @@ msgstr ""
 msgid "Remove from queue"
 msgstr ""
 
-#: gui/layout_build.py:1261
+#: gui/layout_build.py:1273
 msgid "Remove persistent text (logos, tickers, lower-thirds)"
 msgstr ""
 
-#: gui/layout_build.py:1255
+#: gui/layout_build.py:1267
 msgid "Remove short-lived dialogue text. Persistent logos and lower-thirds are controlled separately below."
 msgstr ""
 
@@ -2354,11 +2370,11 @@ msgstr ""
 msgid "Remove subtitles. Keep the frame."
 msgstr ""
 
-#: gui/layout_build.py:1265
+#: gui/layout_build.py:1277
 msgid "Remove text that stays in one place for about three seconds or longer, such as lower-thirds."
 msgstr ""
 
-#: gui/layout_build.py:2116
+#: gui/layout_build.py:2128
 msgid "Remove the selected item from the queue."
 msgstr ""
 
@@ -2384,7 +2400,7 @@ msgstr ""
 msgid "Rename output..."
 msgstr ""
 
-#: gui/layout_build.py:2140 gui/layout_responsive.py:302
+#: gui/layout_build.py:2152 gui/layout_responsive.py:302
 msgid "Repeat last"
 msgstr ""
 
@@ -2392,7 +2408,7 @@ msgstr ""
 msgid "Repeat with these settings"
 msgstr ""
 
-#: gui/layout_build.py:1001
+#: gui/layout_build.py:1013
 msgid "Replace, add to, or subtract from the native composed mask."
 msgstr ""
 
@@ -2412,7 +2428,7 @@ msgstr ""
 msgid "Restored {} item{} from last session"
 msgstr ""
 
-#: gui/layout_build.py:2135 gui/layout_responsive.py:301 gui/quality_controller.py:383
+#: gui/layout_build.py:2147 gui/layout_responsive.py:301 gui/quality_controller.py:383
 msgid "Retry failed"
 msgstr ""
 
@@ -2440,7 +2456,7 @@ msgstr ""
 msgid "Reverse current order"
 msgstr ""
 
-#: gui/layout_build.py:1916
+#: gui/layout_build.py:1928
 msgid "Review files, progress, and output status in one place."
 msgstr ""
 
@@ -2448,7 +2464,7 @@ msgstr ""
 msgid "Review first"
 msgstr ""
 
-#: gui/app.py:1450 gui/layout_build.py:1808 gui/mask_correction_controller.py:152 gui/mask_correction_controller.py:163
+#: gui/app.py:1450 gui/layout_build.py:1820 gui/mask_correction_controller.py:152 gui/mask_correction_controller.py:163
 msgid "Review mask"
 msgstr ""
 
@@ -2472,11 +2488,11 @@ msgstr ""
 msgid "Run burned-in cleanup instead"
 msgstr ""
 
-#: gui/layout_build.py:1822
+#: gui/layout_build.py:1834
 msgid "Run detection and cleanup on one sample frame."
 msgstr ""
 
-#: gui/layout_build.py:1486
+#: gui/layout_build.py:1498
 msgid "Run each job in a separate process"
 msgstr ""
 
@@ -2500,7 +2516,7 @@ msgstr ""
 msgid "Same as source"
 msgstr ""
 
-#: gui/layout_build.py:1031
+#: gui/layout_build.py:1043
 msgid "Sample the finished video for visual damage, remaining text, and flicker, then flag results that need review."
 msgstr ""
 
@@ -2512,7 +2528,7 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: gui/layout_build.py:1371
+#: gui/layout_build.py:1383
 msgid "Save a side-by-side source/output image for sampled frames. Also enables the numeric quality report."
 msgstr ""
 
@@ -2586,7 +2602,7 @@ msgstr[1] ""
 msgid "Saved {tracks} moving track(s); {rects} drawn rectangle(s) were not kept because a file uses either tracks or fixed regions, not both"
 msgstr ""
 
-#: gui/layout_build.py:1407
+#: gui/layout_build.py:1419
 msgid "Scales interface text and dependent controls on the next launch."
 msgstr ""
 
@@ -2594,7 +2610,7 @@ msgstr ""
 msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
 msgstr ""
 
-#: gui/layout_build.py:1830
+#: gui/layout_build.py:1842
 msgid "Scan the whole file and review every text track before cleanup."
 msgstr ""
 
@@ -2650,7 +2666,7 @@ msgstr ""
 msgid "Select a queue item to enable mask review, test cleanup, and zoom."
 msgstr ""
 
-#: gui/layout_build.py:1726
+#: gui/layout_build.py:1738
 msgid "Select a queue item to inspect its subtitle region."
 msgstr ""
 
@@ -2710,7 +2726,7 @@ msgstr ""
 msgid "Sensitivity"
 msgstr ""
 
-#: gui/app.py:1449 gui/layout_build.py:1801 gui/layout_build.py:621
+#: gui/app.py:1449 gui/layout_build.py:1813 gui/layout_build.py:621
 msgid "Set region"
 msgstr ""
 
@@ -2790,7 +2806,7 @@ msgstr ""
 msgid "Some selected files could not be found"
 msgstr ""
 
-#: gui/layout_build.py:1946
+#: gui/layout_build.py:1958
 msgid "Sort"
 msgstr ""
 
@@ -2798,15 +2814,15 @@ msgstr ""
 msgid "Sorting is disabled while a batch is running"
 msgstr ""
 
-#: gui/layout_build.py:1100
+#: gui/layout_build.py:1112
 msgid "Source"
 msgstr ""
 
-#: gui/layout_build.py:1130
+#: gui/layout_build.py:1142
 msgid "Source language tag"
 msgstr ""
 
-#: gui/layout_build.py:1212
+#: gui/layout_build.py:1224
 msgid "Start (s)"
 msgstr ""
 
@@ -2814,7 +2830,7 @@ msgstr ""
 msgid "Start and end frames must be whole numbers"
 msgstr ""
 
-#: gui/layout_build.py:2124 gui/processing_controller.py:1485 gui/processing_controller.py:163
+#: gui/layout_build.py:2136 gui/processing_controller.py:1485 gui/processing_controller.py:163
 msgid "Start batch"
 msgstr ""
 
@@ -2830,7 +2846,7 @@ msgstr ""
 msgid "Start sec"
 msgstr ""
 
-#: gui/layout_build.py:2033
+#: gui/layout_build.py:2045
 msgid "Status"
 msgstr ""
 
@@ -2886,11 +2902,11 @@ msgstr ""
 msgid "Stopping..."
 msgstr ""
 
-#: gui/layout_build.py:1275
+#: gui/layout_build.py:1287
 msgid "Stops karaoke captions leaking original text through the gaps between syllables."
 msgstr ""
 
-#: gui/layout_build.py:1377
+#: gui/layout_build.py:1389
 msgid "Structured JSON log"
 msgstr ""
 
@@ -2938,7 +2954,7 @@ msgstr ""
 msgid "Switched to the {profile} profile"
 msgstr ""
 
-#: gui/layout_build.py:1420 gui/support_controller.py:610
+#: gui/layout_build.py:1432 gui/support_controller.py:610
 msgid "System"
 msgstr ""
 
@@ -2946,11 +2962,11 @@ msgstr ""
 msgid "System and runtime status."
 msgstr ""
 
-#: gui/layout_build.py:1116
+#: gui/layout_build.py:1128
 msgid "Target"
 msgstr ""
 
-#: gui/layout_build.py:1132
+#: gui/layout_build.py:1144
 msgid "Target language tag"
 msgstr ""
 
@@ -2958,11 +2974,11 @@ msgstr ""
 msgid "Temporal"
 msgstr ""
 
-#: gui/layout_build.py:1508
+#: gui/layout_build.py:1520
 msgid "Temporary, mask, checkpoint, and resume files"
 msgstr ""
 
-#: gui/app.py:1451 gui/layout_build.py:1816
+#: gui/app.py:1451 gui/layout_build.py:1828
 msgid "Test cleanup"
 msgstr ""
 
@@ -3100,7 +3116,7 @@ msgstr ""
 msgid "Total time {elapsed} - {count} item{suffix} processed"
 msgstr ""
 
-#: gui/layout_build.py:1824 gui/track_plan_controller.py:205
+#: gui/layout_build.py:1836 gui/track_plan_controller.py:205
 msgid "Track plan"
 msgstr ""
 
@@ -3124,11 +3140,11 @@ msgstr ""
 msgid "Translation"
 msgstr ""
 
-#: gui/layout_build.py:1160
+#: gui/layout_build.py:1172
 msgid "Translator command"
 msgstr ""
 
-#: gui/layout_build.py:1207
+#: gui/layout_build.py:1219
 msgid "Trim (videos only)"
 msgstr ""
 
@@ -3140,11 +3156,11 @@ msgstr ""
 msgid "Try a shorter filename search, or clear the filter to see the full batch again."
 msgstr ""
 
-#: gui/layout_build.py:1326
+#: gui/layout_build.py:1338
 msgid "Try hardware video decoding for faster input. The app falls back to software decoding if needed."
 msgstr ""
 
-#: gui/layout_build.py:1999
+#: gui/layout_build.py:2011
 msgid "Type a filename to hide non-matching queue items"
 msgstr ""
 
@@ -3184,7 +3200,7 @@ msgstr ""
 msgid "Use a fixed subtitle region"
 msgstr ""
 
-#: gui/layout_build.py:1048
+#: gui/layout_build.py:1060
 msgid "Use a provided translated SRT, or send OCR/Whisper cues to a local translation command. VSR itself does not contact a translation service; the command you choose controls text handling."
 msgstr ""
 
@@ -3200,7 +3216,7 @@ msgstr ""
 msgid "Use motion keyframes to time polygon regions"
 msgstr ""
 
-#: gui/layout_build.py:1544
+#: gui/layout_build.py:1556
 msgid "Use system"
 msgstr ""
 
@@ -3216,7 +3232,7 @@ msgstr ""
 msgid "User preset"
 msgstr ""
 
-#: gui/layout_build.py:1449
+#: gui/layout_build.py:1461
 msgid "Uses the system language or a compiled catalog on the next launch."
 msgstr ""
 
@@ -3288,7 +3304,7 @@ msgstr ""
 msgid "Wait for the current batch to finish."
 msgstr ""
 
-#: gui/layout_build.py:1733 gui/preview_controller.py:265 gui/preview_controller.py:363
+#: gui/layout_build.py:1745 gui/preview_controller.py:265 gui/preview_controller.py:363
 msgid "Waiting"
 msgstr ""
 
@@ -3304,7 +3320,7 @@ msgstr ""
 msgid "Welcome to {app}"
 msgstr ""
 
-#: gui/layout_build.py:1502
+#: gui/layout_build.py:1514
 msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
 msgstr ""
 
@@ -3320,7 +3336,7 @@ msgstr ""
 msgid "Wipe"
 msgstr ""
 
-#: gui/layout_build.py:1743
+#: gui/layout_build.py:1755
 msgid "Wipe between the source frame and cleaned output."
 msgstr ""
 
@@ -3344,7 +3360,7 @@ msgstr ""
 msgid "Write a copy of the current settings this version can open."
 msgstr ""
 
-#: gui/layout_build.py:1381
+#: gui/layout_build.py:1393
 msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
 msgstr ""
 
@@ -3352,11 +3368,11 @@ msgstr ""
 msgid "Write the current preset to a shareable JSON file."
 msgstr ""
 
-#: gui/layout_build.py:936
+#: gui/layout_build.py:948
 msgid "Writes an .srt file next to the output using OCR text and timings."
 msgstr ""
 
-#: gui/layout_build.py:945
+#: gui/layout_build.py:957
 msgid "Writes an exact grayscale matte and versioned timestamp manifest alongside the output."
 msgstr ""
 
@@ -3472,7 +3488,7 @@ msgstr[1] ""
 msgid "{n} done"
 msgstr ""
 
-#: gui/layout_build.py:1942 gui/queue_view.py:286 gui/queue_view.py:421
+#: gui/layout_build.py:1954 gui/queue_view.py:286 gui/queue_view.py:421
 msgid "{n} item"
 msgid_plural "{n} items"
 msgstr[0] ""

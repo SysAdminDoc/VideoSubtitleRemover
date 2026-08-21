@@ -14,13 +14,19 @@ from backend.processor import (
 )
 
 
-def test_frame_loop_state_has_only_five_carried_mutables():
+def test_frame_loop_state_has_only_six_carried_mutables():
+    # This list is a guardrail against state creep in the frame loop, so it
+    # is updated only when a new carried value is a deliberate design choice.
+    # fade_carry (RM-292) is one: a fade-out hold has to survive the batch
+    # boundary, and the alternative -- parking it on the remover instance --
+    # is the same state in a worse place.
     assert [item.name for item in fields(_FrameLoopState)] == [
         "frame_idx",
         "last_mask",
         "last_hash",
         "tracker",
         "fixed_mask_cache",
+        "fade_carry",
     ]
 
 

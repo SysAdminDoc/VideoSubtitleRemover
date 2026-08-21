@@ -312,6 +312,10 @@ class ProcessingConfig:
     # touches user-fixed timed regions. Opt-in.
     temporal_mask_union: bool = False
     temporal_mask_window: int = 3
+    # RM-292: frames of mask hold around a fading hardsub. 0 disables both,
+    # which leaves the mask pipeline byte-identical.
+    mask_fade_in_frames: int = 0
+    mask_fade_out_frames: int = 0
 
     # v3.12 AUTO mode routing
     # Fraction of masked pixels that must be exposed in >=1 scene frame
@@ -814,6 +818,10 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.gpu_oom_recovery = _coerce_bool(config.gpu_oom_recovery, True)
     config.temporal_mask_union = _coerce_bool(config.temporal_mask_union, False)
     config.temporal_mask_window = _coerce_int(config.temporal_mask_window, 3, 1, 15)
+    config.mask_fade_in_frames = _coerce_int(
+        config.mask_fade_in_frames, 0, 0, 15)
+    config.mask_fade_out_frames = _coerce_int(
+        config.mask_fade_out_frames, 0, 0, 15)
     config.batch_max_retries = _coerce_int(config.batch_max_retries, 0, 0, 10)
     config.batch_retry_backoff_seconds = _coerce_float(
         config.batch_retry_backoff_seconds, 5.0, 0.0, 600.0)

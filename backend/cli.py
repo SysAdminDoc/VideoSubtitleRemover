@@ -69,7 +69,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--transnetv2", "--denoise-detect", "--sam2-refine",
             "--matanyone-refine", "--cotracker-propagate", "--no-tbe",
             "--no-adaptive-batch", "--temporal-mask-union",
-            "--temporal-mask-window", "--auto-band", "--no-kalman", "--no-phash",
+            "--temporal-mask-window", "--fade-in", "--fade-out",
+            "--auto-band", "--no-kalman", "--no-phash",
             "--phash-distance", "--colour-tune", "--colour-tolerance",
             "--auto-threshold", "--keep-chyrons", "--keep-subtitles",
             "--chyron-min-hits", "--karaoke-grouping", "--karaoke-x-gap",
@@ -140,6 +141,8 @@ _CLI_VALUE_RANGES = {
     "--threshold": "0.1..1.0",
     "--film-grain": "0..0.5",
     "--clean-reference-confidence": "0.05..0.99",
+    "--fade-in": "0..15 frames",
+    "--fade-out": "0..15 frames",
     "--watermark-opacity": "0..1",
     "--watermark-margin": "0..500 pixels",
     "--ffmpeg-whisper-queue": "0.02..3600 seconds",
@@ -1118,6 +1121,18 @@ def _build_parser(mode_choices):
         help="Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures.",
     )
     parser.add_argument(
+        "--fade-in", metavar="N", type=int, default=0,
+        help=("Hold the first confident mask of each text track for N frames "
+              "before it, so a subtitle that fades in is covered while it is "
+              "still too faint to recognise. 0 disables it."),
+    )
+    parser.add_argument(
+        "--fade-out", metavar="N", type=int, default=0,
+        help=("Hold the last confident mask of each text track for N frames "
+              "after it, covering the frames where a subtitle fades out. "
+              "0 disables it."),
+    )
+    parser.add_argument(
         "--clean-reference", metavar="PATH", default="",
         help=("Attach a clean plate or a donor video to every timed region "
               "that does not already have one. When the background exists "
@@ -1782,6 +1797,8 @@ def _build_processing_config(
         adaptive_batch=not args.no_adaptive_batch,
         temporal_mask_union=args.temporal_mask_union,
         temporal_mask_window=args.temporal_mask_window,
+        mask_fade_in_frames=args.fade_in,
+        mask_fade_out_frames=args.fade_out,
         batch_max_retries=args.max_retries,
         batch_retry_backoff_seconds=args.retry_backoff,
         export_srt=args.export_srt,

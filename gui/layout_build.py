@@ -925,6 +925,18 @@ class LayoutBuildMixin:
             self.config.temporal_mask_window, "temporal_mask_window",
             hint=N_("Number of recent masks available to repair a missed detection."),
         )
+        self._create_slider(
+            quality_frame, N_("Fade-in hold"), 0, 15,
+            self.config.mask_fade_in_frames, "mask_fade_in_frames",
+            hint=N_("Frames before a subtitle is first recognized that reuse "
+                    "its mask, for subtitles that fade in."),
+        )
+        self._create_slider(
+            quality_frame, N_("Fade-out hold"), 0, 15,
+            self.config.mask_fade_out_frames, "mask_fade_out_frames",
+            hint=N_("Frames after a subtitle is last recognized that reuse "
+                    "its mask, for subtitles that fade out."),
+        )
 
         self.export_srt_var = tk.BooleanVar(value=self.config.export_srt)
         srt_toggle = ModernToggle(

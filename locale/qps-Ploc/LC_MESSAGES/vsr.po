@@ -32,11 +32,11 @@ msgid_plural "...and {n} more queued items."
 msgstr[0] "[!! ...åńð {n} ḿöŕé ɋûéûéð îţéḿ. ! ! !!]"
 msgstr[1] "[!! ...åńð {n} ḿöŕé ɋûéûéð îţéḿš. ! ! !!]"
 
-#: gui/layout_build.py:1345
+#: gui/layout_build.py:1357
 msgid "0 cleans every frame. Values above 1 clean fewer frames and recreate the gaps when Practical-RIFE is installed. Stride 3 can reduce inpaint calls by up to about 67%."
 msgstr "[!! 0 çŀéåńš éṽéŕý ƒŕåḿé. Ṽåŀûéš åƀöṽé 1 çŀéåń ƒéŵéŕ ƒŕåḿéš åńð ŕéçŕéåţé ţħé ĝåƥš ŵħéń Ƥŕåçţîçåŀ-ŔÎƑÉ îš îńšţåŀŀéð. Šţŕîðé 3 çåń ŕéðûçé îńƥåîńţ çåŀŀš ƀý ûƥ ţö åƀöûţ 67%. ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1238
+#: gui/layout_build.py:1250
 msgid "0 uses the full clip"
 msgstr "[!! 0 ûšéš ţħé ƒûŀŀ çŀîƥ ! !!]"
 
@@ -84,11 +84,11 @@ msgstr "[!! Å/Ɓ çöḿƥåŕé: {name} ! !!]"
 msgid "ACTIVITY"
 msgstr "[!! ÅÇŢÎṼÎŢÝ ! !!]"
 
-#: gui/layout_build.py:1185
+#: gui/layout_build.py:1197
 msgid "ASS style override"
 msgstr "[!! ÅŠŠ šţýŀé öṽéŕŕîðé ! !!]"
 
-#: gui/app.py:1463 gui/layout_build.py:2214 gui/layout_responsive.py:320 gui/support_controller.py:141
+#: gui/app.py:1463 gui/layout_build.py:2226 gui/layout_responsive.py:320 gui/support_controller.py:141
 msgid "Activity"
 msgstr "[!! Åçţîṽîţý ! !!]"
 
@@ -112,7 +112,7 @@ msgstr "[!! Åðð åţ ŀéåšţ ţŵö ķéýƒŕåḿéš ƀéƒöŕé šå�
 msgid "Add files to the queue"
 msgstr "[!! Åðð ƒîŀéš ţö ţħé ɋûéûé ! !!]"
 
-#: gui/layout_build.py:2208
+#: gui/layout_build.py:2220
 msgid "Add files, review a sample frame, then start."
 msgstr "[!! Åðð ƒîŀéš, ŕéṽîéŵ å šåḿƥŀé ƒŕåḿé, ţħéń šţåŕţ. ! ! ! !!]"
 
@@ -120,7 +120,7 @@ msgstr "[!! Åðð ƒîŀéš, ŕéṽîéŵ å šåḿƥŀé ƒŕåḿé, ţħ�
 msgid "Add keyframe"
 msgstr "[!! Åðð ķéýƒŕåḿé ! !!]"
 
-#: gui/layout_build.py:2070 gui/widgets.py:1943
+#: gui/layout_build.py:2082 gui/widgets.py:1943
 msgid "Add media"
 msgstr "[!! Åðð ḿéðîå ! !!]"
 
@@ -132,7 +132,7 @@ msgstr "[!! Åðð ḿéðîå ţö ţħé ɋûéûé ƀéƒöŕé šţåŕţî�
 msgid "Add media to the queue before starting."
 msgstr "[!! Åðð ḿéðîå ţö ţħé ɋûéûé ƀéƒöŕé šţåŕţîńĝ. ! ! ! !!]"
 
-#: gui/layout_build.py:1790
+#: gui/layout_build.py:1802
 msgid "Add media, then select a queue item to enable preview tools."
 msgstr "[!! Åðð ḿéðîå, ţħéń šéŀéçţ å ɋûéûé îţéḿ ţö éńåƀŀé ƥŕéṽîéŵ ţööŀš. ! ! ! ! ! !!]"
 
@@ -168,15 +168,15 @@ msgstr "[!! Åððîńĝ ƒîŀéš... {done} öƒ {total} ! ! !!]"
 msgid "Adjust how many frames are processed together to fit available GPU memory. Recommended for 4K video."
 msgstr "[!! Åðĵûšţ ħöŵ ḿåńý ƒŕåḿéš åŕé ƥŕöçéššéð ţöĝéţħéŕ ţö ƒîţ åṽåîŀåƀŀé ĜƤÛ ḿéḿöŕý. Ŕéçöḿḿéńðéð ƒöŕ 4Ķ ṽîðéö. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1864
+#: gui/layout_build.py:1876
 msgid "Adjust the cached detection without running OCR again."
 msgstr "[!! Åðĵûšţ ţħé çåçħéð ðéţéçţîöń ŵîţħöûţ ŕûńńîńĝ ÖÇŔ åĝåîń. ! ! ! ! !!]"
 
-#: gui/layout_build.py:1579
+#: gui/layout_build.py:1591
 msgid "Advanced"
 msgstr "[!! Åðṽåńçéð ! !!]"
 
-#: gui/layout_build.py:1682 gui/settings_controller.py:112
+#: gui/layout_build.py:1694 gui/settings_controller.py:112
 msgid "Advanced settings"
 msgstr "[!! Åðṽåńçéð šéţţîńĝš ! !!]"
 
@@ -212,11 +212,11 @@ msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
 msgid "All tracks marked for removal; nothing was excluded"
 msgstr "[!! Åŀŀ ţŕåçķš ḿåŕķéð ƒöŕ ŕéḿöṽåŀ; ńöţħîńĝ ŵåš éẋçŀûðéð ! ! ! ! !!]"
 
-#: gui/layout_build.py:1462
+#: gui/layout_build.py:1474
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
 msgstr "[!! Åŀţéŕńåţîṽé ƥåŀéţţé ţûńéð ƒöŕ ŀöŵ-ṽîšîöń ûšéŕš. Ƥéŕšîšţš åçŕöšš šéššîöńš. ! ! ! ! ! ! !!]"
 
-#: gui/app.py:2330 gui/layout_build.py:2199
+#: gui/app.py:2330 gui/layout_build.py:2211
 msgid "Application status"
 msgstr "[!! Åƥƥŀîçåţîöń šţåţûš ! !!]"
 
@@ -320,11 +320,11 @@ msgstr "[!! Ɓåţçħ ńöţ šţåŕţéð. Ŕéṽîéŵ ƑƑḿƥéĝ-ðéƥ
 msgid "Batch processing started"
 msgstr "[!! Ɓåţçħ ƥŕöçéššîńĝ šţåŕţéð ! ! !!]"
 
-#: gui/app.py:1448 gui/layout_build.py:1738
+#: gui/app.py:1448 gui/layout_build.py:1750
 msgid "Before / after"
 msgstr "[!! Ɓéƒöŕé / åƒţéŕ ! !!]"
 
-#: gui/layout_build.py:1174
+#: gui/layout_build.py:1186
 msgid "Browse"
 msgstr "[!! Ɓŕöŵšé ! !!]"
 
@@ -380,15 +380,15 @@ msgstr "[!! Çåŕŕý ḿåšķš åçŕöšš ḿîššéð ðéţéçţîöń
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr "[!! Çħåńĝé çŀéåńûƥ šéţţîńĝš ƒöŕ ţħîš ɋûéûé îţéḿ öńŀý. Ƥŕéšš Çöńţŕöŀ+Éńţéŕ ţö šåṽé öŕ Éšçåƥé ţö çåńçéŀ. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1498
+#: gui/layout_build.py:1510
 msgid "Check for updates on startup"
 msgstr "[!! Çħéçķ ƒöŕ ûƥðåţéš öń šţåŕţûƥ ! ! !!]"
 
-#: gui/layout_build.py:1027
+#: gui/layout_build.py:1039
 msgid "Check output quality after processing"
 msgstr "[!! Çħéçķ öûţƥûţ ɋûåŀîţý åƒţéŕ ƥŕöçéššîńĝ ! ! ! !!]"
 
-#: gui/layout_build.py:1021
+#: gui/layout_build.py:1033
 msgid "Check text on major scene frames and reuse masks between them. Faster on long videos, less precise on motion."
 msgstr "[!! Çħéçķ ţéẋţ öń ḿåĵöŕ šçéńé ƒŕåḿéš åńð ŕéûšé ḿåšķš ƀéţŵééń ţħéḿ. Ƒåšţéŕ öń ŀöńĝ ṽîðéöš, ŀéšš ƥŕéçîšé öń ḿöţîöń. ! ! ! ! ! ! ! ! ! !!]"
 
@@ -408,7 +408,7 @@ msgstr "[!! Çħéçķîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš... 
 msgid "Choose"
 msgstr "[!! Çħööšé ! !!]"
 
-#: gui/layout_build.py:965
+#: gui/layout_build.py:977
 msgid "Choose FFV1 video or an ordered PNG sequence."
 msgstr "[!! Çħööšé ƑƑṼ1 ṽîðéö öŕ åń öŕðéŕéð ƤŃĜ šéɋûéńçé. ! ! ! !!]"
 
@@ -464,7 +464,7 @@ msgstr "[!! Çħööšé ƒîŀéš öŕ å ƒöŀðéŕ ƀéŀöŵ. Öŕîĝî�
 msgid "Choose files to clean"
 msgstr "[!! Çħööšé ƒîŀéš ţö çŀéåń ! !!]"
 
-#: gui/layout_build.py:1535 gui/layout_build.py:382 gui/widgets.py:1970
+#: gui/layout_build.py:1547 gui/layout_build.py:382 gui/widgets.py:1970
 msgid "Choose folder"
 msgstr "[!! Çħööšé ƒöŀðéŕ ! !!]"
 
@@ -472,7 +472,7 @@ msgstr "[!! Çħööšé ƒöŀðéŕ ! !!]"
 msgid "Choose local translation command"
 msgstr "[!! Çħööšé ŀöçåŀ ţŕåńšŀåţîöń çöḿḿåńð ! ! !!]"
 
-#: gui/layout_build.py:1072
+#: gui/layout_build.py:1084
 msgid "Choose translated SRT"
 msgstr "[!! Çħööšé ţŕåńšŀåţéð ŠŔŢ ! !!]"
 
@@ -520,7 +520,7 @@ msgstr "[!! Çŀéåń ŕéƒéŕéńçé ƥŕéṽîéŵ ŕéåðý ! ! !!]"
 msgid "Clean references attach only to timed regions"
 msgstr "[!! Çŀéåń ŕéƒéŕéńçéš åţţåçħ öńŀý ţö ţîḿéð ŕéĝîöńš ! ! ! !!]"
 
-#: gui/layout_build.py:1007
+#: gui/layout_build.py:1019
 msgid "Clean up interlaced video automatically"
 msgstr "[!! Çŀéåń ûƥ îńţéŕŀåçéð ṽîðéö åûţöḿåţîçåŀŀý ! ! ! !!]"
 
@@ -542,11 +542,11 @@ msgstr[1] "[!! Çŀéåńûƥ ƥŕéṽîéŵ ûšîńĝ {mode}; {n} ŕéĝîö�
 msgid "Cleanup profile"
 msgstr "[!! Çŀéåńûƥ ƥŕöƒîŀé ! !!]"
 
-#: gui/layout_build.py:1559
+#: gui/layout_build.py:1571
 msgid "Cleanup settings"
 msgstr "[!! Çŀéåńûƥ šéţţîńĝš ! !!]"
 
-#: gui/layout_build.py:1080 gui/layout_build.py:2010 gui/region_controller.py:515 gui/support_controller.py:94
+#: gui/layout_build.py:1092 gui/layout_build.py:2022 gui/region_controller.py:515 gui/support_controller.py:94
 msgid "Clear"
 msgstr "[!! Çŀéåŕ ! !!]"
 
@@ -554,7 +554,7 @@ msgstr "[!! Çŀéåŕ ! !!]"
 msgid "Clear all"
 msgstr "[!! Çŀéåŕ åŀŀ ! !!]"
 
-#: gui/layout_build.py:2088 gui/layout_responsive.py:293
+#: gui/layout_build.py:2100 gui/layout_responsive.py:293
 msgid "Clear completed"
 msgstr "[!! Çŀéåŕ çöḿƥŀéţéð ! !!]"
 
@@ -570,11 +570,11 @@ msgstr "[!! Çŀéåŕ ƒîŀţéŕ ! !!]"
 msgid "Clear frozen matte"
 msgstr "[!! Çŀéåŕ ƒŕöžéń ḿåţţé ! !!]"
 
-#: gui/layout_build.py:987
+#: gui/layout_build.py:999
 msgid "Clear import"
 msgstr "[!! Çŀéåŕ îḿƥöŕţ ! !!]"
 
-#: gui/layout_build.py:2145 gui/layout_responsive.py:303
+#: gui/layout_build.py:2157 gui/layout_responsive.py:303
 msgid "Clear queue"
 msgstr "[!! Çŀéåŕ ɋûéûé ! !!]"
 
@@ -686,7 +686,7 @@ msgstr "[!! Çöƥý šöûŕçé ƥåţħ ! !!]"
 msgid "Copying embedded subtitle tracks..."
 msgstr "[!! Çöƥýîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš... ! ! !!]"
 
-#: gui/app.py:1453 gui/layout_build.py:1839
+#: gui/app.py:1453 gui/layout_build.py:1851
 msgid "Correct mask"
 msgstr "[!! Çöŕŕéçţ ḿåšķ ! !!]"
 
@@ -762,7 +762,7 @@ msgstr "[!! Çûšţöḿ ŀöçåţîöń ! !!]"
 msgid "DETECTING"
 msgstr "[!! ÐÉŢÉÇŢÎŃĜ ! !!]"
 
-#: gui/layout_build.py:1313
+#: gui/layout_build.py:1325
 msgid "Decode pipeline"
 msgstr "[!! Ðéçöðé ƥîƥéŀîńé ! !!]"
 
@@ -778,7 +778,7 @@ msgstr "[!! Ðéţåîŀ ! !!]"
 msgid "Detailed single-frame fill for stills, animation, and clean scenes."
 msgstr "[!! Ðéţåîŀéð šîńĝŀé-ƒŕåḿé ƒîŀŀ ƒöŕ šţîŀŀš, åńîḿåţîöń, åńð çŀéåń šçéńéš. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:2033
+#: gui/layout_build.py:2045
 msgid "Details"
 msgstr "[!! Ðéţåîŀš ! !!]"
 
@@ -786,11 +786,11 @@ msgstr "[!! Ðéţåîŀš ! !!]"
 msgid "Detect"
 msgstr "[!! Ðéţéçţ ! !!]"
 
-#: gui/layout_build.py:1011
+#: gui/layout_build.py:1023
 msgid "Detect and remove comb-like lines from older interlaced video before cleanup."
 msgstr "[!! Ðéţéçţ åńð ŕéḿöṽé çöḿƀ-ŀîķé ŀîńéš ƒŕöḿ öŀðéŕ îńţéŕŀåçéð ṽîðéö ƀéƒöŕé çŀéåńûƥ. ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1814
+#: gui/layout_build.py:1826
 msgid "Detect subtitles and inspect the first-frame mask."
 msgstr "[!! Ðéţéçţ šûƀţîţŀéš åńð îńšƥéçţ ţħé ƒîŕšţ-ƒŕåḿé ḿåšķ. ! ! ! ! !!]"
 
@@ -814,7 +814,7 @@ msgstr "[!! Ðéţéçţîńĝ ħåŕðŵåŕé... ! !!]"
 msgid "Detecting language..."
 msgstr "[!! Ðéţéçţîńĝ ŀåńĝûåĝé... ! !!]"
 
-#: gui/layout_build.py:1576 gui/support_controller.py:411 gui/support_controller.py:612 gui/support_controller.py:645
+#: gui/layout_build.py:1588 gui/support_controller.py:411 gui/support_controller.py:612 gui/support_controller.py:645
 msgid "Detection"
 msgstr "[!! Ðéţéçţîöń ! !!]"
 
@@ -834,7 +834,7 @@ msgstr "[!! Ðöńöŕ öƒƒšéţ ḿûšţ ƀé å ńûḿƀéŕ öƒ šéç�
 msgid "Donor video attached. Frames are matched by timestamp plus the offset."
 msgstr "[!! Ðöńöŕ ṽîðéö åţţåçħéð. Ƒŕåḿéš åŕé ḿåţçħéð ƀý ţîḿéšţåḿƥ ƥŀûš ţħé öƒƒšéţ. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1785
+#: gui/layout_build.py:1797
 msgid "Double-click for full size, draw a region, or right-click for preview tools."
 msgstr "[!! Ðöûƀŀé-çŀîçķ ƒöŕ ƒûŀŀ šîžé, ðŕåŵ å ŕéĝîöń, öŕ ŕîĝħţ-çŀîçķ ƒöŕ ƥŕéṽîéŵ ţööŀš. ! ! ! ! ! ! !!]"
 
@@ -882,7 +882,7 @@ msgstr "[!! Ðŕåŵ öṽéŕ ţħé šûƀţîţŀé åŕéå. ! ! !!]"
 msgid "Draw subtitle region for {name}"
 msgstr "[!! Ðŕåŵ šûƀţîţŀé ŕéĝîöń ƒöŕ {name} ! ! !!]"
 
-#: gui/layout_build.py:1806
+#: gui/layout_build.py:1818
 msgid "Draw the subtitle region directly on the preview frame."
 msgstr "[!! Ðŕåŵ ţħé šûƀţîţŀé ŕéĝîöń ðîŕéçţŀý öń ţħé ƥŕéṽîéŵ ƒŕåḿé. ! ! ! ! !!]"
 
@@ -890,7 +890,7 @@ msgstr "[!! Ðŕåŵ ţħé šûƀţîţŀé ŕéĝîöń ðîŕéçţŀý öń 
 msgid "Draw with the pointer, or use arrow keys to edit the selected region."
 msgstr "[!! Ðŕåŵ ŵîţħ ţħé ƥöîńţéŕ, öŕ ûšé åŕŕöŵ ķéýš ţö éðîţ ţħé šéŀéçţéð ŕéĝîöń. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1293
+#: gui/layout_build.py:1305
 msgid "EBU R128 loudness target"
 msgstr "[!! ÉƁÛ Ŕ128 ŀöûðńéšš ţåŕĝéţ ! ! !!]"
 
@@ -898,7 +898,7 @@ msgstr "[!! ÉƁÛ Ŕ128 ŀöûðńéšš ţåŕĝéţ ! ! !!]"
 msgid "Embedded subtitle tracks found. Right-click for fast strip/keep, or run burned-in cleanup."
 msgstr "[!! Éḿƀéððéð šûƀţîţŀé ţŕåçķš ƒöûńð. Ŕîĝħţ-çŀîçķ ƒöŕ ƒåšţ šţŕîƥ/ķééƥ, öŕ ŕûń ƀûŕńéð-îń çŀéåńûƥ. ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1578
+#: gui/layout_build.py:1590
 msgid "Encoding"
 msgstr "[!! Éńçöðîńĝ ! !!]"
 
@@ -906,7 +906,7 @@ msgstr "[!! Éńçöðîńĝ ! !!]"
 msgid "Encoding quality"
 msgstr "[!! Éńçöðîńĝ ɋûåŀîţý ! !!]"
 
-#: gui/layout_build.py:1225
+#: gui/layout_build.py:1237
 msgid "End (s)"
 msgstr "[!! Éńð (š) ! !!]"
 
@@ -922,7 +922,7 @@ msgstr "[!! Éńð ƒŕåḿé îš éẋçŀûšîṽé åńð ḿûšţ ƀé �
 msgid "End sec"
 msgstr "[!! Éńð šéç ! !!]"
 
-#: gui/layout_build.py:1421
+#: gui/layout_build.py:1433
 msgid "English"
 msgstr "[!! Éńĝŀîšħ ! !!]"
 
@@ -942,7 +942,7 @@ msgstr "[!! Éńţéŕ å šţåŕţ öŕ éńð šéçöńð ƒöŕ å ţîḿ�
 msgid "Enter a whole number within the source-frame bounds."
 msgstr "[!! Éńţéŕ å ŵħöŀé ńûḿƀéŕ ŵîţħîń ţħé šöûŕçé-ƒŕåḿé ƀöûńðš. ! ! ! ! !!]"
 
-#: gui/layout_build.py:1037
+#: gui/layout_build.py:1049
 msgid "Erase, translate, and re-embed"
 msgstr "[!! Éŕåšé, ţŕåńšŀåţé, åńð ŕé-éḿƀéð ! ! !!]"
 
@@ -962,7 +962,7 @@ msgstr "[!! Éẋƥåńð ðéţéçţéð ŕéĝîöńš ƒöŕ çŀéåńéŕ 
 msgid "Export"
 msgstr "[!! Éẋƥöŕţ ! !!]"
 
-#: gui/layout_build.py:932
+#: gui/layout_build.py:944
 msgid "Export detected text as .srt sidecar"
 msgstr "[!! Éẋƥöŕţ ðéţéçţéð ţéẋţ åš .šŕţ šîðéçåŕ ! ! ! !!]"
 
@@ -974,7 +974,7 @@ msgstr "[!! Éẋƥöŕţ ƒåîŀéð ! !!]"
 msgid "Export failed: {}"
 msgstr "[!! Éẋƥöŕţ ƒåîŀéð: {} ! !!]"
 
-#: gui/layout_build.py:941
+#: gui/layout_build.py:953
 msgid "Export lossless mask / alpha matte"
 msgstr "[!! Éẋƥöŕţ ŀöššŀéšš ḿåšķ / åŀƥħå ḿåţţé ! ! !!]"
 
@@ -1052,6 +1052,14 @@ msgstr "[!! ƑƑḿƥéĝ šƥééçħ ! !!]"
 msgid "FFmpeg {name}"
 msgstr "[!! ƑƑḿƥéĝ {name} ! !!]"
 
+#: gui/layout_build.py:929
+msgid "Fade-in hold"
+msgstr "[!! Ƒåðé-îń ħöŀð ! !!]"
+
+#: gui/layout_build.py:935
+msgid "Fade-out hold"
+msgstr "[!! Ƒåðé-öûţ ħöŀð ! !!]"
+
 #: gui/onboarding.py:131 gui/onboarding.py:143
 msgid "Fast"
 msgstr "[!! Ƒåšţ ! !!]"
@@ -1072,11 +1080,11 @@ msgstr "[!! Ƒåšţ šţŕîƥ éḿƀéððéð šûƀţîţŀéš ! ! !!]"
 msgid "Fast temporal recovery for live action and changing backgrounds."
 msgstr "[!! Ƒåšţ ţéḿƥöŕåŀ ŕéçöṽéŕý ƒöŕ ŀîṽé åçţîöń åńð çħåńĝîńĝ ƀåçķĝŕöûńðš. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1017
+#: gui/layout_build.py:1029
 msgid "Faster keyframe-only detection"
 msgstr "[!! Ƒåšţéŕ ķéýƒŕåḿé-öńŀý ðéţéçţîöń ! ! !!]"
 
-#: gui/layout_build.py:2033
+#: gui/layout_build.py:2045
 msgid "File name"
 msgstr "[!! Ƒîŀé ńåḿé ! !!]"
 
@@ -1100,15 +1108,15 @@ msgstr "[!! Ƒîŀéńåḿé (Ž -> Å) ! !!]"
 msgid "Film"
 msgstr "[!! Ƒîŀḿ ! !!]"
 
-#: gui/layout_build.py:1985
+#: gui/layout_build.py:1997
 msgid "Filter"
 msgstr "[!! Ƒîŀţéŕ ! !!]"
 
-#: gui/layout_build.py:1998
+#: gui/layout_build.py:2010
 msgid "Filter queue"
 msgstr "[!! Ƒîŀţéŕ ɋûéûé ! !!]"
 
-#: gui/layout_build.py:1246
+#: gui/layout_build.py:1258
 msgid "Filter what gets removed"
 msgstr "[!! Ƒîŀţéŕ ŵħåţ ĝéţš ŕéḿöṽéð ! ! !!]"
 
@@ -1160,7 +1168,7 @@ msgstr "[!! Ƒöçûšéð {}{} ! !!]"
 msgid "Frame"
 msgstr "[!! Ƒŕåḿé ! !!]"
 
-#: gui/layout_build.py:1331
+#: gui/layout_build.py:1343
 msgid "Frame interpolation stride"
 msgstr "[!! Ƒŕåḿé îńţéŕƥöŀåţîöń šţŕîðé ! ! !!]"
 
@@ -1180,6 +1188,14 @@ msgstr "[!! Ƒŕåḿé {frame}; ƀåšé ḿåšķ ƒŕöḿ {source} ! ! ! !!]
 msgid "Frame-local mask correction canvas"
 msgstr "[!! Ƒŕåḿé-ŀöçåŀ ḿåšķ çöŕŕéçţîöń çåńṽåš ! ! !!]"
 
+#: gui/layout_build.py:937
+msgid "Frames after a subtitle is last recognized that reuse its mask, for subtitles that fade out."
+msgstr "[!! Ƒŕåḿéš åƒţéŕ å šûƀţîţŀé îš ŀåšţ ŕéçöĝńîžéð ţħåţ ŕéûšé îţš ḿåšķ, ƒöŕ šûƀţîţŀéš ţħåţ ƒåðé öûţ. ! ! ! ! ! ! ! !!]"
+
+#: gui/layout_build.py:931
+msgid "Frames before a subtitle is first recognized that reuse its mask, for subtitles that fade in."
+msgstr "[!! Ƒŕåḿéš ƀéƒöŕé å šûƀţîţŀé îš ƒîŕšţ ŕéçöĝńîžéð ţħåţ ŕéûšé îţš ḿåšķ, ƒöŕ šûƀţîţŀéš ţħåţ ƒåðé îń. ! ! ! ! ! ! ! !!]"
+
 #: gui/track_plan_controller.py:175
 msgid "Frames {start}-{end}  ({begin}s to {finish}s)"
 msgstr "[!! Ƒŕåḿéš {start}-{end}  ({begin}š ţö {finish}š) ! ! ! !!]"
@@ -1192,7 +1208,7 @@ msgstr "[!! Ƒŕééžé åƥƥŕöṽéð ḿåţţé ! !!]"
 msgid "Froze the approved matte ({summary}); reruns will skip detection"
 msgstr "[!! Ƒŕöžé ţħé åƥƥŕöṽéð ḿåţţé ({summary}); ŕéŕûńš ŵîŀŀ šķîƥ ðéţéçţîöń ! ! ! ! ! !!]"
 
-#: gui/app.py:1452 gui/layout_build.py:1834
+#: gui/app.py:1452 gui/layout_build.py:1846
 msgid "Full size"
 msgstr "[!! Ƒûŀŀ šîžé ! !!]"
 
@@ -1216,7 +1232,7 @@ msgstr "[!! Ħåŕðŵåŕé ðéţéçţéð: {}; {} ! ! !!]"
 msgid "Hardware encoding (NVENC / QSV / AMF) with software fallback"
 msgstr "[!! Ħåŕðŵåŕé éńçöðîńĝ (ŃṼÉŃÇ / ɊŠṼ / ÅḾƑ) ŵîţħ šöƒţŵåŕé ƒåŀŀƀåçķ ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1317
+#: gui/layout_build.py:1329
 msgid "Hardware-decode hint"
 msgstr "[!! Ħåŕðŵåŕé-ðéçöðé ħîńţ ! !!]"
 
@@ -1248,7 +1264,7 @@ msgstr "[!! Ħîðé åðṽåńçéð šéţţîńĝš ! !!]"
 msgid "Hide queued files"
 msgstr "[!! Ħîðé ɋûéûéð ƒîŀéš ! !!]"
 
-#: gui/layout_build.py:1458
+#: gui/layout_build.py:1470
 msgid "High-contrast theme (restart required)"
 msgstr "[!! Ħîĝħ-çöńţŕåšţ ţħéḿé (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! !!]"
 
@@ -1308,7 +1324,7 @@ msgstr "[!! Îḿƥöŕţ ƒåîŀéð: {} ! !!]"
 msgid "Import files or choose a folder to start."
 msgstr "[!! Îḿƥöŕţ ƒîŀéš öŕ çħööšé å ƒöŀðéŕ ţö šţåŕţ. ! ! ! !!]"
 
-#: gui/layout_build.py:979
+#: gui/layout_build.py:991
 msgid "Import matte"
 msgstr "[!! Îḿƥöŕţ ḿåţţé ! !!]"
 
@@ -1324,7 +1340,7 @@ msgstr "[!! Îḿƥöŕţ ḿöðéŀ çåçħé... ! !!]"
 msgid "Import preset"
 msgstr "[!! Îḿƥöŕţ ƥŕéšéţ ! !!]"
 
-#: gui/layout_build.py:1000
+#: gui/layout_build.py:1012
 msgid "Imported matte mode"
 msgstr "[!! Îḿƥöŕţéð ḿåţţé ḿöðé ! !!]"
 
@@ -1360,7 +1376,7 @@ msgstr "[!! Îńŀîńé ŕéĝîöń éðîţöŕ ûńåṽåîŀåƀŀé. Öƥ
 msgid "Inpaint preview"
 msgstr "[!! Îńƥåîńţ ƥŕéṽîéŵ ! !!]"
 
-#: gui/layout_build.py:1577 gui/support_controller.py:412 gui/support_controller.py:613 gui/support_controller.py:646
+#: gui/layout_build.py:1589 gui/support_controller.py:412 gui/support_controller.py:613 gui/support_controller.py:646
 msgid "Inpainting"
 msgstr "[!! Îńƥåîńţîńĝ ! !!]"
 
@@ -1388,11 +1404,11 @@ msgstr "[!! Îńšţåŀŀ Ƥîŀŀöŵ ţö éńåƀŀé ƥŕéṽîéŵš åń
 msgid "Install Pillow to enable the visual region selector"
 msgstr "[!! Îńšţåŀŀ Ƥîŀŀöŵ ţö éńåƀŀé ţħé ṽîšûåŀ ŕéĝîöń šéŀéçţöŕ ! ! ! ! !!]"
 
-#: gui/layout_build.py:1414
+#: gui/layout_build.py:1426
 msgid "Interface language (restart required)"
 msgstr "[!! Îńţéŕƒåçé ŀåńĝûåĝé (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! !!]"
 
-#: gui/layout_build.py:1388
+#: gui/layout_build.py:1400
 msgid "Interface text size (restart required)"
 msgstr "[!! Îńţéŕƒåçé ţéẋţ šîžé (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! !!]"
 
@@ -1400,7 +1416,7 @@ msgstr "[!! Îńţéŕƒåçé ţéẋţ šîžé (ŕéšţåŕţ ŕéɋûîŕé
 msgid "Interpolated keyframe masks"
 msgstr "[!! Îńţéŕƥöŀåţéð ķéýƒŕåḿé ḿåšķš ! ! !!]"
 
-#: gui/layout_build.py:1490
+#: gui/layout_build.py:1502
 msgid "Isolates each queue item so a fatal crash in a native library fails only that item instead of closing the app and losing the batch. Costs a process start and a model reload per item."
 msgstr "[!! Îšöŀåţéš éåçħ ɋûéûé îţéḿ šö å ƒåţåŀ çŕåšħ îń å ńåţîṽé ŀîƀŕåŕý ƒåîŀš öńŀý ţħåţ îţéḿ îńšţéåð öƒ çŀöšîńĝ ţħé åƥƥ åńð ŀöšîńĝ ţħé ƀåţçħ. Çöšţš å ƥŕöçéšš šţåŕţ åńð å ḿöðéŀ ŕéŀöåð ƥéŕ îţéḿ. ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
@@ -1412,7 +1428,7 @@ msgstr "[!! Îţéḿ ńöţ ƒöûńð îń ɋûéûé ! !!]"
 msgid "JSON manifest"
 msgstr "[!! ĴŠÖŃ ḿåńîƒéšţ ! !!]"
 
-#: gui/layout_build.py:1271
+#: gui/layout_build.py:1283
 msgid "Karaoke grouping: fuse per-syllable boxes on the same line"
 msgstr "[!! Ķåŕåöķé ĝŕöûƥîńĝ: ƒûšé ƥéŕ-šýŀŀåƀŀé ƀöẋéš öń ţħé šåḿé ŀîńé ! ! ! ! !!]"
 
@@ -1436,7 +1452,7 @@ msgstr "[!! Ķééƥ šçéńé çħåńĝéš šéƥåŕåţé ! ! !!]"
 msgid "Keyframes in one motion track need the same shape and vertex count"
 msgstr "[!! Ķéýƒŕåḿéš îń öńé ḿöţîöń ţŕåçķ ńééð ţħé šåḿé šħåƥé åńð ṽéŕţéẋ çöûńţ ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1306
+#: gui/layout_build.py:1318
 msgid "LUFS. 0 = off. YouTube -14, Apple -16, broadcast -23."
 msgstr "[!! ĿÛƑŠ. 0 = öƒƒ. ÝöûŢûƀé -14, Åƥƥŀé -16, ƀŕöåðçåšţ -23. ! ! ! ! !!]"
 
@@ -1444,7 +1460,7 @@ msgstr "[!! ĿÛƑŠ. 0 = öƒƒ. ÝöûŢûƀé -14, Åƥƥŀé -16, ƀŕöåð
 msgid "LaMa fast mode is useful for quick passes and lower-resolution drafts."
 msgstr "[!! ĿåḾå ƒåšţ ḿöðé îš ûšéƒûŀ ƒöŕ ɋûîçķ ƥåššéš åńð ŀöŵéŕ-ŕéšöŀûţîöń ðŕåƒţš. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1091
+#: gui/layout_build.py:1103
 msgid "Language tags"
 msgstr "[!! Ŀåńĝûåĝé ţåĝš ! !!]"
 
@@ -1460,7 +1476,7 @@ msgstr "[!! Ŀåšţ ŕûń ! !!]"
 msgid "Leave blank for the end of the video."
 msgstr "[!! Ŀéåṽé ƀŀåńķ ƒöŕ ţħé éńð öƒ ţħé ṽîðéö. ! ! ! !!]"
 
-#: gui/layout_build.py:1530
+#: gui/layout_build.py:1542
 msgid "Leave empty for the system temporary directory. The selected folder is write-tested before a batch starts."
 msgstr "[!! Ŀéåṽé éḿƥţý ƒöŕ ţħé šýšţéḿ ţéḿƥöŕåŕý ðîŕéçţöŕý. Ţħé šéŀéçţéð ƒöŀðéŕ îš ŵŕîţé-ţéšţéð ƀéƒöŕé å ƀåţçħ šţåŕţš. ! ! ! ! ! ! ! ! !!]"
 
@@ -1496,15 +1512,15 @@ msgstr "[!! Ŀöåðîńĝ {name}... ! !!]"
 msgid "Local processing"
 msgstr "[!! Ŀöçåŀ ƥŕöçéššîńĝ ! !!]"
 
-#: gui/layout_build.py:1140
+#: gui/layout_build.py:1152
 msgid "Local provider"
 msgstr "[!! Ŀöçåŀ ƥŕöṽîðéŕ ! !!]"
 
-#: gui/layout_build.py:964
+#: gui/layout_build.py:976
 msgid "Lossless matte format"
 msgstr "[!! Ŀöššŀéšš ḿåţţé ƒöŕḿåţ ! !!]"
 
-#: gui/layout_build.py:1280
+#: gui/layout_build.py:1292
 msgid "Loudness + tracks"
 msgstr "[!! Ŀöûðńéšš + ţŕåçķš ! !!]"
 
@@ -1548,7 +1564,7 @@ msgstr "[!! Ḿåšķ çöŕŕéçţîöń šţåţûš ! !!]"
 msgid "Mask dilate"
 msgstr "[!! Ḿåšķ ðîŀåţé ! !!]"
 
-#: gui/layout_build.py:1857
+#: gui/layout_build.py:1869
 msgid "Mask dilation"
 msgstr "[!! Ḿåšķ ðîŀåţîöń ! !!]"
 
@@ -1564,7 +1580,7 @@ msgstr "[!! Ḿåšķ ƥŕéṽîéŵ ƒåîŀéð ! !!]"
 msgid "Match each frame's color"
 msgstr "[!! Ḿåţçħ éåçħ ƒŕåḿé'š çöŀöŕ ! ! !!]"
 
-#: gui/layout_build.py:952
+#: gui/layout_build.py:964
 msgid "Matte format"
 msgstr "[!! Ḿåţţé ƒöŕḿåţ ! !!]"
 
@@ -1588,11 +1604,11 @@ msgstr "[!! Ḿéåšûŕéð {items} çöḿƥŀéţéð îţéḿ{item_suffix}
 msgid "Media stays on this computer. The app checks required models before the first run."
 msgstr "[!! Ḿéðîå šţåýš öń ţħîš çöḿƥûţéŕ. Ţħé åƥƥ çħéçķš ŕéɋûîŕéð ḿöðéŀš ƀéƒöŕé ţħé ƒîŕšţ ŕûń. ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1470
+#: gui/layout_build.py:1482
 msgid "Mirror layout for right-to-left languages (restart required)"
 msgstr "[!! Ḿîŕŕöŕ ŀåýöûţ ƒöŕ ŕîĝħţ-ţö-ŀéƒţ ŀåńĝûåĝéš (ŕéšţåŕţ ŕéɋûîŕéð) ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1474
+#: gui/layout_build.py:1486
 msgid "Mirrors rows, anchors, and directional arrows for Arabic, Hebrew, Persian, and Urdu. Persists across sessions."
 msgstr "[!! Ḿîŕŕöŕš ŕöŵš, åńçħöŕš, åńð ðîŕéçţîöńåŀ åŕŕöŵš ƒöŕ Åŕåƀîç, Ħéƀŕéŵ, Ƥéŕšîåń, åńð Ûŕðû. Ƥéŕšîšţš åçŕöšš šéššîöńš. ! ! ! ! ! ! ! ! ! !!]"
 
@@ -1644,19 +1660,19 @@ msgstr "[!! Ḿöţîöń {track}, ķéýƒŕåḿé {frame} ! ! !!]"
 msgid "Move down"
 msgstr "[!! Ḿöṽé ðöŵń ! !!]"
 
-#: gui/layout_build.py:2106
+#: gui/layout_build.py:2118
 msgid "Move item down"
 msgstr "[!! Ḿöṽé îţéḿ ðöŵń ! !!]"
 
-#: gui/layout_build.py:2097
+#: gui/layout_build.py:2109
 msgid "Move item up"
 msgstr "[!! Ḿöṽé îţéḿ ûƥ ! !!]"
 
-#: gui/layout_build.py:2122
+#: gui/layout_build.py:2134
 msgid "Move the selected item down."
 msgstr "[!! Ḿöṽé ţħé šéŀéçţéð îţéḿ ðöŵń. ! ! !!]"
 
-#: gui/layout_build.py:2121
+#: gui/layout_build.py:2133
 msgid "Move the selected item up."
 msgstr "[!! Ḿöṽé ţħé šéŀéçţéð îţéḿ ûƥ. ! ! !!]"
 
@@ -1674,7 +1690,7 @@ msgid_plural "Moving manual regions: {count} tracks"
 msgstr[0] "[!! Ḿöṽîńĝ ḿåńûåŀ ŕéĝîöńš: {count} ţŕåçķ ! ! ! !!]"
 msgstr[1] "[!! Ḿöṽîńĝ ḿåńûåŀ ŕéĝîöńš: {count} ţŕåçķš ! ! ! !!]"
 
-#: gui/layout_build.py:1289
+#: gui/layout_build.py:1301
 msgid "Mux every audio stream from the source. Off keeps only the first track."
 msgstr "[!! Ḿûẋ éṽéŕý åûðîö šţŕéåḿ ƒŕöḿ ţħé šöûŕçé. Öƒƒ ķééƥš öńŀý ţħé ƒîŕšţ ţŕåçķ. ! ! ! ! ! !!]"
 
@@ -1738,7 +1754,7 @@ msgstr "[!! Ńö éẋƥöŕţéð ḿåţţé ŵåš ƒöûńð ƀéšîðé ţ
 msgid "No frame available"
 msgstr "[!! Ńö ƒŕåḿé åṽåîŀåƀŀé ! !!]"
 
-#: gui/layout_build.py:971 gui/settings_controller.py:210 gui/settings_controller.py:297
+#: gui/layout_build.py:983 gui/settings_controller.py:210 gui/settings_controller.py:297
 msgid "No imported matte"
 msgstr "[!! Ńö îḿƥöŕţéð ḿåţţé ! !!]"
 
@@ -1746,7 +1762,7 @@ msgstr "[!! Ńö îḿƥöŕţéð ḿåţţé ! !!]"
 msgid "No items match \"{needle}\""
 msgstr "[!! Ńö îţéḿš ḿåţçħ \"{needle}\" ! ! !!]"
 
-#: gui/layout_build.py:2167
+#: gui/layout_build.py:2179
 msgid "No media queued"
 msgstr "[!! Ńö ḿéðîå ɋûéûéð ! !!]"
 
@@ -1786,7 +1802,7 @@ msgstr "[!! Ńö ţéẋţ ƒöûńð îń ţħîš ŕéçţåńĝŀé ýéţ. !
 msgid "No text tracks were detected in this file"
 msgstr "[!! Ńö ţéẋţ ţŕåçķš ŵéŕé ðéţéçţéð îń ţħîš ƒîŀé ! ! ! !!]"
 
-#: gui/layout_build.py:1057 gui/settings_controller.py:292
+#: gui/layout_build.py:1069 gui/settings_controller.py:292
 msgid "No translated SRT selected"
 msgstr "[!! Ńö ţŕåńšŀåţéð ŠŔŢ šéŀéçţéð ! ! !!]"
 
@@ -1854,7 +1870,7 @@ msgstr "[!! Öƥéń ŀöĝ ! !!]"
 msgid "Open log file"
 msgstr "[!! Öƥéń ŀöĝ ƒîŀé ! !!]"
 
-#: gui/layout_build.py:2130 gui/layout_responsive.py:299 gui/quality_controller.py:348
+#: gui/layout_build.py:2142 gui/layout_responsive.py:299 gui/quality_controller.py:348
 msgid "Open output"
 msgstr "[!! Öƥéń öûţƥûţ ! !!]"
 
@@ -1870,7 +1886,7 @@ msgstr "[!! Öƥéń ŕéƥöŕţ ! !!]"
 msgid "Open result"
 msgstr "[!! Öƥéń ŕéšûŀţ ! !!]"
 
-#: gui/layout_build.py:1845
+#: gui/layout_build.py:1857
 msgid "Open the source frame at full size."
 msgstr "[!! Öƥéń ţħé šöûŕçé ƒŕåḿé åţ ƒûŀŀ šîžé. ! ! !!]"
 
@@ -1906,7 +1922,7 @@ msgstr "[!! Öƥéńéð ţħé šéţţîńĝš ƒöŀðéŕ ! ! !!]"
 msgid "Optional"
 msgstr "[!! Öƥţîöńåŀ ! !!]"
 
-#: gui/layout_build.py:1198
+#: gui/layout_build.py:1210
 msgid "Optional FFmpeg force_style text, for example FontSize=24."
 msgstr "[!! Öƥţîöńåŀ ƑƑḿƥéĝ ƒöŕçé_šţýŀé ţéẋţ, ƒöŕ éẋåḿƥŀé ƑöńţŠîžé=24. ! ! ! ! !!]"
 
@@ -1970,7 +1986,7 @@ msgstr "[!! ƤåððŀéÖÇŔ-ṼĿ ńééðš ţħé öƥţîöńåŀ ƥåðð
 msgid "PaddleOCR-VL via llama.cpp needs a reachable llama server; without one the run uses the automatic cascade"
 msgstr "[!! ƤåððŀéÖÇŔ-ṼĿ ṽîå ŀŀåḿå.çƥƥ ńééðš å ŕéåçħåƀŀé ŀŀåḿå šéŕṽéŕ; ŵîţħöûţ öńé ţħé ŕûń ûšéš ţħé åûţöḿåţîç çåšçåðé ! ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1848
+#: gui/layout_build.py:1860
 msgid "Paint frame-local mask corrections for a selective rerun."
 msgstr "[!! Ƥåîńţ ƒŕåḿé-ŀöçåŀ ḿåšķ çöŕŕéçţîöńš ƒöŕ å šéŀéçţîṽé ŕéŕûń. ! ! ! ! !!]"
 
@@ -1986,7 +2002,7 @@ msgstr "[!! Ƥåîńţ öŕ çŀéåŕ å çöŕŕéçţîöń ƀéƒöŕé ƥŕ
 msgid "Painting mask correction"
 msgstr "[!! Ƥåîńţîńĝ ḿåšķ çöŕŕéçţîöń ! ! !!]"
 
-#: gui/layout_build.py:1285
+#: gui/layout_build.py:1297
 msgid "Pass through every audio stream (Bluray/DVD multi-track)"
 msgstr "[!! Ƥåšš ţħŕöûĝħ éṽéŕý åûðîö šţŕéåḿ (Ɓŀûŕåý/ÐṼÐ ḿûŀţî-ţŕåçķ) ! ! ! ! !!]"
 
@@ -2102,7 +2118,7 @@ msgstr "[!! Ƥŕéšéţ '{}' ńöţ ƒöûńð ! !!]"
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr "[!! Ƥŕéšš Šħîƒţ+Ƒ10 öŕ ţħé Ḿéńû ķéý ƒöŕ îţéḿ åçţîöńš. ! ! ! ! !!]"
 
-#: gui/layout_build.py:1714 gui/layout_build.py:1720 gui/region_controller.py:513
+#: gui/layout_build.py:1726 gui/layout_build.py:1732 gui/region_controller.py:513
 msgid "Preview"
 msgstr "[!! Ƥŕéṽîéŵ ! !!]"
 
@@ -2114,7 +2130,7 @@ msgstr "[!! Ƥŕéṽîéŵ - {name} ! !!]"
 msgid "Preview failed"
 msgstr "[!! Ƥŕéṽîéŵ ƒåîŀéð ! !!]"
 
-#: gui/layout_build.py:1877
+#: gui/layout_build.py:1889
 msgid "Preview mask dilation"
 msgstr "[!! Ƥŕéṽîéŵ ḿåšķ ðîŀåţîöń ! !!]"
 
@@ -2122,7 +2138,7 @@ msgstr "[!! Ƥŕéṽîéŵ ḿåšķ ðîŀåţîöń ! !!]"
 msgid "Preview source frame"
 msgstr "[!! Ƥŕéṽîéŵ šöûŕçé ƒŕåḿé ! !!]"
 
-#: gui/layout_build.py:1748
+#: gui/layout_build.py:1760
 msgid "Preview tools"
 msgstr "[!! Ƥŕéṽîéŵ ţööŀš ! !!]"
 
@@ -2158,7 +2174,7 @@ msgstr "[!! Ƥŕöçéšš ! !!]"
 msgid "Processing failed"
 msgstr "[!! Ƥŕöçéššîńĝ ƒåîŀéð ! !!]"
 
-#: gui/layout_build.py:1911
+#: gui/layout_build.py:1923
 msgid "Processing queue"
 msgstr "[!! Ƥŕöçéššîńĝ ɋûéûé ! !!]"
 
@@ -2178,7 +2194,7 @@ msgstr "[!! Ƥŕöƥåĝåţé ţħŕöûĝħ ŕéṽîéŵ šƥåń ! ! !!]"
 msgid "Providers"
 msgstr "[!! Ƥŕöṽîðéŕš ! !!]"
 
-#: gui/layout_build.py:1367
+#: gui/layout_build.py:1379
 msgid "Quality report sheet (side-by-side PNG comparison)"
 msgstr "[!! Ɋûåŀîţý ŕéƥöŕţ šħééţ (šîðé-ƀý-šîðé ƤŃĜ çöḿƥåŕîšöń) ! ! ! ! !!]"
 
@@ -2186,7 +2202,7 @@ msgstr "[!! Ɋûåŀîţý ŕéƥöŕţ šħééţ (šîðé-ƀý-šîðé ƤŃ�
 msgid "Quality review span"
 msgstr "[!! Ɋûåŀîţý ŕéṽîéŵ šƥåń ! !!]"
 
-#: gui/layout_build.py:2151
+#: gui/layout_build.py:2163
 msgid "Queue actions"
 msgstr "[!! Ɋûéûé åçţîöńš ! !!]"
 
@@ -2214,7 +2230,7 @@ msgstr "[!! ŔÉṼÎÉŴ ! !!]"
 msgid "RapidOCR model generation"
 msgstr "[!! ŔåƥîðÖÇŔ ḿöðéŀ ĝéńéŕåţîöń ! ! !!]"
 
-#: gui/layout_build.py:1043
+#: gui/layout_build.py:1055
 msgid "Re-embed translated subtitles after cleanup"
 msgstr "[!! Ŕé-éḿƀéð ţŕåńšŀåţéð šûƀţîţŀéš åƒţéŕ çŀéåńûƥ ! ! ! !!]"
 
@@ -2222,11 +2238,11 @@ msgstr "[!! Ŕé-éḿƀéð ţŕåńšŀåţéð šûƀţîţŀéš åƒţéŕ 
 msgid "Re-queued {} with the same settings"
 msgstr "[!! Ŕé-ɋûéûéð {} ŵîţħ ţħé šåḿé šéţţîńĝš ! ! !!]"
 
-#: gui/layout_build.py:1352
+#: gui/layout_build.py:1364
 msgid "Read frames ahead in the background"
 msgstr "[!! Ŕéåð ƒŕåḿéš åħéåð îń ţħé ƀåçķĝŕöûńð ! ! !!]"
 
-#: gui/layout_build.py:1356
+#: gui/layout_build.py:1368
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕöûńð šö çŀéåńûƥ šƥéńðš ŀéšš ţîḿé ŵåîţîńĝ öń ţħé šöûŕçé ƒîŀé. ! ! ! ! ! ! ! !!]"
 
@@ -2234,7 +2250,7 @@ msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕö�
 msgid "Reading first frame..."
 msgstr "[!! Ŕéåðîńĝ ƒîŕšţ ƒŕåḿé... ! !!]"
 
-#: gui/app.py:1122 gui/config.py:196 gui/layout_build.py:1958 gui/layout_build.py:2190 gui/layout_build.py:2201 gui/layout_helpers.py:48 gui/processing_controller.py:1453 gui/processing_controller.py:1488 gui/support_controller.py:617 gui/support_controller.py:640
+#: gui/app.py:1122 gui/config.py:196 gui/layout_build.py:1970 gui/layout_build.py:2202 gui/layout_build.py:2213 gui/layout_helpers.py:48 gui/processing_controller.py:1453 gui/processing_controller.py:1488 gui/support_controller.py:617 gui/support_controller.py:640
 msgid "Ready"
 msgstr "[!! Ŕéåðý ! !!]"
 
@@ -2326,15 +2342,15 @@ msgstr "[!! Ŕéŀéåšé ţö šåṽé ŕéĝîöń ({x1}, {y1}) ţö ({x2}, 
 msgid "Released the frozen matte; this item will detect again"
 msgstr "[!! Ŕéŀéåšéð ţħé ƒŕöžéń ḿåţţé; ţħîš îţéḿ ŵîŀŀ ðéţéçţ åĝåîń ! ! ! ! !!]"
 
-#: gui/layout_build.py:2080 gui/layout_responsive.py:291 gui/track_plan_controller.py:152 gui/widgets.py:2210
+#: gui/layout_build.py:2092 gui/layout_responsive.py:291 gui/track_plan_controller.py:152 gui/widgets.py:2210
 msgid "Remove"
 msgstr "[!! Ŕéḿöṽé ! !!]"
 
-#: gui/layout_build.py:2119
+#: gui/layout_build.py:2131
 msgid "Remove completed items without deleting their output files."
 msgstr "[!! Ŕéḿöṽé çöḿƥŀéţéð îţéḿš ŵîţħöûţ ðéŀéţîńĝ ţħéîŕ öûţƥûţ ƒîŀéš. ! ! ! ! !!]"
 
-#: gui/layout_build.py:1251
+#: gui/layout_build.py:1263
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr "[!! Ŕéḿöṽé ðîåŀöĝûé šûƀţîţŀéš (šħöŕţ-ŀîṽéð ÖÇŔ ţŕåçķš) ! ! ! ! !!]"
 
@@ -2342,11 +2358,11 @@ msgstr "[!! Ŕéḿöṽé ðîåŀöĝûé šûƀţîţŀéš (šħöŕţ-ŀî�
 msgid "Remove from queue"
 msgstr "[!! Ŕéḿöṽé ƒŕöḿ ɋûéûé ! !!]"
 
-#: gui/layout_build.py:1261
+#: gui/layout_build.py:1273
 msgid "Remove persistent text (logos, tickers, lower-thirds)"
 msgstr "[!! Ŕéḿöṽé ƥéŕšîšţéńţ ţéẋţ (ŀöĝöš, ţîçķéŕš, ŀöŵéŕ-ţħîŕðš) ! ! ! ! !!]"
 
-#: gui/layout_build.py:1255
+#: gui/layout_build.py:1267
 msgid "Remove short-lived dialogue text. Persistent logos and lower-thirds are controlled separately below."
 msgstr "[!! Ŕéḿöṽé šħöŕţ-ŀîṽéð ðîåŀöĝûé ţéẋţ. Ƥéŕšîšţéńţ ŀöĝöš åńð ŀöŵéŕ-ţħîŕðš åŕé çöńţŕöŀŀéð šéƥåŕåţéŀý ƀéŀöŵ. ! ! ! ! ! ! ! ! !!]"
 
@@ -2354,11 +2370,11 @@ msgstr "[!! Ŕéḿöṽé šħöŕţ-ŀîṽéð ðîåŀöĝûé ţéẋţ. Ƥ
 msgid "Remove subtitles. Keep the frame."
 msgstr "[!! Ŕéḿöṽé šûƀţîţŀéš. Ķééƥ ţħé ƒŕåḿé. ! ! !!]"
 
-#: gui/layout_build.py:1265
+#: gui/layout_build.py:1277
 msgid "Remove text that stays in one place for about three seconds or longer, such as lower-thirds."
 msgstr "[!! Ŕéḿöṽé ţéẋţ ţħåţ šţåýš îń öńé ƥŀåçé ƒöŕ åƀöûţ ţħŕéé šéçöńðš öŕ ŀöńĝéŕ, šûçħ åš ŀöŵéŕ-ţħîŕðš. ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:2116
+#: gui/layout_build.py:2128
 msgid "Remove the selected item from the queue."
 msgstr "[!! Ŕéḿöṽé ţħé šéŀéçţéð îţéḿ ƒŕöḿ ţħé ɋûéûé. ! ! ! !!]"
 
@@ -2384,7 +2400,7 @@ msgstr "[!! Ŕéḿöṽîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš..
 msgid "Rename output..."
 msgstr "[!! Ŕéńåḿé öûţƥûţ... ! !!]"
 
-#: gui/layout_build.py:2140 gui/layout_responsive.py:302
+#: gui/layout_build.py:2152 gui/layout_responsive.py:302
 msgid "Repeat last"
 msgstr "[!! Ŕéƥéåţ ŀåšţ ! !!]"
 
@@ -2392,7 +2408,7 @@ msgstr "[!! Ŕéƥéåţ ŀåšţ ! !!]"
 msgid "Repeat with these settings"
 msgstr "[!! Ŕéƥéåţ ŵîţħ ţħéšé šéţţîńĝš ! ! !!]"
 
-#: gui/layout_build.py:1001
+#: gui/layout_build.py:1013
 msgid "Replace, add to, or subtract from the native composed mask."
 msgstr "[!! Ŕéƥŀåçé, åðð ţö, öŕ šûƀţŕåçţ ƒŕöḿ ţħé ńåţîṽé çöḿƥöšéð ḿåšķ. ! ! ! ! !!]"
 
@@ -2412,7 +2428,7 @@ msgstr "[!! Ŕéšţöŕé ɋûéûé? ! !!]"
 msgid "Restored {} item{} from last session"
 msgstr "[!! Ŕéšţöŕéð {} îţéḿ{} ƒŕöḿ ŀåšţ šéššîöń ! ! ! !!]"
 
-#: gui/layout_build.py:2135 gui/layout_responsive.py:301 gui/quality_controller.py:383
+#: gui/layout_build.py:2147 gui/layout_responsive.py:301 gui/quality_controller.py:383
 msgid "Retry failed"
 msgstr "[!! Ŕéţŕý ƒåîŀéð ! !!]"
 
@@ -2440,7 +2456,7 @@ msgstr "[!! Ŕéṽéåŀ öûţƥûţ ƒöŀðéŕ ! !!]"
 msgid "Reverse current order"
 msgstr "[!! Ŕéṽéŕšé çûŕŕéńţ öŕðéŕ ! !!]"
 
-#: gui/layout_build.py:1916
+#: gui/layout_build.py:1928
 msgid "Review files, progress, and output status in one place."
 msgstr "[!! Ŕéṽîéŵ ƒîŀéš, ƥŕöĝŕéšš, åńð öûţƥûţ šţåţûš îń öńé ƥŀåçé. ! ! ! ! !!]"
 
@@ -2448,7 +2464,7 @@ msgstr "[!! Ŕéṽîéŵ ƒîŀéš, ƥŕöĝŕéšš, åńð öûţƥûţ šţ
 msgid "Review first"
 msgstr "[!! Ŕéṽîéŵ ƒîŕšţ ! !!]"
 
-#: gui/app.py:1450 gui/layout_build.py:1808 gui/mask_correction_controller.py:152 gui/mask_correction_controller.py:163
+#: gui/app.py:1450 gui/layout_build.py:1820 gui/mask_correction_controller.py:152 gui/mask_correction_controller.py:163
 msgid "Review mask"
 msgstr "[!! Ŕéṽîéŵ ḿåšķ ! !!]"
 
@@ -2472,11 +2488,11 @@ msgstr "[!! Ŕûń åńð ḿöńîţöŕ ţħé ƀåţçħ ! ! !!]"
 msgid "Run burned-in cleanup instead"
 msgstr "[!! Ŕûń ƀûŕńéð-îń çŀéåńûƥ îńšţéåð ! ! !!]"
 
-#: gui/layout_build.py:1822
+#: gui/layout_build.py:1834
 msgid "Run detection and cleanup on one sample frame."
 msgstr "[!! Ŕûń ðéţéçţîöń åńð çŀéåńûƥ öń öńé šåḿƥŀé ƒŕåḿé. ! ! ! !!]"
 
-#: gui/layout_build.py:1486
+#: gui/layout_build.py:1498
 msgid "Run each job in a separate process"
 msgstr "[!! Ŕûń éåçħ ĵöƀ îń å šéƥåŕåţé ƥŕöçéšš ! ! !!]"
 
@@ -2500,7 +2516,7 @@ msgstr "[!! ŠŢÖƤƤÉÐ ! !!]"
 msgid "Same as source"
 msgstr "[!! Šåḿé åš šöûŕçé ! !!]"
 
-#: gui/layout_build.py:1031
+#: gui/layout_build.py:1043
 msgid "Sample the finished video for visual damage, remaining text, and flicker, then flag results that need review."
 msgstr "[!! Šåḿƥŀé ţħé ƒîńîšħéð ṽîðéö ƒöŕ ṽîšûåŀ ðåḿåĝé, ŕéḿåîńîńĝ ţéẋţ, åńð ƒŀîçķéŕ, ţħéń ƒŀåĝ ŕéšûŀţš ţħåţ ńééð ŕéṽîéŵ. ! ! ! ! ! ! ! ! ! !!]"
 
@@ -2512,7 +2528,7 @@ msgstr "[!! Šåḿƥŀéð ɋûåŀîţý çħéçķ ! !!]"
 msgid "Save"
 msgstr "[!! Šåṽé ! !!]"
 
-#: gui/layout_build.py:1371
+#: gui/layout_build.py:1383
 msgid "Save a side-by-side source/output image for sampled frames. Also enables the numeric quality report."
 msgstr "[!! Šåṽé å šîðé-ƀý-šîðé šöûŕçé/öûţƥûţ îḿåĝé ƒöŕ šåḿƥŀéð ƒŕåḿéš. Åŀšö éńåƀŀéš ţħé ńûḿéŕîç ɋûåŀîţý ŕéƥöŕţ. ! ! ! ! ! ! ! ! !!]"
 
@@ -2586,7 +2602,7 @@ msgstr[1] "[!! Šåṽéð {n} ţîḿéð šûƀţîţŀé ŕéĝîöńš ! ! !
 msgid "Saved {tracks} moving track(s); {rects} drawn rectangle(s) were not kept because a file uses either tracks or fixed regions, not both"
 msgstr "[!! Šåṽéð {tracks} ḿöṽîńĝ ţŕåçķ(š); {rects} ðŕåŵń ŕéçţåńĝŀé(š) ŵéŕé ńöţ ķéƥţ ƀéçåûšé å ƒîŀé ûšéš éîţħéŕ ţŕåçķš öŕ ƒîẋéð ŕéĝîöńš, ńöţ ƀöţħ ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1407
+#: gui/layout_build.py:1419
 msgid "Scales interface text and dependent controls on the next launch."
 msgstr "[!! Šçåŀéš îńţéŕƒåçé ţéẋţ åńð ðéƥéńðéńţ çöńţŕöŀš öń ţħé ńéẋţ ŀåûńçħ. ! ! ! ! ! !!]"
 
@@ -2594,7 +2610,7 @@ msgstr "[!! Šçåŀéš îńţéŕƒåçé ţéẋţ åńð ðéƥéńðéńţ 
 msgid "Scan the first 30 frames and pin the dominant subtitle band before processing."
 msgstr "[!! Šçåń ţħé ƒîŕšţ 30 ƒŕåḿéš åńð ƥîń ţħé ðöḿîńåńţ šûƀţîţŀé ƀåńð ƀéƒöŕé ƥŕöçéššîńĝ. ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1830
+#: gui/layout_build.py:1842
 msgid "Scan the whole file and review every text track before cleanup."
 msgstr "[!! Šçåń ţħé ŵħöŀé ƒîŀé åńð ŕéṽîéŵ éṽéŕý ţéẋţ ţŕåçķ ƀéƒöŕé çŀéåńûƥ. ! ! ! ! ! !!]"
 
@@ -2650,7 +2666,7 @@ msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ƒîŕšţ ! ! !!]"
 msgid "Select a queue item to enable mask review, test cleanup, and zoom."
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö éńåƀŀé ḿåšķ ŕéṽîéŵ, ţéšţ çŀéåńûƥ, åńð žööḿ. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1726
+#: gui/layout_build.py:1738
 msgid "Select a queue item to inspect its subtitle region."
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö îńšƥéçţ îţš šûƀţîţŀé ŕéĝîöń. ! ! ! ! !!]"
 
@@ -2710,7 +2726,7 @@ msgstr "[!! Šéŀéçţéð ḿåńûåŀ ŕéĝîöń ! !!]"
 msgid "Sensitivity"
 msgstr "[!! Šéńšîţîṽîţý ! !!]"
 
-#: gui/app.py:1449 gui/layout_build.py:1801 gui/layout_build.py:621
+#: gui/app.py:1449 gui/layout_build.py:1813 gui/layout_build.py:621
 msgid "Set region"
 msgstr "[!! Šéţ ŕéĝîöń ! !!]"
 
@@ -2790,7 +2806,7 @@ msgstr "[!! Šöḿé šéŀéçţéð ƀåţçħ öƥţîöńš åŕé ńöţ �
 msgid "Some selected files could not be found"
 msgstr "[!! Šöḿé šéŀéçţéð ƒîŀéš çöûŀð ńöţ ƀé ƒöûńð ! ! ! !!]"
 
-#: gui/layout_build.py:1946
+#: gui/layout_build.py:1958
 msgid "Sort"
 msgstr "[!! Šöŕţ ! !!]"
 
@@ -2798,15 +2814,15 @@ msgstr "[!! Šöŕţ ! !!]"
 msgid "Sorting is disabled while a batch is running"
 msgstr "[!! Šöŕţîńĝ îš ðîšåƀŀéð ŵħîŀé å ƀåţçħ îš ŕûńńîńĝ ! ! ! !!]"
 
-#: gui/layout_build.py:1100
+#: gui/layout_build.py:1112
 msgid "Source"
 msgstr "[!! Šöûŕçé ! !!]"
 
-#: gui/layout_build.py:1130
+#: gui/layout_build.py:1142
 msgid "Source language tag"
 msgstr "[!! Šöûŕçé ŀåńĝûåĝé ţåĝ ! !!]"
 
-#: gui/layout_build.py:1212
+#: gui/layout_build.py:1224
 msgid "Start (s)"
 msgstr "[!! Šţåŕţ (š) ! !!]"
 
@@ -2814,7 +2830,7 @@ msgstr "[!! Šţåŕţ (š) ! !!]"
 msgid "Start and end frames must be whole numbers"
 msgstr "[!! Šţåŕţ åńð éńð ƒŕåḿéš ḿûšţ ƀé ŵħöŀé ńûḿƀéŕš ! ! ! !!]"
 
-#: gui/layout_build.py:2124 gui/processing_controller.py:1485 gui/processing_controller.py:163
+#: gui/layout_build.py:2136 gui/processing_controller.py:1485 gui/processing_controller.py:163
 msgid "Start batch"
 msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
 
@@ -2830,7 +2846,7 @@ msgstr "[!! Šţåŕţ ƒŕåḿé ! !!]"
 msgid "Start sec"
 msgstr "[!! Šţåŕţ šéç ! !!]"
 
-#: gui/layout_build.py:2033
+#: gui/layout_build.py:2045
 msgid "Status"
 msgstr "[!! Šţåţûš ! !!]"
 
@@ -2886,11 +2902,11 @@ msgstr "[!! Šţöƥƥîńĝ {} ! !!]"
 msgid "Stopping..."
 msgstr "[!! Šţöƥƥîńĝ... ! !!]"
 
-#: gui/layout_build.py:1275
+#: gui/layout_build.py:1287
 msgid "Stops karaoke captions leaking original text through the gaps between syllables."
 msgstr "[!! Šţöƥš ķåŕåöķé çåƥţîöńš ŀéåķîńĝ öŕîĝîńåŀ ţéẋţ ţħŕöûĝħ ţħé ĝåƥš ƀéţŵééń šýŀŀåƀŀéš. ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1377
+#: gui/layout_build.py:1389
 msgid "Structured JSON log"
 msgstr "[!! Šţŕûçţûŕéð ĴŠÖŃ ŀöĝ ! !!]"
 
@@ -2938,7 +2954,7 @@ msgstr "[!! Šûŕýå îš ĜƤĿ-ŀîçéńšéð: îńšţåŀŀ îţ ýöû�
 msgid "Switched to the {profile} profile"
 msgstr "[!! Šŵîţçħéð ţö ţħé {profile} ƥŕöƒîŀé ! ! !!]"
 
-#: gui/layout_build.py:1420 gui/support_controller.py:610
+#: gui/layout_build.py:1432 gui/support_controller.py:610
 msgid "System"
 msgstr "[!! Šýšţéḿ ! !!]"
 
@@ -2946,11 +2962,11 @@ msgstr "[!! Šýšţéḿ ! !!]"
 msgid "System and runtime status."
 msgstr "[!! Šýšţéḿ åńð ŕûńţîḿé šţåţûš. ! ! !!]"
 
-#: gui/layout_build.py:1116
+#: gui/layout_build.py:1128
 msgid "Target"
 msgstr "[!! Ţåŕĝéţ ! !!]"
 
-#: gui/layout_build.py:1132
+#: gui/layout_build.py:1144
 msgid "Target language tag"
 msgstr "[!! Ţåŕĝéţ ŀåńĝûåĝé ţåĝ ! !!]"
 
@@ -2958,11 +2974,11 @@ msgstr "[!! Ţåŕĝéţ ŀåńĝûåĝé ţåĝ ! !!]"
 msgid "Temporal"
 msgstr "[!! Ţéḿƥöŕåŀ ! !!]"
 
-#: gui/layout_build.py:1508
+#: gui/layout_build.py:1520
 msgid "Temporary, mask, checkpoint, and resume files"
 msgstr "[!! Ţéḿƥöŕåŕý, ḿåšķ, çħéçķƥöîńţ, åńð ŕéšûḿé ƒîŀéš ! ! ! !!]"
 
-#: gui/app.py:1451 gui/layout_build.py:1816
+#: gui/app.py:1451 gui/layout_build.py:1828
 msgid "Test cleanup"
 msgstr "[!! Ţéšţ çŀéåńûƥ ! !!]"
 
@@ -3100,7 +3116,7 @@ msgstr "[!! Ţîḿéð ŕéĝîöń {index} ! !!]"
 msgid "Total time {elapsed} - {count} item{suffix} processed"
 msgstr "[!! Ţöţåŀ ţîḿé {elapsed} - {count} îţéḿ{suffix} ƥŕöçéššéð ! ! ! ! !!]"
 
-#: gui/layout_build.py:1824 gui/track_plan_controller.py:205
+#: gui/layout_build.py:1836 gui/track_plan_controller.py:205
 msgid "Track plan"
 msgstr "[!! Ţŕåçķ ƥŀåń ! !!]"
 
@@ -3124,11 +3140,11 @@ msgstr "[!! Ţŕåńšŀåţéð ŠŔŢ ŕéåðý ţö ŕé-éḿƀéð. ! ! !!
 msgid "Translation"
 msgstr "[!! Ţŕåńšŀåţîöń ! !!]"
 
-#: gui/layout_build.py:1160
+#: gui/layout_build.py:1172
 msgid "Translator command"
 msgstr "[!! Ţŕåńšŀåţöŕ çöḿḿåńð ! !!]"
 
-#: gui/layout_build.py:1207
+#: gui/layout_build.py:1219
 msgid "Trim (videos only)"
 msgstr "[!! Ţŕîḿ (ṽîðéöš öńŀý) ! !!]"
 
@@ -3140,11 +3156,11 @@ msgstr "[!! Ţŕý ƑƑḿƥéĝ Ð3Ð12 åççéŀéŕåţîöń (éẋƥéŕî
 msgid "Try a shorter filename search, or clear the filter to see the full batch again."
 msgstr "[!! Ţŕý å šħöŕţéŕ ƒîŀéńåḿé šéåŕçħ, öŕ çŀéåŕ ţħé ƒîŀţéŕ ţö šéé ţħé ƒûŀŀ ƀåţçħ åĝåîń. ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1326
+#: gui/layout_build.py:1338
 msgid "Try hardware video decoding for faster input. The app falls back to software decoding if needed."
 msgstr "[!! Ţŕý ħåŕðŵåŕé ṽîðéö ðéçöðîńĝ ƒöŕ ƒåšţéŕ îńƥûţ. Ţħé åƥƥ ƒåŀŀš ƀåçķ ţö šöƒţŵåŕé ðéçöðîńĝ îƒ ńééðéð. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:1999
+#: gui/layout_build.py:2011
 msgid "Type a filename to hide non-matching queue items"
 msgstr "[!! Ţýƥé å ƒîŀéńåḿé ţö ħîðé ńöń-ḿåţçħîńĝ ɋûéûé îţéḿš ! ! ! ! !!]"
 
@@ -3184,7 +3200,7 @@ msgstr "[!! Ûšé Šéţ ŕéĝîöń ţö ðŕåŵ ţħé šûƀţîţŀé ƀ�
 msgid "Use a fixed subtitle region"
 msgstr "[!! Ûšé å ƒîẋéð šûƀţîţŀé ŕéĝîöń ! ! !!]"
 
-#: gui/layout_build.py:1048
+#: gui/layout_build.py:1060
 msgid "Use a provided translated SRT, or send OCR/Whisper cues to a local translation command. VSR itself does not contact a translation service; the command you choose controls text handling."
 msgstr "[!! Ûšé å ƥŕöṽîðéð ţŕåńšŀåţéð ŠŔŢ, öŕ šéńð ÖÇŔ/Ŵħîšƥéŕ çûéš ţö å ŀöçåŀ ţŕåńšŀåţîöń çöḿḿåńð. ṼŠŔ îţšéŀƒ ðöéš ńöţ çöńţåçţ å ţŕåńšŀåţîöń šéŕṽîçé; ţħé çöḿḿåńð ýöû çħööšé çöńţŕöŀš ţéẋţ ħåńðŀîńĝ. ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
@@ -3200,7 +3216,7 @@ msgstr "[!! Ûšé ŀöçåŀ ĝŀýƥħ çöńţŕåšţ åńð å šöƒţ ð�
 msgid "Use motion keyframes to time polygon regions"
 msgstr "[!! Ûšé ḿöţîöń ķéýƒŕåḿéš ţö ţîḿé ƥöŀýĝöń ŕéĝîöńš ! ! ! !!]"
 
-#: gui/layout_build.py:1544
+#: gui/layout_build.py:1556
 msgid "Use system"
 msgstr "[!! Ûšé šýšţéḿ ! !!]"
 
@@ -3216,7 +3232,7 @@ msgstr "[!! Ûšé ẋ,ý ƥåîŕš šéƥåŕåţéð ƀý šéḿîçöŀöń
 msgid "User preset"
 msgstr "[!! Ûšéŕ ƥŕéšéţ ! !!]"
 
-#: gui/layout_build.py:1449
+#: gui/layout_build.py:1461
 msgid "Uses the system language or a compiled catalog on the next launch."
 msgstr "[!! Ûšéš ţħé šýšţéḿ ŀåńĝûåĝé öŕ å çöḿƥîŀéð çåţåŀöĝ öń ţħé ńéẋţ ŀåûńçħ. ! ! ! ! ! !!]"
 
@@ -3288,7 +3304,7 @@ msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé îţéḿ ţö ƒîńîšħ ƀ�
 msgid "Wait for the current batch to finish."
 msgstr "[!! Ŵåîţ ƒöŕ ţħé çûŕŕéńţ ƀåţçħ ţö ƒîńîšħ. ! ! ! !!]"
 
-#: gui/layout_build.py:1733 gui/preview_controller.py:265 gui/preview_controller.py:363
+#: gui/layout_build.py:1745 gui/preview_controller.py:265 gui/preview_controller.py:363
 msgid "Waiting"
 msgstr "[!! Ŵåîţîńĝ ! !!]"
 
@@ -3304,7 +3320,7 @@ msgstr "[!! Ŵéŀçöḿé ţö {app_name} ! !!]"
 msgid "Welcome to {app}"
 msgstr "[!! Ŵéŀçöḿé ţö {app} ! !!]"
 
-#: gui/layout_build.py:1502
+#: gui/layout_build.py:1514
 msgid "When enabled, checks GitHub Releases for a newer version on launch. Off by default; no telemetry."
 msgstr "[!! Ŵħéń éńåƀŀéð, çħéçķš ĜîţĦûƀ Ŕéŀéåšéš ƒöŕ å ńéŵéŕ ṽéŕšîöń öń ŀåûńçħ. Öƒƒ ƀý ðéƒåûŀţ; ńö ţéŀéḿéţŕý. ! ! ! ! ! ! ! ! !!]"
 
@@ -3320,7 +3336,7 @@ msgstr "[!! Ŵîńðöŵš öńŀý. Ŕéɋûîŕéš ƑƑḿƥéĝ 8.1 öŕ ń�
 msgid "Wipe"
 msgstr "[!! Ŵîƥé ! !!]"
 
-#: gui/layout_build.py:1743
+#: gui/layout_build.py:1755
 msgid "Wipe between the source frame and cleaned output."
 msgstr "[!! Ŵîƥé ƀéţŵééń ţħé šöûŕçé ƒŕåḿé åńð çŀéåńéð öûţƥûţ. ! ! ! ! !!]"
 
@@ -3344,7 +3360,7 @@ msgstr "[!! Ŵöŕšţ šåḿƥŀéð ƒŕåḿé: {frame} îń {name} (ŠŠÎ�
 msgid "Write a copy of the current settings this version can open."
 msgstr "[!! Ŵŕîţé å çöƥý öƒ ţħé çûŕŕéńţ šéţţîńĝš ţħîš ṽéŕšîöń çåń öƥéń. ! ! ! ! !!]"
 
-#: gui/layout_build.py:1381
+#: gui/layout_build.py:1393
 msgid "Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."
 msgstr "[!! Ŵŕîţé å šţŕûçţûŕéð ĴŠÖŃ-ŀîńéš ŀöĝ åŀöńĝšîðé ţħé ţéẋţ ŀöĝ. Ûšéƒûŀ ƒöŕ ŀöńĝ ƀåţçħ ŕûńš åńð šçŕîƥţéð ƥöšţ-ƥŕöçéššîńĝ. ! ! ! ! ! ! ! ! ! !!]"
 
@@ -3352,11 +3368,11 @@ msgstr "[!! Ŵŕîţé å šţŕûçţûŕéð ĴŠÖŃ-ŀîńéš ŀöĝ åŀö
 msgid "Write the current preset to a shareable JSON file."
 msgstr "[!! Ŵŕîţé ţħé çûŕŕéńţ ƥŕéšéţ ţö å šħåŕéåƀŀé ĴŠÖŃ ƒîŀé. ! ! ! ! !!]"
 
-#: gui/layout_build.py:936
+#: gui/layout_build.py:948
 msgid "Writes an .srt file next to the output using OCR text and timings."
 msgstr "[!! Ŵŕîţéš åń .šŕţ ƒîŀé ńéẋţ ţö ţħé öûţƥûţ ûšîńĝ ÖÇŔ ţéẋţ åńð ţîḿîńĝš. ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:945
+#: gui/layout_build.py:957
 msgid "Writes an exact grayscale matte and versioned timestamp manifest alongside the output."
 msgstr "[!! Ŵŕîţéš åń éẋåçţ ĝŕåýšçåŀé ḿåţţé åńð ṽéŕšîöńéð ţîḿéšţåḿƥ ḿåńîƒéšţ åŀöńĝšîðé ţħé öûţƥûţ. ! ! ! ! ! ! ! !!]"
 
@@ -3472,7 +3488,7 @@ msgstr[1] "[!! {n} åçţîṽé îţéḿš ŵîŀŀ ƀé çåńçéŀŀéð. !
 msgid "{n} done"
 msgstr "[!! {n} ðöńé ! !!]"
 
-#: gui/layout_build.py:1942 gui/queue_view.py:286 gui/queue_view.py:421
+#: gui/layout_build.py:1954 gui/queue_view.py:286 gui/queue_view.py:421
 msgid "{n} item"
 msgid_plural "{n} items"
 msgstr[0] "[!! {n} îţéḿ ! !!]"

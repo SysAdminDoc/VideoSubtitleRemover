@@ -238,6 +238,128 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         self.assertEqual(metrics["quality_gate"]["status"], "passed")
 
 
+from backend.inpainters import extend_masks_across_fades  # noqa: E402
+
+
+class MaskFadeExtensionTests(unittest.TestCase):
+    """RM-292: fading hardsubs are the case per-frame detection misses."""
+
+    H, W = 24, 40
+
+    @classmethod
+    def _empty(cls):
+        return np.zeros((cls.H, cls.W), dtype=np.uint8)
+
+    @classmethod
+    def _detected(cls):
+        mask = cls._empty()
+        mask[8:16, 10:30] = 255
+        return mask
+
+    @classmethod
+    def _timeline(cls):
+        """Three blank frames, four detected, three blank."""
+        return (
+            [cls._empty() for _ in range(3)]
+            + [cls._detected() for _ in range(4)]
+            + [cls._empty() for _ in range(3)]
+        )
+
+    def test_zero_is_byte_identical_and_returns_the_same_objects(self):
+        masks = self._timeline()
+        out, carry = extend_masks_across_fades(masks, 0, 0)
+        self.assertIs(out, masks)
+        self.assertIsNone(carry)
+
+    def test_fade_in_covers_frames_before_the_first_detection(self):
+        masks = self._timeline()
+        out, _ = extend_masks_across_fades(masks, fade_in=2, fade_out=0)
+        # Frames 1 and 2 are within two frames of the detection at index 3.
+        self.assertTrue(np.array_equal(out[1], self._detected()))
+        self.assertTrue(np.array_equal(out[2], self._detected()))
+        # Frame 0 is three frames out and stays clear.
+        self.assertFalse(np.any(out[0]))
+        # Nothing after the track is touched by fade-in alone.
+        self.assertFalse(np.any(out[7]))
+
+    def test_fade_out_covers_frames_after_the_last_detection(self):
+        masks = self._timeline()
+        out, carry = extend_masks_across_fades(masks, fade_in=0, fade_out=2)
+        self.assertTrue(np.array_equal(out[7], self._detected()))
+        self.assertTrue(np.array_equal(out[8], self._detected()))
+        self.assertFalse(np.any(out[9]))
+        self.assertFalse(np.any(out[0]))
+        self.assertIsNone(carry, "the hold was used up inside this batch")
+
+    def test_the_original_masks_are_not_mutated(self):
+        masks = self._timeline()
+        extend_masks_across_fades(masks, fade_in=2, fade_out=2)
+        self.assertFalse(np.any(masks[2]))
+        self.assertFalse(np.any(masks[7]))
+
+    def test_a_fade_out_hold_survives_the_batch_boundary(self):
+        first = [self._empty(), self._detected()]
+        second = [self._empty() for _ in range(4)]
+        _out_a, carry = extend_masks_across_fades(first, 0, 3)
+        self.assertIsNotNone(carry)
+        out_b, carry_b = extend_masks_across_fades(second, 0, 3, carry)
+        self.assertTrue(np.array_equal(out_b[0], self._detected()))
+        self.assertTrue(np.array_equal(out_b[1], self._detected()))
+        self.assertTrue(np.array_equal(out_b[2], self._detected()))
+        self.assertFalse(np.any(out_b[3]))
+        self.assertIsNone(carry_b)
+
+    def test_a_new_detection_restarts_the_hold(self):
+        masks = [
+            self._detected(), self._empty(), self._detected(),
+            self._empty(), self._empty(),
+        ]
+        out, _ = extend_masks_across_fades(masks, 0, 1)
+        self.assertTrue(np.array_equal(out[1], self._detected()))
+        self.assertTrue(np.array_equal(out[3], self._detected()))
+        self.assertFalse(np.any(out[4]))
+
+    def test_a_frame_that_detected_anything_is_inside_the_track(self):
+        """The hold covers frames before the FIRST detection, not every frame.
+
+        A frame that detected something faint is already inside the track, so
+        it keeps exactly its own mask. Unioning neighbours into it as well
+        would be a rolling union, which is a separate setting.
+        """
+        partial = self._empty()
+        partial[2:5, 2:6] = 255
+        masks = [partial, self._detected()]
+        out, _ = extend_masks_across_fades(masks, fade_in=1, fade_out=0)
+        self.assertTrue(np.array_equal(out[0], partial))
+
+    def test_the_hold_unions_into_a_blank_frame_without_erasing_it(self):
+        masks = [self._empty(), self._detected()]
+        out, _ = extend_masks_across_fades(masks, fade_in=1, fade_out=0)
+        self.assertTrue(np.array_equal(out[0], self._detected()))
+
+    def test_config_defaults_are_off_on_both_surfaces(self):
+        from backend.config import ProcessingConfig
+        from gui.config import ProcessingConfig as GuiProcessingConfig
+
+        self.assertEqual(ProcessingConfig().mask_fade_in_frames, 0)
+        self.assertEqual(ProcessingConfig().mask_fade_out_frames, 0)
+        self.assertEqual(GuiProcessingConfig().mask_fade_in_frames, 0)
+        self.assertEqual(GuiProcessingConfig().mask_fade_out_frames, 0)
+
+    def test_config_values_are_clamped_on_both_surfaces(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        from gui.config import ProcessingConfig as GuiProcessingConfig
+
+        backend_config = normalize_processing_config(ProcessingConfig(
+            mask_fade_in_frames=999, mask_fade_out_frames=-4))
+        self.assertEqual(backend_config.mask_fade_in_frames, 15)
+        self.assertEqual(backend_config.mask_fade_out_frames, 0)
+        gui_config = GuiProcessingConfig.from_dict({
+            "mask_fade_in_frames": 999, "mask_fade_out_frames": -4})
+        self.assertEqual(gui_config.mask_fade_in_frames, 15)
+        self.assertEqual(gui_config.mask_fade_out_frames, 0)
+
+
 class WorstFrameQualityTests(unittest.TestCase):
     """RM-281: one badly filled frame must be visible in the report."""
 

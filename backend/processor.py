@@ -172,6 +172,7 @@ from backend.inpainters import (
     _expand_mask_by_color,
     _detect_scene_cuts,
     _detect_scene_cuts_pyscenedetect as _detect_scene_cuts_pyscenedetect,
+    extend_masks_across_fades,
     stabilize_masks_rolling_union,
     _farneback_winsize as _farneback_winsize,
     _warp_to_reference as _warp_to_reference,
@@ -444,6 +445,9 @@ class _FrameLoopState:
     last_hash: Any
     tracker: Optional[SubtitleTracker]
     fixed_mask_cache: dict
+    # RM-292: (mask, frames_remaining) so a fade-out hold survives a batch
+    # boundary instead of ending wherever the decode happened to split.
+    fade_carry: Any = None
 
 
 @dataclass
@@ -2035,6 +2039,14 @@ class SubtitleRemover(
                         self.config.temporal_mask_window,
                     )
                 batch.masks[segment_start:segment_end] = segment_masks
+            # RM-292: run the fade hold over the whole batch rather than per
+            # active segment, so a fade that spans a passthrough gap is still
+            # covered. A frozen matte never reaches here.
+            fade_in = int(getattr(self.config, "mask_fade_in_frames", 0) or 0)
+            fade_out = int(getattr(self.config, "mask_fade_out_frames", 0) or 0)
+            if (fade_in > 0 or fade_out > 0) and batch.masks:
+                batch.masks, state.fade_carry = extend_masks_across_fades(
+                    batch.masks, fade_in, fade_out, state.fade_carry)
             if ctx.matte_reader is not None:
                 batch_start = state.frame_idx - len(batch.frames)
                 for offset, passthrough in enumerate(

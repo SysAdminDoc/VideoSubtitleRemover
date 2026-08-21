@@ -813,6 +813,73 @@ def stabilize_masks_rolling_union(
     return out
 
 
+def extend_masks_across_fades(
+    masks: List[np.ndarray],
+    fade_in: int = 0,
+    fade_out: int = 0,
+    carried: Optional[Tuple[np.ndarray, int]] = None,
+) -> Tuple[List[np.ndarray], Optional[Tuple[np.ndarray, int]]]:
+    """Hold a detected mask across the frames where a hardsub fades.
+
+    A fading subtitle is the case per-frame detection is worst at: the glyphs
+    are there, but too faint to recognise, so the mask arrives late and leaves
+    early and the fade frames keep their text. ``fade_in`` frames before the
+    first detection and ``fade_out`` frames after the last one inherit the
+    nearest confident mask.
+
+    ``carried`` lets ``fade_out`` continue across a batch boundary: it is the
+    ``(mask, frames_remaining)`` returned by the previous call. ``fade_in``
+    reaches back only within ``masks``, because the earlier frames have
+    already been written by the time this runs.
+
+    Returns the new mask list and the carry for the next call. With both
+    counts at zero the input list is returned unchanged.
+    """
+    if fade_in <= 0 and fade_out <= 0:
+        return masks, None
+    n = len(masks)
+    if n == 0:
+        return masks, carried
+
+    def _has_pixels(mask) -> bool:
+        return mask is not None and bool(np.any(mask))
+
+    out = [mask.copy() if mask is not None else None for mask in masks]
+
+    if fade_out > 0:
+        held, remaining = (carried if carried else (None, 0))
+        for index in range(n):
+            if _has_pixels(masks[index]):
+                held, remaining = masks[index], fade_out
+                continue
+            if remaining > 0 and held is not None and out[index] is not None:
+                if held.shape == out[index].shape:
+                    out[index] = cv2.bitwise_or(out[index], held)
+                remaining -= 1
+        carry = (held, remaining) if remaining > 0 and held is not None else None
+    else:
+        carry = None
+
+    if fade_in > 0:
+        # Walk backwards so a run of empty frames inherits the mask that
+        # follows it, stopping once the hold is used up.
+        upcoming = None
+        distance = 0
+        for index in range(n - 1, -1, -1):
+            if _has_pixels(masks[index]):
+                upcoming, distance = masks[index], 0
+                continue
+            distance += 1
+            if (
+                upcoming is not None
+                and distance <= fade_in
+                and out[index] is not None
+                and upcoming.shape == out[index].shape
+            ):
+                out[index] = cv2.bitwise_or(out[index], upcoming)
+    return out, carry
+
+
 # ---------------------------------------------------------------------------
 # Dense optical-flow warp helpers + TBE primitive
 # ---------------------------------------------------------------------------

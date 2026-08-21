@@ -13,7 +13,6 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 Implementer index -- drain in this order.
 
 P2:
-- RM-292 M -- fade-in / fade-out mask temporal extension
 - RM-294 S -- wrap remaining `N_(f"...")` status toasts so they extract and translate
 
 P3:
@@ -22,16 +21,9 @@ P3:
 - RM-289 S -- PyInstaller floor 6.22.2 + onedir tripwire (advisory does not apply today)
 - RM-293 S -- README Detection / Troubleshooting copy still describes the 3.8 picker
 - RM-295 S -- unaudited surfaces from the 2026-08-21 pass (watch folder, Whisper, NLE, Docker)
+- RM-296 M -- make the fade-in hold exact across decode-batch boundaries
 
 ### P2
-
-- [ ] P2 -- RM-292: Extend detected subtitle masks across fade-in and fade-out frames
-  Why: fading hardsubs are the case where per-frame detection and steady-state alpha unmix both miss.
-  Evidence: WatermarkRemover-AI `--fade-in`/`--fade-out`; VSR has zero `fade_in`/`fade_out` config keys.
-  Touches: `backend/config.py` + `gui/config.py` mirror, `backend/cli.py` (hang flags on `_apply_cli_config_overlays`, not `main()`), mask compose path, `gui/layout_build.py`.
-  Acceptance: `--fade-in N` / `--fade-out N` (and matching GUI sliders, default 0) hold the last confident mask N frames before first detection and N frames after last detection of that track; N=0 remains byte-identical on the reference corpus.
-  Confidence: Verified (gap) / Needs live validation
-  Complexity: M
 
 - [ ] P2 -- RM-294: Replace remaining `N_(f"...")` status toasts with extractable `tr()`/`ntr()` templates
   Why: `N_` is an extraction marker, not a translator, and an f-string inside it never becomes a catalog msgid.
@@ -82,3 +74,11 @@ P3:
   Acceptance: each named surface has a recorded smoke (command, expected result) or is moved to Roadmap_Blocked with the actual blocker.
   Confidence: Verified (gap)
   Complexity: S
+
+- [ ] P3 -- RM-296: Make the fade-in mask hold exact across decode-batch boundaries
+  Why: RM-292's fade-in reaches back only within the current decode batch, because the frames before it have already been inpainted and written by the time the batch's masks are known. A track whose first detection lands in the first few frames of a batch gets a shorter hold than requested.
+  Evidence: `backend/processor.py` writes per batch (`_write_batch` inside the `while True` loop), and `state.frame_idx` advances during decode, so a carry-over would desync the checkpoint contract. Batch size is `sttn_max_load_num` (default 30) and the hold is capped at 15, so the miss is bounded but real. Fade-out is already exact via `_FrameLoopState.fade_carry`.
+  Touches: `backend/processor.py` (`_decode_and_build_batch`, `_write_batch`, `_checkpoint_after_batch`), `tests/test_frame_loop.py`.
+  Acceptance: a track whose first detection falls at index 0 of a decode batch still receives the full `--fade-in N` hold; the checkpoint resume contract still holds (a resumed run produces the same frames as an uninterrupted one); `N=0` stays byte-identical on the reference corpus.
+  Confidence: Verified (gap)
+  Complexity: M
