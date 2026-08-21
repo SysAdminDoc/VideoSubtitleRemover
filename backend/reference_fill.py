@@ -119,6 +119,11 @@ def donor_frame_index(
 ) -> int:
     """Map a source timestamp onto a donor frame index.
 
+    The mapped time is floored, not rounded: donor frame N is on screen for
+    the whole interval [N/fps, (N+1)/fps), so rounding picks the frame that
+    comes NEXT for the upper half of every interval. On a source and donor
+    with different frame rates that is wrong about half the time.
+
     Returns -1 when the mapped time lands before the donor starts, which the
     caller treats as "no reference for this frame" rather than clamping to
     frame zero and painting the wrong background.
@@ -132,7 +137,7 @@ def donor_frame_index(
         return -1
     if donor_seconds < 0.0:
         return -1
-    return int(round(donor_seconds * fps))
+    return int(math.floor(donor_seconds * fps + 1e-9))
 
 
 @dataclass

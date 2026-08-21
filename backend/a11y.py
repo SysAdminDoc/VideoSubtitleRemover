@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -93,10 +94,12 @@ def announce_widget(widget: Any, importance: str = "normal") -> None:
 # NotificationKind_Other -- the announcement is informational, not the
 # completion of a specific UIA action the reader is tracking.
 _NOTIFICATION_KIND_OTHER = 4
-# NotificationProcessing_ImportantAll = 0 keeps urgent messages; _All = 2
-# lets the reader coalesce routine chatter.
+# NotificationProcessing_ImportantAll = 0 keeps urgent messages.
+# NotificationProcessing_MostRecent = 3 lets the reader drop a queued routine
+# message when a newer one arrives, which is what a status line wants.
+# _All = 2 is the deliver-everything value and was the wrong default here.
 _PROCESSING_IMPORTANT_ALL = 0
-_PROCESSING_ALL = 2
+_PROCESSING_MOST_RECENT = 3
 
 
 def _probe_provider() -> Optional[object]:
@@ -190,7 +193,7 @@ def announce(text: str, importance: str = "normal") -> None:
             return
         processing = (
             _PROCESSING_IMPORTANT_ALL if importance == "high"
-            else _PROCESSING_ALL
+            else _PROCESSING_MOST_RECENT
         )
         core.UiaRaiseNotificationEvent(
             provider, _NOTIFICATION_KIND_OTHER, processing, str(text), "VSR"
@@ -240,8 +243,17 @@ _MSAA_ROLES = {
     "slider": 0x33,          # ROLE_SYSTEM_SLIDER
     "progressbar": 0x30,     # ROLE_SYSTEM_PROGRESSBAR
     "progress": 0x30,
-    "status": 0x29,          # ROLE_SYSTEM_STATICTEXT
+    "status": 0x17,          # ROLE_SYSTEM_STATUSBAR
     "text": 0x2A,            # ROLE_SYSTEM_TEXT
+    "text box": 0x2A,
+    "search box": 0x2A,
+    "numeric input": 0x34,   # ROLE_SYSTEM_SPINBUTTON
+    "coordinate input": 0x34,
+    "combo box": 0x2E,       # ROLE_SYSTEM_COMBOBOX
+    "queue item": 0x22,      # ROLE_SYSTEM_LISTITEM
+    "notification": 0x08,    # ROLE_SYSTEM_ALERT
+    "region editor canvas": 0x28,   # ROLE_SYSTEM_GRAPHIC
+    "mask painting canvas": 0x28,
     "link": 0x1E,            # ROLE_SYSTEM_LINK
     "dialog": 0x12,          # ROLE_SYSTEM_DIALOG
     "drop target": 0x14,     # ROLE_SYSTEM_GROUPING
@@ -487,9 +499,42 @@ def annotate_widget(widget: Any, *, live_region: bool = False) -> bool:
         setattr(widget, "_vsr_a11y_hwnd_applied", snapshot)
     except Exception:
         pass
-    if live_region and spoken_value:
-        announce(spoken_value)
+    if live_region:
+        # The value alone, never the state: a footer whose tone token is
+        # "info" must not read out "...; info" after every message.
+        announce_live(value)
     return applied
+
+
+# A live region that speaks every progress tick is worse than one that says
+# nothing -- the backend emits a new "Processing frame N/M" string per batch,
+# so an unthrottled announcement is hundreds of interruptions per file.
+LIVE_REGION_MIN_INTERVAL_SECONDS = 2.0
+_live_last_text = ""
+_live_last_time = 0.0
+
+
+def announce_live(text: str) -> None:
+    """Announce a changing status value, throttled and de-duplicated."""
+    global _live_last_text, _live_last_time
+
+    message = str(text or "").strip()
+    if not message or message == _live_last_text:
+        return
+    now = time.monotonic()
+    if now - _live_last_time < LIVE_REGION_MIN_INTERVAL_SECONDS:
+        return
+    _live_last_text = message
+    _live_last_time = now
+    announce(message)
+
+
+def reset_live_region_throttle() -> None:
+    """Forget the last live announcement (used by tests)."""
+    global _live_last_text, _live_last_time
+
+    _live_last_text = ""
+    _live_last_time = 0.0
 
 
 def set_tooltip_help(widget: Any, text: str) -> None:

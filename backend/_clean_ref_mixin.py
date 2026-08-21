@@ -15,21 +15,40 @@ from backend.tracking import apply_clean_reference
 logger = logging.getLogger(__name__)
 
 
+def _shared_source_evidence(cache: dict, path: str) -> dict:
+    """Hash a reference once per path.
+
+    ``dict.setdefault`` evaluates its default eagerly, so using it here would
+    still SHA-256 a multi-gigabyte donor once per span.
+    """
+    from backend.reference_fill import clean_reference_source_evidence
+
+    if path not in cache:
+        cache[path] = clean_reference_source_evidence(path)
+    return cache[path]
+
+
 class DonorReference:
     """A donor video standing in for a still clean plate.
 
-    Holds the capture open for the job and remembers the last decoded frame,
-    because consecutive source frames usually map to the same donor frame at
-    a matching frame rate and re-seeking each time would dominate the run.
+    Holds the capture open for the job. A donor slower than the source
+    repeats frames, so the last decode is cached; a donor at the same rate
+    advances one frame per source frame, so that case reads sequentially
+    instead of seeking -- an explicit seek flushes the decoder on every
+    long-GOP frame, which is the common case and the expensive one.
+
+    The frame is also scaled to the source size once per decode rather than
+    once per lookup.
     """
 
     def __init__(self, path: str, capture, fps: float, frame_count: int,
-                 offset_seconds: float):
+                 offset_seconds: float, target_size=None):
         self.path = path
         self.capture = capture
         self.fps = float(fps)
         self.frame_count = int(frame_count)
         self.offset_seconds = float(offset_seconds)
+        self.target_size = target_size
         self._cached_index = -1
         self._cached_frame = None
 
@@ -45,17 +64,27 @@ class DonorReference:
         if index == self._cached_index and self._cached_frame is not None:
             return self._cached_frame
         try:
-            from backend.processor import _seek_capture_to_frame
+            if index == self._cached_index + 1:
+                ok, frame = self.capture.read()
+            else:
+                from backend.processor import _seek_capture_to_frame
 
-            _seek_capture_to_frame(self.capture, index)
-            ok, frame = self.capture.read()
+                _seek_capture_to_frame(self.capture, index)
+                ok, frame = self.capture.read()
         except Exception as exc:
             logger.debug("Donor seek to frame %d failed: %s", index, exc)
+            self._cached_index = -1
+            self._cached_frame = None
             return None
         if not ok or frame is None:
+            self._cached_index = -1
+            self._cached_frame = None
             return None
         if frame.ndim == 2:
             frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        if self.target_size and frame.shape[1::-1] != tuple(self.target_size):
+            frame = cv2.resize(
+                frame, tuple(self.target_size), interpolation=cv2.INTER_AREA)
         self._cached_index = index
         self._cached_frame = frame
         return frame
@@ -134,12 +163,11 @@ class _CleanRefMixin:
                 "status": "not-requested",
             }
             return
-        from backend.reference_fill import (
-            CLEAN_REFERENCE_SCHEMA,
-            clean_reference_source_evidence,
-        )
+        from backend.reference_fill import CLEAN_REFERENCE_SCHEMA
 
         records = []
+        donors_by_path: dict = {}
+        evidence_by_path: dict = {}
         spans = getattr(self.config, "subtitle_region_spans", None) or []
         for span_index, span in enumerate(spans):
             spec = span.get("clean_reference") if isinstance(span, dict) else None
@@ -147,7 +175,16 @@ class _CleanRefMixin:
                 continue
             kind = str(spec.get("kind", "plate") or "plate")
             if kind == "video":
-                donor = self._open_donor_reference(spec, width, height)
+                # Several spans commonly share one donor. Opening and
+                # SHA-256ing a multi-gigabyte file once per span would be
+                # minutes of blocking I/O before the first frame decodes.
+                donor = donors_by_path.get(spec["path"])
+                if donor is None:
+                    donor = self._open_donor_reference(spec, width, height)
+                    donors_by_path[spec["path"]] = donor
+                elif donor.offset_seconds != float(
+                        spec.get("offset_seconds", 0.0) or 0.0):
+                    donor = self._open_donor_reference(spec, width, height)
                 self._clean_reference_cache[span_index] = donor
                 donor_fields = {
                     "donorFps": round(donor.fps, 6),
@@ -178,7 +215,8 @@ class _CleanRefMixin:
                 "alignment": spec["alignment"],
                 "minimumConfidence": float(spec["min_confidence"]),
                 "colorMatch": bool(spec["color_match"]),
-                "source": clean_reference_source_evidence(spec["path"]),
+                "source": _shared_source_evidence(
+                    evidence_by_path, spec["path"]),
                 **donor_fields,
                 "attemptedFrames": 0,
                 "unmappedFrames": 0,
@@ -224,6 +262,16 @@ class _CleanRefMixin:
             raise ValueError(
                 f"Clean reference video reports invalid dimensions: {path}")
         if (donor_w, donor_h) != (width, height):
+            donor_aspect = donor_w / float(donor_h)
+            source_aspect = width / float(height)
+            if abs(donor_aspect - source_aspect) > 0.02:
+                capture.release()
+                raise ValueError(
+                    "Clean reference video aspect ratio does not match the "
+                    f"source: donor {donor_w}x{donor_h}, source "
+                    f"{width}x{height}. Stretching it would fail alignment "
+                    "on every frame."
+                )
             logger.info(
                 "Donor reference %sx%s differs from the source %sx%s; "
                 "frames will be scaled before alignment",
@@ -232,13 +280,19 @@ class _CleanRefMixin:
         return DonorReference(
             path, capture, fps, frame_count,
             float(spec.get("offset_seconds", 0.0) or 0.0),
+            target_size=(width, height),
         )
 
     def _release_clean_references(self) -> None:
-        """Close any donor captures. Safe to call more than once."""
+        """Close any donor captures. Safe to call more than once.
+
+        Spans can share one DonorReference, so release each object once.
+        """
+        released = set()
         for entry in list(
                 getattr(self, "_clean_reference_cache", {}).values()):
-            if isinstance(entry, DonorReference):
+            if isinstance(entry, DonorReference) and id(entry) not in released:
+                released.add(id(entry))
                 entry.release()
 
     def _apply_clean_reference_overrides(
@@ -280,16 +334,11 @@ class _CleanRefMixin:
                     # these pixels down the normal inpaint path, which is the
                     # documented fallback.
                     record["unmappedFrames"] += 1
+                    record["fallbackFrames"] += 1
                     record["lastFallbackReason"] = (
                         "no donor frame maps to this timestamp")
                     self.last_clean_reference["fallbackFrames"] += 1
                     continue
-                if reference.shape[:2] != frame.shape[:2]:
-                    reference = cv2.resize(
-                        reference,
-                        (frame.shape[1], frame.shape[0]),
-                        interpolation=cv2.INTER_AREA,
-                    )
             else:
                 reference = entry
             result = apply_clean_reference(

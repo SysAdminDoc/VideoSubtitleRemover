@@ -1435,16 +1435,17 @@ class LayoutBuildMixin:
         for locale_tag in available_catalogs():
             self._locale_display_to_tag.setdefault(locale_tag, locale_tag)
         saved_locale = getattr(self.config, "ui_locale", "system")
+        # RM-284: a locale saved before it fell below the coverage bar (or by
+        # a build that shipped a fuller catalog) must not re-enter the list.
+        # It falls back to System, which is what the run will actually use.
         locale_display = next(
             (
                 display
                 for display, locale_tag in self._locale_display_to_tag.items()
                 if locale_tag.lower() == str(saved_locale).lower()
             ),
-            str(saved_locale),
+            tr("System"),
         )
-        if locale_display not in self._locale_display_to_tag:
-            self._locale_display_to_tag[locale_display] = str(saved_locale)
         self.locale_var = tk.StringVar(value=locale_display)
         self.locale_combo = ttk.Combobox(
             locale_row,

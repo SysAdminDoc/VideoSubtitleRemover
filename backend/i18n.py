@@ -179,18 +179,32 @@ def available_catalogs() -> tuple[str, ...]:
                 continue
             if not (tag and catalog.is_file()):
                 continue
-            exempt = tag.lower().startswith("qps-") or smoke_locale == tag
-            if not exempt:
-                percent = catalog_coverage(catalog)
-                if percent is None or percent < MINIMUM_CATALOG_COVERAGE:
-                    logger.info(
-                        f"Hiding locale {tag}: coverage "
-                        f"{'unmeasured' if percent is None else f'{percent:.1f}%'}"
-                        f" is below the {MINIMUM_CATALOG_COVERAGE:.0f}% bar"
-                    )
-                    continue
-            found.setdefault(tag.lower(), tag)
-    return tuple(sorted(found.values(), key=str.lower))
+            # First root wins, exactly as bind_locale resolves it. Gating a
+            # later root's copy would advertise a language while binding a
+            # different, possibly thinner, catalog.
+            if tag.lower() in found:
+                continue
+            if catalog_meets_coverage(tag, catalog, smoke_locale):
+                found[tag.lower()] = tag
+            else:
+                found[tag.lower()] = None
+    return tuple(sorted(
+        (tag for tag in found.values() if tag), key=str.lower))
+
+
+def catalog_meets_coverage(tag: str, catalog, smoke_locale: str = "") -> bool:
+    """True when this catalog is complete enough to offer and to bind."""
+    if tag.lower().startswith("qps-") or (smoke_locale and smoke_locale == tag):
+        return True
+    percent = catalog_coverage(catalog)
+    if percent is None or percent < MINIMUM_CATALOG_COVERAGE:
+        logger.info(
+            f"Hiding locale {tag}: coverage "
+            f"{'unmeasured' if percent is None else f'{percent:.1f}%'}"
+            f" is below the {MINIMUM_CATALOG_COVERAGE:.0f}% bar"
+        )
+        return False
+    return True
 
 
 def bind_locale(lang: Optional[str]) -> str:
@@ -230,6 +244,15 @@ def bind_locale(lang: Optional[str]) -> str:
             )
             if catalog is None or not catalog.is_file():
                 continue
+            # RM-284: the coverage bar is not a picker cosmetic. A system
+            # locale that resolves to a thin catalog must fall back to
+            # English too, or the gate only works for people who use the
+            # picker.
+            if not catalog_meets_coverage(
+                fallback_tag, catalog,
+                normalise_locale_tag(os.environ.get("VSR_SMOKE_LOCALE")),
+            ):
+                break
             try:
                 with catalog.open("rb") as handle:
                     translations.append(gettext.GNUTranslations(handle))

@@ -474,13 +474,99 @@ class WindowsShellIntegrationTests(unittest.TestCase):
             ("radio button", 0x2D),
             ("slider", 0x33),
             ("progressbar", 0x30),
-            ("status", 0x29),
+            # A status line is a status bar, not static text: the role tells
+            # a reader this surface changes and is worth re-reading.
+            ("status", 0x17),
+            ("combo box", 0x2E),
+            ("numeric input", 0x34),
+            ("queue item", 0x22),
+            ("notification", 0x08),
+            ("region editor canvas", 0x28),
             ("dialog", 0x12),
         ):
             with self.subTest(role=role):
                 self.assertEqual(a11y._MSAA_ROLES[role], expected)
         self.assertNotIn("mystery control", a11y._MSAA_ROLES)
         self.assertEqual(a11y._MSAA_ROLE_DEFAULT, 0x14)  # grouping
+
+    def test_the_live_region_speaks_the_value_without_the_tone_token(self):
+        """The footer's tone rides in `state`; reading it out is noise."""
+        from unittest import mock
+
+        from backend import a11y
+
+        class FakeWidget:
+            def winfo_id(self):
+                return 0
+
+        widget = FakeWidget()
+        a11y.reset_live_region_throttle()
+        with mock.patch.object(a11y, "announce") as announced:
+            a11y.set_accessible_metadata(
+                widget,
+                role="status",
+                label="Application status",
+                state="info",
+                value="Hardware detected: RTX 4090",
+                live_region=True,
+            )
+        announced.assert_called_once_with("Hardware detected: RTX 4090")
+        a11y.reset_live_region_throttle()
+
+    def test_the_live_region_is_throttled_and_deduplicated(self):
+        """A per-batch progress string would otherwise interrupt hundreds of times."""
+        from unittest import mock
+
+        from backend import a11y
+
+        a11y.reset_live_region_throttle()
+        with mock.patch.object(a11y, "announce") as announced:
+            for frame in range(200):
+                a11y.announce_live(f"Processing frame {frame}/200...")
+        self.assertEqual(
+            announced.call_count, 1,
+            "only the first message inside the throttle window is spoken",
+        )
+        a11y.reset_live_region_throttle()
+
+    def test_a_repeated_live_message_is_not_spoken_twice(self):
+        from unittest import mock
+
+        from backend import a11y
+
+        a11y.reset_live_region_throttle()
+        with mock.patch.object(a11y, "announce") as announced:
+            a11y.announce_live("Batch finished")
+            a11y.announce_live("Batch finished")
+        self.assertEqual(announced.call_count, 1)
+        a11y.reset_live_region_throttle()
+
+    def test_routine_notifications_use_the_coalescing_processing_value(self):
+        """_All (2) delivers everything; MostRecent (3) lets a reader drop stale ones."""
+        from backend import a11y
+
+        self.assertEqual(a11y._PROCESSING_MOST_RECENT, 3)
+        self.assertEqual(a11y._PROCESSING_IMPORTANT_ALL, 0)
+        self.assertFalse(hasattr(a11y, "_PROCESSING_ALL"))
+
+    def test_every_role_string_used_in_the_app_is_mapped(self):
+        """An unmapped role silently reads as "grouping" to a screen reader."""
+        import re
+        from pathlib import Path
+
+        from backend import a11y
+
+        root = Path(__file__).resolve().parents[1]
+        used = set()
+        for directory in ("gui", "backend"):
+            for path in (root / directory).glob("*.py"):
+                used.update(re.findall(
+                    r'role="([a-z ]+)"', path.read_text(encoding="utf-8")))
+        missing = sorted(used - set(a11y._MSAA_ROLES))
+        self.assertEqual(
+            missing, [],
+            f"these roles fall back to ROLE_SYSTEM_GROUPING: {missing}",
+        )
 
     def test_annotation_is_skipped_when_nothing_changed(self):
         """The sync runs on every hover; unchanged metadata must not re-call."""

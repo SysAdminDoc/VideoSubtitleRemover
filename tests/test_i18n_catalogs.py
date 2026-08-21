@@ -297,6 +297,60 @@ class CatalogCoverageGateTests(unittest.TestCase):
             ):
                 self.assertEqual(i18n.available_catalogs(), ("qps-Ploc",))
 
+    def test_a_thin_install_catalog_is_not_unhidden_by_a_fuller_user_copy(self):
+        """bind_locale takes the first root, so the gate must judge that one."""
+        from backend import i18n
+
+        with tempfile.TemporaryDirectory() as tmp_a, \
+                tempfile.TemporaryDirectory() as tmp_b:
+            install = Path(tmp_a)
+            per_user = Path(tmp_b)
+            self._write_catalog(install, "fr", translated=40, total=100)
+            self._write_catalog(per_user, "fr", translated=98, total=100)
+            i18n._candidate_locale_dirs = lambda: [install, per_user]
+            i18n._coverage_cache.clear()
+            self.assertEqual(i18n.available_catalogs(), ())
+
+    def test_a_fuller_install_catalog_still_qualifies(self):
+        from backend import i18n
+
+        with tempfile.TemporaryDirectory() as tmp_a, \
+                tempfile.TemporaryDirectory() as tmp_b:
+            install = Path(tmp_a)
+            per_user = Path(tmp_b)
+            self._write_catalog(install, "fr", translated=98, total=100)
+            self._write_catalog(per_user, "fr", translated=10, total=100)
+            i18n._candidate_locale_dirs = lambda: [install, per_user]
+            i18n._coverage_cache.clear()
+            self.assertEqual(i18n.available_catalogs(), ("fr",))
+
+    def test_bind_locale_refuses_a_thin_catalog_and_falls_back_to_english(self):
+        """The gate is not a picker cosmetic: the system locale honours it too."""
+        from backend import i18n
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_catalog(root, "fr", translated=40, total=100)
+            i18n._candidate_locale_dirs = lambda: [root]
+            i18n._coverage_cache.clear()
+            try:
+                self.assertEqual(i18n.bind_locale("fr"), "en")
+            finally:
+                i18n.bind_locale(None)
+
+    def test_bind_locale_accepts_a_catalog_that_clears_the_bar(self):
+        from backend import i18n
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_catalog(root, "fr", translated=95, total=100)
+            i18n._candidate_locale_dirs = lambda: [root]
+            i18n._coverage_cache.clear()
+            try:
+                self.assertEqual(i18n.bind_locale("fr"), "fr")
+            finally:
+                i18n.bind_locale(None)
+
     def test_the_shipped_catalog_carries_a_coverage_stamp(self):
         from backend import i18n
 

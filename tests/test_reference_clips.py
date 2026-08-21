@@ -33,6 +33,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import numpy as np
@@ -562,6 +563,163 @@ class CleanReferenceFillTests(unittest.TestCase):
             np.abs(at_zero - at_half_second).mean(), 5.0,
             "a 0.5s offset should read a visibly different donor frame",
         )
+
+    def test_donor_frame_index_floors_so_it_names_the_frame_on_screen(self):
+        """Rounding picks the NEXT frame for the upper half of every interval."""
+        from backend.reference_fill import donor_frame_index
+
+        # 30 fps source against a 24 fps donor.
+        self.assertEqual(donor_frame_index(1 / 30, 0.0, 24.0), 0)
+        self.assertEqual(donor_frame_index(2 / 30, 0.0, 24.0), 1)
+        self.assertEqual(donor_frame_index(1 / 24, 0.0, 24.0), 1)
+        self.assertEqual(donor_frame_index(0.99 / 24, 0.0, 24.0), 0)
+
+    def test_two_spans_share_one_donor_capture_and_one_hash(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+        from backend import reference_fill
+
+        clean = self._pattern()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            donor = _write_synthetic(
+                Path(tmpdir) / "donor.mkv",
+                [clean.copy() for _ in range(6)],
+                fps=10.0,
+            )
+            hashes = {"n": 0}
+            real_sha = reference_fill.clean_reference_sha256
+
+            def counting_sha(path):
+                hashes["n"] += 1
+                return real_sha(path)
+
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[
+                    {"rect": self.RECT, "start": 0.0, "end": 1.0,
+                     "clean_reference": self._spec(str(donor))},
+                    {"rect": self.RECT, "start": 1.0, "end": 2.0,
+                     "clean_reference": self._spec(str(donor))},
+                ],
+            ))
+            with mock.patch.object(
+                reference_fill, "clean_reference_sha256", counting_sha
+            ):
+                remover._initialize_clean_references(self.W, self.H)
+            try:
+                entries = list(remover._clean_reference_cache.values())
+                self.assertIs(entries[0], entries[1])
+                self.assertEqual(hashes["n"], 1)
+            finally:
+                remover._release_clean_references()
+
+    def test_a_donor_with_a_different_aspect_ratio_is_rejected(self):
+        """Stretching it would fail alignment on every frame with no reason given."""
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        wide = np.zeros((60, 200, 3), dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            donor = _write_synthetic(
+                Path(tmpdir) / "donor.mkv",
+                [wide.copy() for _ in range(4)],
+                fps=10.0,
+            )
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[{
+                    "rect": self.RECT, "start": 0.0, "end": 0.0,
+                    "clean_reference": self._spec(str(donor)),
+                }],
+            ))
+            with self.assertRaises(ValueError) as caught:
+                remover._initialize_clean_references(self.W, self.H)
+            self.assertIn("aspect ratio", str(caught.exception))
+
+    def test_an_unmapped_frame_counts_against_the_region_and_the_batch(self):
+        from backend.config import ProcessingConfig, normalize_processing_config
+
+        clean = self._pattern()
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        with tempfile.TemporaryDirectory() as tmpdir:
+            donor = _write_synthetic(
+                Path(tmpdir) / "donor.mkv",
+                [clean.copy() for _ in range(4)],
+                fps=10.0,
+            )
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[{
+                    "rect": self.RECT, "start": 0.0, "end": 0.0,
+                    "clean_reference": self._spec(str(donor)),
+                }],
+            ))
+            remover._initialize_clean_references(self.W, self.H)
+            try:
+                for _ in range(2):
+                    remover._apply_clean_reference_overrides(
+                        clean.copy(), mask, 90.0)
+                evidence = remover._clean_reference_sidecar_evidence()
+            finally:
+                remover._release_clean_references()
+
+        self.assertEqual(evidence["fallbackFrames"], 2)
+        self.assertEqual(
+            sum(record["fallbackFrames"]
+                for record in evidence["references"]),
+            evidence["fallbackFrames"],
+            "per-region counts must reconcile with the batch total",
+        )
+
+    def test_sequential_lookups_do_not_reseek_the_donor(self):
+        """An explicit seek flushes the decoder; the common case must not pay it."""
+        from backend.config import ProcessingConfig, normalize_processing_config
+        from backend import _clean_ref_mixin
+
+        clean = self._pattern()
+        mask = np.zeros((self.H, self.W), dtype=np.uint8)
+        x1, y1, x2, y2 = self.RECT
+        mask[y1:y2, x1:x2] = 255
+        with tempfile.TemporaryDirectory() as tmpdir:
+            donor = _write_synthetic(
+                Path(tmpdir) / "donor.mkv",
+                [clean.copy() for _ in range(12)],
+                fps=10.0,
+            )
+            remover = processor.SubtitleRemover.__new__(
+                processor.SubtitleRemover)
+            remover.config = normalize_processing_config(ProcessingConfig(
+                subtitle_region_spans=[{
+                    "rect": self.RECT, "start": 0.0, "end": 0.0,
+                    "clean_reference": self._spec(str(donor)),
+                }],
+            ))
+            remover._initialize_clean_references(self.W, self.H)
+            entry = next(iter(remover._clean_reference_cache.values()))
+            seeks = {"n": 0}
+            real_seek = processor._seek_capture_to_frame
+
+            def counting_seek(capture, target):
+                seeks["n"] += 1
+                return real_seek(capture, target)
+
+            try:
+                with mock.patch.object(
+                    processor, "_seek_capture_to_frame", counting_seek
+                ):
+                    for index in range(10):
+                        self.assertIsNotNone(entry.frame_at(index / 10.0))
+            finally:
+                remover._release_clean_references()
+
+        self.assertLessEqual(
+            seeks["n"], 1,
+            "consecutive donor frames must be read sequentially",
+        )
+        self.assertIs(_clean_ref_mixin.DonorReference, type(entry))
 
     def test_processor_scopes_reference_and_emits_redacted_evidence(self):
         import cv2
