@@ -1358,6 +1358,15 @@ class EndToEndPipelineTests(unittest.TestCase):
             self.assertEqual(contract["color"]["mastering_display"], mastering)
             self.assertEqual(contract["color"]["max_cll"], 1000)
             self.assertEqual(processor._probe_audio_stream_count(str(output)), 1)
+            from backend.hdr import probe_color_metadata
+
+            output_meta = probe_color_metadata(str(output))
+            self.assertIsNotNone(output_meta)
+            self.assertEqual(output_meta.color_primaries, "bt2020")
+            self.assertEqual(output_meta.color_transfer, "smpte2084")
+            self.assertIn(output_meta.color_space, {"bt2020nc", "bt2020_ncl"})
+            self.assertEqual(output_meta.color_range, "tv")
+            self.assertEqual(output_meta.tag_conflicts, ())
             sidecar = json.loads(
                 Path(str(output) + ".vsr.json").read_text(encoding="utf-8")
             )

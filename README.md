@@ -1306,13 +1306,15 @@ players interpret the result the same way as the source.
 
 For HDR10/HLG sources with color preservation enabled, VSR promotes the final
 encode to an HDR-capable codec when needed (default H.264 becomes HEVC),
-decodes a high-bit `bgr48le` source surface through FFmpeg when available, and
-requests a 10-bit output surface (`yuv420p10le`) before re-applying the source
+decodes a high-bit `bgr48le` source surface through FFmpeg and refuses to
+continue if that native reader is unavailable. It requests a 10-bit output
+surface (`yuv420p10le`) before re-applying the source
 color tags. OCR and 8-bit model backends use a tone-mapped proxy. Repaired PQ
 and HLG pixels are lifted into bounded linear light inside the active mask ROI,
 then encoded back through the source transfer function. Unmasked HDR pixels
-remain exact on the high-bit surface. Missing or conflicting HDR tags stop the
-job before processing rather than silently flattening the source. For standard
+remain exact on the high-bit surface. Missing, invalid, or conflicting HDR tags,
+or an unavailable native reader, stop the job before processing rather than
+silently flattening the source. For standard
 SDR limited-range content, colors are preserved. If you still see a mismatch,
 attach the `ffprobe` color fields of your source to a bug report.
 

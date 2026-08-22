@@ -883,6 +883,15 @@ class HdrPipelineTests(unittest.TestCase):
         from backend.hdr import hdr_encode_args
         self.assertEqual(hdr_encode_args(None), [])
 
+    def test_hdr_decode_failure_refuses_8bit_fallback(self):
+        with unittest.mock.patch(
+            "backend.processor._open_bgr48_capture", return_value=None,
+        ):
+            with self.assertRaisesRegex(ValueError, "refusing an 8-bit"):
+                processor._open_required_hdr_capture(
+                    "hdr.mkv", input_fps=24.0,
+                )
+
     def test_hdr_encode_args_emits_tags(self):
         from backend.hdr import hdr_encode_args, ColorMetadata
         meta = ColorMetadata(

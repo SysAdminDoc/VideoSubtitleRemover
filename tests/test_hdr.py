@@ -93,7 +93,14 @@ def test_pq_and_hlg_transfer_round_trip_keeps_high_bit_precision():
 def test_hdr_repair_requires_consistent_color_tags():
     assert hdr_repair_ready(None) is False
     assert "metadata is unavailable" in hdr_repair_block_reason(None)
+    assert hdr_repair_ready(ColorMetadata()) is False
+    assert "incomplete or invalid" in hdr_repair_block_reason(ColorMetadata())
     assert hdr_repair_ready(_hdr_meta()) is True
+    assert hdr_repair_ready(ColorMetadata(
+        color_primaries="bt709",
+        color_transfer="not-a-transfer",
+        color_space="bt709",
+    )) is False
     assert hdr_repair_ready(ColorMetadata(
         pixel_format="yuv420p10le",
     )) is False

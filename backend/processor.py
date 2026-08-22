@@ -747,6 +747,17 @@ class OutputIntegrityError(Exception):
         self.details = details or {}
 
 
+def _open_required_hdr_capture(path: str, *, input_fps: float):
+    """Open the native high-bit HDR reader or fail before any 8-bit decode."""
+    capture = _open_bgr48_capture(path, input_fps=input_fps)
+    if capture is None:
+        raise ValueError(
+            "HDR high-bit decode unavailable; refusing an 8-bit fallback "
+            "that would destroy the source surface."
+        )
+    return capture
+
+
 from backend._encode_mixin import _EncodeMixin
 from backend._quality_mixin import _QualityMixin
 from backend._finalize_mixin import _FinalizeMixin
@@ -2836,15 +2847,10 @@ class SubtitleRemover(
             cap = None
             if self._source_is_hdr() and getattr(
                     self, "_hdr_repair_ready", False):
-                cap = _open_bgr48_capture(
+                cap = _open_required_hdr_capture(
                     decode_path,
                     input_fps=self.config.input_fps,
                 )
-                if cap is None:
-                    logger.warning(
-                        "HDR high-bit decode unavailable; falling back to "
-                        "OpenCV BGR8 decode."
-                    )
             if cap is None:
                 cap = _open_capture(
                     decode_path,
@@ -3072,10 +3078,10 @@ class SubtitleRemover(
                 if not selective_ranges:
                     raise ValueError(
                         "Selective mask rerun has no valid affected frame range"
-                    )
+                )
                 if self._source_is_hdr() and getattr(
                         self, "_hdr_repair_ready", False):
-                    selective_cap = _open_bgr48_capture(
+                    selective_cap = _open_required_hdr_capture(
                         str(selective_path),
                         input_fps=self.config.input_fps,
                     )

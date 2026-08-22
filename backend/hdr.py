@@ -39,6 +39,18 @@ HDR_DEFAULT_CODEC = "h265"
 _UNSET_COLOR_VALUES = {"", "unknown", "unspecified"}
 _RGB_MATRIX_VALUES = {"gbr", "rgb"}
 _HDR_TRANSFER_NAMES = {"smpte2084", "arib-std-b67"}
+_SDR_TRANSFER_NAMES = {
+    "bt709", "smpte170m", "smpte240m", "iec61966-2-1", "linear",
+    "gamma22", "gamma28", "log", "log_sqrt", "bt2020-10", "bt2020-12",
+}
+_KNOWN_COLOR_PRIMARIES = {
+    "bt709", "bt2020", "smpte170m", "smpte240m", "film", "jedec-p22",
+    "smpte428", "smpte431", "smpte432",
+}
+_KNOWN_COLOR_MATRICES = {
+    "bt709", "bt470bg", "bt2020nc", "bt2020_ncl", "smpte170m", "smpte240m",
+    "gbr", "rgb", "ictcp", "chroma-derived-nc", "chroma-derived-c",
+}
 _HDR_TONE_MAP_KNEE = 0.25
 
 
@@ -107,6 +119,11 @@ def hdr_repair_block_reason(meta: Optional[ColorMetadata]) -> str:
     matrix = _normalized_transfer(meta.color_space)
     candidate = meta.is_hdr or meta.is_high_bit
     if not candidate:
+        if not _known_sdr_metadata(meta):
+            return (
+                "color metadata is incomplete or invalid; an explicit, "
+                "verified SDR profile is required when HDR repair is skipped"
+            )
         return ""
     transfer = _normalized_transfer(meta.color_transfer)
     if transfer not in _HDR_TRANSFER_NAMES:
@@ -130,6 +147,32 @@ def hdr_repair_block_reason(meta: Optional[ColorMetadata]) -> str:
             f"{meta.color_range or 'missing'}"
         )
     return ""
+
+
+def _known_sdr_metadata(meta: ColorMetadata) -> bool:
+    """Return whether the probe explicitly describes a supported SDR surface."""
+    transfer = _normalized_transfer(meta.color_transfer)
+    primaries = _normalized_transfer(meta.color_primaries)
+    matrix = _normalized_transfer(meta.color_space)
+    color_range = _normalized_transfer(meta.color_range)
+    pixel_format = _normalized_transfer(meta.pixel_format)
+    if transfer and transfer not in _SDR_TRANSFER_NAMES:
+        return False
+    if primaries and primaries not in _KNOWN_COLOR_PRIMARIES:
+        return False
+    if matrix and matrix not in _KNOWN_COLOR_MATRICES:
+        return False
+    if color_range and color_range not in {"tv", "pc"}:
+        return False
+    if not transfer and not primaries and not matrix:
+        return bool(pixel_format and not meta.is_high_bit)
+    if pixel_format and not meta.is_high_bit:
+        return True
+    return (
+        transfer in _SDR_TRANSFER_NAMES
+        and primaries not in _UNSET_COLOR_VALUES
+        and matrix not in _UNSET_COLOR_VALUES
+    )
 
 
 def hdr_repair_ready(meta: Optional[ColorMetadata]) -> bool:

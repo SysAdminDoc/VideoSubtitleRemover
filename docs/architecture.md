@@ -240,7 +240,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    wrapped in a `_PrefetchReader` daemon worker that feeds a bounded
    queue. Tagged PQ and HLG sources use a `bgr48le` surface. OCR and model
    inputs receive a separate tone-mapped 8-bit proxy, while the high-bit source
-   remains attached to the batch for final repair.
+   remains attached to the batch for final repair. If the native reader cannot
+   provide that surface, processing stops rather than falling back to BGR8.
 6. **Per-frame detect.** Inside the main loop:
    - `pHash` skip + keyframe gating short-circuit when content is
      unchanged.
