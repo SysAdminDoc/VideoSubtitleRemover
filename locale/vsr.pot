@@ -40,6 +40,10 @@ msgstr ""
 msgid "0 uses the full clip"
 msgstr ""
 
+#: gui/mask_correction_controller.py:271
+msgid "24 px"
+msgstr ""
+
 #: gui/region_controller.py:1498
 msgid "; color delta BGR {delta}"
 msgstr ""
@@ -104,6 +108,10 @@ msgstr ""
 msgid "Adaptive edge padding"
 msgstr ""
 
+#: gui/mask_correction_controller.py:253
+msgid "Add"
+msgstr ""
+
 #: gui/preview_controller.py:607 gui/track_plan_controller.py:51
 msgid "Add a file to the queue first"
 msgstr ""
@@ -140,10 +148,6 @@ msgstr ""
 msgid "Add media, then select a queue item to enable preview tools."
 msgstr ""
 
-#: gui/mask_correction_controller.py:203
-msgid "Add missing pixels or subtract over-masked pixels."
-msgstr ""
-
 #: gui/layout_build.py:822
 msgid "Add more padding around uncertain text detections while keeping confident detections tight. Helps catch faint edges."
 msgstr ""
@@ -152,7 +156,7 @@ msgstr ""
 msgid "Add timed"
 msgstr ""
 
-#: gui/mask_correction_controller.py:193
+#: gui/mask_correction_controller.py:242
 msgid "Add to mask"
 msgstr ""
 
@@ -336,12 +340,12 @@ msgstr ""
 msgid "Browse"
 msgstr ""
 
-#: gui/mask_correction_controller.py:234
-msgid "Brush"
+#: gui/mask_correction_controller.py:289
+msgid "Brush radius in source pixels."
 msgstr ""
 
-#: gui/mask_correction_controller.py:245
-msgid "Brush radius in source pixels."
+#: gui/mask_correction_controller.py:267
+msgid "Brush size"
 msgstr ""
 
 #: gui/layout_build.py:378
@@ -368,7 +372,7 @@ msgstr ""
 msgid "CRF target"
 msgstr ""
 
-#: gui/mask_correction_controller.py:305 gui/queue_view.py:252 gui/region_controller.py:782 gui/settings_controller.py:546 gui/track_plan_controller.py:227
+#: gui/mask_correction_controller.py:410 gui/queue_view.py:252 gui/region_controller.py:782 gui/settings_controller.py:546 gui/track_plan_controller.py:227
 msgid "Cancel"
 msgstr ""
 
@@ -448,7 +452,7 @@ msgstr ""
 msgid "Choose a rectangle, polygon, timed region, or keyframe to edit."
 msgstr ""
 
-#: gui/mask_correction_controller.py:190
+#: gui/mask_correction_controller.py:239
 msgid "Choose a residual, flicker, or low-confidence span."
 msgstr ""
 
@@ -490,6 +494,10 @@ msgstr ""
 
 #: gui/layout_build.py:205
 msgid "Choose output folder"
+msgstr ""
+
+#: gui/mask_correction_controller.py:395
+msgid "Choose the source frame to inspect and correct."
 msgstr ""
 
 #: gui/layout_build.py:1150
@@ -576,7 +584,7 @@ msgstr ""
 msgid "Clear completed"
 msgstr ""
 
-#: gui/mask_correction_controller.py:298
+#: gui/mask_correction_controller.py:403
 msgid "Clear corrections"
 msgstr ""
 
@@ -612,7 +620,7 @@ msgstr ""
 msgid "Cleared manual subtitle regions"
 msgstr ""
 
-#: gui/mask_correction_controller.py:490
+#: gui/mask_correction_controller.py:649
 msgid "Cleared mask corrections"
 msgstr ""
 
@@ -714,20 +722,24 @@ msgstr ""
 msgid "Correct mask"
 msgstr ""
 
-#: gui/mask_correction_controller.py:244
+#: gui/mask_correction_controller.py:288
 msgid "Correction brush radius"
 msgstr ""
 
-#: gui/mask_correction_controller.py:368
+#: gui/mask_correction_controller.py:474
 msgid "Correction frames must form a non-empty in-bounds range"
 msgstr ""
 
-#: gui/mask_correction_controller.py:202
+#: gui/mask_correction_controller.py:259
 msgid "Correction paint mode"
 msgstr ""
 
-#: gui/mask_correction_controller.py:482
+#: gui/mask_correction_controller.py:641
 msgid "Correction stroke added; undo is available"
+msgstr ""
+
+#: gui/mask_correction_controller.py:336
+msgid "Corrections"
 msgstr ""
 
 #: gui/support_controller.py:582
@@ -754,7 +766,7 @@ msgstr ""
 msgid "Could not read the selected file for region editing"
 msgstr ""
 
-#: gui/mask_correction_controller.py:559
+#: gui/mask_correction_controller.py:724
 msgid "Could not read the selected review frame"
 msgstr ""
 
@@ -890,7 +902,7 @@ msgstr ""
 msgid "Drag to add; choose a region for exact coordinates and timing."
 msgstr ""
 
-#: gui/mask_correction_controller.py:264
+#: gui/mask_correction_controller.py:367
 msgid "Drag to paint with the selected mode."
 msgstr ""
 
@@ -942,11 +954,11 @@ msgstr ""
 msgid "End (s)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:218
+#: gui/mask_correction_controller.py:301
 msgid "End frame"
 msgstr ""
 
-#: gui/mask_correction_controller.py:231
+#: gui/mask_correction_controller.py:325
 msgid "End frame is exclusive and must be in bounds."
 msgstr ""
 
@@ -1200,7 +1212,7 @@ msgstr ""
 msgid "Focused {name}{stage}"
 msgstr ""
 
-#: gui/preview_controller.py:770 gui/region_controller.py:321
+#: gui/mask_correction_controller.py:372 gui/preview_controller.py:770 gui/region_controller.py:321
 msgid "Frame"
 msgstr ""
 
@@ -1216,11 +1228,15 @@ msgstr ""
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:664
+#: gui/mask_correction_controller.py:516
+msgid "Frame {frame}: {mode}"
+msgstr ""
+
+#: gui/mask_correction_controller.py:836
 msgid "Frame {frame}; base mask from {source}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:263
+#: gui/mask_correction_controller.py:366
 msgid "Frame-local mask correction canvas"
 msgstr ""
 
@@ -1234,6 +1250,10 @@ msgstr ""
 
 #: gui/track_plan_controller.py:175
 msgid "Frames {start}-{end}  ({begin}s to {finish}s)"
+msgstr ""
+
+#: gui/mask_correction_controller.py:519
+msgid "Frames {start}-{end}: {mode}"
 msgstr ""
 
 #: gui/widgets.py:2355
@@ -1540,11 +1560,11 @@ msgstr ""
 msgid "Loading"
 msgstr ""
 
-#: gui/mask_correction_controller.py:569
+#: gui/mask_correction_controller.py:734
 msgid "Loading detected mask for frame {frame}..."
 msgstr ""
 
-#: gui/mask_correction_controller.py:247
+#: gui/mask_correction_controller.py:352
 msgid "Loading review frame..."
 msgstr ""
 
@@ -1604,11 +1624,11 @@ msgstr ""
 msgid "Mask carry window"
 msgstr ""
 
-#: gui/mask_correction_controller.py:341
+#: gui/mask_correction_controller.py:447
 msgid "Mask correction editor could not open: {error}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:253
+#: gui/mask_correction_controller.py:398
 msgid "Mask correction status"
 msgstr ""
 
@@ -1626,6 +1646,10 @@ msgstr ""
 
 #: gui/preview_controller.py:1832
 msgid "Mask preview failed"
+msgstr ""
+
+#: gui/mask_correction_controller.py:203
+msgid "Mask tools"
 msgstr ""
 
 #: gui/region_controller.py:677
@@ -1798,11 +1822,11 @@ msgstr ""
 msgid "No completed results are available yet"
 msgstr ""
 
-#: gui/mask_correction_controller.py:399
+#: gui/mask_correction_controller.py:558
 msgid "No correction to redo"
 msgstr ""
 
-#: gui/mask_correction_controller.py:397
+#: gui/mask_correction_controller.py:556
 msgid "No correction to undo"
 msgstr ""
 
@@ -1820,6 +1844,10 @@ msgstr ""
 
 #: gui/queue_view.py:427
 msgid "No items match \"{needle}\""
+msgstr ""
+
+#: gui/mask_correction_controller.py:502
+msgid "No manual corrections yet."
 msgstr ""
 
 #: gui/layout_build.py:2407
@@ -1870,7 +1898,7 @@ msgstr ""
 msgid "No translated SRT selected"
 msgstr ""
 
-#: gui/mask_correction_controller.py:607
+#: gui/mask_correction_controller.py:772
 msgid "No valid correction frame ranges are available"
 msgstr ""
 
@@ -2056,15 +2084,19 @@ msgstr ""
 msgid "Paint frame-local mask corrections for a selective rerun."
 msgstr ""
 
-#: gui/mask_correction_controller.py:168
-msgid "Paint only where the automatic mask needs correction."
+#: gui/mask_correction_controller.py:247
+msgid "Paint mode"
 msgstr ""
 
-#: gui/mask_correction_controller.py:593
+#: gui/mask_correction_controller.py:171
+msgid "Paint only where the detected mask needs correction."
+msgstr ""
+
+#: gui/mask_correction_controller.py:758
 msgid "Paint or clear a correction before preparing a rerun"
 msgstr ""
 
-#: gui/mask_correction_controller.py:463
+#: gui/mask_correction_controller.py:622
 msgid "Painting mask correction"
 msgstr ""
 
@@ -2156,7 +2188,7 @@ msgstr ""
 msgid "Precision tuning"
 msgstr ""
 
-#: gui/mask_correction_controller.py:642
+#: gui/mask_correction_controller.py:807
 msgid "Prepared mask-correction rerun for {count} frame range{suffix}"
 msgstr ""
 
@@ -2264,7 +2296,7 @@ msgstr ""
 msgid "Progress"
 msgstr ""
 
-#: gui/mask_correction_controller.py:209
+#: gui/mask_correction_controller.py:327
 msgid "Propagate through review span"
 msgstr ""
 
@@ -2276,7 +2308,7 @@ msgstr ""
 msgid "Quality report sheet (side-by-side PNG comparison)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:189
+#: gui/mask_correction_controller.py:238
 msgid "Quality review span"
 msgstr ""
 
@@ -2334,7 +2366,7 @@ msgstr ""
 msgid "Ready"
 msgstr ""
 
-#: gui/mask_correction_controller.py:631
+#: gui/mask_correction_controller.py:796
 msgid "Ready for a full rerun with mask corrections"
 msgstr ""
 
@@ -2346,7 +2378,7 @@ msgstr ""
 msgid "Ready to process"
 msgstr ""
 
-#: gui/mask_correction_controller.py:629
+#: gui/mask_correction_controller.py:794
 msgid "Ready to rerun corrected frames"
 msgstr ""
 
@@ -2366,7 +2398,7 @@ msgstr ""
 msgid "Rectangle {index}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:423
+#: gui/mask_correction_controller.py:582
 msgid "Redid mask correction"
 msgstr ""
 
@@ -2374,7 +2406,7 @@ msgstr ""
 msgid "Redid region edit"
 msgstr ""
 
-#: gui/mask_correction_controller.py:293 gui/region_controller.py:710
+#: gui/mask_correction_controller.py:209 gui/region_controller.py:710
 msgid "Redo"
 msgstr ""
 
@@ -2564,8 +2596,16 @@ msgstr ""
 msgid "Review first"
 msgstr ""
 
-#: gui/app.py:1502 gui/layout_build.py:2047 gui/mask_correction_controller.py:152 gui/mask_correction_controller.py:163
+#: gui/mask_correction_controller.py:394
+msgid "Review frame"
+msgstr ""
+
+#: gui/app.py:1502 gui/layout_build.py:2047 gui/mask_correction_controller.py:155 gui/mask_correction_controller.py:166
 msgid "Review mask"
+msgstr ""
+
+#: gui/mask_correction_controller.py:228
+msgid "Review span"
 msgstr ""
 
 #: gui/widgets.py:2322
@@ -2636,7 +2676,7 @@ msgstr ""
 msgid "Save as..."
 msgstr ""
 
-#: gui/mask_correction_controller.py:302
+#: gui/mask_correction_controller.py:407
 msgid "Save corrections"
 msgstr ""
 
@@ -2754,7 +2794,7 @@ msgstr ""
 msgid "Select a completed queue item to compare source and output."
 msgstr ""
 
-#: gui/mask_correction_controller.py:693
+#: gui/mask_correction_controller.py:865
 msgid "Select a queue item before correcting its mask"
 msgstr ""
 
@@ -2930,7 +2970,7 @@ msgstr ""
 msgid "Start (s)"
 msgstr ""
 
-#: gui/mask_correction_controller.py:365
+#: gui/mask_correction_controller.py:471
 msgid "Start and end frames must be whole numbers"
 msgstr ""
 
@@ -2942,7 +2982,7 @@ msgstr ""
 msgid "Start cleanup"
 msgstr ""
 
-#: gui/mask_correction_controller.py:217
+#: gui/mask_correction_controller.py:300
 msgid "Start frame"
 msgstr ""
 
@@ -3034,7 +3074,11 @@ msgstr ""
 msgid "Subtitles"
 msgstr ""
 
-#: gui/mask_correction_controller.py:194
+#: gui/mask_correction_controller.py:254
+msgid "Subtract"
+msgstr ""
+
+#: gui/mask_correction_controller.py:243
 msgid "Subtract from mask"
 msgstr ""
 
@@ -3280,7 +3324,7 @@ msgstr ""
 msgid "Unavailable"
 msgstr ""
 
-#: gui/mask_correction_controller.py:412
+#: gui/mask_correction_controller.py:571
 msgid "Undid mask correction"
 msgstr ""
 
@@ -3288,7 +3332,7 @@ msgstr ""
 msgid "Undid region edit"
 msgstr ""
 
-#: gui/mask_correction_controller.py:289 gui/region_controller.py:715
+#: gui/mask_correction_controller.py:213 gui/region_controller.py:715
 msgid "Undo"
 msgstr ""
 
@@ -3572,6 +3616,10 @@ msgid_plural "{count} GPUs"
 msgstr[0] ""
 msgstr[1] ""
 
+#: gui/mask_correction_controller.py:523
+msgid "{count} earlier corrections"
+msgstr ""
+
 #: gui/utils.py:468
 msgid "{count} embedded subtitle track: {names}"
 msgid_plural "{count} embedded subtitle tracks: {names}"
@@ -3590,6 +3638,10 @@ msgstr ""
 msgid "{count} warning{suffix}"
 msgstr ""
 
+#: gui/mask_correction_controller.py:488 gui/mask_correction_controller.py:533 gui/mask_correction_controller.py:718
+msgid "{current} of {total}"
+msgstr ""
+
 #: gui/processing_controller.py:1422
 msgid "{current} of {total} complete"
 msgstr ""
@@ -3606,7 +3658,7 @@ msgstr ""
 msgid "{ext} - {size}"
 msgstr ""
 
-#: gui/mask_correction_controller.py:176
+#: gui/mask_correction_controller.py:219
 msgid "{kind}: frames {start}-{end}"
 msgstr ""
 
@@ -3684,6 +3736,10 @@ msgstr[1] ""
 
 #: gui/widgets.py:790
 msgid "{percent} percent"
+msgstr ""
+
+#: gui/mask_correction_controller.py:284
+msgid "{size} px"
 msgstr ""
 
 #: gui/quality_controller.py:209

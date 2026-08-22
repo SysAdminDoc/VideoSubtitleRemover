@@ -40,6 +40,10 @@ msgstr "[!! 0 çŀéåńš éṽéŕý ƒŕåḿé. Ṽåŀûéš åƀöṽé 1 
 msgid "0 uses the full clip"
 msgstr "[!! 0 ûšéš ţħé ƒûŀŀ çŀîƥ ! !!]"
 
+#: gui/mask_correction_controller.py:271
+msgid "24 px"
+msgstr "[!! 24 ƥẋ ! !!]"
+
 #: gui/region_controller.py:1498
 msgid "; color delta BGR {delta}"
 msgstr "[!! ; çöŀöŕ ðéŀţå ƁĜŔ {delta} ! ! !!]"
@@ -104,6 +108,10 @@ msgstr "[!! Åçţîṽîţý ŀöĝ çŀéåŕéð ! !!]"
 msgid "Adaptive edge padding"
 msgstr "[!! Åðåƥţîṽé éðĝé ƥåððîńĝ ! !!]"
 
+#: gui/mask_correction_controller.py:253
+msgid "Add"
+msgstr "[!! Åðð ! !!]"
+
 #: gui/preview_controller.py:607 gui/track_plan_controller.py:51
 msgid "Add a file to the queue first"
 msgstr "[!! Åðð å ƒîŀé ţö ţħé ɋûéûé ƒîŕšţ ! ! !!]"
@@ -140,10 +148,6 @@ msgstr "[!! Åðð ḿéðîå ţö ţħé ɋûéûé ƀéƒöŕé šţåŕţî�
 msgid "Add media, then select a queue item to enable preview tools."
 msgstr "[!! Åðð ḿéðîå, ţħéń šéŀéçţ å ɋûéûé îţéḿ ţö éńåƀŀé ƥŕéṽîéŵ ţööŀš. ! ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:203
-msgid "Add missing pixels or subtract over-masked pixels."
-msgstr "[!! Åðð ḿîššîńĝ ƥîẋéŀš öŕ šûƀţŕåçţ öṽéŕ-ḿåšķéð ƥîẋéŀš. ! ! ! ! !!]"
-
 #: gui/layout_build.py:822
 msgid "Add more padding around uncertain text detections while keeping confident detections tight. Helps catch faint edges."
 msgstr "[!! Åðð ḿöŕé ƥåððîńĝ åŕöûńð ûńçéŕţåîń ţéẋţ ðéţéçţîöńš ŵħîŀé ķééƥîńĝ çöńƒîðéńţ ðéţéçţîöńš ţîĝħţ. Ħéŀƥš çåţçħ ƒåîńţ éðĝéš. ! ! ! ! ! ! ! ! ! !!]"
@@ -152,7 +156,7 @@ msgstr "[!! Åðð ḿöŕé ƥåððîńĝ åŕöûńð ûńçéŕţåîń ţé
 msgid "Add timed"
 msgstr "[!! Åðð ţîḿéð ! !!]"
 
-#: gui/mask_correction_controller.py:193
+#: gui/mask_correction_controller.py:242
 msgid "Add to mask"
 msgstr "[!! Åðð ţö ḿåšķ ! !!]"
 
@@ -336,13 +340,13 @@ msgstr "[!! Ɓéƒöŕé çŀéåńûƥ ! !!]"
 msgid "Browse"
 msgstr "[!! Ɓŕöŵšé ! !!]"
 
-#: gui/mask_correction_controller.py:234
-msgid "Brush"
-msgstr "[!! Ɓŕûšħ ! !!]"
-
-#: gui/mask_correction_controller.py:245
+#: gui/mask_correction_controller.py:289
 msgid "Brush radius in source pixels."
 msgstr "[!! Ɓŕûšħ ŕåðîûš îń šöûŕçé ƥîẋéŀš. ! ! !!]"
+
+#: gui/mask_correction_controller.py:267
+msgid "Brush size"
+msgstr "[!! Ɓŕûšħ šîžé ! !!]"
 
 #: gui/layout_build.py:378
 msgid "Build your batch"
@@ -368,7 +372,7 @@ msgstr "[!! ÇƤÛ öńŀý ! !!]"
 msgid "CRF target"
 msgstr "[!! ÇŔƑ ţåŕĝéţ ! !!]"
 
-#: gui/mask_correction_controller.py:305 gui/queue_view.py:252 gui/region_controller.py:782 gui/settings_controller.py:546 gui/track_plan_controller.py:227
+#: gui/mask_correction_controller.py:410 gui/queue_view.py:252 gui/region_controller.py:782 gui/settings_controller.py:546 gui/track_plan_controller.py:227
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
@@ -448,7 +452,7 @@ msgstr "[!! Çħööšé å ƒöŀðéŕ ţö çŀéåń ! ! !!]"
 msgid "Choose a rectangle, polygon, timed region, or keyframe to edit."
 msgstr "[!! Çħööšé å ŕéçţåńĝŀé, ƥöŀýĝöń, ţîḿéð ŕéĝîöń, öŕ ķéýƒŕåḿé ţö éðîţ. ! ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:190
+#: gui/mask_correction_controller.py:239
 msgid "Choose a residual, flicker, or low-confidence span."
 msgstr "[!! Çħööšé å ŕéšîðûåŀ, ƒŀîçķéŕ, öŕ ŀöŵ-çöńƒîðéńçé šƥåń. ! ! ! ! !!]"
 
@@ -491,6 +495,10 @@ msgstr "[!! Çħööšé ḿéðîå ! !!]"
 #: gui/layout_build.py:205
 msgid "Choose output folder"
 msgstr "[!! Çħööšé öûţƥûţ ƒöŀðéŕ ! !!]"
+
+#: gui/mask_correction_controller.py:395
+msgid "Choose the source frame to inspect and correct."
+msgstr "[!! Çħööšé ţħé šöûŕçé ƒŕåḿé ţö îńšƥéçţ åńð çöŕŕéçţ. ! ! ! !!]"
 
 #: gui/layout_build.py:1150
 msgid "Choose translated SRT"
@@ -576,7 +584,7 @@ msgstr "[!! Çŀéåŕ åŀŀ ! !!]"
 msgid "Clear completed"
 msgstr "[!! Çŀéåŕ çöḿƥŀéţéð ! !!]"
 
-#: gui/mask_correction_controller.py:298
+#: gui/mask_correction_controller.py:403
 msgid "Clear corrections"
 msgstr "[!! Çŀéåŕ çöŕŕéçţîöńš ! !!]"
 
@@ -612,7 +620,7 @@ msgstr "[!! Çŀéåŕéð îḿƥöŕţéð ḿåţţé ! !!]"
 msgid "Cleared manual subtitle regions"
 msgstr "[!! Çŀéåŕéð ḿåńûåŀ šûƀţîţŀé ŕéĝîöńš ! ! !!]"
 
-#: gui/mask_correction_controller.py:490
+#: gui/mask_correction_controller.py:649
 msgid "Cleared mask corrections"
 msgstr "[!! Çŀéåŕéð ḿåšķ çöŕŕéçţîöńš ! ! !!]"
 
@@ -714,21 +722,25 @@ msgstr "[!! Çöƥýîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš... ! 
 msgid "Correct mask"
 msgstr "[!! Çöŕŕéçţ ḿåšķ ! !!]"
 
-#: gui/mask_correction_controller.py:244
+#: gui/mask_correction_controller.py:288
 msgid "Correction brush radius"
 msgstr "[!! Çöŕŕéçţîöń ƀŕûšħ ŕåðîûš ! !!]"
 
-#: gui/mask_correction_controller.py:368
+#: gui/mask_correction_controller.py:474
 msgid "Correction frames must form a non-empty in-bounds range"
 msgstr "[!! Çöŕŕéçţîöń ƒŕåḿéš ḿûšţ ƒöŕḿ å ńöń-éḿƥţý îń-ƀöûńðš ŕåńĝé ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:202
+#: gui/mask_correction_controller.py:259
 msgid "Correction paint mode"
 msgstr "[!! Çöŕŕéçţîöń ƥåîńţ ḿöðé ! !!]"
 
-#: gui/mask_correction_controller.py:482
+#: gui/mask_correction_controller.py:641
 msgid "Correction stroke added; undo is available"
 msgstr "[!! Çöŕŕéçţîöń šţŕöķé åððéð; ûńðö îš åṽåîŀåƀŀé ! ! ! !!]"
+
+#: gui/mask_correction_controller.py:336
+msgid "Corrections"
+msgstr "[!! Çöŕŕéçţîöńš ! !!]"
 
 #: gui/support_controller.py:582
 msgid "Could not copy to the clipboard"
@@ -754,7 +766,7 @@ msgstr "[!! Çöûŀð ńöţ ƥŕéƥåŕé šûĝĝéšţéð ŕéţŕý: {err
 msgid "Could not read the selected file for region editing"
 msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ƒîŀé ƒöŕ ŕéĝîöń éðîţîńĝ ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:559
+#: gui/mask_correction_controller.py:724
 msgid "Could not read the selected review frame"
 msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ŕéṽîéŵ ƒŕåḿé ! ! ! !!]"
 
@@ -890,7 +902,7 @@ msgstr "[!! Ðŕåĝ öṽéŕ ţħé šûƀţîţŀé ţéẋţ. Ŕéŀéåšé
 msgid "Drag to add; choose a region for exact coordinates and timing."
 msgstr "[!! Ðŕåĝ ţö åðð; çħööšé å ŕéĝîöń ƒöŕ éẋåçţ çööŕðîńåţéš åńð ţîḿîńĝ. ! ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:264
+#: gui/mask_correction_controller.py:367
 msgid "Drag to paint with the selected mode."
 msgstr "[!! Ðŕåĝ ţö ƥåîńţ ŵîţħ ţħé šéŀéçţéð ḿöðé. ! ! ! !!]"
 
@@ -942,11 +954,11 @@ msgstr "[!! Éńçöðîńĝ ɋûåŀîţý ! !!]"
 msgid "End (s)"
 msgstr "[!! Éńð (š) ! !!]"
 
-#: gui/mask_correction_controller.py:218
+#: gui/mask_correction_controller.py:301
 msgid "End frame"
 msgstr "[!! Éńð ƒŕåḿé ! !!]"
 
-#: gui/mask_correction_controller.py:231
+#: gui/mask_correction_controller.py:325
 msgid "End frame is exclusive and must be in bounds."
 msgstr "[!! Éńð ƒŕåḿé îš éẋçŀûšîṽé åńð ḿûšţ ƀé îń ƀöûńðš. ! ! ! !!]"
 
@@ -1200,7 +1212,7 @@ msgstr "[!! Ƒŀöŕéńçé-2 ńééðš ţħé öƥţîöńåŀ ţŕåńšƒö
 msgid "Focused {name}{stage}"
 msgstr "[!! Ƒöçûšéð {name}{stage} ! !!]"
 
-#: gui/preview_controller.py:770 gui/region_controller.py:321
+#: gui/mask_correction_controller.py:372 gui/preview_controller.py:770 gui/region_controller.py:321
 msgid "Frame"
 msgstr "[!! Ƒŕåḿé ! !!]"
 
@@ -1216,11 +1228,15 @@ msgstr "[!! Ƒŕåḿé šķîƥ ! !!]"
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr "[!! Ƒŕåḿé {current}/{total} ({percent}%) ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:664
+#: gui/mask_correction_controller.py:516
+msgid "Frame {frame}: {mode}"
+msgstr "[!! Ƒŕåḿé {frame}: {mode} ! !!]"
+
+#: gui/mask_correction_controller.py:836
 msgid "Frame {frame}; base mask from {source}"
 msgstr "[!! Ƒŕåḿé {frame}; ƀåšé ḿåšķ ƒŕöḿ {source} ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:263
+#: gui/mask_correction_controller.py:366
 msgid "Frame-local mask correction canvas"
 msgstr "[!! Ƒŕåḿé-ŀöçåŀ ḿåšķ çöŕŕéçţîöń çåńṽåš ! ! !!]"
 
@@ -1235,6 +1251,10 @@ msgstr "[!! Ƒŕåḿéš ƀéƒöŕé å šûƀţîţŀé îš ƒîŕšţ ŕé�
 #: gui/track_plan_controller.py:175
 msgid "Frames {start}-{end}  ({begin}s to {finish}s)"
 msgstr "[!! Ƒŕåḿéš {start}-{end}  ({begin}š ţö {finish}š) ! ! ! !!]"
+
+#: gui/mask_correction_controller.py:519
+msgid "Frames {start}-{end}: {mode}"
+msgstr "[!! Ƒŕåḿéš {start}-{end}: {mode} ! ! !!]"
 
 #: gui/widgets.py:2355
 msgid "Freeze approved matte"
@@ -1540,11 +1560,11 @@ msgstr "[!! Ŀöåð å ƥŕéšéţ ĴŠÖŃ ƒîŀé îńţö ţħé ûšéŕ 
 msgid "Loading"
 msgstr "[!! Ŀöåðîńĝ ! !!]"
 
-#: gui/mask_correction_controller.py:569
+#: gui/mask_correction_controller.py:734
 msgid "Loading detected mask for frame {frame}..."
 msgstr "[!! Ŀöåðîńĝ ðéţéçţéð ḿåšķ ƒöŕ ƒŕåḿé {frame}... ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:247
+#: gui/mask_correction_controller.py:352
 msgid "Loading review frame..."
 msgstr "[!! Ŀöåðîńĝ ŕéṽîéŵ ƒŕåḿé... ! !!]"
 
@@ -1604,11 +1624,11 @@ msgstr "[!! Ḿåńûåŀ ŕéĝîöńš: {count} ƒîẋéð ŕéçţåńĝŀé
 msgid "Mask carry window"
 msgstr "[!! Ḿåšķ çåŕŕý ŵîńðöŵ ! !!]"
 
-#: gui/mask_correction_controller.py:341
+#: gui/mask_correction_controller.py:447
 msgid "Mask correction editor could not open: {error}"
 msgstr "[!! Ḿåšķ çöŕŕéçţîöń éðîţöŕ çöûŀð ńöţ öƥéń: {error} ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:253
+#: gui/mask_correction_controller.py:398
 msgid "Mask correction status"
 msgstr "[!! Ḿåšķ çöŕŕéçţîöń šţåţûš ! !!]"
 
@@ -1627,6 +1647,10 @@ msgstr "[!! Ḿåšķ ƒéåţħéŕ ! !!]"
 #: gui/preview_controller.py:1832
 msgid "Mask preview failed"
 msgstr "[!! Ḿåšķ ƥŕéṽîéŵ ƒåîŀéð ! !!]"
+
+#: gui/mask_correction_controller.py:203
+msgid "Mask tools"
+msgstr "[!! Ḿåšķ ţööŀš ! !!]"
 
 #: gui/region_controller.py:677
 msgid "Match each frame's color"
@@ -1798,11 +1822,11 @@ msgstr "[!! Ńö çöḿƥŀéţéð ĵöƀ ţö ŕéƥéåţ ! ! !!]"
 msgid "No completed results are available yet"
 msgstr "[!! Ńö çöḿƥŀéţéð ŕéšûŀţš åŕé åṽåîŀåƀŀé ýéţ ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:399
+#: gui/mask_correction_controller.py:558
 msgid "No correction to redo"
 msgstr "[!! Ńö çöŕŕéçţîöń ţö ŕéðö ! !!]"
 
-#: gui/mask_correction_controller.py:397
+#: gui/mask_correction_controller.py:556
 msgid "No correction to undo"
 msgstr "[!! Ńö çöŕŕéçţîöń ţö ûńðö ! !!]"
 
@@ -1821,6 +1845,10 @@ msgstr "[!! Ńö îḿƥöŕţéð ḿåţţé ! !!]"
 #: gui/queue_view.py:427
 msgid "No items match \"{needle}\""
 msgstr "[!! Ńö îţéḿš ḿåţçħ \"{needle}\" ! ! !!]"
+
+#: gui/mask_correction_controller.py:502
+msgid "No manual corrections yet."
+msgstr "[!! Ńö ḿåńûåŀ çöŕŕéçţîöńš ýéţ. ! ! !!]"
 
 #: gui/layout_build.py:2407
 msgid "No media queued. Add media to build the batch."
@@ -1870,7 +1898,7 @@ msgstr "[!! Ńö ţéẋţ ţŕåçķš ŵéŕé ðéţéçţéð îń ţħîš 
 msgid "No translated SRT selected"
 msgstr "[!! Ńö ţŕåńšŀåţéð ŠŔŢ šéŀéçţéð ! ! !!]"
 
-#: gui/mask_correction_controller.py:607
+#: gui/mask_correction_controller.py:772
 msgid "No valid correction frame ranges are available"
 msgstr "[!! Ńö ṽåŀîð çöŕŕéçţîöń ƒŕåḿé ŕåńĝéš åŕé åṽåîŀåƀŀé ! ! ! !!]"
 
@@ -2056,15 +2084,19 @@ msgstr "[!! ƤåððŀéÖÇŔ-ṼĿ ṽîå ŀŀåḿå.çƥƥ šţåýš ŀö�
 msgid "Paint frame-local mask corrections for a selective rerun."
 msgstr "[!! Ƥåîńţ ƒŕåḿé-ŀöçåŀ ḿåšķ çöŕŕéçţîöńš ƒöŕ å šéŀéçţîṽé ŕéŕûń. ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:168
-msgid "Paint only where the automatic mask needs correction."
-msgstr "[!! Ƥåîńţ öńŀý ŵħéŕé ţħé åûţöḿåţîç ḿåšķ ńééðš çöŕŕéçţîöń. ! ! ! ! !!]"
+#: gui/mask_correction_controller.py:247
+msgid "Paint mode"
+msgstr "[!! Ƥåîńţ ḿöðé ! !!]"
 
-#: gui/mask_correction_controller.py:593
+#: gui/mask_correction_controller.py:171
+msgid "Paint only where the detected mask needs correction."
+msgstr "[!! Ƥåîńţ öńŀý ŵħéŕé ţħé ðéţéçţéð ḿåšķ ńééðš çöŕŕéçţîöń. ! ! ! ! !!]"
+
+#: gui/mask_correction_controller.py:758
 msgid "Paint or clear a correction before preparing a rerun"
 msgstr "[!! Ƥåîńţ öŕ çŀéåŕ å çöŕŕéçţîöń ƀéƒöŕé ƥŕéƥåŕîńĝ å ŕéŕûń ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:463
+#: gui/mask_correction_controller.py:622
 msgid "Painting mask correction"
 msgstr "[!! Ƥåîńţîńĝ ḿåšķ çöŕŕéçţîöń ! ! !!]"
 
@@ -2156,7 +2188,7 @@ msgstr "[!! Ƥöšţ-îńƥåîńţ éðĝé-ŕîńĝ çöŀöûŕ çöŕŕéç�
 msgid "Precision tuning"
 msgstr "[!! Ƥŕéçîšîöń ţûńîńĝ ! !!]"
 
-#: gui/mask_correction_controller.py:642
+#: gui/mask_correction_controller.py:807
 msgid "Prepared mask-correction rerun for {count} frame range{suffix}"
 msgstr "[!! Ƥŕéƥåŕéð ḿåšķ-çöŕŕéçţîöń ŕéŕûń ƒöŕ {count} ƒŕåḿé ŕåńĝé{suffix} ! ! ! ! ! !!]"
 
@@ -2264,7 +2296,7 @@ msgstr "[!! Ƥŕöƒîŀé ! !!]"
 msgid "Progress"
 msgstr "[!! Ƥŕöĝŕéšš ! !!]"
 
-#: gui/mask_correction_controller.py:209
+#: gui/mask_correction_controller.py:327
 msgid "Propagate through review span"
 msgstr "[!! Ƥŕöƥåĝåţé ţħŕöûĝħ ŕéṽîéŵ šƥåń ! ! !!]"
 
@@ -2276,7 +2308,7 @@ msgstr "[!! Ƥŕöṽîðéŕš ! !!]"
 msgid "Quality report sheet (side-by-side PNG comparison)"
 msgstr "[!! Ɋûåŀîţý ŕéƥöŕţ šħééţ (šîðé-ƀý-šîðé ƤŃĜ çöḿƥåŕîšöń) ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:189
+#: gui/mask_correction_controller.py:238
 msgid "Quality review span"
 msgstr "[!! Ɋûåŀîţý ŕéṽîéŵ šƥåń ! !!]"
 
@@ -2334,7 +2366,7 @@ msgstr "[!! Ŕéåðîńĝ ƥŕéṽîéŵ ƒŕåḿé åţ {timestamp}... ! ! !
 msgid "Ready"
 msgstr "[!! Ŕéåðý ! !!]"
 
-#: gui/mask_correction_controller.py:631
+#: gui/mask_correction_controller.py:796
 msgid "Ready for a full rerun with mask corrections"
 msgstr "[!! Ŕéåðý ƒöŕ å ƒûŀŀ ŕéŕûń ŵîţħ ḿåšķ çöŕŕéçţîöńš ! ! ! !!]"
 
@@ -2346,7 +2378,7 @@ msgstr "[!! Ŕéåðý ţö ƥŕéṽîéŵ åŀîĝńḿéńţ. ! ! !!]"
 msgid "Ready to process"
 msgstr "[!! Ŕéåðý ţö ƥŕöçéšš ! !!]"
 
-#: gui/mask_correction_controller.py:629
+#: gui/mask_correction_controller.py:794
 msgid "Ready to rerun corrected frames"
 msgstr "[!! Ŕéåðý ţö ŕéŕûń çöŕŕéçţéð ƒŕåḿéš ! ! !!]"
 
@@ -2366,7 +2398,7 @@ msgstr "[!! Ŕéçţåńĝŀé ! !!]"
 msgid "Rectangle {index}"
 msgstr "[!! Ŕéçţåńĝŀé {index} ! !!]"
 
-#: gui/mask_correction_controller.py:423
+#: gui/mask_correction_controller.py:582
 msgid "Redid mask correction"
 msgstr "[!! Ŕéðîð ḿåšķ çöŕŕéçţîöń ! !!]"
 
@@ -2374,7 +2406,7 @@ msgstr "[!! Ŕéðîð ḿåšķ çöŕŕéçţîöń ! !!]"
 msgid "Redid region edit"
 msgstr "[!! Ŕéðîð ŕéĝîöń éðîţ ! !!]"
 
-#: gui/mask_correction_controller.py:293 gui/region_controller.py:710
+#: gui/mask_correction_controller.py:209 gui/region_controller.py:710
 msgid "Redo"
 msgstr "[!! Ŕéðö ! !!]"
 
@@ -2564,9 +2596,17 @@ msgstr "[!! Ŕéṽîéŵ ƒîŀéš, ƥŕöĝŕéšš, åńð öûţƥûţ šţ
 msgid "Review first"
 msgstr "[!! Ŕéṽîéŵ ƒîŕšţ ! !!]"
 
-#: gui/app.py:1502 gui/layout_build.py:2047 gui/mask_correction_controller.py:152 gui/mask_correction_controller.py:163
+#: gui/mask_correction_controller.py:394
+msgid "Review frame"
+msgstr "[!! Ŕéṽîéŵ ƒŕåḿé ! !!]"
+
+#: gui/app.py:1502 gui/layout_build.py:2047 gui/mask_correction_controller.py:155 gui/mask_correction_controller.py:166
 msgid "Review mask"
 msgstr "[!! Ŕéṽîéŵ ḿåšķ ! !!]"
+
+#: gui/mask_correction_controller.py:228
+msgid "Review span"
+msgstr "[!! Ŕéṽîéŵ šƥåń ! !!]"
 
 #: gui/widgets.py:2322
 msgid "Review subtitle mask"
@@ -2636,7 +2676,7 @@ msgstr "[!! Šåṽé å šîðé-ƀý-šîðé šöûŕçé/öûţƥûţ îḿ�
 msgid "Save as..."
 msgstr "[!! Šåṽé åš... ! !!]"
 
-#: gui/mask_correction_controller.py:302
+#: gui/mask_correction_controller.py:407
 msgid "Save corrections"
 msgstr "[!! Šåṽé çöŕŕéçţîöńš ! !!]"
 
@@ -2754,7 +2794,7 @@ msgstr "[!! Šéŀéçţ å çöḿƥŀéţéð îţéḿ ƒîŕšţ ! ! !!]"
 msgid "Select a completed queue item to compare source and output."
 msgstr "[!! Šéŀéçţ å çöḿƥŀéţéð ɋûéûé îţéḿ ţö çöḿƥåŕé šöûŕçé åńð öûţƥûţ. ! ! ! ! !!]"
 
-#: gui/mask_correction_controller.py:693
+#: gui/mask_correction_controller.py:865
 msgid "Select a queue item before correcting its mask"
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ƀéƒöŕé çöŕŕéçţîńĝ îţš ḿåšķ ! ! ! !!]"
 
@@ -2930,7 +2970,7 @@ msgstr "[!! Šţåŕţ ! !!]"
 msgid "Start (s)"
 msgstr "[!! Šţåŕţ (š) ! !!]"
 
-#: gui/mask_correction_controller.py:365
+#: gui/mask_correction_controller.py:471
 msgid "Start and end frames must be whole numbers"
 msgstr "[!! Šţåŕţ åńð éńð ƒŕåḿéš ḿûšţ ƀé ŵħöŀé ńûḿƀéŕš ! ! ! !!]"
 
@@ -2942,7 +2982,7 @@ msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
 msgid "Start cleanup"
 msgstr "[!! Šţåŕţ çŀéåńûƥ ! !!]"
 
-#: gui/mask_correction_controller.py:217
+#: gui/mask_correction_controller.py:300
 msgid "Start frame"
 msgstr "[!! Šţåŕţ ƒŕåḿé ! !!]"
 
@@ -3034,7 +3074,11 @@ msgstr "[!! Šûƀţîţŀé ŕéĝîöń ƥŕéṽîéŵ ! !!]"
 msgid "Subtitles"
 msgstr "[!! Šûƀţîţŀéš ! !!]"
 
-#: gui/mask_correction_controller.py:194
+#: gui/mask_correction_controller.py:254
+msgid "Subtract"
+msgstr "[!! Šûƀţŕåçţ ! !!]"
+
+#: gui/mask_correction_controller.py:243
 msgid "Subtract from mask"
 msgstr "[!! Šûƀţŕåçţ ƒŕöḿ ḿåšķ ! !!]"
 
@@ -3280,7 +3324,7 @@ msgstr "[!! Ţýƥé å ƒîŀéńåḿé ţö ħîðé ńöń-ḿåţçħîńĝ
 msgid "Unavailable"
 msgstr "[!! Ûńåṽåîŀåƀŀé ! !!]"
 
-#: gui/mask_correction_controller.py:412
+#: gui/mask_correction_controller.py:571
 msgid "Undid mask correction"
 msgstr "[!! Ûńðîð ḿåšķ çöŕŕéçţîöń ! !!]"
 
@@ -3288,7 +3332,7 @@ msgstr "[!! Ûńðîð ḿåšķ çöŕŕéçţîöń ! !!]"
 msgid "Undid region edit"
 msgstr "[!! Ûńðîð ŕéĝîöń éðîţ ! !!]"
 
-#: gui/mask_correction_controller.py:289 gui/region_controller.py:715
+#: gui/mask_correction_controller.py:213 gui/region_controller.py:715
 msgid "Undo"
 msgstr "[!! Ûńðö ! !!]"
 
@@ -3572,6 +3616,10 @@ msgid_plural "{count} GPUs"
 msgstr[0] "[!! {count} ĜƤÛ ! !!]"
 msgstr[1] "[!! {count} ĜƤÛš ! !!]"
 
+#: gui/mask_correction_controller.py:523
+msgid "{count} earlier corrections"
+msgstr "[!! {count} éåŕŀîéŕ çöŕŕéçţîöńš ! ! !!]"
+
 #: gui/utils.py:468
 msgid "{count} embedded subtitle track: {names}"
 msgid_plural "{count} embedded subtitle tracks: {names}"
@@ -3590,6 +3638,10 @@ msgstr "[!! {count} ɋûéûéð åńð ŕéåðý ţö ƥŕöçéšš ! ! !!]"
 msgid "{count} warning{suffix}"
 msgstr "[!! {count} ŵåŕńîńĝ{suffix} ! !!]"
 
+#: gui/mask_correction_controller.py:488 gui/mask_correction_controller.py:533 gui/mask_correction_controller.py:718
+msgid "{current} of {total}"
+msgstr "[!! {current} öƒ {total} ! !!]"
+
 #: gui/processing_controller.py:1422
 msgid "{current} of {total} complete"
 msgstr "[!! {current} öƒ {total} çöḿƥŀéţé ! ! !!]"
@@ -3606,7 +3658,7 @@ msgstr "[!! {engine}: {n} ðéţéçţéð ! !!]"
 msgid "{ext} - {size}"
 msgstr "[!! {ext} - {size} ! !!]"
 
-#: gui/mask_correction_controller.py:176
+#: gui/mask_correction_controller.py:219
 msgid "{kind}: frames {start}-{end}"
 msgstr "[!! {kind}: ƒŕåḿéš {start}-{end} ! ! !!]"
 
@@ -3685,6 +3737,10 @@ msgstr[1] "[!! {n} ţŕåçķš ķéƥţ: ţħéîŕ ƒŕåḿéš åŕé éẋ�
 #: gui/widgets.py:790
 msgid "{percent} percent"
 msgstr "[!! {percent} ƥéŕçéńţ ! !!]"
+
+#: gui/mask_correction_controller.py:284
+msgid "{size} px"
+msgstr "[!! {size} ƥẋ ! !!]"
 
 #: gui/quality_controller.py:209
 msgid "{stage} dominated this run. Open the report for per-item decode, OCR, mask, inpaint, encode, mux, and quality timings."

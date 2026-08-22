@@ -42,7 +42,7 @@ from gui.dialog_layout import (
 )
 from gui.theme import Theme, f
 from gui.utils import dispatch_to_ui, is_video_file
-from gui.widgets import ModernButton
+from gui.widgets import ModernButton, ModernToggle, SegmentedPicker
 
 logger = logging.getLogger(__name__)
 
@@ -140,10 +140,13 @@ class MaskCorrectionWindow:
             self.history = RegionEditHistory(limit=100)
             screen_w = self.root.winfo_screenwidth()
             screen_h = self.root.winfo_screenheight()
+            preview_max_w = max(
+                420,
+                min(900, int(screen_w * 0.56), max(420, screen_w - 470)),
+            )
             self.scale = min(
-                min(900, int(screen_w * 0.78)) / self.width,
-                min(430, int(screen_h * 0.52)) / self.height,
-                1.0,
+                preview_max_w / self.width,
+                min(540, int(screen_h * 0.55)) / self.height,
             )
             self.display_w = max(1, int(self.width * self.scale))
             self.display_h = max(1, int(self.height * self.scale))
@@ -165,13 +168,53 @@ class MaskCorrectionWindow:
                 bg=Theme.BG_DARK, fg=Theme.TEXT_PRIMARY,
             ).pack(anchor="w")
             tk.Label(
-                hero, text=tr("Paint only where the automatic mask needs correction."),
+                hero, text=tr("Paint only where the detected mask needs correction."),
                 font=f(Theme.F_BODY_SM),
                 bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED,
             ).pack(anchor="w", pady=(2, 0))
 
-            header = tk.Frame(body, bg=Theme.BG_SECONDARY)
-            header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_SM))
+            workspace = tk.Frame(body, bg=Theme.BG_DARK)
+            workspace.pack(fill="both", expand=True)
+            workspace.columnconfigure(0, weight=1)
+            workspace.columnconfigure(1, weight=0, minsize=420)
+            workspace.rowconfigure(0, weight=1)
+            preview_column = tk.Frame(workspace, bg=Theme.BG_DARK)
+            preview_column.grid(
+                row=0, column=0, sticky="nsew",
+                padx=(Theme.S_MD, Theme.S_SM),
+            )
+            tools_column = tk.Frame(workspace, bg=Theme.BG_DARK)
+            tools_column.grid(
+                row=0, column=1, sticky="nsew",
+                padx=(0, Theme.S_MD),
+            )
+
+            tools_card = tk.Frame(
+                tools_column,
+                bg=Theme.BG_SECONDARY,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER_SUBTLE,
+            )
+            tools_card.pack(fill="x")
+            tools_header = tk.Frame(tools_card, bg=Theme.BG_SECONDARY)
+            tools_header.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_XS))
+            tk.Label(
+                tools_header, text=tr("Mask tools"),
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+            ).pack(side="left")
+            self.buttons = {"undo": None, "redo": None}
+            redo_button = ModernButton(
+                tools_header, text=tr("Redo"), width=68,
+                command=self.redo, style="ghost", size="sm")
+            redo_button.pack(side="right")
+            undo_button = ModernButton(
+                tools_header, text=tr("Undo"), width=68,
+                command=self.undo, style="ghost", size="sm")
+            undo_button.pack(side="right", padx=(0, Theme.S_XS))
+            self.buttons.update(undo=undo_button, redo=redo_button)
+
             self.span_labels = [
                 tr("{kind}: frames {start}-{end}").format(
                     kind=str(span.get("kind", "review")).replace("-", " ").title(),
@@ -181,10 +224,16 @@ class MaskCorrectionWindow:
                 for span in self.spans
             ]
             self.span_var = tk.StringVar(value=self.span_labels[selected_span_index])
+            tk.Label(
+                tools_card, text=tr("Review span"), font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(anchor="w", padx=Theme.S_MD, pady=(Theme.S_XS, 0))
             span_picker = ttk.Combobox(
-                header, state="readonly", width=31, textvariable=self.span_var,
+                tools_card, state="readonly", width=31,
+                textvariable=self.span_var,
                 values=self.span_labels, style="Dark.TCombobox")
-            span_picker.pack(side="left")
+            span_picker.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
             set_accessible_metadata(
                 span_picker, role="combo box", label=tr("Quality review span"),
                 description=tr("Choose a residual, flicker, or low-confidence span."))
@@ -194,68 +243,122 @@ class MaskCorrectionWindow:
                 tr("Subtract from mask"): "subtract",
             }
             self.mode_var = tk.StringVar(value=next(iter(self.mode_labels)))
-            mode_picker = ttk.Combobox(
-                header, state="readonly", width=18, textvariable=self.mode_var,
-                values=tuple(self.mode_labels), style="Dark.TCombobox")
-            mode_picker.pack(side="left", padx=(Theme.S_SM, 0))
-            set_accessible_metadata(
-                mode_picker, role="combo box", label=tr("Correction paint mode"),
-                description=tr("Add missing pixels or subtract over-masked pixels."))
-
-            controls = tk.Frame(body, bg=Theme.BG_DARK)
-            controls.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
-            self.propagate_var = tk.BooleanVar(value=False)
-            propagate = tk.Checkbutton(
-                controls, text=tr("Propagate through review span"),
-                variable=self.propagate_var, bg=Theme.BG_DARK, fg=Theme.TEXT_PRIMARY,
-                activebackground=Theme.BG_DARK, activeforeground=Theme.TEXT_PRIMARY,
-                selectcolor=Theme.BG_TERTIARY, highlightthickness=0, takefocus=True)
-            propagate.pack(side="left")
-            self.start_var = tk.StringVar()
-            self.end_var = tk.StringVar()
-            frame_entries = []
-            for label, variable in ((tr("Start frame"), self.start_var),
-                                    (tr("End frame"), self.end_var)):
-                tk.Label(
-                    controls, text=label, font=f(Theme.F_META),
-                    bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED).pack(
-                        side="left", padx=(Theme.S_MD, Theme.S_XS))
-                entry = tk.Entry(
-                    controls, width=8, textvariable=variable,
-                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                    insertbackground=Theme.TEXT_PRIMARY, relief="flat")
-                entry.pack(side="left")
-                frame_entries.append(entry)
-                set_accessible_metadata(
-                    entry, role="numeric input", label=label,
-                    description=tr("End frame is exclusive and must be in bounds."))
-            self.brush_var = tk.IntVar(value=12)
             tk.Label(
-                controls, text=tr("Brush"), font=f(Theme.F_META),
-                bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED).pack(
-                    side="left", padx=(Theme.S_MD, Theme.S_XS))
+                tools_card, text=tr("Paint mode"), font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(anchor="w", padx=Theme.S_MD)
+            self.mode_picker = SegmentedPicker(
+                tools_card,
+                options=[
+                    ("add", tr("Add")),
+                    ("subtract", tr("Subtract")),
+                ],
+                value="add",
+                command=self._set_paint_mode,
+                bg=Theme.BG_SECONDARY,
+                group_label=tr("Correction paint mode"),
+            )
+            self.mode_picker.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
+
+            brush_header = tk.Frame(tools_card, bg=Theme.BG_SECONDARY)
+            brush_header.pack(fill="x", padx=Theme.S_MD)
+            tk.Label(
+                brush_header, text=tr("Brush size"), font=f(Theme.F_META),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            ).pack(side="left")
+            self.brush_var = tk.IntVar(value=24)
+            self.brush_value_var = tk.StringVar(value=tr("24 px"))
+            tk.Label(
+                brush_header, textvariable=self.brush_value_var,
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_SECONDARY,
+            ).pack(side="right")
             brush = tk.Scale(
-                controls, from_=2, to=80, orient="horizontal", length=130,
-                variable=self.brush_var, bg=Theme.BG_DARK, fg=Theme.TEXT_PRIMARY,
-                troughcolor=Theme.BG_TERTIARY,
-                activebackground=Theme.BLUE_PRIMARY, highlightthickness=0)
-            brush.pack(side="left")
+                tools_card, from_=2, to=80, orient="horizontal", length=360,
+                variable=self.brush_var, bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_PRIMARY, troughcolor=Theme.BG_TERTIARY,
+                activebackground=Theme.BLUE_PRIMARY,
+                highlightthickness=0, showvalue=False,
+                command=lambda value: self.brush_value_var.set(
+                    tr("{size} px").format(size=int(float(value)))),
+            )
+            brush.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
             set_accessible_metadata(
                 brush, role="slider", label=tr("Correction brush radius"),
                 description=tr("Brush radius in source pixels."))
 
+            range_frame = tk.Frame(tools_card, bg=Theme.BG_SECONDARY)
+            range_frame.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+            range_frame.columnconfigure(0, weight=1, uniform="mask-range")
+            range_frame.columnconfigure(1, weight=1, uniform="mask-range")
+            self.propagate_var = tk.BooleanVar(value=False)
+            self.start_var = tk.StringVar()
+            self.end_var = tk.StringVar()
+            frame_entries = []
+            for column, (label, variable) in enumerate((
+                (tr("Start frame"), self.start_var),
+                (tr("End frame"), self.end_var),
+            )):
+                field = tk.Frame(range_frame, bg=Theme.BG_SECONDARY)
+                field.grid(
+                    row=0, column=column, sticky="ew",
+                    padx=(0 if column == 0 else Theme.S_SM, 0),
+                )
+                tk.Label(
+                    field, text=label, font=f(Theme.F_META),
+                    bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                ).pack(anchor="w")
+                entry = tk.Entry(
+                    field, width=8, textvariable=variable,
+                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                    insertbackground=Theme.TEXT_PRIMARY,
+                    font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                    highlightthickness=1,
+                    highlightbackground=Theme.BORDER,
+                    highlightcolor=Theme.BORDER_FOCUS,
+                )
+                entry.pack(fill="x", pady=(Theme.S_XS, 0))
+                frame_entries.append(entry)
+                set_accessible_metadata(
+                    entry, role="numeric input", label=label,
+                    description=tr("End frame is exclusive and must be in bounds."))
+            propagate = ModernToggle(
+                tools_card, text=tr("Propagate through review span"),
+                variable=self.propagate_var,
+                command=self.set_span_range,
+                bg=Theme.BG_SECONDARY,
+            )
+            propagate.pack(
+                anchor="w", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+
+            tk.Label(
+                tools_card, text=tr("Corrections"),
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+                anchor="w",
+            ).pack(
+                anchor="w", fill="x", padx=Theme.S_MD,
+                pady=(Theme.S_XS, Theme.S_XS))
+            self.correction_summary_var = tk.StringVar()
+            tk.Label(
+                tools_card, textvariable=self.correction_summary_var,
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_SECONDARY, justify="left", anchor="nw",
+                wraplength=380,
+            ).pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
+
             self.status_var = tk.StringVar(value=tr("Loading review frame..."))
             status = tk.Label(
-                body, textvariable=self.status_var, font=f(Theme.F_META),
+                preview_column, textvariable=self.status_var, font=f(Theme.F_META),
                 bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED, anchor="w")
-            status.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_XS))
-            set_accessible_metadata(
-                status, role="status", label=tr("Mask correction status"))
 
             self.canvas = tk.Canvas(
-                body, width=self.display_w, height=self.display_h, bg=Theme.BG_TERTIARY,
+                preview_column, width=self.display_w, height=self.display_h,
+                bg=Theme.BG_TERTIARY,
                 cursor="crosshair", takefocus=True, highlightthickness=0)
-            self.canvas.pack(padx=Theme.S_MD)
+            self.canvas.pack(anchor="n", fill="x")
             self.image_id = self.canvas.create_image(0, 0, anchor="nw")
             self.canvas._photo = None
             set_accessible_metadata(
@@ -263,41 +366,43 @@ class MaskCorrectionWindow:
                 label=tr("Frame-local mask correction canvas"),
                 description=tr("Drag to paint with the selected mode."))
 
+            frame_nav = tk.Frame(preview_column, bg=Theme.BG_DARK)
+            frame_nav.pack(fill="x", pady=(Theme.S_SM, 0))
+            tk.Label(
+                frame_nav, text=tr("Frame"), font=f(Theme.F_META),
+                bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED,
+            ).pack(side="left")
+            self.frame_position_var = tk.StringVar()
+            tk.Label(
+                frame_nav, textvariable=self.frame_position_var,
+                font=f(Theme.F_META), bg=Theme.BG_DARK,
+                fg=Theme.TEXT_SECONDARY,
+            ).pack(side="right")
+            self.frame_slider_var = tk.IntVar(value=0)
+            frame_slider = tk.Scale(
+                preview_column, from_=0, to=max(0, self.frame_count - 1),
+                orient="horizontal", variable=self.frame_slider_var,
+                command=self._queue_frame_load, showvalue=False,
+                bg=Theme.BG_DARK, fg=Theme.TEXT_PRIMARY,
+                troughcolor=Theme.BG_TERTIARY,
+                activebackground=Theme.BLUE_PRIMARY,
+                highlightthickness=0,
+                state="normal" if self.frame_count > 1 else "disabled",
+            )
+            frame_slider.pack(fill="x", pady=(0, Theme.S_XS))
+            set_accessible_metadata(
+                frame_slider, role="slider", label=tr("Review frame"),
+                description=tr("Choose the source frame to inspect and correct."))
+            status.pack(fill="x")
+            set_accessible_metadata(
+                status, role="status", label=tr("Mask correction status"))
+
             actions = tk.Frame(body, bg=Theme.BG_DARK)
             actions.pack(fill="x", padx=Theme.S_MD, pady=Theme.S_MD)
-            self.buttons = {"undo": None, "redo": None}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-            undo_button = ModernButton(
-                actions, text=tr("Undo"), width=76, command=self.undo,
-                style="ghost", size="sm")
-            undo_button.pack(side="left")
-            redo_button = ModernButton(
-                actions, text=tr("Redo"), width=76, command=self.redo,
-                style="ghost", size="sm")
-            redo_button.pack(side="left", padx=(Theme.S_XS, 0))
-            self.buttons.update(undo=undo_button, redo=redo_button)
             ModernButton(
                 actions, text=tr("Clear corrections"), width=132,
                 command=self.clear_corrections, style="ghost", size="sm").pack(
-                    side="left", padx=(Theme.S_SM, 0))
+                    side="left")
             ModernButton(
                 actions, text=tr("Save corrections"), width=152,
                 command=self.prepare_rerun, style="primary", size="sm").pack(side="right")
@@ -306,7 +411,6 @@ class MaskCorrectionWindow:
                 command=self.win.destroy, style="ghost", size="sm").pack(
                     side="right", padx=(0, Theme.S_SM))
 
-            propagate.configure(command=self.set_span_range)
             span_picker.bind("<<ComboboxSelected>>", self.span_changed)
             self.canvas.bind("<ButtonPress-1>", self.paint_press)
             self.canvas.bind("<B1-Motion>", self.paint_drag)
@@ -319,8 +423,9 @@ class MaskCorrectionWindow:
 
             self.win.bind("<Destroy>", self.release_capture)
             self.win._vsr_span_picker = span_picker
-            self.win._vsr_mode_picker = mode_picker
+            self.win._vsr_mode_picker = self.mode_picker
             self.win._vsr_frame_entries = frame_entries
+            self.win._vsr_frame_slider = frame_slider
             self.win._vsr_correction_canvas = self.canvas
             self.win._vsr_correction_state = self.state
             self.win._vsr_paint_handlers = (self.paint_press, self.paint_drag, self.paint_release)
@@ -328,9 +433,10 @@ class MaskCorrectionWindow:
             self.win._vsr_redo_correction = self.redo
             self.win._vsr_prepare_selective_rerun = self.prepare_rerun
             self.update_history_buttons()
+            self._refresh_correction_summary()
             self.span_changed()
             fit_dialog_to_work_area(
-                self.win, self.root, min_width=960, min_height=640)
+                self.win, self.root, min_width=1180, min_height=700)
             self.win.grab_set()
             return True
         except Exception as exc:
@@ -368,11 +474,64 @@ class MaskCorrectionWindow:
                 tr("Correction frames must form a non-empty in-bounds range"))
         return start, end
 
+    def _set_paint_mode(self, value):
+        label = next(
+            (label for label, mode in self.mode_labels.items()
+             if mode == value),
+            next(iter(self.mode_labels)),
+        )
+        self.mode_var.set(label)
+
+    def _queue_frame_load(self, value):
+        index = max(0, min(self.frame_count - 1, int(float(value))))
+        self.frame_position_var.set(
+            tr("{current} of {total}").format(
+                current=index + 1, total=self.frame_count))
+        pending = getattr(self, "_frame_load_after_id", None)
+        if pending is not None:
+            try:
+                self.win.after_cancel(pending)
+            except tk.TclError:
+                pass
+        self._frame_load_after_id = self.win.after(
+            120, lambda: self.load_frame(index))
+
+    def _refresh_correction_summary(self):
+        corrections = self.state.get("corrections") or []
+        if not corrections:
+            self.correction_summary_var.set(tr("No manual corrections yet."))
+            return
+        rows = []
+        for correction in corrections[-4:]:
+            mode = str(correction.get("mode") or "add")
+            mode_label = next(
+                (label for label, value in self.mode_labels.items()
+                 if value == mode),
+                mode.title(),
+            )
+            start = int(correction.get("start_frame", 0) or 0)
+            end = max(start + 1, int(
+                correction.get("end_frame", start + 1) or start + 1))
+            if end == start + 1:
+                rows.append(tr("Frame {frame}: {mode}").format(
+                    frame=start, mode=mode_label))
+            else:
+                rows.append(tr("Frames {start}-{end}: {mode}").format(
+                    start=start, end=end - 1, mode=mode_label))
+        hidden = len(corrections) - len(rows)
+        if hidden > 0:
+            rows.append(tr("{count} earlier corrections").format(count=hidden))
+        self.correction_summary_var.set("\n".join(rows))
+
     def render(self):
         frame = self.state["frame"]
         if frame is None:
             return
+        self._refresh_correction_summary()
         frame_index = self.state["frame_index"]
+        self.frame_position_var.set(
+            tr("{current} of {total}").format(
+                current=frame_index + 1, total=self.frame_count))
         final = apply_mask_corrections(
             self.state["base_mask"].copy(), self.state["corrections"],
             frame_index / max(self.fps, 1e-9), frame_index) > 0
@@ -552,6 +711,12 @@ class MaskCorrectionWindow:
 
     def load_frame(self, index):
         index = max(0, min(self.frame_count - 1, int(index)))
+        self._frame_load_after_id = None
+        if self.frame_slider_var.get() != index:
+            self.frame_slider_var.set(index)
+        self.frame_position_var.set(
+            tr("{current} of {total}").format(
+                current=index + 1, total=self.frame_count))
         if self.is_video:
             self.cap.set(self.cv2.CAP_PROP_POS_FRAMES, index)
             ok, frame = self.cap.read()
@@ -579,12 +744,12 @@ class MaskCorrectionWindow:
     def span_changed(self, _event=None):
         span = self.selected_span()
         suggested = str(span.get("suggested_mode") or "add")
-        self.mode_var.set(next(
-            (label for label, value in self.mode_labels.items()
-             if value == suggested),
-            next(iter(self.mode_labels))))
+        self.mode_picker.set(suggested)
+        self._set_paint_mode(suggested)
         self.set_span_range()
-        self.load_frame(span["start_frame"])
+        frame_index = min(self.frame_count - 1, span["start_frame"])
+        self.frame_slider_var.set(frame_index)
+        self.load_frame(frame_index)
 
     def prepare_rerun(self):
         normalized = normalize_mask_correction_list(self.state["corrections"]) or []
@@ -646,8 +811,15 @@ class MaskCorrectionWindow:
         return True
 
     def release_capture(self, event):
-        if event.widget is self.win and self.cap is not None:
-            self.cap.release()
+        if event.widget is self.win:
+            pending = getattr(self, "_frame_load_after_id", None)
+            if pending is not None:
+                try:
+                    self.win.after_cancel(pending)
+                except tk.TclError:
+                    pass
+            if self.cap is not None:
+                self.cap.release()
 
     def _load_frame_worker(self, frame, index, request_id):
         result = self.detect_mask(frame, index)
