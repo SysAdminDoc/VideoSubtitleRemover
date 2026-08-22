@@ -891,8 +891,8 @@ class SubtitleRemover(
         # pass no longer has per-frame masks). Sampled to keep cost flat.
         self._seam_scores: List[float] = []
         self._seam_score_failure_logged = False
-        # RM-304: streaming quality evidence keeps only the previous frame
-        # and the worst pair, so long jobs do not retain the video in memory.
+        # RM-304: final-encode quality evidence keeps only the previous frame
+        # in memory and sparse masks on the existing work temp directory.
         self._quality_temporal_previous = None
         self._quality_temporal_scores: List[float] = []
         self._quality_temporal_scene_cuts_excluded = 0
@@ -1737,8 +1737,11 @@ class SubtitleRemover(
             if transfer:
                 try:
                     return hdr_proxy_from_high_bit(frame, transfer)
-                except (TypeError, ValueError):
-                    pass
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "HDR repair cannot create a tone-mapped proxy from "
+                        f"transfer metadata {transfer!r}"
+                    ) from exc
             return np.ascontiguousarray(
                 np.clip(np.rint(frame.astype(np.float32) / 257.0), 0, 255)
                 .astype(np.uint8)
@@ -1803,9 +1806,21 @@ class SubtitleRemover(
         if mask is None or mask.shape != source_frame.shape[:2] or not np.any(mask):
             return np.ascontiguousarray(source_frame)
 
-        transfer = getattr(
-            getattr(self, "_color_metadata", None), "color_transfer", "")
-        if transfer and getattr(self, "_hdr_repair_ready", True):
+        meta = getattr(self, "_color_metadata", None)
+        transfer = getattr(meta, "color_transfer", "")
+        hdr_surface = bool(
+            meta is not None
+            and (getattr(meta, "is_hdr", False)
+                 or getattr(meta, "is_high_bit", False))
+        )
+        if meta is None or hdr_surface:
+            reason = hdr_repair_block_reason(meta)
+            if reason or not getattr(self, "_hdr_repair_ready", False):
+                raise ValueError(
+                    "HDR repair is blocked because transfer metadata is not "
+                    f"ready for linear-light processing: {reason or 'not ready'}"
+                )
+        if hdr_surface:
             mask_u8 = np.asarray(mask, dtype=np.uint8)
             points = cv2.findNonZero(mask_u8)
             if points is None:
@@ -2570,23 +2585,10 @@ class SubtitleRemover(
                 )
                 if self.config.quality_report:
                     output_frame_index = state.written_idx + offset
-                    reference_frame = (
-                        batch.source_frames[offset]
-                        if offset < len(batch.source_frames)
-                        and batch.source_frames[offset] is not None
-                        else batch.frames[offset]
-                    )
-                    self._accumulate_frame_quality(
-                        reference_frame,
-                        write_frame,
+                    self._persist_quality_mask(
+                        output_frame_index,
                         batch.masks[offset]
                         if offset < len(batch.masks) else None,
-                        frame_index=output_frame_index,
-                        timestamp=_frame_seconds(
-                            ctx.start_frame + output_frame_index,
-                            ctx.fps,
-                            ctx.frame_timing,
-                        ),
                     )
                 ctx.writer.write(write_frame)
         for offset, result in enumerate(results):
@@ -2698,6 +2700,9 @@ class SubtitleRemover(
         self._quality_color_drift_metric = None
         self._quality_color_drift_worst_frame = None
         self._quality_color_failure_logged = False
+        self._quality_frame_evidence_dir = None
+        self._quality_frame_evidence_write_error = False
+        self._quality_final_encode_verified = False
         self._mask_review_signals = []
         self.last_selective_rerun = None
         temp_dir = None
@@ -2765,6 +2770,12 @@ class SubtitleRemover(
             self._report_progress(0.0, "Opening video...")
             _validate_video_input_file(input_path)
             self._prepare_output_contract(input_path, output_path)
+            if getattr(self, "_hdr_probe_failed", False):
+                raise ValueError(
+                    "HDR processing stopped because color metadata could not "
+                    "be probed. Disable color preservation only as an explicit "
+                    "override when the source is known to be SDR."
+                )
             if getattr(self, "_hdr_repair_blocked", False):
                 reason = hdr_repair_block_reason(self._color_metadata)
                 raise ValueError(
@@ -3210,6 +3221,12 @@ class SubtitleRemover(
             # Re-use the deinterlace temp_dir if one was created, else fresh
             if temp_dir is None:
                 temp_dir = self._make_temp_dir()
+            if self.config.quality_report:
+                self._quality_frame_evidence_dir = Path(temp_dir) / "quality_masks"
+                self._quality_frame_evidence_dir.mkdir(
+                    parents=True, exist_ok=True,
+                )
+                self._quality_frame_evidence_write_error = False
             # I-1: lossless FFV1 intermediate inside .mkv. The previous
             # mp4v intermediate cost a full generation of lossy
             # compression before the final ffmpeg encode pass. The
@@ -3649,6 +3666,16 @@ class SubtitleRemover(
                 matte_writer=matte_writer,
             )
 
+            if self.config.quality_report:
+                self._quality_final_encode_verified = (
+                    self._recompute_final_quality_evidence(
+                        input_path,
+                        final_output_path,
+                        start_frame,
+                        end_frame,
+                        fps,
+                    )
+                )
             self._emit_quality_report(
                 input_path=input_path,
                 final_output_path=final_output_path,

@@ -15,7 +15,7 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-from backend.io import _open_capture
+from backend.io import _open_bgr48_capture, _open_capture
 from backend.mask_corrections import make_review_span, merge_review_spans
 from backend.quality import (
     _ssim,
@@ -38,6 +38,7 @@ from backend.quality_gate import (
     TEMPORAL_FLICKER_CEILING,
     evaluate_quality_gate,
 )
+from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,128 @@ class _QualityMixin:
                 min(ox1, x1), min(oy1, y1),
                 max(ox2, x2), max(oy2, y2),
             )
+
+    def _persist_quality_mask(self, frame_index: int,
+                              mask: Optional[np.ndarray]) -> None:
+        """Persist sparse masks so temporal checks can read final output."""
+        directory = getattr(self, "_quality_frame_evidence_dir", None)
+        if directory is None or mask is None:
+            return
+        values = np.asarray(mask)
+        if values.ndim == 3:
+            values = cv2.cvtColor(values, cv2.COLOR_BGR2GRAY)
+        if values.ndim != 2 or not np.any(values > 0):
+            return
+        normalized = np.where(values > 0, 255, 0).astype(np.uint8)
+        path = Path(directory) / f"{int(frame_index):08d}.png"
+        try:
+            if not cv2.imwrite(str(path), normalized):
+                raise OSError(f"could not write {path}")
+        except Exception:
+            self._quality_frame_evidence_write_error = True
+            logger.warning(
+                "Final-encode quality mask write failed for frame %d",
+                int(frame_index),
+                exc_info=True,
+            )
+
+    def _quality_mask_from_disk(self, frame_index: int,
+                                shape: Tuple[int, int]) -> np.ndarray:
+        directory = getattr(self, "_quality_frame_evidence_dir", None)
+        if directory is None:
+            return np.zeros(shape, dtype=np.uint8)
+        path = Path(directory) / f"{int(frame_index):08d}.png"
+        if not path.is_file():
+            return np.zeros(shape, dtype=np.uint8)
+        mask = safe_imread(path, cv2.IMREAD_GRAYSCALE)
+        if mask is None:
+            raise OSError(f"could not read {path}")
+        if mask.shape != shape:
+            mask = cv2.resize(
+                mask, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST,
+            )
+        return mask
+
+    def _open_final_quality_capture(self, path: str, *, source: bool):
+        """Open a final-quality capture in the source's native HDR depth."""
+        meta = getattr(self, "_color_metadata", None)
+        if bool(getattr(meta, "is_hdr", False)) and not Path(path).is_dir():
+            capture = _open_bgr48_capture(
+                path, input_fps=float(getattr(self.config, "input_fps", 24.0)),
+            )
+            if capture is not None and capture.isOpened():
+                return capture
+            return None
+        return _open_capture(
+            path,
+            getattr(self.config, "decode_hw_accel", "off") if source else "off",
+            input_fps=float(getattr(self.config, "input_fps", 24.0)),
+        )
+
+    def _recompute_final_quality_evidence(
+        self,
+        input_path: str,
+        output_path: str,
+        start_frame: int,
+        end_frame: int,
+        fps: float,
+    ) -> bool:
+        """Score the final encoded frames, not the lossless intermediate."""
+        if not getattr(self.config, "quality_report", False):
+            return True
+        if (
+            getattr(self, "_quality_frame_evidence_dir", None) is None
+            or getattr(self, "_quality_frame_evidence_write_error", False)
+        ):
+            return False
+        cap_in = self._open_final_quality_capture(input_path, source=True)
+        cap_out = self._open_final_quality_capture(output_path, source=False)
+        if cap_in is None or cap_out is None:
+            for capture in (cap_in, cap_out):
+                if capture is not None:
+                    capture.release()
+            return False
+        try:
+            if _seek_capture_to_frame_deferred(cap_in, start_frame) is False:
+                return False
+            if _seek_capture_to_frame_deferred(cap_out, 0) is False:
+                return False
+            self._quality_temporal_previous = None
+            self._quality_temporal_scores = []
+            self._quality_temporal_scene_cuts_excluded = 0
+            self._quality_temporal_worst_pair = None
+            self._quality_color_drift_sum = 0.0
+            self._quality_color_drift_count = 0
+            self._quality_color_drift_metric = None
+            self._quality_color_drift_worst_frame = None
+            expected = max(0, int(end_frame) - int(start_frame))
+            for frame_index in range(expected):
+                ok_in, reference = cap_in.read()
+                ok_out, output = cap_out.read()
+                if not ok_in or not ok_out or reference is None or output is None:
+                    return False
+                mask = self._quality_mask_from_disk(
+                    frame_index, reference.shape[:2],
+                )
+                self._accumulate_frame_quality(
+                    reference,
+                    output,
+                    mask,
+                    frame_index=frame_index,
+                    timestamp=_frame_seconds_deferred(
+                        int(start_frame) + frame_index, fps,
+                    ),
+                )
+            return True
+        except Exception:
+            logger.warning(
+                "Final-encode quality evidence collection failed",
+                exc_info=True,
+            )
+            return False
+        finally:
+            cap_in.release()
+            cap_out.release()
 
     def _accumulate_seam_scores(self, frames, results, masks,
                                 max_samples: int = 32) -> None:
@@ -515,10 +638,17 @@ class _QualityMixin:
             temporal_scores = list(
                 getattr(self, "_quality_temporal_scores", None) or []
             )
-            temporal_local_score = (
+            temporal_local_mean_score = (
                 float(np.mean(temporal_scores))
                 if temporal_scores else None
             )
+            temporal_local_worst_score = (
+                float(max(temporal_scores)) if temporal_scores else None
+            )
+            # The public score is the worst valid pair. A mean remains in the
+            # report for trend analysis, but must not dilute one severe local
+            # repair failure.
+            temporal_local_score = temporal_local_worst_score
             temporal_worst_record = getattr(
                 self, "_quality_temporal_worst_pair", None
             )
@@ -582,6 +712,8 @@ class _QualityMixin:
                 'temporal_flicker_score': flicker_score,
                 'temporal_consistency': temporal_consistency,
                 'mask_local_temporal_score': temporal_local_score,
+                'mask_local_temporal_mean_score': temporal_local_mean_score,
+                'mask_local_temporal_worst_score': temporal_local_worst_score,
                 'mask_local_temporal_threshold': MASK_LOCAL_TEMPORAL_CEILING,
                 'mask_local_temporal_pairs': len(temporal_scores),
                 'mask_local_temporal_scene_cuts_excluded': int(
@@ -594,6 +726,9 @@ class _QualityMixin:
                 'outside_mask_color_drift_frames': color_drift_count,
                 'outside_mask_color_drift_worst_frame': color_drift_worst,
                 'outside_mask_color_drift_threshold': color_drift_threshold,
+                'quality_final_encode_verified': getattr(
+                    self, "_quality_final_encode_verified", None
+                ),
                 'residual_text_score': residual_mean_score,
                 'seam_score': (
                     float(np.mean(getattr(self, '_seam_scores', None) or []))

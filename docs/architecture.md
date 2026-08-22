@@ -5,7 +5,7 @@ module it touches, and points new contributors at the right file for a
 given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 [CHANGELOG.md](../CHANGELOG.md).
 
-> Concrete and up to date as of the v3.36.0 pass.
+> Concrete and up to date as of the v3.37.0 pass.
 > Keep this in sync when modules move.
 
 ---
@@ -295,11 +295,12 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 10. **Quality report.** When `quality_report` is on,
     `_compute_quality_report` samples N frames from input and output,
     computes both whole-frame and ROI-cropped PSNR/SSIM (the ROI
-    is the union mask bbox), and consumes the streaming mask-local
-    temporal evidence collected at write time. The temporal pass estimates
-    motion from untouched pixels, excludes scene cuts, and records the worst
-    pair with a timestamp and PNG overlay. It also measures outside-mask
-    CIELAB drift for SDR or linear-light drift for tagged HDR. Optional
+    is the union mask bbox), and reopens the final encoded output against
+    persisted per-frame masks before calculating mask-local evidence. The
+    temporal pass estimates motion from untouched pixels, excludes scene cuts,
+    gates on the worst valid pair, and records it with a timestamp and PNG
+    overlay. It also measures outside-mask CIELAB drift for SDR or linear-light
+    drift for tagged HDR. Optional
     `_write_quality_sheet` renders the side-by-side PNG. The quality gate
     ladder escalates through increase-dilation, temporal-smooth,
     alternate-inpainter, and manual-review. Color drift always remains a

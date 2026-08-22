@@ -305,9 +305,12 @@ def _quality_mask(mask: Optional[np.ndarray], shape: Tuple[int, int]) -> np.ndar
     return values > 0
 
 
-def _quality_histogram(frame: np.ndarray) -> np.ndarray:
+def _quality_histogram(
+    frame: np.ndarray,
+    valid_mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
     gray = _quality_gray_u8(frame)
-    hist = cv2.calcHist([gray], [0], None, [64], [0, 256])
+    hist = cv2.calcHist([gray], [0], valid_mask, [64], [0, 256])
     cv2.normalize(hist, hist)
     return hist
 
@@ -317,6 +320,7 @@ def scene_cut_pair(
     current: np.ndarray,
     *,
     threshold: float = 0.35,
+    excluded_mask: Optional[np.ndarray] = None,
 ) -> bool:
     """Return whether a pair is too discontinuous for temporal scoring.
 
@@ -328,10 +332,25 @@ def scene_cut_pair(
         return False
     if previous.shape[:2] != current.shape[:2]:
         return True
+    valid_mask = None
+    if excluded_mask is not None:
+        excluded = _quality_mask(excluded_mask, previous.shape[:2])
+        valid_mask = (
+            ~cv2.dilate(
+                excluded.astype(np.uint8),
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
+            ).astype(bool)
+        ).astype(np.uint8) * 255
+        # A cut decision must be based on untouched pixels. If there are not
+        # enough of them, do not pretend a local repair is a scene cut.
+        if int(np.count_nonzero(valid_mask)) < max(
+            64, int(previous.shape[0] * previous.shape[1] * 0.05)
+        ):
+            return False
     try:
         correlation = cv2.compareHist(
-            _quality_histogram(previous),
-            _quality_histogram(current),
+            _quality_histogram(previous, valid_mask),
+            _quality_histogram(current, valid_mask),
             cv2.HISTCMP_CORREL,
         )
     except Exception:
@@ -412,12 +431,15 @@ def mask_local_temporal_pair(
     current_binary = _quality_mask(current_mask, shape)
     if not np.any(previous_binary | current_binary):
         return None
+    excluded = previous_binary | current_binary
     if scene_cut_pair(
-        previous, current, threshold=scene_cut_threshold,
+        previous,
+        current,
+        threshold=scene_cut_threshold,
+        excluded_mask=excluded,
     ):
         return {"scene_cut": True}
 
-    excluded = previous_binary | current_binary
     matrix, inlier_ratio = _estimate_quality_motion(
         previous, current, excluded,
     )

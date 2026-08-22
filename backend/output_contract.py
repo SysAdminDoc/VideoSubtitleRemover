@@ -104,6 +104,7 @@ class OutputContract:
                 "mastering_display": getattr(meta, "mastering_display", ""),
                 "max_cll": getattr(meta, "max_cll", 0),
                 "max_fall": getattr(meta, "max_fall", 0),
+                "tag_conflicts": list(getattr(meta, "tag_conflicts", ())),
             },
             "warnings": list(self.warnings),
         }

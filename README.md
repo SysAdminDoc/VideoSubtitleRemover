@@ -6,7 +6,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.36.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.37.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
@@ -260,6 +260,11 @@ configuration, plus OpenCV's wheel provenance and embedded `avcodec`,
 `avformat`, and `avutil` ABI versions. Embedded ABI numbers are inventory data,
 not upstream FFmpeg release tags. The release gate makes no embedded
 vulnerability claim until a cited advisory maps an affected ABI range.
+
+Quality reports keep the source surface and mask evidence in the work directory
+while processing, then reopen the final encoded output before calculating the
+mask-local temporal and outside-mask color gates. A severe valid frame pair is
+reported by its timestamp and overlay instead of being diluted by a run mean.
 
 Every release is staged as one atomic, version-derived artifact set. After
 the strict gates pass, `backend.release_staging` copies the installer,

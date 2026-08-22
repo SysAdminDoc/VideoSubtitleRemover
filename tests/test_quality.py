@@ -56,10 +56,18 @@ def test_flat_regions_never_nan():
 def test_mask_local_temporal_score_is_stable_for_static_and_camera_motion():
     for kwargs in ({}, {"camera_motion": 6.0}):
         clean, _subtitled, masks = synthetic_clip(frames=8, **kwargs)
+        repaired = [frame.copy() for frame in clean]
+        for frame, mask in zip(repaired, masks):
+            # Model a stable, valid fill that differs slightly from the clean
+            # reference. The test must not pass only because output == input.
+            frame[mask > 0] = np.clip(
+                frame[mask > 0].astype(np.int16) + 2, 0, 255,
+            ).astype(np.uint8)
         scores = []
         for index in range(len(clean) - 1):
             result = mask_local_temporal_pair(
-                clean[index], clean[index + 1], masks[index], masks[index + 1],
+                repaired[index], repaired[index + 1],
+                masks[index], masks[index + 1],
                 reference_previous=clean[index],
                 reference_current=clean[index + 1],
             )
@@ -100,6 +108,20 @@ def test_scene_cut_is_excluded_from_the_temporal_score():
     assert scene_cut_pair(clean[0], cut)
     result = mask_local_temporal_pair(clean[0], cut, masks[0], masks[1])
     assert result == {"scene_cut": True}
+
+
+def test_local_repair_change_cannot_be_classified_as_a_scene_cut():
+    previous = np.full((64, 96, 3), 100, dtype=np.uint8)
+    current = previous.copy()
+    mask = np.zeros((64, 96), dtype=np.uint8)
+    mask[8:56, 8:88] = 255
+    current[mask > 0] = 0
+    result = mask_local_temporal_pair(
+        previous, current, mask, mask,
+    )
+    assert result is not None
+    assert result["scene_cut"] is False
+    assert result["score"] > 0.08
 
 
 def test_outside_mask_drift_uses_cielab_for_sdr_and_catches_global_cast():

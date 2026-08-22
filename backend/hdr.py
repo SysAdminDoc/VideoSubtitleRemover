@@ -62,6 +62,7 @@ class ColorMetadata:
     max_fall: int = 0
     dynamic_metadata: Tuple[str, ...] = ()
     pixel_format: str = ""
+    tag_conflicts: Tuple[str, ...] = ()
 
     @property
     def is_hdr(self) -> bool:
@@ -92,15 +93,19 @@ class ColorMetadata:
 def hdr_repair_block_reason(meta: Optional[ColorMetadata]) -> str:
     """Explain why a tagged HDR source cannot use the linear repair path."""
     if meta is None:
-        return ""
+        return (
+            "color metadata is unavailable; HDR repair requires a successful "
+            "probe or an explicit preserve-color override"
+        )
+    conflicts = tuple(getattr(meta, "tag_conflicts", ()) or ())
+    if conflicts:
+        return (
+            "conflicting color tags prevent safe HDR repair: "
+            + ", ".join(conflicts)
+        )
     primaries = _normalized_transfer(meta.color_primaries)
     matrix = _normalized_transfer(meta.color_space)
-    candidate = meta.is_hdr or (
-        meta.is_high_bit
-        and (not meta.color_transfer
-             or primaries == "bt2020"
-             or matrix in {"bt2020nc", "bt2020_ncl"})
-    )
+    candidate = meta.is_hdr or meta.is_high_bit
     if not candidate:
         return ""
     transfer = _normalized_transfer(meta.color_transfer)
@@ -317,6 +322,7 @@ def probe_color_metadata(path: str) -> Optional[ColorMetadata]:
             pixel_format=(
                 s.get("pix_fmt") or first_frame.get("pix_fmt") or ""
             ),
+            tag_conflicts=_color_tag_conflicts(s, first_frame),
         )
     except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as exc:
         logger.debug(f"Color-metadata probe failed: {exc}")
@@ -344,6 +350,25 @@ def _positive_int(value) -> int:
     except (TypeError, ValueError):
         return 0
     return max(0, result)
+
+
+def _normalized_color_tag(field: str, value) -> str:
+    normalized = _normalized_transfer(value)
+    if field == "color_space" and normalized == "bt2020_ncl":
+        return "bt2020nc"
+    return normalized
+
+
+def _color_tag_conflicts(stream: dict, frame: dict) -> Tuple[str, ...]:
+    conflicts = []
+    for field in (
+        "color_primaries", "color_transfer", "color_space", "color_range",
+    ):
+        stream_value = _normalized_color_tag(field, stream.get(field))
+        frame_value = _normalized_color_tag(field, frame.get(field))
+        if stream_value and frame_value and stream_value != frame_value:
+            conflicts.append(field)
+    return tuple(conflicts)
 
 
 def _x265_mastering_display(side_data: dict) -> str:

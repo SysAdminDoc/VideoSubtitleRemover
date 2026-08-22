@@ -304,6 +304,71 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
                 metrics["quality_gate"]["previewFramePaths"],
             )
 
+    def test_final_encode_quality_reopens_encoded_frames(self):
+        from unittest import mock
+
+        r = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        r.config = processor.ProcessingConfig(
+            quality_report=True, input_fps=24.0, decode_hw_accel="off",
+        )
+        r._color_metadata = None
+        r._quality_frame_evidence_dir = None
+        r._quality_frame_evidence_write_error = False
+        source = np.full((64, 96, 3), 128, dtype=np.uint8)
+        encoded = [source.copy(), source.copy()]
+        mask = np.zeros((64, 96), dtype=np.uint8)
+        mask[16:48, 16:48] = 255
+        encoded[1][mask > 0] = 0
+
+        class FakeCapture:
+            def __init__(self, frames):
+                self.frames = frames
+                self.position = 0
+
+            def isOpened(self):
+                return True
+
+            def set(self, prop, value):
+                if prop == processor.cv2.CAP_PROP_POS_FRAMES:
+                    self.position = int(value)
+                return True
+
+            def get(self, prop):
+                if prop == processor.cv2.CAP_PROP_FRAME_COUNT:
+                    return len(self.frames)
+                return float(self.position)
+
+            def read(self):
+                if self.position >= len(self.frames):
+                    return False, None
+                frame = self.frames[self.position].copy()
+                self.position += 1
+                return True, frame
+
+            def release(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            r._quality_frame_evidence_dir = Path(tmp) / "masks"
+            r._quality_frame_evidence_dir.mkdir()
+            self.assertTrue(processor.cv2.imwrite(
+                str(r._quality_frame_evidence_dir / "00000000.png"), mask,
+            ))
+            self.assertTrue(processor.cv2.imwrite(
+                str(r._quality_frame_evidence_dir / "00000001.png"), mask,
+            ))
+            with mock.patch(
+                "backend._quality_mixin._open_capture",
+                side_effect=[FakeCapture([source, source]), FakeCapture(encoded)],
+            ):
+                verified = r._recompute_final_quality_evidence(
+                    "input.mp4", "encoded.mp4", 0, 2, 24.0,
+                )
+        self.assertTrue(verified)
+        self.assertGreater(
+            float(r._quality_temporal_worst_pair["score"]), 0.08,
+        )
+
 
 from backend.inpainters import extend_masks_across_fades  # noqa: E402
 
@@ -724,6 +789,28 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(gate["ladderStep"], "temporal-smooth")
         self.assertIn("frame 17", gate["reason"])
         self.assertIn("0.708", gate["reason"])
+
+    def test_mask_local_gate_uses_worst_pair_not_a_diluted_mean(self):
+        from backend.quality_gate import evaluate_quality_gate
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+            "mask_local_temporal_score": 0.01,
+            "mask_local_temporal_mean_score": 0.01,
+            "mask_local_temporal_worst_score": 0.30,
+            "mask_local_temporal_worst_pair": {
+                "start_frame": 4,
+                "timestamp": 0.166667,
+                "score": 0.30,
+            },
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(
+            gate["reasons"][0]["metric"], "mask_local_temporal_score",
+        )
+        self.assertAlmostEqual(gate["reasons"][0]["value"], 0.30)
 
     def test_outside_mask_color_failure_requires_review_without_recoloring(self):
         from backend.quality_gate import evaluate_quality_gate

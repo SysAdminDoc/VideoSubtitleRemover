@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.37.0] - 2026-08-22
+
 ### Fixed
 
 - Release evidence now inventories both FFmpeg runtimes. The external record
@@ -19,13 +21,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 - HDR repair now keeps the decoded uint16 source surface, uses a tone-mapped
   proxy for OCR and 8-bit model inputs, and composites repaired PQ or HLG pixels
   in bounded linear light inside the active mask ROI. Outside-mask pixels remain
-  exact, complete color tags are required, and synthetic ramps retain high-bit
-  precision through the transfer round trip.
+  exact, complete color tags are required, and synthetic repaired ramps retain
+  high-bit precision through the transfer round trip. Missing probes, invalid
+  transfers, and conflicting stream/frame tags stop the HDR path.
 - Quality reports now add a mask-local temporal score that compensates for
-  motion and excludes scene cuts, names the worst pair with a timestamp and
-  overlay, and measures outside-mask CIELAB drift for SDR or linear-light drift
-  for tagged HDR. A failed color guard requests review without recoloring the
-  output.
+  motion and excludes scene cuts using untouched pixels. The final encoded
+  output is reopened before scoring, the worst valid pair is gated directly,
+  and its timestamp and overlay are recorded alongside outside-mask CIELAB
+  drift for SDR or linear-light drift for tagged HDR. A failed color guard
+  requests review without recoloring the output.
 - OCR quadrilaterals now travel beside the historical axis-aligned boxes through
   detection, tracking, track-plan save/load, masks, and preview overlays. Each
   polygon gets its own local expansion, so a rotated caption doesn't remove the

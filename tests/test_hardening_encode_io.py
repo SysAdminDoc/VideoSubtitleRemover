@@ -1016,6 +1016,7 @@ class HdrPipelineTests(unittest.TestCase):
                 color_metadata=meta,
                 hardware_requested=True,
             )
+
         report = contract.report()
         self.assertEqual(report["container"], "mkv")
         self.assertIsNone(report["color_preserved"])
@@ -1027,6 +1028,41 @@ class HdrPipelineTests(unittest.TestCase):
         self.assertFalse(contract.color_preserved([
             "color transfer is not preserved",
         ]))
+
+    def test_probe_color_metadata_records_stream_frame_tag_conflicts(self):
+        from backend import hdr
+
+        payload = {
+            "streams": [{
+                "color_primaries": "bt2020",
+                "color_transfer": "smpte2084",
+                "color_space": "bt2020nc",
+                "color_range": "tv",
+                "pix_fmt": "yuv420p10le",
+            }],
+            "frames": [{
+                "color_primaries": "bt2020",
+                "color_transfer": "arib-std-b67",
+                "color_space": "bt2020nc",
+                "color_range": "tv",
+                "pix_fmt": "yuv420p10le",
+            }],
+        }
+        completed = SimpleNamespace(
+            returncode=0, stdout=json.dumps(payload), stderr="",
+        )
+        with unittest.mock.patch(
+            "backend.hdr.shutil.which", return_value="ffprobe"
+        ), unittest.mock.patch(
+            "backend.hdr.run_process", return_value=completed
+        ):
+            meta = hdr.probe_color_metadata("conflicting.mkv")
+
+        self.assertIn("color_transfer", meta.tag_conflicts)
+        self.assertFalse(hdr.hdr_repair_ready(meta))
+        self.assertIn(
+            "color_transfer", hdr.hdr_repair_block_reason(meta),
+        )
 
     def test_deinterlace_uses_lossless_contract_intermediate(self):
         from backend.io import _deinterlace_to_temp
@@ -1087,7 +1123,7 @@ class HdrPipelineTests(unittest.TestCase):
         self.assertEqual(out.dtype, np.uint8)
         self.assertEqual(out.tolist(), [[[0, 1, 255]]])
 
-    def test_high_bit_merge_preserves_unmasked_source(self):
+    def test_high_bit_merge_requires_color_metadata(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover.config = processor.ProcessingConfig(mask_feather_px=0)
         source = np.full((2, 2, 3), 40000, dtype=np.uint16)
@@ -1095,11 +1131,8 @@ class HdrPipelineTests(unittest.TestCase):
         mask = np.zeros((2, 2), dtype=np.uint8)
         mask[0, 1] = 255
 
-        out = remover._merge_high_bit_output(source, cleaned, mask)
-
-        self.assertEqual(out.dtype, np.uint16)
-        self.assertEqual(int(out[0, 0, 0]), 40000)
-        self.assertEqual(int(out[0, 1, 0]), 2570)
+        with self.assertRaisesRegex(ValueError, "metadata"):
+            remover._merge_high_bit_output(source, cleaned, mask)
 
     def test_probe_color_metadata_falls_back(self):
         from backend.hdr import probe_color_metadata

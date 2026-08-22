@@ -10,7 +10,9 @@ from backend.hdr import (
     ColorMetadata,
     hdr_proxy_from_high_bit,
     hdr_proxy_to_linear,
+    hdr_encode_args,
     hdr_pixel_format_args,
+    hdr_repair_block_reason,
     hdr_repair_ready,
     hdr_safe_codec,
     hdr_signal_to_linear,
@@ -89,6 +91,8 @@ def test_pq_and_hlg_transfer_round_trip_keeps_high_bit_precision():
 
 
 def test_hdr_repair_requires_consistent_color_tags():
+    assert hdr_repair_ready(None) is False
+    assert "metadata is unavailable" in hdr_repair_block_reason(None)
     assert hdr_repair_ready(_hdr_meta()) is True
     assert hdr_repair_ready(ColorMetadata(
         pixel_format="yuv420p10le",
@@ -105,6 +109,15 @@ def test_hdr_repair_requires_consistent_color_tags():
         color_space="",
         color_range="tv",
     )) is False
+    conflicted = ColorMetadata(
+        color_primaries="bt2020",
+        color_transfer="smpte2084",
+        color_space="bt2020nc",
+        color_range="tv",
+        tag_conflicts=("color_transfer",),
+    )
+    assert hdr_repair_ready(conflicted) is False
+    assert "color_transfer" in hdr_repair_block_reason(conflicted)
 
 
 def test_linear_light_merge_preserves_outside_pixels_and_sub_8bit_detail():
@@ -127,7 +140,20 @@ def test_linear_light_merge_preserves_outside_pixels_and_sub_8bit_detail():
             color_range="tv",
         )
         proxy = hdr_proxy_from_high_bit(source, transfer)
-        output = instance._merge_high_bit_output(source, proxy, mask)
+        repaired_proxy = proxy.copy()
+        repaired_proxy[mask > 0] = np.clip(
+            repaired_proxy[mask > 0].astype(np.int16) + 4,
+            0,
+            255,
+        ).astype(np.uint8)
+        output = instance._merge_high_bit_output(source, repaired_proxy, mask)
         assert output.dtype == np.uint16
         assert np.array_equal(output[mask == 0], source[mask == 0])
+        assert np.any(output[mask > 0] != source[mask > 0])
         assert len(np.unique(output[mask > 0, 0])) > 256
+        assert hdr_encode_args(instance._color_metadata) == [
+            "-color_primaries", "bt2020",
+            "-color_trc", transfer,
+            "-colorspace", "bt2020nc",
+            "-color_range", "tv",
+        ]

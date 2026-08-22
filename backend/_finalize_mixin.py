@@ -423,8 +423,16 @@ class _FinalizeMixin:
             self._color_metadata = meta
         hdr_meta = meta if self.config.preserve_color_metadata else None
         hdr_reason = hdr_repair_block_reason(hdr_meta)
+        self._hdr_probe_failed = bool(
+            self.config.preserve_color_metadata
+            and not Path(input_path).is_dir()
+            and meta is None
+        )
         self._hdr_repair_ready = not hdr_reason
-        self._hdr_repair_blocked = bool(hdr_reason)
+        # A missing probe is held as a pending safety failure until the
+        # caller can report it with the source path. Explicitly disabling
+        # color preservation is the only override.
+        self._hdr_repair_blocked = bool(hdr_reason and hdr_meta is not None)
         requested = getattr(self.config, "output_codec", "h264")
         effective = requested
         if self.config.preserve_color_metadata:

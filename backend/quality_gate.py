@@ -120,6 +120,7 @@ def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
     _check_vmaf(metrics, violations)
     _check_flicker(metrics, violations)
     _check_mask_local_temporal(metrics, violations)
+    _check_final_encode_quality(metrics, violations)
     _check_outside_mask_color_drift(metrics, violations)
     _check_residual_text(metrics, violations)
     _check_seam(metrics, violations)
@@ -358,11 +359,15 @@ def _check_flicker(metrics: dict,
 
 def _check_mask_local_temporal(metrics: dict,
                                violations: List[Dict[str, Any]]) -> None:
-    score = _number(metrics.get("mask_local_temporal_score"))
+    worst = metrics.get("mask_local_temporal_worst_pair")
+    score = _number(metrics.get("mask_local_temporal_worst_score"))
+    if score is None and isinstance(worst, Mapping):
+        score = _number(worst.get("score"))
+    if score is None:
+        score = _number(metrics.get("mask_local_temporal_score"))
     if score is None:
         return
     if score > MASK_LOCAL_TEMPORAL_CEILING:
-        worst = metrics.get("mask_local_temporal_worst_pair")
         suffix = ""
         if isinstance(worst, Mapping):
             start = worst.get("start_frame")
@@ -379,6 +384,22 @@ def _check_mask_local_temporal(metrics: dict,
             ),
             "ladder": LADDER_TEMPORAL_SMOOTH,
         })
+
+
+def _check_final_encode_quality(metrics: dict,
+                                violations: List[Dict[str, Any]]) -> None:
+    if metrics.get("quality_final_encode_verified") is not False:
+        return
+    violations.append({
+        "metric": "quality_final_encode_verified",
+        "value": False,
+        "threshold": True,
+        "detail": (
+            "mask-local temporal and outside-mask color evidence could not "
+            "be collected from the final encoded output"
+        ),
+        "ladder": LADDER_MANUAL_REVIEW,
+    })
 
 
 def _check_outside_mask_color_drift(metrics: dict,
