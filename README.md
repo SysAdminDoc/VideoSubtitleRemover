@@ -52,7 +52,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
 - **Lossless Matte Interchange** -- Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
 - **Erase, Translate, and Re-embed** -- Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
-- **Inpaint Preview** -- "Test cleanup" runs detect + inpaint on the selected frame so you can A/B settings before committing
+- **Inpaint Preview** -- "Test cleanup" uses the selected video timestamp for single-frame modes and a scene-bounded before/current/after source window for temporal modes. The result reports its timestamp, frame range, and low-resolution planning proxy while inpainting the full-resolution source frame
 - **Cached Mask Tuning** -- Adjust mask dilation in the preview pane and see the composed result immediately without rerunning OCR
 - **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
@@ -313,7 +313,8 @@ docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-tes
 5. **Inspect** -- Select a queue item to preview it. Right-click the preview,
    or press **Menu / Shift+F10** while it is focused, to review the mask, test
    cleanup, compare before/after, or open the full-size view. You can also draw
-   a fixed subtitle band directly on the preview.
+   a fixed subtitle band directly on the preview. For video, use **Preview time**
+   to choose a nonzero sample before running **Test cleanup**.
    The full selector supports exact rectangle or polygon coordinates,
    second/frame timing, arrow-key nudging, Ctrl+arrow resizing, and
    Ctrl+Z/Ctrl+Y history

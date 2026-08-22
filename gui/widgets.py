@@ -1289,6 +1289,18 @@ class ModernSlider(tk.Frame):
         if notify and self.command:
             self.command(value)
 
+    def set_range(self, from_, to, value=None, *, notify: bool = False):
+        """Update the numeric range while preserving the slider contract."""
+        self.from_ = from_
+        self.to = max(from_, to)
+        if value is None:
+            value = self.value
+        self.value = max(self.from_, min(self.to, value))
+        self._sync_a11y()
+        self._draw()
+        if notify and self.command:
+            self.command(self.value)
+
     def set(self, v):
         self._set_value(int(v))
 

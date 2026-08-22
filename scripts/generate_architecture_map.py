@@ -38,7 +38,7 @@ DESCRIPTIONS: dict[str, str] = {
     "gui/layout_responsive.py": "Responsive / stacked layout mixin.",
     "gui/mask_correction_controller.py": "Mask paint/erase review and selective rerun.",
     "gui/onboarding.py": "First-run onboarding modal mixin.",
-    "gui/preview_controller.py": "Preview pane, A/B compare, live frames, zoom.",
+    "gui/preview_controller.py": "Preview timeline, proxy planning, A/B compare, live frames, zoom.",
     "gui/processing_controller.py": "Queue worker, pause/stop, reports, notifications.",
     "gui/quality_controller.py": "Quality review, retry, batch-report helpers.",
     "gui/queue_view.py": "Queue table rendering and row state mixin.",

@@ -17,23 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P1 — RM-300 Make Test Cleanup temporally representative
-  - Why: Test Cleanup always reads frame zero and runs one frame, even when the user
-    is viewing another time or has selected a temporal mode. The low-resolution
-    planning proxy exists but is dormant.
-  - Evidence: gui/preview_controller.py:704-740,
-    backend/proxy_workflow.py:45-92, and README.md:55.
-  - Touches: gui/preview_controller.py, backend/proxy_workflow.py,
-    preview state in gui/, and active GUI or preview tests.
-  - Acceptance: Use the selected preview timestamp for single-frame modes; use a
-    scene-bounded before/current/after window for temporal modes; display the tested
-    timestamp, frame range, and proxy resolution; call the existing cached proxy for
-    planning when it reduces latency; never use proxy pixels for final output;
-    cancel stale preview work safely; prove a nonzero selected timestamp and a scene
-    cut with deterministic fixtures.
-  - Complexity: Medium. Regression risk is medium. Depends on RM-299 for stable GUI
-    interaction coverage.
-
 - [ ] P1 — RM-301 Preserve OCR polygon geometry through mask creation
   - Why: OCR engines can return quadrilaterals, but VSR converts them to
     axis-aligned rectangles. Rotated text then removes more valid content and can

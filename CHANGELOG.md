@@ -13,6 +13,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   accessibility bridge. The packaged release matrix runs without foreground
   screen automation; live Narrator and NVDA proof remains an isolated-session
   follow-up.
+- Test Cleanup now follows the selected video timestamp. Temporal modes plan a
+  scene-bounded before/current/after source window using the cached low-resolution
+  proxy, then inpaint only full-resolution source frames. Preview evidence reports
+  the tested timestamp, frame range, and planning resolution, and stale requests
+  are discarded safely.
 - Strict release evidence now blocks Torch 2.9.1 and older for
   CVE-2026-24747. The existing CVE-2025-32434 check remains independent, and
   boundary coverage confirms that Torch 2.10.0 passes the advisory gate while

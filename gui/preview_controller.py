@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - preview features degrade without Pillo
 
 from gui.theme import Theme, f, prefers_reduced_motion
 from gui.config import (
-    ProcessingConfig, ProcessingStatus, QueueItem,
+    InpaintMode, ProcessingConfig, ProcessingStatus, QueueItem,
     save_queue_state, save_settings, status_ui,
 )
 from gui.utils import (
@@ -31,11 +31,31 @@ from gui.utils import (
 from gui.widgets import (
     ModernButton,
 )
-from backend.i18n import N_, ntr, tr
+from backend.i18n import N_, tr
 from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
 logger = logging.getLogger(__name__)
+
+
+def _read_video_frames_at_indices(video_path: str, frame_indices):
+    """Read selected full-resolution source frames for preview rendering."""
+    import cv2
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        cap.release()
+        return []
+    frames = []
+    try:
+        for index in frame_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, int(index)))
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                frames.append(frame)
+    finally:
+        cap.release()
+    return frames
 
 
 class PreviewControllerHost(Protocol):
@@ -367,6 +387,104 @@ class PreviewControllerMixin:
         item = self._get_selected_queue_item(fallback_to_first=True)
         if item:
             self._show_preview(item, show_mask=True)
+
+    @staticmethod
+    def _format_preview_timestamp(seconds: float) -> str:
+        seconds = max(0.0, float(seconds or 0.0))
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        remainder = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{remainder:06.3f}"
+
+    def _preview_timestamp_for_item(self, item_id: str) -> float:
+        try:
+            value = float(getattr(self, "_preview_time_by_item", {}).get(
+                item_id, 0.0))
+        except (TypeError, ValueError):
+            value = 0.0
+        info = getattr(self, "_preview_video_info", {}).get(item_id, {})
+        duration = float(info.get("duration", 0.0) or 0.0)
+        return max(0.0, min(duration, value)) if duration > 0.0 else max(0.0, value)
+
+    def _set_preview_timeline_visible(
+        self,
+        visible: bool,
+        *,
+        item_id: Optional[str] = None,
+        duration: float = 0.0,
+        timestamp: float = 0.0,
+    ):
+        panel = getattr(self, "preview_timeline", None)
+        slider = getattr(self, "preview_time_slider", None)
+        if panel is None or slider is None:
+            return
+        if not visible or duration <= 0.0:
+            panel.pack_forget()
+            slider.set_enabled(False)
+            return
+        timestamp = max(0.0, min(float(duration), float(timestamp or 0.0)))
+        if item_id:
+            self._preview_time_by_item[item_id] = timestamp
+        slider.set_range(0, 1000, (timestamp / duration) * 1000.0)
+        slider.set_enabled(not self.is_processing)
+        self.preview_time_value_var.set(self._format_preview_timestamp(timestamp))
+        if not panel.winfo_manager():
+            panel.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+
+    def _configure_preview_timeline(
+        self,
+        item_id: str,
+        duration: float,
+        timestamp: float,
+        request_id: int,
+    ):
+        if (
+            request_id != self._preview_request_id
+            or item_id != self._selected_queue_item_id
+        ):
+            return
+        if duration <= 0.0:
+            self._set_preview_timeline_visible(False)
+            return
+        self._preview_video_info[item_id] = {"duration": duration}
+        self._set_preview_timeline_visible(
+            True,
+            item_id=item_id,
+            duration=duration,
+            timestamp=timestamp,
+        )
+
+    def _on_preview_time_changed(self, value):
+        item_id = getattr(self, "_selected_queue_item_id", None)
+        if not item_id:
+            return
+        info = getattr(self, "_preview_video_info", {}).get(item_id, {})
+        duration = float(info.get("duration", 0.0) or 0.0)
+        if duration <= 0.0:
+            return
+        try:
+            fraction = max(0.0, min(1.0, float(value) / 1000.0))
+        except (TypeError, ValueError):
+            return
+        timestamp = duration * fraction
+        self._preview_time_by_item[item_id] = timestamp
+        self.preview_time_value_var.set(self._format_preview_timestamp(timestamp))
+        pending = getattr(self, "_preview_time_after_id", None)
+        if pending is not None:
+            try:
+                self.root.after_cancel(pending)
+            except Exception:
+                pass
+        self._preview_time_after_id = self.root.after(
+            90, lambda: self._refresh_preview_at_selected_time(item_id))
+
+    def _refresh_preview_at_selected_time(self, item_id: str):
+        self._preview_time_after_id = None
+        if getattr(self, "_shutdown_started", False):
+            return
+        item = self._queue_item_by_id(item_id)
+        if item is not None and item_id == self._selected_queue_item_id:
+            self._show_preview(item, show_mask=False)
 
     def _set_preview_mask_tuning_visible(self, visible: bool, value: int = 0):
         panel = getattr(self, "preview_mask_tuning", None)
@@ -700,9 +818,7 @@ class PreviewControllerMixin:
         _render()
 
     def _open_selected_inpaint_preview(self):
-        """F-3: run a single-frame detect + inpaint pass on the selected
-        item and render the result in the preview pane. Lets users A/B
-        settings without committing a full batch run."""
+        """Run a representative detect + inpaint pass for the selected item."""
         item = self._get_selected_queue_item(fallback_to_first=True)
         if item is None:
             self._update_status(N_("Select a queue item first"), "warning")
@@ -716,7 +832,10 @@ class PreviewControllerMixin:
 
         self.preview_title_label.config(text=tr("Inpainting {name}").format(
                 name=Path(item.file_path).name))
-        self.preview_meta_label.config(text=tr("Running detect + inpaint on the first frame..."))
+        selected_timestamp = self._preview_timestamp_for_item(item.id)
+        self.preview_meta_label.config(
+            text=tr("Running cleanup at {timestamp}...").format(
+                timestamp=self._format_preview_timestamp(selected_timestamp)))
         self._preview_label.config(image="", text="")
         self._preview_photo = None
         self._start_throbber()
@@ -728,21 +847,75 @@ class PreviewControllerMixin:
 
         def _worker():
             import cv2 as _cv2
+
+            def _stale():
+                return (
+                    request_id != getattr(self, "_preview_request_id", 0)
+                    or item.id != getattr(self, "_selected_queue_item_id", None)
+                    or getattr(self, "_shutdown_started", False)
+                )
+
             try:
                 from backend.config_schema import gui_to_backend_config
+                from backend.proxy_workflow import (
+                    ensure_proxy,
+                    probe_proxy_window,
+                    probe_video_metadata,
+                )
                 if is_image_file(source_path):
                     frame = safe_imread(source_path)
+                    if frame is not None:
+                        frame_indices = (0,)
+                        source_frames = [frame]
+                        planning = {
+                            "frame_indices": frame_indices,
+                            "frame_start": 0,
+                            "frame_end": 0,
+                            "target_frame": 0,
+                            "timestamp": 0.0,
+                            "proxy_resolution": (
+                                f"{frame.shape[1]}x{frame.shape[0]}"
+                            ),
+                            "fps": 1.0,
+                            "planning_source": "image",
+                        }
+                    else:
+                        source_frames = []
+                        planning = {}
                 elif is_video_file(source_path):
-                    cap = _cv2.VideoCapture(source_path)
-                    try:
-                        ret, frame = cap.read()
-                    finally:
-                        cap.release()
-                    if not ret:
-                        frame = None
+                    source_info = probe_video_metadata(source_path)
+                    planning_proxy = ensure_proxy(source_path, target_height=480)
+                    if _stale():
+                        return
+                    planning_path = planning_proxy or source_path
+                    planning = probe_proxy_window(
+                        planning_path,
+                        selected_timestamp,
+                        radius_frames=1,
+                    )
+                    frame_indices = tuple(planning.get("frame_indices") or ())
+                    if not frame_indices:
+                        target = int(planning.get("target_frame", 0) or 0)
+                        frame_indices = (max(0, target),)
+                    source_count = int(source_info.get("frame_count", 0) or 0)
+                    if source_count > 0:
+                        frame_indices = tuple(
+                            max(0, min(source_count - 1, int(index)))
+                            for index in frame_indices
+                        )
+                    source_frames = _read_video_frames_at_indices(
+                        source_path, frame_indices)
+                    frame = source_frames[0] if source_frames else None
+                    if source_info:
+                        planning["proxy_resolution"] = planning.get(
+                            "proxy_resolution", "unknown")
                 else:
                     frame = None
+                    source_frames = []
+                    planning = {}
                 if frame is None:
+                    if _stale():
+                        return
                     self._dispatch_preview_ui(
                         lambda: self._set_preview_unavailable(
                             "Test cleanup unavailable",
@@ -750,6 +923,9 @@ class PreviewControllerMixin:
                             label=tr("No frame available"),
                         ),
                     )
+                    return
+
+                if _stale():
                     return
 
                 # Convert the whole item config instead of hand-picking
@@ -769,50 +945,109 @@ class PreviewControllerMixin:
                 backend_cfg.device = self._gui_to_backend_device(
                     snapshot_cfg.use_gpu, snapshot_cfg.gpu_id)
                 remover = self._preview_remover_for(backend_cfg)
-                # Single-frame inpaint -- detect, build mask, inpaint.
-                timed_fixed = self._active_timed_region_rects(
-                    getattr(snapshot_cfg, "subtitle_region_spans", None), 0.0,
-                    getattr(snapshot_cfg, "subtitle_region_keyframes", None))
                 timed_configured = bool(
                     getattr(snapshot_cfg, "subtitle_region_spans", None)
                     or getattr(
                         snapshot_cfg, "subtitle_region_keyframes", None))
-                active_shapes = remover._fixed_region_shapes(0.0) or []
-                fixed = timed_fixed or (
-                    None if timed_configured else (
-                        snapshot_cfg.subtitle_areas
-                        or ([snapshot_cfg.subtitle_area]
-                            if snapshot_cfg.subtitle_area else None)
-                    )
-                )
-                if fixed:
-                    boxes = list(fixed)
-                elif (timed_configured
-                      and getattr(snapshot_cfg, "sttn_skip_detection", False)):
-                    boxes = []
+                mode = getattr(snapshot_cfg.mode, "value", str(snapshot_cfg.mode))
+                temporal_mode = mode in {
+                    InpaintMode.AUTO.value,
+                    InpaintMode.STTN.value,
+                    InpaintMode.PROPAINTER.value,
+                }
+                all_indices = tuple(planning.get("frame_indices") or (0,))
+                target_index = int(planning.get("target_frame", all_indices[0]))
+                if temporal_mode and len(source_frames) > 1:
+                    frames = list(source_frames)
+                    indices = all_indices[:len(frames)]
                 else:
-                    boxes = remover.detector.detect(
-                        frame, snapshot_cfg.detection_threshold)
-                if not boxes and not active_shapes:
-                    # No detection -- show the source with a hint.
-                    pil = Image.fromarray(_cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB))
+                    target_position = min(
+                        range(len(source_frames)),
+                        key=lambda position: abs(
+                            int(all_indices[position]) - target_index
+                        ),
+                    )
+                    frames = [source_frames[target_position]]
+                    indices = (all_indices[target_position],)
+                fps = float(planning.get("fps", 30.0) or 30.0)
+                if fps <= 0.0:
+                    fps = 30.0
+                boxes_per_frame = []
+                masks = []
+                region_count = 0
+                for frame_index, current_frame in zip(indices, frames):
+                    if _stale():
+                        return
+                    current_time = float(frame_index) / fps
+                    active_shapes = remover._fixed_region_shapes(current_time) or []
+                    fixed = remover._fixed_region_boxes(current_time)
+                    if fixed:
+                        boxes = list(fixed)
+                    elif (timed_configured
+                          and getattr(snapshot_cfg, "sttn_skip_detection", False)):
+                        boxes = []
+                    else:
+                        boxes = remover.detector.detect(
+                            current_frame, snapshot_cfg.detection_threshold)
+                    boxes_per_frame.append(boxes)
+                    region_count = max(region_count, len(boxes) + len(active_shapes))
+                    mask = remover._create_mask(current_frame.shape, boxes)
+                    mask = remover._apply_polygon_region_shapes(mask, active_shapes)
+                    masks.append(mask)
+
+                target_position = min(
+                    range(len(indices)),
+                    key=lambda position: abs(int(indices[position]) - target_index),
+                )
+                if not any(np.any(mask) for mask in masks):
+                    # No detection at the representative frame. Show the
+                    # full-resolution source with planning evidence instead.
+                    pil = Image.fromarray(_cv2.cvtColor(
+                        frames[target_position], _cv2.COLOR_BGR2RGB))
+                    start = int(indices[0])
+                    end = int(indices[-1])
+                    meta = tr(
+                        "No text detected at {timestamp}; frames {start}-{end}; "
+                        "planning proxy {resolution}."
+                    ).format(
+                        timestamp=self._format_preview_timestamp(
+                            float(indices[target_position]) / fps),
+                        start=start,
+                        end=end,
+                        resolution=planning.get("proxy_resolution", "unknown"),
+                    )
                     self._dispatch_preview_ui(lambda: self._apply_inpaint_preview(
-                        pil, tr("No text detected on the first frame"),
+                        pil, meta,
                         request_id, item.id))
                     return
-                mask = remover._create_mask(frame.shape, boxes)
-                mask = remover._apply_polygon_region_shapes(mask, active_shapes)
-                [filled] = remover.inpainter.inpaint([frame], [mask])
+                if _stale():
+                    return
+                filled_frames = remover.inpainter.inpaint(frames, masks)
+                if _stale():
+                    return
+                filled = filled_frames[target_position]
                 pil = Image.fromarray(_cv2.cvtColor(filled, _cv2.COLOR_BGR2RGB))
-                meta = ntr(
-                    "Cleanup preview using {mode}; {n} region masked.",
-                    "Cleanup preview using {mode}; {n} regions masked.",
-                    len(boxes),
-                ).format(mode=snapshot_cfg.mode.value, n=len(boxes))
+                start = int(indices[0])
+                end = int(indices[-1])
+                meta = tr(
+                    "Cleanup preview using {mode}; {n} region(s) masked. "
+                    "Tested at {timestamp}; frames {start}-{end}; "
+                    "planning proxy {resolution}."
+                ).format(
+                    mode=mode,
+                    n=region_count,
+                    timestamp=self._format_preview_timestamp(
+                        float(indices[target_position]) / fps),
+                    start=start,
+                    end=end,
+                    resolution=planning.get("proxy_resolution", "unknown"),
+                )
                 self._dispatch_preview_ui(lambda: self._apply_inpaint_preview(
                     pil, meta, request_id, item.id))
             except Exception:
                 logger.warning("Inpaint preview failed", exc_info=True)
+                if _stale():
+                    return
                 self._dispatch_preview_ui(
                     lambda: self._set_preview_unavailable(
                         "Test cleanup failed",
@@ -1198,6 +1433,8 @@ class PreviewControllerMixin:
         preview_request_id = self._preview_request_id
         self._clear_preview_region_editor()
         item_config = getattr(item, "config", self.config)
+        preview_timestamp = self._preview_timestamp_for_item(item.id)
+        self._set_preview_timeline_visible(False)
         if show_mask:
             self._set_preview_mask_tuning_visible(
                 True, getattr(item_config, "mask_dilate_px", 0))
@@ -1219,13 +1456,20 @@ class PreviewControllerMixin:
         try:
             import cv2 as _cv2
 
-            def load_first_frame_raw(path):
-                """Load first frame as BGR numpy array."""
+            def load_frame_raw(path, seconds: float = 0.0):
+                """Load a selected source frame as a BGR numpy array."""
                 if is_image_file(path):
                     return safe_imread(path)
                 elif is_video_file(path):
                     cap = _cv2.VideoCapture(path)
                     try:
+                        fps = float(cap.get(_cv2.CAP_PROP_FPS) or 30.0)
+                        if fps <= 0.0:
+                            fps = 30.0
+                        cap.set(
+                            _cv2.CAP_PROP_POS_FRAMES,
+                            max(0, int(round(float(seconds or 0.0) * fps))),
+                        )
                         ret, frame = cap.read()
                         return frame if ret else None
                     finally:
@@ -1245,7 +1489,9 @@ class PreviewControllerMixin:
             self.preview_title_label.config(
                 text=tr("Loading {name}...").format(
                     name=Path(item.file_path).name))
-            self.preview_meta_label.config(text=tr("Reading first frame..."))
+            self.preview_meta_label.config(
+                text=tr("Reading preview frame at {timestamp}...").format(
+                    timestamp=self._format_preview_timestamp(preview_timestamp)))
             self._preview_label.config(image="", text="")
             self._preview_photo = None
             lang = getattr(item_config, "detection_lang", "") or self.lang_var.get()
@@ -1256,8 +1502,9 @@ class PreviewControllerMixin:
             keyframe_tracks = (
                 getattr(self.config, "subtitle_region_keyframes", None) or [])
             timed_regions_configured = bool(timed_spans or keyframe_tracks)
-            manual_shapes = region_shapes_at(keyframe_tracks, 0.0)
-            sub_areas = self._active_timed_region_rects(timed_spans, 0.0)
+            manual_shapes = region_shapes_at(keyframe_tracks, preview_timestamp)
+            sub_areas = self._active_timed_region_rects(
+                timed_spans, preview_timestamp)
             sub_areas.extend(
                 tuple(shape["rect"])
                 for shape in manual_shapes if "rect" in shape)
@@ -1282,7 +1529,18 @@ class PreviewControllerMixin:
 
             def _preview_bg():
                 try:
-                    raw_frame = load_first_frame_raw(item_file)
+                    raw_frame = load_frame_raw(item_file, preview_timestamp)
+                    if is_video_file(item_file):
+                        from backend.proxy_workflow import probe_video_metadata
+                        video_info = probe_video_metadata(item_file)
+                        duration = float(video_info.get("duration", 0.0) or 0.0)
+                        self._dispatch_preview_ui(
+                            self._configure_preview_timeline,
+                            item_id,
+                            duration,
+                            min(preview_timestamp, duration) if duration else 0.0,
+                            preview_request_id,
+                        )
                     if raw_frame is None:
                         def _no_frame():
                             if preview_request_id != self._preview_request_id:
@@ -1305,13 +1563,14 @@ class PreviewControllerMixin:
                             mask_import_path=mask_import_path,
                             mask_import_mode=mask_import_mode,
                             mask_dilate_px=mask_dilate_px,
-                            ocr_variant=ocr_variant)
+                            ocr_variant=ocr_variant,
+                            preview_timestamp=preview_timestamp)
                     else:
                         self._preview_bg_normal(
                             raw_frame, item_file, item_id, item_status,
                             item_output, item_quality, item_soft,
                             preview_request_id, max_w, max_h,
-                            _cv2, to_pil, load_first_frame_raw)
+                            _cv2, to_pil, load_frame_raw, preview_timestamp)
                 except Exception:
                     logger.warning("Preview render failed", exc_info=True)
                     def _err():
@@ -1341,7 +1600,7 @@ class PreviewControllerMixin:
                           max_w, max_h, _cv2, to_pil,
                           mask_corrections=None, mask_import_path="",
                           mask_import_mode="replace", mask_dilate_px=0,
-                          ocr_variant="v6"):
+                          ocr_variant="v6", preview_timestamp=0.0):
         try:
             from backend.detection import SubtitleDetector
             with self._detector_lock:
@@ -1421,17 +1680,43 @@ class PreviewControllerMixin:
             engine = det._engine_name
             n = len(boxes) + sum(
                 1 for shape in manual_shapes or [] if "polygon" in shape)
-            if (sub_areas or manual_shapes) and timed_regions_configured:
-                meta = "Timed manual region is active on the first frame."
+            timestamp_label = (
+                self._format_preview_timestamp(preview_timestamp)
+                if preview_timestamp > 0.001 else ""
+            )
+            if not timestamp_label:
+                if (sub_areas or manual_shapes) and timed_regions_configured:
+                    meta = "Timed manual region is active on the first frame."
+                elif sub_areas:
+                    meta = "Manual region applied. Detection used your saved subtitle band."
+                elif timed_regions_configured:
+                    meta = "Timed manual regions are configured but inactive on the first frame."
+                elif n:
+                    meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
+                else:
+                    meta = ("No regions were found on the first frame. Try Set region, or lower the "
+                            "Threshold in detailed controls.")
+            elif (sub_areas or manual_shapes) and timed_regions_configured:
+                meta = tr(
+                    "Timed manual region is active at {timestamp}."
+                ).format(timestamp=timestamp_label)
             elif sub_areas:
-                meta = "Manual region applied. Detection used your saved subtitle band."
+                meta = tr(
+                    "Manual region applied at {timestamp}. Detection used your saved subtitle band."
+                ).format(timestamp=timestamp_label)
             elif timed_regions_configured:
-                meta = "Timed manual regions are configured but inactive on the first frame."
+                meta = tr(
+                    "Timed manual regions are configured but inactive at {timestamp}."
+                ).format(timestamp=timestamp_label)
             elif n:
-                meta = f"{engine} found {n} region{'s' if n != 1 else ''} on the first frame."
+                meta = tr(
+                    "{engine} found {n} region(s) at {timestamp}."
+                ).format(engine=engine, n=n, timestamp=timestamp_label)
             else:
-                meta = ("No regions were found on the first frame. Try Set region, or lower the "
-                        "Threshold in detailed controls.")
+                meta = tr(
+                    "No regions were found at {timestamp}. Try Set region, or lower the "
+                    "Threshold in detailed controls."
+                ).format(timestamp=timestamp_label)
             cache = {
                 "request_id": preview_request_id,
                 "item_id": item_id,
@@ -1532,12 +1817,13 @@ class PreviewControllerMixin:
     def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,
                             item_output, item_quality, item_soft,
                             preview_request_id, max_w, max_h,
-                            _cv2, to_pil, load_first_frame_raw):
+                            _cv2, to_pil, load_frame_raw,
+                            preview_timestamp=0.0):
         input_img = to_pil(raw_frame)
 
         output_img = None
         if item_status == ProcessingStatus.COMPLETE and Path(item_output).exists():
-            out_frame = load_first_frame_raw(item_output)
+            out_frame = load_frame_raw(item_output, preview_timestamp)
             if out_frame is not None:
                 output_img = to_pil(out_frame)
 

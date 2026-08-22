@@ -37,7 +37,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- layout_responsive.py          # Responsive / stacked layout mixin.
 |   |-- mask_correction_controller.py # Mask paint/erase review and selective rerun.
 |   |-- onboarding.py                 # First-run onboarding modal mixin.
-|   |-- preview_controller.py         # Preview pane, A/B compare, live frames, zoom.
+|   |-- preview_controller.py         # Preview timeline, proxy planning, A/B compare, live frames, zoom.
 |   |-- process_job.py                # Windows job object containment for worker process trees.
 |   |-- processing_controller.py      # Queue worker, pause/stop, reports, notifications.
 |   |-- quality_controller.py         # Quality review, retry, batch-report helpers.
@@ -167,8 +167,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 - **`gui/processing_controller.py`** owns queue processing, pause/stop
   orchestration, per-item backend dispatch, progress/taskbar updates,
   report preparation, and completion notifications.
-- **`gui/preview_controller.py`** owns preview placeholders, live frames,
-  mask review, A/B compare, test-cleanup previews, and preview zoom. The
+- **`gui/preview_controller.py`** owns preview placeholders, the selected-time
+  timeline, proxy scene planning, live frames, mask review, A/B compare,
+  test-cleanup previews, and preview zoom. The
   region editor lives in `gui/region_controller.py` and mask correction in
   `gui/mask_correction_controller.py`; both build into a scrollable dialog
   body from `gui/dialog_layout.py` so they reflow at high text scale.

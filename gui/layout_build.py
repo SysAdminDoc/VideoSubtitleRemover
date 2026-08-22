@@ -1874,6 +1874,41 @@ class LayoutBuildMixin:
             tr("Double-click for full size, draw a region, or right-click for preview tools."),
         )
 
+        self.preview_timeline = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        self.preview_timeline_label = tk.Label(
+            self.preview_timeline,
+            text=tr("Preview time"),
+            font=f(Theme.F_BODY_SM, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        )
+        self.preview_timeline_label.pack(side="left")
+        self.preview_time_slider = ModernSlider(
+            self.preview_timeline,
+            from_=0,
+            to=1000,
+            value=0,
+            command=self._on_preview_time_changed,
+            bg=Theme.BG_SECONDARY,
+            width=240,
+            accessible_label=tr("Preview timestamp"),
+        )
+        self.preview_time_slider.pack(
+            side="left", fill="x", expand=True,
+            padx=(Theme.S_LG, Theme.S_SM),
+        )
+        self.preview_time_value_var = tk.StringVar(value="00:00.000")
+        tk.Label(
+            self.preview_timeline,
+            textvariable=self.preview_time_value_var,
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(side="right")
+        self.preview_timeline.pack(
+            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+        self.preview_timeline.pack_forget()
+
         self.preview_action_hint = tk.Label(
             section,
             text=tr("Add media, then select a queue item to enable preview tools."),
@@ -1900,7 +1935,7 @@ class LayoutBuildMixin:
         )
         self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_mask_btn,
-                tr("Detect subtitles and inspect the first-frame mask."))
+                tr("Detect subtitles and inspect the mask at the selected time."))
         self.preview_inpaint_btn = ModernButton(
             preview_actions, text=tr("Test cleanup"), width=112,
             command=self._open_selected_inpaint_preview,

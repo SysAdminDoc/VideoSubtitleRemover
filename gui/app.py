@@ -259,6 +259,9 @@ class VideoSubtitleRemoverApp(
         self._last_batch_report_records: List[dict] = []
         self._model_download_guidance_seen: set = set()
         self._preview_request_id = 0
+        self._preview_time_by_item: dict[str, float] = {}
+        self._preview_video_info: dict[str, dict] = {}
+        self._preview_time_after_id = None
         self._preview_region_editor_state = None
         self._preview_region_drag_start = None
         self._preview_region_pending_rect = None
@@ -469,6 +472,13 @@ class VideoSubtitleRemoverApp(
         root = getattr(self, "root", None)
         if root is not None:
             stop_ui_dispatcher(root)
+            preview_time_after_id = getattr(self, "_preview_time_after_id", None)
+            if preview_time_after_id is not None:
+                try:
+                    root.after_cancel(preview_time_after_id)
+                except (tk.TclError, RuntimeError):
+                    pass
+                self._preview_time_after_id = None
             try:
                 pending = root.tk.splitlist(root.tk.call("after", "info"))
                 for callback_id in pending:
