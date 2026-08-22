@@ -4,6 +4,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Primary actions now keep normal-size text above the 4.5:1 contrast floor in
+  default, hover, and pressed states. Disabled copy is clearer, the shared
+  radius scale uses 4, 6, 8, and 10 pixels, and thin progress tracks use crisp
+  ends instead of capsule shapes.
+
 ## [3.37.0] - 2026-08-22
 
 ### Fixed

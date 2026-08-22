@@ -15,6 +15,7 @@ from unittest import mock
 
 from backend.a11y import accessible_metadata
 from gui.preview_controller import PreviewControllerMixin
+from gui.theme import Theme
 from gui.utils import (
     dispatch_to_ui,
     install_ui_dispatcher,
@@ -26,6 +27,44 @@ def _have_display() -> bool:
     if sys.platform == "win32":
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _contrast_ratio(foreground: str, background: str) -> float:
+    def _luminance(value: str) -> float:
+        channels = [int(value[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [
+            channel / 12.92
+            if channel <= 0.04045
+            else ((channel + 0.055) / 1.055) ** 2.4
+            for channel in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    foreground_luminance = _luminance(foreground)
+    background_luminance = _luminance(background)
+    lighter = max(foreground_luminance, background_luminance)
+    darker = min(foreground_luminance, background_luminance)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+class DesignTokenReleaseTests(unittest.TestCase):
+    def test_primary_button_states_meet_normal_text_contrast(self):
+        for background in (
+            Theme.BLUE_PRIMARY,
+            Theme.BLUE_HOVER,
+            Theme.BLUE_PRESS,
+        ):
+            with self.subTest(background=background):
+                self.assertGreaterEqual(
+                    _contrast_ratio(Theme.INK_ON_BLUE, background),
+                    4.5,
+                )
+
+    def test_radius_scale_uses_the_supported_non_pill_values(self):
+        self.assertEqual(
+            (Theme.R_SM, Theme.R_MD, Theme.R_LG, Theme.R_XL),
+            (4, 6, 8, 10),
+        )
 
 
 class UiThreadDispatchTests(unittest.TestCase):

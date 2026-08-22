@@ -40,7 +40,7 @@ class Theme:
 
     BLUE_PRIMARY = "#2f78ff"
     BLUE_HOVER = "#4b8aff"
-    BLUE_PRESS = "#2267dd"
+    BLUE_PRESS = "#2a71ec"
     BLUE_MUTED = "#1a2d5a"
     CYAN = "#36c5f0"
 
@@ -48,11 +48,11 @@ class Theme:
     TEXT_PRIMARY = "#f5f7fb"
     TEXT_SECONDARY = "#cbd4e4"
     TEXT_MUTED = "#9ca9bf"
-    TEXT_DISABLED = "#59677f"
+    TEXT_DISABLED = "#73829a"
 
     # Ink: dark foreground for bright-filled controls
     INK_ON_GREEN = "#04120b"
-    INK_ON_BLUE = "#ffffff"
+    INK_ON_BLUE = "#000000"
     INK_ON_DANGER = "#2a0505"
 
     # Danger / destructive action
@@ -106,10 +106,10 @@ class Theme:
     S_3XL = 32
 
     # Radii
-    R_SM = 3
-    R_MD = 4
-    R_LG = 5
-    R_XL = 6
+    R_SM = 4
+    R_MD = 6
+    R_LG = 8
+    R_XL = 10
 
 
 def apply_high_contrast_theme():

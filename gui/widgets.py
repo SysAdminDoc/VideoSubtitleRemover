@@ -755,7 +755,7 @@ class ModernButton(tk.Canvas):
 
 
 class ModernProgressBar(tk.Canvas):
-    """A refined progress bar. Rounded track + fill. Smoothly tweens to
+    """A refined progress bar. Crisp track + fill. Smoothly tweens to
     target progress values so updates feel continuous rather than stepped."""
 
     TWEEN_STEP = 0.04
@@ -765,7 +765,7 @@ class ModernProgressBar(tk.Canvas):
                  fill=Theme.PROGRESS_FILL, corner_radius=None, **kwargs):
         height = scaled_control_size(height)
         if corner_radius is None:
-            corner_radius = max(2, height // 2)
+            corner_radius = 0
         super().__init__(parent, width=width, height=height, highlightthickness=0,
                         bg=parent.cget('bg') if hasattr(parent, 'cget') else Theme.BG_DARK)
 
@@ -875,7 +875,6 @@ class ModernProgressBar(tk.Canvas):
         self.bar_width = width
         if height:
             self.bar_height = height
-            self.corner_radius = max(2, height // 2)
         self.config(width=self.bar_width, height=self.bar_height)
         self._draw()
 
