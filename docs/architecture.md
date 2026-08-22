@@ -78,7 +78,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- failure_reason.py           # Closed-set failure classification for rows and reports.
 |   |-- ffmpeg_profiles.py          # FFmpeg capability profiles and security probe.
 |   |-- frozen_matte.py             # Freeze an approved matte as a reusable input.
-|   |-- hdr.py                      # Color metadata preservation and HDR handling.
+|   |-- hdr.py                      # Color metadata, transfer math, and HDR handling.
 |   |-- i18n.py                     # gettext localisation runtime.
 |   |-- import_safety.py            # Crash-safe optional-module import probes.
 |   |-- inpainter_registry.py       # In-process inpainter discovery registry.
@@ -238,7 +238,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    optional `decode_hw_accel`) or a `_FrameSequenceCapture` for an
    image-directory input. When `prefetch_decode` is on, the cap is
    wrapped in a `_PrefetchReader` daemon worker that feeds a bounded
-   queue.
+   queue. Tagged PQ and HLG sources use a `bgr48le` surface. OCR and model
+   inputs receive a separate tone-mapped 8-bit proxy, while the high-bit source
+   remains attached to the batch for final repair.
 6. **Per-frame detect.** Inside the main loop:
    - `pHash` skip + keyframe gating short-circuit when content is
      unchanged.
@@ -271,7 +273,10 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
      idle-LaMa is unloaded after `LAMA_IDLE_UNLOAD_AFTER` TBE
      batches.
    All paths terminate in `apply_finishing` (edge-ring colour match
-   then feather blend).
+   then feather blend). HDR output converts only the active mask ROI to bounded
+   linear light, lifts the proxy result with high-bit boundary detail, and
+   reapplies the source PQ or HLG transfer function. Outside-mask pixels stay
+   byte-identical to the decoded source surface.
 8. **Intermediate write.** `_LosslessIntermediateWriter` pipes raw
    BGR frames through `ffmpeg -c:v ffv1` so the final encode is the
    only lossy step. Falls back to legacy `mp4v` when ffmpeg is

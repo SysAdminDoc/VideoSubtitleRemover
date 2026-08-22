@@ -166,6 +166,14 @@ from backend.tracking import (
     apply_clean_reference as apply_clean_reference,
 )
 from backend.detection import SubtitleDetector, _surya_allowed as _surya_allowed
+from backend.hdr import (
+    hdr_proxy_from_high_bit,
+    hdr_proxy_from_linear,
+    hdr_proxy_to_linear,
+    hdr_repair_block_reason,
+    hdr_signal_to_linear,
+    linear_to_hdr_signal,
+)
 from backend.inpainters import (
     BaseInpainter,
     STTNInpainter,
@@ -1708,11 +1716,17 @@ class SubtitleRemover(
         return np.ascontiguousarray(frame)
 
     @staticmethod
-    def _processing_frame(frame: np.ndarray) -> np.ndarray:
+    def _processing_frame(frame: np.ndarray, *, transfer: Optional[str] = None
+                          ) -> np.ndarray:
         """Return the uint8 BGR working copy expected by OCR/inpainters."""
         if frame.dtype == np.uint8:
             return np.ascontiguousarray(frame)
         if frame.dtype == np.uint16:
+            if transfer:
+                try:
+                    return hdr_proxy_from_high_bit(frame, transfer)
+                except (TypeError, ValueError):
+                    pass
             return np.ascontiguousarray(
                 np.clip(np.rint(frame.astype(np.float32) / 257.0), 0, 255)
                 .astype(np.uint8)
@@ -1722,6 +1736,46 @@ class SubtitleRemover(
     @staticmethod
     def _is_high_bit_frame(frame: Any) -> bool:
         return isinstance(frame, np.ndarray) and frame.dtype == np.uint16
+
+    @staticmethod
+    def _linear_precision_fill(source_linear: np.ndarray,
+                               mask: np.ndarray) -> np.ndarray:
+        """Recover sub-8-bit boundary detail inside the active mask ROI."""
+        mask_u8 = np.asarray(mask, dtype=np.uint8)
+        active = mask_u8 > 0
+        if not np.any(active):
+            return np.ascontiguousarray(source_linear)
+        points = cv2.findNonZero(mask_u8)
+        if points is None:
+            return np.ascontiguousarray(source_linear)
+        x, y, width, height = cv2.boundingRect(points)
+        pad = max(4, min(64, max(width, height) // 8 or 4))
+        x0 = max(0, x - pad)
+        y0 = max(0, y - pad)
+        x1 = min(source_linear.shape[1], x + width + pad)
+        y1 = min(source_linear.shape[0], y + height + pad)
+        region_mask = mask_u8[y0:y1, x0:x1]
+        if np.all(region_mask > 0):
+            return np.ascontiguousarray(source_linear)
+        region = np.ascontiguousarray(source_linear[y0:y1, x0:x1])
+        seed8 = np.clip(np.rint(region * 255.0), 0, 255).astype(np.uint8)
+        seed8 = cv2.inpaint(seed8, region_mask, 5, cv2.INPAINT_TELEA)
+        seed = seed8.astype(np.float32) / 255.0
+        region[region_mask > 0] = seed[region_mask > 0]
+        kernel = np.array(
+            [[0.0, 0.25, 0.0],
+             [0.25, 0.0, 0.25],
+             [0.0, 0.25, 0.0]],
+            dtype=np.float32,
+        )
+        iterations = max(12, min(64, max(region.shape[:2]) * 2))
+        for _ in range(iterations):
+            candidate = cv2.filter2D(
+                region, -1, kernel, borderType=cv2.BORDER_REPLICATE)
+            region[region_mask > 0] = candidate[region_mask > 0]
+        result = np.ascontiguousarray(source_linear.copy())
+        result[y0:y1, x0:x1][region_mask > 0] = region[region_mask > 0]
+        return result
 
     def _merge_high_bit_output(
         self,
@@ -1737,6 +1791,59 @@ class SubtitleRemover(
         if mask is None or mask.shape != source_frame.shape[:2] or not np.any(mask):
             return np.ascontiguousarray(source_frame)
 
+        transfer = getattr(
+            getattr(self, "_color_metadata", None), "color_transfer", "")
+        if transfer and getattr(self, "_hdr_repair_ready", True):
+            mask_u8 = np.asarray(mask, dtype=np.uint8)
+            points = cv2.findNonZero(mask_u8)
+            if points is None:
+                return np.ascontiguousarray(source_frame)
+            x, y, width, height = cv2.boundingRect(points)
+            feather = max(
+                0, int(getattr(self.config, "mask_feather_px", 0) or 0))
+            pad = max(4, feather * 2 + 4)
+            x0 = max(0, x - pad)
+            y0 = max(0, y - pad)
+            x1 = min(source_frame.shape[1], x + width + pad)
+            y1 = min(source_frame.shape[0], y + height + pad)
+            region_mask = mask_u8[y0:y1, x0:x1]
+            source_region = source_frame[y0:y1, x0:x1]
+            cleaned_region = cleaned_frame[y0:y1, x0:x1]
+            source_linear = hdr_signal_to_linear(source_region, transfer)
+            cleaned_linear = hdr_proxy_to_linear(cleaned_region, transfer)
+            precision_fill = self._linear_precision_fill(
+                source_linear, region_mask)
+            precision_proxy = hdr_proxy_from_linear(
+                precision_fill, transfer)
+            quantized_linear = hdr_proxy_to_linear(
+                precision_proxy, transfer)
+            cleaned_linear = np.clip(
+                cleaned_linear + (precision_fill - quantized_linear) * 0.75,
+                0.0,
+                1.0,
+            )
+            if feather > 0:
+                k = feather * 2 + 1
+                alpha = cv2.GaussianBlur(
+                    region_mask, (k, k), 0).astype(np.float32) / 255.0
+            else:
+                alpha = (region_mask > 0).astype(np.float32)
+            alpha = np.minimum(alpha, (region_mask > 0).astype(np.float32))
+            alpha = np.clip(alpha, 0.0, 1.0)[..., None]
+            merged_linear = (
+                source_linear * (1.0 - alpha)
+                + cleaned_linear * alpha
+            )
+            encoded = linear_to_hdr_signal(merged_linear, transfer)
+            output = np.ascontiguousarray(source_frame.copy())
+            changed = alpha[..., 0] > 0.0
+            output[y0:y1, x0:x1][changed] = encoded[changed]
+            return output
+        if transfer:
+            raise ValueError(
+                "HDR repair is blocked because transfer metadata is not "
+                "ready for linear-light processing"
+            )
         cleaned16 = np.clip(
             np.rint(cleaned_frame.astype(np.float32) * 257.0),
             0,
@@ -1887,6 +1994,8 @@ class SubtitleRemover(
                                 state: _FrameLoopState) -> _FrameBatch:
         """Decode frames and build masks until one processing batch is full."""
         batch = _FrameBatch()
+        hdr_transfer = getattr(
+            getattr(self, "_color_metadata", None), "color_transfer", "")
         for _ in range(ctx.batch_size):
             if ctx.start_frame + state.frame_idx >= ctx.end_frame:
                 break
@@ -1900,7 +2009,10 @@ class SubtitleRemover(
                     and self._is_high_bit_frame(raw_frame)
                     else None
                 )
-                frame = self._processing_frame(raw_frame)
+                frame = self._processing_frame(
+                    raw_frame,
+                    transfer=hdr_transfer if source_frame is not None else None,
+                )
 
             self.last_detection_stats["frames_total"] += 1
             absolute_idx = ctx.start_frame + state.frame_idx
@@ -1916,11 +2028,23 @@ class SubtitleRemover(
                     absolute_idx, ctx.selective_ranges
                 ):
                     self._record_detection_skip("selective_rerun")
-                    prior_frame = self._processing_frame(prior_raw)
+                    prior_source_frame = (
+                        prior_raw
+                        if ctx.high_bit_depth_surface
+                        and self._is_high_bit_frame(prior_raw)
+                        else None
+                    )
+                    prior_frame = self._processing_frame(
+                        prior_raw,
+                        transfer=(
+                            hdr_transfer if prior_source_frame is not None
+                            else None
+                        ),
+                    )
                     batch.add(
                         prior_frame,
                         np.zeros(prior_frame.shape[:2], dtype=np.uint8),
-                        None,
+                        prior_source_frame,
                         passthrough=True,
                     )
                     state.frame_idx += 1
@@ -2599,6 +2723,12 @@ class SubtitleRemover(
             self._report_progress(0.0, "Opening video...")
             _validate_video_input_file(input_path)
             self._prepare_output_contract(input_path, output_path)
+            if getattr(self, "_hdr_repair_blocked", False):
+                reason = hdr_repair_block_reason(self._color_metadata)
+                raise ValueError(
+                    "HDR processing stopped because the source tags are not "
+                    f"safe for linear-light repair: {reason}"
+                )
 
             # Optional deinterlace preprocessing. Produces a temp
             # progressive-scan mp4; the rest of the pipeline runs against
@@ -2651,7 +2781,8 @@ class SubtitleRemover(
                     logger.warning("Keyframe probe failed, falling back to pHash skip")
 
             cap = None
-            if self._source_is_hdr():
+            if self._source_is_hdr() and getattr(
+                    self, "_hdr_repair_ready", False):
                 cap = _open_bgr48_capture(
                     decode_path,
                     input_fps=self.config.input_fps,
@@ -2766,6 +2897,14 @@ class SubtitleRemover(
             selected_frame_duration_ticks = (
                 _range.selected_frame_duration_ticks
             )
+            source_start_ticks = (
+                int(frame_timing.source_start_ticks)
+                if frame_timing is not None else None
+            )
+            stream_start_ticks = (
+                int(frame_timing.stream_start_ticks)
+                if frame_timing is not None else None
+            )
             if frozen_record:
                 # RM-153: revalidate before a single frame is decoded, so
                 # a matte that no longer belongs to this job stops the run
@@ -2792,6 +2931,8 @@ class SubtitleRemover(
                     duration_ticks=matte_duration_ticks,
                     source_time_base_num=matte_time_base_num,
                     source_time_base_den=matte_time_base_den,
+                    source_start_ticks=source_start_ticks,
+                    stream_start_ticks=stream_start_ticks,
                 )
                 matte_reader = MaskInterchangeReader(
                     frozen_record["manifest"],
@@ -2808,6 +2949,8 @@ class SubtitleRemover(
                     duration_ticks=matte_duration_ticks,
                     source_time_base_num=matte_time_base_num,
                     source_time_base_den=matte_time_base_den,
+                    source_start_ticks=source_start_ticks,
+                    stream_start_ticks=stream_start_ticks,
                     mode="replace",
                 )
                 self.last_frozen_matte = {
@@ -2836,6 +2979,8 @@ class SubtitleRemover(
                     duration_ticks=matte_duration_ticks,
                     source_time_base_num=matte_time_base_num,
                     source_time_base_den=matte_time_base_den,
+                    source_start_ticks=source_start_ticks,
+                    stream_start_ticks=stream_start_ticks,
                     mode=self.config.mask_import_mode,
                 )
                 self.last_mask_import = {
@@ -2875,7 +3020,14 @@ class SubtitleRemover(
                     raise ValueError(
                         "Selective mask rerun has no valid affected frame range"
                     )
-                selective_cap = _open_capture(str(selective_path), "off")
+                if self._source_is_hdr() and getattr(
+                        self, "_hdr_repair_ready", False):
+                    selective_cap = _open_bgr48_capture(
+                        str(selective_path),
+                        input_fps=self.config.input_fps,
+                    )
+                if selective_cap is None:
+                    selective_cap = _open_capture(str(selective_path), "off")
                 if not selective_cap.isOpened():
                     raise ValueError(
                         "Could not open the previous cleaned output for selective rerun"
@@ -3267,6 +3419,8 @@ class SubtitleRemover(
                         duration_ticks=matte_duration_ticks,
                         source_time_base_num=matte_time_base_num,
                         source_time_base_den=matte_time_base_den,
+                        source_start_ticks=source_start_ticks,
+                        stream_start_ticks=stream_start_ticks,
                     )
                 except Exception as exc:
                     self.last_mask_export.update({

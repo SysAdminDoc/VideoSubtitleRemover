@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import List, Optional, Tuple
 
+import numpy as np
+
 from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,12 @@ HDR_COMPATIBLE_CODECS = {"h265", "av1", "vvc"}
 HDR_DEFAULT_CODEC = "h265"
 _UNSET_COLOR_VALUES = {"", "unknown", "unspecified"}
 _RGB_MATRIX_VALUES = {"gbr", "rgb"}
+_HDR_TRANSFER_NAMES = {"smpte2084", "arib-std-b67"}
+_HDR_TONE_MAP_KNEE = 0.25
+
+
+def _normalized_transfer(value) -> str:
+    return str(value or "").strip().lower()
 
 
 @dataclass
@@ -53,10 +61,19 @@ class ColorMetadata:
     max_cll: int = 0
     max_fall: int = 0
     dynamic_metadata: Tuple[str, ...] = ()
+    pixel_format: str = ""
 
     @property
     def is_hdr(self) -> bool:
-        return self.color_transfer in {"smpte2084", "arib-std-b67"}
+        return _normalized_transfer(self.color_transfer) in _HDR_TRANSFER_NAMES
+
+    @property
+    def is_high_bit(self) -> bool:
+        pixel_format = _normalized_transfer(self.pixel_format)
+        return any(
+            marker in pixel_format
+            for marker in ("10", "12", "14", "16", "p010", "p012", "p016")
+        )
 
     @property
     def label(self) -> str:
@@ -70,6 +87,168 @@ class ColorMetadata:
         if self.color_space:
             bits.append(self.color_space)
         return " / ".join(bits)
+
+
+def hdr_repair_block_reason(meta: Optional[ColorMetadata]) -> str:
+    """Explain why a tagged HDR source cannot use the linear repair path."""
+    if meta is None:
+        return ""
+    primaries = _normalized_transfer(meta.color_primaries)
+    matrix = _normalized_transfer(meta.color_space)
+    candidate = meta.is_hdr or (
+        meta.is_high_bit
+        and (not meta.color_transfer
+             or primaries == "bt2020"
+             or matrix in {"bt2020nc", "bt2020_ncl"})
+    )
+    if not candidate:
+        return ""
+    transfer = _normalized_transfer(meta.color_transfer)
+    if transfer not in _HDR_TRANSFER_NAMES:
+        return (
+            "high-bit HDR repair requires a PQ or HLG transfer tag; received "
+            f"{meta.color_transfer or 'missing'}"
+        )
+    if primaries != "bt2020":
+        return (
+            "HDR repair requires BT.2020 primaries; received "
+            f"{meta.color_primaries or 'missing'}"
+        )
+    if matrix not in {"bt2020nc", "bt2020_ncl"}:
+        return (
+            "HDR repair requires the BT.2020 non-constant-luminance matrix; "
+            f"received {meta.color_space or 'missing'}"
+        )
+    if _normalized_transfer(meta.color_range) not in {"tv", "pc"}:
+        return (
+            "HDR repair requires an explicit color range; received "
+            f"{meta.color_range or 'missing'}"
+        )
+    return ""
+
+
+def hdr_repair_ready(meta: Optional[ColorMetadata]) -> bool:
+    """Return whether HDR pixels have enough tags for exact transfer math."""
+    return not hdr_repair_block_reason(meta)
+
+
+def _hdr_signal_float(frame) -> np.ndarray:
+    values = np.asarray(frame)
+    if np.issubdtype(values.dtype, np.integer):
+        scale = float(np.iinfo(values.dtype).max)
+    else:
+        scale = 1.0
+    return np.clip(values.astype(np.float32) / scale, 0.0, 1.0)
+
+
+def hdr_signal_to_linear(frame, transfer: str) -> np.ndarray:
+    """Decode PQ or HLG signal values into bounded relative linear light."""
+    transfer_name = _normalized_transfer(transfer)
+    if transfer_name not in _HDR_TRANSFER_NAMES:
+        raise ValueError(f"unsupported HDR transfer: {transfer or 'missing'}")
+    signal = _hdr_signal_float(frame)
+    if transfer_name == "smpte2084":
+        m1 = 2610.0 / 16384.0
+        m2 = 2523.0 / 32.0
+        c1 = 3424.0 / 4096.0
+        c2 = 2413.0 / 128.0
+        c3 = 2392.0 / 128.0
+        powered = np.power(signal, 1.0 / m2)
+        numerator = np.maximum(powered - c1, 0.0)
+        denominator = np.maximum(c2 - c3 * powered, 1e-8)
+        linear = np.power(numerator / denominator, 1.0 / m1)
+    else:
+        a = 0.17883277
+        b = 1.0 - 4.0 * a
+        c = 0.5 - a * np.log(4.0 * a)
+        linear = np.empty_like(signal, dtype=np.float32)
+        low = signal <= 0.5
+        linear[low] = np.square(signal[low]) / 3.0
+        linear[~low] = (
+            np.exp((signal[~low] - c) / a) + b
+        ) / 12.0
+    return np.clip(linear, 0.0, 1.0).astype(np.float32, copy=False)
+
+
+def linear_to_hdr_signal(linear, transfer: str) -> np.ndarray:
+    """Encode bounded relative linear light back to a uint16 HDR signal."""
+    transfer_name = _normalized_transfer(transfer)
+    if transfer_name not in _HDR_TRANSFER_NAMES:
+        raise ValueError(f"unsupported HDR transfer: {transfer or 'missing'}")
+    values = np.clip(np.asarray(linear, dtype=np.float32), 0.0, 1.0)
+    if transfer_name == "smpte2084":
+        m1 = 2610.0 / 16384.0
+        m2 = 2523.0 / 32.0
+        c1 = 3424.0 / 4096.0
+        c2 = 2413.0 / 128.0
+        c3 = 2392.0 / 128.0
+        powered = np.power(values, m1)
+        numerator = c1 + c2 * powered
+        denominator = 1.0 + c3 * powered
+        signal = np.power(numerator / np.maximum(denominator, 1e-8), m2)
+    else:
+        a = 0.17883277
+        b = 1.0 - 4.0 * a
+        c = 0.5 - a * np.log(4.0 * a)
+        signal = np.empty_like(values, dtype=np.float32)
+        low = values <= (1.0 / 12.0)
+        signal[low] = np.sqrt(3.0 * values[low])
+        signal[~low] = a * np.log(12.0 * values[~low] - b) + c
+    return np.clip(np.rint(signal * 65535.0), 0, 65535).astype(np.uint16)
+
+
+def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
+    values = np.clip(linear, 0.0, 1.0)
+    return np.where(
+        values <= 0.0031308,
+        values * 12.92,
+        1.055 * np.power(values, 1.0 / 2.4) - 0.055,
+    )
+
+
+def _srgb_to_linear(encoded: np.ndarray) -> np.ndarray:
+    values = np.clip(encoded, 0.0, 1.0)
+    return np.where(
+        values <= 0.04045,
+        values / 12.92,
+        np.power((values + 0.055) / 1.055, 2.4),
+    )
+
+
+def hdr_proxy_from_linear(linear, transfer: str) -> np.ndarray:
+    """Create the bounded SDR proxy used by OCR and 8-bit model backends."""
+    if _normalized_transfer(transfer) not in _HDR_TRANSFER_NAMES:
+        raise ValueError(f"unsupported HDR transfer: {transfer or 'missing'}")
+    values = np.clip(np.asarray(linear, dtype=np.float32), 0.0, 1.0)
+    display_linear = values / (values + _HDR_TONE_MAP_KNEE)
+    return np.clip(
+        np.rint(_linear_to_srgb(display_linear) * 255.0), 0, 255
+    ).astype(np.uint8)
+
+
+def hdr_proxy_from_high_bit(frame, transfer: str) -> np.ndarray:
+    """Convert a decoded uint16 HDR surface to a display-safe 8-bit proxy."""
+    return hdr_proxy_from_linear(
+        hdr_signal_to_linear(frame, transfer), transfer)
+
+
+def hdr_proxy_to_linear(proxy, transfer: str) -> np.ndarray:
+    """Lift an SDR proxy back into bounded relative linear light."""
+    if _normalized_transfer(transfer) not in _HDR_TRANSFER_NAMES:
+        raise ValueError(f"unsupported HDR transfer: {transfer or 'missing'}")
+    values = np.asarray(proxy)
+    if np.issubdtype(values.dtype, np.integer):
+        scale = float(np.iinfo(values.dtype).max)
+    else:
+        scale = 1.0
+    encoded = np.clip(values.astype(np.float32) / scale, 0.0, 1.0)
+    display_linear = _srgb_to_linear(encoded)
+    display_linear = np.minimum(display_linear, 0.999)
+    linear = (
+        _HDR_TONE_MAP_KNEE * display_linear
+        / np.maximum(1.0 - display_linear, 1e-6)
+    )
+    return np.clip(linear, 0.0, 1.0).astype(np.float32, copy=False)
 
 
 def probe_color_metadata(path: str) -> Optional[ColorMetadata]:
@@ -135,6 +314,9 @@ def probe_color_metadata(path: str) -> Optional[ColorMetadata]:
             max_cll=max_cll,
             max_fall=max_fall,
             dynamic_metadata=tuple(dict.fromkeys(dynamic_metadata)),
+            pixel_format=(
+                s.get("pix_fmt") or first_frame.get("pix_fmt") or ""
+            ),
         )
     except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError) as exc:
         logger.debug(f"Color-metadata probe failed: {exc}")

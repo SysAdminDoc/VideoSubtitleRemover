@@ -10,6 +10,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   time base from ffprobe. Checkpoints, matte manifests, frozen mattes,
   track plans, audio trimming, SRT, EDL, and FCPXML retain the exact clock while
   float values remain compatibility views.
+- HDR repair now keeps the decoded uint16 source surface, uses a tone-mapped
+  proxy for OCR and 8-bit model inputs, and composites repaired PQ or HLG pixels
+  in bounded linear light inside the active mask ROI. Outside-mask pixels remain
+  exact, complete color tags are required, and synthetic ramps retain high-bit
+  precision through the transfer round trip.
 - OCR quadrilaterals now travel beside the historical axis-aligned boxes through
   detection, tracking, track-plan save/load, masks, and preview overlays. Each
   polygon gets its own local expansion, so a rotated caption doesn't remove the

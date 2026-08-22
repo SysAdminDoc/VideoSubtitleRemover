@@ -17,26 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P1 — RM-303 Preserve linear-light high-bit HDR repairs
-  - Why: HDR input reaches the processor as uint16, but the repair surface is divided
-    to uint8 and expanded again. Pixels inside the repaired mask are therefore
-    limited to 256 code values and are blended in transfer-encoded space.
-  - Evidence: backend/processor.py:1520-1565,
-    https://www.itu.int/rec/R-REC-BT.2100-3-202502-I/en,
-    https://www.itu.int/pub/R-REP-BT.2446-1-2021, and
-    https://helpx.adobe.com/ca/after-effects/desktop/remove-objects-from-your-videos/content-aware-fill.html.
-  - Touches: HDR decode and merge helpers in backend/processor.py, color metadata
-    probing, ROI buffers, finishing, quality checks, release fixtures, and HDR tests.
-  - Acceptance: Keep the original high-bit source surface; generate a separate
-    tone-mapped 8-bit proxy only for OCR and models that require it; decode tagged PQ
-    or HLG repair regions to bounded linear float, composite there, and reapply the
-    transfer function; fail closed or require an explicit override for missing or
-    conflicting transfer tags; keep outside-mask high-bit pixels exact; prove
-    synthetic PQ and HLG ramps retain more than 256 repaired code levels without
-    banding regressions; preserve HDR metadata and bound memory to active regions.
-  - Complexity: High. Regression risk is high. Requires trustworthy color tags and
-    dedicated HDR fixtures.
-
 - [ ] P1 — RM-304 Add mask-local temporal and color-drift quality gates
   - Why: The current temporal score averages raw adjacent-frame ROI SSIM, which
     confuses valid motion with flicker and can hide localized defects. The pipeline

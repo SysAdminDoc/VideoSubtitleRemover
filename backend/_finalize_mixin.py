@@ -25,6 +25,7 @@ from backend.io import (
     _probe_duration_seconds,
     _promote_temp_output,
 )
+from backend.hdr import hdr_repair_block_reason
 
 logger = logging.getLogger(__name__)
 
@@ -420,6 +421,10 @@ class _FinalizeMixin:
                 logger.warning("Source codec/color probe failed", exc_info=True)
         if self.config.preserve_color_metadata:
             self._color_metadata = meta
+        hdr_meta = meta if self.config.preserve_color_metadata else None
+        hdr_reason = hdr_repair_block_reason(hdr_meta)
+        self._hdr_repair_ready = not hdr_reason
+        self._hdr_repair_blocked = bool(hdr_reason)
         requested = getattr(self.config, "output_codec", "h264")
         effective = requested
         if self.config.preserve_color_metadata:
@@ -450,6 +455,15 @@ class _FinalizeMixin:
         )
         self.last_output_contract = self._attach_d3d12_evidence(
             self._output_contract.report())
+        self.last_output_contract["hdr_repair"] = {
+            "status": (
+                "blocked" if hdr_reason else
+                "ready" if hdr_meta is not None and hdr_meta.is_hdr else
+                "not-applicable"
+            ),
+            "transfer": getattr(hdr_meta, "color_transfer", ""),
+            "reason": hdr_reason,
+        }
         self.last_output_contract["container_payload"] = {
             "status": "pending",
         }
@@ -459,6 +473,9 @@ class _FinalizeMixin:
                     f"HDR source detected: {meta.label} -- output contract "
                     f"requires {effective}, 10-bit pixels, and source color tags."
                 )
+                if hdr_reason:
+                    logger.error(
+                        "HDR linear-light repair is blocked: %s", hdr_reason)
             else:
                 logger.info(f"Color signalling: {meta.label}")
         for warning in self._output_contract.warnings:
