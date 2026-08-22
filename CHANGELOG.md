@@ -10,6 +10,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   default, hover, and pressed states. Disabled copy is clearer, the shared
   radius scale uses 4, 6, 8, and 10 pixels, and thin progress tracks use crisp
   ends instead of capsule shapes.
+- Detection, Inpainting, Encoding, and Advanced are now independent inspector
+  disclosures. Opening one category closes the previous category, updates the
+  correct chevron and accessibility state, and keeps hidden controls out of the
+  keyboard and accessibility control views. Interface and app behavior options
+  now have their own Advanced card instead of extending Encoding quality.
 
 ## [3.37.0] - 2026-08-22
 

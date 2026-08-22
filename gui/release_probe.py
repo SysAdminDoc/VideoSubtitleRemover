@@ -397,17 +397,19 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
             if high_contrast and Theme.BG_DARK != "#000000":
                 failures.append("high-contrast palette was not applied")
 
-            advanced_roots = [
-                panel for panel, _pack_options in app._inspector_detail_panels
-            ] + [app.adv_panel]
-            advanced_descendants = {
+            detail_roots = [
+                *app._inspector_primary_detail_roots,
+                *app._inspector_advanced_cards,
+            ]
+            detail_descendants = {
                 widget
-                for root in advanced_roots
+                for root in detail_roots
                 for widget in _walk(root)
             }
+            detail_descendants.add(app.adv_panel)
             focusable_descendants = {
                 widget
-                for widget in advanced_descendants
+                for widget in detail_descendants
                 if str(getattr(widget, "_vsr_a11y_saved_takefocus", "0"))
                 not in {"", "0", "false"}
             }
@@ -419,7 +421,7 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                 failures.append("advanced panels expose no focusable descendants")
             if any(
                 getattr(widget, "_vsr_a11y_control_view", True) is not False
-                for widget in advanced_descendants
+                for widget in detail_descendants
             ):
                 failures.append("collapsed advanced controls remain in control view")
             if any(
@@ -440,18 +442,59 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                     app.root, app._inspector_advanced_button)
                 if not collapsed_tabs.isdisjoint(hidden_paths):
                     failures.append("collapsed advanced controls receive Tab focus")
-                app._toggle_advanced()
-                app.root.update_idletasks()
-                if any(
-                    getattr(widget, "_vsr_a11y_control_view", False) is not True
-                    for widget in advanced_descendants
+                for section in (
+                    "detection", "inpainting", "encoding", "advanced",
                 ):
-                    failures.append("expanded advanced controls are absent from control view")
-                expanded_tabs = _tab_cycle(
-                    app.root, app._inspector_advanced_button)
-                if not expanded_tabs.intersection(hidden_paths):
-                    failures.append("expanded advanced controls are absent from tab order")
-                app._toggle_advanced()
+                    app._open_inspector_details(section)
+                    app.root.update_idletasks()
+                    active = {app.adv_panel}
+                    for panel, _pack_options in (
+                        app._inspector_section_primary_panels[section]
+                    ):
+                        active.update(_walk(panel))
+                    for panel in app._inspector_section_advanced_cards[section]:
+                        active.update(_walk(panel))
+                    if any(
+                        getattr(widget, "_vsr_a11y_control_view", False)
+                        is not True
+                        for widget in active
+                    ):
+                        failures.append(
+                            f"expanded {section} controls are absent from control view")
+                    if any(
+                        getattr(widget, "_vsr_a11y_control_view", True)
+                        is not False
+                        for widget in detail_descendants - active
+                    ):
+                        failures.append(
+                            f"collapsed controls leak while {section} is expanded")
+                    states = {
+                        key: getattr(button, "_vsr_a11y", {}).get("state")
+                        for key, button in app._inspector_summary_buttons.items()
+                    }
+                    if states.get(section) != "expanded" or any(
+                        state != "collapsed"
+                        for key, state in states.items()
+                        if key != section
+                    ):
+                        failures.append(
+                            f"{section} disclosure state is inconsistent")
+                    section_tabs = _tab_cycle(
+                        app.root, app._inspector_summary_buttons[section])
+                    active_paths = {
+                        str(widget)
+                        for widget in active.intersection(focusable_descendants)
+                    }
+                    if not section_tabs.intersection(active_paths):
+                        failures.append(
+                            f"expanded {section} controls are absent from tab order")
+                    if not section_tabs.isdisjoint(hidden_paths - active_paths):
+                        failures.append(
+                            f"hidden controls receive Tab focus while {section} is open")
+                    if section == "advanced":
+                        expanded_tabs = section_tabs
+                    app._open_inspector_details(section)
+                    app.root.update_idletasks()
                 app.root.update_idletasks()
                 collapsed_again = _tab_cycle(
                     app.root, app._inspector_advanced_button)
@@ -461,7 +504,7 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                 failures.append(f"advanced focus traversal probe failed: {exc}")
             finally:
                 if getattr(app, "adv_visible", False):
-                    app._toggle_advanced()
+                    app._set_inspector_section(None)
                     app.root.update_idletasks()
                 app.root.withdraw()
                 try:

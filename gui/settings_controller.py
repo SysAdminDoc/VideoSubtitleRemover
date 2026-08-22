@@ -97,30 +97,52 @@ class AdvancedSettingsControllerMixin:
                          fill="x", padx=(Theme.S_LG, Theme.S_LG),
                          pady=(0, Theme.S_XS))
 
-    def _toggle_advanced(self, event=None):
-        """Toggle advanced settings visibility."""
-        self.adv_visible = not self.adv_visible
-        if self.adv_visible:
-            self.adv_toggle.icon = "-"
-            self.adv_toggle.set_text(tr("Hide advanced settings"))
-            for panel, pack_options in getattr(
-                self, "_inspector_detail_panels", ()
-            ):
+    def _set_inspector_section(self, section: Optional[str]) -> None:
+        """Show one inspector category and keep every other category hidden."""
+        section_panels = getattr(
+            self, "_inspector_section_primary_panels", {})
+        section_cards = getattr(
+            self, "_inspector_section_advanced_cards", {})
+        if section not in section_panels:
+            section = None
+        previous = getattr(self, "_inspector_open_section", None)
+
+        for panel, _pack_options in getattr(
+            self, "_inspector_detail_panels", ()
+        ):
+            set_accessible_subtree_visible(panel, False)
+            panel.pack_forget()
+        for panel in getattr(self, "_inspector_advanced_cards", ()):
+            set_accessible_subtree_visible(panel, False)
+            panel.pack_forget()
+        self.adv_panel.pack_forget()
+        self.adv_panel._vsr_a11y_control_view = False
+
+        if section is not None:
+            for panel, pack_options in section_panels[section]:
                 panel.pack(**pack_options)
                 set_accessible_subtree_visible(panel, True)
-            self.adv_panel.pack(fill="x")
-            set_accessible_subtree_visible(self.adv_panel, True)
-        else:
-            self.adv_toggle.icon = "+"
-            self.adv_toggle.set_text(tr("Advanced settings"))
-            for panel, _pack_options in getattr(
-                self, "_inspector_detail_panels", ()
-            ):
-                set_accessible_subtree_visible(panel, False)
-                panel.pack_forget()
-            set_accessible_subtree_visible(self.adv_panel, False)
-            self.adv_panel.pack_forget()
-            disclosure = getattr(self, "_inspector_advanced_button", None)
+            cards = section_cards.get(section, ())
+            if cards:
+                for panel in cards:
+                    panel.pack(**self._inspector_advanced_pack_options[panel])
+                    set_accessible_subtree_visible(panel, True)
+                self.adv_panel.pack(fill="x")
+                self.adv_panel._vsr_a11y_control_view = True
+
+        self._inspector_open_section = section
+        self.adv_visible = section is not None
+        advanced_is_open = section == "advanced"
+        self.adv_toggle.icon = "-" if advanced_is_open else "+"
+        self.adv_toggle.set_text(
+            tr("Hide advanced settings")
+            if advanced_is_open
+            else tr("Advanced settings")
+        )
+        if section is None and previous is not None:
+            disclosure = getattr(
+                self, "_inspector_summary_buttons", {}
+            ).get(previous)
             if disclosure is not None:
                 try:
                     disclosure.focus_set()
@@ -128,6 +150,13 @@ class AdvancedSettingsControllerMixin:
                     pass
         if hasattr(self, "_sync_inspector_disclosure_state"):
             self._sync_inspector_disclosure_state()
+
+    def _toggle_advanced(self, event=None):
+        """Toggle the Advanced inspector category."""
+        del event
+        current = getattr(self, "_inspector_open_section", None)
+        self._set_inspector_section(
+            None if current == "advanced" else "advanced")
 
     def _get_algo_description(self) -> str:
         """Get description for current algorithm."""

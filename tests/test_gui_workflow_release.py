@@ -274,26 +274,32 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
     def test_collapsed_advanced_controls_leave_control_view_and_tab_order(self):
         app = self._make_app(withdraw=False)
         try:
+            section_names = {
+                "detection", "inpainting", "encoding", "advanced",
+            }
             labels = {
                 key: accessible_metadata(button)
                 for key, button in app._inspector_summary_buttons.items()
             }
-            self.assertEqual(set(labels), {
-                "detection", "inpainting", "encoding", "advanced",
-            })
+            self.assertEqual(set(labels), section_names)
             self.assertTrue(all(
                 metadata["role"] == "button" and metadata["label"]
                 for metadata in labels.values()
             ))
-            self.assertEqual(labels["advanced"]["state"], "collapsed")
+            self.assertTrue(all(
+                metadata["state"] == "collapsed"
+                for metadata in labels.values()
+            ))
             roots = [
-                panel for panel, _pack_options in app._inspector_detail_panels
-            ] + [app.adv_panel]
+                *app._inspector_primary_detail_roots,
+                *app._inspector_advanced_cards,
+            ]
             descendants = {
                 widget
                 for root in roots
                 for widget in self._walk(root)
             }
+            descendants.add(app.adv_panel)
             originally_focusable = {
                 widget
                 for widget in descendants
@@ -322,31 +328,49 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
             )
             self.assertTrue(collapsed_tabs.isdisjoint(hidden_paths))
 
-            app._toggle_advanced()
-            app.root.update_idletasks()
-            self.assertEqual(
-                accessible_metadata(app._inspector_advanced_button)["state"],
-                "expanded",
-            )
-            self.assertTrue(all(
-                getattr(widget, "_vsr_a11y_control_view", False) is True
-                for widget in descendants
-            ))
-            self.assertTrue(any(
-                str(widget.cget("takefocus")) not in {"", "0", "false"}
-                for widget in originally_focusable
-            ))
-            expanded_tabs = self._tab_cycle(
-                app.root, app._inspector_advanced_button
-            )
-            self.assertTrue(expanded_tabs.intersection(hidden_paths))
+            for section in ("detection", "inpainting", "encoding", "advanced"):
+                app._open_inspector_details(section)
+                app.root.update_idletasks()
+                states = {
+                    key: accessible_metadata(button)["state"]
+                    for key, button in app._inspector_summary_buttons.items()
+                }
+                self.assertEqual(states[section], "expanded")
+                self.assertTrue(all(
+                    state == "collapsed"
+                    for key, state in states.items()
+                    if key != section
+                ))
+                active = {app.adv_panel}
+                for panel, _pack_options in (
+                    app._inspector_section_primary_panels[section]
+                ):
+                    active.update(self._walk(panel))
+                for panel in app._inspector_section_advanced_cards[section]:
+                    active.update(self._walk(panel))
+                self.assertTrue(all(
+                    getattr(widget, "_vsr_a11y_control_view", False) is True
+                    for widget in active
+                ))
+                self.assertTrue(all(
+                    getattr(widget, "_vsr_a11y_control_view", True) is False
+                    for widget in descendants - active
+                ))
+                active_focus_paths = {
+                    str(widget)
+                    for widget in active.intersection(originally_focusable)
+                }
+                expanded_tabs = self._tab_cycle(
+                    app.root, app._inspector_summary_buttons[section]
+                )
+                self.assertTrue(expanded_tabs.intersection(active_focus_paths))
+                self.assertTrue(
+                    expanded_tabs.isdisjoint(hidden_paths - active_focus_paths)
+                )
 
-            app._toggle_advanced()
+            app._open_inspector_details("advanced")
             app.root.update_idletasks()
-            self.assertEqual(
-                accessible_metadata(app._inspector_advanced_button)["state"],
-                "collapsed",
-            )
+            self.assertIsNone(app._inspector_open_section)
             self.assertTrue(all(
                 getattr(widget, "_vsr_a11y_control_view", True) is False
                 for widget in descendants

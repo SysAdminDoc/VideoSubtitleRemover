@@ -694,6 +694,7 @@ class LayoutBuildMixin:
                             hint=N_("Most frames held in memory per pass. Lower this if "
                                  "you run out of GPU or system memory."))
         tk.Frame(sttn_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
+        return sttn_frame
 
     def _build_detection_settings_group(self):
         # Detection Precision card
@@ -913,6 +914,7 @@ class LayoutBuildMixin:
                                     "or Chinese text. Saved masks stay aligned to the source."))
 
         tk.Frame(det_frame, bg=Theme.BG_CARD, height=Theme.S_SM).pack(fill="x")
+        return det_frame
 
     def _build_output_settings_group(self):
         # Output Quality card
@@ -1274,7 +1276,7 @@ class LayoutBuildMixin:
         Tooltip(style_entry, tr(
             "Optional FFmpeg force_style text, for example FontSize=24."))
 
-        return quality_frame
+        return quality_frame, translation_frame
 
     def _build_range_settings_group(self):
         # Video Range card
@@ -1313,6 +1315,7 @@ class LayoutBuildMixin:
 
         tk.Label(time_inner, text=tr("0 uses the full clip"), font=f(Theme.F_META),
                  bg=Theme.BG_CARD, fg=Theme.TEXT_MUTED).pack(side="left", padx=(Theme.S_MD, 0))
+        return time_frame
 
     def _build_performance_settings_groups(self):
         # ---- v3.13 GUI-exposed knobs ------------------------------------
@@ -1431,6 +1434,7 @@ class LayoutBuildMixin:
         prefetch_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD))
         Tooltip(prefetch_toggle, tr("Read upcoming frames in the background so "
                                     "cleanup spends less time waiting on the source file."))
+        return editorial_frame, audio_frame, perf_frame
 
     def _build_accessibility_storage_settings(
         self, quality_frame,
@@ -1447,16 +1451,20 @@ class LayoutBuildMixin:
         Tooltip(quality_sheet_toggle, tr("Save a side-by-side source/output image "
                                          "for sampled frames. Also enables the numeric quality report."))
 
+        preferences_frame = self._create_card(self.adv_panel)
+        preferences_frame.pack(fill="x", pady=(0, Theme.S_SM))
+        self._card_header(preferences_frame, N_("Interface and app behavior"))
+
         self.json_log_var = tk.BooleanVar(value=getattr(self.config, "json_log_enabled", False))
         json_log_toggle = ModernToggle(
-            quality_frame,
+            preferences_frame,
             text=tr("Structured JSON log"),
             variable=self.json_log_var,
         )
         json_log_toggle.pack(anchor="w", padx=Theme.S_LG, pady=(0, Theme.S_SM))
         Tooltip(json_log_toggle, tr("Write a structured JSON-lines log alongside the text log. Useful for long batch runs and scripted post-processing."))
 
-        text_scale_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        text_scale_row = tk.Frame(preferences_frame, bg=Theme.BG_CARD)
         text_scale_row.pack(
             fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
         tk.Label(
@@ -1483,7 +1491,7 @@ class LayoutBuildMixin:
             tr("Scales interface text and dependent controls on the next launch."),
         )
 
-        locale_row = tk.Frame(quality_frame, bg=Theme.BG_CARD)
+        locale_row = tk.Frame(preferences_frame, bg=Theme.BG_CARD)
         locale_row.pack(fill="x", padx=Theme.S_LG, pady=(0, Theme.S_SM))
         tk.Label(
             locale_row,
@@ -1531,7 +1539,7 @@ class LayoutBuildMixin:
         # a tree-wide redraw the design tokens were not built for.
         self.high_contrast_var = tk.BooleanVar(value=getattr(self.config, "high_contrast", False))
         hc_toggle = ModernToggle(
-            quality_frame,
+            preferences_frame,
             text=tr("High-contrast theme (restart required)"),
             variable=self.high_contrast_var,
         )
@@ -1543,7 +1551,7 @@ class LayoutBuildMixin:
         self.rtl_layout_var = tk.BooleanVar(
             value=getattr(self.config, "rtl_layout", False))
         rtl_toggle = ModernToggle(
-            quality_frame,
+            preferences_frame,
             text=tr("Mirror layout for right-to-left languages (restart required)"),
             variable=self.rtl_layout_var,
         )
@@ -1559,7 +1567,7 @@ class LayoutBuildMixin:
         self.job_isolation_var = tk.BooleanVar(
             value=getattr(self.config, "job_isolation", False))
         isolation_toggle = ModernToggle(
-            quality_frame,
+            preferences_frame,
             text=tr("Run each job in a separate process"),
             variable=self.job_isolation_var,
         )
@@ -1571,7 +1579,7 @@ class LayoutBuildMixin:
 
         self.update_check_var = tk.BooleanVar(value=getattr(self.config, "update_check", False))
         uc_toggle = ModernToggle(
-            quality_frame,
+            preferences_frame,
             text=tr("Check for updates on startup"),
             variable=self.update_check_var,
         )
@@ -1626,6 +1634,7 @@ class LayoutBuildMixin:
         )
         work_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self._work_directory_buttons = (work_browse_btn, work_reset_btn)
+        return preferences_frame, storage_frame
 
     def _build_inspector_summary(self, settings):
         """Build the first-viewport inspector as separator-led disclosure rows."""
@@ -1655,7 +1664,9 @@ class LayoutBuildMixin:
             ("encoding", tr("Encoding")),
             ("advanced", tr("Advanced")),
         )
+        self._inspector_summary_titles = dict(rows)
         self._inspector_summary_rows = []
+        self._inspector_summary_row_frames = {}
         self._inspector_summary_buttons = {}
         self._inspector_summary_chevrons = {}
         for section_key, title in rows:
@@ -1685,7 +1696,9 @@ class LayoutBuildMixin:
                 button,
                 role="button",
                 label=title,
-                description=tr("Open detailed cleanup settings."),
+                state="collapsed",
+                description=tr("Show {section} settings.").format(
+                    section=title),
             )
             chevron = tk.Label(
                 row,
@@ -1704,6 +1717,7 @@ class LayoutBuildMixin:
                 lambda _event, name=section_key: self._open_inspector_details(name),
             )
             self._inspector_summary_rows.append(button)
+            self._inspector_summary_row_frames[section_key] = row
             self._inspector_summary_buttons[section_key] = button
             self._inspector_summary_chevrons[section_key] = chevron
             if section_key == "advanced":
@@ -1729,6 +1743,11 @@ class LayoutBuildMixin:
         self._inspector_profile_panel = profile_panel
         self._inspector_workflow_panel = workflow_panel
         self._inspector_output_panel = output_panel
+        self._inspector_primary_detail_roots = (
+            profile_panel,
+            workflow_panel,
+            output_panel,
+        )
         self._inspector_detail_panels = (
             (profile_panel, {"fill": "x"}),
             (profile_details, {
@@ -1764,6 +1783,7 @@ class LayoutBuildMixin:
         self._advanced_compat_frame = adv_frame
 
         self.adv_visible = False
+        self._inspector_open_section = None
         self.adv_toggle = ModernButton(adv_frame, text=tr("Advanced settings"), width=188,
                                        command=self._toggle_advanced,
                                        style="ghost", size="sm", icon="+")
@@ -1771,16 +1791,79 @@ class LayoutBuildMixin:
 
         self.adv_panel = tk.Frame(settings, bg=Theme.BG_SECONDARY)
 
-        self._build_sttn_settings_group()
-        self._build_detection_settings_group()
-        quality_frame = self._build_output_settings_group()
-        self._build_range_settings_group()
-        self._build_performance_settings_groups()
-        self._build_accessibility_storage_settings(quality_frame)
+        sttn_frame = self._build_sttn_settings_group()
+        detection_frame = self._build_detection_settings_group()
+        quality_frame, translation_frame = self._build_output_settings_group()
+        range_frame = self._build_range_settings_group()
+        performance_frames = self._build_performance_settings_groups()
+        preferences_frame, storage_frame = (
+            self._build_accessibility_storage_settings(quality_frame)
+        )
+
+        advanced_cards = (
+            sttn_frame,
+            detection_frame,
+            quality_frame,
+            translation_frame,
+            range_frame,
+            *performance_frames,
+            preferences_frame,
+            storage_frame,
+        )
+        self._inspector_advanced_cards = advanced_cards
+        self._inspector_advanced_pack_options = {
+            sttn_frame: {"fill": "x", "pady": (Theme.S_MD, Theme.S_SM)},
+            detection_frame: {"fill": "x", "pady": (0, Theme.S_SM)},
+            quality_frame: {"fill": "x", "pady": (0, Theme.S_SM)},
+            translation_frame: {"fill": "x", "pady": (0, Theme.S_SM)},
+            range_frame: {"fill": "x"},
+            performance_frames[0]: {
+                "fill": "x", "pady": (Theme.S_MD, Theme.S_SM),
+            },
+            performance_frames[1]: {"fill": "x", "pady": (0, Theme.S_SM)},
+            performance_frames[2]: {"fill": "x", "pady": (0, Theme.S_SM)},
+            preferences_frame: {"fill": "x", "pady": (0, Theme.S_SM)},
+            storage_frame: {
+                "fill": "x", "pady": (Theme.S_MD, Theme.S_SM),
+            },
+        }
+        self._inspector_section_advanced_cards = {
+            "detection": (detection_frame,),
+            "inpainting": (sttn_frame,),
+            "encoding": (quality_frame, translation_frame),
+            "advanced": (
+                range_frame,
+                *performance_frames,
+                preferences_frame,
+                storage_frame,
+            ),
+        }
+        self._inspector_section_primary_panels = {
+            "detection": (
+                (self._inspector_workflow_panel, {"fill": "x"}),
+                (self._inspector_workflow_details, {
+                    "fill": "x", "before": self._inspector_region_surface,
+                }),
+            ),
+            "inpainting": (
+                (self._inspector_profile_panel, {"fill": "x"}),
+                (self._inspector_profile_details, {
+                    "fill": "x", "padx": Theme.S_MD,
+                    "pady": (Theme.S_SM, Theme.S_MD),
+                }),
+            ),
+            "encoding": (
+                (self._inspector_output_panel, {"fill": "x"}),
+            ),
+            "advanced": (),
+        }
 
         for panel, _pack_options in self._inspector_detail_panels:
             set_accessible_subtree_visible(panel, False)
-        set_accessible_subtree_visible(self.adv_panel, False)
+        for panel in advanced_cards:
+            panel.pack_forget()
+            set_accessible_subtree_visible(panel, False)
+        self.adv_panel._vsr_a11y_control_view = False
 
         self.output_codec_var.trace_add("write", self._sync_inspector_encoding)
 

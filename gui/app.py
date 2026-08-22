@@ -1392,14 +1392,15 @@ class VideoSubtitleRemoverApp(
         if not hasattr(self, "_settings_col"):
             return
         try:
-            if not self.adv_visible:
-                self._toggle_advanced()
             if self._layout_mode == "stacked":
                 bbox = self._content_canvas.bbox("all")
                 if bbox and bbox[3] > 0:
                     self._content_canvas.yview_moveto(
                         max(0.0, self._settings_col.winfo_y() / bbox[3]))
-            self._settings_col.focus_set()
+            target = self._inspector_summary_buttons.get(
+                self._inspector_open_section or "detection")
+            if target is not None:
+                target.focus_set()
         except tk.TclError:
             pass
 
@@ -1434,28 +1435,43 @@ class VideoSubtitleRemoverApp(
         self._inspector_profile_summary_var.set(
             profile_names.get(mode, mode))
 
-    def _open_inspector_details(self, _section: str = ""):
-        """Reveal the detailed editor from a compact inspector row."""
-        if _section == "advanced":
-            self._toggle_advanced()
-        elif not self.adv_visible:
-            self._toggle_advanced()
+    def _open_inspector_details(self, section: str = ""):
+        """Toggle one detailed editor from a compact inspector row."""
+        if section not in self._inspector_summary_buttons:
+            return
+        target = None if self._inspector_open_section == section else section
+        self._set_inspector_section(target)
 
     def _sync_inspector_disclosure_state(self):
-        """Keep the flat Advanced row aligned with detailed-control state."""
-        chevron = getattr(self, "_inspector_advanced_chevron", None)
-        if chevron is not None:
-            chevron.configure(text="^" if self.adv_visible else "v")
-        button = getattr(self, "_inspector_advanced_button", None)
-        if button is not None:
+        """Keep every disclosure row aligned with its category state."""
+        open_section = getattr(self, "_inspector_open_section", None)
+        for section, button in getattr(
+            self, "_inspector_summary_buttons", {}
+        ).items():
+            expanded = section == open_section
+            row_bg = Theme.BG_CARD_HOVER if expanded else Theme.BG_SECONDARY
             button.configure(
-                fg=Theme.TEXT_PRIMARY if self.adv_visible else Theme.TEXT_SECONDARY)
+                bg=row_bg,
+                fg=Theme.TEXT_PRIMARY if expanded else Theme.TEXT_SECONDARY,
+            )
+            row = self._inspector_summary_row_frames.get(section)
+            if row is not None:
+                row.configure(bg=row_bg)
+            chevron = self._inspector_summary_chevrons.get(section)
+            if chevron is not None:
+                chevron.configure(
+                    text="^" if expanded else "v",
+                    bg=row_bg,
+                    fg=Theme.TEXT_PRIMARY if expanded else Theme.TEXT_MUTED,
+                )
+            title = self._inspector_summary_titles.get(section, section)
             set_accessible_metadata(
                 button,
                 role="button",
-                label=tr("Advanced"),
-                state="expanded" if self.adv_visible else "collapsed",
-                description=tr("Open detailed cleanup settings."),
+                label=title,
+                state="expanded" if expanded else "collapsed",
+                description=tr("Show {section} settings.").format(
+                    section=title),
             )
 
 
