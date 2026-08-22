@@ -23,7 +23,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   in bounded linear light inside the active mask ROI. Outside-mask pixels remain
   exact, complete color tags are required, and synthetic repaired ramps retain
   high-bit precision through the transfer round trip. Missing probes, invalid
-  transfers, conflicting stream/frame tags, and unavailable native high-bit
+  transfers, conflicting stream/frame tags, untagged YUV without verified
+  8-bit-surface or valid-range evidence, and unavailable native high-bit
   decoding stop the HDR path instead of flattening it to 8-bit.
 - Quality reports now add a mask-local temporal score that compensates for
   motion and excludes scene cuts using untouched pixels. The final encoded

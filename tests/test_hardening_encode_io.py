@@ -95,6 +95,7 @@ class MediaInputFailureTests(unittest.TestCase):
     def test_partial_decode_fails_and_removes_work_dir(self):
         import numpy as _np
         from unittest import mock
+        from backend.hdr import ColorMetadata
 
         class FakeCapture:
             def __init__(self):
@@ -151,12 +152,23 @@ class MediaInputFailureTests(unittest.TestCase):
             fake_capture = FakeCapture()
 
             with mock.patch("backend.processor._validate_video_input_file"):
-                with mock.patch("backend.processor._open_capture", return_value=fake_capture):
-                    with mock.patch(
-                        "backend.processor._LosslessIntermediateWriter",
-                        FakeWriter,
-                    ):
-                        ok = remover.process_video(str(source), str(output))
+                with mock.patch(
+                    "backend.hdr.probe_color_metadata",
+                    return_value=ColorMetadata(
+                        color_primaries="bt709",
+                        color_transfer="bt709",
+                        color_space="bt709",
+                        color_range="tv",
+                        pixel_format="yuv420p",
+                        bits_per_raw_sample=8,
+                    ),
+                ):
+                    with mock.patch("backend.processor._open_capture", return_value=fake_capture):
+                        with mock.patch(
+                            "backend.processor._LosslessIntermediateWriter",
+                            FakeWriter,
+                        ):
+                            ok = remover.process_video(str(source), str(output))
 
             self.assertFalse(ok)
             self.assertEqual(remover.last_error_reason, "truncated_decode")
@@ -167,6 +179,7 @@ class MediaInputFailureTests(unittest.TestCase):
 
     def test_unsupported_codec_is_actionable(self):
         from unittest import mock
+        from backend.hdr import ColorMetadata
 
         class ClosedCapture:
             def isOpened(self):
@@ -183,20 +196,31 @@ class MediaInputFailureTests(unittest.TestCase):
             remover = self._minimal_remover(work)
 
             with mock.patch("backend.processor._validate_video_input_file"):
-                with mock.patch("backend.processor._open_capture", return_value=ClosedCapture()):
-                    with mock.patch(
-                        "backend.io._probe_video_stream_status",
-                        return_value={
-                            "available": True,
-                            "ok": True,
-                            "hasVideo": True,
-                            "codec": "fictional_codec",
-                            "width": 1920,
-                            "height": 1080,
-                            "error": "",
-                        },
-                    ):
-                        ok = remover.process_video(str(source), str(output))
+                with mock.patch(
+                    "backend.hdr.probe_color_metadata",
+                    return_value=ColorMetadata(
+                        color_primaries="bt709",
+                        color_transfer="bt709",
+                        color_space="bt709",
+                        color_range="tv",
+                        pixel_format="yuv420p",
+                        bits_per_raw_sample=8,
+                    ),
+                ):
+                    with mock.patch("backend.processor._open_capture", return_value=ClosedCapture()):
+                        with mock.patch(
+                            "backend.io._probe_video_stream_status",
+                            return_value={
+                                "available": True,
+                                "ok": True,
+                                "hasVideo": True,
+                                "codec": "fictional_codec",
+                                "width": 1920,
+                                "height": 1080,
+                                "error": "",
+                            },
+                        ):
+                            ok = remover.process_video(str(source), str(output))
 
             self.assertFalse(ok)
             self.assertEqual(remover.last_error_reason, "unsupported_codec")
@@ -892,6 +916,51 @@ class HdrPipelineTests(unittest.TestCase):
                     "hdr.mkv", input_fps=24.0,
                 )
 
+    def test_color_preservation_override_rejects_tagged_hdr(self):
+        from backend.hdr import ColorMetadata
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            preserve_color_metadata=False,
+            preserve_audio=False,
+            use_hw_encode=False,
+        )
+        remover._hw_encoder = None
+        remover._d3d12_status = {}
+        hdr_meta = ColorMetadata(
+            color_primaries="bt2020",
+            color_transfer="smpte2084",
+            color_space="bt2020nc",
+            color_range="tv",
+            pixel_format="yuv420p10le",
+        )
+        with unittest.mock.patch(
+            "backend.hdr.probe_color_metadata", return_value=hdr_meta,
+        ), unittest.mock.patch(
+            "backend._finalize_mixin._probe_codec_for_log", return_value="",
+        ):
+            remover._prepare_output_contract("source.mkv", "cleaned.mp4")
+
+        self.assertTrue(remover._hdr_override_blocked)
+
+    def test_color_preservation_override_rejects_missing_probe(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            preserve_color_metadata=False,
+            preserve_audio=False,
+            use_hw_encode=False,
+        )
+        remover._hw_encoder = None
+        remover._d3d12_status = {}
+        with unittest.mock.patch(
+            "backend.hdr.probe_color_metadata", return_value=None,
+        ), unittest.mock.patch(
+            "backend._finalize_mixin._probe_codec_for_log", return_value="",
+        ):
+            remover._prepare_output_contract("unprobed.mkv", "cleaned.mp4")
+
+        self.assertTrue(remover._hdr_override_blocked)
+
     def test_hdr_encode_args_emits_tags(self):
         from backend.hdr import hdr_encode_args, ColorMetadata
         meta = ColorMetadata(
@@ -1072,6 +1141,30 @@ class HdrPipelineTests(unittest.TestCase):
         self.assertIn(
             "color_transfer", hdr.hdr_repair_block_reason(meta),
         )
+
+    def test_untagged_yuv_probe_requires_verified_surface(self):
+        from backend import hdr
+
+        payload = {
+            "streams": [{"pix_fmt": "yuv420p"}],
+            "frames": [],
+        }
+        completed = SimpleNamespace(
+            returncode=0, stdout=json.dumps(payload), stderr="",
+        )
+        with unittest.mock.patch(
+            "backend.hdr.shutil.which", return_value="ffprobe"
+        ), unittest.mock.patch(
+            "backend.hdr.run_process", return_value=completed
+        ):
+            meta = hdr.probe_color_metadata("untagged-sdr.mkv")
+
+        self.assertEqual(meta.pixel_format, "yuv420p")
+        self.assertEqual(meta.bits_per_raw_sample, 8)
+        self.assertTrue(hdr.hdr_repair_ready(meta))
+        self.assertFalse(hdr.hdr_repair_ready(
+            hdr.ColorMetadata(pixel_format="yuv420p")
+        ))
 
     def test_deinterlace_uses_lossless_contract_intermediate(self):
         from backend.io import _deinterlace_to_temp

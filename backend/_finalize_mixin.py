@@ -423,10 +423,21 @@ class _FinalizeMixin:
             self._color_metadata = meta
         hdr_meta = meta if self.config.preserve_color_metadata else None
         hdr_reason = hdr_repair_block_reason(hdr_meta)
+        override_reason = hdr_repair_block_reason(meta)
         self._hdr_probe_failed = bool(
             self.config.preserve_color_metadata
             and not Path(input_path).is_dir()
             and meta is None
+        )
+        self._hdr_override_blocked = bool(
+            not self.config.preserve_color_metadata
+            and not Path(input_path).is_dir()
+            and (
+                meta is None
+                or bool(override_reason)
+                or bool(getattr(meta, "is_hdr", False))
+                or bool(getattr(meta, "is_high_bit", False))
+            )
         )
         self._hdr_repair_ready = not hdr_reason
         # A missing probe is held as a pending safety failure until the

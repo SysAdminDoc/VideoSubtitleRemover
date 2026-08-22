@@ -58,6 +58,31 @@ def _normalized_transfer(value) -> str:
     return str(value or "").strip().lower()
 
 
+def _pixel_format_bit_depth(value: str) -> int:
+    """Return a known component depth for common FFmpeg pixel formats."""
+    pixel_format = _normalized_transfer(value)
+    if not pixel_format:
+        return 0
+    if re.fullmatch(r"(?:yuv|yuva|yuvj)\d+p", pixel_format):
+        return 8
+    if pixel_format in {
+        "bgr0", "bgra", "bgr24", "rgb24", "rgba", "gray",
+        "gray8", "gbrp", "gbrap", "nv12", "nv21", "uyvy422",
+        "yuyv422",
+    }:
+        return 8
+    if pixel_format in {
+        "bgr48le", "bgr48be", "bgr64le", "bgr64be",
+        "rgb48le", "rgb48be", "rgba64le", "rgba64be",
+    }:
+        return 16
+    match = re.search(
+        r"(?:p|rgb|bgr|gray)(9|10|12|14|16)(?:le|be)?$",
+        pixel_format,
+    )
+    return int(match.group(1)) if match else 0
+
+
 @dataclass
 class ColorMetadata:
     """Container for the four ffprobe stream-level color tags we care
@@ -75,6 +100,7 @@ class ColorMetadata:
     dynamic_metadata: Tuple[str, ...] = ()
     pixel_format: str = ""
     tag_conflicts: Tuple[str, ...] = ()
+    bits_per_raw_sample: int = 0
 
     @property
     def is_hdr(self) -> bool:
@@ -82,10 +108,18 @@ class ColorMetadata:
 
     @property
     def is_high_bit(self) -> bool:
+        if int(self.bits_per_raw_sample or 0) > 8:
+            return True
+        pixel_format_bits = _pixel_format_bit_depth(self.pixel_format)
+        if pixel_format_bits:
+            return pixel_format_bits > 8
         pixel_format = _normalized_transfer(self.pixel_format)
         return any(
             marker in pixel_format
-            for marker in ("10", "12", "14", "16", "p010", "p012", "p016")
+            for marker in (
+                "9", "10", "12", "14", "16",
+                "p010", "p012", "p016",
+            )
         )
 
     @property
@@ -156,6 +190,8 @@ def _known_sdr_metadata(meta: ColorMetadata) -> bool:
     matrix = _normalized_transfer(meta.color_space)
     color_range = _normalized_transfer(meta.color_range)
     pixel_format = _normalized_transfer(meta.pixel_format)
+    bits_per_raw_sample = int(meta.bits_per_raw_sample or 0)
+    pixel_format_bits = _pixel_format_bit_depth(pixel_format)
     if transfer and transfer not in _SDR_TRANSFER_NAMES:
         return False
     if primaries and primaries not in _KNOWN_COLOR_PRIMARIES:
@@ -164,10 +200,25 @@ def _known_sdr_metadata(meta: ColorMetadata) -> bool:
         return False
     if color_range and color_range not in {"tv", "pc"}:
         return False
+    known_8bit_surface = bool(
+        pixel_format_bits == 8
+        and (
+            pixel_format.startswith(("bgr", "rgb", "gray"))
+            or bits_per_raw_sample == 8
+            or (
+                pixel_format.startswith("yuv")
+                and color_range in {"tv", "pc"}
+            )
+        )
+    )
     if not transfer and not primaries and not matrix:
-        return bool(pixel_format and not meta.is_high_bit)
+        return bool(
+            pixel_format
+            and not meta.is_high_bit
+            and known_8bit_surface
+        )
     if pixel_format and not meta.is_high_bit:
-        return True
+        return known_8bit_surface
     return (
         transfer in _SDR_TRANSFER_NAMES
         and primaries not in _UNSET_COLOR_VALUES
@@ -364,6 +415,15 @@ def probe_color_metadata(path: str) -> Optional[ColorMetadata]:
             dynamic_metadata=tuple(dict.fromkeys(dynamic_metadata)),
             pixel_format=(
                 s.get("pix_fmt") or first_frame.get("pix_fmt") or ""
+            ),
+            bits_per_raw_sample=(
+                _positive_int(
+                    s.get("bits_per_raw_sample")
+                    or first_frame.get("bits_per_raw_sample")
+                )
+                or _pixel_format_bit_depth(
+                    s.get("pix_fmt") or first_frame.get("pix_fmt") or ""
+                )
             ),
             tag_conflicts=_color_tag_conflicts(s, first_frame),
         )

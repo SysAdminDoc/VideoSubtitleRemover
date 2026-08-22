@@ -2787,6 +2787,12 @@ class SubtitleRemover(
                     "be probed. Disable color preservation only as an explicit "
                     "override when the source is known to be SDR."
                 )
+            if getattr(self, "_hdr_override_blocked", False):
+                raise ValueError(
+                    "Color preservation cannot be disabled for an unknown, "
+                    "invalid, high-bit, or HDR source; a verified SDR profile "
+                    "is required before using that override."
+                )
             if getattr(self, "_hdr_repair_blocked", False):
                 reason = hdr_repair_block_reason(self._color_metadata)
                 raise ValueError(

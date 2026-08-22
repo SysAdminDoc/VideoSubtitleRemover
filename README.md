@@ -1312,8 +1312,9 @@ surface (`yuv420p10le`) before re-applying the source
 color tags. OCR and 8-bit model backends use a tone-mapped proxy. Repaired PQ
 and HLG pixels are lifted into bounded linear light inside the active mask ROI,
 then encoded back through the source transfer function. Unmasked HDR pixels
-remain exact on the high-bit surface. Missing, invalid, or conflicting HDR tags,
-or an unavailable native reader, stop the job before processing rather than
+remain exact on the high-bit surface. Missing, invalid, or conflicting color
+tags, untagged YUV without verified 8-bit surface or valid-range evidence, or
+an unavailable native reader stop the job before processing rather than
 silently flattening the source. For standard
 SDR limited-range content, colors are preserved. If you still see a mismatch,
 attach the `ffprobe` color fields of your source to a bug report.

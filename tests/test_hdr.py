@@ -95,6 +95,20 @@ def test_hdr_repair_requires_consistent_color_tags():
     assert "metadata is unavailable" in hdr_repair_block_reason(None)
     assert hdr_repair_ready(ColorMetadata()) is False
     assert "incomplete or invalid" in hdr_repair_block_reason(ColorMetadata())
+    assert hdr_repair_ready(ColorMetadata(pixel_format="yuv420p")) is False
+    assert hdr_repair_ready(ColorMetadata(
+        pixel_format="yuv420p", color_range="tv",
+    )) is True
+    assert hdr_repair_ready(ColorMetadata(
+        pixel_format="yuv420p", bits_per_raw_sample=8,
+    )) is True
+    assert hdr_repair_ready(ColorMetadata(
+        pixel_format="nv12", bits_per_raw_sample=8,
+    )) is True
+    assert hdr_repair_ready(ColorMetadata(
+        color_primaries="bt709", pixel_format="yuv420p",
+    )) is False
+    assert hdr_repair_ready(ColorMetadata(pixel_format="bgr0")) is True
     assert hdr_repair_ready(_hdr_meta()) is True
     assert hdr_repair_ready(ColorMetadata(
         color_primaries="bt709",
@@ -103,6 +117,9 @@ def test_hdr_repair_requires_consistent_color_tags():
     )) is False
     assert hdr_repair_ready(ColorMetadata(
         pixel_format="yuv420p10le",
+    )) is False
+    assert hdr_repair_ready(ColorMetadata(
+        pixel_format="yuv420p9le", color_range="tv",
     )) is False
     assert hdr_repair_ready(ColorMetadata(
         color_primaries="bt709",

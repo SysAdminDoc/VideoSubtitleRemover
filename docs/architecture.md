@@ -238,7 +238,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    optional `decode_hw_accel`) or a `_FrameSequenceCapture` for an
    image-directory input. When `prefetch_decode` is on, the cap is
    wrapped in a `_PrefetchReader` daemon worker that feeds a bounded
-   queue. Tagged PQ and HLG sources use a `bgr48le` surface. OCR and model
+   queue. Tagged PQ and HLG sources use a `bgr48le` surface. Untagged 8-bit
+   YUV sources need an ffprobe-verified 8-bit surface or an explicit `tv` or
+   `pc` range before the SDR path is accepted. OCR and model
    inputs receive a separate tone-mapped 8-bit proxy, while the high-bit source
    remains attached to the batch for final repair. If the native reader cannot
    provide that surface, processing stops rather than falling back to BGR8.
