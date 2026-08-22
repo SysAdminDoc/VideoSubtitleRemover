@@ -205,8 +205,10 @@ class SupportControllerMixin:
                 result = work()
             except Exception as exc:  # noqa: BLE001 - surfaced to the user
                 logger.warning("%s: %s", error_message, exc, exc_info=True)
-                self.root.after(
-                    0, lambda: self._update_status(tr(error_message), "error"))
+                dispatch_to_ui(
+                    self.root, self._update_status,
+                    tr(error_message), "error",
+                )
                 return
 
             def _done():

@@ -107,13 +107,24 @@ class LayoutHelpersMixin:
             display = truncate_middle(str(self._output_dir), 54)
             self.output_dir_label.config(text=display, fg=Theme.TEXT_PRIMARY)
             self.output_dir_meta.config(text=tr("Custom location"))
-            command_text = tr("Custom folder")
+            full_command_text = tr("Custom folder")
+            command_text = (
+                ""
+                if self._text_scale_percent >= 200
+                else full_command_text
+            )
         else:
             self.output_dir_label.config(text=tr("Auto-create an output folder beside each source"),
                                          fg=Theme.TEXT_PRIMARY)
             self.output_dir_meta.config(text=tr("Default workflow"))
-            command_text = tr("Same as source")
+            full_command_text = tr("Same as source")
+            command_text = (
+                ""
+                if self._text_scale_percent >= 200
+                else full_command_text
+            )
         if hasattr(self, "_command_output_btn"):
+            self._command_output_btn.accessible_label = full_command_text
             self._command_output_btn.set_text(command_text)
 
     def _update_region_label_display(self):

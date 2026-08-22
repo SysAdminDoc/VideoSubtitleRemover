@@ -22,6 +22,10 @@ class FrozenBuildSmokeTests(unittest.TestCase):
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("!VideoSubtitleRemoverPro.spec", ignore)
 
+    def test_committed_spec_does_not_bundle_the_development_asset_tree(self):
+        spec = (ROOT / "VideoSubtitleRemoverPro.spec").read_text(encoding="ascii")
+        self.assertNotIn("('assets', 'assets')", spec)
+
     def test_build_command_uses_committed_spec_and_isolated_paths(self):
         command = frozen_build_smoke.build_command(
             spec=ROOT / "VideoSubtitleRemoverPro.spec",

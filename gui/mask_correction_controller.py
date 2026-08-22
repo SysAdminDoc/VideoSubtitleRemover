@@ -41,7 +41,7 @@ from gui.dialog_layout import (
     scrollable_dialog_body,
 )
 from gui.theme import Theme, f
-from gui.utils import is_video_file
+from gui.utils import dispatch_to_ui, is_video_file
 from gui.widgets import ModernButton
 
 logger = logging.getLogger(__name__)
@@ -651,12 +651,9 @@ class MaskCorrectionWindow:
 
     def _load_frame_worker(self, frame, index, request_id):
         result = self.detect_mask(frame, index)
-        try:
-            self.root.after(
-                0, self._apply_frame_mask, request_id, index, result,
-            )
-        except (RuntimeError, tk.TclError):
-            pass
+        dispatch_to_ui(
+            self.root, self._apply_frame_mask, request_id, index, result,
+        )
 
     def _apply_frame_mask(self, request_id, index, result):
         if request_id != self.state["request"] or not self.win.winfo_exists():

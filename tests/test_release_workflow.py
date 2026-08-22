@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from backend import release_verification
@@ -198,6 +199,53 @@ class ReleaseVerificationTests(unittest.TestCase):
             "--exclude-module 'easyocr' --exclude-module torch"
         )
         self.assertEqual(excluded, ("easyocr", "paddleocr", "torch"))
+
+    def test_packaged_ui_release_matrix_runs_inside_frozen_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            executable = root / "VideoSubtitleRemoverPro.exe"
+            executable.write_bytes(b"MZ")
+
+            def fake_run(command, **_kwargs):
+                result_path = Path(
+                    command[command.index("--ui-release-probe") + 1]
+                )
+                result_path.write_text(
+                    json.dumps({
+                        "ok": True,
+                        "frozen": True,
+                        "appVersion": release_verification.APP_VERSION,
+                        "failures": [],
+                    }),
+                    encoding="utf-8",
+                )
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with mock.patch(
+                "backend.release_verification.run_process",
+                side_effect=fake_run,
+            ):
+                payload = (
+                    release_verification._run_packaged_ui_release_probes(
+                        executable, enabled=True
+                    )
+                )
+
+        self.assertTrue(payload["ran"])
+        self.assertTrue(payload["passed"])
+        self.assertEqual(
+            len(payload["cases"]),
+            len(release_verification.PACKAGED_UI_PROBE_CASES),
+        )
+        self.assertTrue(all(case["passed"] for case in payload["cases"]))
+
+    def test_packaged_ui_release_matrix_fails_when_executable_is_missing(self):
+        payload = release_verification._run_packaged_ui_release_probes(
+            "missing.exe", enabled=True
+        )
+
+        self.assertFalse(payload["available"])
+        self.assertFalse(payload["passed"])
 
     def test_artifact_sbom_excludes_unbundled_environment_packages(self):
         with tempfile.TemporaryDirectory() as tmp:

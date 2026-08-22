@@ -8,11 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Protocol
 
-try:
-    import tkinter as tk
-except ImportError:  # pragma: no cover - tkinter is optional in headless imports
-    pass
-
 from gui.theme import Theme
 from gui.config import (
     APP_NAME, APP_VERSION, ProcessingStatus, QueueItem,
@@ -429,9 +424,9 @@ class ProcessingControllerMixin:
                 break
 
             # Update batch progress + window title
-            try:
-                self.root.after(0, self._update_batch_progress, idx, total)
-            except (RuntimeError, tk.TclError):
+            if dispatch_to_ui(
+                self.root, self._update_batch_progress, idx, total
+            ) is None:
                 return  # root destroyed during shutdown
             self._process_item(item)
             if self.pause_event.is_set():
@@ -439,11 +434,8 @@ class ProcessingControllerMixin:
 
         # Final batch state
         save_queue_state(self.queue)
-        try:
-            self.root.after(0, self._update_batch_progress, total, total)
-            self.root.after(0, self._on_processing_complete)
-        except (RuntimeError, tk.TclError):
-            pass  # root destroyed during shutdown
+        dispatch_to_ui(self.root, self._update_batch_progress, total, total)
+        dispatch_to_ui(self.root, self._on_processing_complete)
 
     def _process_soft_subtitle_item(self, item: QueueItem) -> bool:
         action_value = getattr(item, "soft_subtitle_action", "burned_in")
@@ -588,14 +580,10 @@ class ProcessingControllerMixin:
             self._update_item_display(item)
 
         def on_warning(message: str) -> None:
-            try:
-                self.root.after(
-                    0,
-                    lambda msg=message: self._update_status(
-                        msg, "warning", toast=True),
-                )
-            except (RuntimeError, tk.TclError):
-                pass
+            dispatch_to_ui(
+                self.root, self._update_status,
+                message, "warning", True,
+            )
 
         # Live preview parity with the in-process path: the child writes a
         # throttled PNG, this side loads it, downsizes, and marshals the
@@ -626,9 +614,10 @@ class ProcessingControllerMixin:
                 from PIL import Image as _Image
 
                 pil = _Image.fromarray(frame[..., ::-1])
-                self.root.after(
-                    0, self._push_live_preview, pil, cur_idx, total,
-                    Path(item.file_path).name)
+                dispatch_to_ui(
+                    self.root, self._push_live_preview,
+                    pil, cur_idx, total, Path(item.file_path).name,
+                )
             except Exception:
                 logger.warning(
                     "Isolated live preview failed", exc_info=True)
@@ -789,10 +778,10 @@ class ProcessingControllerMixin:
             if wanted_pause
             else N_("Could not resume the paused job.")
         )
-        try:
-            self.root.after(0, self._update_status, message, "error", True)
-        except (RuntimeError, AttributeError, tk.TclError):
-            logger.debug("Could not surface a control failure", exc_info=True)
+        if dispatch_to_ui(
+            self.root, self._update_status, message, "error", True
+        ) is None:
+            logger.debug("Could not surface a control failure")
 
     def _watch_isolated_controls(
             self, supervisor, item: QueueItem,
@@ -954,14 +943,10 @@ class ProcessingControllerMixin:
             self._active_remover = remover
             work_warning = getattr(remover, "last_work_directory_warning", None)
             if work_warning:
-                try:
-                    self.root.after(
-                        0,
-                        lambda msg=work_warning: self._update_status(
-                            msg, "warning", toast=True),
-                    )
-                except (RuntimeError, tk.TclError):
-                    pass
+                dispatch_to_ui(
+                    self.root, self._update_status,
+                    work_warning, "warning", True,
+                )
             if hasattr(remover, "last_quality_report"):
                 remover.last_quality_report = None
 
@@ -1021,8 +1006,10 @@ class ProcessingControllerMixin:
                     rgb = small[..., ::-1]  # BGR -> RGB
                     from PIL import Image as _Image
                     pil = _Image.fromarray(rgb)
-                    self.root.after(0, self._push_live_preview, pil, cur_idx, total,
-                                     Path(item.file_path).name)
+                    dispatch_to_ui(
+                        self.root, self._push_live_preview,
+                        pil, cur_idx, total, Path(item.file_path).name,
+                    )
                 except Exception:
                     logger.warning("Live preview callback failed", exc_info=True)
 
@@ -1166,11 +1153,9 @@ class ProcessingControllerMixin:
             if resume_warning:
                 # _process_item runs on the worker thread; Tk widget/toast
                 # updates must be marshalled to the main loop.
-                self.root.after(
-                    0,
-                    lambda msg=str(resume_warning): self._update_status(
-                        msg, "warning", toast=True
-                    ),
+                dispatch_to_ui(
+                    self.root, self._update_status,
+                    str(resume_warning), "warning", True,
                 )
 
             if success:

@@ -42,6 +42,7 @@ DESCRIPTIONS: dict[str, str] = {
     "gui/processing_controller.py": "Queue worker, pause/stop, reports, notifications.",
     "gui/quality_controller.py": "Quality review, retry, batch-report helpers.",
     "gui/queue_view.py": "Queue table rendering and row state mixin.",
+    "gui/release_probe.py": "Packaged scaling, contrast, RTL, and dialog release probe.",
     "gui/region_controller.py": "Region editor: rects, spans, keyframes, polygons.",
     "gui/settings_controller.py": "Settings widgets, presets, mode selection.",
     "gui/support_controller.py": "Support bundle, model cache, log panel, About.",

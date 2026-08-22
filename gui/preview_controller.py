@@ -24,7 +24,8 @@ from gui.config import (
     save_queue_state, save_settings, status_ui,
 )
 from gui.utils import (
-    _format_soft_subtitle_summary, desktop_bounds, format_quality_report,
+    _format_soft_subtitle_summary, desktop_bounds, dispatch_to_ui,
+    format_quality_report,
     is_image_file, is_video_file,
 )
 from gui.widgets import (
@@ -97,10 +98,7 @@ class PreviewControllerMixin:
         """Marshal preview work without leaking teardown races from workers."""
         if getattr(self, "_shutdown_started", False):
             return None
-        try:
-            return self.root.after(0, callback, *args)
-        except (RuntimeError, tk.TclError):
-            return None
+        return dispatch_to_ui(self.root, callback, *args)
 
     def _render_clean_reference_preview(self, frame, span):
         """Return alignment/composite evidence for one selected timed region."""

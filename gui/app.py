@@ -41,10 +41,12 @@ from gui.utils import (
     collect_supported_files,
     desktop_bounds,
     dispatch_to_ui,
+    install_ui_dispatcher,
     get_app_dir, detect_gpu, is_video_file, is_image_file,
     detect_ai_engines, detect_ffmpeg, get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
     truncate_middle,
+    stop_ui_dispatcher,
     queue_message_text,
     QUEUE_MESSAGE_PROBING, QUEUE_MESSAGE_READY,
     QUEUE_MESSAGE_SOFT_SUBS_FOUND,
@@ -67,6 +69,7 @@ from backend.region_keyframes import (
     region_shapes_at,
     shape_bounds,
 )
+from backend.a11y import set_accessible_metadata
 from gui.direction import (
     install_direction_mirror,
     uninstall_direction_mirror,
@@ -248,6 +251,7 @@ class VideoSubtitleRemoverApp(
         self._brand_photo = getattr(self, "_app_icon_photo", None)
         self._status_tone = "neutral"
         self._shutdown_started = False
+        install_ui_dispatcher(self.root)
         self._taskbar = None  # created after the root is fully realized
         self._batch_times: List[float] = []  # seconds per item for ETA
         self._batch_started_at: Optional[datetime] = None
@@ -464,6 +468,7 @@ class VideoSubtitleRemoverApp(
 
         root = getattr(self, "root", None)
         if root is not None:
+            stop_ui_dispatcher(root)
             try:
                 pending = root.tk.splitlist(root.tk.call("after", "info"))
                 for callback_id in pending:
@@ -850,16 +855,15 @@ class VideoSubtitleRemoverApp(
                 },
             }
 
-        try:
-            self.root.after(
-                0,
-                lambda: self._apply_startup_hardware_probe(
-                    gpus, ai_engines, ffmpeg_ready, backend_status,
-                    ffmpeg_profiles
-                ),
-            )
-        except (tk.TclError, RuntimeError):
-            pass
+        dispatch_to_ui(
+            self.root,
+            self._apply_startup_hardware_probe,
+            gpus,
+            ai_engines,
+            ffmpeg_ready,
+            backend_status,
+            ffmpeg_profiles,
+        )
 
     def _apply_startup_hardware_probe(
         self,
@@ -1306,12 +1310,20 @@ class VideoSubtitleRemoverApp(
             self._command_inner.columnconfigure(
                 column, weight=0, uniform="", minsize=0)
         if compact:
-            for column in range(3):
+            dense = self._text_scale_percent >= 200
+            for column in range(2 if dense else 3):
                 self._command_inner.columnconfigure(
                     column, weight=1, uniform="command_compact")
-            positions = (
-                (0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 2), (0, 2, 1),
-            )
+            if dense:
+                positions = (
+                    (0, 0, 2), (1, 0, 1), (1, 1, 1),
+                    (2, 0, 1), (2, 1, 1),
+                )
+            else:
+                positions = (
+                    (0, 0, 1), (0, 1, 1), (1, 0, 1),
+                    (1, 1, 2), (0, 2, 1),
+                )
         else:
             self._command_inner.columnconfigure(0, minsize=176)
             for column in (1, 2, 3):
@@ -1428,6 +1440,13 @@ class VideoSubtitleRemoverApp(
         if button is not None:
             button.configure(
                 fg=Theme.TEXT_PRIMARY if self.adv_visible else Theme.TEXT_SECONDARY)
+            set_accessible_metadata(
+                button,
+                role="button",
+                label=tr("Advanced"),
+                state="expanded" if self.adv_visible else "collapsed",
+                description=tr("Open detailed cleanup settings."),
+            )
 
 
     def _sync_inspector_encoding(self, *_args):
@@ -2899,10 +2918,7 @@ class VideoSubtitleRemoverApp(
             return
 
         def _on_update(tag, url):
-            try:
-                self.root.after(0, lambda: self._show_update_toast(tag, url))
-            except Exception:
-                pass
+            dispatch_to_ui(self.root, self._show_update_toast, tag, url)
 
         check_for_update(APP_VERSION, _on_update)
 

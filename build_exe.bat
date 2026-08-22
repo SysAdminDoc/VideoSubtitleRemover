@@ -236,6 +236,7 @@ set "VSR_SMOKE_LOCALE=qps-Ploc"
     --collect-data "!COLLECT_DATA!" ^
     --run-reference-corpus ^
     --run-dependency-audit ^
+    --run-ui-release-probes ^
     --quality strict
 set "RELEASE_EXIT=!ERRORLEVEL!"
 set "VSR_SMOKE_LOCALE="

@@ -78,6 +78,7 @@ class ResponsiveLayoutMixin:
             elif not spacer.winfo_manager():
                 spacer.pack(side="right", fill="y")
         if mode == self._layout_mode:
+            self._layout_header(width=width, compact=compact)
             self._layout_queue_actions(
                 compact=compact,
                 dense=self._text_scale_percent >= 150,
@@ -120,12 +121,6 @@ class ResponsiveLayoutMixin:
             self._settings_col.grid(row=1, column=0, sticky="nsew",
                                     pady=(0, Theme.S_MD))
 
-            self._header_left.pack(side="left", fill="y")
-            self._header_right.pack(side="right", anchor="n")
-            if self._text_scale_percent < 150:
-                self._header_chips.pack(
-                    side="right", padx=(Theme.S_SM, Theme.S_LG))
-
             self._footer_left.pack_forget()
             self._footer_left.pack(
                 anchor="w", padx=Theme.S_LG, pady=Theme.S_XS)
@@ -143,12 +138,6 @@ class ResponsiveLayoutMixin:
                                    padx=(0, 0))
             self._settings_col.grid(row=0, column=1, sticky="nsew")
 
-            self._header_left.pack(side="left", fill="y")
-            self._header_right.pack(side="right", anchor="n")
-            if width >= 1260 and self._text_scale_percent < 150:
-                self._header_chips.pack(side="right",
-                                        padx=(Theme.S_XL, Theme.S_LG))
-
             self._footer_left.pack_forget()
             self._footer_left.pack(
                 side="left", padx=Theme.S_LG, pady=Theme.S_XS)
@@ -158,7 +147,49 @@ class ResponsiveLayoutMixin:
         if hasattr(self, "preview_action_hint"):
             self.preview_action_hint.config(wraplength=720 if stacked else 520)
         self.status_hint.config(wraplength=520 if stacked else 360)
+        self._layout_header(width=width, compact=compact)
         self._render_header_chips()
+
+    def _layout_header(self, *, width: int, compact: bool) -> None:
+        """Keep header actions readable without stealing workbench height."""
+        self._header_left.pack_forget()
+        self._header_right.pack_forget()
+        self._header_chips.pack_forget()
+        compact_actions = self._text_scale_percent >= 150
+        compact_title = self._text_scale_percent >= 200
+        if compact_title != getattr(self, "_header_title_compact", None):
+            self._header_title_label.configure(
+                text=(
+                    tr("VSR Pro")
+                    if compact_title
+                    else self._header_title_label._vsr_full_text
+                )
+            )
+            self._header_title_compact = compact_title
+        if compact_actions != getattr(
+            self, "_header_actions_compact", None
+        ):
+            for button, icon in (
+                (self._header_settings_btn, "\u2699"),
+                (self._header_help_btn, "?"),
+            ):
+                if compact_actions:
+                    button._minimum_width = 44
+                    button.icon = icon
+                    button.set_text("")
+                else:
+                    button._minimum_width = button._vsr_header_full_minimum_width
+                    button.icon = None
+                    button.set_text(button._vsr_header_full_text)
+            self._header_actions_compact = compact_actions
+        self._header_right.pack(side="right", anchor="n")
+        self._header_left.pack(side="left", fill="y", expand=True)
+        if compact:
+            self._header_chips.pack(
+                side="right", padx=(Theme.S_SM, Theme.S_LG))
+        elif width >= 1260:
+            self._header_chips.pack(
+                side="right", padx=(Theme.S_XL, Theme.S_LG))
 
     def _layout_workflow_rail(self, *, compact: bool):
         """Switch the workflow rail between horizontal and vertical forms."""

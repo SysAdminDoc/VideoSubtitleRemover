@@ -6,6 +6,7 @@ cascade used by STTN / ProPainter / AUTO.
 from __future__ import annotations
 
 import logging
+import threading
 import warnings
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
@@ -34,6 +35,8 @@ _GRAIN_DITHER_STD = 0.2
 _TRANSLUCENCY_MIN_ALPHA = 0.15
 _TRANSLUCENCY_MAX_ALPHA = 0.92
 _TRANSLUCENCY_RESIDUAL_TOLERANCE = 2.0
+_DIS_VARIATIONAL_REFINEMENT_ITERATIONS = 2
+_DENSE_FLOW_LOCAL = threading.local()
 
 
 class BaseInpainter(ABC):
@@ -928,7 +931,21 @@ def _calc_dense_flow(
         preset = getattr(cv2, "DISOPTICAL_FLOW_PRESET_FAST", None)
         if callable(factory) and preset is not None:
             try:
-                flow = factory(preset).calc(ref_gray, src_gray, None)
+                cached = getattr(_DENSE_FLOW_LOCAL, "dis", None)
+                frame_shape = tuple(ref_gray.shape[:2])
+                if (
+                    cached is None
+                    or cached[0] is not factory
+                    or cached[1] != preset
+                    or cached[2] != frame_shape
+                ):
+                    dis = factory(preset)
+                    dis.setVariationalRefinementIterations(
+                        _DIS_VARIATIONAL_REFINEMENT_ITERATIONS
+                    )
+                    cached = (factory, preset, frame_shape, dis)
+                    _DENSE_FLOW_LOCAL.dis = cached
+                flow = cached[3].calc(ref_gray, src_gray, None)
                 if flow is None or flow.shape[:2] != ref_gray.shape[:2]:
                     raise ValueError("DIS returned an invalid flow shape")
                 return flow

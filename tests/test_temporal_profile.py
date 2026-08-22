@@ -122,6 +122,61 @@ class DenseFlowEstimatorTests(unittest.TestCase):
         self.assertEqual(flow.shape[:2], ref_gray.shape)
         self.assertTrue(any("unavailable" in line for line in captured.output))
 
+    def test_dis_estimator_is_reused_within_a_worker_thread(self):
+        reference, source, _expected, _valid = self._large_motion_fixture()
+        ref_gray = _common.cv2.cvtColor(
+            reference, _common.cv2.COLOR_BGR2GRAY)
+        src_gray = _common.cv2.cvtColor(source, _common.cv2.COLOR_BGR2GRAY)
+        flow = np.zeros((*ref_gray.shape, 2), dtype=np.float32)
+        estimator = mock.Mock()
+        estimator.calc.return_value = flow
+        factory = mock.Mock(return_value=estimator)
+        previous = getattr(_common._DENSE_FLOW_LOCAL, "dis", None)
+        try:
+            _common._DENSE_FLOW_LOCAL.dis = None
+            with mock.patch.object(
+                _common.cv2, "DISOpticalFlow_create", factory
+            ):
+                first = _common._calc_dense_flow(ref_gray, src_gray, "dis")
+                second = _common._calc_dense_flow(ref_gray, src_gray, "dis")
+        finally:
+            _common._DENSE_FLOW_LOCAL.dis = previous
+        factory.assert_called_once_with(
+            _common.cv2.DISOPTICAL_FLOW_PRESET_FAST)
+        estimator.setVariationalRefinementIterations.assert_called_once_with(
+            _common._DIS_VARIATIONAL_REFINEMENT_ITERATIONS)
+        self.assertEqual(estimator.calc.call_count, 2)
+        self.assertIs(first, flow)
+        self.assertIs(second, flow)
+
+    def test_dis_estimator_cache_is_partitioned_by_frame_shape(self):
+        first = mock.Mock()
+        first.calc.return_value = np.zeros((16, 24, 2), dtype=np.float32)
+        second = mock.Mock()
+        second.calc.return_value = np.zeros((8, 12, 2), dtype=np.float32)
+        factory = mock.Mock(side_effect=(first, second))
+        previous = getattr(_common._DENSE_FLOW_LOCAL, "dis", None)
+        try:
+            _common._DENSE_FLOW_LOCAL.dis = None
+            with mock.patch.object(
+                _common.cv2, "DISOpticalFlow_create", factory
+            ):
+                _common._calc_dense_flow(
+                    np.zeros((16, 24), dtype=np.uint8),
+                    np.zeros((16, 24), dtype=np.uint8),
+                )
+                _common._calc_dense_flow(
+                    np.zeros((8, 12), dtype=np.uint8),
+                    np.zeros((8, 12), dtype=np.uint8),
+                )
+        finally:
+            _common._DENSE_FLOW_LOCAL.dis = previous
+        self.assertEqual(factory.call_count, 2)
+        for estimator in (first, second):
+            estimator.setVariationalRefinementIterations.assert_called_once_with(
+                _common._DIS_VARIATIONAL_REFINEMENT_ITERATIONS)
+            estimator.calc.assert_called_once()
+
 
 class MetricTests(unittest.TestCase):
     def test_a_perfect_fill_scores_near_zero_on_every_axis(self):

@@ -76,6 +76,15 @@ EXCLUDE_MODULE_RE = re.compile(r"--exclude-module(?:=|\s+)([^\s]+)")
 STRICT_BLOCKING_SEVERITIES = {"high", "critical"}
 REQUIRED_RUNTIME_HOOK = "assets/runtime_hook_mp.py"
 NSIS_MINIMUM_VERSION = "3.12"
+ACCESSIBILITY_LIVE_EVIDENCE_PATH = (
+    ROOT / "docs" / "accessibility-live-evidence.json"
+)
+PACKAGED_UI_PROBE_CASES = (
+    (100, "default", "en"),
+    (100, "high-contrast", "pseudo"),
+    (200, "default", "rtl"),
+    (200, "high-contrast", "pseudo"),
+)
 BUILD_ONLY_DISTRIBUTIONS = {
     "pip",
     "pip-audit",
@@ -1145,6 +1154,128 @@ def _run_installer_smoke(
     return payload
 
 
+def _run_packaged_ui_release_probes(
+    installed_executable: str | Path | None,
+    *,
+    enabled: bool,
+    timeout: float = 90.0,
+) -> dict:
+    """Run the scaling, contrast, and RTL matrix inside the installed EXE."""
+    path = Path(installed_executable) if installed_executable else Path()
+    payload = {
+        "schema": "vsr.packaged_ui_release_probe.v1",
+        "path": str(path) if installed_executable else "",
+        "available": bool(installed_executable) and path.is_file(),
+        "ran": False,
+        "passed": None,
+        "cases": [],
+        "error": "",
+    }
+    if not enabled:
+        payload["error"] = "packaged UI release probes skipped"
+        return payload
+    if not payload["available"]:
+        payload["passed"] = False
+        payload["error"] = "installer smoke executable not found"
+        return payload
+    try:
+        with tempfile.TemporaryDirectory(prefix="vsr-packaged-ui-") as tmp:
+            root = Path(tmp)
+            for scale, theme, locale in PACKAGED_UI_PROBE_CASES:
+                result_path = root / f"{scale}-{theme}-{locale}.json"
+                command = [
+                    str(path),
+                    "--ui-release-probe", str(result_path),
+                    "--scale", str(scale),
+                    "--theme", theme,
+                    "--locale", locale,
+                ]
+                case = {
+                    "scale": scale,
+                    "theme": theme,
+                    "locale": locale,
+                    "ran": False,
+                    "passed": False,
+                    "returncode": None,
+                    "result": {},
+                    "error": "",
+                }
+                env = os.environ.copy()
+                env["APPDATA"] = str(root / "appdata")
+                env["VSR_UI_BACKGROUND"] = "1"
+                try:
+                    proc = run_process(
+                        command,
+                        cwd=path.parent,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout,
+                        check=False,
+                    )
+                    case["ran"] = True
+                    case["returncode"] = proc.returncode
+                    if result_path.is_file():
+                        case["result"] = json.loads(
+                            result_path.read_text(encoding="utf-8")
+                        )
+                    result = case["result"]
+                    case["passed"] = bool(
+                        proc.returncode == 0
+                        and isinstance(result, Mapping)
+                        and result.get("ok")
+                        and result.get("frozen") is True
+                        and result.get("appVersion") == APP_VERSION
+                    )
+                    if not case["passed"]:
+                        failures = (
+                            result.get("failures", [])
+                            if isinstance(result, Mapping) else []
+                        )
+                        case["error"] = "; ".join(
+                            str(item) for item in failures
+                        ) or "packaged probe did not return passing evidence"
+                except Exception as exc:
+                    case["error"] = str(exc)
+                payload["cases"].append(case)
+        payload["ran"] = any(case["ran"] for case in payload["cases"])
+        payload["passed"] = bool(payload["cases"]) and all(
+            case["passed"] for case in payload["cases"]
+        )
+    except Exception as exc:
+        payload["passed"] = False
+        payload["error"] = str(exc)
+    return payload
+
+
+def _load_accessibility_live_evidence() -> dict:
+    """Load the checked-in Narrator/NVDA observation without inventing it."""
+    payload = {
+        "schema": "vsr.accessibility_live_evidence.v1",
+        "available": False,
+        "currentVersion": False,
+        "path": str(ACCESSIBILITY_LIVE_EVIDENCE_PATH),
+        "evidence": {},
+        "error": "",
+    }
+    if not ACCESSIBILITY_LIVE_EVIDENCE_PATH.is_file():
+        payload["error"] = "live assistive-technology evidence not recorded"
+        return payload
+    try:
+        evidence = json.loads(
+            ACCESSIBILITY_LIVE_EVIDENCE_PATH.read_text(encoding="utf-8")
+        )
+        payload["available"] = isinstance(evidence, dict)
+        payload["evidence"] = evidence if isinstance(evidence, dict) else {}
+        payload["currentVersion"] = bool(
+            isinstance(evidence, dict)
+            and evidence.get("appVersion") == APP_VERSION
+        )
+    except (OSError, ValueError) as exc:
+        payload["error"] = str(exc)
+    return payload
+
+
 def _component_property(component: Mapping[str, object], name: str) -> str:
     for item in component.get("properties", []):
         if isinstance(item, Mapping) and item.get("name") == name:
@@ -1335,6 +1466,7 @@ def build_release_evidence(
     run_smoke: bool = True,
     run_reference_corpus: bool = False,
     run_dependency_audit: bool = False,
+    run_ui_release_probes: bool = False,
     env: Optional[Mapping[str, str]] = None,
 ) -> tuple[dict, dict, dict, dict]:
     dist = Path(dist_dir)
@@ -1491,6 +1623,11 @@ def build_release_evidence(
             "dependencyProfile": dependency_profile,
             "adapterConformance": collect_adapter_conformance_matrix(env=env),
             "dependencyAudit": dependency_audit,
+            "guiAccessibility": _run_packaged_ui_release_probes(
+                installer_smoke_executable,
+                enabled=run_ui_release_probes,
+            ),
+            "assistiveTechnology": _load_accessibility_live_evidence(),
         },
         "smokeLaunch": _run_smoke(dist) if run_smoke else {
             "ran": False,
@@ -1545,6 +1682,13 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     smoke = evidence.get("smokeLaunch", {})
     if isinstance(smoke, Mapping) and smoke.get("ran") and not smoke.get("passed"):
         yield "Smoke launch failed"
+    gui_accessibility = evidence.get("releaseTools", {}).get(
+        "guiAccessibility", {}
+    )
+    if (isinstance(gui_accessibility, Mapping)
+            and gui_accessibility.get("ran")
+            and not gui_accessibility.get("passed")):
+        yield "Packaged GUI accessibility matrix failed"
     temporal = evidence.get("releaseTools", {}).get("temporalProfile", {})
     if (isinstance(temporal, Mapping)
             and temporal.get("ran") and not temporal.get("passed")):
@@ -1604,6 +1748,7 @@ def write_release_evidence(
     run_smoke: bool = True,
     run_reference_corpus: bool = False,
     run_dependency_audit: bool = False,
+    run_ui_release_probes: bool = False,
     strict: bool = False,
     env: Optional[Mapping[str, str]] = None,
 ) -> dict:
@@ -1621,6 +1766,7 @@ def write_release_evidence(
         run_smoke=run_smoke,
         run_reference_corpus=run_reference_corpus,
         run_dependency_audit=run_dependency_audit,
+        run_ui_release_probes=run_ui_release_probes,
         env=env,
     )
     outputs = {
@@ -1670,6 +1816,15 @@ def write_release_evidence(
                 or not installer_smoke.get("ran")
                 or not installer_smoke.get("passed")):
             strict_errors.append("Installer payload smoke did not pass")
+        if run_ui_release_probes:
+            gui_accessibility = evidence.get("releaseTools", {}).get(
+                "guiAccessibility", {}
+            )
+            if (not isinstance(gui_accessibility, Mapping)
+                    or not gui_accessibility.get("ran")
+                    or not gui_accessibility.get("passed")):
+                strict_errors.append(
+                    "Packaged GUI accessibility matrix did not pass")
     if strict and strict_errors:
         raise SystemExit(
             "Strict release verification failed:\n- "
@@ -1699,6 +1854,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--skip-smoke", action="store_true")
     parser.add_argument("--run-reference-corpus", action="store_true")
     parser.add_argument("--run-dependency-audit", action="store_true")
+    parser.add_argument("--run-ui-release-probes", action="store_true")
     args = parser.parse_args(argv)
     write_release_evidence(
         dist_dir=args.dist_dir,
@@ -1713,6 +1869,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         run_smoke=not args.skip_smoke,
         run_reference_corpus=args.run_reference_corpus,
         run_dependency_audit=args.run_dependency_audit,
+        run_ui_release_probes=args.run_ui_release_probes,
         strict=args.quality == "strict",
     )
     return 0

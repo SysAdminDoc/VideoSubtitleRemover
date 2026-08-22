@@ -262,6 +262,52 @@ def _run_frozen_import_smoke(result_path: str) -> int:
     return 0 if payload["passed"] else 1
 
 
+def _run_ui_release_probe(
+    result_path: str,
+    *,
+    scale: int,
+    theme: str,
+    locale: str,
+) -> int:
+    """Run one real Tk layout case from the frozen executable."""
+    from gui.release_probe import run_probe
+
+    try:
+        payload = run_probe(
+            int(scale), theme == "high-contrast", str(locale)
+        )
+    except Exception:
+        payload = {
+            "ok": False,
+            "scale": int(scale),
+            "theme": str(theme),
+            "locale": str(locale),
+            "failures": [traceback.format_exc()],
+        }
+    payload["appVersion"] = APP_VERSION
+    payload["frozen"] = bool(getattr(sys, "frozen", False))
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(result_path)), exist_ok=True)
+        with open(result_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    except Exception:
+        logger.critical(
+            "UI release probe could not write %s:\n%s",
+            result_path,
+            traceback.format_exc(),
+        )
+        return 1
+    return 0 if payload.get("ok") else 1
+
+
+def _required_option(args: list[str], option: str) -> str:
+    try:
+        return args[args.index(option) + 1]
+    except (ValueError, IndexError) as exc:
+        raise ValueError(f"{option} requires a value") from exc
+
+
 def main():
     """Main entry point."""
     # RM-155: a frozen build has no importable `-m backend.job_worker`
@@ -298,6 +344,28 @@ def main():
             windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         pass
+
+    if "--ui-release-probe" in sys.argv[1:]:
+        try:
+            result_path = _required_option(sys.argv, "--ui-release-probe")
+            scale = int(_required_option(sys.argv, "--scale"))
+            theme = _required_option(sys.argv, "--theme")
+            locale = _required_option(sys.argv, "--locale")
+            if scale not in {100, 125, 150, 175, 200}:
+                raise ValueError("--scale must be 100, 125, 150, 175, or 200")
+            if theme not in {"default", "high-contrast"}:
+                raise ValueError("--theme must be default or high-contrast")
+            if locale not in {"en", "pseudo", "rtl"}:
+                raise ValueError("--locale must be en, pseudo, or rtl")
+        except ValueError as exc:
+            logger.error("Invalid UI release probe arguments: %s", exc)
+            sys.exit(2)
+        sys.exit(_run_ui_release_probe(
+            result_path,
+            scale=scale,
+            theme=theme,
+            locale=locale,
+        ))
 
     app = VideoSubtitleRemoverApp()
     app.run()

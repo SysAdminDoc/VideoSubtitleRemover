@@ -537,11 +537,16 @@ class ModernButton(tk.Canvas):
     def _draw(self):
         self.delete("all")
 
+        radius = max(
+            1,
+            min(self.corner_radius, self.width // 2, self.height // 2),
+        )
+
         # Focus ring -- crisp outer glow
         if self.focused and self.enabled:
             self._create_rounded_rect(
                 0, 0, self.width, self.height,
-                self.corner_radius + 2,
+                min(radius + 2, self.width // 2, self.height // 2),
                 fill=Theme.BG_DARK, outline=Theme.BORDER_FOCUS, width=2,
             )
             pad = 2
@@ -559,14 +564,14 @@ class ModernButton(tk.Canvas):
 
         self._create_rounded_rect(
             pad, pad, self.width - pad, self.height - pad,
-            self.corner_radius,
+            radius,
             fill=fill, outline=border, width=1,
         )
 
         # Press offset
         text_y = self.height // 2 + (1 if self.pressed else 0)
 
-        self.create_text(
+        text_item = self.create_text(
             self.width // 2,
             text_y,
             text=self._display_text,
@@ -575,6 +580,18 @@ class ModernButton(tk.Canvas):
             width=self._text_width_px,
             justify="center",
         )
+        text_bbox = self.bbox(text_item)
+        if text_bbox:
+            required_height = max(
+                self._minimum_height,
+                text_bbox[3] - text_bbox[1] + scaled_control_size(8),
+            )
+            try:
+                requested_height = int(float(self.cget("height")))
+            except (tk.TclError, TypeError, ValueError):
+                requested_height = required_height
+            if requested_height != required_height:
+                self.configure(height=required_height)
 
     def _on_configure(self, event):
         """Keep the drawing and hit target aligned with geometry-manager size."""
@@ -690,7 +707,12 @@ class ModernButton(tk.Canvas):
         if not enabled:
             self.focused = False
         self.current_bg = self.bg_color if enabled else Theme.BG_TERTIARY
-        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        focusable = enabled and getattr(
+            self, "_vsr_a11y_control_view", True)
+        self.config(
+            cursor="hand2" if enabled else "",
+            takefocus=1 if focusable else 0,
+        )
         self._sync_a11y()
         self._draw()
 
@@ -1046,7 +1068,12 @@ class ModernToggle(tk.Canvas):
         self.enabled = enabled
         if not enabled:
             self.focused = False
-        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        focusable = enabled and getattr(
+            self, "_vsr_a11y_control_view", True)
+        self.config(
+            cursor="hand2" if enabled else "",
+            takefocus=1 if focusable else 0,
+        )
         self._sync_a11y()
         self._draw()
 
@@ -1275,7 +1302,11 @@ class ModernSlider(tk.Frame):
             self._focused = False
         self.canvas.config(
             cursor="hand2" if enabled else "",
-            takefocus=1 if enabled else 0,
+            takefocus=(
+                1 if enabled and getattr(
+                    self.canvas, "_vsr_a11y_control_view", True
+                ) else 0
+            ),
         )
         self._sync_a11y()
         self._draw()
@@ -1868,7 +1899,12 @@ class _Segment(tk.Canvas):
         if not enabled:
             self.focused = False
             self.hovered = False
-        self.config(cursor="hand2" if enabled else "", takefocus=1 if enabled else 0)
+        focusable = enabled and getattr(
+            self, "_vsr_a11y_control_view", True)
+        self.config(
+            cursor="hand2" if enabled else "",
+            takefocus=1 if focusable else 0,
+        )
         self._sync_a11y()
         self._draw()
 

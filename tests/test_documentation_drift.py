@@ -197,7 +197,7 @@ class AccessibilitySupportMatrixTests(unittest.TestCase):
         ):
             with self.subTest(row=tested):
                 self.assertIn(tested, matrix)
-        self.assertIn("Not supported", matrix)
+        self.assertIn("Live client proof blocked", matrix)
         self.assertIn("UI Automation", matrix)
 
     def test_matrix_points_at_real_proof_files(self):
@@ -205,7 +205,7 @@ class AccessibilitySupportMatrixTests(unittest.TestCase):
             "## Accessibility support matrix", 1)[1]
         for reference in (
             "tools/ui_scaling_probe.py",
-            "tests/archive/test_text_scaling.py",
+            "tests/test_text_scaling.py",
             "gui/dialog_layout.py",
             "scripts/i18n_catalogs.py",
             "backend/a11y.py",

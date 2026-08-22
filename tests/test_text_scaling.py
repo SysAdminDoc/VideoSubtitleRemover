@@ -1,3 +1,5 @@
+"""Active GUI scaling, contrast, and direction release probes."""
+
 import json
 from pathlib import Path
 import sys

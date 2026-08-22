@@ -11,6 +11,7 @@ except ImportError:  # pragma: no cover - tkinter is optional for headless impor
     pass
 
 from backend.i18n import N_, tr
+from backend.a11y import set_accessible_subtree_visible
 from gui.config import (
     BUILTIN_PRESETS,
     InpaintMode,
@@ -106,15 +107,25 @@ class AdvancedSettingsControllerMixin:
                 self, "_inspector_detail_panels", ()
             ):
                 panel.pack(**pack_options)
+                set_accessible_subtree_visible(panel, True)
             self.adv_panel.pack(fill="x")
+            set_accessible_subtree_visible(self.adv_panel, True)
         else:
             self.adv_toggle.icon = "+"
             self.adv_toggle.set_text(tr("Advanced settings"))
             for panel, _pack_options in getattr(
                 self, "_inspector_detail_panels", ()
             ):
+                set_accessible_subtree_visible(panel, False)
                 panel.pack_forget()
+            set_accessible_subtree_visible(self.adv_panel, False)
             self.adv_panel.pack_forget()
+            disclosure = getattr(self, "_inspector_advanced_button", None)
+            if disclosure is not None:
+                try:
+                    disclosure.focus_set()
+                except (AttributeError, tk.TclError):
+                    pass
         if hasattr(self, "_sync_inspector_disclosure_state"):
             self._sync_inspector_disclosure_state()
 

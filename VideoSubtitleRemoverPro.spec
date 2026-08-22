@@ -29,7 +29,7 @@ def _package_payload(entry, package):
     )
 
 
-datas = [('backend', 'backend'), ('assets', 'assets'), ('locale', 'locale'), ('icon.png', '.'), ('icon.ico', '.')]
+datas = [('backend', 'backend'), ('locale', 'locale'), ('icon.png', '.'), ('icon.ico', '.')]
 hiddenimports = [
     'PIL._tkinter_finder', 'cv2', 'numpy', 'backend.opencv_ocr',
     'tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox',

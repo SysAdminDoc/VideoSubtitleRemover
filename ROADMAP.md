@@ -17,29 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P1 — RM-299 Restore GUI workflow and accessibility release proof
-  - Why: Active tests prove GUI imports but not the queue, manual-region, Test
-    Cleanup, scaling, high-contrast, RTL, or collapsed-control workflows. The
-    relevant interaction tests are archived and ignored. One local UIA inspection
-    found Advanced controls discoverable while collapsed and needs live validation.
-  - Evidence: tests/test_gui_import_smoke.py, tests/archive/conftest.py,
-    tests/archive/test_gui_smoke.py, tools/ui_scaling_probe.py,
-    gui/settings_controller.py:99-117, backend/a11y.py,
-    https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-testing,
-    and
-    https://learn.microsoft.com/en-us/accessibility-tools-docs/items/wpf/control_iscontrolelement.
-  - Touches: selected tests under tests/archive/, new active GUI tests,
-    gui/settings_controller.py, backend/a11y.py, tools/ui_scaling_probe.py,
-    and build_exe.bat.
-  - Acceptance: Promote a minimal stable interaction suite into active collection;
-    prove queue selection, region propagation, Test Cleanup dispatch, cancellation,
-    and clean shutdown; prove collapsed Advanced descendants are absent from the
-    control view and tab order; run 100 and 200 percent scaling, high-contrast, and
-    RTL probes in the local release build; record packaged-build Narrator and NVDA
-    results as live evidence; keep every Tk call on the UI thread.
-  - Complexity: Medium. Regression risk is medium because native accessibility
-    trees and display scaling require packaged Windows validation.
-
 - [ ] P1 — RM-300 Make Test Cleanup temporally representative
   - Why: Test Cleanup always reads frame zero and runs one frame, even when the user
     is viewing another time or has selected a temporal mode. The low-resolution

@@ -44,7 +44,12 @@ from gui.dialog_layout import (
     scrollable_dialog_body,
 )
 from gui.theme import Theme, f
-from gui.utils import SUPPORTED_EXTENSIONS, filepicker_pattern, is_video_file
+from gui.utils import (
+    SUPPORTED_EXTENSIONS,
+    dispatch_to_ui,
+    filepicker_pattern,
+    is_video_file,
+)
 from gui.widgets import (
     ModernButton,
     ModernToggle,
@@ -947,17 +952,14 @@ class RegionSelectorWindow:
         except Exception as exc:
             logger.debug("Live region OCR preview failed", exc_info=True)
             error = str(exc)
-        try:
-            self.root.after(
-                0,
-                self._apply_live_ocr_probe,
-                rect,
-                generation,
-                results,
-                error,
-            )
-        except (RuntimeError, tk.TclError):
-            pass
+        dispatch_to_ui(
+            self.root,
+            self._apply_live_ocr_probe,
+            rect,
+            generation,
+            results,
+            error,
+        )
 
     def _apply_live_ocr_probe(self, rect, generation, results, error=None):
         self.ocr_probe_inflight = False

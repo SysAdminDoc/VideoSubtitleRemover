@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 import math
 import os
+import queue
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
@@ -26,6 +28,8 @@ __all__ = (
     "collect_supported_files",
     "desktop_bounds",
     "dispatch_to_ui",
+    "install_ui_dispatcher",
+    "stop_ui_dispatcher",
     "_CURATED_LANG_NAMES",
     "_build_language_list",
     "_engine_supported_languages",
@@ -124,6 +128,61 @@ def desktop_bounds(primary_w: int, primary_h: int) -> tuple:
     return (0, 0, int(primary_w), int(primary_h))
 
 
+UI_DISPATCH_INTERVAL_MS = 16
+UI_DISPATCH_BATCH_SIZE = 128
+
+
+def install_ui_dispatcher(root) -> None:
+    """Install a UI-thread poller for worker results on one Tk root."""
+    if getattr(root, "_vsr_ui_dispatch_queue", None) is not None:
+        return
+    root._vsr_ui_thread_id = threading.get_ident()
+    root._vsr_ui_dispatch_queue = queue.SimpleQueue()
+    root._vsr_ui_dispatch_running = True
+
+    def _drain():
+        if not getattr(root, "_vsr_ui_dispatch_running", False):
+            return
+        pending = root._vsr_ui_dispatch_queue
+        for _index in range(UI_DISPATCH_BATCH_SIZE):
+            try:
+                callback, args = pending.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback(*args)
+            except Exception as exc:
+                reporter = getattr(root, "report_callback_exception", None)
+                if callable(reporter):
+                    reporter(type(exc), exc, exc.__traceback__)
+                else:
+                    logger.exception("Unhandled UI callback exception")
+        try:
+            root._vsr_ui_dispatch_after_id = root.after(
+                UI_DISPATCH_INTERVAL_MS, _drain)
+        except (RuntimeError, tk.TclError if tk is not None else RuntimeError):
+            root._vsr_ui_dispatch_running = False
+
+    root._vsr_ui_dispatch_drain = _drain
+    root._vsr_ui_dispatch_after_id = root.after(0, _drain)
+
+
+def stop_ui_dispatcher(root) -> None:
+    """Stop accepting worker results before the Tk root is destroyed."""
+    try:
+        root._vsr_ui_dispatch_running = False
+    except Exception:
+        return
+    pending = getattr(root, "_vsr_ui_dispatch_queue", None)
+    if pending is None:
+        return
+    while True:
+        try:
+            pending.get_nowait()
+        except queue.Empty:
+            break
+
+
 def dispatch_to_ui(root, callback, *args):
     """Marshal a worker-thread call onto the Tk main loop.
 
@@ -136,6 +195,13 @@ def dispatch_to_ui(root, callback, *args):
     restored a "needs attention" item for a file that was only interrupted.
     A teardown race is not a processing failure.
     """
+    pending = getattr(root, "_vsr_ui_dispatch_queue", None)
+    if pending is not None:
+        if not getattr(root, "_vsr_ui_dispatch_running", False):
+            return None
+        pending.put((callback, args))
+        return "queued"
+
     errors = (RuntimeError,) if tk is None else (RuntimeError, tk.TclError)
     try:
         return root.after(0, callback, *args)

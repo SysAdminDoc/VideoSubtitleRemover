@@ -6,6 +6,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- The active GUI release suite now exercises queue selection, region propagation,
+  Test Cleanup dispatch, cancellation, shutdown, scaling, high contrast, RTL,
+  and collapsed Advanced control-view and tab-order behavior. Disclosure rows
+  now expose explicit button names and expanded or collapsed state through the
+  accessibility bridge. The packaged release matrix runs without foreground
+  screen automation; live Narrator and NVDA proof remains an isolated-session
+  follow-up.
 - Strict release evidence now blocks Torch 2.9.1 and older for
   CVE-2026-24747. The existing CVE-2025-32434 check remains independent, and
   boundary coverage confirms that Torch 2.10.0 passes the advisory gate while

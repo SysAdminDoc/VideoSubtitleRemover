@@ -25,7 +25,10 @@ from gui.widgets import (
     Tooltip, ModernButton, ModernProgressBar, ModernToggle,
     ModernSlider, SegmentedPicker, DragDropFrame,
 )
-from backend.a11y import set_accessible_metadata
+from backend.a11y import (
+    set_accessible_metadata,
+    set_accessible_subtree_visible,
+)
 from backend.i18n import N_, ntr, available_catalogs, tr
 
 logger = logging.getLogger(__name__)
@@ -114,12 +117,17 @@ class LayoutBuildMixin:
 
     def _build_command_strip(self, parent):
         """Build the high-priority command row from the v3 visual target."""
+        dense_copy = self._text_scale_percent >= 200
         strip = self._create_surface(parent)
         strip.pack(fill="x", pady=(1, 0))
         self._command_strip = strip
 
         inner = tk.Frame(strip, bg=Theme.BG_SECONDARY)
-        inner.pack(fill="x", padx=Theme.S_LG, pady=Theme.S_SM)
+        inner.pack(
+            fill="x",
+            padx=Theme.S_LG,
+            pady=Theme.S_XS if dense_copy else Theme.S_SM,
+        )
         self._command_inner = inner
 
         import_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
@@ -130,7 +138,9 @@ class LayoutBuildMixin:
 
         mode_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         tk.Label(
-            mode_block, text=tr("Cleanup profile"), font=f(Theme.F_BODY_SM),
+            mode_block,
+            text=tr("Profile") if dense_copy else tr("Cleanup profile"),
+            font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_profile_var = tk.StringVar()
@@ -141,6 +151,12 @@ class LayoutBuildMixin:
             style="Dark.TCombobox", font=f(Theme.F_BODY_SM), width=18,
         )
         self._command_mode_combo.pack(fill="x")
+        set_accessible_metadata(
+            self._command_mode_combo,
+            role="combo box",
+            label=tr("Cleanup profile"),
+        )
+        Tooltip(self._command_mode_combo, tr("Cleanup profile"))
         self._command_mode_combo.bind(
             "<<ComboboxSelected>>", self._on_command_profile_changed)
         self.mode_var.trace_add("write", self._sync_command_profile)
@@ -148,7 +164,9 @@ class LayoutBuildMixin:
 
         region_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         tk.Label(
-            region_block, text=tr("Subtitle region"), font=f(Theme.F_BODY_SM),
+            region_block,
+            text=tr("Region") if dense_copy else tr("Subtitle region"),
+            font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_region_var = tk.StringVar()
@@ -159,6 +177,12 @@ class LayoutBuildMixin:
             font=f(Theme.F_BODY_SM), width=18,
         )
         self._command_region_combo.pack(fill="x")
+        set_accessible_metadata(
+            self._command_region_combo,
+            role="combo box",
+            label=tr("Subtitle region"),
+        )
+        Tooltip(self._command_region_combo, tr("Subtitle region"))
         self._command_region_combo.bind(
             "<<ComboboxSelected>>", self._on_command_region_changed)
         self.skip_detection_var.trace_add("write", self._sync_command_region)
@@ -170,17 +194,26 @@ class LayoutBuildMixin:
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
         ).pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_output_btn = ModernButton(
-            output_block, text=tr("Same as source"), width=176,
+            output_block,
+            text="" if dense_copy else tr("Same as source"),
+            icon="..." if dense_copy else None,
+            accessible_label=tr("Same as source"),
+            width=176,
             command=self._choose_output_dir, style="secondary", size="md",
         )
         self._command_output_btn.pack(fill="x")
+        Tooltip(self._command_output_btn, tr("Choose output folder"))
 
         start_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
         self.command_start_btn = ModernButton(
-            start_block, text=tr("Start cleanup"), width=176,
+            start_block,
+            text=tr("Start") if dense_copy else tr("Start cleanup"),
+            accessible_label=tr("Start cleanup"),
+            width=176,
             command=self._start_processing, style="primary", size="lg",
         )
         self.command_start_btn.pack(fill="x", pady=(Theme.S_LG, 0))
+        Tooltip(self.command_start_btn, tr("Start cleanup"))
 
         self._command_blocks = (
             import_block, mode_block, region_block, output_block, start_block,
@@ -211,14 +244,21 @@ class LayoutBuildMixin:
             )
             self._header_icon_label.pack(side="left", padx=(0, Theme.S_SM))
 
+        full_title = tr("Video Subtitle Remover Pro")
         self._header_title_label = tk.Label(
             left,
-            text=tr("Video Subtitle Remover Pro"),
+            text=full_title,
             font=f(Theme.F_DISPLAY, "bold"),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_PRIMARY,
         )
         self._header_title_label.pack(side="left", anchor="w")
+        self._header_title_label._vsr_full_text = full_title
+        set_accessible_metadata(
+            self._header_title_label,
+            role="heading",
+            label=full_title,
+        )
         Tooltip(self._header_title_label, f"Video Subtitle Remover v{APP_VERSION}")
         self._header_version_label = tk.Label(
             left,
@@ -244,15 +284,21 @@ class LayoutBuildMixin:
         settings_btn = ModernButton(
             right, text=tr("Settings"), width=92,
             command=self._focus_settings_panel, style="toolbar",
-            size="sm",
+            size="sm", accessible_label=tr("Settings"),
         )
         settings_btn.pack(side="left")
+        settings_btn._vsr_header_full_text = settings_btn.text
+        settings_btn._vsr_header_full_minimum_width = settings_btn._minimum_width
+        Tooltip(settings_btn, tr("Settings"))
         self._header_settings_btn = settings_btn
 
         help_btn = ModernButton(right, text=tr("Help"), width=80,
                                 command=self._show_about, style="toolbar",
-                                size="sm")
+                                size="sm", accessible_label=tr("Help"))
         help_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        help_btn._vsr_header_full_text = help_btn.text
+        help_btn._vsr_header_full_minimum_width = help_btn._minimum_width
+        Tooltip(help_btn, tr("Help"))
         self._header_help_btn = help_btn
 
         chips = tk.Frame(header_top, bg=Theme.BG_DARK)
@@ -1610,6 +1656,7 @@ class LayoutBuildMixin:
             ("advanced", tr("Advanced")),
         )
         self._inspector_summary_rows = []
+        self._inspector_summary_buttons = {}
         self._inspector_summary_chevrons = {}
         for section_key, title in rows:
             self._divider(settings)
@@ -1634,6 +1681,12 @@ class LayoutBuildMixin:
                 pady=Theme.S_MD,
             )
             button.pack(side="left", fill="x", expand=True)
+            set_accessible_metadata(
+                button,
+                role="button",
+                label=title,
+                description=tr("Open detailed cleanup settings."),
+            )
             chevron = tk.Label(
                 row,
                 text="v",
@@ -1651,6 +1704,7 @@ class LayoutBuildMixin:
                 lambda _event, name=section_key: self._open_inspector_details(name),
             )
             self._inspector_summary_rows.append(button)
+            self._inspector_summary_buttons[section_key] = button
             self._inspector_summary_chevrons[section_key] = chevron
             if section_key == "advanced":
                 self._inspector_advanced_button = button
@@ -1723,6 +1777,10 @@ class LayoutBuildMixin:
         self._build_range_settings_group()
         self._build_performance_settings_groups()
         self._build_accessibility_storage_settings(quality_frame)
+
+        for panel, _pack_options in self._inspector_detail_panels:
+            set_accessible_subtree_visible(panel, False)
+        set_accessible_subtree_visible(self.adv_panel, False)
 
         self.output_codec_var.trace_add("write", self._sync_inspector_encoding)
 

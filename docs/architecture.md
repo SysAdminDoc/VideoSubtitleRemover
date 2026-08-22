@@ -43,6 +43,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- quality_controller.py         # Quality review, retry, batch-report helpers.
 |   |-- queue_view.py                 # Queue table rendering and row state mixin.
 |   |-- region_controller.py          # Region editor: rects, spans, keyframes, polygons.
+|   |-- release_probe.py              # Packaged scaling, contrast, RTL, and dialog release probe.
 |   |-- settings_controller.py        # Settings widgets, presets, mode selection.
 |   |-- support_controller.py         # Support bundle, model cache, log panel, About.
 |   |-- theme.py                      # Design tokens, colors, spacing, typography, text scale.
@@ -416,14 +417,14 @@ honest: an untested claim is worse than a documented gap.
 
 | Surface | State | Proof |
 |---------|-------|-------|
-| Keyboard reachability of major actions | Supported and tested | `tools/ui_scaling_probe.py` asserts every major action is focusable, has non-zero geometry, and is not clipped, across the scale/theme/locale matrix (pytest companion archived at `tests/archive/test_text_scaling.py`; the probe itself is the live proof) |
+| Keyboard reachability of major actions | Supported and tested | `tools/ui_scaling_probe.py` asserts every major action is focusable, has non-zero geometry, and is not clipped, across the scale/theme/locale matrix; `tests/test_text_scaling.py` keeps the probe in active collection |
 | Text scaling 100-200% | Supported and tested | Same probe at 100/125/150/175/200%; fonts, control heights, and wrap lengths must all scale |
 | Dialog reflow and scrolling at high scale | Supported and tested | `gui/dialog_layout.py`; the probe opens the dialogs at 980x720 and 2752x1152 work areas and requires an internal scroll path |
 | High-contrast theme | Supported and tested | Probe runs the whole matrix under the high-contrast palette |
 | Pseudo-locale (qps-Ploc) string expansion | Supported and tested | `scripts/i18n_catalogs.py`; probe renders pseudo-localised strings |
 | RTL mirroring | Supported and tested (pseudo-RTL) | Probe checks theme direction, label justification, and mirrored toggle geometry |
-| Accessible names/roles on standard widgets | Supported (best effort) | `backend/a11y.py` sets accessible metadata; not verified against a live client |
-| **Screen readers / UI Automation on custom controls** | **Not supported** | The Canvas-based `ModernButton` / `ModernToggle` / `ModernSlider` / `SegmentedPicker` expose no native UIA pattern. Implementing providers is tracked as blocked work; it needs a live Narrator/NVDA and a real UIA client to verify, which this project cannot do headlessly |
+| Accessible names/roles on standard and custom widgets | Supported as an MSAA bridge | `backend/a11y.py` annotates names, roles, values, descriptions, and help text on native widget HWNDs; the active release probes cover metadata and focus behavior |
+| **Screen readers / UI Automation on custom controls** | **Live client proof blocked** | The Canvas-based controls expose the MSAA bridge but do not implement native UIA patterns. Narrator/NVDA validation requires an isolated virtual monitor or user session. The current headless release build records the limitation instead of claiming a live reader result |
 
 If you need screen-reader support today, the CLI (`python -m backend.cli`) is
 the accessible surface: it is plain text, fully keyboard driven, and every

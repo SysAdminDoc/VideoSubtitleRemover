@@ -74,6 +74,50 @@ def accessible_metadata(widget: Any) -> dict:
     return dict(metadata) if isinstance(metadata, dict) else {}
 
 
+def set_accessible_subtree_visible(widget: Any, visible: bool) -> None:
+    """Keep a disclosed Tk subtree in both the control view and tab order.
+
+    Tk normally removes an unpacked parent from painting, but focusable child
+    HWNDs can remain discoverable to Windows accessibility clients. Preserve
+    each widget's original ``takefocus`` value while the subtree is collapsed
+    so keyboard traversal and UI Automation expose the same disclosure state.
+    """
+    pending = [widget]
+    while pending:
+        current = pending.pop()
+        try:
+            pending.extend(current.winfo_children())
+        except Exception:
+            pass
+        try:
+            setattr(current, "_vsr_a11y_control_view", bool(visible))
+        except Exception:
+            pass
+        if visible:
+            original = getattr(current, "_vsr_a11y_saved_takefocus", None)
+            if original is None:
+                continue
+            if getattr(current, "enabled", True) is False:
+                original = 0
+            try:
+                current.configure(takefocus=original)
+            except Exception:
+                pass
+            try:
+                delattr(current, "_vsr_a11y_saved_takefocus")
+            except Exception:
+                pass
+            continue
+        if hasattr(current, "_vsr_a11y_saved_takefocus"):
+            continue
+        try:
+            original = current.cget("takefocus")
+            setattr(current, "_vsr_a11y_saved_takefocus", original)
+            current.configure(takefocus=0)
+        except Exception:
+            pass
+
+
 def accessible_text(metadata: dict) -> str:
     """Format metadata into a concise screen-reader announcement."""
     parts = []
@@ -244,6 +288,7 @@ _MSAA_ROLES = {
     "progressbar": 0x30,     # ROLE_SYSTEM_PROGRESSBAR
     "progress": 0x30,
     "status": 0x17,          # ROLE_SYSTEM_STATUSBAR
+    "heading": 0x29,         # ROLE_SYSTEM_STATICTEXT
     "text": 0x2A,            # ROLE_SYSTEM_TEXT
     "text box": 0x2A,
     "search box": 0x2A,
