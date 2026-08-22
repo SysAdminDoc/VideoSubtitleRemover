@@ -1,4 +1,4 @@
-# Video Subtitle Remover Pro -- Roadmap
+# Video Subtitle Remover Pro Roadmap
 
 Actionable work only. Historical and completed roadmap material is archived in CHANGELOG.md; blocked work is kept in Roadmap_Blocked.md.
 
@@ -13,7 +13,7 @@ winget/Store submission. Reasons in RESEARCH.md Rejected Ideas.
 CLEAR now has released code and weights. Keep it research-only until redistribution
 rights, consumer GPU cost, large-font quality, and color drift pass written gates.
 
-Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
+Implementer index. Drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 

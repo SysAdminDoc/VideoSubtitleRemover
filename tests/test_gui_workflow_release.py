@@ -383,6 +383,44 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_conditional_scrollbars_do_not_reflow_their_canvases(self):
+        app = self._make_app(withdraw=False)
+        try:
+            app.root.update_idletasks()
+            cases = (
+                (
+                    app._content_canvas,
+                    app._content_window,
+                    app._content_scrollbar,
+                    app._sync_content_scrollbar,
+                ),
+                (
+                    app.queue_canvas,
+                    app.queue_window,
+                    app._queue_scrollbar,
+                    app._sync_queue_scrollbar,
+                ),
+            )
+            for canvas, window, scrollbar, sync_scrollbar in cases:
+                with self.subTest(canvas=str(canvas)):
+                    width = canvas.winfo_width()
+                    canvas.itemconfigure(
+                        window, height=canvas.winfo_height() + 200)
+                    canvas.configure(scrollregion=canvas.bbox("all"))
+                    sync_scrollbar()
+                    app.root.update_idletasks()
+                    self.assertEqual(scrollbar.winfo_manager(), "place")
+                    self.assertEqual(canvas.winfo_width(), width)
+
+                    canvas.itemconfigure(window, height=1)
+                    canvas.configure(scrollregion=canvas.bbox("all"))
+                    sync_scrollbar()
+                    app.root.update_idletasks()
+                    self.assertEqual(scrollbar.winfo_manager(), "")
+                    self.assertEqual(canvas.winfo_width(), width)
+        finally:
+            self._destroy_app(app)
+
     def test_shutdown_cancels_callbacks_and_detaches_log_handler(self):
         app = self._make_app()
         handler = app._log_handler

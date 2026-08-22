@@ -16,6 +16,15 @@ def _has_display() -> bool:
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
 
+def _has_windows_shell() -> bool:
+    """Return True only when this desktop has an Explorer taskbar."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    return bool(ctypes.windll.user32.FindWindowW("Shell_TrayWnd", None))
+
+
 class RemoteModelPolicyTests(unittest.TestCase):
     def test_code_executing_remote_adapter_requires_full_commit_sha(self):
         from backend.remote_model_policy import resolve_remote_model_source
@@ -503,7 +512,8 @@ class WindowsShellIntegrationTests(unittest.TestCase):
             a11y._PROBED = False
             a11y._PROVIDER = None
 
-    @unittest.skipUnless(sys.platform == "win32", "Windows-only shell APIs")
+    @unittest.skipUnless(
+        _has_windows_shell(), "Windows Explorer shell required")
     def test_taskbar_progress_acquires_a_real_com_object(self):
         import ctypes
 

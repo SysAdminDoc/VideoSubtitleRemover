@@ -1761,34 +1761,22 @@ class LayoutBuildMixin:
             (output_panel, {"fill": "x"}),
         )
 
-    def _build_settings_section(self, parent):
-        """Flat inspector grouped by separators and progressive disclosure."""
-        section = self._create_surface(parent)
-        section.pack(fill="both", expand=True)
-
-        tk.Frame(
-            section, bg=Theme.BORDER_SUBTLE, width=1,
-        ).pack(side="left", fill="y")
-        settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        settings.pack(
-            side="left", fill="both", expand=True,
-            padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD),
-        )
-
-        self._build_inspector_summary(settings)
-        self._build_inspector_detail_surfaces(settings)
-
-        # ---- Advanced toggle --------------------------------------------
+    def _build_inspector_advanced_surfaces(self, settings):
+        """Create and register the cards behind inspector disclosures."""
         adv_frame = tk.Frame(settings, bg=Theme.BG_SECONDARY)
         self._advanced_compat_frame = adv_frame
-
         self.adv_visible = False
         self._inspector_open_section = None
-        self.adv_toggle = ModernButton(adv_frame, text=tr("Advanced settings"), width=188,
-                                       command=self._toggle_advanced,
-                                       style="ghost", size="sm", icon="+")
+        self.adv_toggle = ModernButton(
+            adv_frame,
+            text=tr("Advanced settings"),
+            width=188,
+            command=self._toggle_advanced,
+            style="ghost",
+            size="sm",
+            icon="+",
+        )
         self._sync_inspector_disclosure_state()
-
         self.adv_panel = tk.Frame(settings, bg=Theme.BG_SECONDARY)
 
         sttn_frame = self._build_sttn_settings_group()
@@ -1799,7 +1787,6 @@ class LayoutBuildMixin:
         preferences_frame, storage_frame = (
             self._build_accessibility_storage_settings(quality_frame)
         )
-
         advanced_cards = (
             sttn_frame,
             detection_frame,
@@ -1820,8 +1807,12 @@ class LayoutBuildMixin:
             performance_frames[0]: {
                 "fill": "x", "pady": (Theme.S_MD, Theme.S_SM),
             },
-            performance_frames[1]: {"fill": "x", "pady": (0, Theme.S_SM)},
-            performance_frames[2]: {"fill": "x", "pady": (0, Theme.S_SM)},
+            performance_frames[1]: {
+                "fill": "x", "pady": (0, Theme.S_SM),
+            },
+            performance_frames[2]: {
+                "fill": "x", "pady": (0, Theme.S_SM),
+            },
             preferences_frame: {"fill": "x", "pady": (0, Theme.S_SM)},
             storage_frame: {
                 "fill": "x", "pady": (Theme.S_MD, Theme.S_SM),
@@ -1857,13 +1848,30 @@ class LayoutBuildMixin:
             ),
             "advanced": (),
         }
-
         for panel, _pack_options in self._inspector_detail_panels:
             set_accessible_subtree_visible(panel, False)
         for panel in advanced_cards:
             panel.pack_forget()
             set_accessible_subtree_visible(panel, False)
         self.adv_panel._vsr_a11y_control_view = False
+
+    def _build_settings_section(self, parent):
+        """Flat inspector grouped by separators and progressive disclosure."""
+        section = self._create_surface(parent)
+        section.pack(fill="both", expand=True)
+
+        tk.Frame(
+            section, bg=Theme.BORDER_SUBTLE, width=1,
+        ).pack(side="left", fill="y")
+        settings = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        settings.pack(
+            side="left", fill="both", expand=True,
+            padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_MD),
+        )
+
+        self._build_inspector_summary(settings)
+        self._build_inspector_detail_surfaces(settings)
+        self._build_inspector_advanced_surfaces(settings)
 
         self.output_codec_var.trace_add("write", self._sync_inspector_encoding)
 

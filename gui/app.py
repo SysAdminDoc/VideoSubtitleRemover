@@ -1602,7 +1602,10 @@ class VideoSubtitleRemoverApp(
         self._sync_queue_scrollbar()
 
     def _on_canvas_configure(self, event):
-        self.queue_canvas.itemconfig(self.queue_window, width=event.width)
+        scrollbar = getattr(self, "_queue_scrollbar", None)
+        gutter = scrollbar.winfo_reqwidth() if scrollbar is not None else 0
+        self.queue_canvas.itemconfig(
+            self.queue_window, width=max(1, event.width - gutter))
         self._sync_queue_scrollbar()
 
     def _sync_queue_scrollbar(self):
@@ -1614,10 +1617,10 @@ class VideoSubtitleRemoverApp(
         needs_scroll = (
             bbox[3] - bbox[1] > self.queue_canvas.winfo_height() + 1)
         if needs_scroll and not scrollbar.winfo_manager():
-            scrollbar.pack(
-                side="right", fill="y", before=self.queue_canvas)
+            scrollbar.place(relx=1.0, rely=0.0, relheight=1.0, anchor="ne")
+            scrollbar.lift()
         elif not needs_scroll and scrollbar.winfo_manager():
-            scrollbar.pack_forget()
+            scrollbar.place_forget()
             self.queue_canvas.yview_moveto(0.0)
 
 

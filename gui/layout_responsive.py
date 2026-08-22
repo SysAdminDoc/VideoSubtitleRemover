@@ -30,7 +30,12 @@ class ResponsiveLayoutMixin:
     def _on_content_canvas_configure(self, event):
         """Lock the scrollable content frame to the canvas width."""
         if hasattr(self, "_content_window"):
-            self._content_canvas.itemconfig(self._content_window, width=event.width)
+            scrollbar = getattr(self, "_content_scrollbar", None)
+            gutter = scrollbar.winfo_reqwidth() if scrollbar is not None else 0
+            self._content_canvas.itemconfig(
+                self._content_window,
+                width=max(1, event.width - gutter),
+            )
             self._content_canvas.configure(
                 scrollregion=self._content_canvas.bbox("all"))
             self._sync_content_scrollbar()
@@ -44,10 +49,10 @@ class ResponsiveLayoutMixin:
         bbox = canvas.bbox("all") or (0, 0, 0, 0)
         needs_scroll = bbox[3] - bbox[1] > canvas.winfo_height() + 1
         if needs_scroll and not scrollbar.winfo_manager():
-            scrollbar.pack(
-                side="right", fill="y", before=canvas)
+            scrollbar.place(relx=1.0, rely=0.0, relheight=1.0, anchor="ne")
+            scrollbar.lift()
         elif not needs_scroll and scrollbar.winfo_manager():
-            scrollbar.pack_forget()
+            scrollbar.place_forget()
             canvas.yview_moveto(0.0)
 
     def _on_root_configure(self, event):

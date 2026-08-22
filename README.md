@@ -6,7 +6,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.37.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.38.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
@@ -36,46 +36,46 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 
 ## Features
 
-- **Real Video Inpainting** -- Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
-- **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
-- **AUTO Inpaint Routing** -- Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
-- **Multi-Engine Detection** -- RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
-- **Polygon-Aware OCR Masks** -- OCR quadrilaterals stay attached to their legacy boxes through tracking, saved track plans, masks, and preview overlays, so rotated text doesn't widen removal to its full axis-aligned bounds
-- **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
-- **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, mask-aware film-grain restoration plus native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
-- **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
-- **Precise Multi-region Masks** -- Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
-- **Moving Region Keyframes** -- Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
-- **Confidence-Gated Clean Plates and Donor Video** -- Attach a same-size clean image or a whole donor release to each timed rectangle, preview translation or homography alignment and per-frame color matching, match donor frames by timestamp with a configurable offset, and fall back to normal inpainting whenever alignment is uncertain
-- **Fade-Aware Masks** -- Hold the nearest confident mask for a few frames on either side of a text track, so a subtitle that fades in or out is covered while it is still too faint for OCR to recognize; both holds reach across decode batches, so the result does not depend on where the decoder split the file
-- **Last FFmpeg Commands** -- Help shows the recent FFmpeg and ffprobe invocations as quoted, runnable lines you can copy, and the support bundle carries the same list, so an encode failure leaves something reproducible behind
-- **Reviewable Track Plans** -- Scan a file first and get every detected text track with its frame span, a text sample, and a thumbnail. Keep or remove each track before any pixel changes, save the plan as JSON, and reuse it from the CLI with `--plan-out` / `--plan-in`
-- **Quality-Directed Mask Correction** -- Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
-- **Lossless Matte Interchange** -- Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
-- **Erase, Translate, and Re-embed** -- Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
-- **Inpaint Preview** -- "Test cleanup" uses the selected video timestamp for single-frame modes and a scene-bounded before/current/after source window for temporal modes. The result reports its timestamp, frame range, and low-resolution planning proxy while inpainting the full-resolution source frame
-- **Cached Mask Tuning** -- Adjust mask dilation in the preview pane and see the composed result immediately without rerunning OCR
-- **Seamless Boundaries** -- Gaussian alpha feathering at every inpaint boundary, no visible cut lines
-- **Language Support** -- 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
-- **GPU Acceleration** -- NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
-- **Subtitle Region Selector** -- Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
-- **Live Region OCR Feedback** -- While drawing a rectangle, inspect detected text boxes and confidence before saving the region
-- **Selected-Language Masks** -- Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
-- **Batch Processing** -- Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
-- **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
+- **Real Video Inpainting:** Temporal Background Exposure (TBE) reconstructs the true background from neighbouring frames where the subtitle is absent. No external model weight downloads required.
+- **Real AI Inpainting:** LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
+- **AUTO Inpaint Routing:** Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
+- **Multi-Engine Detection:** RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
+- **Polygon-Aware OCR Masks:** OCR quadrilaterals stay attached to their legacy boxes through tracking, saved track plans, masks, and preview overlays, so rotated text doesn't widen removal to its full axis-aligned bounds
+- **Lossless Pipeline:** FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
+- **Modern Codec Output:** Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, mask-aware film-grain restoration plus native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
+- **Opt-in FFmpeg D3D12 Path:** FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
+- **Precise Multi-region Masks:** Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
+- **Moving Region Keyframes:** Scrub to two or more frames, draw rectangle or polygon anchors, and interpolate the mask deterministically through the selected motion span
+- **Confidence-Gated Clean Plates and Donor Video:** Attach a same-size clean image or a whole donor release to each timed rectangle, preview translation or homography alignment and per-frame color matching, match donor frames by timestamp with a configurable offset, and fall back to normal inpainting whenever alignment is uncertain
+- **Fade-Aware Masks:** Hold the nearest confident mask for a few frames on either side of a text track, so a subtitle that fades in or out is covered while it is still too faint for OCR to recognize; both holds reach across decode batches, so the result does not depend on where the decoder split the file
+- **Last FFmpeg Commands:** Help shows the recent FFmpeg and ffprobe invocations as quoted, runnable lines you can copy, and the support bundle carries the same list, so an encode failure leaves something reproducible behind
+- **Reviewable Track Plans:** Scan a file first and get every detected text track with its frame span, a text sample, and a thumbnail. Keep or remove each track before any pixel changes, save the plan as JSON, and reuse it from the CLI with `--plan-out` / `--plan-in`
+- **Quality-Directed Mask Correction:** Review residual, flicker, and low-confidence frame spans; paint ordered add/subtract corrections with undo/redo; then rerun only the affected frames while reusing the prior cleaned output elsewhere
+- **Lossless Matte Interchange:** Export exact gray8 FFV1 or PNG-sequence masks with CFR/VFR timestamps, edit them externally, preview replace/add/subtract composition, and import them through strict manifest preflight
+- **Erase, Translate, and Re-embed:** Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
+- **Inpaint Preview:** "Test cleanup" uses the selected video timestamp for single-frame modes and a scene-bounded before/current/after source window for temporal modes. The result reports its timestamp, frame range, and low-resolution planning proxy while inpainting the full-resolution source frame
+- **Cached Mask Tuning:** Adjust mask dilation in the preview pane and see the composed result immediately without rerunning OCR
+- **Seamless Boundaries:** Gaussian alpha feathering at every inpaint boundary, no visible cut lines
+- **Language Support:** 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
+- **GPU Acceleration:** NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
+- **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
+- **Live Region OCR Feedback:** While drawing a rectangle, inspect detected text boxes and confidence before saving the region
+- **Selected-Language Masks:** Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
+- **Batch Processing:** Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
+- **Multi-track Audio + Loudness Normalisation:** Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
 - **Quality Self-Test**: PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, motion-compensated mask-local temporal evidence, outside-mask SDR or HDR color drift, and an optional side-by-side comparison PNG
-- **Detection Efficiency Reports** -- Batch summaries show frames OCR'd versus skipped, skip reasons, unique regions, stage timings, and an optimization hint when OCR dominates
-- **HDR Color Validation** -- Post-encode ffprobe checks record whether BT.2020/PQ/HLG and related color metadata were preserved in batch reports and output sidecars
-- **CLI + Presets** -- `python -m backend.processor --pattern ... --preset "YouTube (default)"`; nine built-in presets + user presets persisted to `%APPDATA%`
-- **Chyron vs Subtitle Filter** -- Keep persistent text (logos, lower-thirds) and remove dialogue, or vice versa
-- **Karaoke Grouping** -- Per-syllable boxes fuse into a single line mask so highlighted lyrics do not leak through the gaps
-- **Live Preview During Processing** -- 15 FPS throttled preview piped from the backend worker
-- **Pre-batch ETA Estimate** -- 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
-- **Pause/Resume Checkpointing** -- SHA-256 input fingerprint per file; finished files are skipped and paused videos resume from durable checkpoint frames
-- **Backend Status** -- Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
+- **Detection Efficiency Reports:** Batch summaries show frames OCR'd versus skipped, skip reasons, unique regions, stage timings, and an optimization hint when OCR dominates
+- **HDR Color Validation:** Post-encode ffprobe checks record whether BT.2020/PQ/HLG and related color metadata were preserved in batch reports and output sidecars
+- **CLI + Presets:** `python -m backend.processor --pattern ... --preset "YouTube (default)"`; nine built-in presets + user presets persisted to `%APPDATA%`
+- **Chyron vs Subtitle Filter:** Keep persistent text (logos, lower-thirds) and remove dialogue, or vice versa
+- **Karaoke Grouping:** Per-syllable boxes fuse into a single line mask so highlighted lyrics do not leak through the gaps
+- **Live Preview During Processing:** 15 FPS throttled preview piped from the backend worker
+- **Pre-batch ETA Estimate:** 30-frame detect probe seeds the ETA so users see "about X left" from the very first frame
+- **Pause/Resume Checkpointing:** SHA-256 input fingerprint per file; finished files are skipped and paused videos resume from durable checkpoint frames
+- **Backend Status:** Help shows OCR/inpaint backends, language picker vs. engine capacity, ONNX/OpenCV providers, required model files, hash state, FFmpeg capability profiles, and the next setup action
 - **Premium Dark UI.** Media-first preview, fixed-width inspector, 14 to 15 px working text, compact command bar, quieter queue controls, and focused onboarding
-- **Settings Persistence** -- All knobs saved/restored between sessions; versioned schema with backfill migration
-- **Release Tooling** -- Local PyInstaller/NSIS build scripts, dependency checks, and support bundles
+- **Settings Persistence:** All knobs saved/restored between sessions; versioned schema with backfill migration
+- **Release Tooling:** Local PyInstaller/NSIS build scripts, dependency checks, and support bundles
 
 ## System Requirements
 
@@ -96,13 +96,13 @@ Grab the latest standalone Windows x64 build from the
 [Releases page](https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/latest):
 download `VideoSubtitleRemoverPro-X.Y.Z-Windows-x64.zip`, extract anywhere, and run
 `VideoSubtitleRemoverPro.exe` (or `Run_VSR_Pro.bat`). The build is unsigned, so
-Windows SmartScreen may prompt -- choose **More info -> Run anyway**, and verify
+Windows SmartScreen may prompt. Choose **More info -> Run anyway**, and verify
 the download against the published `SHA256SUMS.txt` file.
 
 ### Quick Install
 
 1. **Download** or clone this repository
-2. **Double-click** `Run_VSR_Pro.bat` — first run automatically:
+2. **Double-click** `Run_VSR_Pro.bat`. The first run automatically:
    - Creates a virtual environment
    - Detects your GPU and installs appropriate packages
    - Shows a compact six-stage setup splash while the runtime is prepared
@@ -209,7 +209,7 @@ before a long batch starts.
 Run `python -m backend.cli --ocr-benchmark` to score the active OCR detector
 (RapidOCR 3.9.2 defaults to PP-OCRv6) on synthetic ground-truth subtitle
 fixtures --
-detection recall plus per-frame latency -- and print JSON evidence. Any change
+detection recall plus per-frame latency, and print JSON evidence. Any change
 to the default detector should be gated on the `meets_floors` verdict (recall
 >= 0.8); latency is reported as device-dependent evidence, not a hard gate.
 Use `--rapidocr-variant v5` for the retained PP-OCRv5 fallback, or
@@ -274,7 +274,7 @@ derives every filename from `APP_VERSION`, hashes exactly those files into
 `build/release/<version>/` in a single move. Evidence that records a
 different version, a verification error, or a failed installer/launch smoke
 is refused, and a promoted directory that gains or loses a file no longer
-verifies -- so a newer installer can never be published beside an older ZIP
+verifies, so a newer installer can never be published beside an older ZIP
 or a checksum file that describes neither. Run
 `python -m backend.release_staging verify --version X.Y.Z` to re-check a
 staged set, and `... guidance` for the publication steps: upload the staged
@@ -319,13 +319,13 @@ docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-tes
 
 1. **Launch** via `Run_VSR_Pro.bat`, `Run_VSR_Pro_Debug.bat`, or
    `Run_VSR_Pro.ps1`
-2. **Import** -- Use **Add media** in the top command bar, press Ctrl+O, or
+2. **Import:** Use **Add media** in the top command bar, press Ctrl+O, or
    drag media directly into the window
-3. **Configure** -- Choose the cleanup profile, subtitle region, and output
+3. **Configure:** Choose the cleanup profile, subtitle region, and output
    location from the top command bar
 4. **Open Advanced** in the right inspector when you need preset management,
    compute-device and language selection, workflow toggles, or expert tuning
-5. **Inspect** -- Select a queue item to preview it. Right-click the preview,
+5. **Inspect:** Select a queue item to preview it. Right-click the preview,
    or press **Menu / Shift+F10** while it is focused, to review the mask, test
    cleanup, compare before/after, or open the full-size view. You can also draw
    a fixed subtitle band directly on the preview. For video, use **Preview time**
@@ -333,7 +333,7 @@ docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-tes
    The full selector supports exact rectangle or polygon coordinates,
    second/frame timing, arrow-key nudging, Ctrl+arrow resizing, and
    Ctrl+Z/Ctrl+Y history
-6. **Process** -- Use **Start cleanup** in the top command bar and monitor
+6. **Process:** Use **Start cleanup** in the top command bar and monitor
    per-file status in the persistent queue. Remove, clear completed, and reorder
    controls stay in the queue header; Ctrl+L opens the detailed activity log
 
@@ -346,7 +346,7 @@ docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-tes
 | ProPainter | TBE + LaMa refinement | Slowest | Best motion | Motion-heavy footage, thick/decorative text |
 | Auto | Per-scene STTN / ProPainter routing | Adaptive | Adaptive | Mixed edits with both static dialogue and fast motion |
 
-> All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent -- this works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a TBE + LaMa refinement hybrid -- it is **not** the ICCV 2023 ProPainter model or weights (which carry a non-commercial NTU S-Lab license). This implementation uses only MIT-licensed code.
+> All three modes now do real inpainting. STTN recovers the literal background from adjacent frames where the subtitle is absent. This works because hard-coded subtitles are sparse in time, and the pixels behind them are revealed whenever the text changes or disappears. LAMA is a single-frame neural fill. ProPainter is a TBE + LaMa refinement hybrid. It is **not** the ICCV 2023 ProPainter model or weights (which carry a non-commercial NTU S-Lab license). This implementation uses only MIT-licensed code.
 
 TBE also tests each exposed mask region for a semi-transparent overlay. When
 the observed pixels fit the foreground/background mixture, it solves the
@@ -417,16 +417,16 @@ tested CUDA 12.x ONNX Runtime path. ONNX Runtime 1.27 dropped CUDA 12 (its
 default GPU wheel is now CUDA 13 only), so the pin caps below 1.27.0 to keep a
 working CUDA 12 provider on a fresh install; CUDA 13 hosts install the cuda13
 wheel manually per the ONNX Runtime install docs. ONNX Runtime `>=1.26.0` is
-required for the CPU and CUDA packages -- VSR runs untrusted OCR/inpaint ONNX
+required for the CPU and CUDA packages. VSR runs untrusted OCR/inpaint ONNX
 models through the runtime, and the self-test and strict release validation
 flag older CPU/CUDA builds as a blocking security advisory.
 Backend status and
 release evidence distinguish `onnxruntime`, `onnxruntime-gpu`, CUDA package
 channel, `onnxruntime-directml`, and the providers reported at runtime.
 The reviewed dependency profiles track five execution-provider lanes with
-separate tested and security state -- CPU (`onnxruntime`), CUDA 12
+separate tested and security state: CPU (`onnxruntime`), CUDA 12
 (`onnxruntime-gpu` 1.26.x, the default NVIDIA lock), CUDA 13 (manual
-cuda13 wheel, untested here), and DirectML -- so the CPU lane can adopt
+cuda13 wheel, untested here), and DirectML, so the CPU lane can adopt
 newer ONNX Runtime fixes while the CUDA 12 lane stays on its last
 compatible build. TensorRT-RTX is listed as a separate untested manual lane;
 it requires the `NvTensorRTRTXExecutionProvider` built-in provider or the
@@ -681,7 +681,7 @@ composition order. **Review mask** shows that composed result before a run.
 `.srt`, and a WebVTT source stays WebVTT all the way through: the translated
 sidecar is written as `<output>.<lang>.vtt`.
 
-WebVTT carries a great deal SRT cannot express -- cue identifiers, per-cue
+WebVTT carries a great deal SRT cannot express, including cue identifiers and per-cue
 positioning (`line`, `position`, `size`, `align`, `vertical`), named `REGION`
 blocks, a `STYLE` block, `NOTE` comments, `<v>` voice spans, `<lang>` and
 `<c.class>` spans, ruby annotations, and karaoke timestamp tags. Routing a
@@ -702,20 +702,20 @@ Two behaviours are worth knowing about:
   text, not new markup, so it cannot restructure the cue or inject tags.
 
 Every translation report includes a `loss` block. A WebVTT-to-WebVTT pass
-records `lossless: true` explicitly -- "no report" and "nothing was lost"
+records `lossless: true` explicitly. "No report" and "nothing was lost"
 must not look the same. Converting to SRT enumerates each dropped feature
 and how many times it occurred, and muxing WebVTT into MP4 says that
 `mov_text` loses regions, cue settings, and STYLE rules instead of reporting
 a neutral "conversion". Matroska and WebM copy WebVTT through untouched.
 
-TTML and IMSC are out of scope. `.ttml`, `.dfxp`, `.itt`, and `.xml` are
+TTML and IMSC aren't supported. `.ttml`, `.dfxp`, `.itt`, and `.xml` are
 rejected with a clear message rather than being parsed as SRT, which would be
 the same silent flattening one format further along.
 
 ### Isolating each job in its own process
 
-A fatal native fault -- an access violation inside OpenCV, ONNX Runtime,
-or a model's own kernels -- cannot be caught by Python. In a single
+A fatal native fault, such as an access violation inside OpenCV, ONNX Runtime,
+or a model's own kernels, cannot be caught by Python. In a single
 in-process worker it takes down the interpreter, which means it takes the
 app and every remaining queued job with it. Checkpoints do not help,
 because the process that would have resumed them is gone too.
@@ -725,8 +725,8 @@ Enable **Run each job in a separate process** in Settings (or set
 versioned local job protocol. Progress, live preview, pause, cancel, and
 checkpoints all keep working. When a child dies, the supervisor reports it
 against that one item, retains the worker's stderr tail as the item's log
-(a native crash usually prints the real cause -- a CUDA error, a missing
-DLL -- right before dying), decodes the exit status into something
+(a native crash usually prints the real cause, such as a CUDA error or missing
+DLL, right before dying), decodes the exit status into something
 readable, and continues the rest of the batch.
 
 It is off by default because it is a real trade, not a free win: the
@@ -737,7 +737,7 @@ long unattended batches or footage that has crashed the app before.
 The protocol itself is text-only and deliberately dull: the parent writes a
 JSON request file and a JSON control file, and the child streams
 newline-delimited JSON events back on stdout. Control does **not** travel
-over stdin -- a reader thread parked on a blocking stdin read deadlocks
+over stdin. A reader thread parked on a blocking stdin read deadlocks
 against C-extension module initialisation during the child's own imports,
 so the child runs with stdin closed, which also stops any grandchild
 (an import probe, an ffmpeg call) from inheriting a live pipe. Parent and
@@ -756,7 +756,7 @@ pin the exported matte to that job. VSR records the artifact and manifest
 hashes, a fingerprint of the source, and the geometry, timing, and frame
 range the matte was approved for. A later run that matches on all of those
 paints the approved mask directly and skips OCR, tracking, and the mask
-refiners entirely -- the refiners are skipped on purpose, since they exist
+refiners entirely. The refiners are skipped on purpose, since they exist
 to improve a *derived* mask and would edit pixels you already signed off
 on. **Clear frozen matte** releases the pin and restores detection.
 
@@ -1473,7 +1473,7 @@ To add a new language:
    into your new catalog and compiles it, so you always translate against the
    latest strings.
 3. Translate each `msgstr` in your `.po`. Keep every `{placeholder}` and
-   `%s`-style token from the `msgid` exactly as written -- the `check` gate
+   `%s`-style token from the `msgid` exactly as written. The `check` gate
    rejects catalogs that drop or add placeholders, and preserves ASCII-glyph
    accelerators as-is.
 4. Run `python scripts/i18n_catalogs.py check` until it passes, then
@@ -1505,7 +1505,7 @@ Enable **Mirror layout for right-to-left languages** in Settings (or set
 `rtl_layout` in `settings.json`) to flip the interface for Arabic, Hebrew,
 Persian, and Urdu.
 
-Layout code is written in *logical* terms throughout -- `side="left"` means
+Layout code is written in *logical* terms throughout. `side="left"` means
 "the start of the row", not "the left of the screen". `gui/direction.py`
 translates those logical values into physical ones at a single interception
 point, so packing order, anchors, `grid` sticky masks, text justification, and
@@ -1524,7 +1524,7 @@ every text scale and compares the direction census against the LTR baseline.
 - LaMa inpainting: [simple-lama-inpainting](https://github.com/enesmsahin/simple-lama-inpainting)
 - EasyOCR: [JaidedAI/EasyOCR](https://github.com/JaidedAI/EasyOCR)
 - STTN: [Learning Joint Spatial-Temporal Transformations](https://arxiv.org/abs/2007.10247)
-- ProPainter (research reference): [sczhou/ProPainter](https://github.com/sczhou/ProPainter) -- VSR's "ProPainter" mode is a TBE + LaMa hybrid inspired by the concept; it does not use the upstream ProPainter code or weights
+- ProPainter (research reference): [sczhou/ProPainter](https://github.com/sczhou/ProPainter). VSR's "ProPainter" mode is a TBE + LaMa hybrid inspired by the concept; it does not use the upstream ProPainter code or weights
 
 ## License
 
@@ -1534,7 +1534,7 @@ This project is licensed under the MIT License.
 
 <div align="center">
 
-**Video Subtitle Remover Pro** -- Built by SysAdminDoc
+**Video Subtitle Remover Pro**. Built by SysAdminDoc
 
 [Report Bug](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues) | [Request Feature](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues)
 

@@ -157,14 +157,6 @@ def scrollable_dialog_body(dialog, *, bg: str = "") -> tk.Frame:
         )
         needs_v = body_height > effective_height + 1
         needs_h = body_width > effective_width + 1
-        dialog._vsr_scroll_measurement = {
-            "canvas": (canvas_width, canvas_height),
-            "effective": (effective_width, effective_height),
-            "body": (body_width, body_height),
-            "vertical": needs_v,
-            "horizontal": needs_h,
-            "fitted": bool(getattr(dialog, "_vsr_dialog_fitted", False)),
-        }
         canvas.itemconfigure(
             window,
             width=body_width if needs_h else effective_width,

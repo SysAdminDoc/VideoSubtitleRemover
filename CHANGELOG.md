@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.38.0] - 2026-08-22
+
 ### Changed
 
 - Primary actions now keep normal-size text above the 4.5:1 contrast floor in
@@ -19,7 +21,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   The header uses a clearer brand mark, queue and workbench scrollbars appear
   only when content overflows, and fitted dialogs no longer trigger horizontal
   and vertical scrollbars from their own scrollbar chrome. Help replaces its
-  clipped shortcut row with concise sample-review guidance.
+  clipped shortcut row with concise sample-review guidance. Conditional
+  scrollbars use a reserved overlay gutter, so showing one cannot start a
+  geometry feedback loop in the frozen app.
+- The region editor now uses a large preview beside focused Shape, Timing,
+  Region properties, and Clean reference cards. Small source clips scale to the
+  available preview area, exact fields have consistent labels and focus rings,
+  and secondary actions no longer compete with Save region.
+- The mask editor now follows the same two-pane pattern. Paint mode is a direct
+  segmented choice, frame review has a scrubber, brush size stays visible, and
+  the tools panel reports saved correction ranges as they change.
 
 ## [3.37.0] - 2026-08-22
 

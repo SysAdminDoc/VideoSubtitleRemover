@@ -5,7 +5,7 @@ module it touches, and points new contributors at the right file for a
 given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 [CHANGELOG.md](../CHANGELOG.md).
 
-> Concrete and up to date as of the v3.37.0 pass.
+> Concrete and up to date as of the v3.38.0 pass.
 > Keep this in sync when modules move.
 
 ---
@@ -160,7 +160,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
   construction itself lives in the layout mixins (`gui/layout_build.py`,
   `gui/layout_responsive.py`, `gui/layout_helpers.py`, `gui/queue_view.py`,
   `gui/onboarding.py`), which compose onto the app exactly like the controller
-  mixins -- put new widget-building code in a mixin, not in `app.py`.
+  mixins. Put new widget-building code in a mixin, not in `app.py`.
   The default shell is a command-first workbench: one compact command strip
   sits above the preview/inspector split, and the persistent queue is rendered
   as a dense table below it. Advanced controls remain progressively disclosed
@@ -378,7 +378,7 @@ For a new ProcessingConfig field:
 6. Add a regression test that round-trips the field through to_dict +
    from_dict.
 7. Bump `VSR_SETTINGS_FORMAT` only when the new field's semantics
-   require a migration -- a backend-default new key does not.
+   require a migration. A backend-default new key does not.
 
 For a new inpainter:
 1. Subclass `BaseInpainter` with an `inpaint(frames, masks)` method.
