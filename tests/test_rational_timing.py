@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import json
+from fractions import Fraction
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 import cv2
 import numpy as np
+import pytest
+from xml.etree import ElementTree
 
 from backend import io
 from backend import resume_checkpoint
+from backend.frozen_matte import FrozenMatteError, freeze_matte, validate_frozen_matte
 from backend.matte_interchange import MaskInterchangeReader, MaskInterchangeWriter
-from backend.nle_sidecar import write_fcpxml
+from backend.nle_sidecar import write_edl, write_fcpxml
 
 
 def _probe_result(payload: str):
@@ -91,6 +95,48 @@ def test_probe_logs_and_repairs_missing_repeated_and_non_monotonic_pts(caplog):
     assert timing.timestamp_ticks == [0, 1000, 1040, 1080]
 
 
+def test_frame_range_does_not_round_exact_subframe_boundaries():
+    timing = io.VideoFrameTiming(
+        timestamp_ticks=[0, 1, 2, 3],
+        duration_ticks=[1, 1, 1, 1],
+        time_base_num=1,
+        time_base_den=60000,
+        average_fps=60000.0,
+    )
+    assert timing.frame_range(
+        Fraction(1, 60000), Fraction(3, 60000), 4
+    ) == (1, 3)
+
+
+def test_sparse_timing_rows_keep_timestamp_time_in_the_right_column():
+    stream = json.dumps({
+        "streams": [{
+            "avg_frame_rate": "25/1",
+            "r_frame_rate": "25/1",
+            "time_base": "1/1000",
+            "start_time": "0",
+            "duration": "1.08",
+        }],
+    })
+    frames = (
+        "0,0.000000\n"
+        "40,0.040000\n"
+        "80,0.080000\n"
+        "1040,1.040000\n"
+    )
+    with mock.patch.object(io.shutil, "which", return_value="ffprobe"), \
+            mock.patch.object(
+                io,
+                "run_process",
+                side_effect=[_probe_result(stream), _probe_result(frames)],
+            ):
+        timing = io._probe_video_frame_timing("sparse.mkv", timeout=30.0)
+
+    assert timing is not None
+    assert timing.timestamp_ticks == [0, 40, 80, 1040]
+    assert timing.duration_ticks == [40, 40, 960, 40]
+
+
 def test_exact_ticks_survive_pause_checkpoint_round_trip(tmp_path: Path):
     source = tmp_path / "source.mkv"
     source.write_bytes(b"source")
@@ -136,6 +182,21 @@ def test_exact_ticks_survive_pause_checkpoint_round_trip(tmp_path: Path):
     )
     assert state.next_frame == 1
     assert state.warning == ""
+    changed_timing = timing.checkpoint_metadata(0, 3, 0)
+    changed_timing["stream_start_ticks"] = 1
+    changed = resume_checkpoint.load_pause_checkpoint(
+        tmp_path,
+        "job",
+        input_path=str(source),
+        output_path=str(tmp_path / "out.mkv"),
+        config_hash="abc",
+        total_frames=3,
+        width=4,
+        height=4,
+        fps=timing.average_fps,
+        timing=changed_timing,
+    )
+    assert "exact source timing" in changed.warning
 
 
 def test_exact_ticks_are_written_and_validated_in_matte_manifest(tmp_path: Path):
@@ -158,6 +219,8 @@ def test_exact_ticks_are_written_and_validated_in_matte_manifest(tmp_path: Path)
         duration_ticks=durations,
         source_time_base_num=1,
         source_time_base_den=60000,
+        source_start_ticks=30000,
+        stream_start_ticks=30000,
     )
     writer.write(np.zeros((4, 4), np.uint8))
     writer.write(np.full((4, 4), 255, np.uint8))
@@ -179,9 +242,71 @@ def test_exact_ticks_are_written_and_validated_in_matte_manifest(tmp_path: Path)
         duration_ticks=durations,
         source_time_base_num=1,
         source_time_base_den=60000,
+        source_start_ticks=30000,
+        stream_start_ticks=30000,
         mode="replace",
     )
     reader.close()
+    with pytest.raises(ValueError, match="stream_start_ticks"):
+        MaskInterchangeReader(
+            evidence["manifest"],
+            width=4,
+            height=4,
+            start_frame=0,
+            end_frame=2,
+            timestamps=[0.0, 1001 / 60000],
+            durations=[1001 / 60000, 1001 / 60000],
+            is_vfr=False,
+            source_time_base=1 / 60000,
+            timestamp_ticks=ticks,
+            duration_ticks=durations,
+            source_time_base_num=1,
+            source_time_base_den=60000,
+            source_start_ticks=30000,
+            stream_start_ticks=30001,
+            mode="replace",
+        )
+    source = tmp_path / "source.mkv"
+    source.write_bytes(b"source")
+    frozen = freeze_matte(evidence["manifest"], source)
+    validated = validate_frozen_matte(
+        frozen,
+        source_path=source,
+        width=4,
+        height=4,
+        start_frame=0,
+        end_frame=2,
+        timestamps=[0.0, 1001 / 60000],
+        durations=[1001 / 60000, 1001 / 60000],
+        is_vfr=False,
+        source_time_base=1 / 60000,
+        timestamp_ticks=ticks,
+        duration_ticks=durations,
+        source_time_base_num=1,
+        source_time_base_den=60000,
+        source_start_ticks=30000,
+        stream_start_ticks=30000,
+    )
+    assert validated["stream_start_ticks"] == 30000
+    with pytest.raises(FrozenMatteError, match="edit-list timing"):
+        validate_frozen_matte(
+            frozen,
+            source_path=source,
+            width=4,
+            height=4,
+            start_frame=0,
+            end_frame=2,
+            timestamps=[0.0, 1001 / 60000],
+            durations=[1001 / 60000, 1001 / 60000],
+            is_vfr=False,
+            source_time_base=1 / 60000,
+            timestamp_ticks=ticks,
+            duration_ticks=durations,
+            source_time_base_num=1,
+            source_time_base_den=60000,
+            source_start_ticks=30000,
+            stream_start_ticks=30001,
+        )
 
 
 def test_fcpxml_uses_exact_rational_boundary(tmp_path: Path):
@@ -201,3 +326,45 @@ def test_fcpxml_uses_exact_rational_boundary(tmp_path: Path):
     text = path.read_text(encoding="utf-8")
     assert 'offset="1/2s"' in text
     assert 'duration="1001/15000s"' in text
+
+
+def test_multi_segment_nle_does_not_apply_overall_exact_range_to_segment_one(
+    tmp_path: Path,
+):
+    xml_path = tmp_path / "multi.fcpxml"
+    write_fcpxml(
+        str(xml_path),
+        "source.mkv",
+        "cleaned.mkv",
+        fps=30.0,
+        start_s=10.0,
+        end_s=21.0,
+        segments=[(10.0, 11.0), (20.0, 21.0)],
+        start_ticks=600000,
+        end_ticks=1260000,
+        time_base_num=1,
+        time_base_den=60000,
+    )
+    root = ElementTree.parse(xml_path).getroot()
+    clips = root.findall(".//asset-clip")
+    assert [clip.attrib["duration"] for clip in clips] == ["1/1s", "1/1s"]
+
+    edl_path = tmp_path / "multi.edl"
+    write_edl(
+        str(edl_path),
+        "source.mkv",
+        "cleaned.mkv",
+        fps=30.0,
+        start_s=10.0,
+        end_s=21.0,
+        segments=[(10.0, 11.0), (20.0, 21.0)],
+        start_ticks=600000,
+        end_ticks=1260000,
+        time_base_num=1,
+        time_base_den=60000,
+    )
+    events = [
+        line for line in edl_path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("001") or line.startswith("002")
+    ]
+    assert "00:00:10:00 00:00:11:00" in events[0]

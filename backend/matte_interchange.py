@@ -120,6 +120,8 @@ class MaskInterchangeWriter:
         duration_ticks: Optional[Iterable[int]] = None,
         source_time_base_num: Optional[int] = None,
         source_time_base_den: Optional[int] = None,
+        source_start_ticks: Optional[int] = None,
+        stream_start_ticks: Optional[int] = None,
     ):
         self.export_format = normalize_mask_export_format(export_format)
         self.width = int(width)
@@ -134,6 +136,11 @@ class MaskInterchangeWriter:
         )
         self.source_time_base_num = base_num
         self.source_time_base_den = base_den
+        self.source_start_ticks = int(source_start_ticks or 0)
+        self.stream_start_ticks = int(
+            stream_start_ticks
+            if stream_start_ticks is not None else self.source_start_ticks
+        )
         self.timestamp_ticks = (
             [int(value) for value in timestamp_ticks]
             if timestamp_ticks is not None else [
@@ -240,6 +247,8 @@ class MaskInterchangeWriter:
             "source_time_base_seconds": round(self.source_time_base, 12),
             "source_time_base_num": self.source_time_base_num,
             "source_time_base_den": self.source_time_base_den,
+            "source_start_ticks": self.source_start_ticks,
+            "stream_start_ticks": self.stream_start_ticks,
             "timestamp_ticks": self.timestamp_ticks,
             "duration_ticks": self.duration_ticks,
             "timing_ticks_sha256": timing_ticks_digest(
@@ -372,6 +381,8 @@ class MaskInterchangeReader:
         duration_ticks: Optional[Iterable[int]] = None,
         source_time_base_num: Optional[int] = None,
         source_time_base_den: Optional[int] = None,
+        source_start_ticks: Optional[int] = None,
+        stream_start_ticks: Optional[int] = None,
     ):
         self.manifest_path, self.manifest = _load_manifest(manifest_path)
         self.artifact_path = _artifact_from_manifest(
@@ -387,7 +398,8 @@ class MaskInterchangeReader:
         self._validate_metadata(
             start_frame, end_frame, timestamps, durations,
             is_vfr, source_time_base, timestamp_ticks, duration_ticks,
-            source_time_base_num, source_time_base_den)
+            source_time_base_num, source_time_base_den,
+            source_start_ticks, stream_start_ticks)
         self._validate_artifact()
         current_hash = (
             _sha256_sequence(self.artifact_path, self.frame_count)
@@ -408,6 +420,8 @@ class MaskInterchangeReader:
             "frame_count": self.frame_count,
             "source_time_base_num": self.manifest.get("source_time_base_num"),
             "source_time_base_den": self.manifest.get("source_time_base_den"),
+            "source_start_ticks": self.manifest.get("source_start_ticks"),
+            "stream_start_ticks": self.manifest.get("stream_start_ticks"),
             "timing_ticks_sha256": self.manifest.get("timing_ticks_sha256", ""),
             "composition_order": [
                 "ocr_and_manual_regions",
@@ -429,6 +443,8 @@ class MaskInterchangeReader:
         duration_ticks: Optional[Iterable[int]],
         source_time_base_num: Optional[int],
         source_time_base_den: Optional[int],
+        source_start_ticks: Optional[int],
+        stream_start_ticks: Optional[int],
     ) -> None:
         expected_timestamps = [float(value) for value in timestamps]
         expected_durations = [float(value) for value in durations]
@@ -478,6 +494,20 @@ class MaskInterchangeReader:
             raise ValueError("Imported matte must use the gray8 pixel format")
         if bool(self.manifest.get("source_is_vfr", False)) != bool(is_vfr):
             raise ValueError("Imported matte CFR/VFR timing mode does not match the source")
+        for key, expected in (
+            ("source_start_ticks", source_start_ticks),
+            ("stream_start_ticks", stream_start_ticks),
+        ):
+            if expected is None or self.manifest.get(key) is None:
+                continue
+            try:
+                actual_start = int(self.manifest.get(key))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Imported matte {key} is malformed") from exc
+            if actual_start != int(expected):
+                raise ValueError(
+                    f"Imported matte {key} does not match the source"
+                )
         try:
             manifest_time_base = float(
                 self.manifest.get("source_time_base_seconds", 0.0))

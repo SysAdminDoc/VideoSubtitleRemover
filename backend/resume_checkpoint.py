@@ -335,6 +335,7 @@ def _validation_warning(payload: dict, *, input_path: str, output_path: str,
     if isinstance(timing, dict) and isinstance(stored_timing, dict):
         for key in (
             "time_base_num", "time_base_den", "source_start_ticks",
+            "stream_start_ticks",
             "start_frame", "end_frame", "timestamp_ticks_sha256",
         ):
             if key not in stored_timing or key not in timing:

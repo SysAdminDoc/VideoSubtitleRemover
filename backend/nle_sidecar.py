@@ -127,9 +127,14 @@ def write_edl(path: str, source: str, cleaned: str,
     otherwise the single start_s/end_s pair produces a 1-event EDL.
     Returns the path written."""
     all_segments = segments if segments else [(start_s, end_s)]
-    exact_segments = segments_ticks if segments_ticks else [
-        (start_ticks, end_ticks)
-    ] if start_ticks is not None and end_ticks is not None else []
+    exact_segments = list(segments_ticks or [])
+    if (
+        not exact_segments
+        and len(all_segments) == 1
+        and start_ticks is not None
+        and end_ticks is not None
+    ):
+        exact_segments = [(start_ticks, end_ticks)]
     payload = []
     payload.append(f"TITLE: {title}")
     payload.append("FCM: NON-DROP FRAME")
@@ -180,9 +185,14 @@ def write_fcpxml(path: str, source: str, cleaned: str,
     survives PyInstaller's text bundling and arbitrary editor parsers.
     """
     all_segments = segments if segments else [(start_s, end_s)]
-    exact_segments = segments_ticks if segments_ticks else [
-        (start_ticks, end_ticks)
-    ] if start_ticks is not None and end_ticks is not None else []
+    exact_segments = list(segments_ticks or [])
+    if (
+        not exact_segments
+        and len(all_segments) == 1
+        and start_ticks is not None
+        and end_ticks is not None
+    ):
+        exact_segments = [(start_ticks, end_ticks)]
     rational_segments = []
     for index, (seg_start, seg_end) in enumerate(all_segments):
         exact = exact_segments[index] if index < len(exact_segments) else None

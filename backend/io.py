@@ -313,15 +313,18 @@ class VideoFrameTiming:
             return 0, 0
         values = (self.timestamp_ticks or [])[:limit]
         def _target_ticks(seconds: float) -> Fraction:
-            return _fraction_from_value(max(0.0, float(seconds))) * (
+            seconds_fraction = _fraction_from_value(seconds)
+            return max(Fraction(0, 1), seconds_fraction) * (
                 Fraction(self.time_base_den, self.time_base_num))
+        start_value = _fraction_from_value(start_seconds)
+        end_value = _fraction_from_value(end_seconds)
         start = (
-            bisect.bisect_left(values, _target_ticks(start_seconds))
-            if start_seconds > 0 else 0
+            bisect.bisect_left(values, _target_ticks(start_value))
+            if start_value > 0 else 0
         )
         end = (
-            bisect.bisect_left(values, _target_ticks(end_seconds))
-            if end_seconds > 0 else limit
+            bisect.bisect_left(values, _target_ticks(end_value))
+            if end_value > 0 else limit
         )
         # Clamp to [0, limit], not [0, limit-1]. A start at or past the last
         # timestamp is an empty window; squeezing it onto the last frame
@@ -863,13 +866,43 @@ def _parse_frame_timing_csv(text: str) -> List[dict]:
         line = line.strip()
         if not line:
             continue
-        parts = line.split(",")
-        frames.append({
+        parts = line.split("|") if "|" in line else line.split(",")
+        if any("=" in part for part in parts):
+            record = {}
+            for part in parts:
+                if "=" not in part:
+                    continue
+                key, value = part.split("=", 1)
+                record[key.strip()] = value.strip()
+            frames.append(record)
+            continue
+        record = {
             "best_effort_timestamp": parts[0] if parts else "",
-            "pkt_duration": parts[1] if len(parts) > 1 else "",
-            "best_effort_timestamp_time": parts[2] if len(parts) > 2 else "",
-            "pkt_duration_time": parts[3] if len(parts) > 3 else "",
-        })
+            "pkt_duration": "",
+            "best_effort_timestamp_time": "",
+            "pkt_duration_time": "",
+        }
+        if len(parts) >= 4:
+            record.update({
+                "pkt_duration": parts[1],
+                "best_effort_timestamp_time": parts[2],
+                "pkt_duration_time": parts[3],
+            })
+        elif len(parts) == 3:
+            second = parts[1].strip().lower()
+            if "." in second or "e" in second or "/" in second:
+                record["best_effort_timestamp_time"] = parts[1]
+                record["pkt_duration_time"] = parts[2]
+            else:
+                record["pkt_duration"] = parts[1]
+                record["best_effort_timestamp_time"] = parts[2]
+        elif len(parts) == 2:
+            second = parts[1].strip().lower()
+            if "." in second or "e" in second or "/" in second:
+                record["best_effort_timestamp_time"] = parts[1]
+            else:
+                record["pkt_duration"] = parts[1]
+        frames.append(record)
     return frames
 
 
@@ -919,7 +952,7 @@ def _probe_video_frame_timing(
         "-show_entries",
         "frame=best_effort_timestamp,pkt_duration,"
         "best_effort_timestamp_time,pkt_duration_time",
-        "-of", "csv=p=0", str(path),
+        "-of", "compact=p=0:nk=0:s=|", str(path),
     ]
     try:
         stream_result = run_process(

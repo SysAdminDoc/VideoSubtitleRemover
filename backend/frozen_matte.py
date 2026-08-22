@@ -207,6 +207,14 @@ def freeze_matte(manifest_path: str | Path,
             payload.get("source_time_base_seconds", 0.0) or 0.0),
         "source_time_base_num": time_base_num,
         "source_time_base_den": time_base_den,
+        "source_start_ticks": (
+            int(payload["source_start_ticks"])
+            if payload.get("source_start_ticks") is not None else None
+        ),
+        "stream_start_ticks": (
+            int(payload["stream_start_ticks"])
+            if payload.get("stream_start_ticks") is not None else None
+        ),
         "timestamp_ticks": [int(value) for value in timestamp_ticks],
         "duration_ticks": [int(value) for value in duration_ticks],
         "timing_ticks_sha256": timing_ticks_digest(
@@ -244,6 +252,12 @@ def normalize_frozen_matte(value: object) -> dict:
             record[key] = int(record.get(key, 0) or 0)
         except (TypeError, ValueError):
             return {}
+    for key in ("source_start_ticks", "stream_start_ticks"):
+        if record.get(key) is not None:
+            try:
+                record[key] = int(record[key])
+            except (TypeError, ValueError, OverflowError):
+                return {}
     try:
         record["source_time_base_seconds"] = float(
             record.get("source_time_base_seconds", 0.0) or 0.0)
@@ -293,6 +307,8 @@ def validate_frozen_matte(
     duration_ticks: Optional[Iterable[int]] = None,
     source_time_base_num: Optional[int] = None,
     source_time_base_den: Optional[int] = None,
+    source_start_ticks: Optional[int] = None,
+    stream_start_ticks: Optional[int] = None,
     verify_artifact: bool = True,
 ) -> dict:
     """Re-verify a frozen matte against the job about to run.
@@ -406,6 +422,19 @@ def validate_frozen_matte(
             frozen.get("source_time_base_den"),
             fallback_seconds=source_time_base,
         )
+    for key, expected in (
+        ("source_start_ticks", source_start_ticks),
+        ("stream_start_ticks", stream_start_ticks),
+    ):
+        actual = frozen.get(key)
+        if expected is None or actual is None:
+            continue
+        _require(
+            int(actual) == int(expected),
+            "This job's edit-list timing no longer matches the frozen matte. "
+            "Freeze it again.",
+            "timing_changed",
+        )
     expected_timestamp_ticks = (
         [int(value) for value in timestamp_ticks]
         if timestamp_ticks is not None else [
@@ -453,6 +482,8 @@ def validate_frozen_matte(
         "source_end_frame": frozen["source_end_frame"],
         "source_time_base_num": frozen.get("source_time_base_num"),
         "source_time_base_den": frozen.get("source_time_base_den"),
+        "source_start_ticks": frozen.get("source_start_ticks"),
+        "stream_start_ticks": frozen.get("stream_start_ticks"),
         "artifact_verified": bool(verify_artifact),
         "bypassed_stages": ["ocr", "tracking", "mask_refiners"],
     }
