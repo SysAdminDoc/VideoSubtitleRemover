@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Video timing now keeps integer PTS and duration ticks with the source rational
+  time base from ffprobe. Checkpoints, matte manifests, frozen mattes,
+  track plans, audio trimming, SRT, EDL, and FCPXML retain the exact clock while
+  float values remain compatibility views.
 - OCR quadrilaterals now travel beside the historical axis-aligned boxes through
   detection, tracking, track-plan save/load, masks, and preview overlays. Each
   polygon gets its own local expansion, so a rotated caption doesn't remove the

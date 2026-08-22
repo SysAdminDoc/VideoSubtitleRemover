@@ -129,6 +129,7 @@ def load_pause_checkpoint(
     width: int,
     height: int,
     fps: float,
+    timing: Optional[dict] = None,
 ) -> CheckpointState:
     ckpt_path = pause_checkpoint_path(checkpoint_dir, key)
     default_frames = pause_frame_dir(checkpoint_dir, key)
@@ -153,6 +154,7 @@ def load_pause_checkpoint(
         width=width,
         height=height,
         fps=fps,
+        timing=timing,
     )
     if warning:
         return CheckpointState(ckpt_path, default_frames, 0, {}, warning=warning)
@@ -215,10 +217,22 @@ def write_pause_checkpoint(
     fps: float,
     status: str,
     timing_manifest_path: Optional[Path] = None,
+    timing: Optional[dict] = None,
     stage: str = "inpainting",
     inpaint_complete: bool = False,
 ) -> dict:
     now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    timing_payload = None
+    if isinstance(timing, dict):
+        timing_payload = {}
+        for timing_key, value in timing.items():
+            if isinstance(value, bool):
+                timing_payload[str(timing_key)] = bool(value)
+            else:
+                try:
+                    timing_payload[str(timing_key)] = int(value)
+                except (TypeError, ValueError, OverflowError):
+                    timing_payload[str(timing_key)] = str(value)
     payload = {
         "schema": SCHEMA,
         "status": status,
@@ -237,6 +251,7 @@ def write_pause_checkpoint(
         "timing_manifest": (
             str(timing_manifest_path) if timing_manifest_path else ""
         ),
+        "timing": timing_payload,
         "updated_at": now,
     }
     path = pause_checkpoint_path(checkpoint_dir, key)
@@ -292,7 +307,8 @@ def _scan_frame_sequence(frame_dir: Path, *, prefix: str = "frame",
 
 def _validation_warning(payload: dict, *, input_path: str, output_path: str,
                         config_hash: str, total_frames: int, width: int,
-                        height: int, fps: float) -> str:
+                        height: int, fps: float,
+                        timing: Optional[dict] = None) -> str:
     if not isinstance(payload, dict):
         return "Ignoring pause checkpoint because it is not a JSON object."
     if payload.get("schema") != SCHEMA:
@@ -315,6 +331,19 @@ def _validation_warning(payload: dict, *, input_path: str, output_path: str,
     old_fps = _safe_float(payload.get("fps"), -1.0)
     if abs(old_fps - float(fps)) > 0.001:
         return "Ignoring pause checkpoint because the source frame rate changed."
+    stored_timing = payload.get("timing")
+    if isinstance(timing, dict) and isinstance(stored_timing, dict):
+        for key in (
+            "time_base_num", "time_base_den", "source_start_ticks",
+            "start_frame", "end_frame", "timestamp_ticks_sha256",
+        ):
+            if key not in stored_timing or key not in timing:
+                continue
+            if str(stored_timing.get(key)) != str(timing.get(key)):
+                return (
+                    "Ignoring pause checkpoint because the exact source "
+                    "timing changed."
+                )
     return ""
 
 

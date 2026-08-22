@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+import cv2
+import numpy as np
+
+from backend import io
+from backend import resume_checkpoint
+from backend.matte_interchange import MaskInterchangeReader, MaskInterchangeWriter
+from backend.nle_sidecar import write_fcpxml
+
+
+def _probe_result(payload: str):
+    return SimpleNamespace(returncode=0, stdout=payload, stderr="")
+
+
+def test_probe_keeps_1001_timeline_as_integer_ticks():
+    stream = json.dumps({
+        "streams": [{
+            "avg_frame_rate": "60000/1001",
+            "r_frame_rate": "60000/1001",
+            "time_base": "1/60000",
+            "start_time": "0.5",
+            "duration": "0.0834166667",
+        }],
+    })
+    frames = (
+        "30000,1001,0.5,0.0166833333333333\n"
+        "31001,1001,0.5166833333333333,0.0166833333333333\n"
+        "33003,1001,0.55005,0.0166833333333333\n"
+    )
+    with mock.patch.object(io.shutil, "which", return_value="ffprobe"), \
+            mock.patch.object(
+                io,
+                "run_process",
+                side_effect=[_probe_result(stream), _probe_result(frames)],
+            ):
+        timing = io._probe_video_frame_timing("clip.mkv", timeout=30.0)
+
+    assert timing is not None
+    assert timing.timestamp_ticks == [0, 1001, 3003]
+    assert timing.duration_ticks == [1001, 2002, 1001]
+    assert (timing.time_base_num, timing.time_base_den) == (1, 60000)
+    assert timing.source_start_ticks == 30000
+    assert timing.stream_start_ticks == 30000
+    assert timing.total_duration_ticks == 4004
+    assert abs(timing.duration - (4004 / 60000)) < 1e-15
+
+
+def test_probe_logs_and_repairs_missing_repeated_and_non_monotonic_pts(caplog):
+    stream = json.dumps({
+        "streams": [{
+            "avg_frame_rate": "25/1",
+            "r_frame_rate": "25/1",
+            "time_base": "1/1000",
+            "start_time": "0",
+            "duration": "0.2",
+        }],
+    })
+    frames = (
+        "N/A,40,N/A,0.04\n"
+        "1000,40,1.0,0.04\n"
+        "1000,40,1.0,0.04\n"
+        "900,40,0.9,0.04\n"
+    )
+    with mock.patch.object(io.shutil, "which", return_value="ffprobe"), \
+            mock.patch.object(
+                io,
+                "run_process",
+                side_effect=[_probe_result(stream), _probe_result(frames)],
+            ), caplog.at_level("WARNING", logger="backend.io"):
+        timing = io._probe_video_frame_timing("damaged.mkv", timeout=30.0)
+
+    assert timing is not None
+    kinds = {entry["kind"] for entry in timing.anomalies}
+    assert {
+        "missing_timestamp",
+        "repaired_timestamp",
+        "repeated_pts",
+        "non_monotonic_pts",
+    } <= kinds
+    messages = "\n".join(record.message for record in caplog.records)
+    assert "missing_timestamp" in messages
+    assert "repeated_pts" in messages
+    assert "non_monotonic_pts" in messages
+    assert "repaired_timestamp" in messages
+    assert timing.timestamp_ticks == [0, 1000, 1040, 1080]
+
+
+def test_exact_ticks_survive_pause_checkpoint_round_trip(tmp_path: Path):
+    source = tmp_path / "source.mkv"
+    source.write_bytes(b"source")
+    frame_dir = tmp_path / "job.frames"
+    frame_dir.mkdir()
+    cv2.imwrite(str(frame_dir / "frame_000000.png"), np.zeros((4, 4, 3), np.uint8))
+    timing = io.VideoFrameTiming(
+        timestamp_ticks=[0, 1001, 2002],
+        duration_ticks=[1001, 1001, 1001],
+        time_base_num=1,
+        time_base_den=60000,
+        average_fps=60000 / 1001,
+        is_vfr=False,
+    )
+    metadata = timing.checkpoint_metadata(0, 3, 1)
+    payload = resume_checkpoint.write_pause_checkpoint(
+        tmp_path,
+        "job",
+        input_path=str(source),
+        output_path=str(tmp_path / "out.mkv"),
+        config_hash="abc",
+        frame_dir=frame_dir,
+        next_frame=1,
+        total_frames=3,
+        width=4,
+        height=4,
+        fps=timing.average_fps,
+        status="paused",
+        timing=metadata,
+    )
+    assert payload["timing"]["time_base_den"] == 60000
+    state = resume_checkpoint.load_pause_checkpoint(
+        tmp_path,
+        "job",
+        input_path=str(source),
+        output_path=str(tmp_path / "out.mkv"),
+        config_hash="abc",
+        total_frames=3,
+        width=4,
+        height=4,
+        fps=timing.average_fps,
+        timing=timing.checkpoint_metadata(0, 3, 0),
+    )
+    assert state.next_frame == 1
+    assert state.warning == ""
+
+
+def test_exact_ticks_are_written_and_validated_in_matte_manifest(tmp_path: Path):
+    output = tmp_path / "cleaned.mp4"
+    ticks = [0, 1001]
+    durations = [1001, 1001]
+    writer = MaskInterchangeWriter(
+        output,
+        "png",
+        width=4,
+        height=4,
+        fps=60000 / 1001,
+        start_frame=0,
+        end_frame=2,
+        timestamps=[0.0, 1001 / 60000],
+        durations=[1001 / 60000, 1001 / 60000],
+        is_vfr=False,
+        source_time_base=1 / 60000,
+        timestamp_ticks=ticks,
+        duration_ticks=durations,
+        source_time_base_num=1,
+        source_time_base_den=60000,
+    )
+    writer.write(np.zeros((4, 4), np.uint8))
+    writer.write(np.full((4, 4), 255, np.uint8))
+    evidence = writer.finalize()
+    manifest = json.loads(Path(evidence["manifest"]).read_text(encoding="utf-8"))
+    assert manifest["timestamp_ticks"] == ticks
+    assert manifest["duration_ticks"] == durations
+    reader = MaskInterchangeReader(
+        evidence["manifest"],
+        width=4,
+        height=4,
+        start_frame=0,
+        end_frame=2,
+        timestamps=[0.0, 1001 / 60000],
+        durations=[1001 / 60000, 1001 / 60000],
+        is_vfr=False,
+        source_time_base=1 / 60000,
+        timestamp_ticks=ticks,
+        duration_ticks=durations,
+        source_time_base_num=1,
+        source_time_base_den=60000,
+        mode="replace",
+    )
+    reader.close()
+
+
+def test_fcpxml_uses_exact_rational_boundary(tmp_path: Path):
+    path = tmp_path / "exact.fcpxml"
+    write_fcpxml(
+        str(path),
+        "source.mkv",
+        "cleaned.mkv",
+        fps=60000 / 1001,
+        start_s=0.0,
+        end_s=0.0,
+        start_ticks=30000,
+        end_ticks=34004,
+        time_base_num=1,
+        time_base_den=60000,
+    )
+    text = path.read_text(encoding="utf-8")
+    assert 'offset="1/2s"' in text
+    assert 'duration="1001/15000s"' in text

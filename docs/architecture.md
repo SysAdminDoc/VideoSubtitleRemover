@@ -195,7 +195,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 - **`backend/processor.py`** preserves the legacy public import surface
   and delegates `python -m backend.processor` to `backend.cli.main`.
 - **`backend/detection.py`**, **`backend/tracking.py`**,
-  **`backend/io.py`**, **`backend/quality.py`**, and
+  **`backend/io.py`** (capture, ffprobe, and exact rational timing),
+  **`backend/quality.py`**, and
   **`backend/inpainters/`** own the focused pipeline pieces.
 - **`backend/encoder.py`** probes hardware encoders and selects the
   output codec (H.264 / H.265 / AV1 / VVC).
@@ -229,6 +230,10 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 4. **Optional preprocessing.** `process_video`:
    - ffprobe `idet` -> `ffmpeg yadif` deinterlace when auto-detected.
    - ffprobe keyframe enumeration when `keyframe_detection`.
+   - ffprobe timing fields are retained as integer PTS and duration ticks with
+     the stream's rational time base. Missing, repeated, and non-monotonic PTS
+     are repaired with warning records, while edit-list starts stay available
+     for validation.
 5. **Decode.** `_open_capture` either opens a `cv2.VideoCapture` (with
    optional `decode_hw_accel`) or a `_FrameSequenceCapture` for an
    image-directory input. When `prefetch_decode` is on, the cap is
@@ -280,6 +285,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    - Per-stream loudness normalisation (`-filter_complex` branch).
    - Adaptive `_ffmpeg_subprocess_timeout` scaled to source
      duration.
+   - Exact frame-range ticks are converted to FFmpeg boundary strings only at
+     the tool boundary, so audio, SRT, EDL, and FCPXML share one clock.
 10. **Quality report.** When `quality_report` is on,
     `_compute_quality_report` samples N frames from input + output,
     computes both whole-frame and ROI-cropped PSNR/SSIM (the ROI

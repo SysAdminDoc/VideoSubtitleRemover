@@ -26,6 +26,11 @@ import json
 from pathlib import Path
 from typing import Iterable, Optional
 
+from backend.io import (
+    _normalize_time_base,
+    _seconds_to_ticks,
+    timing_ticks_digest,
+)
 from backend.matte_interchange import (
     MASK_INTERCHANGE_SCHEMA,
     _artifact_from_manifest,
@@ -164,6 +169,27 @@ def freeze_matte(manifest_path: str | Path,
 
     timestamps = payload.get("timestamps_seconds") or []
     durations = payload.get("durations_seconds") or []
+    timestamp_ticks = payload.get("timestamp_ticks")
+    duration_ticks = payload.get("duration_ticks")
+    if not isinstance(timestamp_ticks, list):
+        timestamp_ticks = None
+    if not isinstance(duration_ticks, list):
+        duration_ticks = None
+    time_base_num, time_base_den = _normalize_time_base(
+        payload.get("source_time_base_num"),
+        payload.get("source_time_base_den"),
+        fallback_seconds=payload.get("source_time_base_seconds", 0.0),
+    )
+    if timestamp_ticks is None:
+        timestamp_ticks = [
+            _seconds_to_ticks(value, time_base_num, time_base_den)
+            for value in timestamps
+        ]
+    if duration_ticks is None:
+        duration_ticks = [
+            _seconds_to_ticks(value, time_base_num, time_base_den)
+            for value in durations
+        ]
     return {
         "schema": FROZEN_MATTE_SCHEMA,
         "manifest": str(manifest),
@@ -179,6 +205,14 @@ def freeze_matte(manifest_path: str | Path,
         "source_is_vfr": bool(payload.get("source_is_vfr", False)),
         "source_time_base_seconds": float(
             payload.get("source_time_base_seconds", 0.0) or 0.0),
+        "source_time_base_num": time_base_num,
+        "source_time_base_den": time_base_den,
+        "timestamp_ticks": [int(value) for value in timestamp_ticks],
+        "duration_ticks": [int(value) for value in duration_ticks],
+        "timing_ticks_sha256": timing_ticks_digest(
+            [int(value) for value in timestamp_ticks],
+            [int(value) for value in duration_ticks],
+        ),
         "timing_sha256": timing_digest(timestamps, durations),
         "source": source_fingerprint(source_path),
     }
@@ -216,6 +250,24 @@ def normalize_frozen_matte(value: object) -> dict:
     except (TypeError, ValueError):
         return {}
     record["source_is_vfr"] = bool(record.get("source_is_vfr", False))
+    try:
+        base_num, base_den = _normalize_time_base(
+            record.get("source_time_base_num"),
+            record.get("source_time_base_den"),
+            fallback_seconds=record["source_time_base_seconds"],
+        )
+        record["source_time_base_num"] = base_num
+        record["source_time_base_den"] = base_den
+        if isinstance(record.get("timestamp_ticks"), list):
+            record["timestamp_ticks"] = [
+                int(value) for value in record["timestamp_ticks"]
+            ]
+        if isinstance(record.get("duration_ticks"), list):
+            record["duration_ticks"] = [
+                int(value) for value in record["duration_ticks"]
+            ]
+    except (TypeError, ValueError, OverflowError):
+        return {}
     record["source"] = dict(record["source"])
     return record
 
@@ -237,6 +289,10 @@ def validate_frozen_matte(
     durations: Iterable[float],
     is_vfr: bool,
     source_time_base: float,
+    timestamp_ticks: Optional[Iterable[int]] = None,
+    duration_ticks: Optional[Iterable[int]] = None,
+    source_time_base_num: Optional[int] = None,
+    source_time_base_den: Optional[int] = None,
     verify_artifact: bool = True,
 ) -> dict:
     """Re-verify a frozen matte against the job about to run.
@@ -334,6 +390,46 @@ def validate_frozen_matte(
         "Freeze the matte again.",
         "time_base_changed",
     )
+    expected_num, expected_den = _normalize_time_base(
+        source_time_base_num,
+        source_time_base_den,
+        fallback_seconds=source_time_base,
+    )
+    if (
+        source_time_base_num is None
+        and source_time_base_den is None
+        and frozen.get("source_time_base_num") is not None
+        and frozen.get("source_time_base_den") is not None
+    ):
+        expected_num, expected_den = _normalize_time_base(
+            frozen.get("source_time_base_num"),
+            frozen.get("source_time_base_den"),
+            fallback_seconds=source_time_base,
+        )
+    expected_timestamp_ticks = (
+        [int(value) for value in timestamp_ticks]
+        if timestamp_ticks is not None else [
+            _seconds_to_ticks(value, expected_num, expected_den)
+            for value in timestamps
+        ]
+    )
+    expected_duration_ticks = (
+        [int(value) for value in duration_ticks]
+        if duration_ticks is not None else [
+            _seconds_to_ticks(value, expected_num, expected_den)
+            for value in durations
+        ]
+    )
+    if "timing_ticks_sha256" in frozen:
+        _require(
+            frozen.get("source_time_base_num") == expected_num
+            and frozen.get("source_time_base_den") == expected_den
+            and frozen.get("timing_ticks_sha256") == timing_ticks_digest(
+                expected_timestamp_ticks, expected_duration_ticks),
+            "This job's exact frame timing no longer matches the frozen matte. "
+            "Freeze it again.",
+            "timing_changed",
+        )
     _require(
         timing_digest(timestamps, durations) == frozen["timing_sha256"],
         "This job's frame timing no longer matches the frozen matte. "
@@ -355,6 +451,8 @@ def validate_frozen_matte(
         "timing_sha256": frozen["timing_sha256"],
         "source_start_frame": frozen["source_start_frame"],
         "source_end_frame": frozen["source_end_frame"],
+        "source_time_base_num": frozen.get("source_time_base_num"),
+        "source_time_base_den": frozen.get("source_time_base_den"),
         "artifact_verified": bool(verify_artifact),
         "bypassed_stages": ["ocr", "tracking", "mask_refiners"],
     }

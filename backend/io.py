@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import bisect
 import errno
+from fractions import Fraction
+import hashlib
 import logging
 import os
 import queue
@@ -31,7 +33,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
@@ -48,6 +50,115 @@ from backend.subprocess_policy import (
 logger = logging.getLogger(__name__)
 
 
+def _fraction_from_value(value, *, default: Fraction = Fraction(0, 1),
+                         allow_negative: bool = True) -> Fraction:
+    """Parse an ffmpeg number without routing it through binary float math."""
+    if isinstance(value, Fraction):
+        result = value
+    else:
+        text = str(value or "").strip()
+        if not text or text.lower() in {"n/a", "na", "none", "nan", "inf", "-inf"}:
+            return default
+        try:
+            result = Fraction(text)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return default
+    if not allow_negative and result <= 0:
+        return default
+    return result
+
+
+def _normalize_time_base(
+    numerator: object,
+    denominator: object,
+    *,
+    fallback_seconds: object = 0.0,
+) -> tuple[int, int]:
+    """Return a reduced positive rational seconds-per-tick time base."""
+    try:
+        num = int(numerator)
+        den = int(denominator)
+    except (TypeError, ValueError, OverflowError):
+        num, den = 0, 0
+    if num <= 0 or den <= 0:
+        fallback = _fraction_from_value(
+            fallback_seconds, default=Fraction(1, 1_000_000),
+            allow_negative=False)
+        if fallback <= 0:
+            fallback = Fraction(1, 1_000_000)
+        num, den = fallback.numerator, fallback.denominator
+    value = Fraction(num, den)
+    return value.numerator, value.denominator
+
+
+def _parse_ffmpeg_rational(
+    value: object,
+    *,
+    default: tuple[int, int] = (0, 1),
+    allow_negative: bool = False,
+) -> tuple[int, int]:
+    """Parse ``N/D`` or decimal ffmpeg metadata into reduced integers."""
+    parsed = _fraction_from_value(
+        value,
+        default=Fraction(default[0], default[1]),
+        allow_negative=allow_negative,
+    )
+    if not allow_negative and parsed <= 0:
+        return default
+    if parsed.denominator == 0:
+        return default
+    return parsed.numerator, parsed.denominator
+
+
+def _round_fraction_to_int(value: Fraction) -> int:
+    """Round a rational to the nearest integer, halfway away from zero."""
+    if value >= 0:
+        return (value.numerator * 2 + value.denominator) // (
+            2 * value.denominator)
+    positive = -value
+    return -((positive.numerator * 2 + positive.denominator) // (
+        2 * positive.denominator))
+
+
+def _seconds_to_ticks(
+    seconds: object,
+    time_base_num: int,
+    time_base_den: int,
+) -> int:
+    """Convert seconds to nearest source ticks exactly once at a boundary."""
+    seconds_fraction = _fraction_from_value(seconds)
+    if time_base_num <= 0 or time_base_den <= 0:
+        return 0
+    return _round_fraction_to_int(
+        seconds_fraction * time_base_den / time_base_num)
+
+
+def _ticks_to_seconds(ticks: int, time_base_num: int, time_base_den: int) -> float:
+    if time_base_num <= 0 or time_base_den <= 0:
+        return 0.0
+    return float(Fraction(int(ticks) * time_base_num, time_base_den))
+
+
+def _fraction_to_decimal(value: Fraction, places: int = 15) -> str:
+    """Format a rational for a tool boundary with bounded decimal error."""
+    return f"{float(value):.{int(places)}f}".rstrip("0").rstrip(".") or "0"
+
+
+def timing_ticks_digest(
+    timestamp_ticks: List[int], duration_ticks: List[int]
+) -> str:
+    """Hash the canonical tick arrays without a lossy decimal projection."""
+    digest = hashlib.sha256()
+    for label, values in ((b"t", timestamp_ticks), (b"d", duration_ticks)):
+        digest.update(label)
+        digest.update(b":")
+        for value in values:
+            digest.update(str(int(value)).encode("ascii"))
+            digest.update(b",")
+        digest.update(b";")
+    return digest.hexdigest()
+
+
 @dataclass
 class VideoFrameTiming:
     """Presentation timing for a decoded video stream.
@@ -58,35 +169,138 @@ class VideoFrameTiming:
     checkpoint PNGs, SRT/NLE exporters, and ffmpeg encoding share one clock.
     """
 
-    timestamps: List[float]
-    durations: List[float]
-    time_base: float
-    average_fps: float
-    source_start: float
-    is_vfr: bool
+    timestamps: List[float] = field(default_factory=list)
+    durations: List[float] = field(default_factory=list)
+    time_base: float = 0.0
+    average_fps: float = 0.0
+    source_start: float = 0.0
+    is_vfr: bool = False
+    # These integer fields are the canonical clock. The float fields above
+    # remain as compatibility/display views for older callers and manifests.
+    timestamp_ticks: Optional[List[int]] = None
+    duration_ticks: Optional[List[int]] = None
+    time_base_num: int = 0
+    time_base_den: int = 1
+    source_start_ticks: Optional[int] = None
+    stream_start_ticks: Optional[int] = None
+    anomalies: List[dict] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        base_num, base_den = _normalize_time_base(
+            self.time_base_num,
+            self.time_base_den,
+            fallback_seconds=self.time_base,
+        )
+        self.time_base_num = base_num
+        self.time_base_den = base_den
+        if self.timestamp_ticks is None:
+            self.timestamp_ticks = [
+                _seconds_to_ticks(value, base_num, base_den)
+                for value in self.timestamps
+            ]
+        else:
+            self.timestamp_ticks = [int(value) for value in self.timestamp_ticks]
+        if self.duration_ticks is None:
+            self.duration_ticks = [
+                _seconds_to_ticks(value, base_num, base_den)
+                for value in self.durations
+            ]
+        else:
+            self.duration_ticks = [int(value) for value in self.duration_ticks]
+        if self.source_start_ticks is None:
+            self.source_start_ticks = _seconds_to_ticks(
+                self.source_start, base_num, base_den)
+        else:
+            self.source_start_ticks = int(self.source_start_ticks)
+        self.time_base = _ticks_to_seconds(1, base_num, base_den)
+        self.timestamps = [
+            _ticks_to_seconds(value, base_num, base_den)
+            for value in self.timestamp_ticks
+        ]
+        self.durations = [
+            _ticks_to_seconds(value, base_num, base_den)
+            for value in self.duration_ticks
+        ]
+        self.source_start = _ticks_to_seconds(
+            self.source_start_ticks, base_num, base_den)
+        if self.stream_start_ticks is None:
+            self.stream_start_ticks = int(self.source_start_ticks)
+        else:
+            self.stream_start_ticks = int(self.stream_start_ticks)
+        self.anomalies = [dict(item) for item in (self.anomalies or [])]
 
     @property
     def frame_count(self) -> int:
-        return len(self.timestamps)
+        return len(self.timestamp_ticks or [])
+
+    @property
+    def time_base_numerator(self) -> int:
+        return int(self.time_base_num)
+
+    @property
+    def time_base_denominator(self) -> int:
+        return int(self.time_base_den)
 
     @property
     def duration(self) -> float:
-        if not self.timestamps:
+        if not self.timestamp_ticks:
             return 0.0
-        tail = self.durations[-1] if self.durations else 0.0
-        return max(0.0, self.timestamps[-1] + tail)
+        tail = self.duration_ticks[-1] if self.duration_ticks else 0
+        return max(0.0, _ticks_to_seconds(
+            self.timestamp_ticks[-1] + tail,
+            self.time_base_num,
+            self.time_base_den,
+        ))
+
+    @property
+    def total_duration_ticks(self) -> int:
+        if not self.timestamp_ticks:
+            return 0
+        tail = self.duration_ticks[-1] if self.duration_ticks else 0
+        return max(0, int(self.timestamp_ticks[-1]) + int(tail))
+
+    def frame_time_ticks(self, index: int, fallback_fps: float = 30.0) -> int:
+        if 0 <= int(index) < len(self.timestamp_ticks or []):
+            return int(self.timestamp_ticks[int(index)])
+        rate = self.average_fps if self.average_fps > 0 else fallback_fps
+        fallback_seconds = int(index) / max(rate, 1e-6)
+        return _seconds_to_ticks(
+            fallback_seconds, self.time_base_num, self.time_base_den)
+
+    def frame_duration_ticks(self, index: int, fallback_fps: float = 30.0) -> int:
+        if 0 <= int(index) < len(self.duration_ticks or []):
+            return int(self.duration_ticks[int(index)])
+        rate = self.average_fps if self.average_fps > 0 else fallback_fps
+        return max(1, _seconds_to_ticks(
+            1.0 / max(rate, 1e-6), self.time_base_num, self.time_base_den))
+
+    def frame_time_fraction(self, index: int, fallback_fps: float = 30.0) -> Fraction:
+        return Fraction(
+            self.frame_time_ticks(index, fallback_fps) * self.time_base_num,
+            self.time_base_den,
+        )
+
+    def frame_duration_fraction(
+        self, index: int, fallback_fps: float = 30.0
+    ) -> Fraction:
+        return Fraction(
+            self.frame_duration_ticks(index, fallback_fps) * self.time_base_num,
+            self.time_base_den,
+        )
 
     def frame_time(self, index: int, fallback_fps: float = 30.0) -> float:
-        if 0 <= int(index) < len(self.timestamps):
-            return float(self.timestamps[int(index)])
-        rate = self.average_fps if self.average_fps > 0 else fallback_fps
-        return max(0.0, int(index) / max(rate, 1e-6))
+        return max(0.0, _ticks_to_seconds(
+            self.frame_time_ticks(index, fallback_fps),
+            self.time_base_num,
+            self.time_base_den,
+        ))
 
     def frame_duration(self, index: int, fallback_fps: float = 30.0) -> float:
-        if 0 <= int(index) < len(self.durations):
-            return float(self.durations[int(index)])
-        rate = self.average_fps if self.average_fps > 0 else fallback_fps
-        return 1.0 / max(rate, 1e-6)
+        return max(0.0, _ticks_to_seconds(
+            self.frame_duration_ticks(index, fallback_fps),
+            self.time_base_num,
+            self.time_base_den,
+        ))
 
     def frame_range(
         self,
@@ -97,13 +311,16 @@ class VideoFrameTiming:
         limit = min(max(0, int(total_frames)), self.frame_count)
         if limit <= 0:
             return 0, 0
-        values = self.timestamps[:limit]
+        values = (self.timestamp_ticks or [])[:limit]
+        def _target_ticks(seconds: float) -> Fraction:
+            return _fraction_from_value(max(0.0, float(seconds))) * (
+                Fraction(self.time_base_den, self.time_base_num))
         start = (
-            bisect.bisect_left(values, max(0.0, float(start_seconds)))
+            bisect.bisect_left(values, _target_ticks(start_seconds))
             if start_seconds > 0 else 0
         )
         end = (
-            bisect.bisect_left(values, max(0.0, float(end_seconds)))
+            bisect.bisect_left(values, _target_ticks(end_seconds))
             if end_seconds > 0 else limit
         )
         # Clamp to [0, limit], not [0, limit-1]. A start at or past the last
@@ -124,12 +341,63 @@ class VideoFrameTiming:
             for index in range(max(0, start_frame), max(0, end_frame))
         ]
 
+    def range_duration_ticks(self, start_frame: int, end_frame: int) -> List[int]:
+        return [
+            self.frame_duration_ticks(index)
+            for index in range(max(0, start_frame), max(0, end_frame))
+        ]
+
+    def checkpoint_metadata(
+        self,
+        start_frame: int,
+        end_frame: int,
+        next_frame: int = 0,
+    ) -> dict:
+        """Return compact exact-clock data for a pause checkpoint."""
+        start = max(0, int(start_frame))
+        end = min(self.frame_count, max(start, int(end_frame)))
+        cursor = min(max(0, int(next_frame)), max(0, end - start))
+        next_index = start + cursor
+        next_timestamp = (
+            self.frame_time_ticks(next_index)
+            if next_index < end else self.total_duration_ticks
+        )
+        next_duration = (
+            self.frame_duration_ticks(next_index)
+            if next_index < end else 0
+        )
+        return {
+            "schema": "vsr.frame_timing.v2",
+            "time_base_num": int(self.time_base_num),
+            "time_base_den": int(self.time_base_den),
+            "source_start_ticks": int(self.source_start_ticks or 0),
+            "stream_start_ticks": int(self.stream_start_ticks or 0),
+            "start_frame": start,
+            "end_frame": end,
+            "next_frame_timestamp_ticks": int(next_timestamp),
+            "next_frame_duration_ticks": int(next_duration),
+            "timestamp_ticks_sha256": timing_ticks_digest(
+                list(self.timestamp_ticks[start:end]),
+                list(self.duration_ticks[start:end]),
+            ),
+        }
+
     def report(self) -> dict:
         return {
             "mode": "vfr" if self.is_vfr else "cfr",
             "frame_count": self.frame_count,
             "duration_seconds": round(self.duration, 9),
             "time_base_seconds": round(max(0.0, self.time_base), 12),
+            "time_base_num": int(self.time_base_num),
+            "time_base_den": int(self.time_base_den),
+            "time_base": {
+                "num": int(self.time_base_num),
+                "den": int(self.time_base_den),
+            },
+            "source_start_ticks": int(self.source_start_ticks or 0),
+            "stream_start_ticks": int(self.stream_start_ticks or 0),
+            "timing_anomaly_count": len(self.anomalies),
+            "timing_anomalies": [dict(item) for item in self.anomalies],
             "average_fps": round(max(0.0, self.average_fps), 6),
         }
 
@@ -585,9 +853,10 @@ def _parse_ffmpeg_ratio(value, default: float = 0.0) -> float:
 def _parse_frame_timing_csv(text: str) -> List[dict]:
     """Turn `-of csv=p=0` frame rows into the dicts the parser below expects.
 
-    Each row is ``best_effort_timestamp_time,pkt_duration_time``; ffprobe
-    writes "N/A" for an unknown value, which the caller already treats as
-    missing.
+    The first two columns are integer stream ticks. The final two columns are
+    compatibility fallbacks for ffprobe builds that cannot expose the integer
+    fields. ffprobe writes ``N/A`` for unknown values, which the caller keeps
+    as an explicit timing anomaly instead of silently switching clocks.
     """
     frames: List[dict] = []
     for line in text.splitlines():
@@ -596,8 +865,10 @@ def _parse_frame_timing_csv(text: str) -> List[dict]:
             continue
         parts = line.split(",")
         frames.append({
-            "best_effort_timestamp_time": parts[0] if parts else "",
-            "pkt_duration_time": parts[1] if len(parts) > 1 else "",
+            "best_effort_timestamp": parts[0] if parts else "",
+            "pkt_duration": parts[1] if len(parts) > 1 else "",
+            "best_effort_timestamp_time": parts[2] if len(parts) > 2 else "",
+            "pkt_duration_time": parts[3] if len(parts) > 3 else "",
         })
     return frames
 
@@ -645,7 +916,9 @@ def _probe_video_frame_timing(
     frame_cmd = [
         "ffprobe", "-v", "error", "-select_streams", "v:0",
         "-show_frames",
-        "-show_entries", "frame=best_effort_timestamp_time,pkt_duration_time",
+        "-show_entries",
+        "frame=best_effort_timestamp,pkt_duration,"
+        "best_effort_timestamp_time,pkt_duration_time",
         "-of", "csv=p=0", str(path),
     ]
     try:
@@ -690,89 +963,185 @@ def _probe_video_frame_timing(
 
     streams = payload.get("streams") or []
     stream = streams[0] if streams and isinstance(streams[0], dict) else {}
-    average_fps = _parse_ffmpeg_ratio(stream.get("avg_frame_rate"), 0.0)
-    if average_fps <= 0:
-        average_fps = _parse_ffmpeg_ratio(stream.get("r_frame_rate"), 30.0)
-    fallback_duration = 1.0 / max(average_fps, 1e-6)
-    time_base = _parse_ffmpeg_ratio(stream.get("time_base"), 0.0)
-    stream_start = _parse_ffmpeg_ratio(stream.get("start_time"), 0.0)
-    try:
-        stream_duration = float(stream.get("duration") or 0.0)
-    except (TypeError, ValueError):
-        stream_duration = 0.0
-    if not np.isfinite(stream_duration) or stream_duration <= 0:
-        stream_duration = 0.0
+    average_num, average_den = _parse_ffmpeg_rational(
+        stream.get("avg_frame_rate"), default=(0, 1))
+    if average_num <= 0:
+        average_num, average_den = _parse_ffmpeg_rational(
+            stream.get("r_frame_rate"), default=(30, 1))
+    average_fraction = Fraction(average_num, average_den)
+    average_fps = float(average_fraction)
+    time_base_num, time_base_den = _parse_ffmpeg_rational(
+        stream.get("time_base"), default=(1, 1_000_000))
+    time_base_num, time_base_den = _normalize_time_base(
+        time_base_num, time_base_den, fallback_seconds=1 / 1_000_000)
+    stream_start_num, stream_start_den = _parse_ffmpeg_rational(
+        stream.get("start_time"), default=(0, 1), allow_negative=True)
+    stream_start_ticks = _round_fraction_to_int(
+        Fraction(stream_start_num, stream_start_den)
+        * time_base_den / time_base_num
+    )
+    stream_duration = _fraction_from_value(
+        stream.get("duration"), default=Fraction(0, 1),
+        allow_negative=False)
+    fallback_tick = max(1, _round_fraction_to_int(
+        Fraction(1, 1) / average_fraction
+        * time_base_den / time_base_num
+    ))
 
-    raw_timestamps: List[float] = []
-    packet_durations: List[float] = []
-    previous = None
-    for frame in payload.get("frames") or []:
+    anomalies: List[dict] = []
+
+    def record_anomaly(
+        frame_index: int,
+        kind: str,
+        raw_value: object = None,
+        repaired_to: Optional[int] = None,
+    ) -> None:
+        entry = {"frame": int(frame_index), "kind": str(kind)}
+        if raw_value not in (None, ""):
+            entry["raw"] = str(raw_value)
+        if repaired_to is not None:
+            entry["repaired_to_ticks"] = int(repaired_to)
+        anomalies.append(entry)
+        detail = f" raw={raw_value!r}" if raw_value not in (None, "") else ""
+        if repaired_to is not None:
+            detail += f" repaired_to={int(repaired_to)} ticks"
+        logger.warning(
+            "Frame timing anomaly frame=%d kind=%s (%s)%s",
+            int(frame_index), kind, str(kind).replace("_", "-"), detail,
+        )
+
+    def optional_fraction(value: object) -> Optional[Fraction]:
+        text = str(value or "").strip()
+        if not text or text.lower() in {
+            "n/a", "na", "none", "nan", "inf", "-inf",
+        }:
+            return None
+        try:
+            return Fraction(text)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+
+    raw_timestamps: List[int] = []
+    packet_durations: List[int] = []
+    previous: Optional[int] = None
+    for frame_index, frame in enumerate(payload.get("frames") or []):
         if not isinstance(frame, dict):
             continue
-        try:
-            timestamp = float(frame.get("best_effort_timestamp_time"))
-        except (TypeError, ValueError):
-            timestamp = (
-                previous + fallback_duration
-                if previous is not None else stream_start
+        raw_timestamp = frame.get("best_effort_timestamp")
+        timestamp: Optional[int] = None
+        timestamp_fraction = optional_fraction(raw_timestamp)
+        if timestamp_fraction is not None:
+            timestamp = _round_fraction_to_int(timestamp_fraction)
+        if timestamp is None:
+            timestamp_time = optional_fraction(
+                frame.get("best_effort_timestamp_time"))
+            if timestamp_time is not None:
+                timestamp = _round_fraction_to_int(
+                    timestamp_time * time_base_den / time_base_num)
+                record_anomaly(
+                    frame_index,
+                    "timestamp_quantized",
+                    frame.get("best_effort_timestamp_time"),
+                    timestamp,
+                )
+        if timestamp is None:
+            record_anomaly(
+                frame_index,
+                "missing_timestamp",
+                raw_timestamp or frame.get("best_effort_timestamp_time"),
             )
-        if not np.isfinite(timestamp):
             timestamp = (
-                previous + fallback_duration
-                if previous is not None else stream_start
+                previous + fallback_tick
+                if previous is not None else stream_start_ticks
+            )
+            record_anomaly(
+                frame_index,
+                "repaired_timestamp",
+                raw_timestamp or frame.get("best_effort_timestamp_time"),
+                timestamp,
             )
         if previous is not None and timestamp <= previous:
-            timestamp = previous + fallback_duration
-        try:
-            packet_duration = float(frame.get("pkt_duration_time") or 0.0)
-        except (TypeError, ValueError):
-            packet_duration = 0.0
-        if not np.isfinite(packet_duration) or packet_duration <= 0:
-            packet_duration = 0.0
-        raw_timestamps.append(timestamp)
-        packet_durations.append(packet_duration)
-        previous = timestamp
+            kind = "repeated_pts" if timestamp == previous else "non_monotonic_pts"
+            record_anomaly(frame_index, kind, raw_timestamp, timestamp)
+            timestamp = previous + fallback_tick
+            record_anomaly(frame_index, "repaired_timestamp", raw_timestamp, timestamp)
+
+        raw_duration = frame.get("pkt_duration")
+        duration: Optional[int] = None
+        duration_fraction = optional_fraction(raw_duration)
+        if duration_fraction is not None and duration_fraction > 0:
+            duration = int(duration_fraction)
+        if duration is None or duration <= 0:
+            duration_time = optional_fraction(frame.get("pkt_duration_time"))
+            if duration_time is not None and duration_time > 0:
+                duration = _round_fraction_to_int(
+                    duration_time * time_base_den / time_base_num)
+        if duration is None or duration <= 0:
+            duration = 0
+        raw_timestamps.append(int(timestamp))
+        packet_durations.append(int(duration))
+        previous = int(timestamp)
 
     if len(raw_timestamps) < 2:
         return None
-    origin = raw_timestamps[0]
-    timestamps = [max(0.0, value - origin) for value in raw_timestamps]
+
+    origin = int(raw_timestamps[0])
+    timestamp_ticks = [max(0, value - origin) for value in raw_timestamps]
     deltas = [
-        timestamps[index + 1] - timestamps[index]
-        for index in range(len(timestamps) - 1)
+        timestamp_ticks[index + 1] - timestamp_ticks[index]
+        for index in range(len(timestamp_ticks) - 1)
     ]
     positive_deltas = [value for value in deltas if value > 0]
-    typical = (
-        float(np.median(np.asarray(positive_deltas, dtype=np.float64)))
-        if positive_deltas else fallback_duration
-    )
-    durations = list(positive_deltas)
-    if len(durations) != len(timestamps) - 1:
-        durations = [max(fallback_duration, value) for value in deltas]
+    if positive_deltas:
+        ordered = sorted(positive_deltas)
+        typical_tick = int(ordered[(len(ordered) - 1) // 2])
+        typical_tick = max(1, typical_tick)
+    else:
+        typical_tick = fallback_tick
+
+    durations: List[int] = []
+    for index, delta in enumerate(deltas):
+        if delta <= 0:
+            record_anomaly(index + 1, "invalid_duration", delta, typical_tick)
+            delta = typical_tick
+        durations.append(int(delta))
+
     last_duration = packet_durations[-1]
     if last_duration <= 0 and stream_duration > 0:
-        last_duration = origin + stream_duration - raw_timestamps[-1]
-    if last_duration <= 0 or last_duration > max(typical * 10.0, 1.0):
-        last_duration = typical if typical > 0 else fallback_duration
-    durations.append(last_duration)
+        stream_end_ticks = stream_start_ticks + _round_fraction_to_int(
+            stream_duration * time_base_den / time_base_num)
+        last_duration = stream_end_ticks - raw_timestamps[-1]
+    if last_duration <= 0 or last_duration > max(typical_tick * 10, 1):
+        record_anomaly(len(raw_timestamps) - 1, "missing_duration", None,
+                       typical_tick)
+        last_duration = typical_tick
+        record_anomaly(len(raw_timestamps) - 1, "repaired_duration", None,
+                       last_duration)
+    durations.append(int(last_duration))
 
-    tolerance = max(time_base * 1.1, typical * 0.01, 1e-6)
-    is_vfr = any(abs(value - typical) > tolerance for value in positive_deltas)
-    observed_duration = timestamps[-1] + last_duration
+    tolerance = max(1, int(round(typical_tick * 0.01)))
+    is_vfr = any(abs(value - typical_tick) > tolerance for value in positive_deltas)
+    observed_duration_ticks = timestamp_ticks[-1] + durations[-1]
+    observed_duration = _ticks_to_seconds(
+        observed_duration_ticks, time_base_num, time_base_den)
     observed_fps = (
-        len(timestamps) / observed_duration if observed_duration > 0 else average_fps
+        len(timestamp_ticks) / observed_duration
+        if observed_duration > 0 else average_fps
     )
     return VideoFrameTiming(
-        timestamps=timestamps,
-        durations=durations,
-        time_base=time_base,
+        timestamp_ticks=timestamp_ticks,
+        duration_ticks=durations,
+        time_base_num=time_base_num,
+        time_base_den=time_base_den,
         average_fps=(
             observed_fps
             if is_vfr and observed_fps > 0
             else average_fps
         ),
-        source_start=origin,
+        source_start_ticks=origin,
+        stream_start_ticks=stream_start_ticks,
         is_vfr=is_vfr,
+        anomalies=anomalies,
     )
 
 
@@ -1273,6 +1642,8 @@ class _FfmpegBgr48Capture:
         self._frame_count = max(1, int(frame_count))
         self._pos = 0
         self._frame_timestamps: Optional[List[float]] = None
+        self._frame_timestamp_fractions: Optional[List[Fraction]] = None
+        self._frame_timing_exact = False
         self._proc: Optional[subprocess.Popen] = None
         self._frame_bytes = self._width * self._height * 3 * 2
         self._opened = (
@@ -1309,8 +1680,43 @@ class _FfmpegBgr48Capture:
         self._restart()
         return True
 
-    def set_frame_timing(self, timestamps: List[float]) -> None:
-        """Use source PTS for seeks instead of the average-frame-rate guess."""
+    def set_frame_timing(
+        self,
+        timestamps,
+        *,
+        time_base_num: Optional[int] = None,
+        time_base_den: Optional[int] = None,
+    ) -> None:
+        """Use exact source PTS for seeks instead of the FPS estimate."""
+        exact_ticks = getattr(timestamps, "timestamp_ticks", None)
+        if exact_ticks is not None:
+            time_base_num = int(getattr(timestamps, "time_base_num", 0) or 0)
+            time_base_den = int(getattr(timestamps, "time_base_den", 0) or 0)
+            timestamps = exact_ticks
+        if (
+            exact_ticks is not None
+            or (time_base_num is not None and time_base_den is not None)
+        ):
+            try:
+                base_num, base_den = _normalize_time_base(
+                    time_base_num, time_base_den)
+                ticks = [int(value) for value in timestamps]
+                if any(value < 0 for value in ticks):
+                    return
+                fractions = [
+                    Fraction(value * base_num, base_den)
+                    for value in ticks
+                ]
+            except (TypeError, ValueError, OverflowError):
+                return
+            if fractions:
+                self._frame_timestamp_fractions = fractions
+                self._frame_timestamps = [
+                    float(value) for value in fractions
+                ]
+                self._frame_timing_exact = True
+                self._frame_count = len(fractions)
+            return
         values = []
         for value in timestamps:
             try:
@@ -1322,6 +1728,10 @@ class _FfmpegBgr48Capture:
             values.append(timestamp)
         if values:
             self._frame_timestamps = values
+            self._frame_timestamp_fractions = [
+                _fraction_from_value(value) for value in values
+            ]
+            self._frame_timing_exact = False
             self._frame_count = len(values)
 
     def _restart(self) -> None:
@@ -1338,10 +1748,17 @@ class _FfmpegBgr48Capture:
                 self._frame_timestamps is not None
                 and self._pos < len(self._frame_timestamps)
             ):
-                seek_seconds = self._frame_timestamps[self._pos]
+                if (
+                    self._frame_timing_exact
+                    and self._frame_timestamp_fractions is not None
+                ):
+                    seek_seconds = _fraction_to_decimal(
+                        self._frame_timestamp_fractions[self._pos], 15)
+                else:
+                    seek_seconds = f"{self._frame_timestamps[self._pos]:.9f}"
             else:
-                seek_seconds = self._pos / max(self._fps, 1e-6)
-            cmd += ["-ss", f"{seek_seconds:.9f}"]
+                seek_seconds = f"{self._pos / max(self._fps, 1e-6):.9f}"
+            cmd += ["-ss", str(seek_seconds)]
         cmd += [
             "-i", self._path,
             "-map", "0:v:0",

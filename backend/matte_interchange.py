@@ -17,7 +17,11 @@ from backend.atomic_replace import ReplacementJournal
 from backend.io import (
     _LosslessIntermediateWriter,
     _allocate_temp_output_path,
+    _normalize_time_base,
     _promote_temp_output,
+    _seconds_to_ticks,
+    _ticks_to_seconds,
+    timing_ticks_digest,
     _write_text_atomic,
 )
 from backend.safe_image import safe_imread
@@ -112,6 +116,10 @@ class MaskInterchangeWriter:
         durations: Iterable[float],
         is_vfr: bool,
         source_time_base: float,
+        timestamp_ticks: Optional[Iterable[int]] = None,
+        duration_ticks: Optional[Iterable[int]] = None,
+        source_time_base_num: Optional[int] = None,
+        source_time_base_den: Optional[int] = None,
     ):
         self.export_format = normalize_mask_export_format(export_format)
         self.width = int(width)
@@ -119,10 +127,37 @@ class MaskInterchangeWriter:
         self.fps = max(float(fps), 1e-9)
         self.start_frame = max(0, int(start_frame))
         self.end_frame = max(self.start_frame, int(end_frame))
-        self.timestamps = [round(float(value), 9) for value in timestamps]
-        self.durations = [round(float(value), 9) for value in durations]
+        base_num, base_den = _normalize_time_base(
+            source_time_base_num,
+            source_time_base_den,
+            fallback_seconds=source_time_base,
+        )
+        self.source_time_base_num = base_num
+        self.source_time_base_den = base_den
+        self.timestamp_ticks = (
+            [int(value) for value in timestamp_ticks]
+            if timestamp_ticks is not None else [
+                _seconds_to_ticks(value, base_num, base_den)
+                for value in timestamps
+            ]
+        )
+        self.duration_ticks = (
+            [int(value) for value in duration_ticks]
+            if duration_ticks is not None else [
+                _seconds_to_ticks(value, base_num, base_den)
+                for value in durations
+            ]
+        )
+        self.timestamps = [
+            round(_ticks_to_seconds(value, base_num, base_den), 9)
+            for value in self.timestamp_ticks
+        ]
+        self.durations = [
+            round(_ticks_to_seconds(value, base_num, base_den), 9)
+            for value in self.duration_ticks
+        ]
         self.is_vfr = bool(is_vfr)
-        self.source_time_base = max(0.0, float(source_time_base or 0.0))
+        self.source_time_base = _ticks_to_seconds(1, base_num, base_den)
         self.artifact_path, self.manifest_path = mask_interchange_paths(
             output_path, self.export_format)
         self.artifact_path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,6 +238,12 @@ class MaskInterchangeWriter:
             "source_end_frame": self.end_frame,
             "source_is_vfr": self.is_vfr,
             "source_time_base_seconds": round(self.source_time_base, 12),
+            "source_time_base_num": self.source_time_base_num,
+            "source_time_base_den": self.source_time_base_den,
+            "timestamp_ticks": self.timestamp_ticks,
+            "duration_ticks": self.duration_ticks,
+            "timing_ticks_sha256": timing_ticks_digest(
+                self.timestamp_ticks, self.duration_ticks),
             "timestamps_seconds": self.timestamps,
             "durations_seconds": self.durations,
         }
@@ -305,6 +346,9 @@ def inspect_matte_manifest(path: str | Path) -> dict:
         "width": int(payload.get("width", 0) or 0),
         "height": int(payload.get("height", 0) or 0),
         "frame_count": int(payload.get("frame_count", 0) or 0),
+        "source_time_base_num": payload.get("source_time_base_num"),
+        "source_time_base_den": payload.get("source_time_base_den"),
+        "timing_ticks_sha256": payload.get("timing_ticks_sha256", ""),
     }
 
 
@@ -324,6 +368,10 @@ class MaskInterchangeReader:
         is_vfr: bool,
         source_time_base: float,
         mode: str,
+        timestamp_ticks: Optional[Iterable[int]] = None,
+        duration_ticks: Optional[Iterable[int]] = None,
+        source_time_base_num: Optional[int] = None,
+        source_time_base_den: Optional[int] = None,
     ):
         self.manifest_path, self.manifest = _load_manifest(manifest_path)
         self.artifact_path = _artifact_from_manifest(
@@ -338,7 +386,8 @@ class MaskInterchangeReader:
         self._capture_position = 0
         self._validate_metadata(
             start_frame, end_frame, timestamps, durations,
-            is_vfr, source_time_base)
+            is_vfr, source_time_base, timestamp_ticks, duration_ticks,
+            source_time_base_num, source_time_base_den)
         self._validate_artifact()
         current_hash = (
             _sha256_sequence(self.artifact_path, self.frame_count)
@@ -357,6 +406,9 @@ class MaskInterchangeReader:
             "format": self.export_format,
             "mode": self.mode,
             "frame_count": self.frame_count,
+            "source_time_base_num": self.manifest.get("source_time_base_num"),
+            "source_time_base_den": self.manifest.get("source_time_base_den"),
+            "timing_ticks_sha256": self.manifest.get("timing_ticks_sha256", ""),
             "composition_order": [
                 "ocr_and_manual_regions",
                 "manual_add_subtract_corrections",
@@ -373,9 +425,34 @@ class MaskInterchangeReader:
         durations: Iterable[float],
         is_vfr: bool,
         source_time_base: float,
+        timestamp_ticks: Optional[Iterable[int]],
+        duration_ticks: Optional[Iterable[int]],
+        source_time_base_num: Optional[int],
+        source_time_base_den: Optional[int],
     ) -> None:
         expected_timestamps = [float(value) for value in timestamps]
         expected_durations = [float(value) for value in durations]
+        expected_time_base_num, expected_time_base_den = _normalize_time_base(
+            source_time_base_num,
+            source_time_base_den,
+            fallback_seconds=source_time_base,
+        )
+        expected_timestamp_ticks = (
+            [int(value) for value in timestamp_ticks]
+            if timestamp_ticks is not None else [
+                _seconds_to_ticks(
+                    value, expected_time_base_num, expected_time_base_den)
+                for value in expected_timestamps
+            ]
+        )
+        expected_duration_ticks = (
+            [int(value) for value in duration_ticks]
+            if duration_ticks is not None else [
+                _seconds_to_ticks(
+                    value, expected_time_base_num, expected_time_base_den)
+                for value in expected_durations
+            ]
+        )
         if (
             len(expected_timestamps) != self.frame_count
             or len(expected_durations) != self.frame_count
@@ -416,6 +493,48 @@ class MaskInterchangeReader:
         tolerance = max(1e-6, abs(float(source_time_base or 0.0)) * 0.51)
         if abs(manifest_time_base - float(source_time_base or 0.0)) > tolerance:
             raise ValueError("Imported matte time base does not match the source")
+        raw_time_base_num = self.manifest.get("source_time_base_num")
+        raw_time_base_den = self.manifest.get("source_time_base_den")
+        raw_timestamp_ticks = self.manifest.get("timestamp_ticks")
+        raw_duration_ticks = self.manifest.get("duration_ticks")
+        if (
+            raw_time_base_num is not None
+            and raw_time_base_den is not None
+        ):
+            actual_num, actual_den = _normalize_time_base(
+                raw_time_base_num, raw_time_base_den,
+                fallback_seconds=manifest_time_base,
+            )
+            if source_time_base_num is None and source_time_base_den is None:
+                expected_time_base_num, expected_time_base_den = (
+                    actual_num, actual_den)
+                expected_timestamp_ticks = [
+                    _seconds_to_ticks(
+                        value, expected_time_base_num, expected_time_base_den)
+                    for value in expected_timestamps
+                ]
+                expected_duration_ticks = [
+                    _seconds_to_ticks(
+                        value, expected_time_base_num, expected_time_base_den)
+                    for value in expected_durations
+                ]
+            if (actual_num, actual_den) != (
+                expected_time_base_num, expected_time_base_den
+            ):
+                raise ValueError("Imported matte rational time base does not match the source")
+            if not isinstance(raw_timestamp_ticks, list) or len(raw_timestamp_ticks) != self.frame_count:
+                raise ValueError("Imported matte timestamp tick count does not match the source")
+            if not isinstance(raw_duration_ticks, list) or len(raw_duration_ticks) != self.frame_count:
+                raise ValueError("Imported matte duration tick count does not match the source")
+            try:
+                actual_timestamp_ticks = [int(value) for value in raw_timestamp_ticks]
+                actual_duration_ticks = [int(value) for value in raw_duration_ticks]
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Imported matte timing ticks are malformed") from exc
+            if actual_timestamp_ticks != expected_timestamp_ticks:
+                raise ValueError("Imported matte timestamp mismatch at exact tick")
+            if actual_duration_ticks != expected_duration_ticks:
+                raise ValueError("Imported matte duration mismatch at exact tick")
         for index, (actual, expected) in enumerate(
             zip(actual_timestamps, expected_timestamps)
         ):

@@ -910,6 +910,7 @@ def build_output_sidecar(
     translation: Optional[dict] = None,
     clean_reference: Optional[dict] = None,
     execution_provenance: Optional[dict] = None,
+    source_timing: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> dict:
@@ -958,6 +959,8 @@ def build_output_sidecar(
     # RM-147: requested vs. effective device/engine/backend for this job.
     if execution_provenance is not None:
         payload["executionProvenance"] = execution_provenance
+    if source_timing is not None:
+        payload["sourceTiming"] = dict(source_timing)
     if elapsed_seconds is not None:
         payload["elapsedSeconds"] = round(max(0.0, float(elapsed_seconds)), 3)
     if stage_timings is not None:
@@ -1004,6 +1007,7 @@ def write_output_sidecar(
     translation: Optional[dict] = None,
     clean_reference: Optional[dict] = None,
     execution_provenance: Optional[dict] = None,
+    source_timing: Optional[dict] = None,
     checkpoint_resumed: bool = False,
     app_version: str = "",
 ) -> Optional[Path]:
@@ -1027,6 +1031,7 @@ def write_output_sidecar(
             translation=translation,
             clean_reference=clean_reference,
             execution_provenance=execution_provenance,
+            source_timing=source_timing,
             checkpoint_resumed=checkpoint_resumed,
             app_version=app_version,
         )

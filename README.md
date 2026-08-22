@@ -652,6 +652,7 @@ python -m backend.processor -i input.mp4 -o revised.mp4 --import-mask cleaned.ma
 Edit the referenced artifact while keeping the manifest beside it, then import
 in `replace`, `add`, or `subtract` mode. VSR validates every frame, dimension,
 frame count, timestamp, duration, and timing mode before processing begins.
+VFR manifests retain integer PTS and duration ticks with the source rational time base, including edit-list starts. Checkpoints, frozen mattes, track plans, audio trimming, SRT, EDL, and FCPXML use the same exact clock.
 The output reproducibility sidecar records the imported artifact's current
 SHA-256, whether it differs from the exported hash, and the deterministic mask
 composition order. **Review mask** shows that composed result before a run.

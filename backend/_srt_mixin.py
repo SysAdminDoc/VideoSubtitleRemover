@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from fractions import Fraction
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -113,8 +114,13 @@ class _SrtMixin:
         fps = fps if fps and fps > 1.0 else 30.0
         gap_tol = max(1, int(fps * 0.5))
 
-        def ts(t: float) -> str:
-            ms = int(round(t * 1000))
+        def ts(t) -> str:
+            value = t if isinstance(t, Fraction) else Fraction(str(float(t)))
+            if value >= 0:
+                ms = (value.numerator * 1000 * 2 + value.denominator) // (
+                    2 * value.denominator)
+            else:
+                ms = 0
             hh, rem = divmod(ms, 3600000)
             mm, rem = divmod(rem, 60000)
             ss, ms = divmod(rem, 1000)
@@ -151,10 +157,12 @@ class _SrtMixin:
                 if frame_timing is not None:
                     absolute_start = s + offset_frames
                     absolute_end = e + offset_frames
-                    t_start = frame_timing.frame_time(absolute_start, fps)
+                    t_start = frame_timing.frame_time_fraction(
+                        absolute_start, fps)
                     t_end = (
-                        frame_timing.frame_time(absolute_end, fps)
-                        + frame_timing.frame_duration(absolute_end, fps)
+                        frame_timing.frame_time_fraction(absolute_end, fps)
+                        + frame_timing.frame_duration_fraction(
+                            absolute_end, fps)
                     )
                 else:
                     t_start = (s + offset_frames) / fps

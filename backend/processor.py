@@ -34,6 +34,7 @@ import subprocess
 import traceback
 import time
 from contextlib import contextmanager
+from fractions import Fraction
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Optional, Tuple, List, Callable
@@ -69,6 +70,9 @@ from backend.io import (
     _copy_file_atomic,
     validate_video_output as validate_video_output,
     VideoFrameTiming,
+    _normalize_time_base,
+    _seconds_to_ticks,
+    _ticks_to_seconds,
     _probe_video_frame_timing,
     _FrameSequenceCapture as _FrameSequenceCapture,
     _open_capture,
@@ -398,6 +402,13 @@ class _FrameRange:
     matte_timestamps: List[float]
     matte_durations: List[float]
     matte_time_base: float
+    selected_frame_duration_ticks: Optional[List[int]]
+    processed_time_start_ticks: int
+    processed_time_end_ticks: int
+    matte_timestamp_ticks: List[int]
+    matte_duration_ticks: List[int]
+    matte_time_base_num: int
+    matte_time_base_den: int
 
 
 @dataclass(frozen=True)
@@ -409,6 +420,7 @@ class _FrameLoopCheckpoint:
     config_hash: str
     frame_dir: Optional[Path]
     timing_manifest_path: Optional[Path]
+    timing_metadata: Optional[dict]
     input_path: str
     output_path: str
     pause_check: Optional[Callable[[], bool]]
@@ -577,6 +589,23 @@ def _resolve_frame_range(cap, total_frames: int, fps: float,
         frame_timing.range_durations(start_frame, end_frame, fps)
         if frame_timing is not None else None
     )
+    if frame_timing is not None:
+        timing_num, timing_den = _normalize_time_base(
+            getattr(frame_timing, "time_base_num", 0),
+            getattr(frame_timing, "time_base_den", 0),
+            fallback_seconds=getattr(frame_timing, "time_base", 0.0),
+        )
+        range_tick_method = getattr(frame_timing, "range_duration_ticks", None)
+        selected_frame_duration_ticks = (
+            list(range_tick_method(start_frame, end_frame))
+            if callable(range_tick_method) else [
+                _seconds_to_ticks(value, timing_num, timing_den)
+                for value in selected_frame_durations or []
+            ]
+        )
+    else:
+        timing_num, timing_den = 0, 1
+        selected_frame_duration_ticks = None
     processed_time_start = _frame_seconds(
         start_frame, fps, frame_timing)
     processed_time_end = (
@@ -584,17 +613,58 @@ def _resolve_frame_range(cap, total_frames: int, fps: float,
         if selected_frame_durations is not None
         else _frame_seconds(end_frame, fps)
     )
+    if frame_timing is not None:
+        matte_time_base_num = timing_num
+        matte_time_base_den = timing_den
+        frame_tick_method = getattr(frame_timing, "frame_time_ticks", None)
+        matte_timestamp_ticks = [
+            frame_tick_method(index, fps)
+            if callable(frame_tick_method) else _seconds_to_ticks(
+                frame_timing.frame_time(index, fps),
+                matte_time_base_num,
+                matte_time_base_den,
+            )
+            for index in range(start_frame, end_frame)
+        ]
+        matte_duration_ticks = list(selected_frame_duration_ticks or [])
+        processed_time_start_ticks = (
+            frame_tick_method(start_frame, fps)
+            if callable(frame_tick_method) else _seconds_to_ticks(
+                frame_timing.frame_time(start_frame, fps),
+                matte_time_base_num,
+                matte_time_base_den,
+            )
+        )
+        processed_time_end_ticks = (
+            processed_time_start_ticks + sum(matte_duration_ticks)
+        )
+    else:
+        try:
+            rate = Fraction(str(float(fps)))
+        except (TypeError, ValueError, ZeroDivisionError):
+            rate = Fraction(1, 1)
+        if rate <= 0:
+            rate = Fraction(1, 1)
+        matte_time_base_num, matte_time_base_den = _normalize_time_base(
+            rate.denominator, rate.numerator,
+            fallback_seconds=1.0,
+        )
+        matte_timestamp_ticks = list(range(start_frame, end_frame))
+        matte_duration_ticks = [1] * frames_to_process
+        processed_time_start_ticks = int(start_frame)
+        processed_time_end_ticks = int(end_frame)
     matte_timestamps = [
-        _frame_seconds(index, fps, frame_timing)
-        for index in range(start_frame, end_frame)
+        _ticks_to_seconds(
+            value, matte_time_base_num, matte_time_base_den)
+        for value in matte_timestamp_ticks
     ]
-    matte_durations = list(selected_frame_durations or (
-        [1.0 / fps] * frames_to_process
-    ))
-    matte_time_base = (
-        frame_timing.time_base
-        if frame_timing is not None else 1.0 / fps
-    )
+    matte_durations = [
+        _ticks_to_seconds(
+            value, matte_time_base_num, matte_time_base_den)
+        for value in matte_duration_ticks
+    ]
+    matte_time_base = _ticks_to_seconds(
+        1, matte_time_base_num, matte_time_base_den)
     return _FrameRange(
         time_start_s=time_start_s,
         time_end_s=time_end_s,
@@ -607,6 +677,13 @@ def _resolve_frame_range(cap, total_frames: int, fps: float,
         matte_timestamps=matte_timestamps,
         matte_durations=matte_durations,
         matte_time_base=matte_time_base,
+        selected_frame_duration_ticks=selected_frame_duration_ticks,
+        processed_time_start_ticks=processed_time_start_ticks,
+        processed_time_end_ticks=processed_time_end_ticks,
+        matte_timestamp_ticks=matte_timestamp_ticks,
+        matte_duration_ticks=matte_duration_ticks,
+        matte_time_base_num=matte_time_base_num,
+        matte_time_base_den=matte_time_base_den,
     )
 
 
@@ -2402,6 +2479,10 @@ class SubtitleRemover(
         if should_pause is None:
             should_pause = bool(
                 checkpoint.pause_check and checkpoint.pause_check())
+        timing_metadata = checkpoint.timing_metadata
+        if ctx.frame_timing is not None:
+            timing_metadata = ctx.frame_timing.checkpoint_metadata(
+                ctx.start_frame, ctx.end_frame, state.written_idx)
         payload = write_pause_checkpoint(
             checkpoint.root,
             checkpoint.key,
@@ -2417,6 +2498,7 @@ class SubtitleRemover(
             fps=ctx.fps,
             status="paused" if should_pause else "running",
             timing_manifest_path=checkpoint.timing_manifest_path,
+            timing=timing_metadata,
         )
         self.last_pause_checkpoint = payload
         if checkpoint.state_path is not None:
@@ -2628,16 +2710,18 @@ class SubtitleRemover(
             if frame_timing is not None:
                 set_frame_timing = getattr(cap, "set_frame_timing", None)
                 if callable(set_frame_timing):
-                    set_frame_timing(frame_timing.timestamps)
+                    set_frame_timing(frame_timing)
                 if frame_timing.average_fps > 0:
                     fps = float(min(frame_timing.average_fps, 1000.0))
                 self.last_timing_report = frame_timing.report()
                 timing_label = "variable" if frame_timing.is_vfr else "constant"
                 logger.info(
                     "Source timing: %s frame rate, %d timestamps, "
-                    "time base %.9fs",
+                    "time base %d/%d s (%0.12fs)",
                     timing_label,
                     frame_timing.frame_count,
+                    frame_timing.time_base_num,
+                    frame_timing.time_base_den,
                     frame_timing.time_base,
                 )
             else:
@@ -2646,6 +2730,11 @@ class SubtitleRemover(
                     "frame_count": total_frames,
                     "duration_seconds": round(total_frames / fps, 9),
                     "time_base_seconds": 0.0,
+                    "time_base_num": 0,
+                    "time_base_den": 1,
+                    "source_start_ticks": 0,
+                    "timing_anomaly_count": 0,
+                    "timing_anomalies": [],
                     "average_fps": round(fps, 6),
                 }
 
@@ -2665,9 +2754,18 @@ class SubtitleRemover(
             selected_frame_durations = _range.selected_frame_durations
             processed_time_start = _range.processed_time_start
             processed_time_end = _range.processed_time_end
+            processed_time_start_ticks = _range.processed_time_start_ticks
+            processed_time_end_ticks = _range.processed_time_end_ticks
             matte_timestamps = _range.matte_timestamps
             matte_durations = _range.matte_durations
             matte_time_base = _range.matte_time_base
+            matte_timestamp_ticks = _range.matte_timestamp_ticks
+            matte_duration_ticks = _range.matte_duration_ticks
+            matte_time_base_num = _range.matte_time_base_num
+            matte_time_base_den = _range.matte_time_base_den
+            selected_frame_duration_ticks = (
+                _range.selected_frame_duration_ticks
+            )
             if frozen_record:
                 # RM-153: revalidate before a single frame is decoded, so
                 # a matte that no longer belongs to this job stops the run
@@ -2690,6 +2788,10 @@ class SubtitleRemover(
                     is_vfr=bool(
                         frame_timing is not None and frame_timing.is_vfr),
                     source_time_base=matte_time_base,
+                    timestamp_ticks=matte_timestamp_ticks,
+                    duration_ticks=matte_duration_ticks,
+                    source_time_base_num=matte_time_base_num,
+                    source_time_base_den=matte_time_base_den,
                 )
                 matte_reader = MaskInterchangeReader(
                     frozen_record["manifest"],
@@ -2702,6 +2804,10 @@ class SubtitleRemover(
                     is_vfr=bool(
                         frame_timing is not None and frame_timing.is_vfr),
                     source_time_base=matte_time_base,
+                    timestamp_ticks=matte_timestamp_ticks,
+                    duration_ticks=matte_duration_ticks,
+                    source_time_base_num=matte_time_base_num,
+                    source_time_base_den=matte_time_base_den,
                     mode="replace",
                 )
                 self.last_frozen_matte = {
@@ -2726,6 +2832,10 @@ class SubtitleRemover(
                     is_vfr=bool(
                         frame_timing is not None and frame_timing.is_vfr),
                     source_time_base=matte_time_base,
+                    timestamp_ticks=matte_timestamp_ticks,
+                    duration_ticks=matte_duration_ticks,
+                    source_time_base_num=matte_time_base_num,
+                    source_time_base_den=matte_time_base_den,
                     mode=self.config.mask_import_mode,
                 )
                 self.last_mask_import = {
@@ -2845,6 +2955,11 @@ class SubtitleRemover(
                         width=width,
                         height=height,
                         fps=fps,
+                        timing=(
+                            frame_timing.checkpoint_metadata(
+                                start_frame, end_frame, 0)
+                            if frame_timing is not None else None
+                        ),
                     )
                     checkpoint_state_path = state.path
                     checkpoint_frame_dir = state.frame_dir
@@ -2963,17 +3078,28 @@ class SubtitleRemover(
                 if timing_dir is not None:
                     timing_manifest_path = Path(timing_dir) / "frame_timing.json"
                     timing_payload = {
-                        "schema": "vsr.frame_timing.v1",
+                        "schema": "vsr.frame_timing.v2",
                         "source": str(input_path),
                         "source_start_seconds": frame_timing.source_start,
+                        "source_start_ticks": frame_timing.source_start_ticks,
+                        "stream_start_ticks": frame_timing.stream_start_ticks,
+                        "source_time_base_num": frame_timing.time_base_num,
+                        "source_time_base_den": frame_timing.time_base_den,
+                        "source_time_base": {
+                            "num": frame_timing.time_base_num,
+                            "den": frame_timing.time_base_den,
+                        },
                         "source_time_base_seconds": frame_timing.time_base,
                         "start_frame": start_frame,
                         "end_frame": end_frame,
+                        "timestamp_ticks": matte_timestamp_ticks,
+                        "duration_ticks": matte_duration_ticks,
                         "timestamps_seconds": [
                             frame_timing.frame_time(index, fps)
                             for index in range(start_frame, end_frame)
                         ],
                         "durations_seconds": selected_frame_durations,
+                        "timing_anomalies": frame_timing.anomalies,
                     }
                     _write_text_atomic(
                         timing_manifest_path,
@@ -2983,6 +3109,12 @@ class SubtitleRemover(
                             ensure_ascii=True,
                         ) + "\n",
                     )
+
+            timing_checkpoint_metadata = (
+                frame_timing.checkpoint_metadata(
+                    start_frame, end_frame, resume_frame_count)
+                if frame_timing is not None else None
+            )
 
             if checkpoint_active and checkpoint_root is not None and checkpoint_key:
                 payload = write_pause_checkpoint(
@@ -3000,6 +3132,7 @@ class SubtitleRemover(
                     fps=fps,
                     status="running",
                     timing_manifest_path=timing_manifest_path,
+                    timing=timing_checkpoint_metadata,
                 )
                 self.last_pause_checkpoint = payload
                 if checkpoint_state_path is not None:
@@ -3130,6 +3263,10 @@ class SubtitleRemover(
                         is_vfr=bool(
                             frame_timing is not None and frame_timing.is_vfr),
                         source_time_base=matte_time_base,
+                        timestamp_ticks=matte_timestamp_ticks,
+                        duration_ticks=matte_duration_ticks,
+                        source_time_base_num=matte_time_base_num,
+                        source_time_base_den=matte_time_base_den,
                     )
                 except Exception as exc:
                     self.last_mask_export.update({
@@ -3181,6 +3318,7 @@ class SubtitleRemover(
                     config_hash=checkpoint_config_hash,
                     frame_dir=checkpoint_frame_dir,
                     timing_manifest_path=timing_manifest_path,
+                    timing_metadata=timing_checkpoint_metadata,
                     input_path=input_path,
                     output_path=output_path,
                     pause_check=pause_check,
@@ -3276,6 +3414,11 @@ class SubtitleRemover(
                     fps=fps,
                     status="running",
                     timing_manifest_path=timing_manifest_path,
+                    timing=(
+                        frame_timing.checkpoint_metadata(
+                            start_frame, end_frame, frames_to_process)
+                        if frame_timing is not None else None
+                    ),
                     stage="encoding",
                     inpaint_complete=True,
                 )
@@ -3300,8 +3443,13 @@ class SubtitleRemover(
                 vfr_frame_dir=vfr_frame_dir,
                 frame_timing=frame_timing,
                 selected_frame_durations=selected_frame_durations,
+                selected_frame_duration_ticks=selected_frame_duration_ticks,
                 processed_time_start=processed_time_start,
                 processed_time_end=processed_time_end,
+                processed_time_start_ticks=processed_time_start_ticks,
+                processed_time_end_ticks=processed_time_end_ticks,
+                matte_time_base_num=matte_time_base_num,
+                matte_time_base_den=matte_time_base_den,
                 matte_writer=matte_writer,
             )
 

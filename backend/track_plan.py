@@ -32,6 +32,7 @@ from backend.detection_geometry import (
     as_detection_geometry,
     expand_polygon_local,
 )
+from backend.io import _probe_video_frame_timing, timing_ticks_digest
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +244,9 @@ def scan_track_plan(
     or from the ``device``/``lang`` arguments.
     """
     source = Path(video_path)
+    frame_timing = (
+        _probe_video_frame_timing(str(source)) if source.is_file() else None
+    )
     cap = cv2.VideoCapture(str(source))
     if not cap.isOpened():
         raise ValueError(f"could not open video: {source}")
@@ -251,6 +255,14 @@ def scan_track_plan(
         if not np.isfinite(fps) or fps <= 0:
             fps = 30.0
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if frame_timing is not None and frame_timing.frame_count != total:
+            logger.warning(
+                "Using ffprobe's %d-frame timing map instead of the decoder's "
+                "%d-frame header estimate",
+                frame_timing.frame_count,
+                total,
+            )
+            total = frame_timing.frame_count
         stride = max(1, int(round(fps / max(0.1, float(sample_fps)))))
 
         if detector is None:
@@ -318,6 +330,26 @@ def scan_track_plan(
         # in memory on a long file.
         _attach_thumbnails(source, tracks)
 
+    timing_payload = None
+    if frame_timing is not None:
+        timing_payload = {
+            "schema": "vsr.frame_timing.v2",
+            "time_base_num": int(frame_timing.time_base_num),
+            "time_base_den": int(frame_timing.time_base_den),
+            "time_base": {
+                "num": int(frame_timing.time_base_num),
+                "den": int(frame_timing.time_base_den),
+            },
+            "source_start_ticks": int(frame_timing.source_start_ticks or 0),
+            "stream_start_ticks": int(frame_timing.stream_start_ticks or 0),
+            "timestamp_ticks": [int(value) for value in frame_timing.timestamp_ticks],
+            "duration_ticks": [int(value) for value in frame_timing.duration_ticks],
+            "timing_ticks_sha256": timing_ticks_digest(
+                frame_timing.timestamp_ticks,
+                frame_timing.duration_ticks,
+            ),
+            "anomalies": [dict(item) for item in frame_timing.anomalies],
+        }
     return {
         "schema": TRACK_PLAN_SCHEMA,
         "source": str(source),
@@ -325,6 +357,7 @@ def scan_track_plan(
         "frame_count": total,
         "sample_stride": stride,
         "detector": getattr(detector, "_engine_name", "") or "",
+        "timing": timing_payload,
         "tracks": tracks,
     }
 
@@ -409,6 +442,48 @@ def load_track_plan(path: str | Path) -> dict:
     tracks = raw.get("tracks")
     if not isinstance(tracks, list):
         raise ValueError("track plan has no tracks list")
+    timing = raw.get("timing")
+    if timing is not None:
+        if not isinstance(timing, dict):
+            raise ValueError("track plan timing is not an object")
+        if timing.get("schema") != "vsr.frame_timing.v2":
+            raise ValueError("track plan timing has an unsupported schema")
+        try:
+            time_base_num = int(timing["time_base_num"])
+            time_base_den = int(timing["time_base_den"])
+            source_start_ticks = int(timing.get("source_start_ticks", 0))
+            timestamp_ticks = [int(value) for value in timing["timestamp_ticks"]]
+            duration_ticks = [int(value) for value in timing["duration_ticks"]]
+            frame_count = int(raw.get("frame_count", 0) or 0)
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"track plan timing is malformed: {exc}") from exc
+        if time_base_num <= 0 or time_base_den <= 0:
+            raise ValueError("track plan timing has an invalid time base")
+        if (
+            len(timestamp_ticks) != frame_count
+            or len(duration_ticks) != frame_count
+        ):
+            raise ValueError("track plan timing count does not match frame count")
+        if any(value < 0 for value in timestamp_ticks):
+            raise ValueError("track plan timing has a negative timestamp")
+        if any(value <= 0 for value in duration_ticks):
+            raise ValueError("track plan timing has a non-positive duration")
+        if any(
+            current < previous
+            for previous, current in zip(timestamp_ticks, timestamp_ticks[1:])
+        ):
+            raise ValueError("track plan timing is not monotonic")
+        expected_digest = timing_ticks_digest(timestamp_ticks, duration_ticks)
+        if timing.get("timing_ticks_sha256") not in (None, expected_digest):
+            raise ValueError("track plan timing digest does not match its ticks")
+        timing.update({
+            "time_base_num": time_base_num,
+            "time_base_den": time_base_den,
+            "source_start_ticks": source_start_ticks,
+            "timestamp_ticks": timestamp_ticks,
+            "duration_ticks": duration_ticks,
+            "timing_ticks_sha256": expected_digest,
+        })
     for index, track in enumerate(tracks):
         if not isinstance(track, dict):
             raise ValueError(f"track {index} is not an object")

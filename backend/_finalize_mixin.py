@@ -45,8 +45,14 @@ class _FinalizeMixin:
                           checkpoint_active: bool, checkpoint_frame_dir,
                           vfr_frame_dir, frame_timing,
                           selected_frame_durations,
+                          selected_frame_duration_ticks,
                           processed_time_start: float,
-                          processed_time_end: float, matte_writer):
+                          processed_time_end: float,
+                          processed_time_start_ticks: int,
+                          processed_time_end_ticks: int,
+                          matte_time_base_num: int,
+                          matte_time_base_den: int,
+                          matte_writer):
         """Encode/mux stage: assemble the final output file, finalize the
         matte, and write SRT/translation/NLE sidecars plus post-restore passes.
 
@@ -75,9 +81,22 @@ class _FinalizeMixin:
                         if frame_timing is not None and frame_timing.is_vfr
                         else None
                     ),
+                    frame_duration_ticks=(
+                        selected_frame_duration_ticks
+                        if frame_timing is not None and frame_timing.is_vfr
+                        else None
+                    ),
                     source_time_base=(
                         frame_timing.time_base
                         if frame_timing is not None else None
+                    ),
+                    source_time_base_num=(
+                        frame_timing.time_base_num
+                        if frame_timing is not None else matte_time_base_num
+                    ),
+                    source_time_base_den=(
+                        frame_timing.time_base_den
+                        if frame_timing is not None else matte_time_base_den
                     ),
                 )
                 final_output_path = processed_video
@@ -89,6 +108,10 @@ class _FinalizeMixin:
                         output_path,
                         start_seconds=processed_time_start,
                         end_seconds=processed_time_end,
+                        start_ticks=processed_time_start_ticks,
+                        end_ticks=processed_time_end_ticks,
+                        time_base_num=matte_time_base_num,
+                        time_base_den=matte_time_base_den,
                         # _encode_frame_sequence just produced this with the
                         # job's own encoder settings; muxing audio must not
                         # add a second lossy generation.
@@ -100,7 +123,10 @@ class _FinalizeMixin:
                     fps,
                     output_path,
                     frame_durations=selected_frame_durations,
+                    frame_duration_ticks=selected_frame_duration_ticks,
                     source_time_base=frame_timing.time_base,
+                    source_time_base_num=frame_timing.time_base_num,
+                    source_time_base_den=frame_timing.time_base_den,
                 )
                 final_output_path = processed_video
                 final_output_path = self._merge_audio(
@@ -109,6 +135,10 @@ class _FinalizeMixin:
                     output_path,
                     start_seconds=processed_time_start,
                     end_seconds=processed_time_end,
+                    start_ticks=processed_time_start_ticks,
+                    end_ticks=processed_time_end_ticks,
+                    time_base_num=matte_time_base_num,
+                    time_base_den=matte_time_base_den,
                     video_is_contract_ready=True,
                 )
             else:
@@ -121,6 +151,10 @@ class _FinalizeMixin:
                         output_path,
                         start_seconds=processed_time_start,
                         end_seconds=processed_time_end,
+                        start_ticks=processed_time_start_ticks,
+                        end_ticks=processed_time_end_ticks,
+                        time_base_num=matte_time_base_num,
+                        time_base_den=matte_time_base_den,
                     )
                 else:
                     final_output_path = self._reencode_or_copy(
@@ -164,7 +198,8 @@ class _FinalizeMixin:
                                      start_frame, end_frame, fps,
                                      width=width, height=height,
                                      start_seconds=processed_time_start,
-                                     end_seconds=processed_time_end)
+                                     end_seconds=processed_time_end,
+                                     frame_timing=frame_timing)
         return final_output_path, matte_writer
 
     def _emit_quality_report(self, *, input_path: str, final_output_path: str,
@@ -208,7 +243,8 @@ class _FinalizeMixin:
                              fps: float, width: int = 0,
                              height: int = 0,
                              start_seconds: Optional[float] = None,
-                             end_seconds: Optional[float] = None) -> None:
+                             end_seconds: Optional[float] = None,
+                             frame_timing=None) -> None:
         """RM-76: emit an EDL or FCPXML sidecar next to the output so an
         NLE operator can hand-conform the cleaned clip into a Premiere
         / DaVinci timeline at the same timecode."""
@@ -257,12 +293,48 @@ class _FinalizeMixin:
                     base + ".edl", input_path, output_path,
                     fps, start_s, end_s,
                     segments=segments, width=width, height=height,
+                    start_ticks=(
+                        frame_timing.frame_time_ticks(start_frame, fps)
+                        if frame_timing is not None else None
+                    ),
+                    end_ticks=(
+                        frame_timing.frame_time_ticks(end_frame - 1, fps)
+                        + frame_timing.frame_duration_ticks(end_frame - 1, fps)
+                        if frame_timing is not None and end_frame > start_frame
+                        else None
+                    ),
+                    time_base_num=(
+                        frame_timing.time_base_num
+                        if frame_timing is not None else None
+                    ),
+                    time_base_den=(
+                        frame_timing.time_base_den
+                        if frame_timing is not None else None
+                    ),
                 )
             else:
                 path = nle_sidecar.write_fcpxml(
                     base + ".fcpxml", input_path, output_path,
                     fps, start_s, end_s,
                     segments=segments, width=width, height=height,
+                    start_ticks=(
+                        frame_timing.frame_time_ticks(start_frame, fps)
+                        if frame_timing is not None else None
+                    ),
+                    end_ticks=(
+                        frame_timing.frame_time_ticks(end_frame - 1, fps)
+                        + frame_timing.frame_duration_ticks(end_frame - 1, fps)
+                        if frame_timing is not None and end_frame > start_frame
+                        else None
+                    ),
+                    time_base_num=(
+                        frame_timing.time_base_num
+                        if frame_timing is not None else None
+                    ),
+                    time_base_den=(
+                        frame_timing.time_base_den
+                        if frame_timing is not None else None
+                    ),
                 )
             logger.info(f"NLE {mode.upper()} sidecar written: {path}")
         except Exception as exc:
@@ -323,6 +395,7 @@ class _FinalizeMixin:
                     if getattr(self, "execution_provenance", None) is not None
                     else None
                 ),
+                source_timing=getattr(self, "last_timing_report", None),
                 checkpoint_resumed=checkpoint_resumed,
                 app_version=APP_VERSION,
             )
@@ -664,4 +737,3 @@ class _FinalizeMixin:
                         logger.info("Watermark burn pass complete")
             except Exception as exc:
                 logger.warning(f"Watermark burn failed: {exc}", exc_info=True)
-

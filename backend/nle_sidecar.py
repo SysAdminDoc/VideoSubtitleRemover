@@ -20,6 +20,7 @@ attempts to round-trip transitions or audio tracks; this is the
 from __future__ import annotations
 
 import datetime as _dt
+from fractions import Fraction
 import logging
 import os
 import re
@@ -58,13 +59,49 @@ def _xml_attr(value: str) -> str:
     return quoteattr(str(value))
 
 
-def _ts_to_smpte(seconds: float, fps: float) -> str:
+def _ticks_fraction(
+    ticks: Optional[int],
+    time_base_num: Optional[int],
+    time_base_den: Optional[int],
+) -> Optional[Fraction]:
+    if ticks is None or time_base_num is None or time_base_den is None:
+        return None
+    try:
+        if int(time_base_num) <= 0 or int(time_base_den) <= 0:
+            return None
+        return Fraction(
+            int(ticks) * int(time_base_num), int(time_base_den))
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def _round_fraction(value: Fraction) -> int:
+    if value >= 0:
+        return (value.numerator * 2 + value.denominator) // (
+            2 * value.denominator)
+    positive = -value
+    return -((positive.numerator * 2 + positive.denominator) // (
+        2 * positive.denominator))
+
+
+def _ts_to_smpte(
+    seconds: float,
+    fps: float,
+    *,
+    ticks: Optional[int] = None,
+    time_base_num: Optional[int] = None,
+    time_base_den: Optional[int] = None,
+) -> str:
     """Return SMPTE HH:MM:SS:FF (drop-frame ignored; integer-fps only
     so 23.976 falls into 24 fps for the sidecar). The CMX 3600 spec
     accepts both ; and : separators; we use : to keep ASCII-only."""
     if fps <= 0:
         fps = 24.0
-    total_frames = max(0, int(round(seconds * fps)))
+    exact_seconds = _ticks_fraction(ticks, time_base_num, time_base_den)
+    if exact_seconds is None:
+        exact_seconds = Fraction(str(float(seconds)))
+    fps_fraction = Fraction(str(float(fps))).limit_denominator(1_000_000)
+    total_frames = max(0, _round_fraction(exact_seconds * fps_fraction))
     rate = max(1, int(round(fps)))
     hh = total_frames // (3600 * rate)
     rem = total_frames - hh * 3600 * rate
@@ -79,12 +116,20 @@ def write_edl(path: str, source: str, cleaned: str,
               fps: float, start_s: float, end_s: float,
               title: str = "VSR cleanup",
               segments: Optional[List[Tuple[float, float]]] = None,
-              width: int = 0, height: int = 0) -> str:
+              width: int = 0, height: int = 0,
+              start_ticks: Optional[int] = None,
+              end_ticks: Optional[int] = None,
+              time_base_num: Optional[int] = None,
+              time_base_den: Optional[int] = None,
+              segments_ticks: Optional[List[Tuple[int, int]]] = None) -> str:
     """Write a CMX 3600 EDL with one or more events. When `segments` is
     provided, each (start_s, end_s) pair becomes a numbered event;
     otherwise the single start_s/end_s pair produces a 1-event EDL.
     Returns the path written."""
     all_segments = segments if segments else [(start_s, end_s)]
+    exact_segments = segments_ticks if segments_ticks else [
+        (start_ticks, end_ticks)
+    ] if start_ticks is not None and end_ticks is not None else []
     payload = []
     payload.append(f"TITLE: {title}")
     payload.append("FCM: NON-DROP FRAME")
@@ -92,8 +137,19 @@ def write_edl(path: str, source: str, cleaned: str,
         payload.append(f"* SOURCE DIMENSIONS: {width}x{height}")
     payload.append("")
     for idx, (seg_start, seg_end) in enumerate(all_segments, 1):
-        src_in = _ts_to_smpte(seg_start, fps)
-        src_out = _ts_to_smpte(seg_end, fps)
+        exact = exact_segments[idx - 1] if idx <= len(exact_segments) else None
+        src_in = _ts_to_smpte(
+            seg_start, fps,
+            ticks=exact[0] if exact else None,
+            time_base_num=time_base_num,
+            time_base_den=time_base_den,
+        )
+        src_out = _ts_to_smpte(
+            seg_end, fps,
+            ticks=exact[1] if exact else None,
+            time_base_num=time_base_num,
+            time_base_den=time_base_den,
+        )
         payload.append(
             f"{idx:03d}  AX       V     C        "
             f"{src_in} {src_out} {src_in} {src_out}"
@@ -110,7 +166,12 @@ def write_edl(path: str, source: str, cleaned: str,
 def write_fcpxml(path: str, source: str, cleaned: str,
                   fps: float, start_s: float, end_s: float,
                   segments: Optional[List[Tuple[float, float]]] = None,
-                  width: int = 0, height: int = 0) -> str:
+                  width: int = 0, height: int = 0,
+                  start_ticks: Optional[int] = None,
+                  end_ticks: Optional[int] = None,
+                  time_base_num: Optional[int] = None,
+                  time_base_den: Optional[int] = None,
+                  segments_ticks: Optional[List[Tuple[int, int]]] = None) -> str:
     """Write a minimal FCPXML 1.10 stub with one or more asset-clips
     referencing the cleaned file. When `segments` is provided, each
     (start_s, end_s) pair becomes an asset-clip in the spine.
@@ -119,36 +180,63 @@ def write_fcpxml(path: str, source: str, cleaned: str,
     survives PyInstaller's text bundling and arbitrary editor parsers.
     """
     all_segments = segments if segments else [(start_s, end_s)]
+    exact_segments = segments_ticks if segments_ticks else [
+        (start_ticks, end_ticks)
+    ] if start_ticks is not None and end_ticks is not None else []
+    rational_segments = []
+    for index, (seg_start, seg_end) in enumerate(all_segments):
+        exact = exact_segments[index] if index < len(exact_segments) else None
+        rational_start = _ticks_fraction(
+            exact[0] if exact else None,
+            time_base_num,
+            time_base_den,
+        ) or Fraction(str(float(seg_start)))
+        rational_end = _ticks_fraction(
+            exact[1] if exact else None,
+            time_base_num,
+            time_base_den,
+        ) or Fraction(str(float(seg_end)))
+        rational_segments.append((rational_start, rational_end))
     src_name = Path(source).stem
     resolved = str(Path(cleaned).resolve()).replace("\\", "/")
     cleaned_uri = "file:///" + _uri_quote(resolved.lstrip("/"), safe="/:")
-    rate = max(1, int(round(fps if fps > 0 else 24.0)))
+    fps_fraction = (
+        Fraction(str(float(fps))).limit_denominator(1_000_000)
+        if fps > 0 else Fraction(24, 1)
+    )
+    frame_duration = 1 / fps_fraction
+    frame_duration_text = f"{frame_duration.numerator}/{frame_duration.denominator}s"
     fmt_width = width if width > 0 else 1920
     fmt_height = height if height > 0 else 1080
-    total_start = min(s for s, _ in all_segments) if all_segments else start_s
-    total_end = max(e for _, e in all_segments) if all_segments else end_s
-    total_duration_frames = max(1, int(round((total_end - total_start) * rate)))
+    total_start = (
+        min(s for s, _ in rational_segments)
+        if rational_segments else Fraction(str(float(start_s)))
+    )
+    total_end = (
+        max(e for _, e in rational_segments)
+        if rational_segments else Fraction(str(float(end_s)))
+    )
+    total_duration = max(frame_duration, total_end - total_start)
     now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     event_name = f"VSR Cleanup {now} UTC"
     project_name = f"{src_name} -- cleaned"
     clips = []
-    for seg_start, seg_end in all_segments:
-        dur_frames = max(1, int(round((seg_end - seg_start) * rate)))
-        off_frames = max(0, int(round(seg_start * rate)))
+    for seg_start, seg_end in rational_segments:
+        duration = max(frame_duration, seg_end - seg_start)
         clips.append(
             f"            <asset-clip name={_xml_attr(src_name)} "
-            f"ref=\"r1\" offset=\"{off_frames}/{rate}s\" "
-            f"start=\"0s\" duration=\"{dur_frames}/{rate}s\"/>"
+            f"ref=\"r1\" offset=\"{seg_start.numerator}/{seg_start.denominator}s\" "
+            f"start=\"0s\" duration=\"{duration.numerator}/{duration.denominator}s\"/>"
         )
     payload = (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<!DOCTYPE fcpxml>\n"
         "<fcpxml version=\"1.10\">\n"
         "  <resources>\n"
-        f"    <format id=\"r0\" frameDuration=\"1/{rate}s\" "
+        f"    <format id=\"r0\" frameDuration=\"{frame_duration_text}\" "
         f"width=\"{fmt_width}\" height=\"{fmt_height}\"/>\n"
         f"    <asset id=\"r1\" name={_xml_attr(src_name)} "
-        f"start=\"0s\" duration=\"{total_duration_frames}/{rate}s\" "
+        f"start=\"0s\" duration=\"{total_duration.numerator}/{total_duration.denominator}s\" "
         f"hasVideo=\"1\" hasAudio=\"1\" format=\"r0\" "
         f"src={_xml_attr(cleaned_uri)}/>\n"
         "  </resources>\n"

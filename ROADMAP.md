@@ -17,26 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P1 — RM-302 Preserve exact rational VFR timing
-  - Why: Current probes and manifests store decimal timestamp seconds. Long or
-    irregular timelines can accumulate conversion error and lose the source clock
-    needed for exact checkpoints, mattes, subtitles, NLE exports, and validation.
-  - Evidence: backend/io.py:52-90, backend/processor.py:2779-2810,
-    https://ffmpeg.org/ffprobe.html,
-    https://ffmpeg.org/ffmpeg.html, and
-    https://www.rfc-editor.org/rfc/rfc9559.html.
-  - Touches: backend/io.py, timing data classes, backend/processor.py,
-    checkpoints, matte and track plans, subtitle and NLE exports, sidecars, and VFR
-    tests.
-  - Acceptance: Store integer best-effort timestamps and durations with rational
-    time-base numerator and denominator; convert to seconds only for display or a
-    format that requires it; preserve exact ticks through resume and plan reload;
-    log every missing, repeated, non-monotonic, or repaired timestamp; prove a long
-    1001-based timeline stays within half a source frame and keeps audio alignment;
-    validate repeated PTS, missing PTS, edit lists, and muxer rounding.
-  - Complexity: High. Regression risk is high because timing is shared across
-    decoding, processing, exports, and final validation.
-
 - [ ] P1 — RM-303 Preserve linear-light high-bit HDR repairs
   - Why: HDR input reaches the processor as uint16, but the repair surface is divided
     to uint8 and expanded again. Pixels inside the repaired mask are therefore

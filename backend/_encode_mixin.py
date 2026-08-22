@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from fractions import Fraction
 from pathlib import Path
 from typing import List, Optional
-
-import numpy as np
 
 from backend.container_payload import (
     build_container_mux_args,
@@ -26,6 +25,8 @@ from backend.io import (
     _copy_file_atomic,
     _ensure_output_parent,
     _ffmpeg_subprocess_timeout,
+    _fraction_to_decimal,
+    _normalize_time_base,
     _probe_duration_seconds,
     _promote_temp_output,
     _write_text_atomic,
@@ -316,7 +317,10 @@ class _EncodeMixin:
         output: str,
         *,
         frame_durations: Optional[List[float]] = None,
+        frame_duration_ticks: Optional[List[int]] = None,
         source_time_base: Optional[float] = None,
+        source_time_base_num: Optional[int] = None,
+        source_time_base_den: Optional[int] = None,
     ) -> str:
         """Encode checkpoint/output frames into the requested video path."""
         frame_dir = Path(frame_dir)
@@ -329,37 +333,60 @@ class _EncodeMixin:
             _ensure_output_parent(output)
             frame_total = len(list(frame_dir.glob("frame_*.png")))
             use_vfr = bool(
-                frame_durations
-                and len(frame_durations) >= frame_total
+                (frame_durations or frame_duration_ticks)
+                and (
+                    len(frame_duration_ticks or frame_durations or [])
+                    >= frame_total
+                )
                 and frame_total > 0
             )
             if use_vfr:
-                normalized_durations = []
+                normalized_duration_fractions = []
                 fallback = 1.0 / max(float(fps), 1e-6)
-                for value in frame_durations[:frame_total]:
-                    try:
-                        duration = float(value)
-                    except (TypeError, ValueError):
-                        duration = fallback
-                    if not np.isfinite(duration) or duration <= 0:
-                        duration = fallback
-                    normalized_durations.append(duration)
+                if frame_duration_ticks:
+                    base_num, base_den = _normalize_time_base(
+                        source_time_base_num,
+                        source_time_base_den,
+                        fallback_seconds=source_time_base,
+                    )
+                    for value in frame_duration_ticks[:frame_total]:
+                        duration_fraction = Fraction(
+                            max(1, int(value)) * base_num, base_den)
+                        normalized_duration_fractions.append(duration_fraction)
+                else:
+                    for value in frame_durations[:frame_total]:
+                        try:
+                            duration_fraction = Fraction(str(float(value)))
+                        except (TypeError, ValueError, ZeroDivisionError):
+                            duration_fraction = Fraction(str(fallback))
+                        if duration_fraction <= 0:
+                            duration_fraction = Fraction(str(fallback))
+                        normalized_duration_fractions.append(duration_fraction)
+                normalized_durations = [
+                    float(value) for value in normalized_duration_fractions
+                ]
                 concat_path = frame_dir / ".vsr-vfr.ffconcat"
                 concat_lines = ["ffconcat version 1.0"]
-                try:
-                    timing_tick = float(source_time_base or 0.0)
-                except (TypeError, ValueError):
-                    timing_tick = 0.0
-                if not np.isfinite(timing_tick) or timing_tick <= 0:
-                    timing_tick = min(normalized_durations) / 100.0
+                if frame_duration_ticks:
+                    timing_tick_fraction = Fraction(base_num, base_den)
+                else:
+                    timing_tick_fraction = Fraction(
+                        str(source_time_base or 0.0))
+                if timing_tick_fraction <= 0:
+                    timing_tick_fraction = (
+                        min(normalized_duration_fractions) / 100)
                 concat_rate = max(
                     1000,
-                    min(1_000_000, int(round(1.0 / max(timing_tick, 1e-6)))),
+                    min(
+                        1_000_000,
+                        int(round(float(1 / timing_tick_fraction))),
+                    ),
                 )
-                for index, duration in enumerate(normalized_durations):
+                for index, duration in enumerate(normalized_duration_fractions):
                     concat_lines.append(f"file frame_{index:06d}.png")
                     concat_lines.append(f"option framerate {concat_rate}")
-                    concat_lines.append(f"duration {duration:.9f}")
+                    concat_lines.append(
+                        f"duration {_fraction_to_decimal(duration, 15)}")
                 _write_text_atomic(
                     concat_path, "\n".join(concat_lines) + "\n")
                 cmd = [
@@ -421,7 +448,10 @@ class _EncodeMixin:
                     fps,
                     output,
                     frame_durations=frame_durations,
+                    frame_duration_ticks=frame_duration_ticks,
                     source_time_base=source_time_base,
+                    source_time_base_num=source_time_base_num,
+                    source_time_base_den=source_time_base_den,
                 )
             raise
         except Exception as exc:
@@ -438,7 +468,10 @@ class _EncodeMixin:
                         fps,
                         output,
                         frame_durations=frame_durations,
+                        frame_duration_ticks=frame_duration_ticks,
                         source_time_base=source_time_base,
+                        source_time_base_num=source_time_base_num,
+                        source_time_base_den=source_time_base_den,
                     )
             raise
         finally:
@@ -511,6 +544,10 @@ class _EncodeMixin:
         *,
         start_seconds: Optional[float] = None,
         end_seconds: Optional[float] = None,
+        start_ticks: Optional[int] = None,
+        end_ticks: Optional[int] = None,
+        time_base_num: Optional[int] = None,
+        time_base_den: Optional[int] = None,
         _include_auxiliary: bool = True,
         _force_audio_transcode: bool = False,
         video_is_contract_ready: bool = False,
@@ -525,18 +562,47 @@ class _EncodeMixin:
             ] + self._d3d12_device_args() + [
                 '-i', processed,
             ]
-            audio_start = (
-                max(0.0, float(start_seconds))
-                if start_seconds is not None else
-                max(0.0, float(self.config.time_start or 0.0))
-            )
-            audio_end = (
-                max(audio_start, float(end_seconds))
-                if end_seconds is not None else
-                max(0.0, float(self.config.time_end or 0.0))
-            )
+            exact_base = None
+            if (
+                start_ticks is not None
+                and end_ticks is not None
+                and time_base_num is not None
+                and time_base_den is not None
+            ):
+                base_num, base_den = _normalize_time_base(
+                    time_base_num, time_base_den)
+                exact_base = (base_num, base_den)
+                audio_start_fraction = Fraction(
+                    max(0, int(start_ticks)) * base_num, base_den)
+                audio_end_fraction = Fraction(
+                    max(int(start_ticks), int(end_ticks)) * base_num,
+                    base_den,
+                )
+                audio_start = max(0.0, float(audio_start_fraction))
+                audio_end = max(audio_start, float(audio_end_fraction))
+            else:
+                audio_start = (
+                    max(0.0, float(start_seconds))
+                    if start_seconds is not None else
+                    max(0.0, float(self.config.time_start or 0.0))
+                )
+                audio_end = (
+                    max(audio_start, float(end_seconds))
+                    if end_seconds is not None else
+                    max(0.0, float(self.config.time_end or 0.0))
+                )
             if audio_start > 0:
-                cmd += ['-ss', f'{audio_start:.9f}']
+                if exact_base is not None:
+                    cmd += [
+                        '-ss',
+                        _fraction_to_decimal(
+                            Fraction(max(0, int(start_ticks)) * exact_base[0],
+                                     exact_base[1]),
+                            15,
+                        ),
+                    ]
+                else:
+                    cmd += ['-ss', f'{audio_start:.9f}']
             cmd += ['-i', original]
             manifest = probe_container_manifest(original)
             target = self.config.loudnorm_target
@@ -574,7 +640,20 @@ class _EncodeMixin:
                 else _probe_duration_seconds(processed)
             )
             if output_duration > 0:
-                cmd += ['-t', f'{output_duration:.9f}']
+                if exact_base is not None:
+                    cmd += [
+                        '-t',
+                        _fraction_to_decimal(
+                            Fraction(
+                                max(0, int(end_ticks) - int(start_ticks))
+                                * exact_base[0],
+                                exact_base[1],
+                            ),
+                            15,
+                        ),
+                    ]
+                else:
+                    cmd += ['-t', f'{output_duration:.9f}']
             else:
                 cmd += ['-shortest']
             cmd += [str(temp_output)]
@@ -605,6 +684,10 @@ class _EncodeMixin:
                         output,
                         start_seconds=start_seconds,
                         end_seconds=end_seconds,
+                        start_ticks=start_ticks,
+                        end_ticks=end_ticks,
+                        time_base_num=time_base_num,
+                        time_base_den=time_base_den,
                         _include_auxiliary=_include_auxiliary,
                         _force_audio_transcode=_force_audio_transcode,
                     )
@@ -648,6 +731,10 @@ class _EncodeMixin:
                     output,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
+                    start_ticks=start_ticks,
+                    end_ticks=end_ticks,
+                    time_base_num=time_base_num,
+                    time_base_den=time_base_den,
                     _include_auxiliary=False,
                     _force_audio_transcode=_force_audio_transcode,
                     video_is_contract_ready=video_is_contract_ready,
@@ -663,6 +750,10 @@ class _EncodeMixin:
                     output,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
+                    start_ticks=start_ticks,
+                    end_ticks=end_ticks,
+                    time_base_num=time_base_num,
+                    time_base_den=time_base_den,
                     _include_auxiliary=False,
                     _force_audio_transcode=True,
                     video_is_contract_ready=video_is_contract_ready,
@@ -702,6 +793,10 @@ class _EncodeMixin:
                     output,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
+                    start_ticks=start_ticks,
+                    end_ticks=end_ticks,
+                    time_base_num=time_base_num,
+                    time_base_den=time_base_den,
                     _include_auxiliary=_include_auxiliary,
                     _force_audio_transcode=_force_audio_transcode,
                     video_is_contract_ready=video_is_contract_ready,
@@ -725,6 +820,10 @@ class _EncodeMixin:
                     output,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
+                    start_ticks=start_ticks,
+                    end_ticks=end_ticks,
+                    time_base_num=time_base_num,
+                    time_base_den=time_base_den,
                     _include_auxiliary=False,
                     _force_audio_transcode=_force_audio_transcode,
                     video_is_contract_ready=video_is_contract_ready,
@@ -739,6 +838,10 @@ class _EncodeMixin:
                     output,
                     start_seconds=start_seconds,
                     end_seconds=end_seconds,
+                    start_ticks=start_ticks,
+                    end_ticks=end_ticks,
+                    time_base_num=time_base_num,
+                    time_base_den=time_base_den,
                     _include_auxiliary=False,
                     _force_audio_transcode=True,
                     video_is_contract_ready=video_is_contract_ready,
