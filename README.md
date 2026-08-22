@@ -63,7 +63,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Selected-Language Masks** -- Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
 - **Batch Processing** -- Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
 - **Multi-track Audio + Loudness Normalisation** -- Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
-- **Quality Self-Test** -- PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, and an optional side-by-side comparison PNG
+- **Quality Self-Test**: PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, motion-compensated mask-local temporal evidence, outside-mask SDR or HDR color drift, and an optional side-by-side comparison PNG
 - **Detection Efficiency Reports** -- Batch summaries show frames OCR'd versus skipped, skip reasons, unique regions, stage timings, and an optimization hint when OCR dominates
 - **HDR Color Validation** -- Post-encode ffprobe checks record whether BT.2020/PQ/HLG and related color metadata were preserved in batch reports and output sidecars
 - **CLI + Presets** -- `python -m backend.processor --pattern ... --preset "YouTube (default)"`; nine built-in presets + user presets persisted to `%APPDATA%`
@@ -622,8 +622,12 @@ against the selected output codec and CRF; risky settings are shown as
 preflight warnings, and the report records the safer recommendation plus that
 the user continued after the warning. When quality reports are enabled, batch
 summaries also include a `passed`, `review`, or `unknown` quality gate using
-ROI metrics, a cheap residual-text score, and an adjacent-frame temporal
-flicker score, plus any quality-sheet preview path for review-needed outputs.
+ROI metrics, a cheap residual-text score, and temporal evidence that compensates
+for scene motion and excludes cuts. The report names the worst mask-local frame
+pair with its timestamp and a review overlay. It also records outside-mask
+CIELAB drift for SDR or linear-light drift for tagged HDR. A failed color guard
+goes to review and never recolors the footage automatically. Any quality-sheet
+or temporal-overlay preview path is included for review-needed outputs.
 A failed gate changes the batch row status to `review-needed`; skipped and
 remux-only rows are marked `not_applicable`.
 Review-needed queue items expose **Retry with suggested settings**, which

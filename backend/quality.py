@@ -268,6 +268,305 @@ def temporal_consistency_score(
     return float(np.mean(scores)) if scores else None
 
 
+def _quality_gray_u8(frame: np.ndarray) -> np.ndarray:
+    """Return a stable 8-bit luminance view for motion probing."""
+    values = np.asarray(frame)
+    if values.ndim == 3:
+        if values.shape[2] == 1:
+            values = values[..., 0]
+        else:
+            values = cv2.cvtColor(values, cv2.COLOR_BGR2GRAY)
+    if values.dtype == np.uint8:
+        return values
+    if np.issubdtype(values.dtype, np.integer):
+        scale = float(np.iinfo(values.dtype).max)
+        return np.clip(
+            np.rint(values.astype(np.float32) * 255.0 / scale), 0, 255
+        ).astype(np.uint8)
+    return np.clip(np.rint(values.astype(np.float32) * 255.0), 0, 255).astype(
+        np.uint8
+    )
+
+
+def _quality_mask(mask: Optional[np.ndarray], shape: Tuple[int, int]) -> np.ndarray:
+    """Normalize a quality mask to a boolean array matching ``shape``."""
+    if mask is None:
+        return np.zeros(shape, dtype=bool)
+    values = np.asarray(mask)
+    if values.ndim == 3:
+        values = cv2.cvtColor(values, cv2.COLOR_BGR2GRAY)
+    if values.ndim != 2:
+        return np.zeros(shape, dtype=bool)
+    if values.shape != shape:
+        values = cv2.resize(
+            values.astype(np.uint8), (shape[1], shape[0]),
+            interpolation=cv2.INTER_NEAREST,
+        )
+    return values > 0
+
+
+def _quality_histogram(frame: np.ndarray) -> np.ndarray:
+    gray = _quality_gray_u8(frame)
+    hist = cv2.calcHist([gray], [0], None, [64], [0, 256])
+    cv2.normalize(hist, hist)
+    return hist
+
+
+def scene_cut_pair(
+    previous: np.ndarray,
+    current: np.ndarray,
+    *,
+    threshold: float = 0.35,
+) -> bool:
+    """Return whether a pair is too discontinuous for temporal scoring.
+
+    This intentionally follows the inexpensive histogram leg of the existing
+    scene-cut cascade. A cut is excluded from the temporal average rather than
+    being treated as a failed repair.
+    """
+    if previous is None or current is None:
+        return False
+    if previous.shape[:2] != current.shape[:2]:
+        return True
+    try:
+        correlation = cv2.compareHist(
+            _quality_histogram(previous),
+            _quality_histogram(current),
+            cv2.HISTCMP_CORREL,
+        )
+    except Exception:
+        return False
+    return bool(correlation < (1.0 - float(threshold)))
+
+
+def _estimate_quality_motion(
+    previous: np.ndarray,
+    current: np.ndarray,
+    excluded: np.ndarray,
+) -> Tuple[Optional[np.ndarray], float]:
+    """Estimate dominant affine motion using only untouched pixels."""
+    previous_gray = _quality_gray_u8(previous)
+    current_gray = _quality_gray_u8(current)
+    feature_mask = np.where(
+        cv2.dilate(
+            excluded.astype(np.uint8),
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
+        ) > 0,
+        0,
+        255,
+    ).astype(np.uint8)
+    corners = cv2.goodFeaturesToTrack(
+        previous_gray,
+        maxCorners=240,
+        qualityLevel=0.01,
+        minDistance=7,
+        mask=feature_mask,
+    )
+    if corners is None or len(corners) < 6:
+        return None, 0.0
+    tracked, status, _error = cv2.calcOpticalFlowPyrLK(
+        previous_gray, current_gray, corners.astype(np.float32), None,
+    )
+    if tracked is None or status is None:
+        return None, 0.0
+    keep = status.ravel() == 1
+    source = corners[keep].reshape(-1, 2)
+    target = tracked[keep].reshape(-1, 2)
+    if len(source) < 6:
+        return None, 0.0
+    matrix, inliers = cv2.estimateAffinePartial2D(
+        source, target, method=cv2.RANSAC, ransacReprojThreshold=3.0,
+    )
+    if matrix is None or inliers is None:
+        return None, 0.0
+    ratio = float(np.count_nonzero(inliers)) / float(len(source))
+    if ratio < 0.35:
+        return None, ratio
+    return matrix.astype(np.float32), ratio
+
+
+def mask_local_temporal_pair(
+    previous: np.ndarray,
+    current: np.ndarray,
+    previous_mask: Optional[np.ndarray],
+    current_mask: Optional[np.ndarray],
+    *,
+    reference_previous: Optional[np.ndarray] = None,
+    reference_current: Optional[np.ndarray] = None,
+    scene_cut_threshold: float = 0.35,
+) -> Optional[dict]:
+    """Score one cleaned-frame pair inside the active mask.
+
+    The score is the motion-compensated excess error inside the union of the
+    two masks over the untouched background error, normalized to 0..1. A
+    camera pan that is visible in both regions therefore contributes little,
+    while a localized fill jump contributes strongly. Scene cuts return a
+    record marked ``scene_cut`` so callers can count the exclusion explicitly.
+    """
+    if previous is None or current is None:
+        return None
+    if previous.shape[:2] != current.shape[:2]:
+        return None
+    shape = previous.shape[:2]
+    previous_binary = _quality_mask(previous_mask, shape)
+    current_binary = _quality_mask(current_mask, shape)
+    if not np.any(previous_binary | current_binary):
+        return None
+    if scene_cut_pair(
+        previous, current, threshold=scene_cut_threshold,
+    ):
+        return {"scene_cut": True}
+
+    excluded = previous_binary | current_binary
+    matrix, inlier_ratio = _estimate_quality_motion(
+        previous, current, excluded,
+    )
+    height, width = shape
+    if matrix is None:
+        matrix = np.asarray([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
+    warped_previous = cv2.warpAffine(
+        previous, matrix, (width, height),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REPLICATE,
+    )
+    warped_mask = cv2.warpAffine(
+        previous_binary.astype(np.uint8), matrix, (width, height),
+        flags=cv2.INTER_NEAREST,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    ) > 0
+    union = current_binary | warped_mask
+    valid = cv2.warpAffine(
+        np.ones(shape, dtype=np.uint8), matrix, (width, height),
+        flags=cv2.INTER_NEAREST,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0,
+    ) > 0
+    outside = (~cv2.dilate(
+        union.astype(np.uint8),
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
+    ).astype(bool)) & valid
+    inside = union & valid
+    if int(np.count_nonzero(inside)) < 16:
+        return None
+    previous_gray = _quality_gray_u8(warped_previous).astype(np.float32)
+    current_gray = _quality_gray_u8(current).astype(np.float32)
+    delta = np.abs(current_gray - previous_gray)
+    inside_error = float(np.mean(delta[inside]))
+    outside_error = (
+        float(np.mean(delta[outside]))
+        if int(np.count_nonzero(outside))
+        else inside_error
+    )
+    reference_inside_error = None
+    if (
+        reference_previous is not None
+        and reference_current is not None
+        and reference_previous.shape[:2] == shape
+        and reference_current.shape[:2] == shape
+    ):
+        warped_reference = cv2.warpAffine(
+            reference_previous, matrix, (width, height),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        reference_delta = np.abs(
+            _quality_gray_u8(reference_current).astype(np.float32)
+            - _quality_gray_u8(warped_reference).astype(np.float32)
+        )
+        reference_inside_error = float(np.mean(reference_delta[inside]))
+    baseline_error = max(
+        outside_error,
+        reference_inside_error if reference_inside_error is not None else 0.0,
+    )
+    score = float(np.clip(
+        max(0.0, inside_error - baseline_error) / 255.0,
+        0.0,
+        1.0,
+    ))
+    return {
+        "scene_cut": False,
+        "score": score,
+        "inside_error": inside_error,
+        "outside_error": outside_error,
+        "reference_inside_error": reference_inside_error,
+        "motion_inlier_ratio": float(inlier_ratio),
+        "pixels": int(np.count_nonzero(inside)),
+    }
+
+
+def outside_mask_color_drift(
+    reference: np.ndarray,
+    output: np.ndarray,
+    mask: Optional[np.ndarray],
+    *,
+    hdr_transfer: str = "",
+) -> Optional[dict]:
+    """Measure changes outside the repair mask in SDR or HDR light space."""
+    if reference is None or output is None:
+        return None
+    if reference.shape[:2] != output.shape[:2]:
+        return None
+    shape = reference.shape[:2]
+    outside = ~_quality_mask(mask, shape)
+    if int(np.count_nonzero(outside)) == 0:
+        return None
+    if hdr_transfer:
+        from backend.hdr import hdr_signal_to_linear
+
+        reference_values = hdr_signal_to_linear(reference, hdr_transfer)
+        output_values = hdr_signal_to_linear(output, hdr_transfer)
+        delta = np.abs(
+            output_values.astype(np.float32)
+            - reference_values.astype(np.float32)
+        )
+        if delta.ndim == 3:
+            delta = np.mean(delta, axis=2)
+        metric = "linear_rgb_mae"
+    else:
+        reference_u8 = _quality_gray_u8(reference)
+        output_u8 = _quality_gray_u8(output)
+        if reference.ndim == 3 and output.ndim == 3:
+            reference_u8 = cv2.cvtColor(
+                _quality_bgr_u8(reference), cv2.COLOR_BGR2LAB,
+            ).astype(np.float32)
+            output_u8 = cv2.cvtColor(
+                _quality_bgr_u8(output), cv2.COLOR_BGR2LAB,
+            ).astype(np.float32)
+            delta = np.sqrt(np.sum(
+                np.square((output_u8 - reference_u8) / 2.55), axis=2,
+            ))
+        else:
+            delta = np.abs(
+                output_u8.astype(np.float32)
+                - reference_u8.astype(np.float32)
+            ) / 255.0 * 100.0
+        metric = "cielab_delta_e"
+    values = np.asarray(delta, dtype=np.float32)[outside]
+    if values.size == 0:
+        return None
+    return {
+        "score": float(np.mean(values)),
+        "p95": float(np.percentile(values, 95)),
+        "metric": metric,
+        "pixels": int(values.size),
+    }
+
+
+def _quality_bgr_u8(frame: np.ndarray) -> np.ndarray:
+    values = np.asarray(frame)
+    if values.dtype == np.uint8:
+        return values
+    if np.issubdtype(values.dtype, np.integer):
+        scale = float(np.iinfo(values.dtype).max)
+        return np.clip(
+            np.rint(values.astype(np.float32) * 255.0 / scale), 0, 255
+        ).astype(np.uint8)
+    return np.clip(np.rint(values.astype(np.float32) * 255.0), 0, 255).astype(
+        np.uint8
+    )
+
+
 def _mask_bbox_from_masks(
     masks: Sequence[np.ndarray],
     *,

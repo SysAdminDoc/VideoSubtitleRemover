@@ -26,9 +26,14 @@ from backend.quality import (
     residual_text_score,
     temporal_flicker_score,
     mask_boundary_seam_score,
+    mask_local_temporal_pair,
+    outside_mask_color_drift,
     worst_sample,
 )
 from backend.quality_gate import (
+    MASK_LOCAL_TEMPORAL_CEILING,
+    OUTSIDE_MASK_CIELAB_CEILING,
+    OUTSIDE_MASK_HDR_LINEAR_CEILING,
     RESIDUAL_TEXT_SCORE_CEILING,
     TEMPORAL_FLICKER_CEILING,
     evaluate_quality_gate,
@@ -93,6 +98,211 @@ class _QualityMixin:
                 score = None
             if score is not None:
                 self._seam_scores.append(score)
+
+    @staticmethod
+    def _quality_display_frame(frame: np.ndarray) -> np.ndarray:
+        values = np.asarray(frame)
+        if values.ndim == 2:
+            values = cv2.cvtColor(values, cv2.COLOR_GRAY2BGR)
+        if values.dtype == np.uint8:
+            return values.copy()
+        if np.issubdtype(values.dtype, np.integer):
+            scale = float(np.iinfo(values.dtype).max)
+            return np.clip(
+                np.rint(values.astype(np.float32) * 255.0 / scale), 0, 255
+            ).astype(np.uint8)
+        return np.clip(np.rint(values.astype(np.float32) * 255.0), 0, 255).astype(
+            np.uint8
+        )
+
+    @classmethod
+    def _quality_overlay_frame(
+        cls,
+        frame: np.ndarray,
+        mask: Optional[np.ndarray],
+        label: str,
+    ) -> np.ndarray:
+        image = cls._quality_display_frame(frame)
+        if mask is not None and mask.shape[:2] == image.shape[:2]:
+            active = np.asarray(mask) > 0
+            if np.any(active):
+                tint = image.copy()
+                tint[active] = (0, 48, 255)
+                image = cv2.addWeighted(image, 0.72, tint, 0.28, 0.0)
+                contours, _ = cv2.findContours(
+                    active.astype(np.uint8),
+                    cv2.RETR_EXTERNAL,
+                    cv2.CHAIN_APPROX_SIMPLE,
+                )
+                cv2.drawContours(image, contours, -1, (0, 96, 255), 1)
+        cv2.putText(
+            image, label, (8, 22), cv2.FONT_HERSHEY_SIMPLEX,
+            0.62, (245, 245, 245), 1, cv2.LINE_AA,
+        )
+        return image
+
+    def _write_temporal_quality_overlay(
+        self,
+        output_path: str,
+        record: dict,
+    ) -> Optional[str]:
+        """Write the worst mask-local pair as a reviewable A/B overlay."""
+        previous = record.get("previous_frame")
+        current = record.get("current_frame")
+        if previous is None or current is None:
+            return None
+        left = self._quality_overlay_frame(
+            previous, record.get("previous_mask"),
+            f"Frame {int(record['start_frame'])}",
+        )
+        right = self._quality_overlay_frame(
+            current, record.get("current_mask"),
+            f"Frame {int(record['end_frame'])}",
+        )
+        if left.shape[0] != right.shape[0]:
+            height = max(left.shape[0], right.shape[0])
+            left = cv2.resize(left, (left.shape[1], height), interpolation=cv2.INTER_AREA)
+            right = cv2.resize(right, (right.shape[1], height), interpolation=cv2.INTER_AREA)
+        gap = np.full((left.shape[0], 8, 3), 32, dtype=np.uint8)
+        body = np.concatenate([left, gap, right], axis=1)
+        header = np.full((44, body.shape[1], 3), 12, dtype=np.uint8)
+        cv2.putText(
+            header,
+            (
+                f"Worst mask-local pair  t={float(record['timestamp']):.3f}s  "
+                f"score={float(record['score']):.4f}"
+            ),
+            (8, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.62,
+            (245, 245, 245), 1, cv2.LINE_AA,
+        )
+        overlay = np.concatenate([header, body], axis=0)
+        overlay_path = str(Path(output_path).with_suffix("")) + ".temporalworst.png"
+        if not cv2.imwrite(overlay_path, overlay, [cv2.IMWRITE_PNG_COMPRESSION, 3]):
+            return None
+        return overlay_path
+
+    def _accumulate_frame_quality(
+        self,
+        reference_frame: np.ndarray,
+        output_frame: np.ndarray,
+        mask: Optional[np.ndarray],
+        *,
+        frame_index: int,
+        timestamp: float,
+    ) -> None:
+        """Accumulate streaming temporal and outside-mask color evidence."""
+        previous = getattr(self, "_quality_temporal_previous", None)
+        if (
+            isinstance(previous, dict)
+            and int(previous.get("frame_index", -2)) + 1 == int(frame_index)
+        ):
+            try:
+                pair = mask_local_temporal_pair(
+                    previous["frame"],
+                    output_frame,
+                    previous.get("mask"),
+                    mask,
+                    reference_previous=previous.get("reference"),
+                    reference_current=reference_frame,
+                    scene_cut_threshold=float(
+                        getattr(self.config, "tbe_scene_cut_threshold", 0.35)
+                    ),
+                )
+            except Exception:
+                pair = None
+                if not getattr(self, "_quality_temporal_failure_logged", False):
+                    logger.warning(
+                        "Mask-local temporal quality sampling failed",
+                        exc_info=True,
+                    )
+                    self._quality_temporal_failure_logged = True
+            if pair is not None:
+                if pair.get("scene_cut"):
+                    self._quality_temporal_scene_cuts_excluded = (
+                        int(getattr(self, "_quality_temporal_scene_cuts_excluded", 0))
+                        + 1
+                    )
+                else:
+                    score = float(pair["score"])
+                    scores = getattr(self, "_quality_temporal_scores", None)
+                    if scores is None:
+                        scores = []
+                        self._quality_temporal_scores = scores
+                    scores.append(score)
+                    worst = getattr(self, "_quality_temporal_worst_pair", None)
+                    if worst is None or score > float(worst["score"]):
+                        self._quality_temporal_worst_pair = {
+                            "start_frame": int(previous["frame_index"]),
+                            "end_frame": int(frame_index),
+                            "timestamp": float(timestamp),
+                            "score": score,
+                            "inside_error": float(pair["inside_error"]),
+                            "outside_error": float(pair["outside_error"]),
+                            "reference_inside_error": (
+                                None
+                                if pair.get("reference_inside_error") is None
+                                else float(pair["reference_inside_error"])
+                            ),
+                            "motion_inlier_ratio": float(
+                                pair["motion_inlier_ratio"]
+                            ),
+                            "pixels": int(pair["pixels"]),
+                            "previous_frame": previous["frame"].copy(),
+                            "current_frame": np.asarray(output_frame).copy(),
+                            "previous_mask": (
+                                None if previous.get("mask") is None
+                                else np.asarray(previous["mask"]).copy()
+                            ),
+                            "current_mask": (
+                                None if mask is None
+                                else np.asarray(mask).copy()
+                            ),
+                        }
+        self._quality_temporal_previous = {
+            "frame_index": int(frame_index),
+            "frame": np.asarray(output_frame).copy(),
+            "reference": np.asarray(reference_frame).copy(),
+            "mask": None if mask is None else np.asarray(mask).copy(),
+        }
+
+        meta = getattr(self, "_color_metadata", None)
+        hdr_transfer = ""
+        if bool(getattr(meta, "is_hdr", False)):
+            hdr_transfer = str(getattr(meta, "color_transfer", "") or "")
+        try:
+            drift = outside_mask_color_drift(
+                reference_frame,
+                output_frame,
+                mask,
+                hdr_transfer=hdr_transfer,
+            )
+        except Exception:
+            drift = None
+            if not getattr(self, "_quality_color_failure_logged", False):
+                logger.warning(
+                    "Outside-mask color quality sampling failed",
+                    exc_info=True,
+                )
+                self._quality_color_failure_logged = True
+        if drift is None:
+            return
+        self._quality_color_drift_sum = (
+            float(getattr(self, "_quality_color_drift_sum", 0.0))
+            + float(drift["score"])
+        )
+        self._quality_color_drift_count = (
+            int(getattr(self, "_quality_color_drift_count", 0)) + 1
+        )
+        self._quality_color_drift_metric = str(drift["metric"])
+        worst_color = getattr(self, "_quality_color_drift_worst_frame", None)
+        if worst_color is None or float(drift["score"]) > float(worst_color["score"]):
+            self._quality_color_drift_worst_frame = {
+                "frame": int(frame_index),
+                "timestamp": float(timestamp),
+                "score": float(drift["score"]),
+                "p95": float(drift["p95"]),
+                "metric": str(drift["metric"]),
+            }
 
     def _compute_quality_report(self, input_path: str, output_path: str,
                                   start_frame: int, end_frame: int,
@@ -302,6 +512,59 @@ class _QualityMixin:
                     [(a, b) for (_, a, b, _, _) in pairs])
                 temporal_consistency = temporal_consistency_score(
                     [b for (_, _, b, _, _) in pairs])
+            temporal_scores = list(
+                getattr(self, "_quality_temporal_scores", None) or []
+            )
+            temporal_local_score = (
+                float(np.mean(temporal_scores))
+                if temporal_scores else None
+            )
+            temporal_worst_record = getattr(
+                self, "_quality_temporal_worst_pair", None
+            )
+            temporal_overlay = None
+            temporal_worst_pair = None
+            if isinstance(temporal_worst_record, dict):
+                try:
+                    temporal_overlay = self._write_temporal_quality_overlay(
+                        output_path, temporal_worst_record,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Temporal quality overlay write failed",
+                        exc_info=True,
+                    )
+                temporal_worst_pair = {
+                    key: temporal_worst_record[key]
+                    for key in (
+                        "start_frame", "end_frame", "timestamp", "score",
+                        "inside_error", "outside_error",
+                        "reference_inside_error",
+                        "motion_inlier_ratio", "pixels",
+                    )
+                    if key in temporal_worst_record
+                }
+                if temporal_overlay:
+                    temporal_worst_pair["overlay"] = temporal_overlay
+            color_drift_count = int(
+                getattr(self, "_quality_color_drift_count", 0) or 0
+            )
+            color_drift = (
+                float(getattr(self, "_quality_color_drift_sum", 0.0))
+                / color_drift_count
+                if color_drift_count else None
+            )
+            color_drift_metric = getattr(
+                self, "_quality_color_drift_metric", None
+            )
+            color_drift_worst = getattr(
+                self, "_quality_color_drift_worst_frame", None
+            )
+            color_drift_threshold = (
+                OUTSIDE_MASK_HDR_LINEAR_CEILING
+                if color_drift_metric == "linear_rgb_mae"
+                else OUTSIDE_MASK_CIELAB_CEILING
+            )
             metrics = {
                 'psnr': mean_psnr,
                 'ssim': mean_ssim,
@@ -318,6 +581,19 @@ class _QualityMixin:
                 'roi_bbox': list(roi) if roi else None,
                 'temporal_flicker_score': flicker_score,
                 'temporal_consistency': temporal_consistency,
+                'mask_local_temporal_score': temporal_local_score,
+                'mask_local_temporal_threshold': MASK_LOCAL_TEMPORAL_CEILING,
+                'mask_local_temporal_pairs': len(temporal_scores),
+                'mask_local_temporal_scene_cuts_excluded': int(
+                    getattr(self, "_quality_temporal_scene_cuts_excluded", 0)
+                    or 0
+                ),
+                'mask_local_temporal_worst_pair': temporal_worst_pair,
+                'outside_mask_color_drift': color_drift,
+                'outside_mask_color_drift_metric': color_drift_metric,
+                'outside_mask_color_drift_frames': color_drift_count,
+                'outside_mask_color_drift_worst_frame': color_drift_worst,
+                'outside_mask_color_drift_threshold': color_drift_threshold,
                 'residual_text_score': residual_mean_score,
                 'seam_score': (
                     float(np.mean(getattr(self, '_seam_scores', None) or []))
@@ -329,6 +605,23 @@ class _QualityMixin:
                 'tag': tag,
                 'sheet': sheet_path,
             }
+            if (
+                temporal_local_score is not None
+                and temporal_local_score > MASK_LOCAL_TEMPORAL_CEILING
+                and isinstance(temporal_worst_pair, dict)
+            ):
+                review_spans.append(make_review_span(
+                    "flicker",
+                    int(temporal_worst_pair["start_frame"]),
+                    int(temporal_worst_pair["end_frame"]) + 1,
+                    fps=fps,
+                    score=temporal_local_score,
+                    threshold=MASK_LOCAL_TEMPORAL_CEILING,
+                    reason=(
+                        "Motion-compensated mask-local temporal score exceeded "
+                        "the review threshold"
+                    ),
+                ))
             metrics["mask_review_spans"] = merge_review_spans(review_spans)
             if metrics["mask_review_spans"]:
                 metrics["tag"] = "Review"

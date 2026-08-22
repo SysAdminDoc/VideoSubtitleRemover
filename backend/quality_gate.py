@@ -48,6 +48,12 @@ VMAF_FLOOR = 90.0
 TEMPORAL_FLICKER_CEILING = 0.08
 RESIDUAL_TEXT_SCORE_CEILING = 0.025
 SEAM_SCORE_CEILING = 0.35
+# RM-304: these are normalized, mask-local fail bars. They are deliberately
+# conservative synthetic-fixture bars, not a claim that a licensed corpus was
+# available on every developer machine.
+MASK_LOCAL_TEMPORAL_CEILING = 0.08
+OUTSIDE_MASK_CIELAB_CEILING = 1.0
+OUTSIDE_MASK_HDR_LINEAR_CEILING = 0.005
 
 _REMEDIATION = {
     LADDER_NONE: "",
@@ -76,7 +82,8 @@ _REMEDIATION = {
 }
 
 _ALL_OPTIONAL_METRICS = ("vmaf", "roi_vmaf", "lpips", "dists",
-                         "temporal_consistency")
+                         "temporal_consistency", "mask_local_temporal_score",
+                         "outside_mask_color_drift")
 _ACTIONABLE_RETRY_STEPS = (
     LADDER_INCREASE_DILATION,
     LADDER_TEMPORAL_SMOOTH,
@@ -112,6 +119,8 @@ def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
     _check_worst_frame(metrics, violations)
     _check_vmaf(metrics, violations)
     _check_flicker(metrics, violations)
+    _check_mask_local_temporal(metrics, violations)
+    _check_outside_mask_color_drift(metrics, violations)
     _check_residual_text(metrics, violations)
     _check_seam(metrics, violations)
 
@@ -347,6 +356,62 @@ def _check_flicker(metrics: dict,
         })
 
 
+def _check_mask_local_temporal(metrics: dict,
+                               violations: List[Dict[str, Any]]) -> None:
+    score = _number(metrics.get("mask_local_temporal_score"))
+    if score is None:
+        return
+    if score > MASK_LOCAL_TEMPORAL_CEILING:
+        worst = metrics.get("mask_local_temporal_worst_pair")
+        suffix = ""
+        if isinstance(worst, Mapping):
+            start = worst.get("start_frame")
+            timestamp = _number(worst.get("timestamp"))
+            if start is not None and timestamp is not None:
+                suffix = f" at frame {int(start)} ({timestamp:.3f}s)"
+        violations.append({
+            "metric": "mask_local_temporal_score",
+            "value": score,
+            "threshold": MASK_LOCAL_TEMPORAL_CEILING,
+            "detail": (
+                f"mask-local temporal score {score:.4f} above "
+                f"{MASK_LOCAL_TEMPORAL_CEILING:.4f}{suffix}"
+            ),
+            "ladder": LADDER_TEMPORAL_SMOOTH,
+        })
+
+
+def _check_outside_mask_color_drift(metrics: dict,
+                                    violations: List[Dict[str, Any]]) -> None:
+    drift = _number(metrics.get("outside_mask_color_drift"))
+    if drift is None:
+        return
+    metric = str(
+        metrics.get("outside_mask_color_drift_metric") or "cielab_delta_e"
+    ).strip().lower()
+    if metric == "linear_rgb_mae":
+        threshold = OUTSIDE_MASK_HDR_LINEAR_CEILING
+        label = "HDR linear-light outside-mask drift"
+    else:
+        threshold = OUTSIDE_MASK_CIELAB_CEILING
+        label = "outside-mask CIELAB drift"
+    if drift > threshold:
+        worst = metrics.get("outside_mask_color_drift_worst_frame")
+        suffix = ""
+        if isinstance(worst, Mapping) and worst.get("frame") is not None:
+            suffix = f" at frame {int(worst['frame'])}"
+        violations.append({
+            "metric": "outside_mask_color_drift",
+            "value": drift,
+            "threshold": threshold,
+            "detail": (
+                f"{label} {drift:.4f} above {threshold:.4f}{suffix}; "
+                "manual review required, no automatic recoloring applied"
+            ),
+            "ladder": LADDER_MANUAL_REVIEW,
+        })
+
+
 def _check_residual_text(metrics: dict,
                          violations: List[Dict[str, Any]]) -> None:
     residual = _number(metrics.get("residual_text_score"))
@@ -422,6 +487,9 @@ def _preview_paths(metrics: dict) -> list[str]:
     sheet = metrics.get("sheet")
     if sheet:
         paths.append(str(sheet))
+    worst_pair = metrics.get("mask_local_temporal_worst_pair")
+    if isinstance(worst_pair, Mapping) and worst_pair.get("overlay"):
+        paths.append(str(worst_pair["overlay"]))
     for key in ("preview_frame_paths", "previewFramePaths"):
         value = metrics.get(key)
         if isinstance(value, (list, tuple)):

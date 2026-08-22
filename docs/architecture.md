@@ -78,7 +78,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- failure_reason.py           # Closed-set failure classification for rows and reports.
 |   |-- ffmpeg_profiles.py          # FFmpeg capability profiles and security probe.
 |   |-- frozen_matte.py             # Freeze an approved matte as a reusable input.
-|   |-- hdr.py                      # Color metadata, transfer math, and HDR handling.
+|   |-- hdr.py                      # Color metadata preservation and HDR handling.
 |   |-- i18n.py                     # gettext localisation runtime.
 |   |-- import_safety.py            # Crash-safe optional-module import probes.
 |   |-- inpainter_registry.py       # In-process inpainter discovery registry.
@@ -293,12 +293,17 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    - Exact frame-range ticks are converted to FFmpeg boundary strings only at
      the tool boundary, so audio, SRT, EDL, and FCPXML share one clock.
 10. **Quality report.** When `quality_report` is on,
-    `_compute_quality_report` samples N frames from input + output,
+    `_compute_quality_report` samples N frames from input and output,
     computes both whole-frame and ROI-cropped PSNR/SSIM (the ROI
-    is the union mask bbox). Optional `_write_quality_sheet`
-    renders the side-by-side PNG. The quality gate ladder escalates
-    through increase-dilation, temporal-smooth,
-    alternate-inpainter, and manual-review.
+    is the union mask bbox), and consumes the streaming mask-local
+    temporal evidence collected at write time. The temporal pass estimates
+    motion from untouched pixels, excludes scene cuts, and records the worst
+    pair with a timestamp and PNG overlay. It also measures outside-mask
+    CIELAB drift for SDR or linear-light drift for tagged HDR. Optional
+    `_write_quality_sheet` renders the side-by-side PNG. The quality gate
+    ladder escalates through increase-dilation, temporal-smooth,
+    alternate-inpainter, and manual-review. Color drift always remains a
+    review signal and never triggers automatic recoloring.
 11. **Batch report.** `backend/batch_report.py` writes
     `vsr-batch-summary.json` and `vsr-batch-summary.md` with
     per-item status, codec/duration data, quality gate results,

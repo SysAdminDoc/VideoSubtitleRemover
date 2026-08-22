@@ -891,6 +891,18 @@ class SubtitleRemover(
         # pass no longer has per-frame masks). Sampled to keep cost flat.
         self._seam_scores: List[float] = []
         self._seam_score_failure_logged = False
+        # RM-304: streaming quality evidence keeps only the previous frame
+        # and the worst pair, so long jobs do not retain the video in memory.
+        self._quality_temporal_previous = None
+        self._quality_temporal_scores: List[float] = []
+        self._quality_temporal_scene_cuts_excluded = 0
+        self._quality_temporal_worst_pair = None
+        self._quality_temporal_failure_logged = False
+        self._quality_color_drift_sum = 0.0
+        self._quality_color_drift_count = 0
+        self._quality_color_drift_metric = None
+        self._quality_color_drift_worst_frame = None
+        self._quality_color_failure_logged = False
         # RM-73 partial: source color signalling, populated lazily inside
         # process_video once we know the input path. Used by _get_encode_args
         # to preserve HDR / BT.2020 tagging on the output.
@@ -2556,6 +2568,26 @@ class SubtitleRemover(
                     batch.masks[offset]
                     if offset < len(batch.masks) else None,
                 )
+                if self.config.quality_report:
+                    output_frame_index = state.written_idx + offset
+                    reference_frame = (
+                        batch.source_frames[offset]
+                        if offset < len(batch.source_frames)
+                        and batch.source_frames[offset] is not None
+                        else batch.frames[offset]
+                    )
+                    self._accumulate_frame_quality(
+                        reference_frame,
+                        write_frame,
+                        batch.masks[offset]
+                        if offset < len(batch.masks) else None,
+                        frame_index=output_frame_index,
+                        timestamp=_frame_seconds(
+                            ctx.start_frame + output_frame_index,
+                            ctx.fps,
+                            ctx.frame_timing,
+                        ),
+                    )
                 ctx.writer.write(write_frame)
         for offset, result in enumerate(results):
             frame_index = state.written_idx + offset
@@ -2656,6 +2688,16 @@ class SubtitleRemover(
         self._quality_mask_bbox = None
         self._seam_scores = []
         self._seam_score_failure_logged = False
+        self._quality_temporal_previous = None
+        self._quality_temporal_scores = []
+        self._quality_temporal_scene_cuts_excluded = 0
+        self._quality_temporal_worst_pair = None
+        self._quality_temporal_failure_logged = False
+        self._quality_color_drift_sum = 0.0
+        self._quality_color_drift_count = 0
+        self._quality_color_drift_metric = None
+        self._quality_color_drift_worst_frame = None
+        self._quality_color_failure_logged = False
         self._mask_review_signals = []
         self.last_selective_rerun = None
         temp_dir = None

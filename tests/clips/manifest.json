@@ -10,7 +10,9 @@
         "roi_psnr",
         "roi_ssim",
         "temporal_flicker_score",
-        "temporal_consistency"
+        "temporal_consistency",
+        "mask_local_temporal_score",
+        "outside_mask_color_drift"
       ]
     },
     "mask_free_subtitle_erasure": {

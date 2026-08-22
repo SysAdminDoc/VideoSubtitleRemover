@@ -237,6 +237,73 @@ class QualityReportMaskedRoiTests(unittest.TestCase):
         self.assertEqual(metrics["residual_text_score"], 0.0)
         self.assertEqual(metrics["quality_gate"]["status"], "passed")
 
+    def test_quality_report_persists_worst_pair_timestamp_and_overlay(self):
+        from unittest import mock
+
+        r = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        r.config = processor.ProcessingConfig(quality_report=True)
+        r._quality_mask_bbox = (16, 16, 48, 48)
+        r._color_metadata = None
+        reference = np.full((80, 96, 3), 128, dtype=np.uint8)
+        mask = np.zeros((80, 96), dtype=np.uint8)
+        mask[16:48, 16:48] = 255
+        clean = reference.copy()
+        flicker = reference.copy()
+        flicker[mask > 0] = 0
+        r._accumulate_frame_quality(
+            reference, clean, mask, frame_index=0, timestamp=0.0,
+        )
+        r._accumulate_frame_quality(
+            reference, flicker, mask, frame_index=1, timestamp=1 / 24,
+        )
+
+        class FakeCapture:
+            def __init__(self, frame):
+                self.frame = frame
+                self.position = 0
+
+            def isOpened(self):
+                return True
+
+            def get(self, prop):
+                if prop == processor.cv2.CAP_PROP_FRAME_COUNT:
+                    return 2
+                return float(self.position)
+
+            def set(self, prop, value):
+                if prop == processor.cv2.CAP_PROP_POS_FRAMES:
+                    self.position = int(value)
+                return True
+
+            def read(self):
+                return True, self.frame.copy()
+
+            def release(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = str(Path(tmp) / "result.mp4")
+            with mock.patch(
+                "backend._quality_mixin._open_capture",
+                side_effect=[FakeCapture(reference), FakeCapture(clean)],
+            ), mock.patch(
+                "backend._quality_mixin.compute_vmaf", return_value=None,
+            ):
+                metrics = r._compute_quality_report(
+                    "input.mp4", output_path, 0, 2, 24.0, n_samples=2,
+                )
+            worst = metrics["mask_local_temporal_worst_pair"]
+            self.assertEqual(worst["start_frame"], 0)
+            self.assertAlmostEqual(worst["timestamp"], 1 / 24)
+            self.assertGreater(metrics["mask_local_temporal_score"], 0.08)
+            self.assertEqual(metrics["mask_local_temporal_threshold"], 0.08)
+            self.assertTrue(Path(worst["overlay"]).exists())
+            self.assertEqual(metrics["outside_mask_color_drift"], 0.0)
+            self.assertIn(
+                worst["overlay"],
+                metrics["quality_gate"]["previewFramePaths"],
+            )
+
 
 from backend.inpainters import extend_masks_across_fades  # noqa: E402
 
@@ -638,6 +705,42 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(len(gate["reasons"]), 1)
         self.assertEqual(gate["reasons"][0]["metric"], "temporal_flicker_score")
 
+    def test_ladder_temporal_smooth_on_mask_local_temporal_failure(self):
+        from backend.quality_gate import evaluate_quality_gate
+
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+            "mask_local_temporal_score": 0.12,
+            "mask_local_temporal_worst_pair": {
+                "start_frame": 17,
+                "timestamp": 0.708333,
+                "score": 0.4,
+            },
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "temporal-smooth")
+        self.assertIn("frame 17", gate["reason"])
+        self.assertIn("0.708", gate["reason"])
+
+    def test_outside_mask_color_failure_requires_review_without_recoloring(self):
+        from backend.quality_gate import evaluate_quality_gate
+
+        gate = evaluate_quality_gate({
+            "samples": 4,
+            "tag": "Good",
+            "ssim": 0.99,
+            "roi_ssim": 0.98,
+            "outside_mask_color_drift": 2.1,
+            "outside_mask_color_drift_metric": "cielab_delta_e",
+            "outside_mask_color_drift_worst_frame": {"frame": 9},
+        })
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(gate["ladderStep"], "manual-review")
+        self.assertIn("no automatic recoloring", gate["reason"])
+
     def test_ladder_increase_dilation_on_residual_text(self):
         from backend.quality_gate import evaluate_quality_gate
         gate = evaluate_quality_gate({
@@ -726,6 +829,8 @@ class QualityGateTests(unittest.TestCase):
             "lpips": 0.01,
             "dists": 0.02,
             "temporal_consistency": 0.99,
+            "mask_local_temporal_score": 0.01,
+            "outside_mask_color_drift": 0.0,
         })
         self.assertEqual(gate["degradedMetrics"], [])
 

@@ -390,6 +390,7 @@ def run_reference_clip(entry: Mapping[str, object], output_dir: Path | str) -> d
             for key in (
                 "psnr", "ssim", "roi_psnr", "roi_ssim",
                 "temporal_flicker_score", "temporal_consistency",
+                "mask_local_temporal_score", "outside_mask_color_drift",
                 "residual_text_score", "samples", "tag",
             )
         },

@@ -17,26 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P1 — RM-304 Add mask-local temporal and color-drift quality gates
-  - Why: The current temporal score averages raw adjacent-frame ROI SSIM, which
-    confuses valid motion with flicker and can hide localized defects. The pipeline
-    also lacks an outside-mask color-drift guard.
-  - Evidence: backend/quality.py:252-268, backend/_quality_mixin.py,
-    https://arxiv.org/abs/2605.14534,
-    https://github.com/silent-commit/CLEAR/issues/5, and
-    https://docs.telestream.dev/docs/qualify-user-guide.
-  - Touches: backend/quality.py, backend/_quality_mixin.py,
-    backend/quality_gate.py, quality reports, reference corpus fixtures, and
-    quality tests.
-  - Acceptance: Add a scene-aware, mask-local, motion-compensated temporal score;
-    exclude cuts and report the worst frame pair with timestamp and overlay; add an
-    outside-mask CIELAB color-drift measure for SDR and an appropriate linear-light
-    measure for tagged HDR; calibrate thresholds on static, moving, flicker,
-    occlusion, and global-cast fixtures; prove intentional camera motion does not
-    fail by itself; warn or gate without automatically recoloring valid footage.
-  - Complexity: Medium. Regression risk is medium because thresholds need a licensed
-    calibration corpus. Benefits from RM-302 and RM-303.
-
 - [ ] P1 — RM-305 Inventory both FFmpeg runtimes
   - Why: Release evidence validates the external FFmpeg executable, but untrusted
     media also enters through OpenCV's embedded FFmpeg libraries. The Docker image
