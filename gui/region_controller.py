@@ -157,10 +157,16 @@ class RegionSelectorWindow:
             self.orig_h, self.orig_w = frame.shape[:2]
             screen_w = self.root.winfo_screenwidth()
             screen_h = self.root.winfo_screenheight()
-            max_w = min(900, int(screen_w * 0.8))
+            # Keep the preview useful on both compact and wide displays. Small
+            # source clips are enlarged to the available workspace instead of
+            # appearing as a postage stamp in the editor.
+            max_w = max(
+                420,
+                min(900, int(screen_w * 0.56), max(420, screen_w - 470)),
+            )
             height_ratio = 0.55 if screen_h >= 600 else 0.7
             max_h = min(540, int(screen_h * height_ratio))
-            self.scale = min(max_w / self.orig_w, max_h / self.orig_h, 1.0)
+            self.scale = min(max_w / self.orig_w, max_h / self.orig_h)
             self.disp_w, self.disp_h = int(self.orig_w * self.scale), int(self.orig_h * self.scale)
 
             # Selector state: every saved rect lives in `rects` (image-
@@ -205,8 +211,24 @@ class RegionSelectorWindow:
                 bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED,
             ).pack(anchor="w", pady=(2, 0))
 
+            workspace = tk.Frame(body, bg=Theme.BG_OVERLAY)
+            workspace.pack(fill="both", expand=True)
+            workspace.columnconfigure(0, weight=1)
+            workspace.columnconfigure(1, weight=0, minsize=420)
+            workspace.rowconfigure(0, weight=1)
+            preview_column = tk.Frame(workspace, bg=Theme.BG_OVERLAY)
+            preview_column.grid(
+                row=0, column=0, sticky="nsew",
+                padx=(Theme.S_MD, Theme.S_SM),
+            )
+            properties_column = tk.Frame(workspace, bg=Theme.BG_OVERLAY)
+            properties_column.grid(
+                row=0, column=1, sticky="nsew",
+                padx=(0, Theme.S_MD),
+            )
+
             self.canvas = tk.Canvas(
-                body,
+                preview_column,
                 width=self.disp_w,
                 height=self.disp_h,
                 highlightthickness=0,
@@ -214,7 +236,7 @@ class RegionSelectorWindow:
                 cursor="cross",
                 takefocus=True,
             )
-            self.canvas.pack(padx=Theme.S_MD)
+            self.canvas.pack(anchor="n", fill="x")
             set_accessible_metadata(
                 self.canvas,
                 role="region editor canvas",
@@ -236,26 +258,27 @@ class RegionSelectorWindow:
             self.ocr_probe_generation = 0
             self.shape_mode_var = tk.StringVar(value=tr("Rectangle"))
 
-
-
-
-
             self._draw_image(frame)
             self._draw_saved_rects()
 
             # Drawing handlers.
-
-
-
             self.canvas.bind("<ButtonPress-1>", self.on_press)
             self.canvas.bind("<B1-Motion>", self.on_drag)
             self.canvas.bind("<ButtonRelease-1>", self.on_release)
             self.canvas._vsr_region_drag_handlers = (self.on_press, self.on_drag, self.on_release)
 
-            shape_row = tk.Frame(body, bg=Theme.BG_OVERLAY)
-            shape_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
+            shape_frame = tk.Frame(
+                properties_column,
+                bg=Theme.BG_SECONDARY,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER_SUBTLE,
+            )
+            shape_frame.pack(fill="x", pady=(0, Theme.S_SM))
+            shape_row = tk.Frame(shape_frame, bg=Theme.BG_SECONDARY)
+            shape_row.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_XS))
             tk.Label(shape_row, text=tr("Shape"), font=f(Theme.F_META),
-                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
+                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED).pack(side="left")
             shape_picker = ttk.Combobox(
                 shape_row,
                 width=12,
@@ -267,30 +290,34 @@ class RegionSelectorWindow:
             shape_picker.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
             shape_hint_var = tk.StringVar(
                 value=tr("Drag a rectangle, or choose Polygon and click vertices."))
-            tk.Label(shape_row, textvariable=shape_hint_var,
-                     font=f(Theme.F_META), bg=Theme.BG_OVERLAY,
-                     fg=Theme.TEXT_MUTED).pack(side="left")
-
-
             finish_polygon_btn = ModernButton(
                 shape_row, text=tr("Finish polygon"), command=self._finish_polygon,
                 style="secondary", size="sm", width=112)
             finish_polygon_btn.pack(side="right")
+            tk.Label(
+                shape_frame, textvariable=shape_hint_var,
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED, anchor="w", justify="left",
+                wraplength=380,
+            ).pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_XS))
 
             self.ocr_feedback_var = tk.StringVar(
                 value=tr("Drag a rectangle to preview OCR boxes and confidence."))
             tk.Label(
-                body,
+                shape_frame,
                 textvariable=self.ocr_feedback_var,
                 font=f(Theme.F_META),
-                bg=Theme.BG_OVERLAY,
+                bg=Theme.BG_SECONDARY,
                 fg=Theme.INFO,
-            ).pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, 0))
+                anchor="w", justify="left", wraplength=380,
+            ).pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
 
             # Frame slider for videos.
             if self.is_video and self.frame_count > 1:
-                slider_row = tk.Frame(body, bg=Theme.BG_OVERLAY)
-                slider_row.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, 0))
+                slider_row = tk.Frame(preview_column, bg=Theme.BG_OVERLAY)
+                slider_row.pack(fill="x", pady=(Theme.S_SM, 0))
                 tk.Label(slider_row, text=tr("Frame"),
                          font=f(Theme.F_BODY_SM),
                          bg=Theme.BG_OVERLAY, fg=Theme.TEXT_SECONDARY).pack(side="left")
@@ -301,16 +328,16 @@ class RegionSelectorWindow:
 
 
                 slider = tk.Scale(
-                    body, from_=0, to=self.frame_count - 1, orient="horizontal",
+                    preview_column, from_=0, to=self.frame_count - 1,
+                    orient="horizontal",
                     command=self._on_slider, length=self.disp_w - 24,
                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY,
                     troughcolor=Theme.BG_TERTIARY,
                     activebackground=Theme.BLUE_PRIMARY,
                     highlightthickness=0, showvalue=False,
                 )
-                slider.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+                slider.pack(fill="x", pady=(0, Theme.S_SM))
 
-            time_row = None
             self.start_var = tk.StringVar()
             self.end_var = tk.StringVar()
             self.start_frame_var = tk.StringVar()
@@ -327,55 +354,68 @@ class RegionSelectorWindow:
                     self.start_var.set(f"{start_value:g}" if start_value else "")
                     self.end_var.set(f"{end_value:g}" if end_value else "")
 
-                time_row = tk.Frame(body, bg=Theme.BG_OVERLAY)
-                time_row.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
-                tk.Label(time_row, text=tr("Start sec"),
-                         font=f(Theme.F_META),
-                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
-                start_entry = tk.Entry(
-                    time_row, width=9, textvariable=self.start_var,
-                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                    insertbackground=Theme.TEXT_PRIMARY,
-                    relief="flat",
+                timing_frame = tk.Frame(
+                    properties_column,
+                    bg=Theme.BG_SECONDARY,
+                    highlightthickness=1,
+                    highlightbackground=Theme.BORDER_SUBTLE,
                 )
-                start_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
-                tk.Label(time_row, text=tr("End sec"),
-                         font=f(Theme.F_META),
-                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
-                end_entry = tk.Entry(
-                    time_row, width=9, textvariable=self.end_var,
-                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                    insertbackground=Theme.TEXT_PRIMARY,
-                    relief="flat",
-                )
-                end_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
-                tk.Label(time_row, text=tr("Start frame"),
-                         font=f(Theme.F_META),
-                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
-                start_frame_entry = tk.Entry(
-                    time_row, width=7, textvariable=self.start_frame_var,
-                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                    insertbackground=Theme.TEXT_PRIMARY,
-                    relief="flat",
-                )
-                start_frame_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
-                tk.Label(time_row, text=tr("End frame"),
-                         font=f(Theme.F_META),
-                         bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED).pack(side="left")
-                end_frame_entry = tk.Entry(
-                    time_row, width=7, textvariable=self.end_frame_var,
-                    bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                    insertbackground=Theme.TEXT_PRIMARY,
-                    relief="flat",
-                )
-                end_frame_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+                timing_frame.pack(fill="x", pady=(0, Theme.S_SM))
+                timing_header = tk.Frame(
+                    timing_frame, bg=Theme.BG_SECONDARY)
+                timing_header.pack(
+                    fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_XS))
+                tk.Label(
+                    timing_header, text=tr("Timing"),
+                    font=f(Theme.F_BODY_SM, "bold"),
+                    bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+                ).pack(side="left")
                 self.span_summary_var.set(self._region_editor_span_summary())
                 span_label = tk.Label(
-                    time_row, textvariable=self.span_summary_var,
+                    timing_header, textvariable=self.span_summary_var,
                     font=f(Theme.F_META),
-                    bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED,
+                    bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
                 )
                 span_label.pack(side="right")
+
+                timing_fields = tk.Frame(
+                    timing_frame, bg=Theme.BG_SECONDARY)
+                timing_fields.pack(
+                    fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
+                for column in range(4):
+                    timing_fields.columnconfigure(
+                        column, weight=1, uniform="timing")
+
+                def timing_field(column, label_text, variable):
+                    field = tk.Frame(timing_fields, bg=Theme.BG_SECONDARY)
+                    field.grid(
+                        row=0, column=column, sticky="ew",
+                        padx=(0 if column == 0 else Theme.S_SM, 0),
+                    )
+                    tk.Label(
+                        field, text=tr(label_text), font=f(Theme.F_META),
+                        bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+                    ).pack(anchor="w")
+                    entry = tk.Entry(
+                        field, width=8, textvariable=variable,
+                        bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                        insertbackground=Theme.TEXT_PRIMARY,
+                        font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                        highlightthickness=1,
+                        highlightbackground=Theme.BORDER,
+                        highlightcolor=Theme.BORDER_FOCUS,
+                    )
+                    entry.pack(fill="x", pady=(Theme.S_XS, 0))
+                    return entry
+
+                start_entry = timing_field(
+                    0, "Start time (s)", self.start_var)
+                end_entry = timing_field(
+                    1, "End time (s)", self.end_var)
+                start_frame_entry = timing_field(
+                    2, "Start frame", self.start_frame_var)
+                end_frame_entry = timing_field(
+                    3, "End frame", self.end_frame_var)
                 self.win._vsr_start_entry = start_entry
                 self.win._vsr_end_entry = end_entry
                 self.win._vsr_start_frame_entry = start_frame_entry
@@ -396,31 +436,36 @@ class RegionSelectorWindow:
                         description=description)
 
             precise_frame = tk.Frame(
-                body,
+                properties_column,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
                 highlightbackground=Theme.BORDER_SUBTLE,
             )
-            precise_frame.pack(
-                fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
-            precise_top = tk.Frame(precise_frame, bg=Theme.BG_SECONDARY)
-            precise_top.pack(fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
-            precise_bottom = tk.Frame(precise_frame, bg=Theme.BG_SECONDARY)
-            precise_bottom.pack(fill="x", padx=Theme.S_SM, pady=(2, Theme.S_XS))
+            precise_frame.pack(fill="x", pady=(0, Theme.S_SM))
+            precise_header = tk.Frame(
+                precise_frame, bg=Theme.BG_SECONDARY)
+            precise_header.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_XS))
+            tk.Label(
+                precise_header, text=tr("Region properties"),
+                font=f(Theme.F_BODY_SM, "bold"),
+                bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
+            ).pack(side="left")
 
             self.selected_region_var = tk.StringVar()
             self.region_picker = ttk.Combobox(
-                precise_top,
-                width=21,
+                precise_header,
+                width=18,
                 state="readonly",
                 textvariable=self.selected_region_var,
                 style="Dark.TCombobox",
             )
-            tk.Label(
-                precise_top, text=tr("Selected"), font=f(Theme.F_META),
+            selected_label = tk.Label(
+                precise_header, text=tr("Selected"), font=f(Theme.F_META),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-            ).pack(side="left")
-            self.region_picker.pack(side="left", padx=(Theme.S_XS, Theme.S_MD))
+            )
+            self.region_picker.pack(side="right")
+            selected_label.pack(side="right", padx=(Theme.S_SM, Theme.S_XS))
             set_accessible_metadata(
                 self.region_picker,
                 role="combo box",
@@ -436,24 +481,41 @@ class RegionSelectorWindow:
                 "vertices": tk.StringVar(),
             }
             self.geometry_entries = {}
-            for key, label, width in (
-                ("x", tr("X"), 6),
-                ("y", tr("Y"), 6),
-                ("width", tr("Width"), 7),
-                ("height", tr("Height"), 7),
-            ):
+            geometry_fields = tk.Frame(
+                precise_frame, bg=Theme.BG_SECONDARY)
+            geometry_fields.pack(
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
+            for column in range(4):
+                geometry_fields.columnconfigure(
+                    column, weight=1, uniform="geometry")
+            for column, (key, label) in enumerate((
+                ("x", tr("X")),
+                ("y", tr("Y")),
+                ("width", tr("Width")),
+                ("height", tr("Height")),
+            )):
+                field = tk.Frame(
+                    geometry_fields, bg=Theme.BG_SECONDARY)
+                field.grid(
+                    row=0, column=column, sticky="ew",
+                    padx=(0 if column == 0 else Theme.S_SM, 0),
+                )
                 tk.Label(
-                    precise_top, text=label, font=f(Theme.F_META),
+                    field, text=label, font=f(Theme.F_META),
                     bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-                ).pack(side="left")
+                ).pack(anchor="w")
                 entry = tk.Entry(
-                    precise_top, width=width, textvariable=self.geometry_vars[key],
+                    field, width=6, textvariable=self.geometry_vars[key],
                     bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
                     disabledbackground=Theme.BG_DARK,
                     disabledforeground=Theme.TEXT_DISABLED,
-                    insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+                    insertbackground=Theme.TEXT_PRIMARY,
+                    font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                    highlightthickness=1,
+                    highlightbackground=Theme.BORDER,
+                    highlightcolor=Theme.BORDER_FOCUS,
                 )
-                entry.pack(side="left", padx=(Theme.S_XS, Theme.S_SM))
+                entry.pack(fill="x", pady=(Theme.S_XS, 0))
                 self.geometry_entries[key] = entry
                 set_accessible_metadata(
                     entry,
@@ -462,19 +524,27 @@ class RegionSelectorWindow:
                     description=tr("Enter a whole number within the source-frame bounds."),
                 )
 
+            vertices_field = tk.Frame(
+                precise_frame, bg=Theme.BG_SECONDARY)
+            vertices_field.pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
             tk.Label(
-                precise_bottom, text=tr("Vertices"), font=f(Theme.F_META),
+                vertices_field, text=tr("Vertices"), font=f(Theme.F_META),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-            ).pack(side="left")
+            ).pack(anchor="w")
             vertices_entry = tk.Entry(
-                precise_bottom, width=46,
+                vertices_field,
                 textvariable=self.geometry_vars["vertices"],
                 bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
                 disabledbackground=Theme.BG_DARK,
                 disabledforeground=Theme.TEXT_DISABLED,
-                insertbackground=Theme.TEXT_PRIMARY, relief="flat",
+                insertbackground=Theme.TEXT_PRIMARY,
+                font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER_FOCUS,
             )
-            vertices_entry.pack(side="left", padx=(Theme.S_XS, Theme.S_MD), fill="x", expand=True)
+            vertices_entry.pack(fill="x", pady=(Theme.S_XS, 0))
             self.geometry_entries["vertices"] = vertices_entry
             set_accessible_metadata(
                 vertices_entry,
@@ -482,15 +552,18 @@ class RegionSelectorWindow:
                 label=tr("Polygon vertex coordinates"),
                 description=tr("Use x,y pairs separated by semicolons; at least three vertices are required."),
             )
+            precise_actions = tk.Frame(
+                precise_frame, bg=Theme.BG_SECONDARY)
+            precise_actions.pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
             reference_frame = tk.Frame(
-                body,
+                properties_column,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
                 highlightbackground=Theme.BORDER_SUBTLE,
             )
-            reference_frame.pack(
-                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+            reference_frame.pack(fill="x")
             self.reference_path_var = tk.StringVar(value="")
             self.reference_status_var = tk.StringVar(
                 value=tr("Select a timed region to attach a clean reference."))
@@ -500,89 +573,121 @@ class RegionSelectorWindow:
             self.reference_offset_var = tk.StringVar(value="0")
             reference_top = tk.Frame(reference_frame, bg=Theme.BG_SECONDARY)
             reference_top.pack(
-                fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_XS))
             tk.Label(
                 reference_top, text=tr("Clean reference"),
-                font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
+                font=f(Theme.F_BODY_SM, "bold"), bg=Theme.BG_SECONDARY,
                 fg=Theme.TEXT_PRIMARY,
             ).pack(side="left")
-            tk.Label(
-                reference_top, textvariable=self.reference_path_var,
-                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
-                fg=Theme.TEXT_MUTED, anchor="w",
-            ).pack(side="left", fill="x", expand=True, padx=Theme.S_SM)
             self.reference_buttons = {}
-            for key, label, width, command in (
-                ("choose", tr("Choose"), 76,
-                 lambda: self._choose_clean_reference()),
-                ("preview", tr("Preview"), 78,
-                 lambda: self._preview_clean_reference()),
-                ("clear", tr("Clear"), 68,
+            for key, label, width, style, command in (
+                ("clear", tr("Clear"), 68, "ghost",
                  lambda: self._clear_clean_reference()),
+                ("preview", tr("Preview"), 78,
+                 "secondary", lambda: self._preview_clean_reference()),
+                ("choose", tr("Choose"), 76, "secondary",
+                 lambda: self._choose_clean_reference()),
             ):
                 button = ModernButton(
                     reference_top, text=label, width=width,
-                    command=command, style="ghost", size="sm")
+                    command=command, style=style, size="sm")
                 button.pack(side="right", padx=(Theme.S_XS, 0))
                 self.reference_buttons[key] = button
+            tk.Label(
+                reference_frame, textvariable=self.reference_path_var,
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED, anchor="w",
+            ).pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_XS))
             reference_options = tk.Frame(
                 reference_frame, bg=Theme.BG_SECONDARY)
             reference_options.pack(
-                fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, 0))
+                fill="x", padx=Theme.S_MD, pady=(Theme.S_XS, Theme.S_SM))
+            for column in range(3):
+                reference_options.columnconfigure(
+                    column, weight=1, uniform="reference")
+
+            alignment_field = tk.Frame(
+                reference_options, bg=Theme.BG_SECONDARY)
+            alignment_field.grid(row=0, column=0, sticky="ew")
             tk.Label(
-                reference_options, text=tr("Alignment"), font=f(Theme.F_META),
+                alignment_field, text=tr("Alignment"), font=f(Theme.F_META),
                 bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
-            ).pack(side="left")
+            ).pack(anchor="w")
             self.reference_alignment_picker = ttk.Combobox(
-                reference_options, width=13, state="readonly",
+                alignment_field, width=11, state="readonly",
                 textvariable=self.reference_alignment_var,
                 values=(tr("Auto"), tr("Translation"), tr("Homography")),
                 style="Dark.TCombobox",
             )
             self.reference_alignment_picker.pack(
-                side="left", padx=(Theme.S_XS, Theme.S_MD))
+                fill="x", pady=(Theme.S_XS, 0))
+
+            confidence_field = tk.Frame(
+                reference_options, bg=Theme.BG_SECONDARY)
+            confidence_field.grid(
+                row=0, column=1, sticky="ew", padx=(Theme.S_SM, 0))
+            tk.Label(
+                confidence_field, text=tr("Confidence floor"),
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED,
+            ).pack(anchor="w")
+            self.reference_confidence_entry = tk.Entry(
+                confidence_field, width=6,
+                textvariable=self.reference_confidence_var,
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                disabledbackground=Theme.BG_DARK,
+                disabledforeground=Theme.TEXT_DISABLED,
+                insertbackground=Theme.TEXT_PRIMARY,
+                font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER_FOCUS,
+            )
+            self.reference_confidence_entry.pack(
+                fill="x", pady=(Theme.S_XS, 0))
+            # RM-283: only meaningful for a donor video, so the label says so
+            # rather than leaving a dead field on a still plate.
+            offset_field = tk.Frame(
+                reference_options, bg=Theme.BG_SECONDARY)
+            offset_field.grid(
+                row=0, column=2, sticky="ew", padx=(Theme.S_SM, 0))
+            self.reference_offset_label = tk.Label(
+                offset_field, text=tr("Donor offset (s)"),
+                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
+                fg=Theme.TEXT_MUTED,
+            )
+            self.reference_offset_label.pack(anchor="w")
+            self.reference_offset_entry = tk.Entry(
+                offset_field, width=7,
+                textvariable=self.reference_offset_var,
+                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
+                disabledbackground=Theme.BG_DARK,
+                disabledforeground=Theme.TEXT_DISABLED,
+                insertbackground=Theme.TEXT_PRIMARY,
+                font=f(Theme.F_BODY_SM), relief="flat", bd=6,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER,
+                highlightcolor=Theme.BORDER_FOCUS,
+            )
+            self.reference_offset_entry.pack(
+                fill="x", pady=(Theme.S_XS, 0))
             self.reference_color_toggle = ModernToggle(
-                reference_options,
+                reference_frame,
                 text=tr("Match each frame's color"),
                 variable=self.reference_color_match_var,
                 command=lambda: self._save_clean_reference_options(),
                 bg=Theme.BG_SECONDARY,
             )
-            self.reference_color_toggle.pack(side="left")
-            tk.Label(
-                reference_options, text=tr("Confidence floor"),
-                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
-                fg=Theme.TEXT_MUTED,
-            ).pack(side="left", padx=(Theme.S_MD, Theme.S_XS))
-            self.reference_confidence_entry = tk.Entry(
-                reference_options, width=6,
-                textvariable=self.reference_confidence_var,
-                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                insertbackground=Theme.TEXT_PRIMARY, relief="flat",
-            )
-            self.reference_confidence_entry.pack(side="left")
-            # RM-283: only meaningful for a donor video, so the label says so
-            # rather than leaving a dead field on a still plate.
-            self.reference_offset_label = tk.Label(
-                reference_options, text=tr("Donor offset (s)"),
-                font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
-                fg=Theme.TEXT_MUTED,
-            )
-            self.reference_offset_label.pack(
-                side="left", padx=(Theme.S_MD, Theme.S_XS))
-            self.reference_offset_entry = tk.Entry(
-                reference_options, width=7,
-                textvariable=self.reference_offset_var,
-                bg=Theme.BG_TERTIARY, fg=Theme.TEXT_PRIMARY,
-                insertbackground=Theme.TEXT_PRIMARY, relief="flat",
-            )
-            self.reference_offset_entry.pack(side="left")
+            self.reference_color_toggle.pack(
+                anchor="w", padx=Theme.S_MD, pady=(0, Theme.S_XS))
             tk.Label(
                 reference_frame, textvariable=self.reference_status_var,
                 font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
-                fg=Theme.TEXT_MUTED, anchor="w",
+                fg=Theme.TEXT_MUTED, anchor="w", justify="left",
+                wraplength=380,
             ).pack(
-                fill="x", padx=Theme.S_SM, pady=(Theme.S_XS, Theme.S_XS))
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
             set_accessible_metadata(
                 self.reference_alignment_picker, role="combo box",
                 label=tr("Clean reference alignment mode"))
@@ -596,39 +701,19 @@ class RegionSelectorWindow:
             self.history_buttons = {"undo": None, "redo": None}
             self.time_input_source = {"start": "seconds", "end": "seconds"}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             apply_edit_button = ModernButton(
-                precise_bottom, text=tr("Apply"), command=self._apply_numeric_region_edit,
+                precise_actions, text=tr("Apply"),
+                command=self._apply_numeric_region_edit,
                 style="secondary", size="sm", width=72)
             apply_edit_button.pack(side="right")
             redo_edit_button = ModernButton(
-                precise_bottom, text=tr("Redo"), command=self._redo_region_edit,
+                precise_actions, text=tr("Redo"),
+                command=self._redo_region_edit,
                 style="ghost", size="sm", width=68)
             redo_edit_button.pack(side="right", padx=(0, Theme.S_XS))
             undo_edit_button = ModernButton(
-                precise_bottom, text=tr("Undo"), command=self._undo_region_edit,
+                precise_actions, text=tr("Undo"),
+                command=self._undo_region_edit,
                 style="ghost", size="sm", width=68)
             undo_edit_button.pack(side="right", padx=(0, Theme.S_XS))
             self.history_buttons.update(undo=undo_edit_button, redo=redo_edit_button)
@@ -677,12 +762,6 @@ class RegionSelectorWindow:
             actions = tk.Frame(body, bg=Theme.BG_OVERLAY)
             actions.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_MD))
 
-
-
-
-
-
-
             ModernButton(actions, text=tr("Clear all"), command=self._clear_all,
                          style="ghost", size="sm", width=92).pack(side="left")
             if self.is_video:
@@ -704,12 +783,15 @@ class RegionSelectorWindow:
                          style="ghost", size="sm", width=92).pack(
                              side="right", padx=(0, Theme.S_SM))
 
-            hint_frame = tk.Frame(body, bg=Theme.BG_OVERLAY)
-            hint_frame.pack(fill="x", pady=(0, Theme.S_MD))
-            tk.Label(hint_frame,
-                     text=tr("Drag to add; choose a region for exact coordinates and timing."),
-                     font=f(Theme.F_BODY_SM, "bold"),
-                     bg=Theme.BG_OVERLAY, fg=Theme.TEXT_PRIMARY).pack()
+            hint_frame = tk.Frame(preview_column, bg=Theme.BG_OVERLAY)
+            hint_frame.pack(fill="x", pady=(Theme.S_XS, 0))
+            tk.Label(
+                hint_frame,
+                text=tr("Drag to add; choose a region for exact coordinates and timing."),
+                font=f(Theme.F_META),
+                bg=Theme.BG_OVERLAY, fg=Theme.TEXT_MUTED,
+                anchor="w",
+            ).pack(fill="x")
 
             for sequence in ("<Left>", "<Right>", "<Up>", "<Down>"):
                 self.canvas.bind(sequence, self._transform_selected_region, add="+")
@@ -727,7 +809,7 @@ class RegionSelectorWindow:
             self.win.bind("<Escape>", lambda e: self.win.destroy())
             self.win.transient(self.root)
             fit_dialog_to_work_area(
-                self.win, self.root, min_width=960, min_height=640)
+                self.win, self.root, min_width=1180, min_height=700)
             self.win.grab_set()
         except Exception as e:
             logger.error(f"Region selector error: {e}")
@@ -1903,7 +1985,6 @@ class RegionSelectorWindow:
                 self.cap.release()
             except Exception:
                 pass
-
 
 
 class RegionEditorControllerMixin:
