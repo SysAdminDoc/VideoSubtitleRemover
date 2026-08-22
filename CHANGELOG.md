@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Release evidence now inventories both FFmpeg runtimes. The external record
+  includes its version and build configuration, while the OpenCV record keeps
+  wheel provenance and the embedded `avcodec`, `avformat`, and `avutil` ABI
+  versions. Embedded builds block only with a cited advisory mapping. The CPU
+  container now pins its Python base by digest and builds verified FFmpeg 9.0.1
+  from the official source archive.
 - Video timing now keeps integer PTS and duration ticks with the source rational
   time base from ffprobe. Checkpoints, matte manifests, frozen mattes,
   track plans, audio trimming, SRT, EDL, and FCPXML retain the exact clock while

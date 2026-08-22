@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Sequence, Tuple
 
 
 # Single source of truth for the libpng security floor. CVE-2026-22801 is
@@ -306,6 +306,222 @@ def opencv_libpng_status() -> dict:
         "warning": warning,
         "error": None,
     }
+
+
+# OpenCV's Python wheel carries its own FFmpeg libraries. The ABI numbers are
+# useful inventory facts, but they are not FFmpeg release numbers and must not
+# be classified against the external FFmpeg floor without an advisory that
+# maps a specific embedded build to an affected range. Keep this mapping empty
+# until an advisory supplies that evidence. A missing mapping is recorded as
+# unclassified, not silently treated as vulnerable or safe.
+OPENCV_FFMPEG_STATUS_SCHEMA = "vsr.opencv_ffmpeg.v1"
+OPENCV_FFMPEG_PROVENANCE_SOURCE = (
+    "https://github.com/opencv/opencv/releases/tag/5.0.0"
+)
+OPENCV_FFMPEG_WHEEL_SOURCE = "https://github.com/opencv/opencv-python"
+OPENCV_FFMPEG_REQUIRED_LIBRARIES = ("avcodec", "avformat", "avutil")
+OPENCV_FFMPEG_ADVISORY_RULES: Tuple[Mapping[str, object], ...] = ()
+_OPENCV_FFMPEG_LINE_RE = re.compile(
+    r"^\s*(avcodec|avformat|avutil):\s+(YES|NO)"
+    r"(?:\s+\(([^)]*)\))?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_OPENCV_FFMPEG_HEADER_RE = re.compile(
+    r"^\s*FFMPEG:\s+(YES|NO)(?:\s+\(([^)]*)\))?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _numeric_version(value: object) -> Tuple[int, ...]:
+    parts = [int(part) for part in re.findall(r"\d+", str(value or ""))]
+    return tuple(parts[:3])
+
+
+def parse_opencv_ffmpeg_build_info(build_info: object) -> dict:
+    """Extract OpenCV's embedded FFmpeg ABI inventory from build text."""
+    text = str(build_info or "")
+    header = _OPENCV_FFMPEG_HEADER_RE.search(text)
+    libraries = {
+        name: {
+            "available": False,
+            "version": None,
+            "versionTuple": [],
+        }
+        for name in OPENCV_FFMPEG_REQUIRED_LIBRARIES
+    }
+    for match in _OPENCV_FFMPEG_LINE_RE.finditer(text):
+        name = match.group(1).lower()
+        version = (match.group(3) or "").strip() or None
+        parsed = _numeric_version(version)
+        libraries[name] = {
+            "available": match.group(2).upper() == "YES",
+            "version": version,
+            "versionTuple": list(parsed),
+        }
+    ffmpeg_enabled = None
+    ffmpeg_build = ""
+    if header:
+        ffmpeg_enabled = header.group(1).upper() == "YES"
+        ffmpeg_build = (header.group(2) or "").strip()
+    parseable = bool(
+        ffmpeg_enabled is True
+        and all(
+            item["available"] and item["version"] and item["versionTuple"]
+            for item in libraries.values()
+        )
+    )
+    return {
+        "ffmpegEnabled": ffmpeg_enabled,
+        "ffmpegBuild": ffmpeg_build,
+        "libraries": libraries,
+        "parseable": parseable,
+    }
+
+
+def _opencv_wheel_provenance(wheel_status: Optional[Mapping[str, object]]) -> dict:
+    if not isinstance(wheel_status, Mapping):
+        return {
+            "schema": "vsr.opencv_wheel_provenance.v1",
+            "distribution": "",
+            "version": None,
+            "importedFile": "",
+            "source": OPENCV_FFMPEG_WHEEL_SOURCE,
+        }
+    recorded = wheel_status.get("provenance")
+    if isinstance(recorded, Mapping):
+        result = dict(recorded)
+        result.setdefault("schema", "vsr.opencv_wheel_provenance.v1")
+        result.setdefault("source", OPENCV_FFMPEG_WHEEL_SOURCE)
+        return result
+    imported = wheel_status.get("imported")
+    imported = imported if isinstance(imported, Mapping) else {}
+    return {
+        "schema": "vsr.opencv_wheel_provenance.v1",
+        "distribution": str(imported.get("owner") or ""),
+        "version": imported.get("version"),
+        "importedFile": str(imported.get("file") or ""),
+        "source": OPENCV_FFMPEG_WHEEL_SOURCE,
+    }
+
+
+def opencv_ffmpeg_status(
+    *,
+    wheel_status: Optional[Mapping[str, object]] = None,
+    build_info: Optional[str] = None,
+    opencv_version: Optional[str] = None,
+    advisory_rules: Optional[Sequence[Mapping[str, object]]] = None,
+) -> dict:
+    """Inventory OpenCV's embedded FFmpeg and apply only cited mappings.
+
+    OpenCV reports FFmpeg library ABI versions rather than an upstream FFmpeg
+    tag. The release gate therefore blocks only when ``advisory_rules`` has a
+    component, an affected-before version, an advisory identifier, and a
+    source URL. Current OpenCV builds have no such mapping in this repository.
+    """
+    provenance = {
+        "source": OPENCV_FFMPEG_PROVENANCE_SOURCE,
+        "wheelSource": OPENCV_FFMPEG_WHEEL_SOURCE,
+        "rule": (
+            "Record embedded ABI versions and wheel provenance. Block only on "
+            "a cited advisory rule that maps a component ABI to an affected "
+            "range."
+        ),
+        "advisoryRules": [dict(item) for item in (advisory_rules or OPENCV_FFMPEG_ADVISORY_RULES)],
+    }
+    payload = {
+        "schema": OPENCV_FFMPEG_STATUS_SCHEMA,
+        "available": False,
+        "opencv_version": opencv_version,
+        "wheel": _opencv_wheel_provenance(wheel_status),
+        "ffmpeg": {
+            "enabled": None,
+            "build": "",
+        },
+        "avcodec": {"available": False, "version": None, "versionTuple": []},
+        "avformat": {"available": False, "version": None, "versionTuple": []},
+        "avutil": {"available": False, "version": None, "versionTuple": []},
+        "libraries": {},
+        "provenance": provenance,
+        "classification": "unknown",
+        "vulnerable": None,
+        "blocking": False,
+        "advisories": [],
+        "passed": False,
+        "warning": "",
+        "error": "",
+    }
+    try:
+        if build_info is None:
+            import cv2
+
+            build_info = cv2.getBuildInformation()
+            if not payload["opencv_version"]:
+                payload["opencv_version"] = getattr(cv2, "__version__", None)
+        parsed = parse_opencv_ffmpeg_build_info(build_info)
+    except Exception as exc:
+        payload["error"] = str(exc)
+        return payload
+
+    payload["available"] = True
+    payload["ffmpeg"] = {
+        "enabled": parsed["ffmpegEnabled"],
+        "build": parsed["ffmpegBuild"],
+    }
+    payload["libraries"] = parsed["libraries"]
+    for name in OPENCV_FFMPEG_REQUIRED_LIBRARIES:
+        payload[name] = parsed["libraries"][name]
+    if not parsed["parseable"]:
+        payload["error"] = (
+            "OpenCV build information did not provide enabled, versioned "
+            "avcodec, avformat, and avutil entries"
+        )
+        return payload
+
+    rules = advisory_rules if advisory_rules is not None else OPENCV_FFMPEG_ADVISORY_RULES
+    invalid_rules = []
+    matches = []
+    for rule in rules:
+        if not isinstance(rule, Mapping):
+            invalid_rules.append("rule is not an object")
+            continue
+        advisory_id = str(rule.get("id") or "")
+        source = str(rule.get("source") or "")
+        component = str(rule.get("component") or "").lower()
+        affected_before = _numeric_version(rule.get("affectedBefore"))
+        if not advisory_id or not source or component not in payload["libraries"] or not affected_before:
+            invalid_rules.append(dict(rule))
+            continue
+        observed = tuple(payload["libraries"][component]["versionTuple"])
+        if observed < affected_before:
+            matches.append({
+                "id": advisory_id,
+                "component": component,
+                "version": payload["libraries"][component]["version"],
+                "affected": str(rule.get("affected") or f"<{rule.get('affectedBefore')}"),
+                "fixedIn": str(rule.get("fixedIn") or rule.get("affectedBefore")),
+                "source": source,
+            })
+    provenance["invalidRules"] = invalid_rules
+    payload["advisories"] = matches
+    if matches:
+        payload["classification"] = "vulnerable"
+        payload["vulnerable"] = True
+        payload["blocking"] = True
+        payload["warning"] = (
+            "OpenCV's embedded FFmpeg matches a cited advisory mapping; "
+            "upgrade the wheel before release."
+        )
+    elif rules and not invalid_rules:
+        payload["classification"] = "safe"
+        payload["vulnerable"] = False
+    else:
+        payload["classification"] = "unmapped"
+        payload["warning"] = (
+            "OpenCV's embedded FFmpeg ABI is inventoried, but no cited "
+            "advisory mapping exists. No vulnerability claim was made."
+        )
+    payload["passed"] = not payload["blocking"]
+    return payload
 
 
 def warn_if_vulnerable_opencv_libpng(logger) -> Optional[str]:

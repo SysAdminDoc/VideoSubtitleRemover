@@ -52,6 +52,18 @@ class LocalSmokeTests(unittest.TestCase):
         self.assertIn("tools/local_smoke.py --skip-self-test", dockerfile)
         self.assertIn('ENTRYPOINT ["python", "-m", "backend.cli"]', dockerfile)
         self.assertIn('CMD ["--help"]', dockerfile)
+        self.assertIn(
+            "FROM python:3.12-slim@sha256:2c941e860699f878900b0edc2403613c234d4b32eda3cc9fa7036991a2a63c4a",
+            dockerfile,
+        )
+        self.assertIn("ARG FFMPEG_VERSION=9.0.1", dockerfile)
+        self.assertIn(
+            "ARG FFMPEG_SHA256=cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635",
+            dockerfile,
+        )
+        self.assertIn("ffmpeg -version | grep -q", dockerfile)
+        self.assertIn("ffprobe -version | grep -q", dockerfile)
+        self.assertNotIn("apt-get install -y --no-install-recommends \\\n        ffmpeg", dockerfile)
         self.assertNotIn('CMD ["python", "tools/local_smoke.py"]', dockerfile)
         self.assertNotIn("github", dockerfile.lower())
 

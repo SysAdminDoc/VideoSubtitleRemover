@@ -51,6 +51,21 @@ class ReleaseVerificationTests(unittest.TestCase):
                 return_value={"available": True, "version": "test-tool"},
             ),
             mock.patch(
+                "backend.release_verification._ffmpeg_runtime_status",
+                return_value={
+                    "schema": "vsr.ffmpeg_runtime.v1",
+                    "available": True,
+                    "path": "ffmpeg",
+                    "version": "ffmpeg version 9.0.1",
+                    "configuration": "--enable-static",
+                    "configurationSha256": "a" * 64,
+                    "compiler": "test compiler",
+                    "returncode": 0,
+                    "passed": True,
+                    "error": "",
+                },
+            ),
+            mock.patch(
                 "backend.release_verification._ffmpeg_encoder_status",
                 return_value={"available": True, "hasLibvvenc": True},
             ),
@@ -122,6 +137,40 @@ class ReleaseVerificationTests(unittest.TestCase):
                         "file": "cv2/__init__.py",
                     },
                     "warnings": [],
+                },
+            ),
+            mock.patch(
+                "backend.release_verification.opencv_ffmpeg_status",
+                return_value={
+                    "schema": "vsr.opencv_ffmpeg.v1",
+                    "available": True,
+                    "opencv_version": "5.0.0",
+                    "ffmpeg": {
+                        "enabled": True,
+                        "build": "prebuilt binaries",
+                    },
+                    "avcodec": {
+                        "available": True,
+                        "version": "61.19.100",
+                    },
+                    "avformat": {
+                        "available": True,
+                        "version": "61.7.100",
+                    },
+                    "avutil": {
+                        "available": True,
+                        "version": "59.39.100",
+                    },
+                    "provenance": {
+                        "source": "https://github.com/opencv/opencv/releases/tag/5.0.0",
+                        "advisoryRules": [],
+                    },
+                    "classification": "unmapped",
+                    "vulnerable": None,
+                    "blocking": False,
+                    "advisories": [],
+                    "passed": True,
+                    "error": "",
                 },
             ),
             mock.patch(
@@ -389,6 +438,19 @@ class ReleaseVerificationTests(unittest.TestCase):
             "vsr.ffmpeg_profiles.v1",
         )
         self.assertTrue(evidence["releaseTools"]["ffmpegSecurity"]["passed"])
+        self.assertTrue(evidence["releaseTools"]["ffmpegRuntime"]["passed"])
+        self.assertEqual(
+            evidence["releaseTools"]["ffmpegRuntime"]["configuration"],
+            "--enable-static",
+        )
+        self.assertEqual(
+            evidence["releaseTools"]["opencvFfmpeg"]["schema"],
+            "vsr.opencv_ffmpeg.v1",
+        )
+        self.assertEqual(
+            evidence["releaseTools"]["opencvFfmpeg"]["avcodec"]["version"],
+            "61.19.100",
+        )
         self.assertEqual(
             evidence["releaseTools"]["onnxRuntimeProviders"]["schema"],
             "vsr.onnxruntime_providers.v1",
@@ -875,6 +937,33 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertGreaterEqual(advisories["summary"]["blocking"], 1)
         ids = {item["id"] for item in advisories["advisories"]}
         self.assertIn("CVE-2026-8461", ids)
+
+    def test_ffmpeg_runtime_inventory_records_configuration(self):
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "ffmpeg version 9.0.1 test-build\n"
+                "built with test-compiler\n"
+                "configuration: --enable-static --disable-debug\n"
+            ),
+            stderr="",
+        )
+        with mock.patch(
+            "backend.release_verification.shutil.which",
+            return_value="ffmpeg",
+        ), mock.patch(
+            "backend.release_verification.run_process",
+            return_value=completed,
+        ):
+            status = release_verification._ffmpeg_runtime_status()
+
+        self.assertTrue(status["passed"])
+        self.assertEqual(status["version"], "ffmpeg version 9.0.1 test-build")
+        self.assertEqual(
+            status["configuration"],
+            "--enable-static --disable-debug",
+        )
+        self.assertEqual(len(status["configurationSha256"]), 64)
 
     def test_ffmpeg_subprocess_smoke_passes_with_real_tools(self):
         smoke = release_verification._ffmpeg_subprocess_smoke(timeout=30.0)

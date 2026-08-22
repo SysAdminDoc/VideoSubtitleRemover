@@ -297,6 +297,55 @@ def _opencv_versions_compatible(imported_version: str, package_version: str) -> 
     )
 
 
+def _opencv_wheel_provenance(
+    package_status: Mapping[str, Mapping[str, object]],
+    imported_owner: str,
+    imported_version: Optional[str],
+    imported_file: Optional[str],
+) -> dict:
+    """Record the distribution metadata that owns the imported cv2 module."""
+    owner_status = package_status.get(imported_owner, {})
+    owner_version = str(owner_status.get("version") or "")
+    payload = {
+        "schema": "vsr.opencv_wheel_provenance.v1",
+        "distribution": imported_owner if imported_owner in package_status else "",
+        "version": owner_version or imported_version,
+        "importedFile": imported_file or "",
+        "source": "importlib.metadata",
+        "homePage": "",
+        "directUrl": None,
+        "metadataVersion": "",
+        "error": "",
+    }
+    if not payload["distribution"]:
+        payload["source"] = "cv2 import probe"
+        return payload
+    try:
+        distribution = metadata.distribution(imported_owner)
+        if owner_version and str(distribution.version) != owner_version:
+            payload["error"] = (
+                f"installed metadata version {distribution.version} does not "
+                f"match recorded package version {owner_version}"
+            )
+            return payload
+        payload.update({
+            "version": str(distribution.version),
+            "homePage": str(distribution.metadata.get("Home-page") or ""),
+            "metadataVersion": str(
+                distribution.metadata.get("Metadata-Version") or ""
+            ),
+        })
+        direct_url = distribution.read_text("direct_url.json")
+        if direct_url:
+            try:
+                payload["directUrl"] = json.loads(direct_url)
+            except json.JSONDecodeError:
+                payload["error"] = "direct_url.json is not valid JSON"
+    except Exception as exc:
+        payload["error"] = str(exc)
+    return payload
+
+
 def _opencv_import_probe(timeout: float = 8.0) -> tuple[Optional[str], Optional[str], bool, str]:
     script = (
         "import json\n"
@@ -438,6 +487,13 @@ def collect_opencv_wheel_status(
                 ),
             })
 
+    provenance = _opencv_wheel_provenance(
+        package_status,
+        imported_owner,
+        imported_version,
+        imported_file,
+    )
+
     return {
         "schema": OPENCV_WHEEL_STATUS_SCHEMA,
         "packages": package_status,
@@ -452,6 +508,7 @@ def collect_opencv_wheel_status(
             "dnnAvailable": bool(dnn_available),
             "error": import_error or "",
         },
+        "provenance": provenance,
         "remediation": {
             "commands": list(OPENCV_REMEDIATION_COMMANDS),
             "summary": remediation_text,

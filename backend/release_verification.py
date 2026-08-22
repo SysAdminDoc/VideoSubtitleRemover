@@ -60,6 +60,7 @@ from backend.security_checks import (
     ffmpeg_security_affected_range,
     ffmpeg_security_eol_branch_str,
     libpng_fixed_version_str,
+    opencv_ffmpeg_status,
     opencv_libpng_status,
 )
 from backend.subprocess_policy import run_process
@@ -820,6 +821,75 @@ def _tool_version(command: Sequence[str], timeout: float = 10.0) -> dict:
     return payload
 
 
+def _ffmpeg_runtime_status(timeout: float = 10.0) -> dict:
+    """Capture the external FFmpeg version and full build configuration."""
+    path = shutil.which("ffmpeg")
+    payload = {
+        "schema": "vsr.ffmpeg_runtime.v1",
+        "available": bool(path),
+        "path": path or "",
+        "version": "",
+        "configuration": "",
+        "configurationSha256": "",
+        "compiler": "",
+        "returncode": None,
+        "passed": False,
+        "error": "",
+    }
+    if not path:
+        payload["error"] = "ffmpeg is not on PATH"
+        return payload
+    try:
+        proc = run_process(
+            [path, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        text = "\n".join(
+            part for part in (proc.stdout or "", proc.stderr or "") if part
+        )
+        lines = text.splitlines()
+        payload["version"] = next(
+            (line.strip() for line in lines if line.lower().startswith("ffmpeg version")),
+            "",
+        )
+        configuration = next(
+            (
+                line.strip()[len("configuration:"):].strip()
+                for line in lines
+                if line.strip().lower().startswith("configuration:")
+            ),
+            "",
+        )
+        payload["configuration"] = configuration
+        payload["configurationSha256"] = (
+            hashlib.sha256(configuration.encode("utf-8")).hexdigest()
+            if configuration else ""
+        )
+        payload["compiler"] = next(
+            (
+                line.strip()[len("built with"):].strip()
+                for line in lines
+                if line.strip().lower().startswith("built with")
+            ),
+            "",
+        )
+        payload["returncode"] = proc.returncode
+        payload["passed"] = bool(
+            proc.returncode == 0 and payload["version"] and configuration
+        )
+        if not payload["passed"]:
+            payload["error"] = (
+                "ffmpeg -version did not return a version and build "
+                "configuration"
+            )
+    except Exception as exc:  # pragma: no cover - platform/tool dependent
+        payload["error"] = str(exc)
+    return payload
+
+
 def _ffmpeg_encoder_status() -> dict:
     ffmpeg = shutil.which("ffmpeg")
     payload = {
@@ -1540,7 +1610,9 @@ def build_release_evidence(
     rapidocr_engines = collect_rapidocr_engine_status(
         package_versions=package_versions,
     )
+    ffmpeg_runtime = _ffmpeg_runtime_status()
     ffmpeg_security = probe_ffmpeg_security()
+    opencv_ffmpeg = opencv_ffmpeg_status(wheel_status=opencv_wheels)
     advisories = collect_release_advisories(dependencies, env=env)
     hidden_payload = {
         "schema": "vsr.release_hidden_imports.v1",
@@ -1584,10 +1656,12 @@ def build_release_evidence(
                 _source_file_status(item) for item in hooks
             ],
             "ffmpeg": _tool_version(["ffmpeg", "-version"]),
+            "ffmpegRuntime": ffmpeg_runtime,
             "ffmpegSecurity": ffmpeg_security,
             "ffmpegEncoders": _ffmpeg_encoder_status(),
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "opencvWheels": opencv_wheels,
+            "opencvFfmpeg": opencv_ffmpeg,
             "opencvDnnOcr": opencv_dnn_ocr,
             "opencvDnnEngines": opencv_dnn_engines,
             "onnxRuntimeProviders": onnxruntime_providers,
@@ -1698,6 +1772,37 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     if (isinstance(reference, Mapping)
             and reference.get("ran") and not reference.get("passed")):
         yield "Reference corpus regression failed"
+    ffmpeg_runtime = evidence.get("releaseTools", {}).get(
+        "ffmpegRuntime", {}
+    )
+    if (not isinstance(ffmpeg_runtime, Mapping)
+            or not ffmpeg_runtime.get("passed")):
+        detail = ""
+        if isinstance(ffmpeg_runtime, Mapping):
+            detail = str(ffmpeg_runtime.get("error") or "")
+        yield "External FFmpeg runtime inventory failed" + (
+            f": {detail}" if detail else ""
+        )
+    opencv_ffmpeg = evidence.get("releaseTools", {}).get(
+        "opencvFfmpeg", {}
+    )
+    if (not isinstance(opencv_ffmpeg, Mapping)
+            or not opencv_ffmpeg.get("passed")):
+        detail = ""
+        if isinstance(opencv_ffmpeg, Mapping):
+            detail = str(opencv_ffmpeg.get("error") or "")
+        yield "OpenCV embedded FFmpeg inventory failed" + (
+            f": {detail}" if detail else ""
+        )
+    elif opencv_ffmpeg.get("blocking"):
+        advisories = ", ".join(
+            str(item.get("id"))
+            for item in opencv_ffmpeg.get("advisories", [])
+            if isinstance(item, Mapping)
+        )
+        yield "OpenCV embedded FFmpeg advisory matched" + (
+            f": {advisories}" if advisories else ""
+        )
     ffsmoke = evidence.get("releaseTools", {}).get("ffmpegSubprocessSmoke", {})
     if (isinstance(ffsmoke, Mapping)
             and ffsmoke.get("ran") and not ffsmoke.get("passed")):

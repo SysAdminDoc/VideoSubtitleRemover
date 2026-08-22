@@ -120,7 +120,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/remux.py": "Soft-subtitle strip / keep remux paths.",
     "backend/resume_checkpoint.py": "Crash-resume and pause checkpoints.",
     "backend/safe_image.py": "Bounded image reads.",
-    "backend/security_checks.py": "Runtime safety checks (libpng floor).",
+    "backend/security_checks.py": "Runtime safety checks (libpng and OpenCV FFmpeg inventory).",
     "backend/segmentation.py": "Optional SAM 2 / MatAnyone / CoTracker adapters.",
     "backend/static_logo_benchmark.py": "Static-logo removal benchmark harness.",
     "backend/subprocess_policy.py": "Hidden, bounded, cancellable child processes.",

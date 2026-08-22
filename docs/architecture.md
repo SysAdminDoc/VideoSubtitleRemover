@@ -121,7 +121,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- remux.py                    # Soft-subtitle strip / keep remux paths.
 |   |-- resume_checkpoint.py        # Crash-resume and pause checkpoints.
 |   |-- safe_image.py               # Bounded image reads.
-|   |-- security_checks.py          # Runtime safety checks (libpng floor).
+|   |-- security_checks.py          # Runtime safety checks (libpng and OpenCV FFmpeg inventory).
 |   |-- segmentation.py             # Optional SAM 2 / MatAnyone / CoTracker adapters.
 |   |-- static_logo_benchmark.py    # Static-logo removal benchmark harness.
 |   |-- subprocess_policy.py        # Hidden, bounded, cancellable child processes.
@@ -304,6 +304,17 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
     ladder escalates through increase-dilation, temporal-smooth,
     alternate-inpainter, and manual-review. Color drift always remains a
     review signal and never triggers automatic recoloring.
+
+### Release runtime inventory
+
+`backend/release_verification.py` records the external FFmpeg banner,
+configuration, compiler line, and configuration hash in `ffmpegRuntime`. It
+also records OpenCV wheel provenance and the embedded `avcodec`, `avformat`,
+and `avutil` ABI versions in `opencvFfmpeg`. Those ABI values are not treated
+as upstream FFmpeg release tags. A release blocks only when a cited advisory
+rule maps a component ABI to an affected range. The current OpenCV build has
+no such mapping and is reported as `unmapped` without a vulnerability claim.
+
 11. **Batch report.** `backend/batch_report.py` writes
     `vsr-batch-summary.json` and `vsr-batch-summary.md` with
     per-item status, codec/duration data, quality gate results,

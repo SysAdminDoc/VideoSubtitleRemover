@@ -195,6 +195,107 @@ def test_ffmpeg_probe_records_pass_fail():
             assert ffmpeg_profiles.probe_ffmpeg_security()["passed"] is False
 
 
+def test_opencv_ffmpeg_build_info_records_required_abi_versions():
+    from backend.security_checks import parse_opencv_ffmpeg_build_info
+
+    status = parse_opencv_ffmpeg_build_info(
+        """
+    FFMPEG:                      YES (prebuilt binaries)
+      avcodec:                   YES (61.19.100)
+      avformat:                  YES (61.7.100)
+      avutil:                    YES (59.39.100)
+        """
+    )
+
+    assert status["parseable"] is True
+    assert status["ffmpegBuild"] == "prebuilt binaries"
+    assert status["libraries"]["avcodec"]["version"] == "61.19.100"
+    assert status["libraries"]["avformat"]["version"] == "61.7.100"
+    assert status["libraries"]["avutil"]["version"] == "59.39.100"
+
+
+def test_opencv_ffmpeg_without_advisory_mapping_is_not_called_vulnerable():
+    from backend.security_checks import opencv_ffmpeg_status
+
+    status = opencv_ffmpeg_status(
+        build_info=(
+            "FFMPEG: YES (prebuilt binaries)\n"
+            "  avcodec: YES (61.19.100)\n"
+            "  avformat: YES (61.7.100)\n"
+            "  avutil: YES (59.39.100)\n"
+        ),
+        opencv_version="5.0.0",
+        wheel_status={
+            "provenance": {
+                "schema": "vsr.opencv_wheel_provenance.v1",
+                "distribution": "opencv-python",
+                "version": "5.0.0.93",
+                "source": "importlib.metadata",
+            },
+        },
+    )
+
+    assert status["passed"] is True
+    assert status["classification"] == "unmapped"
+    assert status["vulnerable"] is None
+    assert status["blocking"] is False
+    assert status["wheel"]["distribution"] == "opencv-python"
+    assert status["provenance"]["advisoryRules"] == []
+
+
+def test_opencv_ffmpeg_cited_affected_rule_fails_closed():
+    from backend.security_checks import opencv_ffmpeg_status
+
+    status = opencv_ffmpeg_status(
+        build_info=(
+            "FFMPEG: YES (prebuilt binaries)\n"
+            "  avcodec: YES (61.19.100)\n"
+            "  avformat: YES (61.7.100)\n"
+            "  avutil: YES (59.39.100)\n"
+        ),
+        advisory_rules=(
+            {
+                "id": "CVE-TEST-OPENCV-FFMPEG",
+                "component": "avcodec",
+                "affectedBefore": "62.0.0",
+                "fixedIn": "62.0.0",
+                "source": "https://example.invalid/advisory",
+            },
+        ),
+    )
+
+    assert status["passed"] is False
+    assert status["classification"] == "vulnerable"
+    assert status["vulnerable"] is True
+    assert status["blocking"] is True
+    assert status["advisories"][0]["id"] == "CVE-TEST-OPENCV-FFMPEG"
+
+
+def test_opencv_ffmpeg_rule_without_citation_cannot_block():
+    from backend.security_checks import opencv_ffmpeg_status
+
+    status = opencv_ffmpeg_status(
+        build_info=(
+            "FFMPEG: YES (prebuilt binaries)\n"
+            "  avcodec: YES (61.19.100)\n"
+            "  avformat: YES (61.7.100)\n"
+            "  avutil: YES (59.39.100)\n"
+        ),
+        advisory_rules=(
+            {
+                "id": "UNCITED-RULE",
+                "component": "avcodec",
+                "affectedBefore": "62.0.0",
+            },
+        ),
+    )
+
+    assert status["passed"] is True
+    assert status["blocking"] is False
+    assert status["vulnerable"] is None
+    assert status["provenance"]["invalidRules"]
+
+
 def test_cpython_floors_cover_every_supported_release_line():
     """3.11 and 3.12 were previously unguarded by the self-test."""
     assert sc.CPYTHON_SECURITY_FLOORS == {

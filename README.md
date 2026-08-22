@@ -255,6 +255,12 @@ build tools are marked with excluded scope. `release-verification.json` and
 Torch through 2.5.1 for CVE-2025-32434 and through 2.9.1 for CVE-2026-24747.
 Reviewed profiles stay on Torch 2.11.0 or newer.
 
+Release evidence also records the external FFmpeg version and full build
+configuration, plus OpenCV's wheel provenance and embedded `avcodec`,
+`avformat`, and `avutil` ABI versions. Embedded ABI numbers are inventory data,
+not upstream FFmpeg release tags. The release gate makes no embedded
+vulnerability claim until a cited advisory maps an affected ABI range.
+
 Every release is staged as one atomic, version-derived artifact set. After
 the strict gates pass, `backend.release_staging` copies the installer,
 builds the portable ZIP from the frozen folder, copies the evidence set,
@@ -290,12 +296,15 @@ docker build -t vsr-pro .
 docker run --rm --mount "type=bind,source=$((Get-Location).Path)\inputs,target=/in,readonly" --mount "type=bind,source=$((Get-Location).Path)\outputs,target=/out" vsr-pro --input /in/movie.mp4 --output /out/movie_no_sub.mp4 --gpu -1 --no-audio
 ```
 
-The image installs the active CPU requirements under
+The image is pinned to the official Python 3.12 slim image by digest. It builds
+FFmpeg 9.0.1 from the official source archive, verifies the archive SHA-256,
+and checks both `ffmpeg` and `ffprobe` before the application layer is added.
+It then installs the active CPU requirements under
 `dependency_profiles/cpu.txt`, including RapidOCR and the reviewed ONNX Runtime
-LaMa tier. It runs the generated-image smoke during `docker build`, then uses
-`python -m backend.cli` as its entrypoint; the input and output directories in
-the example are mounted into the container. To run that smoke explicitly after
-the build, bypass the CLI entrypoint:
+LaMa tier. The image runs the generated-image smoke during `docker build`, then
+uses `python -m backend.cli` as its entrypoint. The input and output directories
+in the example are mounted into the container. To run that smoke explicitly
+after the build, bypass the CLI entrypoint:
 
 ```powershell
 docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-test
