@@ -23,6 +23,12 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 
+from backend.detection_geometry import (
+    DetectionGeometry,
+    as_detection_geometry,
+    remap_polygon,
+)
+
 # Motion-estimation APIs live in a focused module but remain available from
 # tracking, where callers already obtain frame-to-frame alignment helpers.
 from backend.reference_fill import (
@@ -37,7 +43,13 @@ class _KalmanBox:
     Used to smooth per-frame OCR jitter and carry the box through a missed
     detection (single-frame occlusion)."""
 
-    def __init__(self, box: Tuple[int, int, int, int]):
+    def __init__(
+        self,
+        box: Tuple[int, int, int, int],
+        polygon=None,
+        confidence: float = 1.0,
+        text: str = "",
+    ):
         x1, y1, x2, y2 = box
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
@@ -62,12 +74,17 @@ class _KalmanBox:
             [cx, cy, w, h, 0, 0, 0, 0], dtype=np.float32).reshape(8, 1)
         self.age = 0
         self.hits = 1
+        self.polygon = polygon
+        self.confidence = float(confidence)
+        self.text = str(text or "")
+        self._polygon_box = tuple(int(value) for value in box)
 
     def predict(self) -> Tuple[int, int, int, int]:
         s = self.kf.predict().flatten()
         return _box_from_state(s)
 
-    def update(self, box: Tuple[int, int, int, int]):
+    def update(self, box: Tuple[int, int, int, int], detection=None):
+        previous_box = self.box
         x1, y1, x2, y2 = box
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
@@ -77,6 +94,16 @@ class _KalmanBox:
         self.kf.correct(m)
         self.age = 0
         self.hits += 1
+        current_box = self.box
+        if detection is not None:
+            self.polygon = remap_polygon(
+                detection.polygon, detection.bbox, current_box)
+            self.confidence = detection.confidence
+            self.text = detection.text
+        elif self.polygon:
+            self.polygon = remap_polygon(
+                self.polygon, previous_box, current_box)
+        self._polygon_box = current_box
 
     def is_chyron(self, min_hits: int) -> bool:
         return self.hits >= max(1, int(min_hits))
@@ -84,6 +111,17 @@ class _KalmanBox:
     @property
     def box(self) -> Tuple[int, int, int, int]:
         return _box_from_state(self.kf.statePost.flatten())
+
+    def geometry(self) -> DetectionGeometry:
+        polygon = self.polygon
+        if polygon and self._polygon_box != self.box:
+            polygon = remap_polygon(polygon, self._polygon_box, self.box)
+        return DetectionGeometry(
+            self.box,
+            polygon,
+            self.confidence,
+            self.text,
+        )
 
 
 def _box_from_state(state: np.ndarray) -> Tuple[int, int, int, int]:
@@ -141,11 +179,25 @@ class SubtitleTracker:
     def reset(self):
         self._tracks = []
 
-    def update(self, detections: List[Tuple[int, int, int, int]]
-                ) -> List[Tuple[int, int, int, int]]:
+    def update_with_geometry(
+        self, detections: List[DetectionGeometry]
+    ) -> List[DetectionGeometry]:
+        normalized = []
+        for value in detections:
+            detection = as_detection_geometry(value)
+            if detection is not None:
+                normalized.append(detection)
         if not self._tracks:
-            self._tracks = [_KalmanBox(d) for d in detections]
-            return [t.box for t in self._tracks]
+            self._tracks = [
+                _KalmanBox(
+                    detection.bbox,
+                    detection.polygon,
+                    detection.confidence,
+                    detection.text,
+                )
+                for detection in normalized
+            ]
+            return [track.geometry() for track in self._tracks]
 
         predictions = [t.predict() for t in self._tracks]
         used_det = set()
@@ -158,15 +210,15 @@ class SubtitleTracker:
         # predicted boxes overlap the same region.
         pairs = []
         for ti, pred in enumerate(predictions):
-            for di, det in enumerate(detections):
-                score = _iou(pred, det)
+            for di, detection in enumerate(normalized):
+                score = _iou(pred, detection.bbox)
                 if score >= self.iou_threshold:
                     pairs.append((score, ti, di))
         pairs.sort(reverse=True)
         for score, ti, di in pairs:
             if ti in used_trk or di in used_det:
                 continue
-            self._tracks[ti].update(detections[di])
+            self._tracks[ti].update(normalized[di].bbox, normalized[di])
             used_trk.add(ti)
             used_det.add(di)
 
@@ -174,12 +226,26 @@ class SubtitleTracker:
             if ti not in used_trk:
                 self._tracks[ti].age += 1
 
-        for di, det in enumerate(detections):
+        for di, detection in enumerate(normalized):
             if di not in used_det:
-                self._tracks.append(_KalmanBox(det))
+                self._tracks.append(_KalmanBox(
+                    detection.bbox,
+                    detection.polygon,
+                    detection.confidence,
+                    detection.text,
+                ))
 
         self._tracks = [t for t in self._tracks if t.age <= self.max_age]
-        return [t.box for t in self._tracks]
+        return [track.geometry() for track in self._tracks]
+
+    def update(
+        self, detections: List[Tuple[int, int, int, int]]
+    ) -> List[Tuple[int, int, int, int]]:
+        """Legacy rectangle-only wrapper."""
+        return [
+            detection.bbox
+            for detection in self.update_with_geometry(detections)
+        ]
 
     def categorize(self, min_chyron_hits: int) -> List[str]:
         return [

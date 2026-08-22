@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- OCR quadrilaterals now travel beside the historical axis-aligned boxes through
+  detection, tracking, track-plan save/load, masks, and preview overlays. Each
+  polygon gets its own local expansion, so a rotated caption doesn't remove the
+  unused corners of its bounding rectangle. Rectangle regions and older plans
+  still load unchanged.
 - The active GUI release suite now exercises queue selection, region propagation,
   Test Cleanup dispatch, cancellation, shutdown, scaling, high contrast, RTL,
   and collapsed Advanced control-view and tab-order behavior. Disclosure rows

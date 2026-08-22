@@ -69,6 +69,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/dependency_caps.py": "Dependency ceilings and execution-provider lanes.",
     "backend/dependency_profiles.py": "Reviewed CPU/NVIDIA/DirectML dependency locks.",
     "backend/detection.py": "OCR cascade, selectable engines, execution provenance.",
+    "backend/detection_geometry.py": "Normalized OCR boxes and polygon geometry.",
     "backend/device_provider.py": "Device strategy and inpainter construction.",
     "backend/encoder.py": "Output codec probing and HW encoder selection.",
     "backend/execution_provenance.py": "Requested vs. effective device/engine record.",

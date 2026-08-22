@@ -23,6 +23,7 @@ import cv2
 import numpy as np
 
 from backend.import_safety import module_can_import as _module_can_import
+from backend.detection_geometry import DetectionGeometry
 from backend.ocr_variants import (
     normalize_paddleocr_variant as _normalize_paddleocr_variant,
     paddleocr_model_names as _paddleocr_model_names,
@@ -670,6 +671,69 @@ class SubtitleDetector:
             return out
         return self._detect_axis_aligned(frame, threshold)
 
+    def detect_with_geometry(
+        self, frame: np.ndarray, threshold: float = 0.5
+    ) -> List[DetectionGeometry]:
+        """Detect regions while retaining OCR polygons when available.
+
+        ``detect`` remains the compatibility API. New callers use this
+        method when a tighter mask or editable overlay is required.
+        """
+        if self.vertical:
+            height, width = frame.shape[:2]
+            rotated = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            records = self._detect_geometry(rotated, threshold)
+            output: List[DetectionGeometry] = []
+            for record in records:
+                if record.polygon:
+                    mapped = [
+                        (width - y, x)
+                        for x, y in record.polygon
+                    ]
+                    transformed = DetectionGeometry.from_polygon(
+                        mapped,
+                        frame.shape,
+                        confidence=record.confidence,
+                        text=record.text,
+                    )
+                else:
+                    rx1, ry1, rx2, ry2 = record.bbox
+                    transformed = DetectionGeometry.from_box(
+                        (width - ry2, rx1, width - ry1, rx2),
+                        frame.shape,
+                        confidence=record.confidence,
+                        text=record.text,
+                    )
+                if transformed is not None:
+                    output.append(transformed)
+            return output
+        return self._clip_geometry_to_frame(
+            self._detect_geometry(frame, threshold), frame.shape)
+
+    @staticmethod
+    def _clip_geometry_to_frame(
+        records: List[DetectionGeometry], frame_shape
+    ) -> List[DetectionGeometry]:
+        output: List[DetectionGeometry] = []
+        for record in records:
+            if record.polygon:
+                clipped = DetectionGeometry.from_polygon(
+                    record.polygon,
+                    frame_shape,
+                    confidence=record.confidence,
+                    text=record.text,
+                )
+            else:
+                clipped = DetectionGeometry.from_box(
+                    record.bbox,
+                    frame_shape,
+                    confidence=record.confidence,
+                    text=record.text,
+                )
+            if clipped is not None:
+                output.append(clipped)
+        return output
+
     def detect_with_confidence(
         self, frame: np.ndarray, threshold: float = 0.5
     ) -> List[Tuple[int, int, int, int, float]]:
@@ -830,7 +894,13 @@ class SubtitleDetector:
         if output is None:
             return []
         results = output[0] if isinstance(output, tuple) and output else output
-        if not results:
+        try:
+            if len(results) == 0:
+                return []
+        except (TypeError, AttributeError):
+            if not results:
+                return []
+        if results is None:
             return []
         polys = cls._rapid_field(
             results, "boxes", "dt_polys", "dt_boxes", "polys", "det_polys")
@@ -948,6 +1018,39 @@ class SubtitleDetector:
         else:
             return self._fallback_detection(frame)
 
+    def _detect_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        vlm = getattr(self, "_vlm_detector", None)
+        if vlm is not None:
+            try:
+                detect_geometry = getattr(vlm, "detect_with_geometry", None)
+                if callable(detect_geometry):
+                    return list(detect_geometry(frame, threshold))
+                return [
+                    detection
+                    for box in vlm.detect(frame, threshold)
+                    for detection in [DetectionGeometry.from_box(box)]
+                    if detection is not None
+                ]
+            except Exception as exc:
+                logger.warning(
+                    f"VLM geometry detector errored, falling back: {exc}")
+        if self._rapid_model is not None:
+            return self._detect_rapid_geometry(frame, threshold)
+        if self._paddle_model is not None:
+            return self._detect_paddle_geometry(frame, threshold)
+        if self._surya_det is not None:
+            return self._detect_surya_geometry(frame, threshold)
+        if self._easyocr_reader is not None:
+            return self._detect_easyocr_geometry(frame, threshold)
+        return [
+            detection
+            for box in self._fallback_detection(frame)
+            for detection in [DetectionGeometry.from_box(box, frame.shape)]
+            if detection is not None
+        ]
+
     def _detect_rapid(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         try:
             output = self._rapid_model(frame)
@@ -955,6 +1058,134 @@ class SubtitleDetector:
         except Exception as e:
             logger.error(f"RapidOCR detection error: {e}")
             return self._fallback_detection(frame)
+
+    def _detect_rapid_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        try:
+            return self._rapid_output_to_geometry(
+                self._rapid_model(frame), threshold, frame.shape)
+        except Exception as exc:
+            logger.error(f"RapidOCR geometry detection error: {exc}")
+            return [
+                detection
+                for box in self._fallback_detection(frame)
+                for detection in [DetectionGeometry.from_box(box, frame.shape)]
+                if detection is not None
+            ]
+
+    @classmethod
+    def _rapid_output_to_geometry(
+        cls,
+        output,
+        threshold: float,
+        frame_shape=None,
+    ) -> List[DetectionGeometry]:
+        if output is None:
+            return []
+        results = output[0] if isinstance(output, tuple) and output else output
+        try:
+            if len(results) == 0:
+                return []
+        except (TypeError, AttributeError):
+            if not results:
+                return []
+        polys = cls._rapid_field(
+            results,
+            "boxes", "dt_polys", "dt_boxes", "polys", "det_polys",
+        )
+        if polys is not None:
+            scores = cls._rapid_field(
+                results, "scores", "rec_scores", "text_scores", "cls_scores")
+            texts = cls._rapid_field(
+                results, "txts", "texts", "rec_texts", "text")
+            if isinstance(texts, str):
+                texts = [texts]
+            output_geometry: List[DetectionGeometry] = []
+            for index, poly in enumerate(polys):
+                confidence = cls._rapid_score_at(scores, index)
+                if confidence < threshold:
+                    continue
+                text = ""
+                try:
+                    if texts is not None:
+                        text = str(texts[index])
+                except (IndexError, KeyError, TypeError):
+                    pass
+                detection = DetectionGeometry.from_polygon(
+                    poly,
+                    frame_shape,
+                    confidence=confidence,
+                    text=text,
+                )
+                if detection is None:
+                    detection = DetectionGeometry.from_box(
+                        poly,
+                        frame_shape,
+                        confidence=confidence,
+                        text=text,
+                    )
+                if detection is not None:
+                    output_geometry.append(detection)
+            return output_geometry
+        output_geometry = []
+        for entry in results:
+            detection = cls._rapid_entry_to_geometry(
+                entry, threshold, frame_shape)
+            if detection is not None:
+                output_geometry.append(detection)
+        return output_geometry
+
+    @classmethod
+    def _rapid_entry_to_geometry(
+        cls, entry, threshold: float, frame_shape=None
+    ) -> Optional[DetectionGeometry]:
+        text = ""
+        if isinstance(entry, dict):
+            poly = cls._rapid_field(
+                entry, "box", "bbox", "poly", "points", "dt_poly")
+            confidence = cls._rapid_score_at(
+                [cls._rapid_field(
+                    entry, "score", "confidence", "conf", "rec_score")],
+                0,
+            )
+            text = str(cls._rapid_field(
+                entry, "text", "txt", "rec_text") or "")
+        elif isinstance(entry, np.ndarray) and entry.ndim == 2:
+            poly = entry
+            confidence = 1.0
+        else:
+            try:
+                if len(entry) < 1:
+                    return None
+                poly = entry[0]
+                text = str(entry[1]) if len(entry) >= 2 else ""
+                confidence = entry[2] if len(entry) >= 3 else 1.0
+            except TypeError:
+                poly = cls._rapid_field(
+                    entry, "box", "bbox", "poly", "points", "dt_poly")
+                confidence = cls._rapid_field(
+                    entry, "score", "confidence", "conf", "rec_score")
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 1.0
+        if confidence < threshold:
+            return None
+        detection = DetectionGeometry.from_polygon(
+            poly,
+            frame_shape,
+            confidence=confidence,
+            text=text,
+        )
+        if detection is None:
+            detection = DetectionGeometry.from_box(
+                poly,
+                frame_shape,
+                confidence=confidence,
+                text=text,
+            )
+        return detection
 
     @classmethod
     def _rapid_output_to_boxes(cls, output, threshold: float) -> List[Tuple[int, int, int, int]]:
@@ -1075,6 +1306,22 @@ class SubtitleDetector:
             logger.error(f"PaddleOCR detection error: {e}")
             return self._fallback_detection(frame)
 
+    def _detect_paddle_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        try:
+            from backend.paddle_compat import extract_paddle_geometry
+            return extract_paddle_geometry(
+                self._paddle_model, frame, threshold)
+        except Exception as exc:
+            logger.error(f"PaddleOCR geometry detection error: {exc}")
+            return [
+                detection
+                for box in self._fallback_detection(frame)
+                for detection in [DetectionGeometry.from_box(box, frame.shape)]
+                if detection is not None
+            ]
+
     def _detect_surya(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         try:
             from PIL import Image
@@ -1092,6 +1339,47 @@ class SubtitleDetector:
             logger.error(f"Surya detection error: {e}")
             return self._fallback_detection(frame)
 
+    def _detect_surya_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        try:
+            from PIL import Image
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            predictions = self._surya_det([Image.fromarray(frame_rgb)])
+            output: List[DetectionGeometry] = []
+            for item in predictions[0].bboxes if predictions else []:
+                confidence = float(getattr(item, "confidence", 1.0))
+                if confidence < threshold:
+                    continue
+                polygon = getattr(item, "polygon", None)
+                if polygon is None:
+                    polygon = getattr(item, "points", None)
+                detection = (
+                    DetectionGeometry.from_polygon(
+                        polygon,
+                        frame.shape,
+                        confidence=confidence,
+                    )
+                    if polygon is not None else None
+                )
+                if detection is None:
+                    detection = DetectionGeometry.from_box(
+                        getattr(item, "bbox", ()),
+                        frame.shape,
+                        confidence=confidence,
+                    )
+                if detection is not None:
+                    output.append(detection)
+            return output
+        except Exception as exc:
+            logger.error(f"Surya geometry detection error: {exc}")
+            return [
+                detection
+                for box in self._fallback_detection(frame)
+                for detection in [DetectionGeometry.from_box(box, frame.shape)]
+                if detection is not None
+            ]
+
     def _detect_easyocr(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         try:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -1107,6 +1395,35 @@ class SubtitleDetector:
         except Exception as e:
             logger.error(f"EasyOCR detection error: {e}")
             return self._fallback_detection(frame)
+
+    def _detect_easyocr_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        try:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            output: List[DetectionGeometry] = []
+            for polygon, text, confidence in self._easyocr_reader.readtext(
+                frame_rgb):
+                confidence = float(confidence)
+                if confidence < threshold:
+                    continue
+                detection = DetectionGeometry.from_polygon(
+                    polygon,
+                    frame.shape,
+                    confidence=confidence,
+                    text=str(text),
+                )
+                if detection is not None:
+                    output.append(detection)
+            return output
+        except Exception as exc:
+            logger.error(f"EasyOCR geometry detection error: {exc}")
+            return [
+                detection
+                for box in self._fallback_detection(frame)
+                for detection in [DetectionGeometry.from_box(box, frame.shape)]
+                if detection is not None
+            ]
 
     def _fallback_detection(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """EI-1 percentile-based fallback for grey/mid-tone subtitles."""

@@ -40,6 +40,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Real AI Inpainting** -- LaMa neural network via ONNX Runtime (default, no torch dependency), OpenCV DNN weights, or an explicit PyTorch fallback opt-in
 - **AUTO Inpaint Routing** -- Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
 - **Multi-Engine Detection** -- RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
+- **Polygon-Aware OCR Masks** -- OCR quadrilaterals stay attached to their legacy boxes through tracking, saved track plans, masks, and preview overlays, so rotated text doesn't widen removal to its full axis-aligned bounds
 - **Lossless Pipeline** -- FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Modern Codec Output** -- Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, mask-aware film-grain restoration plus native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Opt-in FFmpeg D3D12 Path** -- FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
@@ -364,6 +365,12 @@ opt-in and requires recognized text from RapidOCR, PaddleOCR, or EasyOCR;
 detection-only boxes are kept. Matching is by script family, so it can separate
 Japanese/Cyrillic/Arabic/etc. overlays from Latin text, while Latin-script
 languages such as English and French intentionally share one family.
+
+Polygon-capable OCR engines also expose normalized vertices beside each
+compatibility box. The processor expands and rasterizes each polygon locally,
+and track plans and preview overlays keep those vertices instead of widening a
+rotated caption to its bounding rectangle. Existing rectangle regions and old
+track plans remain valid.
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|

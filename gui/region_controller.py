@@ -947,8 +947,13 @@ class RegionSelectorWindow:
                     self._preview_detector_lang = lang
                     self._preview_detector_engine = engine
                     self._preview_detector_variant = variant
-                results = self._preview_detector.detect_with_confidence(
-                    crop, threshold)
+                detect_geometry = getattr(
+                    self._preview_detector, "detect_with_geometry", None)
+                if callable(detect_geometry):
+                    results = list(detect_geometry(crop, threshold))
+                else:
+                    results = self._preview_detector.detect_with_confidence(
+                        crop, threshold)
         except Exception as exc:
             logger.debug("Live region OCR preview failed", exc_info=True)
             error = str(exc)
@@ -973,18 +978,42 @@ class RegionSelectorWindow:
             self._clear_live_ocr_overlay()
             x1, y1, _x2, _y2 = rect
             confidences = []
-            for bx1, by1, bx2, by2, confidence in results:
+            for result in results:
+                polygon = getattr(result, "polygon", None)
+                if hasattr(result, "bbox"):
+                    bx1, by1, bx2, by2 = getattr(result, "bbox")
+                    confidence = getattr(result, "confidence", 1.0)
+                else:
+                    bx1, by1, bx2, by2, confidence = result[:5]
                 confidence = max(0.0, min(1.0, float(confidence)))
                 confidences.append(confidence)
-                sx1 = (x1 + bx1) * self.scale
-                sy1 = (y1 + by1) * self.scale
-                sx2 = (x1 + bx2) * self.scale
-                sy2 = (y1 + by2) * self.scale
-                self.ocr_overlay_ids.append(self.canvas.create_rectangle(
-                    sx1, sy1, sx2, sy2,
-                    outline=Theme.WARNING,
-                    width=2,
-                ))
+                if polygon:
+                    points = [
+                        value
+                        for px, py in polygon
+                        for value in (
+                            (x1 + px) * self.scale,
+                            (y1 + py) * self.scale,
+                        )
+                    ]
+                    self.ocr_overlay_ids.append(self.canvas.create_polygon(
+                        points,
+                        outline=Theme.WARNING,
+                        fill="",
+                        width=2,
+                    ))
+                    sx1 = min(points[::2])
+                    sy1 = min(points[1::2])
+                else:
+                    sx1 = (x1 + bx1) * self.scale
+                    sy1 = (y1 + by1) * self.scale
+                    sx2 = (x1 + bx2) * self.scale
+                    sy2 = (y1 + by2) * self.scale
+                    self.ocr_overlay_ids.append(self.canvas.create_rectangle(
+                        sx1, sy1, sx2, sy2,
+                        outline=Theme.WARNING,
+                        width=2,
+                    ))
                 self.ocr_overlay_ids.append(self.canvas.create_text(
                     sx1 + 3,
                     max(8, sy1 - 7),

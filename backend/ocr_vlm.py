@@ -47,6 +47,7 @@ import cv2
 import numpy as np
 
 from backend.remote_model_policy import resolve_remote_model_source
+from backend.detection_geometry import DetectionGeometry
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,16 @@ class _BaseVlmDetector:
     def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         raise NotImplementedError
 
+    def _extract_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        output: List[DetectionGeometry] = []
+        for box in self._extract_boxes(frame, threshold):
+            detection = DetectionGeometry.from_box(box)
+            if detection is not None:
+                output.append(detection)
+        return output
+
     def detect(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
         if not self._loaded:
             self._model = self._load()
@@ -112,6 +123,20 @@ class _BaseVlmDetector:
             return self._extract_boxes(frame, threshold)
         except Exception as exc:
             logger.warning(f"{self.name} VLM detect failed: {exc}")
+            return []
+
+    def detect_with_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        if not self._loaded:
+            self._model = self._load()
+            self._loaded = True
+        if self._model is None:
+            return []
+        try:
+            return list(self._extract_geometry(frame, threshold))
+        except Exception as exc:
+            logger.warning(f"{self.name} VLM geometry detect failed: {exc}")
             return []
 
 
@@ -152,7 +177,9 @@ class _Florence2Detector(_BaseVlmDetector):
             logger.warning(f"Florence-2 load failed: {exc}")
             return None
 
-    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
+    def _extract_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
         processor, model, torch = self._model
         from PIL import Image as _Image
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -172,16 +199,20 @@ class _Florence2Detector(_BaseVlmDetector):
         text = processor.batch_decode(generated, skip_special_tokens=False)[0]
         parsed = processor.post_process_generation(text, task=task, image_size=(w, h))
         bboxes = (parsed.get(task) or {}).get("quad_boxes", [])
-        out: List[Tuple[int, int, int, int]] = []
+        out: List[DetectionGeometry] = []
         for poly in bboxes:
-            pts = np.array(poly, dtype=np.int32).reshape(-1, 2)
-            if pts.size == 0:
-                continue
-            x1, y1 = pts.min(axis=0)
-            x2, y2 = pts.max(axis=0)
-            if x2 > x1 and y2 > y1:
-                out.append((int(x1), int(y1), int(x2), int(y2)))
+            detection = DetectionGeometry.from_polygon(poly, frame.shape)
+            if detection is not None:
+                out.append(detection)
         return out
+
+    def _extract_boxes(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int]]:
+        return [
+            detection.bbox
+            for detection in self._extract_geometry(frame, threshold)
+        ]
 
 
 class _Qwen25VLDetector(_BaseVlmDetector):
@@ -222,7 +253,9 @@ class _Qwen25VLDetector(_BaseVlmDetector):
             logger.warning(f"Qwen2.5-VL load failed: {exc}")
             return None
 
-    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
+    def _extract_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
         processor, model, torch = self._model
         from PIL import Image as _Image
         import json as _json
@@ -230,7 +263,8 @@ class _Qwen25VLDetector(_BaseVlmDetector):
         pil = _Image.fromarray(rgb)
         prompt = (
             "Detect every burned-in subtitle / caption / chyron in this image "
-            "and return JSON: [{\"bbox\": [x1,y1,x2,y2]}, ...]. Pixel coords."
+            "and return JSON: [{\"polygon\": [[x,y], ...]}, ...]. "
+            "Use pixel coords and preserve rotated text quadrilaterals."
         )
         messages = [{"role": "user", "content": [
             {"type": "image", "image": pil},
@@ -252,26 +286,60 @@ class _Qwen25VLDetector(_BaseVlmDetector):
             return []
         if not isinstance(arr, list):
             return []
-        out: List[Tuple[int, int, int, int]] = []
+        out: List[DetectionGeometry] = []
         for entry in arr:
             if isinstance(entry, dict):
-                bbox = entry.get("bbox") or entry.get("box")
+                coords = entry.get("polygon") or entry.get("poly")
+                polygon = coords is not None
+                if coords is None:
+                    coords = entry.get("bbox") or entry.get("box")
+                confidence = entry.get(
+                    "confidence", entry.get("score", 1.0))
             elif isinstance(entry, (list, tuple)):
                 # Some models emit a bare [x1, y1, x2, y2] per detection
                 # instead of {"bbox": [...]}; accept that shape too rather
                 # than dropping every box.
-                bbox = entry
+                coords = entry
+                polygon = False
+                confidence = 1.0
             else:
                 continue
-            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            if not isinstance(coords, (list, tuple)):
                 continue
             try:
-                x1, y1, x2, y2 = [int(round(float(v))) for v in bbox]
+                confidence = float(confidence)
             except (TypeError, ValueError):
+                confidence = 1.0
+            if confidence < threshold:
                 continue
-            if x2 > x1 and y2 > y1:
-                out.append((x1, y1, x2, y2))
+            detection = DetectionGeometry.from_polygon(
+                coords,
+                frame.shape,
+                confidence=confidence,
+            )
+            if not polygon:
+                detection = DetectionGeometry.from_box(
+                    coords,
+                    frame.shape,
+                    confidence=confidence,
+                )
+                if detection is None:
+                    detection = DetectionGeometry.from_polygon(
+                        coords,
+                        frame.shape,
+                        confidence=confidence,
+                    )
+            if detection is not None:
+                out.append(detection)
         return out
+
+    def _extract_boxes(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int]]:
+        return [
+            detection.bbox
+            for detection in self._extract_geometry(frame, threshold)
+        ]
 
 
 class _PaddleOcrVlDetector(_BaseVlmDetector):
@@ -309,9 +377,19 @@ class _PaddleOcrVlDetector(_BaseVlmDetector):
             logger.warning(f"PaddleOCR-VL load failed: {exc}")
             return None
 
-    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
-        from backend.paddle_compat import extract_paddle_boxes
-        return extract_paddle_boxes(self._model, frame, threshold)
+    def _extract_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
+        from backend.paddle_compat import extract_paddle_geometry
+        return extract_paddle_geometry(self._model, frame, threshold)
+
+    def _extract_boxes(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int]]:
+        return [
+            detection.bbox
+            for detection in self._extract_geometry(frame, threshold)
+        ]
 
 
 def _normalise_vl_server_url(raw: str) -> str:
@@ -574,11 +652,14 @@ def _box_from_coords(coords: Any, frame_shape: Tuple[int, int, int]) -> Optional
 
 def _score_at(scores: Any, idx: int, fallback: float = 1.0) -> float:
     try:
-        if isinstance(scores, (list, tuple)) and idx < len(scores):
+        if scores is not None and not isinstance(scores, dict):
             return float(scores[idx])
-        if scores is not None and not isinstance(scores, (list, tuple, dict)):
+    except (IndexError, KeyError, TypeError, ValueError):
+        try:
             return float(scores)
-    except (TypeError, ValueError):
+        except (TypeError, ValueError):
+            pass
+    except (AttributeError, OverflowError):
         pass
     return fallback
 
@@ -593,9 +674,12 @@ def _score_from_dict(data: Mapping[str, Any]) -> float:
     return 1.0
 
 
-def _collect_vl_boxes(payload: Any, threshold: float,
-                      frame_shape: Tuple[int, int, int]) -> List[Box]:
-    boxes: List[Box] = []
+def _collect_vl_geometry(
+    payload: Any,
+    threshold: float,
+    frame_shape: Tuple[int, int, int],
+) -> List[DetectionGeometry]:
+    detections: List[DetectionGeometry] = []
     if isinstance(payload, dict):
         data = payload.get("res", payload)
         handled_keys = {
@@ -608,55 +692,108 @@ def _collect_vl_boxes(payload: Any, threshold: float,
         score = _score_from_dict(data)
         for key in ("bbox", "box", "rect", "coordinate", "poly", "polygon"):
             if key in data and score >= threshold:
-                box = _box_from_coords(data[key], frame_shape)
-                if box:
-                    boxes.append(box)
-        scores = (
-            data.get("rec_scores")
-            or data.get("scores")
-            or data.get("layout_scores")
-            or data.get("confidence")
-        )
+                is_polygon = key in {"poly", "polygon"}
+                detection = (
+                    DetectionGeometry.from_polygon(
+                        data[key], frame_shape, confidence=score)
+                    if is_polygon else DetectionGeometry.from_box(
+                        data[key], frame_shape, confidence=score)
+                )
+                if detection is None and not is_polygon:
+                    detection = DetectionGeometry.from_polygon(
+                        data[key], frame_shape, confidence=score)
+                if detection is not None:
+                    detections.append(detection)
+        scores = None
+        for score_key in (
+            "rec_scores", "scores", "layout_scores", "confidence"):
+            if score_key in data and data[score_key] is not None:
+                scores = data[score_key]
+                break
         for key in ("rec_boxes", "dt_boxes", "boxes", "bboxes"):
             values = data.get(key)
-            if isinstance(values, (list, tuple)):
+            if isinstance(values, (list, tuple, np.ndarray)):
                 for idx, value in enumerate(values):
                     if _score_at(scores, idx) < threshold:
                         continue
-                    box = _box_from_coords(value, frame_shape)
-                    if box:
-                        boxes.append(box)
+                    detection = DetectionGeometry.from_box(
+                        value,
+                        frame_shape,
+                        confidence=_score_at(scores, idx),
+                    )
+                    if detection is not None:
+                        detections.append(detection)
         for key in ("rec_polys", "dt_polys", "polys", "quad_boxes", "points"):
             values = data.get(key)
-            if isinstance(values, (list, tuple)):
+            if isinstance(values, (list, tuple, np.ndarray)):
                 for idx, value in enumerate(values):
                     if _score_at(scores, idx) < threshold:
                         continue
-                    box = _box_from_coords(value, frame_shape)
-                    if box:
-                        boxes.append(box)
+                    score_value = _score_at(scores, idx)
+                    detection = DetectionGeometry.from_polygon(
+                        value,
+                        frame_shape,
+                        confidence=score_value,
+                    )
+                    if detection is None:
+                        detection = DetectionGeometry.from_box(
+                            value,
+                            frame_shape,
+                            confidence=score_value,
+                        )
+                    if detection is not None:
+                        detections.append(detection)
         for key, value in data.items():
             if key in handled_keys:
                 continue
             if isinstance(value, (dict, list, tuple)):
-                boxes.extend(_collect_vl_boxes(value, threshold, frame_shape))
-        return boxes
-    if isinstance(payload, (list, tuple)):
+                detections.extend(
+                    _collect_vl_geometry(value, threshold, frame_shape))
+        return detections
+    if isinstance(payload, (list, tuple, np.ndarray)):
         try:
             array = np.asarray(payload)
             if array.ndim == 2 and array.shape[1] == 4 and array.shape[0] > 1:
                 for row in array:
-                    boxes.extend(_collect_vl_boxes(
-                        row.tolist(), threshold, frame_shape))
-                return boxes
+                    detection = DetectionGeometry.from_box(
+                        row.tolist(), frame_shape, confidence=1.0)
+                    if detection is not None:
+                        detections.append(detection)
+                return detections
         except (TypeError, ValueError):
             pass
-        box = _box_from_coords(payload, frame_shape)
-        if box:
-            return [box]
+        detection = DetectionGeometry.from_polygon(payload, frame_shape)
+        if detection is None:
+            detection = DetectionGeometry.from_box(payload, frame_shape)
+        if detection is not None:
+            return [detection]
         for value in payload:
-            boxes.extend(_collect_vl_boxes(value, threshold, frame_shape))
-    return boxes
+            detections.extend(
+                _collect_vl_geometry(value, threshold, frame_shape))
+    return detections
+
+
+def _collect_vl_boxes(payload: Any, threshold: float,
+                      frame_shape: Tuple[int, int, int]) -> List[Box]:
+    """Compatibility wrapper that intentionally drops polygon vertices."""
+    return [
+        detection.bbox
+        for detection in _collect_vl_geometry(payload, threshold, frame_shape)
+    ]
+
+
+def _dedupe_geometry(
+    detections: List[DetectionGeometry],
+) -> List[DetectionGeometry]:
+    out: List[DetectionGeometry] = []
+    seen = set()
+    for detection in detections:
+        key = (detection.bbox, detection.polygon)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(detection)
+    return out
 
 
 def _dedupe_boxes(boxes: List[Box]) -> List[Box]:
@@ -739,7 +876,9 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
             logger.warning("PaddleOCR-VL-1.5 llama.cpp load failed: %s", exc)
             return None
 
-    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Box]:
+    def _extract_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
         try:
             validate_vlm_server_endpoint(self.server_url, self.env)
         except VlmEndpointPolicyError as exc:
@@ -763,10 +902,17 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
             except OSError:
                 pass
         payloads = [_result_payload(result) for result in _vl_result_sequence(results)]
-        boxes: List[Box] = []
+        detections: List[DetectionGeometry] = []
         for payload in payloads:
-            boxes.extend(_collect_vl_boxes(payload, threshold, frame.shape))
-        return _dedupe_boxes(boxes)
+            detections.extend(
+                _collect_vl_geometry(payload, threshold, frame.shape))
+        return _dedupe_geometry(detections)
+
+    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Box]:
+        return [
+            detection.bbox
+            for detection in self._extract_geometry(frame, threshold)
+        ]
 
 
 class _MangaOcrDetector(_BaseVlmDetector):
@@ -809,7 +955,9 @@ class _MangaOcrDetector(_BaseVlmDetector):
             )
         return (mocr, ctd)
 
-    def _extract_boxes(self, frame: np.ndarray, threshold: float) -> List[Tuple[int, int, int, int]]:
+    def _extract_geometry(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[DetectionGeometry]:
         _mocr, ctd = self._model
         if ctd is None:
             # Single whole-frame crop -- we still return ONE box around
@@ -821,22 +969,30 @@ class _MangaOcrDetector(_BaseVlmDetector):
             ys, xs = np.where(closed > 0)
             if ys.size == 0:
                 return []
-            return [(int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max()))]
+            detection = DetectionGeometry.from_box(
+                (int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())),
+                frame.shape,
+            )
+            return [detection] if detection is not None else []
         try:
             polys = ctd.predict_one(frame)  # type: ignore[attr-defined]
         except Exception as exc:
             logger.debug(f"comic-text-detector inference failed: {exc}")
             return []
-        out: List[Tuple[int, int, int, int]] = []
+        out: List[DetectionGeometry] = []
         for poly in polys:
-            pts = np.array(poly, dtype=np.int32).reshape(-1, 2)
-            if pts.size == 0:
-                continue
-            x1, y1 = pts.min(axis=0)
-            x2, y2 = pts.max(axis=0)
-            if x2 > x1 and y2 > y1:
-                out.append((int(x1), int(y1), int(x2), int(y2)))
+            detection = DetectionGeometry.from_polygon(poly, frame.shape)
+            if detection is not None:
+                out.append(detection)
         return out
+
+    def _extract_boxes(
+        self, frame: np.ndarray, threshold: float
+    ) -> List[Tuple[int, int, int, int]]:
+        return [
+            detection.bbox
+            for detection in self._extract_geometry(frame, threshold)
+        ]
 
 
 # The four names the GUI engine picker and --ocr-engine accept with a

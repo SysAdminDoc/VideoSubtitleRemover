@@ -71,6 +71,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- dependency_caps.py          # Dependency ceilings and execution-provider lanes.
 |   |-- dependency_profiles.py      # Reviewed CPU/NVIDIA/DirectML dependency locks.
 |   |-- detection.py                # OCR cascade, selectable engines, execution provenance.
+|   |-- detection_geometry.py       # Normalized OCR boxes and polygon geometry.
 |   |-- device_provider.py          # Device strategy and inpainter construction.
 |   |-- encoder.py                  # Output codec probing and HW encoder selection.
 |   |-- execution_provenance.py     # Requested vs. effective device/engine record.
@@ -188,6 +189,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 - **`backend/config.py`** owns the backend `ProcessingConfig`,
   `InpaintMode` enum, coercers, and `normalize_processing_config`.
   Inpainters import `backend.config` directly.
+- **`backend/detection_geometry.py`** owns the normalized OCR record. It keeps
+  the legacy bounding box beside optional polygon vertices, clips and remaps
+  them for the current frame, and rasterizes each shape with local expansion.
 - **`backend/processor.py`** preserves the legacy public import surface
   and delegates `python -m backend.processor` to `backend.cli.main`.
 - **`backend/detection.py`**, **`backend/tracking.py`**,
@@ -233,13 +237,19 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 6. **Per-frame detect.** Inside the main loop:
    - `pHash` skip + keyframe gating short-circuit when content is
      unchanged.
-   - `SubtitleDetector.detect(frame)` calls the active engine
-     (RapidOCR / PaddleOCR / Surya / EasyOCR / OpenCV).
+   - `SubtitleDetector.detect_with_geometry(frame)` calls the active engine
+     (RapidOCR / PaddleOCR / Surya / EasyOCR / OpenCV) and keeps polygon
+     vertices beside the compatibility boxes. `detect(frame)` remains the
+     rectangle API for older callers.
    - `_group_horizontal_line` fuses karaoke syllables.
-   - `SubtitleTracker.update` smooths via Kalman.
+   - `SubtitleTracker.update_with_geometry` smooths boxes and remaps polygon
+     vertices with the tracked translation and scale. `update` remains the
+     rectangle API.
    - `categorize` filters chyron vs subtitle when either
      `remove_chyrons` / `remove_subtitles` is off.
-   - `_create_mask` produces the binary mask (with dilation).
+   - `_create_mask` produces the binary mask (with dilation). Polygon records
+     are filled and expanded independently, so one rotated caption cannot
+     widen another caption's mask.
    - `_expand_mask_by_color` extends to dominant-colour pixels.
    - `_accumulate_quality_bbox` widens the union-mask bbox used by
      the ROI quality metric.

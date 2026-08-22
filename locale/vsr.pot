@@ -40,7 +40,7 @@ msgstr ""
 msgid "0 uses the full clip"
 msgstr ""
 
-#: gui/region_controller.py:1387
+#: gui/region_controller.py:1416
 msgid "; color delta BGR {delta}"
 msgstr ""
 
@@ -48,7 +48,7 @@ msgstr ""
 msgid "; slowest stage {stage}"
 msgstr ""
 
-#: gui/region_controller.py:1393
+#: gui/region_controller.py:1422
 msgid "; would fall back to normal inpainting"
 msgstr ""
 
@@ -60,15 +60,15 @@ msgstr ""
 msgid "A folder scan is already running"
 msgstr ""
 
-#: gui/region_controller.py:1531
+#: gui/region_controller.py:1560
 msgid "A motion keyframe uses one frame, not an end frame"
 msgstr ""
 
-#: gui/region_controller.py:1797
+#: gui/region_controller.py:1826
 msgid "A polygon can only be saved as a moving track: add at least two motion keyframes, or convert it to a rectangle"
 msgstr ""
 
-#: gui/region_controller.py:1015
+#: gui/region_controller.py:1044
 msgid "A polygon needs at least three vertices"
 msgstr ""
 
@@ -80,7 +80,7 @@ msgstr ""
 msgid "A track scan is already running"
 msgstr ""
 
-#: gui/preview_controller.py:704
+#: gui/preview_controller.py:705
 msgid "A/B compare: {name}"
 msgstr ""
 
@@ -104,11 +104,11 @@ msgstr ""
 msgid "Adaptive edge padding"
 msgstr ""
 
-#: gui/preview_controller.py:586 gui/track_plan_controller.py:51
+#: gui/preview_controller.py:587 gui/track_plan_controller.py:51
 msgid "Add a file to the queue first"
 msgstr ""
 
-#: gui/region_controller.py:1697
+#: gui/region_controller.py:1726
 msgid "Add at least two keyframes before saving a motion track"
 msgstr ""
 
@@ -160,7 +160,7 @@ msgstr ""
 msgid "Add video or image files"
 msgstr ""
 
-#: gui/region_controller.py:1676
+#: gui/region_controller.py:1705
 msgid "Added motion keyframe at {seconds:.3f} seconds"
 msgstr ""
 
@@ -208,7 +208,7 @@ msgstr ""
 msgid "All Supported"
 msgstr ""
 
-#: gui/app.py:2154 gui/region_controller.py:1292 gui/settings_controller.py:235 gui/settings_controller.py:272 gui/settings_controller.py:297 gui/settings_controller.py:329 gui/settings_controller.py:360 gui/settings_controller.py:384 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:342
+#: gui/app.py:2154 gui/region_controller.py:1321 gui/settings_controller.py:235 gui/settings_controller.py:272 gui/settings_controller.py:297 gui/settings_controller.py:329 gui/settings_controller.py:360 gui/settings_controller.py:384 gui/support_controller.py:238 gui/support_controller.py:298 gui/support_controller.py:342
 msgid "All files"
 msgstr ""
 
@@ -224,7 +224,7 @@ msgstr ""
 msgid "Application status"
 msgstr ""
 
-#: gui/region_controller.py:1567
+#: gui/region_controller.py:1596
 msgid "Applied precise region edit"
 msgstr ""
 
@@ -240,7 +240,7 @@ msgstr ""
 msgid "Apply to this file"
 msgstr ""
 
-#: gui/region_controller.py:1198 gui/region_controller.py:1203 gui/region_controller.py:1228 gui/region_controller.py:539
+#: gui/region_controller.py:1227 gui/region_controller.py:1232 gui/region_controller.py:1257 gui/region_controller.py:539
 msgid "Auto"
 msgstr ""
 
@@ -420,15 +420,15 @@ msgstr ""
 msgid "Choose FFV1 video or an ordered PNG sequence."
 msgstr ""
 
-#: gui/region_controller.py:1213
+#: gui/region_controller.py:1242
 msgid "Choose a clean plate or a donor video for this timed region."
 msgstr ""
 
-#: gui/region_controller.py:1283
+#: gui/region_controller.py:1312
 msgid "Choose a clean plate or donor video"
 msgstr ""
 
-#: gui/region_controller.py:1367
+#: gui/region_controller.py:1396
 msgid "Choose a clean reference for the selected timed region"
 msgstr ""
 
@@ -496,7 +496,7 @@ msgstr ""
 msgid "Choose which detected text tracks to keep or remove"
 msgstr ""
 
-#: gui/region_controller.py:1285
+#: gui/region_controller.py:1314
 msgid "Clean plates and donor videos"
 msgstr ""
 
@@ -508,11 +508,11 @@ msgstr ""
 msgid "Clean reference alignment mode"
 msgstr ""
 
-#: gui/region_controller.py:1329
+#: gui/region_controller.py:1358
 msgid "Clean reference attached to the timed region"
 msgstr ""
 
-#: gui/region_controller.py:1361
+#: gui/region_controller.py:1390
 msgid "Clean reference cleared"
 msgstr ""
 
@@ -520,15 +520,15 @@ msgstr ""
 msgid "Clean reference minimum confidence"
 msgstr ""
 
-#: gui/region_controller.py:1314
+#: gui/region_controller.py:1343
 msgid "Clean reference must be {width}x{height}"
 msgstr ""
 
-#: gui/region_controller.py:1390
+#: gui/region_controller.py:1419
 msgid "Clean reference preview ready"
 msgstr ""
 
-#: gui/region_controller.py:1158
+#: gui/region_controller.py:1187
 msgid "Clean references attach only to timed regions"
 msgstr ""
 
@@ -540,11 +540,11 @@ msgstr ""
 msgid "Cleanup algorithm"
 msgstr ""
 
-#: gui/preview_controller.py:1055
+#: gui/preview_controller.py:1076
 msgid "Cleanup preview failed"
 msgstr ""
 
-#: gui/preview_controller.py:1032
+#: gui/preview_controller.py:1053
 msgid "Cleanup preview using {mode}; {n} region(s) masked. Tested at {timestamp}; frames {start}-{end}; planning proxy {resolution}."
 msgstr ""
 
@@ -600,7 +600,7 @@ msgstr ""
 msgid "Cleared imported matte"
 msgstr ""
 
-#: gui/region_controller.py:1866
+#: gui/region_controller.py:1895
 msgid "Cleared manual subtitle regions"
 msgstr ""
 
@@ -614,7 +614,7 @@ msgid_plural "Cleared {count} completed items"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/preview_controller.py:1139 gui/quality_controller.py:391 gui/support_controller.py:587 gui/support_controller.py:787
+#: gui/preview_controller.py:1160 gui/quality_controller.py:391 gui/support_controller.py:587 gui/support_controller.py:787
 msgid "Close"
 msgstr ""
 
@@ -654,7 +654,7 @@ msgstr ""
 msgid "Completed {name}"
 msgstr ""
 
-#: gui/preview_controller.py:1803
+#: gui/preview_controller.py:1858
 msgid "Composed mask for {name}"
 msgstr ""
 
@@ -674,7 +674,7 @@ msgstr ""
 msgid "Confidence floor"
 msgstr ""
 
-#: gui/region_controller.py:1238
+#: gui/region_controller.py:1267
 msgid "Confidence must be between 0.05 and 0.99"
 msgstr ""
 
@@ -726,11 +726,11 @@ msgstr ""
 msgid "Could not copy to the clipboard"
 msgstr ""
 
-#: gui/preview_controller.py:621
+#: gui/preview_controller.py:622
 msgid "Could not detect language from this frame"
 msgstr ""
 
-#: gui/preview_controller.py:677
+#: gui/preview_controller.py:678
 msgid "Could not open input/output for compare"
 msgstr ""
 
@@ -742,7 +742,7 @@ msgstr ""
 msgid "Could not prepare suggested retry: {error}"
 msgstr ""
 
-#: gui/preview_controller.py:1200
+#: gui/preview_controller.py:1221
 msgid "Could not read the selected file for region editing"
 msgstr ""
 
@@ -778,7 +778,7 @@ msgstr ""
 msgid "Custom location"
 msgstr ""
 
-#: gui/preview_controller.py:188
+#: gui/preview_controller.py:189
 msgid "DETECTING"
 msgstr ""
 
@@ -818,11 +818,11 @@ msgstr ""
 msgid "Detect subtitles and inspect the mask at the selected time."
 msgstr ""
 
-#: gui/preview_controller.py:632
+#: gui/preview_controller.py:633
 msgid "Detected {script} script, suggested language: {lang} (confidence {confidence})"
 msgstr ""
 
-#: gui/preview_controller.py:162
+#: gui/preview_controller.py:163
 msgid "Detecting"
 msgstr ""
 
@@ -834,7 +834,7 @@ msgstr ""
 msgid "Detecting hardware..."
 msgstr ""
 
-#: gui/preview_controller.py:588
+#: gui/preview_controller.py:589
 msgid "Detecting language..."
 msgstr ""
 
@@ -842,7 +842,7 @@ msgstr ""
 msgid "Detection"
 msgstr ""
 
-#: gui/preview_controller.py:1806
+#: gui/preview_controller.py:1861
 msgid "Dilation: {px} px; detection cached."
 msgstr ""
 
@@ -850,11 +850,11 @@ msgstr ""
 msgid "Donor offset (s)"
 msgstr ""
 
-#: gui/region_controller.py:1255
+#: gui/region_controller.py:1284
 msgid "Donor offset must be a number of seconds"
 msgstr ""
 
-#: gui/region_controller.py:1217
+#: gui/region_controller.py:1246
 msgid "Donor video attached. Frames are matched by timestamp plus the offset."
 msgstr ""
 
@@ -862,7 +862,7 @@ msgstr ""
 msgid "Double-click for full size, draw a region, or right-click for preview tools."
 msgstr ""
 
-#: gui/preview_controller.py:1398
+#: gui/preview_controller.py:1419
 msgid "Drag a larger subtitle region before releasing."
 msgstr ""
 
@@ -878,7 +878,7 @@ msgstr ""
 msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
 msgstr ""
 
-#: gui/preview_controller.py:1248
+#: gui/preview_controller.py:1269
 msgid "Drag over the subtitle text. Release to save and refresh the mask."
 msgstr ""
 
@@ -890,11 +890,11 @@ msgstr ""
 msgid "Drag to paint with the selected mode."
 msgstr ""
 
-#: gui/region_controller.py:1751
+#: gui/region_controller.py:1780
 msgid "Draw a region before adding a timed range"
 msgstr ""
 
-#: gui/region_controller.py:1641
+#: gui/region_controller.py:1670
 msgid "Draw exactly one rectangle or polygon for this keyframe"
 msgstr ""
 
@@ -902,7 +902,7 @@ msgstr ""
 msgid "Draw over the subtitle area."
 msgstr ""
 
-#: gui/preview_controller.py:1244
+#: gui/preview_controller.py:1265
 msgid "Draw subtitle region for {name}"
 msgstr ""
 
@@ -962,7 +962,7 @@ msgstr ""
 msgid "Enter a nonnegative frame number."
 msgstr ""
 
-#: gui/region_controller.py:1762
+#: gui/region_controller.py:1791
 msgid "Enter a start or end second for a timed range"
 msgstr ""
 
@@ -1160,7 +1160,7 @@ msgstr ""
 msgid "Finalizing the previous batch..."
 msgstr ""
 
-#: gui/region_controller.py:1791
+#: gui/region_controller.py:1820
 msgid "Finish or cancel the polygon in progress before saving"
 msgstr ""
 
@@ -1172,7 +1172,7 @@ msgstr ""
 msgid "Finish processing an item to open its output folder."
 msgstr ""
 
-#: gui/preview_controller.py:342
+#: gui/preview_controller.py:343
 msgid "Finish processing this item before using A/B compare."
 msgstr ""
 
@@ -1200,7 +1200,7 @@ msgstr ""
 msgid "Focused {name}{stage}"
 msgstr ""
 
-#: gui/preview_controller.py:749 gui/region_controller.py:294
+#: gui/preview_controller.py:750 gui/region_controller.py:294
 msgid "Frame"
 msgstr ""
 
@@ -1212,7 +1212,7 @@ msgstr ""
 msgid "Frame skip"
 msgstr ""
 
-#: gui/preview_controller.py:222
+#: gui/preview_controller.py:223
 msgid "Frame {current}/{total} ({percent}%)"
 msgstr ""
 
@@ -1316,7 +1316,7 @@ msgstr ""
 msgid "Higher values reuse masks across more near-identical frames; 4 is conservative."
 msgstr ""
 
-#: gui/region_controller.py:1200 gui/region_controller.py:1230 gui/region_controller.py:539
+#: gui/region_controller.py:1229 gui/region_controller.py:1259 gui/region_controller.py:539
 msgid "Homography"
 msgstr ""
 
@@ -1340,7 +1340,7 @@ msgstr ""
 msgid "Image Files"
 msgstr ""
 
-#: gui/region_controller.py:1288
+#: gui/region_controller.py:1317
 msgid "Image files"
 msgstr ""
 
@@ -1396,7 +1396,7 @@ msgstr ""
 msgid "Improve detection for top-to-bottom Japanese or Chinese text. Saved masks stay aligned to the source."
 msgstr ""
 
-#: gui/preview_controller.py:279
+#: gui/preview_controller.py:280
 msgid "Info"
 msgstr ""
 
@@ -1404,11 +1404,11 @@ msgstr ""
 msgid "Initializing..."
 msgstr ""
 
-#: gui/preview_controller.py:1256
+#: gui/preview_controller.py:1277
 msgid "Inline region editor unavailable. Opening the full selector is still available."
 msgstr ""
 
-#: gui/preview_controller.py:1072
+#: gui/preview_controller.py:1093
 msgid "Inpaint preview"
 msgstr ""
 
@@ -1416,11 +1416,11 @@ msgstr ""
 msgid "Inpainting"
 msgstr ""
 
-#: gui/preview_controller.py:833
+#: gui/preview_controller.py:834
 msgid "Inpainting {name}"
 msgstr ""
 
-#: gui/preview_controller.py:302
+#: gui/preview_controller.py:303
 msgid "Install Pillow to enable image preview tools."
 msgstr ""
 
@@ -1428,11 +1428,11 @@ msgstr ""
 msgid "Install Pillow to enable mask correction"
 msgstr ""
 
-#: gui/preview_controller.py:1179
+#: gui/preview_controller.py:1200
 msgid "Install Pillow to enable preview region editing"
 msgstr ""
 
-#: gui/preview_controller.py:359
+#: gui/preview_controller.py:360
 msgid "Install Pillow to enable previews and visual inspection tools."
 msgstr ""
 
@@ -1484,7 +1484,7 @@ msgstr ""
 msgid "Keep scene changes separate"
 msgstr ""
 
-#: gui/region_controller.py:1654
+#: gui/region_controller.py:1683
 msgid "Keyframes in one motion track need the same shape and vertex count"
 msgstr ""
 
@@ -1524,7 +1524,7 @@ msgstr ""
 msgid "Limited"
 msgstr ""
 
-#: gui/preview_controller.py:220
+#: gui/preview_controller.py:221
 msgid "Live preview: {file_name}"
 msgstr ""
 
@@ -1544,7 +1544,7 @@ msgstr ""
 msgid "Loading review frame..."
 msgstr ""
 
-#: gui/preview_controller.py:1490
+#: gui/preview_controller.py:1511
 msgid "Loading {name}..."
 msgstr ""
 
@@ -1584,7 +1584,7 @@ msgstr ""
 msgid "Manual region"
 msgstr ""
 
-#: gui/preview_controller.py:1704
+#: gui/preview_controller.py:1759
 msgid "Manual region applied at {timestamp}. Detection used your saved subtitle band."
 msgstr ""
 
@@ -1620,7 +1620,7 @@ msgstr ""
 msgid "Mask feather"
 msgstr ""
 
-#: gui/preview_controller.py:1755
+#: gui/preview_controller.py:1810
 msgid "Mask preview failed"
 msgstr ""
 
@@ -1692,7 +1692,7 @@ msgstr ""
 msgid "Motion"
 msgstr ""
 
-#: gui/region_controller.py:1542
+#: gui/region_controller.py:1571
 msgid "Motion keyframes must use distinct frames"
 msgstr ""
 
@@ -1700,7 +1700,7 @@ msgstr ""
 msgid "Motion smoothing"
 msgstr ""
 
-#: gui/region_controller.py:1079
+#: gui/region_controller.py:1108
 msgid "Motion {track}, keyframe {frame}"
 msgstr ""
 
@@ -1750,7 +1750,7 @@ msgstr ""
 msgid "Name the current cleanup settings and save them to the user preset library."
 msgstr ""
 
-#: gui/config.py:202 gui/preview_controller.py:277 gui/preview_controller.py:278 gui/support_controller.py:742
+#: gui/config.py:202 gui/preview_controller.py:278 gui/preview_controller.py:279 gui/support_controller.py:742
 msgid "Needs attention"
 msgstr ""
 
@@ -1806,7 +1806,7 @@ msgstr ""
 msgid "No exported matte was found beside this output. Enable matte export and run the item again."
 msgstr ""
 
-#: gui/preview_controller.py:1551 gui/preview_controller.py:923
+#: gui/preview_controller.py:1572 gui/preview_controller.py:924
 msgid "No frame available"
 msgstr ""
 
@@ -1830,15 +1830,15 @@ msgstr ""
 msgid "No queued items match this search"
 msgstr ""
 
-#: gui/region_controller.py:1131
+#: gui/region_controller.py:1160
 msgid "No region edit to redo"
 msgstr ""
 
-#: gui/region_controller.py:1128
+#: gui/region_controller.py:1157
 msgid "No region edit to undo"
 msgstr ""
 
-#: gui/preview_controller.py:1716
+#: gui/preview_controller.py:1771
 msgid "No regions were found at {timestamp}. Try Set region, or lower the Threshold in detailed controls."
 msgstr ""
 
@@ -1846,15 +1846,15 @@ msgstr ""
 msgid "No supported videos or images were found in the selected folder"
 msgstr ""
 
-#: gui/preview_controller.py:1815
+#: gui/preview_controller.py:1870
 msgid "No text detected"
 msgstr ""
 
-#: gui/preview_controller.py:1009
+#: gui/preview_controller.py:1030
 msgid "No text detected at {timestamp}; frames {start}-{end}; planning proxy {resolution}."
 msgstr ""
 
-#: gui/region_controller.py:1008
+#: gui/region_controller.py:1037
 msgid "No text found in this rectangle yet."
 msgstr ""
 
@@ -1870,7 +1870,7 @@ msgstr ""
 msgid "No valid correction frame ranges are available"
 msgstr ""
 
-#: gui/region_controller.py:1196 gui/support_controller.py:660 gui/support_controller.py:661
+#: gui/region_controller.py:1225 gui/support_controller.py:660 gui/support_controller.py:661
 msgid "None"
 msgstr ""
 
@@ -1898,11 +1898,11 @@ msgstr ""
 msgid "OCR engine"
 msgstr ""
 
-#: gui/region_controller.py:1002
+#: gui/region_controller.py:1031
 msgid "OCR found {count} region{suffix}; average confidence {confidence:.0%}."
 msgstr ""
 
-#: gui/region_controller.py:998
+#: gui/region_controller.py:1027
 msgid "OCR preview unavailable; the region can still be saved."
 msgstr ""
 
@@ -1982,7 +1982,7 @@ msgstr ""
 msgid "Opened the settings folder"
 msgstr ""
 
-#: gui/region_controller.py:1629 gui/region_controller.py:1692
+#: gui/region_controller.py:1658 gui/region_controller.py:1721
 msgid "Optional"
 msgstr ""
 
@@ -1998,7 +1998,7 @@ msgstr ""
 msgid "Output codec"
 msgstr ""
 
-#: gui/preview_controller.py:665
+#: gui/preview_controller.py:666
 msgid "Output file is missing"
 msgstr ""
 
@@ -2084,7 +2084,7 @@ msgstr ""
 msgid "Pause the batch before planning tracks"
 msgstr ""
 
-#: gui/preview_controller.py:827
+#: gui/preview_controller.py:828
 msgid "Pause the batch before previewing"
 msgstr ""
 
@@ -2108,7 +2108,7 @@ msgstr ""
 msgid "Pausing..."
 msgstr ""
 
-#: gui/region_controller.py:1069
+#: gui/region_controller.py:1098
 msgid "Pending keyframe {index}"
 msgstr ""
 
@@ -2124,11 +2124,11 @@ msgstr ""
 msgid "Pick a preset first, then export"
 msgstr ""
 
-#: gui/preview_controller.py:668
+#: gui/preview_controller.py:669
 msgid "Pillow required for A/B compare"
 msgstr ""
 
-#: gui/preview_controller.py:830
+#: gui/preview_controller.py:831
 msgid "Pillow required for inpaint preview"
 msgstr ""
 
@@ -2140,11 +2140,11 @@ msgstr ""
 msgid "Polygon vertex coordinates"
 msgstr ""
 
-#: gui/region_controller.py:1061
+#: gui/region_controller.py:1090
 msgid "Polygon {index}"
 msgstr ""
 
-#: gui/region_controller.py:1755
+#: gui/region_controller.py:1784
 msgid "Polygons are saved through motion keyframes"
 msgstr ""
 
@@ -2188,11 +2188,11 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
-#: gui/preview_controller.py:1122
+#: gui/preview_controller.py:1143
 msgid "Preview - {name}"
 msgstr ""
 
-#: gui/preview_controller.py:1582 gui/preview_controller.py:1593
+#: gui/preview_controller.py:1603 gui/preview_controller.py:1614
 msgid "Preview failed"
 msgstr ""
 
@@ -2216,23 +2216,23 @@ msgstr ""
 msgid "Preview tools"
 msgstr ""
 
-#: gui/preview_controller.py:298
+#: gui/preview_controller.py:299
 msgid "Preview tools are locked while a batch is running."
 msgstr ""
 
-#: gui/preview_controller.py:353
+#: gui/preview_controller.py:354
 msgid "Preview tools are locked while the batch is running."
 msgstr ""
 
-#: gui/preview_controller.py:368
+#: gui/preview_controller.py:369
 msgid "Preview tools are ready. Review the mask or test cleanup before starting."
 msgstr ""
 
-#: gui/preview_controller.py:365
+#: gui/preview_controller.py:366
 msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
 msgstr ""
 
-#: gui/preview_controller.py:1452
+#: gui/preview_controller.py:1473
 msgid "Preview tools need Pillow"
 msgstr ""
 
@@ -2326,7 +2326,7 @@ msgstr ""
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr ""
 
-#: gui/preview_controller.py:1493
+#: gui/preview_controller.py:1514
 msgid "Reading preview frame at {timestamp}..."
 msgstr ""
 
@@ -2338,7 +2338,7 @@ msgstr ""
 msgid "Ready for a full rerun with mask corrections"
 msgstr ""
 
-#: gui/region_controller.py:1221
+#: gui/region_controller.py:1250
 msgid "Ready to preview alignment."
 msgstr ""
 
@@ -2362,7 +2362,7 @@ msgstr ""
 msgid "Rectangle"
 msgstr ""
 
-#: gui/region_controller.py:1044
+#: gui/region_controller.py:1073
 msgid "Rectangle {index}"
 msgstr ""
 
@@ -2370,7 +2370,7 @@ msgstr ""
 msgid "Redid mask correction"
 msgstr ""
 
-#: gui/region_controller.py:1618
+#: gui/region_controller.py:1647
 msgid "Redid region edit"
 msgstr ""
 
@@ -2394,7 +2394,7 @@ msgstr ""
 msgid "Region end frame"
 msgstr ""
 
-#: gui/region_controller.py:1529
+#: gui/region_controller.py:1558
 msgid "Region end must be after its start"
 msgstr ""
 
@@ -2418,7 +2418,7 @@ msgstr ""
 msgid "Register each scene's frames to a reference before temporal background recovery. Recommended for pans, zooms, and handheld footage."
 msgstr ""
 
-#: gui/preview_controller.py:1379
+#: gui/preview_controller.py:1400
 msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
 msgstr ""
 
@@ -2588,7 +2588,7 @@ msgstr ""
 msgid "Run each job in a separate process"
 msgstr ""
 
-#: gui/preview_controller.py:837
+#: gui/preview_controller.py:838
 msgid "Running cleanup at {timestamp}..."
 msgstr ""
 
@@ -2664,7 +2664,7 @@ msgstr ""
 msgid "Save track plan"
 msgstr ""
 
-#: gui/region_controller.py:1716
+#: gui/region_controller.py:1745
 msgid "Saved interpolated motion track"
 msgstr ""
 
@@ -2672,25 +2672,25 @@ msgstr ""
 msgid "Saved redacted support bundle to {name}"
 msgstr ""
 
-#: gui/region_controller.py:1828
+#: gui/region_controller.py:1857
 msgid "Saved {n} moving subtitle track"
 msgid_plural "Saved {n} moving subtitle tracks"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/region_controller.py:1841
+#: gui/region_controller.py:1870
 msgid "Saved {n} subtitle region"
 msgid_plural "Saved {n} subtitle regions"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/region_controller.py:1854
+#: gui/region_controller.py:1883
 msgid "Saved {n} timed subtitle region"
 msgid_plural "Saved {n} timed subtitle regions"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/region_controller.py:1819
+#: gui/region_controller.py:1848
 msgid "Saved {tracks} moving track(s); {rects} drawn rectangle(s) were not kept because a file uses either tracks or fixed regions, not both"
 msgstr ""
 
@@ -2738,11 +2738,11 @@ msgstr ""
 msgid "Select Processing Work Directory"
 msgstr ""
 
-#: gui/preview_controller.py:660
+#: gui/preview_controller.py:661
 msgid "Select a completed item first"
 msgstr ""
 
-#: gui/preview_controller.py:340
+#: gui/preview_controller.py:341
 msgid "Select a completed queue item to compare source and output."
 msgstr ""
 
@@ -2750,11 +2750,11 @@ msgstr ""
 msgid "Select a queue item before correcting its mask"
 msgstr ""
 
-#: gui/preview_controller.py:824
+#: gui/preview_controller.py:825
 msgid "Select a queue item first"
 msgstr ""
 
-#: gui/preview_controller.py:356
+#: gui/preview_controller.py:357
 msgid "Select a queue item to enable mask review, test cleanup, and zoom."
 msgstr ""
 
@@ -2774,15 +2774,15 @@ msgstr ""
 msgid "Select a queue item to remove."
 msgstr ""
 
-#: gui/preview_controller.py:300
+#: gui/preview_controller.py:301
 msgid "Select a queued item to enable preview tools."
 msgstr ""
 
-#: gui/region_controller.py:1277
+#: gui/region_controller.py:1306
 msgid "Select a timed region before choosing a clean reference"
 msgstr ""
 
-#: gui/region_controller.py:1189 gui/region_controller.py:496
+#: gui/region_controller.py:1218 gui/region_controller.py:496
 msgid "Select a timed region to attach a clean reference."
 msgstr ""
 
@@ -2802,7 +2802,7 @@ msgstr ""
 msgid "Select files to process with the last job's settings"
 msgstr ""
 
-#: gui/region_controller.py:1513
+#: gui/region_controller.py:1542
 msgid "Select or draw a region before editing it"
 msgstr ""
 
@@ -2954,7 +2954,7 @@ msgstr ""
 msgid "Stop is already in progress."
 msgstr ""
 
-#: gui/preview_controller.py:1173
+#: gui/preview_controller.py:1194
 msgid "Stop the active batch before changing the subtitle region"
 msgstr ""
 
@@ -3010,7 +3010,7 @@ msgstr ""
 msgid "SubRip subtitles"
 msgstr ""
 
-#: gui/region_controller.py:1908
+#: gui/region_controller.py:1937
 msgid "Subtitle detection returned to automatic mode"
 msgstr ""
 
@@ -3086,11 +3086,11 @@ msgstr ""
 msgid "The batch is already running."
 msgstr ""
 
-#: gui/region_controller.py:1308
+#: gui/region_controller.py:1337
 msgid "The clean reference image could not be read"
 msgstr ""
 
-#: gui/preview_controller.py:344
+#: gui/preview_controller.py:345
 msgid "The cleaned output file is not available on disk."
 msgstr ""
 
@@ -3098,11 +3098,11 @@ msgstr ""
 msgid "The current video is paused at a checkpoint. Start the batch again to resume from that frame."
 msgstr ""
 
-#: gui/region_controller.py:1341
+#: gui/region_controller.py:1370
 msgid "The donor video could not be opened"
 msgstr ""
 
-#: gui/region_controller.py:1346
+#: gui/region_controller.py:1375
 msgid "The donor video reports no usable frame rate"
 msgstr ""
 
@@ -3122,7 +3122,7 @@ msgstr ""
 msgid "The log file is not available yet"
 msgstr ""
 
-#: gui/region_controller.py:1708
+#: gui/region_controller.py:1737
 msgid "The motion keyframes could not be normalized"
 msgstr ""
 
@@ -3182,11 +3182,11 @@ msgstr ""
 msgid "These apply to this queued item only and survive a global settings change."
 msgstr ""
 
-#: gui/region_controller.py:1495
+#: gui/region_controller.py:1524
 msgid "Time must be a number"
 msgstr ""
 
-#: gui/region_controller.py:1497
+#: gui/region_controller.py:1526
 msgid "Time must be zero or greater"
 msgstr ""
 
@@ -3194,11 +3194,11 @@ msgstr ""
 msgid "Time-ranged mask regions"
 msgstr ""
 
-#: gui/preview_controller.py:1700
+#: gui/preview_controller.py:1755
 msgid "Timed manual region is active at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1708
+#: gui/preview_controller.py:1763
 msgid "Timed manual regions are configured but inactive at {timestamp}."
 msgstr ""
 
@@ -3208,11 +3208,11 @@ msgid_plural "Timed manual regions: {count} rectangles"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/region_controller.py:1739
+#: gui/region_controller.py:1768
 msgid "Timed region end must be after start"
 msgstr ""
 
-#: gui/region_controller.py:1051
+#: gui/region_controller.py:1080
 msgid "Timed region {index}"
 msgstr ""
 
@@ -3240,7 +3240,7 @@ msgstr ""
 msgid "Translated SRT ready to re-embed."
 msgstr ""
 
-#: gui/region_controller.py:1199 gui/region_controller.py:1229 gui/region_controller.py:539
+#: gui/region_controller.py:1228 gui/region_controller.py:1258 gui/region_controller.py:539
 msgid "Translation"
 msgstr ""
 
@@ -3276,7 +3276,7 @@ msgstr ""
 msgid "Undid mask correction"
 msgstr ""
 
-#: gui/region_controller.py:1608
+#: gui/region_controller.py:1637
 msgid "Undid region edit"
 msgstr ""
 
@@ -3316,7 +3316,7 @@ msgstr ""
 msgid "Use local glyph contrast and a soft distance-transform edge. Changing Mask dilate turns this off."
 msgstr ""
 
-#: gui/region_controller.py:1546
+#: gui/region_controller.py:1575
 msgid "Use motion keyframes to time polygon regions"
 msgstr ""
 
@@ -3388,7 +3388,7 @@ msgstr ""
 msgid "Video Subtitle Remover Pro"
 msgstr ""
 
-#: gui/region_controller.py:1290
+#: gui/region_controller.py:1319
 msgid "Video files"
 msgstr ""
 
@@ -3400,11 +3400,11 @@ msgstr ""
 msgid "Wait for the active batch to finish before clearing completed items"
 msgstr ""
 
-#: gui/preview_controller.py:338
+#: gui/preview_controller.py:339
 msgid "Wait for the active batch to finish before comparing output."
 msgstr ""
 
-#: gui/preview_controller.py:309
+#: gui/preview_controller.py:310
 msgid "Wait for the active batch to finish before editing regions."
 msgstr ""
 
@@ -3420,7 +3420,7 @@ msgstr ""
 msgid "Wait for the current batch to finish."
 msgstr ""
 
-#: gui/layout_build.py:1822 gui/preview_controller.py:283 gui/preview_controller.py:381
+#: gui/layout_build.py:1822 gui/preview_controller.py:284 gui/preview_controller.py:382
 msgid "Waiting"
 msgstr ""
 
@@ -3448,7 +3448,7 @@ msgstr ""
 msgid "Windows only. Requires FFmpeg 8.1 or newer and uses D3D12 only after a byte-valid runtime test; NVENC, QSV, AMF, or CPU encoding remains the automatic fallback."
 msgstr ""
 
-#: gui/preview_controller.py:783
+#: gui/preview_controller.py:784
 msgid "Wipe"
 msgstr ""
 
@@ -3550,7 +3550,7 @@ msgid_plural "skipped {n} unsafe or invalid files"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/preview_controller.py:785
+#: gui/preview_controller.py:786
 msgid "source <-> cleaned"
 msgstr ""
 
@@ -3586,11 +3586,11 @@ msgstr ""
 msgid "{current} of {total} complete"
 msgstr ""
 
-#: gui/preview_controller.py:1712
+#: gui/preview_controller.py:1767
 msgid "{engine} found {n} region(s) at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1814
+#: gui/preview_controller.py:1869
 msgid "{engine}: {n} detected"
 msgstr ""
 
@@ -3602,7 +3602,7 @@ msgstr ""
 msgid "{kind}: frames {start}-{end}"
 msgstr ""
 
-#: gui/region_controller.py:1381
+#: gui/region_controller.py:1410
 msgid "{method} alignment: {confidence:.1%}"
 msgstr ""
 
@@ -3638,7 +3638,7 @@ msgid_plural "{n} items"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/region_controller.py:1684
+#: gui/region_controller.py:1713
 msgid "{n} motion track"
 msgid_plural "{n} motion tracks"
 msgstr[0] ""
@@ -3656,7 +3656,7 @@ msgid_plural "{n} queued items from last session"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/region_controller.py:1689
+#: gui/region_controller.py:1718
 msgid "{n} timed region"
 msgid_plural "{n} timed regions"
 msgstr[0] ""

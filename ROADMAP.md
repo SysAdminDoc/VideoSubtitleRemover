@@ -17,24 +17,6 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P1 — RM-301 Preserve OCR polygon geometry through mask creation
-  - Why: OCR engines can return quadrilaterals, but VSR converts them to
-    axis-aligned rectangles. Rotated text then removes more valid content and can
-    miss the intended stroke shape.
-  - Evidence: backend/ocr_vlm.py:376-405, backend/detection.py:654, and
-    https://github.com/D-Ogi/WatermarkRemover-AI/issues/38.
-  - Touches: backend/detection.py, OCR adapter result types, tracking and track-plan
-    serialization, backend/segmentation.py, mask rendering, preview overlays, and
-    geometry tests.
-  - Acceptance: Carry a normalized polygon beside the backward-compatible bounding
-    box; preserve polygon vertices through tracking, scaling, clipping, scene cuts,
-    serialization, and reload; rasterize polygon masks with configured expansion in
-    the polygon's local geometry; show editable polygon overlays; prove a 45-degree
-    text fixture removes the target without the old rectangle's excess area; keep
-    existing manual rectangles and old plans valid.
-  - Complexity: Medium to high. Regression risk is medium because geometry crosses
-    detection, tracking, storage, and rendering.
-
 - [ ] P1 — RM-302 Preserve exact rational VFR timing
   - Why: Current probes and manifests store decimal timestamp seconds. Long or
     irregular timelines can accumulate conversion error and lose the source clock

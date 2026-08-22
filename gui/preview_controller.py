@@ -32,6 +32,7 @@ from gui.widgets import (
     ModernButton,
 )
 from backend.i18n import N_, tr
+from backend.detection_geometry import DetectionGeometry
 from backend.region_keyframes import region_shapes_at
 from backend.safe_image import safe_imread
 
@@ -983,15 +984,35 @@ class PreviewControllerMixin:
                     fixed = remover._fixed_region_boxes(current_time)
                     if fixed:
                         boxes = list(fixed)
+                        detections = remover._legacy_geometry(boxes)
                     elif (timed_configured
                           and getattr(snapshot_cfg, "sttn_skip_detection", False)):
                         boxes = []
+                        detections = []
                     else:
-                        boxes = remover.detector.detect(
-                            current_frame, snapshot_cfg.detection_threshold)
+                        detect_geometry = getattr(
+                            remover.detector, "detect_with_geometry", None)
+                        if callable(detect_geometry):
+                            detections = list(detect_geometry(
+                                current_frame,
+                                snapshot_cfg.detection_threshold,
+                            ))
+                            boxes = [
+                                detection.bbox for detection in detections
+                            ]
+                        else:
+                            boxes = remover.detector.detect(
+                                current_frame,
+                                snapshot_cfg.detection_threshold,
+                            )
+                            detections = remover._legacy_geometry(boxes)
                     boxes_per_frame.append(boxes)
                     region_count = max(region_count, len(boxes) + len(active_shapes))
-                    mask = remover._create_mask(current_frame.shape, boxes)
+                    mask = remover._create_mask(
+                        current_frame.shape,
+                        boxes,
+                        detections=detections,
+                    )
                     mask = remover._apply_polygon_region_shapes(mask, active_shapes)
                     masks.append(mask)
 
@@ -1622,8 +1643,15 @@ class PreviewControllerMixin:
                     self._preview_detector_variant = ocr_variant
                 det = self._preview_detector
                 frame_copy = raw_frame.copy()
+                detections = []
                 if sub_areas or manual_shapes:
                     boxes = sub_areas
+                    detections = [
+                        detection
+                        for box in boxes
+                        for detection in [DetectionGeometry.from_box(box)]
+                        if detection is not None
+                    ]
                 elif (timed_regions_configured
                       and getattr(self.config, "sttn_skip_detection", False)):
                     boxes = []
@@ -1633,13 +1661,32 @@ class PreviewControllerMixin:
                     # requests (or one racing the batch ETA probe) share this
                     # single detector instance. region_controller already
                     # holds the lock across detect for the same reason.
-                    boxes = det.detect(frame_copy, threshold)
+                    detect_geometry = getattr(
+                        det, "detect_with_geometry", None)
+                    if callable(detect_geometry):
+                        detections = list(detect_geometry(frame_copy, threshold))
+                        boxes = [detection.bbox for detection in detections]
+                    else:
+                        boxes = det.detect(frame_copy, threshold)
+                        detections = [
+                            detection
+                            for box in boxes
+                            for detection in [DetectionGeometry.from_box(box)]
+                            if detection is not None
+                        ]
             vis = frame_copy.copy()
             # Detection boxes use the theme's danger accent (BGR for cv2) so
             # they stay visible in the high-contrast palette.
             _dr, _dg, _db = self._hex_to_rgb(Theme.DANGER)
-            for (bx1, by1, bx2, by2) in boxes:
-                _cv2.rectangle(vis, (bx1, by1), (bx2, by2), (_db, _dg, _dr), 2)
+            for detection in detections:
+                if detection.polygon:
+                    points = np.asarray(detection.polygon, dtype=np.int32)
+                    _cv2.polylines(
+                        vis, [points], True, (_db, _dg, _dr), 2)
+                else:
+                    bx1, by1, bx2, by2 = detection.bbox
+                    _cv2.rectangle(
+                        vis, (bx1, by1), (bx2, by2), (_db, _dg, _dr), 2)
             for shape in manual_shapes or []:
                 coords = shape.get("polygon")
                 if not coords:
@@ -1650,9 +1697,17 @@ class PreviewControllerMixin:
             import cv2 as _mask_cv2
 
             base_mask = np.zeros(frame_copy.shape[:2], dtype=np.uint8)
-            for bx1, by1, bx2, by2 in boxes:
-                _mask_cv2.rectangle(
-                    base_mask, (bx1, by1), (bx2, by2), 255, -1)
+            for detection in detections:
+                if detection.polygon:
+                    _mask_cv2.fillPoly(
+                        base_mask,
+                        [np.asarray(detection.polygon, dtype=np.int32)],
+                        255,
+                    )
+                else:
+                    bx1, by1, bx2, by2 = detection.bbox
+                    _mask_cv2.rectangle(
+                        base_mask, (bx1, by1), (bx2, by2), 255, -1)
             for shape in manual_shapes or []:
                 coords = shape.get("polygon")
                 if not coords:

@@ -27,6 +27,12 @@ from typing import Callable, List, Optional, Sequence, Tuple
 import cv2
 import numpy as np
 
+from backend.detection_geometry import (
+    DetectionGeometry,
+    as_detection_geometry,
+    expand_polygon_local,
+)
+
 logger = logging.getLogger(__name__)
 
 TRACK_PLAN_SCHEMA = "vsr.track_plan.v1"
@@ -59,9 +65,9 @@ def _iou(a: Sequence[int], b: Sequence[int]) -> float:
 
 class _OpenTrack:
     __slots__ = ("bbox", "start_frame", "last_frame", "texts",
-                 "misses", "sample_count")
+                 "misses", "sample_count", "polygon", "polygon_history")
 
-    def __init__(self, bbox, frame_idx, text):
+    def __init__(self, bbox, frame_idx, text, polygon=None):
         self.bbox = list(bbox)
         self.start_frame = frame_idx
         self.last_frame = frame_idx
@@ -70,8 +76,12 @@ class _OpenTrack:
             self.texts[text] += 1
         self.misses = 0
         self.sample_count = 1
+        self.polygon = polygon
+        self.polygon_history = []
+        if polygon:
+            self.polygon_history.append((int(frame_idx), polygon))
 
-    def absorb(self, bbox, frame_idx, text):
+    def absorb(self, bbox, frame_idx, text, polygon=None):
         self.bbox = [
             min(self.bbox[0], bbox[0]), min(self.bbox[1], bbox[1]),
             max(self.bbox[2], bbox[2]), max(self.bbox[3], bbox[3]),
@@ -81,6 +91,9 @@ class _OpenTrack:
             self.texts[text] += 1
         self.misses = 0
         self.sample_count += 1
+        if polygon:
+            self.polygon = polygon
+            self.polygon_history.append((int(frame_idx), polygon))
 
 
 def group_detections_into_tracks(
@@ -102,21 +115,27 @@ def group_detections_into_tracks(
     for frame_idx, detections in samples:
         boxes = []
         for det in detections:
-            x1, y1, x2, y2 = (int(det[0]), int(det[1]),
-                              int(det[2]), int(det[3]))
-            if x2 <= x1 or y2 <= y1:
+            detection = as_detection_geometry(det)
+            if detection is None:
                 continue
+            x1, y1, x2, y2 = detection.bbox
             text = ""
-            for extra in det[4:]:
-                if isinstance(extra, str) and extra.strip():
-                    text = extra.strip()
-                    break
-            boxes.append(((x1, y1, x2, y2), text))
+            if detection.text.strip():
+                text = detection.text.strip()
+            else:
+                try:
+                    for extra in det[4:]:
+                        if isinstance(extra, str) and extra.strip():
+                            text = extra.strip()
+                            break
+                except (TypeError, IndexError):
+                    pass
+            boxes.append((detection, text))
 
         pairs = []
         for ti, track in enumerate(open_tracks):
-            for bi, (bbox, _text) in enumerate(boxes):
-                score = _iou(track.bbox, bbox)
+            for bi, (detection, _text) in enumerate(boxes):
+                score = _iou(track.bbox, detection.bbox)
                 if score >= iou_threshold:
                     pairs.append((score, -track.sample_count, ti, bi))
         pairs.sort(key=lambda item: (-item[0], item[1], item[2], item[3]))
@@ -127,8 +146,13 @@ def group_detections_into_tracks(
                 continue
             used_tracks.add(ti)
             used_boxes.add(bi)
-            bbox, text = boxes[bi]
-            open_tracks[ti].absorb(bbox, frame_idx, text)
+            detection, text = boxes[bi]
+            open_tracks[ti].absorb(
+                detection.bbox,
+                frame_idx,
+                text,
+                detection.polygon,
+            )
 
         for ti, track in enumerate(open_tracks):
             if ti not in used_tracks:
@@ -141,16 +165,21 @@ def group_detections_into_tracks(
                 still_open.append(track)
         open_tracks = still_open
 
-        for bi, (bbox, text) in enumerate(boxes):
+        for bi, (detection, text) in enumerate(boxes):
             if bi not in used_boxes:
-                open_tracks.append(_OpenTrack(bbox, frame_idx, text))
+                open_tracks.append(_OpenTrack(
+                    detection.bbox,
+                    frame_idx,
+                    text,
+                    detection.polygon,
+                ))
 
     closed.extend(open_tracks)
     closed.sort(key=lambda track: (track.start_frame, tuple(track.bbox)))
     tracks = []
     for index, track in enumerate(closed, 1):
         text, _count = (track.texts.most_common(1) or [("", 0)])[0]
-        tracks.append({
+        track_data = {
             "id": index,
             "start_frame": int(track.start_frame),
             "end_frame": int(track.last_frame),
@@ -158,7 +187,19 @@ def group_detections_into_tracks(
             "sample_text": text,
             "sample_count": int(track.sample_count),
             "keep": False,
-        })
+        }
+        if track.polygon:
+            track_data["polygon"] = [
+                [int(x), int(y)] for x, y in track.polygon
+            ]
+            track_data["polygon_history"] = [
+                {
+                    "frame": int(frame),
+                    "points": [[int(x), int(y)] for x, y in polygon],
+                }
+                for frame, polygon in track.polygon_history
+            ]
+        tracks.append(track_data)
     return tracks
 
 
@@ -238,14 +279,19 @@ def scan_track_plan(
                     break
                 detections: list = []
                 try:
-                    with_text = getattr(detector, "detect_with_text", None)
-                    if callable(with_text):
-                        detections = list(with_text(frame, threshold))
+                    with_geometry = getattr(
+                        detector, "detect_with_geometry", None)
+                    if callable(with_geometry):
+                        detections = list(with_geometry(frame, threshold))
                     if not detections:
-                        detections = [
-                            tuple(box) for box in detector.detect(
-                                frame, threshold)
-                        ]
+                        with_text = getattr(detector, "detect_with_text", None)
+                        if callable(with_text):
+                            detections = list(with_text(frame, threshold))
+                        if not detections:
+                            detections = [
+                                tuple(box) for box in detector.detect(
+                                    frame, threshold)
+                            ]
                 except Exception:
                     logger.warning(
                         "Track-plan detection failed at frame %d",
@@ -317,12 +363,29 @@ def plan_to_mask_corrections(plan: dict, *, pad: int = 4) -> List[dict]:
     for track in plan.get("tracks", []):
         if not track.get("keep"):
             continue
-        x1, y1, x2, y2 = (int(v) for v in track["bbox"])
-        x1, y1 = max(0, x1 - pad), max(0, y1 - pad)
-        x2, y2 = x2 + pad, y2 + pad
+        polygon = track.get("polygon")
+        if isinstance(polygon, (list, tuple)) and len(polygon) >= 3:
+            points = []
+            for point in polygon:
+                if not isinstance(point, (list, tuple)) or len(point) < 2:
+                    points = []
+                    break
+                points.append((int(point[0]), int(point[1])))
+            if len(points) >= 3:
+                expanded = expand_polygon_local(tuple(points), int(pad))
+                coords = [value for point in expanded for value in point]
+            else:
+                coords = None
+        else:
+            coords = None
+        if coords is None:
+            x1, y1, x2, y2 = (int(v) for v in track["bbox"])
+            x1, y1 = max(0, x1 - pad), max(0, y1 - pad)
+            x2, y2 = x2 + pad, y2 + pad
+            coords = [x1, y1, x2, y1, x2, y2, x1, y2]
         corrections.append({
             "mode": "subtract",
-            "polygons": [[x1, y1, x2, y1, x2, y2, x1, y2]],
+            "polygons": [coords],
             "start_frame": int(track["start_frame"]),
             # correction_is_active treats end_frame as exclusive.
             "end_frame": int(track["end_frame"]) + 1,
@@ -363,4 +426,33 @@ def load_track_plan(path: str | Path) -> dict:
         track["start_frame"] = start
         track["end_frame"] = end
         track["keep"] = bool(track.get("keep"))
+        if "polygon" in track:
+            detection = DetectionGeometry.from_polygon(track["polygon"])
+            if detection is None:
+                raise ValueError(f"track {index} has an invalid polygon")
+            track["polygon"] = [
+                [int(x), int(y)] for x, y in detection.polygon or ()
+            ]
+        if "polygon_history" in track:
+            history = track["polygon_history"]
+            if not isinstance(history, list):
+                raise ValueError(f"track {index} has invalid polygon history")
+            normalized_history = []
+            for entry in history:
+                if not isinstance(entry, dict):
+                    raise ValueError(
+                        f"track {index} has invalid polygon history entry")
+                polygon_detection = DetectionGeometry.from_polygon(
+                    entry.get("points"))
+                if polygon_detection is None:
+                    raise ValueError(
+                        f"track {index} has invalid polygon history points")
+                normalized_history.append({
+                    "frame": int(entry.get("frame", start)),
+                    "points": [
+                        [int(x), int(y)]
+                        for x, y in polygon_detection.polygon or ()
+                    ],
+                })
+            track["polygon_history"] = normalized_history
     return raw

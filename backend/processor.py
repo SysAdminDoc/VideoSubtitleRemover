@@ -139,6 +139,11 @@ from backend.resume_checkpoint import (
     write_pause_checkpoint,
 )
 from backend.safe_image import safe_imread
+from backend.detection_geometry import (
+    DetectionGeometry,
+    as_detection_geometry,
+    geometry_mask,
+)
 from backend.region_keyframes import region_shapes_at as region_shapes_at
 from backend.work_directory import (
     StorageRequirement as StorageRequirement,
@@ -1024,6 +1029,23 @@ class SubtitleRemover(
         self.last_detection_stats["unique_regions_detected"] = len(
             self._unique_detected_regions)
 
+    @staticmethod
+    def _legacy_geometry(boxes) -> List[DetectionGeometry]:
+        output: List[DetectionGeometry] = []
+        for value in boxes or []:
+            detection = as_detection_geometry(value)
+            if detection is not None:
+                output.append(detection)
+        return output
+
+    def _detect_geometry(self, frame: np.ndarray, threshold: float):
+        """Use polygon-aware detection when the detector exposes it."""
+        method = getattr(self.detector, "detect_with_geometry", None)
+        if callable(method):
+            return list(method(frame, threshold))
+        return self._legacy_geometry(
+            self.detector.detect(frame, threshold))
+
     @contextmanager
     def _time_stage(self, stage: str):
         started = time.monotonic()
@@ -1147,9 +1169,13 @@ class SubtitleRemover(
 
     def _create_mask(self, frame_shape: Tuple[int, int], boxes: List[Tuple[int, int, int, int]],
                      padding: int = 5, frame: Optional[np.ndarray] = None,
-                     confidences: Optional[List[float]] = None) -> np.ndarray:
+                     confidences: Optional[List[float]] = None,
+                     detections: Optional[List[DetectionGeometry]] = None) -> np.ndarray:
         h, w = frame_shape[:2]
         mask = np.zeros((h, w), dtype=np.uint8)
+        geometry = list(detections or [])
+        mask_boxes = [detection.bbox for detection in geometry] or list(boxes)
+        has_polygons = any(detection.polygon for detection in geometry)
         base_dilate = self.config.mask_dilate_px
         auto_dilate = bool(
             getattr(self.config, "auto_dilate_enable", False)
@@ -1162,7 +1188,40 @@ class SubtitleRemover(
             and not auto_dilate
         )
 
-        if auto_dilate:
+        if has_polygons:
+            from backend.segmentation import (
+                estimate_auto_dilation_radius,
+                soft_dilate_mask,
+            )
+            for index, detection in enumerate(geometry):
+                if auto_dilate:
+                    radius = estimate_auto_dilation_radius(
+                        frame, detection.bbox)
+                    local = geometry_mask(
+                        frame_shape,
+                        detection,
+                        max(0, int(padding)),
+                    )
+                    mask = np.maximum(mask, soft_dilate_mask(local, radius))
+                    continue
+                effective = base_dilate
+                if use_conf_dilate:
+                    confidence = (
+                        confidences[index]
+                        if confidences is not None and index < len(confidences)
+                        else detection.confidence
+                    )
+                    scale = self.config.confidence_dilation_scale
+                    effective = int(
+                        base_dilate
+                        * (1.0 + (1.0 - confidence) * scale))
+                local = geometry_mask(
+                    frame_shape,
+                    detection,
+                    max(0, int(padding)) + max(0, int(effective)),
+                )
+                mask = cv2.bitwise_or(mask, local)
+        elif auto_dilate:
             from backend.segmentation import (
                 estimate_auto_dilation_radius,
                 soft_dilate_mask,
@@ -1211,10 +1270,11 @@ class SubtitleRemover(
         # with the SAM 2 segmentation prompted by that box. Tighter
         # mask = less inpaint area = cleaner output. Skips when the
         # caller didn't pass `frame` (SAM 2 needs pixels).
-        if frame is not None and boxes and self.config.sam2_refine:
+        if frame is not None and mask_boxes and self.config.sam2_refine:
             try:
                 from backend.segmentation import refine_mask_with_sam2
-                mask = refine_mask_with_sam2(frame, boxes, mask, self.config.device)
+                mask = refine_mask_with_sam2(
+                    frame, mask_boxes, mask, self.config.device)
             except Exception as exc:
                 logger.debug(f"SAM 2 refinement skipped: {exc}")
 
@@ -1382,35 +1442,88 @@ class SubtitleRemover(
             fixed_shapes = self._fixed_region_shapes(0.0) or []
             fixed = self._fixed_region_boxes(0.0)
             confidences = None
+            detection_geometry: List[DetectionGeometry] = []
             self.last_detection_stats["frames_total"] = 1
             with self._time_stage("ocr"):
                 if fixed:
                     boxes = fixed
+                    detection_geometry = self._legacy_geometry(boxes)
                     self._record_detection_skip("manual_region")
                 elif fixed_shapes and self.config.sttn_skip_detection:
                     boxes = []
                     self._record_detection_skip("manual_region")
                 elif self.config.language_mask_filter:
                     from backend.detection import text_matches_detection_language
-                    results = self.detector.detect_with_text(
-                        image, self.config.detection_threshold)
-                    matched = [
-                        result for result in results
-                        if text_matches_detection_language(
-                            result[5], self.config.detection_lang)
-                    ]
-                    boxes = [result[:4] for result in matched]
-                    if self.config.confidence_weighted_dilation:
-                        confidences = [result[4] for result in matched]
+                    if callable(getattr(
+                            self.detector, "detect_with_geometry", None)):
+                        detection_geometry = self._detect_geometry(
+                            image, self.config.detection_threshold)
+                        matched_geometry = [
+                            detection for detection in detection_geometry
+                            if text_matches_detection_language(
+                                detection.text,
+                                self.config.detection_lang,
+                            )
+                        ]
+                        if detection_geometry and not any(
+                                detection.text for detection in detection_geometry):
+                            matched_geometry = []
+                        detection_geometry = matched_geometry
+                        boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                        if self.config.confidence_weighted_dilation:
+                            confidences = [
+                                detection.confidence
+                                for detection in detection_geometry
+                            ]
+                    else:
+                        results = self.detector.detect_with_text(
+                            image, self.config.detection_threshold)
+                        matched = [
+                            result for result in results
+                            if text_matches_detection_language(
+                                result[5], self.config.detection_lang)
+                        ]
+                        boxes = [result[:4] for result in matched]
+                        if self.config.confidence_weighted_dilation:
+                            confidences = [result[4] for result in matched]
                     self._record_ocr_detection(boxes)
                 elif self.config.confidence_weighted_dilation:
-                    results = self.detector.detect_with_confidence(
-                        image, self.config.detection_threshold)
-                    boxes = [(x1, y1, x2, y2) for x1, y1, x2, y2, _ in results]
-                    confidences = [c for _, _, _, _, c in results]
+                    if callable(getattr(
+                            self.detector, "detect_with_geometry", None)):
+                        detection_geometry = self._detect_geometry(
+                            image, self.config.detection_threshold)
+                        boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                        confidences = [
+                            detection.confidence
+                            for detection in detection_geometry
+                        ]
+                    else:
+                        results = self.detector.detect_with_confidence(
+                            image, self.config.detection_threshold)
+                        boxes = [
+                            (x1, y1, x2, y2)
+                            for x1, y1, x2, y2, _ in results
+                        ]
+                        confidences = [c for _, _, _, _, c in results]
                     self._record_ocr_detection(boxes)
                 else:
-                    boxes = self.detector.detect(image, self.config.detection_threshold)
+                    if callable(getattr(
+                            self.detector, "detect_with_geometry", None)):
+                        detection_geometry = self._detect_geometry(
+                            image, self.config.detection_threshold)
+                        boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                    else:
+                        boxes = self.detector.detect(
+                            image, self.config.detection_threshold)
                     self._record_ocr_detection(boxes)
 
             if not boxes and not fixed_shapes:
@@ -1428,7 +1541,8 @@ class SubtitleRemover(
             self._report_progress(0.5, f"Removing {region_count} text regions...")
             with self._time_stage("mask"):
                 mask = self._create_mask(image.shape, boxes, frame=image,
-                                         confidences=confidences)
+                                         confidences=confidences,
+                                         detections=detection_geometry)
                 mask = self._apply_polygon_region_shapes(mask, fixed_shapes)
                 mask = self._apply_manual_mask_corrections(mask, 0.0, 0)
                 [mask] = self._refine_masks_with_matanyone([image], [mask])
@@ -1855,21 +1969,43 @@ class SubtitleRemover(
                 else:
                     det_frame = frame
                 det_confs = None
+                detection_geometry: List[DetectionGeometry] = []
+                geometry_detector = callable(getattr(
+                    self.detector, "detect_with_geometry", None))
                 collect_confidence = bool(
                     self.config.confidence_weighted_dilation
                     or self.config.quality_report
                 )
                 if self.config.language_mask_filter:
                     from backend.detection import text_matches_detection_language
-                    text_results = self.detector.detect_with_text(
-                        det_frame, self.config.detection_threshold)
-                    matched = [
-                        result for result in text_results
-                        if text_matches_detection_language(
-                            result[5], self.config.detection_lang)
-                    ]
-                    detected_boxes = [result[:4] for result in matched]
-                    det_confs = [result[4] for result in matched]
+                    if geometry_detector:
+                        detection_geometry = self._detect_geometry(
+                            det_frame, self.config.detection_threshold)
+                        detection_geometry = [
+                            detection for detection in detection_geometry
+                            if text_matches_detection_language(
+                                detection.text,
+                                self.config.detection_lang,
+                            )
+                        ]
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                        det_confs = [
+                            detection.confidence
+                            for detection in detection_geometry
+                        ]
+                    else:
+                        text_results = self.detector.detect_with_text(
+                            det_frame, self.config.detection_threshold)
+                        matched = [
+                            result for result in text_results
+                            if text_matches_detection_language(
+                                result[5], self.config.detection_lang)
+                        ]
+                        detected_boxes = [result[:4] for result in matched]
+                        det_confs = [result[4] for result in matched]
                     if self.config.quality_report and det_confs:
                         review_floor = min(
                             0.9,
@@ -1897,13 +2033,25 @@ class SubtitleRemover(
                     if not self.config.confidence_weighted_dilation:
                         det_confs = None
                 elif collect_confidence:
-                    det_results = self.detector.detect_with_confidence(
-                        det_frame, self.config.detection_threshold)
-                    detected_boxes = [
-                        (x1, y1, x2, y2)
-                        for x1, y1, x2, y2, _ in det_results
-                    ]
-                    det_confs = [c for _, _, _, _, c in det_results]
+                    if geometry_detector:
+                        detection_geometry = self._detect_geometry(
+                            det_frame, self.config.detection_threshold)
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                        det_confs = [
+                            detection.confidence
+                            for detection in detection_geometry
+                        ]
+                    else:
+                        det_results = self.detector.detect_with_confidence(
+                            det_frame, self.config.detection_threshold)
+                        detected_boxes = [
+                            (x1, y1, x2, y2)
+                            for x1, y1, x2, y2, _ in det_results
+                        ]
+                        det_confs = [c for _, _, _, _, c in det_results]
                     if self.config.quality_report and det_confs:
                         review_floor = min(
                             0.9,
@@ -1931,8 +2079,16 @@ class SubtitleRemover(
                     if not self.config.confidence_weighted_dilation:
                         det_confs = None
                 else:
-                    detected_boxes = self.detector.detect(
-                        det_frame, self.config.detection_threshold)
+                    if geometry_detector:
+                        detection_geometry = self._detect_geometry(
+                            det_frame, self.config.detection_threshold)
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                    else:
+                        detected_boxes = self.detector.detect(
+                            det_frame, self.config.detection_threshold)
                 self._record_ocr_detection(detected_boxes)
                 if self.config.karaoke_grouping and detected_boxes:
                     detected_boxes = _group_horizontal_line(
@@ -1940,19 +2096,38 @@ class SubtitleRemover(
                         x_gap_px=self.config.karaoke_x_gap_px,
                         y_overlap_ratio=self.config.karaoke_y_overlap,
                     )
+                    if geometry_detector:
+                        detection_geometry = self._legacy_geometry(
+                            detected_boxes)
                     det_confs = None
                 if state.tracker is not None:
-                    smoothed = state.tracker.update(list(detected_boxes))
+                    update_geometry = getattr(
+                        state.tracker, "update_with_geometry", None)
+                    if geometry_detector and callable(update_geometry):
+                        smoothed_geometry = list(
+                            update_geometry(list(detection_geometry)))
+                    else:
+                        smoothed_geometry = self._legacy_geometry(
+                            state.tracker.update(list(detected_boxes)))
+                    smoothed = [
+                        detection.bbox
+                        for detection in smoothed_geometry
+                    ]
                     det_confs = None
                 else:
                     smoothed = list(detected_boxes)
+                    smoothed_geometry = (
+                        list(detection_geometry)
+                        if geometry_detector else self._legacy_geometry(smoothed)
+                    )
                 if (state.tracker is not None
                         and (not self.config.remove_chyrons
                              or not self.config.remove_subtitles)):
                     cats = state.tracker.categorize(
                         self.config.chyron_min_hits)
-                    smoothed = [
-                        box for box, category in zip(smoothed, cats)
+                    smoothed_geometry = [
+                        detection for detection, category in zip(
+                            smoothed_geometry, cats)
                         if (
                             category == "chyron"
                             and self.config.remove_chyrons
@@ -1961,12 +2136,20 @@ class SubtitleRemover(
                             and self.config.remove_subtitles
                         )
                     ]
+                    smoothed = [
+                        detection.bbox for detection in smoothed_geometry
+                    ]
                     det_confs = None
                 if fixed_boxes:
                     boxes = list(fixed_boxes) + smoothed
+                    detection_geometry = (
+                        self._legacy_geometry(fixed_boxes)
+                        + smoothed_geometry
+                    )
                     det_confs = None
                 else:
                     boxes = smoothed
+                    detection_geometry = smoothed_geometry
                 if (
                     self.config.export_srt
                     or (
@@ -1991,6 +2174,7 @@ class SubtitleRemover(
                             int(width * 0.95),
                             height - 4,
                         )]
+                        detection_geometry = self._legacy_geometry(boxes)
                         break
 
             with self._time_stage("mask"):
@@ -1999,6 +2183,7 @@ class SubtitleRemover(
                     boxes,
                     frame=frame,
                     confidences=det_confs,
+                    detections=detection_geometry,
                 )
                 mask = self._apply_polygon_region_shapes(mask, fixed_shapes)
                 if self.config.colour_tune_enable and boxes:

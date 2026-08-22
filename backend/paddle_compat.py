@@ -18,6 +18,8 @@ from typing import List, Tuple
 
 import numpy as np
 
+from backend.detection_geometry import DetectionGeometry
+
 logger = logging.getLogger(__name__)
 
 Box = Tuple[int, int, int, int]
@@ -42,6 +44,7 @@ from backend.ocr_variants import (  # noqa: E402
 __all__ = [
     "build_paddleocr",
     "extract_paddle_boxes",
+    "extract_paddle_geometry",
     "extract_paddle_text_boxes",
     "normalize_paddleocr_variant",
     "paddleocr_model_names",
@@ -116,69 +119,30 @@ def build_paddleocr(lang: str, device: str, *, variant: str = "mobile", **extra)
 
 def extract_paddle_boxes(model, frame: np.ndarray,
                          threshold: float) -> List[Box]:
-    """Run det+rec on ``frame`` and return axis-aligned boxes for lines
-    scoring at or above ``threshold``, on either major version."""
+    """Run det+rec and return legacy boxes for compatible callers."""
+    return [
+        detection.bbox
+        for detection in extract_paddle_geometry(model, frame, threshold)
+    ]
+
+
+def extract_paddle_geometry(
+    model, frame: np.ndarray, threshold: float
+) -> List[DetectionGeometry]:
+    """Run det+rec while retaining PaddleOCR polygon vertices."""
     if hasattr(model, "predict"):
-        return _extract_v3(model, frame, threshold)
-    return _extract_v2(model, frame, threshold)
+        return _extract_v3_geometry(model, frame, threshold)
+    return _extract_v2_geometry(model, frame, threshold)
 
 
 def extract_paddle_text_boxes(
     model, frame: np.ndarray, threshold: float
 ) -> List[TextBox]:
     """Run PaddleOCR and retain aligned confidence/text for each box."""
-    if hasattr(model, "predict"):
-        results = model.predict(frame)
-        output: List[TextBox] = []
-        for result in results or []:
-            data = _result_payload(result)
-            if not isinstance(data, dict):
-                continue
-            data = data.get("res", data)
-            boxes = data.get("rec_polys")
-            if boxes is None:
-                boxes = data.get("dt_polys")
-            rectangular = False
-            if boxes is None:
-                boxes = data.get("rec_boxes")
-                rectangular = True
-            scores = data.get("rec_scores")
-            if scores is None:
-                scores = []
-            texts = data.get("rec_texts")
-            if texts is None:
-                texts = []
-            if boxes is None:
-                boxes = []
-            for index, raw_box in enumerate(boxes):
-                score = _sequence_float(scores, index, 1.0)
-                if score < threshold:
-                    continue
-                box = (
-                    _rect_to_box(raw_box)
-                    if rectangular else _poly_to_box(raw_box)
-                )
-                if box is None:
-                    continue
-                text = str(texts[index]) if index < len(texts) else ""
-                output.append(box + (score, text))
-        return output
-
-    try:
-        results = model.ocr(frame, cls=False)
-    except TypeError:
-        results = model.ocr(frame)
-    output = []
-    for line in (results[0] if results and results[0] else []):
-        try:
-            text = str(line[1][0])
-            score = float(line[1][1])
-        except (IndexError, TypeError, ValueError):
-            continue
-        box = _poly_to_box(line[0])
-        if box is not None and score >= threshold:
-            output.append(box + (score, text))
-    return output
+    return [
+        detection.bbox + (detection.confidence, detection.text)
+        for detection in extract_paddle_geometry(model, frame, threshold)
+    ]
 
 
 def _sequence_float(values, index: int, default: float) -> float:
@@ -213,6 +177,88 @@ def _rect_to_box(rect) -> Box | None:
     if x2 <= x1 or y2 <= y1:
         return None
     return int(x1), int(y1), int(x2), int(y2)
+
+
+def _extract_v3_geometry(
+    model, frame: np.ndarray, threshold: float
+) -> List[DetectionGeometry]:
+    output: List[DetectionGeometry] = []
+    results = model.predict(frame)
+    for result in results or []:
+        data = _result_payload(result)
+        if not isinstance(data, dict):
+            continue
+        data = data.get("res", data)
+        boxes = data.get("rec_polys")
+        if boxes is None:
+            boxes = data.get("dt_polys")
+        rectangular = False
+        if boxes is None:
+            boxes = data.get("rec_boxes")
+            rectangular = True
+        scores = data.get("rec_scores")
+        if scores is None:
+            scores = []
+        texts = data.get("rec_texts")
+        if texts is None:
+            texts = []
+        values = boxes if boxes is not None else []
+        for index, raw_box in enumerate(values):
+            score = _sequence_float(scores, index, 1.0)
+            if score < threshold:
+                continue
+            text = str(texts[index]) if index < len(texts) else ""
+            if rectangular:
+                detection = DetectionGeometry.from_box(
+                    raw_box,
+                    None,
+                    confidence=score,
+                    text=text,
+                )
+            else:
+                detection = DetectionGeometry.from_polygon(
+                    raw_box,
+                    None,
+                    confidence=score,
+                    text=text,
+                )
+                if detection is None:
+                    detection = DetectionGeometry.from_box(
+                        raw_box,
+                        None,
+                        confidence=score,
+                        text=text,
+                    )
+            if detection is not None:
+                output.append(detection)
+    return output
+
+
+def _extract_v2_geometry(
+    model, frame: np.ndarray, threshold: float
+) -> List[DetectionGeometry]:
+    try:
+        results = model.ocr(frame, cls=False)
+    except TypeError:
+        results = model.ocr(frame)
+    output: List[DetectionGeometry] = []
+    for line in (results[0] if results and results[0] else []):
+        try:
+            text = str(line[1][0])
+            score = float(line[1][1])
+        except (IndexError, TypeError, ValueError):
+            continue
+        if score < threshold:
+            continue
+        detection = DetectionGeometry.from_polygon(
+            line[0],
+            frame.shape,
+            confidence=score,
+            text=text,
+        )
+        if detection is not None:
+            output.append(detection)
+    return output
 
 
 def _extract_v3(model, frame: np.ndarray, threshold: float) -> List[Box]:
