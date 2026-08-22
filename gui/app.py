@@ -191,7 +191,7 @@ class VideoSubtitleRemoverApp(
                             icon_img.thumbnail((128, 128), Image.LANCZOS)
                         self._app_icon_photo = ImageTk.PhotoImage(icon_img)
                         header_icon = icon_img.copy()
-                        header_icon.thumbnail((24, 24), Image.LANCZOS)
+                        header_icon.thumbnail((32, 32), Image.LANCZOS)
                         self._header_icon_photo = ImageTk.PhotoImage(header_icon)
                         self.root.iconphoto(True, self._app_icon_photo)
                         break
@@ -1599,9 +1599,26 @@ class VideoSubtitleRemoverApp(
 
     def _on_queue_configure(self, event):
         self.queue_canvas.configure(scrollregion=self.queue_canvas.bbox("all"))
+        self._sync_queue_scrollbar()
 
     def _on_canvas_configure(self, event):
         self.queue_canvas.itemconfig(self.queue_window, width=event.width)
+        self._sync_queue_scrollbar()
+
+    def _sync_queue_scrollbar(self):
+        """Keep the queue scrollbar hidden until rows exceed the viewport."""
+        scrollbar = getattr(self, "_queue_scrollbar", None)
+        if scrollbar is None:
+            return
+        bbox = self.queue_canvas.bbox("all") or (0, 0, 0, 0)
+        needs_scroll = (
+            bbox[3] - bbox[1] > self.queue_canvas.winfo_height() + 1)
+        if needs_scroll and not scrollbar.winfo_manager():
+            scrollbar.pack(
+                side="right", fill="y", before=self.queue_canvas)
+        elif not needs_scroll and scrollbar.winfo_manager():
+            scrollbar.pack_forget()
+            self.queue_canvas.yview_moveto(0.0)
 
 
 

@@ -138,26 +138,57 @@ def scrollable_dialog_body(dialog, *, bg: str = "") -> tk.Frame:
 
     body = tk.Frame(canvas, bg=background)
     window = canvas.create_window((0, 0), window=body, anchor="nw")
+    dialog._vsr_dialog_fitted = False
+    dialog._vsr_scroll_vbar_visible = False
+    dialog._vsr_scroll_hbar_visible = False
 
     def _sync(_event=None):
+        canvas_width = max(1, canvas.winfo_width())
+        canvas_height = max(1, canvas.winfo_height())
+        body_width = max(1, body.winfo_reqwidth())
+        body_height = max(1, body.winfo_reqheight())
+        effective_width = canvas_width + (
+            vbar.winfo_reqwidth()
+            if dialog._vsr_scroll_vbar_visible else 0
+        )
+        effective_height = canvas_height + (
+            hbar.winfo_reqheight()
+            if dialog._vsr_scroll_hbar_visible else 0
+        )
+        needs_v = body_height > effective_height + 1
+        needs_h = body_width > effective_width + 1
+        dialog._vsr_scroll_measurement = {
+            "canvas": (canvas_width, canvas_height),
+            "effective": (effective_width, effective_height),
+            "body": (body_width, body_height),
+            "vertical": needs_v,
+            "horizontal": needs_h,
+            "fitted": bool(getattr(dialog, "_vsr_dialog_fitted", False)),
+        }
+        canvas.itemconfigure(
+            window,
+            width=body_width if needs_h else effective_width,
+        )
         bbox = canvas.bbox("all") or (0, 0, 0, 0)
         canvas.configure(scrollregion=bbox)
-        needs_v = bbox[3] - bbox[1] > canvas.winfo_height() + 1
-        needs_h = bbox[2] - bbox[0] > canvas.winfo_width() + 1
-        if needs_v and not vbar.winfo_ismapped():
-            vbar.grid(row=0, column=1, sticky="ns")
-        elif not needs_v and vbar.winfo_ismapped():
+        if not getattr(dialog, "_vsr_dialog_fitted", False):
             vbar.grid_remove()
-        if needs_h and not hbar.winfo_ismapped():
-            hbar.grid(row=1, column=0, sticky="ew")
-        elif not needs_h and hbar.winfo_ismapped():
             hbar.grid_remove()
-        # Stretch the body to the canvas when there is room to spare so the
-        # content is not left-hugging in a wide dialog.
-        if canvas.winfo_width() > body.winfo_reqwidth():
-            canvas.itemconfigure(window, width=canvas.winfo_width())
-        else:
-            canvas.itemconfigure(window, width=body.winfo_reqwidth())
+            dialog._vsr_scroll_vbar_visible = False
+            dialog._vsr_scroll_hbar_visible = False
+            return
+        if needs_v and not dialog._vsr_scroll_vbar_visible:
+            vbar.grid(row=0, column=1, sticky="ns")
+            dialog._vsr_scroll_vbar_visible = True
+        elif not needs_v and dialog._vsr_scroll_vbar_visible:
+            vbar.grid_remove()
+            dialog._vsr_scroll_vbar_visible = False
+        if needs_h and not dialog._vsr_scroll_hbar_visible:
+            hbar.grid(row=1, column=0, sticky="ew")
+            dialog._vsr_scroll_hbar_visible = True
+        elif not needs_h and dialog._vsr_scroll_hbar_visible:
+            hbar.grid_remove()
+            dialog._vsr_scroll_hbar_visible = False
 
     body.bind("<Configure>", _sync)
     canvas.bind("<Configure>", _sync)
@@ -177,6 +208,8 @@ def scrollable_dialog_body(dialog, *, bg: str = "") -> tk.Frame:
 
     dialog._vsr_scroll_canvas = canvas
     dialog._vsr_scroll_body = body
+    dialog._vsr_scroll_vbar = vbar
+    dialog._vsr_scroll_hbar = hbar
     dialog._vsr_scroll_sync = _sync
     return body
 
@@ -201,8 +234,27 @@ def fit_dialog_to_work_area(
     body = getattr(dialog, "_vsr_scroll_body", None)
     body_w = int(body.winfo_reqwidth()) if body is not None else 0
     body_h = int(body.winfo_reqheight()) if body is not None else 0
-    want_w = max(int(dialog.winfo_reqwidth()), body_w, min_width)
-    want_h = max(int(dialog.winfo_reqheight()), body_h, min_height)
+    canvas = getattr(dialog, "_vsr_scroll_canvas", None)
+    canvas_border = (
+        int(float(canvas.cget("highlightthickness"))) * 2
+        if canvas is not None else 0
+    )
+    vertical_bar = getattr(dialog, "_vsr_scroll_vbar", None)
+    vertical_bar_width = (
+        int(vertical_bar.winfo_reqwidth())
+        if vertical_bar is not None and body_h + canvas_border > area_h
+        else 0
+    )
+    want_w = max(
+        int(dialog.winfo_reqwidth()),
+        body_w + canvas_border + vertical_bar_width,
+        min_width,
+    )
+    want_h = max(
+        int(dialog.winfo_reqheight()),
+        body_h + canvas_border,
+        min_height,
+    )
     width = max(min(want_w, area_w), min(min_width, area_w))
     height = max(min(want_h, area_h), min(min_height, area_h))
     dialog.resizable(True, True)
@@ -236,6 +288,9 @@ def fit_dialog_to_work_area(
         dialog.geometry(f"{width}x{height}")
     sync = getattr(dialog, "_vsr_scroll_sync", None)
     if callable(sync):
+        dialog.update_idletasks()
+        dialog._vsr_dialog_fitted = True
+        sync()
         dialog.update_idletasks()
         sync()
     return (width, height)

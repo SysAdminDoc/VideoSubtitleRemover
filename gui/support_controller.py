@@ -722,8 +722,8 @@ class SupportControllerMixin:
         fact(system, tr("Model cache"), cache_label)
         fact(
             system,
-            tr("Shortcuts"),
-            tr("Ctrl+O open, Ctrl+L log, Ctrl+F filter, F1 help"),
+            tr("Before cleanup"),
+            tr("Review a sample frame"),
         )
 
         summary = (self.backend_status or {}).get("summary", {})
@@ -733,17 +733,12 @@ class SupportControllerMixin:
         status_row = tk.Frame(runtime, bg=Theme.BG_SECONDARY)
         status_row.pack(fill="x", pady=(Theme.S_XS, Theme.S_MD))
         tk.Label(
-            status_row, text="*", font=f(Theme.F_BODY, "bold"),
-            bg=Theme.BG_SECONDARY,
-            fg=Theme.SUCCESS if ready else Theme.WARNING,
-        ).pack(side="left")
-        tk.Label(
             status_row,
             text=tr("Ready") if ready else tr("Needs attention"),
             font=f(Theme.F_BODY, "bold"),
             bg=Theme.BG_SECONDARY,
             fg=Theme.SUCCESS if ready else Theme.WARNING,
-        ).pack(side="left", padx=(Theme.S_SM, 0))
+        ).pack(side="left")
         fact(runtime, tr("Detection"), summary.get("detection") or tr("Unknown"))
         fact(runtime, tr("Inpainting"), summary.get("inpainting") or tr("Unknown"))
         fact(runtime, tr("Models"), summary.get("model_files") or tr("Unknown"))

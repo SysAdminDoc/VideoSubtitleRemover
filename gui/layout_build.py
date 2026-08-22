@@ -80,8 +80,8 @@ class LayoutBuildMixin:
             content_shell, orient="vertical",
             command=self._content_canvas.yview,
             style="Dark.Vertical.TScrollbar")
+        self._content_scrollbar = content_scroll
         self._content_canvas.configure(yscrollcommand=content_scroll.set)
-        content_scroll.pack(side="right", fill="y")
         self._content_canvas.pack(side="left", fill="both", expand=True)
 
         content = tk.Frame(self._content_canvas, bg=Theme.BG_DARK)
@@ -242,7 +242,7 @@ class LayoutBuildMixin:
                 image=self._header_icon_photo,
                 bg=Theme.BG_DARK,
             )
-            self._header_icon_label.pack(side="left", padx=(0, Theme.S_SM))
+            self._header_icon_label.pack(side="left", padx=(0, Theme.S_MD))
 
         full_title = tr("Video Subtitle Remover Pro")
         self._header_title_label = tk.Label(
@@ -1957,6 +1957,38 @@ class LayoutBuildMixin:
             tr("Double-click for full size, draw a region, or right-click for preview tools."),
         )
 
+        self._preview_empty_title_var = tk.StringVar()
+        self._preview_empty_body_var = tk.StringVar()
+        self._preview_empty_state = tk.Frame(
+            media_surface,
+            bg=Theme.BG_TERTIARY,
+        )
+        tk.Label(
+            self._preview_empty_state,
+            textvariable=self._preview_empty_title_var,
+            font=f(Theme.F_HEADING, "bold"),
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack()
+        tk.Label(
+            self._preview_empty_state,
+            textvariable=self._preview_empty_body_var,
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_MUTED,
+            justify="center",
+            wraplength=460,
+        ).pack(pady=(Theme.S_SM, Theme.S_LG))
+        self._preview_empty_action = ModernButton(
+            self._preview_empty_state,
+            text=tr("Choose media"),
+            width=128,
+            command=self.drop_area._open_file_dialog,
+            style="accent",
+            size="md",
+        )
+        self._preview_empty_action.pack()
+
         self.preview_timeline = tk.Frame(section, bg=Theme.BG_SECONDARY)
         self.preview_timeline_label = tk.Label(
             self.preview_timeline,
@@ -2095,8 +2127,8 @@ class LayoutBuildMixin:
             fg=Theme.TEXT_PRIMARY,
         ).pack(side="right")
         self._set_preview_placeholder(
-            "Preview",
-            "Select a queue item to inspect its subtitle region before cleanup.",
+            "Preview a sample frame",
+            "Add media, then select a queue item to inspect its subtitle region.",
         )
 
     def _build_queue_section(self, parent):
@@ -2253,11 +2285,11 @@ class LayoutBuildMixin:
         scrollbar = ttk.Scrollbar(queue_container, orient="vertical",
                                  command=self.queue_canvas.yview,
                                  style="Dark.Vertical.TScrollbar")
+        self._queue_scrollbar = scrollbar
 
         self.queue_frame = tk.Frame(self.queue_canvas, bg=Theme.BG_SECONDARY)
 
         self.queue_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
         self.queue_canvas.pack(side="left", fill="both", expand=True)
 
         self.queue_window = self.queue_canvas.create_window((0, 0), window=self.queue_frame,
@@ -2371,10 +2403,11 @@ class LayoutBuildMixin:
         self.empty_container = tk.Frame(self.queue_frame, bg=Theme.BG_SECONDARY)
         self.empty_container.pack(fill="x")
         tk.Label(
-            self.empty_container, text=tr("No media queued"),
+            self.empty_container,
+            text=tr("No media queued. Add media to build the batch."),
             font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_MUTED,
-        ).pack(anchor="w", padx=Theme.S_MD, pady=Theme.S_MD)
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(anchor="w", padx=Theme.S_MD, pady=Theme.S_XS)
 
     def _build_footer(self, parent):
         """Footer status bar with a colored dot + message and a right-side hint."""

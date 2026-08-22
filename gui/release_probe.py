@@ -87,7 +87,31 @@ def _probe_dialog_fit(app, work_area, tk) -> list[str]:
                 failures.append(f"{name} scroll body has no content")
                 return
             bbox = canvas.bbox("all") or (0, 0, 0, 0)
-            if bbox[3] - bbox[1] > canvas.winfo_height() + 1:
+            vbar = getattr(dialog, "_vsr_scroll_vbar", None)
+            hbar = getattr(dialog, "_vsr_scroll_hbar", None)
+            effective_width = canvas.winfo_width() + (
+                vbar.winfo_reqwidth()
+                if vbar is not None and dialog._vsr_scroll_vbar_visible
+                else 0
+            )
+            effective_height = canvas.winfo_height() + (
+                hbar.winfo_reqheight()
+                if hbar is not None and dialog._vsr_scroll_hbar_visible
+                else 0
+            )
+            needs_vertical = (
+                bbox[3] - bbox[1] > effective_height + 1)
+            needs_horizontal = (
+                bbox[2] - bbox[0] > effective_width + 1)
+            if vbar is None or bool(
+                dialog._vsr_scroll_vbar_visible
+            ) != needs_vertical:
+                failures.append(f"{name} vertical scrollbar state is stale")
+            if hbar is None or bool(
+                dialog._vsr_scroll_hbar_visible
+            ) != needs_horizontal:
+                failures.append(f"{name} horizontal scrollbar state is stale")
+            if needs_vertical:
                 # Content is taller than the viewport, so the scrollbar must be
                 # mapped and the view must actually be able to move.
                 canvas.yview_moveto(1.0)

@@ -145,6 +145,7 @@ class PreviewControllerMixin:
         """Animate the preview area with a shimmer placeholder and moving dots
         to signal a background task in progress."""
         self._stop_throbber()
+        self._set_preview_empty_state_visible(False)
         self._throbber_phase = 0
         self._throbber_tick(animate=not prefers_reduced_motion())
 
@@ -156,6 +157,24 @@ class PreviewControllerMixin:
             except Exception:
                 pass
             self._throbber_id = None
+
+    def _set_preview_empty_state_visible(
+        self,
+        visible: bool,
+        title: str = "",
+        body: str = "",
+    ) -> None:
+        """Show or hide the centered preview guidance surface."""
+        empty_state = getattr(self, "_preview_empty_state", None)
+        if empty_state is None:
+            return
+        if visible:
+            self._preview_empty_title_var.set(tr(title))
+            self._preview_empty_body_var.set(tr(body))
+            empty_state.place(relx=0.5, rely=0.5, anchor="center")
+            empty_state.lift()
+        else:
+            empty_state.place_forget()
 
     def _throbber_tick(self, *, animate: bool = True):
         if not PIL_AVAILABLE:
@@ -206,6 +225,7 @@ class PreviewControllerMixin:
         Called on the Tk main thread via `root.after` from the worker thread."""
         try:
             self._stop_throbber()
+            self._set_preview_empty_state_visible(False)
             # Throttle: coalesce to at most ~15 FPS of UI updates
             now = time.monotonic()
             last = getattr(self, "_live_preview_last_ts", 0.0)
@@ -226,12 +246,11 @@ class PreviewControllerMixin:
             pass
 
     def _set_preview_placeholder(self, title: str, body: str):
-        """Show the empty-state preview guidance with a subtle illustration."""
+        """Show the empty-state preview guidance."""
         self._stop_throbber()
         self.preview_title_label.config(text=tr(title))
         self.preview_meta_label.config(text=tr(body))
-        # Keep the empty media stage calm; the header already explains the
-        # next action, so decorative illustrations only add visual noise.
+        self._set_preview_empty_state_visible(True, title, body)
         if PIL_AVAILABLE:
             try:
                 w, h = 960, 540
@@ -272,7 +291,8 @@ class PreviewControllerMixin:
         self._preview_photo = None
         self.preview_title_label.config(text=tr(title))
         self.preview_meta_label.config(text=tr(body))
-        self._preview_label.config(text=tr(label), image="")
+        self._preview_label.config(text="", image="")
+        self._set_preview_empty_state_visible(True, label, body)
 
         tone_map = {
             "error": (tr("Needs attention"), Theme.ERROR),
@@ -1086,6 +1106,7 @@ class PreviewControllerMixin:
             return
         try:
             self._stop_throbber()
+            self._set_preview_empty_state_visible(False)
             max_w, max_h = self._preview_display_bounds()
             pil_img.thumbnail((max_w, max_h), Image.LANCZOS)
             self._preview_photo = ImageTk.PhotoImage(pil_img)
@@ -1465,6 +1486,7 @@ class PreviewControllerMixin:
         # Any switch cancels a running throbber so it can't overwrite later UI
         if not show_mask:
             self._stop_throbber()
+        self._set_preview_empty_state_visible(False)
         self._set_selected_queue_item(item.id)
         if not PIL_AVAILABLE:
             self._set_preview_unavailable(
@@ -1853,6 +1875,7 @@ class PreviewControllerMixin:
         ):
             return
         self._stop_throbber()
+        self._set_preview_empty_state_visible(False)
         self._preview_photo = ImageTk.PhotoImage(img)
         self.preview_title_label.config(
             text=tr("Composed mask for {name}").format(

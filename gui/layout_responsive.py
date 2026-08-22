@@ -25,6 +25,7 @@ class ResponsiveLayoutMixin:
         if hasattr(self, "_content_canvas"):
             self._content_canvas.configure(
                 scrollregion=self._content_canvas.bbox("all"))
+            self._sync_content_scrollbar()
 
     def _on_content_canvas_configure(self, event):
         """Lock the scrollable content frame to the canvas width."""
@@ -32,6 +33,22 @@ class ResponsiveLayoutMixin:
             self._content_canvas.itemconfig(self._content_window, width=event.width)
             self._content_canvas.configure(
                 scrollregion=self._content_canvas.bbox("all"))
+            self._sync_content_scrollbar()
+
+    def _sync_content_scrollbar(self):
+        """Show workbench scrolling only when the content is taller."""
+        canvas = getattr(self, "_content_canvas", None)
+        scrollbar = getattr(self, "_content_scrollbar", None)
+        if canvas is None or scrollbar is None:
+            return
+        bbox = canvas.bbox("all") or (0, 0, 0, 0)
+        needs_scroll = bbox[3] - bbox[1] > canvas.winfo_height() + 1
+        if needs_scroll and not scrollbar.winfo_manager():
+            scrollbar.pack(
+                side="right", fill="y", before=canvas)
+        elif not needs_scroll and scrollbar.winfo_manager():
+            scrollbar.pack_forget()
+            canvas.yview_moveto(0.0)
 
     def _on_root_configure(self, event):
         """Keep layout responsive as the window width changes."""

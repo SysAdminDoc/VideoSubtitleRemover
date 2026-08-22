@@ -15,6 +15,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   correct chevron and accessibility state, and keeps hidden controls out of the
   keyboard and accessibility control views. Interface and app behavior options
   now have their own Advanced card instead of extending Encoding quality.
+- The empty preview now explains the next step and offers a direct media action.
+  The header uses a clearer brand mark, queue and workbench scrollbars appear
+  only when content overflows, and fitted dialogs no longer trigger horizontal
+  and vertical scrollbars from their own scrollbar chrome. Help replaces its
+  clipped shortcut row with concise sample-review guidance.
 
 ## [3.37.0] - 2026-08-22
 
