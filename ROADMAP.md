@@ -17,20 +17,5 @@ Implementer index -- drain in this order. Blocked work is in Roadmap_Blocked.md.
 
 ## Research-Driven Additions
 
-- [ ] P2 — RM-306 Publish the requested beginner workflow
-  - Why: Discussion #8 asks for a beginner video covering import, translation,
-    inpainting, and output. It is the only unresolved concrete request in this
-    repository's public tracker.
-  - Evidence:
-    https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8#discussioncomment-17848058.
-  - Touches: hosted tutorial media, a versioned transcript and screenshot walkthrough
-    under docs/, README.md, and discussion #8.
-  - Acceptance: Record the packaged current release from a fresh install; show file
-    import, region review, Test Cleanup, model availability, optional translation,
-    processing, quality review, and output location; explain local processing and
-    optional network paths; provide accurate captions, timestamps, transcript,
-    keyboard-free mouse steps, and a tested sample; state the exact app version and
-    recording date; link the stable video and text fallback from README and reply to
-    discussion #8.
-  - Complexity: Low to medium. Regression risk is low. Record after RM-299 and RM-300
-    stabilize the demonstrated workflow.
+No actionable items remain. RM-306 is recorded in Roadmap_Blocked.md pending
+an isolated recording session and authenticated publishing path.
