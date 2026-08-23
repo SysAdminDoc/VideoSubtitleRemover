@@ -1,850 +1,361 @@
 # Research: Video Subtitle Remover Pro
 
-Evidence cutoff: 2026-08-21  
-Repository state: v3.36.0 at [d79ac68](https://github.com/SysAdminDoc/VideoSubtitleRemover/commit/d79ac688974640b2aadef6d917215f3c82024b01)  
-Research mode: repository and ecosystem analysis only. No feature implementation.
+Date: 2026-08-23. Replaces all prior research.
 
-This document replaces every earlier research pass. It reflects the current source,
-tests, documentation, issue tracker, discussions, released dependencies, and external
-market as of the evidence cutoff.
+Repository state: v3.38.0 at [7ee0ce1](https://github.com/SysAdminDoc/VideoSubtitleRemover/commit/7ee0ce1a316e07c3853f2cd9565a5d2d6bc6998a).
+
+Confidence labels:
+
+- **Verified:** confirmed in the v3.38.0 source, tracker, release artifacts, or a local read-only probe.
+- **Corroborated:** supported by project evidence and at least one independent primary source.
+- **Needs live validation:** requires hardware, licensed media, or assistive technology that was not exercised during this research pass.
 
 ## Executive Summary
 
-Video Subtitle Remover Pro is already a broad local desktop production tool, not a
-single-model demo. It combines a Windows GUI and CLI, automatic and manual masks,
-temporal restoration, LaMa, resumable batches, translation, quality evidence, NLE
-exports, PyInstaller packaging, an NSIS installer, and a Linux CPU container
-([README.md](README.md), [backend/processor.py](backend/processor.py),
-[gui/app.py](gui/app.py)). The closest focused open source tools remain narrower or
-carry substantial license, memory, dependency, or maintenance constraints
-([YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover),
-[VideoWipe](https://github.com/KKenny0/videowipe),
-[WatermarkRemover-AI](https://github.com/D-Ogi/WatermarkRemover-AI),
-[ProPainter](https://github.com/sczhou/ProPainter)).
+Video Subtitle Remover Pro is a local-first Windows desktop and command-line tool for detecting, tracking, removing, exporting, translating, and reburning visible video text. Its strongest current shape is unusually broad for an open source remover: exact timestamp handling, HDR-aware processing, polygon masks, temporal quality gates, recoverable jobs, donor references, review tools, batch preflight, and detailed release evidence are already present in v3.38.0 (`README.md`, `backend/processor.py`, `backend/quality.py`, `backend/resume_checkpoint.py`). The highest-value direction is not another model. It is making every user choice truthful, every reused result verifiable, and every distributed runtime measurable.
 
-The strongest opportunity is trust. Users need confidence that the selected model
-really ran, the preview represents the part of the clip they are judging, rotated
-text does not erase an oversized rectangle, HDR and variable-frame-rate media remain
-faithful, and a finished job has measurable temporal quality. Professional tools
-build this confidence through tracked masks, keyframes, reference frames, previews,
-and review controls rather than one-click model claims
-([Adobe Content-Aware Fill](https://helpx.adobe.com/after-effects/using/content-aware-fill.html),
-[Mocha Pro](https://borisfx.com/documentation/mocha/2026.5.0/),
-[Nuke SmartVector](https://learn.foundry.com/nuke/content/comp_environment/smartpaint/smartvector.html)).
+Priority opportunities:
 
-This pass reviewed nine source classes and more than 70 direct sources. It harvested
-150 raw ideas, removed shipped features and duplicates, then scored the remaining
-candidates for product fit, impact, effort, regression risk, prerequisites, novelty,
-and evidence strength. Ten additions survived:
-
-The nine completed source classes were direct competitors, first-party and external
-issue trackers, forums and community discussions, academic papers and benchmarks,
-standards and official engineering guidance, security advisories, dependency
-releases, commercial products and pricing, and curated discovery lists. The Sources
-section records 72 numbered groups and 129 unique external URLs.
-
-1. Correct the PyTorch advisory floor used by strict release verification.
-2. Enforce a local-by-default privacy boundary for the optional VLM server.
-3. Restore executable GUI workflow and accessibility release proof.
-4. Make Test Cleanup use the selected moment and temporal context.
-5. Preserve OCR quadrilaterals through tracking and mask creation.
-6. Preserve exact rational timestamps for variable-frame-rate media.
-7. Repair HDR regions in linear light without reducing them to 256 code values.
-8. Add mask-local, motion-aware temporal and outside-mask color quality checks.
-9. Inventory OpenCV's embedded FFmpeg and pin the container media runtime.
-10. Publish the beginner workflow requested in discussion #8.
-
-The two P0 items close verifiable safety gaps. The current dependency pins are safe,
-but strict release verification approves affected PyTorch 2.6.0 through 2.9.1 because
-it checks only the older 2.6.0 floor
-([backend/release_verification.py:525](backend/release_verification.py#L525),
-[GHSA-63cw-57p8-fm3p](https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p)).
-The optional llama.cpp OCR path defaults to loopback, yet its normalizer accepts any
-HTTP or HTTPS host and supplies that endpoint to PaddleOCRVL
-([backend/ocr_vlm.py:311](backend/ocr_vlm.py#L311),
-[backend/ocr_vlm.py:490](backend/ocr_vlm.py#L490)). Remote use therefore needs an
-explicit acknowledgement and encrypted transport.
-
-No new inpainting backend is recommended. CLEAR now has public code and weights, so
-the former claim that it is unreleased is stale
-([CLEAR repository](https://github.com/silent-commit/CLEAR),
-[CLEAR model card](https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal)).
-It still belongs in a research-only benchmark lane until model rights, base-model
-terms, consumer GPU cost, persistent large-text quality, and global color drift are
-validated
-([CLEAR issue #2](https://github.com/silent-commit/CLEAR/issues/2),
-[CLEAR issue #5](https://github.com/silent-commit/CLEAR/issues/5)).
-
-Evidence labels used below:
-
-- **Verified:** confirmed in current code, an official source, or a direct tracker.
-- **Corroborated:** supported by at least two independent sources or by code plus an
-  external source.
-- **Needs live validation:** a behavior observed in one local UI session or requiring
-  physical hardware, assistive technology, or a real media corpus before a claim can
-  be closed.
+1. **RM-307, requested-stage execution contract.** [Verified] Explicit diffusion, OCR, segmentation, tracking, and restoration choices can still catch a load or runtime failure and silently use another implementation or unchanged pixels. Provenance can then disagree with the work actually performed (`backend/inpainters_diffusion.py:126-165`, `backend/detection.py:411-440`, `backend/processor.py:1376-1389`, `backend/post_restore.py`).
+2. **RM-308, manual-region contract.** [Verified] The command bar's Manual region choice is a no-op, and fixed-region mode is cleared for LaMa, ProPainter, and Auto even though the processor can build a fixed mask independently of the inpainting mode (`gui/layout_build.py:175`, `gui/app.py:1381-1386`, `gui/settings_controller.py:603-608`, `backend/processor.py:2117-2146`). This is the unresolved part of [issue #7](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/7).
+3. **RM-309, FFmpeg 9 frame-duration compatibility.** [Verified] VSR requests legacy `pkt_duration` fields, while FFmpeg 9 exposes frame `duration` fields. A local FFmpeg 9.0.1 probe returned no values for the legacy request. Adjacent timestamps hide most failures, but final and irregular frame durations lose authoritative evidence (`backend/io.py:953`, [ffprobe source](https://ffmpeg.org/doxygen/trunk/ffprobe_8c_source.html)).
+4. **RM-310, tracked OCR consensus for SRT and translation.** [Verified] `_read_text_for_boxes` ignores its `boxes` argument, reruns OCR over the full frame, and merges only exact adjacent strings. This wastes work and fragments cues when OCR fluctuates (`backend/_srt_mixin.py:21-174`). [Subtitle Edit](https://github.com/SubtitleEdit/subtitleedit/blob/main/docs/features/video-ocr.md) demonstrates near-equivalent temporal collapsing and representative text selection.
+5. **RM-311, verified skip-existing behavior.** [Verified] CLI, batch, and watch paths treat file existence as success, then can write current provenance beside an unverified older output (`backend/cli.py:2021`, `backend/cli.py:2253-2262`, `backend/cli.py:2498-2507`). Existing checkpoint fingerprints provide a stronger pattern (`backend/resume_checkpoint.py:307-352`).
+6. **RM-312, immutable model snapshots.** [Verified] VACE auto-fetch can call `snapshot_download(revision=None)` and its manifest has no artifact hashes (`backend/inpainters_diffusion.py:330-370`, `backend/adapter_manifest.py:170-190`). Hugging Face documents that an omitted revision resolves the current repository state, while commit revisions provide immutable identity ([download guide](https://huggingface.co/docs/huggingface_hub/guides/download)).
+7. **RM-313, validated setup profiles.** [Verified] A failed full dependency install silently falls back to four packages, omits declared security floors, and still prints “All dependencies installed” (`setup.py:568-656`, `requirements.txt:27`, `Run_VSR_Pro.bat:14`).
+8. **RM-314, same-user state concurrency.** [Verified] GUI settings and queue state are shared by all processes for one Windows user, their locks are process-local, and the named mutex result is never checked (`gui/config.py:141-148`, `gui/app.py:159`). Two instances can race on persisted state.
+9. **RM-315, provider-labeled release bundles with benchmark evidence.** [Corroborated] The v3.38.0 public bundle contains CPU ONNX Runtime and no default Torch payload, while the README recommends an NVIDIA GPU. Focused competitors publish provider-specific bundles, and their trackers repeatedly expose throughput, VRAM, and output-fidelity uncertainty ([v3.38.0 release](https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/tag/v3.38.0), [Yao VSR](https://github.com/YaoFANGUK/video-subtitle-remover), [VideoWipe v0.8.0](https://github.com/KKenny0/videowipe/releases/tag/v0.8.0)).
+10. **RM-316, Windows processing power hold.** [Corroborated] Long jobs have no execution-state request. Windows provides a scoped system-required flag that prevents idle sleep without forcing the display on, and PowerToys uses the same behavior for long-running work ([SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate), [PowerToys Awake](https://learn.microsoft.com/en-us/windows/powertoys/awake)).
 
 ## Product Map
 
-### Product boundary
+### Core workflows
 
-The product is a Windows-first, local-first subtitle and overlay restoration
-application with a scriptable backend. Supported delivery paths include the GUI,
-CLI, portable ZIP, NSIS installer, and Linux CPU container
-([README.md](README.md), [build_exe.bat](build_exe.bat),
-[installer/vsr.nsi](installer/vsr.nsi), [Dockerfile](Dockerfile)). Automatic network
-use is not the core workflow. Optional model and update paths are separately gated
-([backend/remote_model_policy.py](backend/remote_model_policy.py),
-[backend/update_check.py](backend/update_check.py)).
+- **Remove visible text:** import a file or queue, choose automatic or guided detection, track regions, inpaint frames, preserve audio and media timing, then review quality evidence (`gui/app.py`, `backend/processor.py`, `backend/batch_report.py`).
+- **Plan and review:** preview detections, edit masks, use donor references or clean plates, export and import track plans, inspect contact sheets, and rerun failed regions (`gui/preview_controller.py`, `gui/region_controller.py`, `backend/track_plan.py`).
+- **Subtitle localization:** export SRT, translate cues through configured providers, reburn localized text, or export timed masks and NLE sidecars (`backend/_srt_mixin.py`, `backend/subtitle_translation.py`, `backend/post_restore.py`, `backend/nle_sidecar.py`).
+- **Operate long jobs:** batch preflight, disk forecasting, pause and resume, atomic output publication, watch folders, failure classification, support bundles, and crash recovery (`backend/batch_report.py`, `backend/work_directory.py`, `backend/resume_checkpoint.py`, `backend/atomic_replace.py`, `backend/cli.py`).
+- **Validate media fidelity:** preserve exact frame timing, metadata, HDR transfer behavior, alpha masks, subtitle streams, and audio while producing temporal and color quality signals (`backend/io.py`, `backend/hdr.py`, `backend/quality.py`).
 
-### Primary workflows
+### User personas
 
-- Import one or more videos, images, folders, or watched folders; inspect a preview;
-  choose automatic detection or a manual region; run Test Cleanup; then process and
-  review output ([gui/app.py](gui/app.py),
-  [gui/preview_controller.py](gui/preview_controller.py),
-  [gui/region_controller.py](gui/region_controller.py)).
-- Detect subtitle areas with RapidOCR, PaddleOCR, optional OCR engines, or an OpenCV
-  fallback; convert detections to tracks and masks; choose temporal, LaMa, or
-  conventional restoration; finish, encode, and emit evidence
-  ([backend/detection.py](backend/detection.py),
-  [backend/processor.py](backend/processor.py),
-  [backend/batch_report.py](backend/batch_report.py)).
-- Resume isolated jobs, reuse frozen mattes, correct masks, rerun failed ranges, and
-  export SRT, WebVTT, FCPXML, EDL, mattes, and reports
-  ([backend/job_worker.py](backend/job_worker.py),
-  [backend/resume_checkpoint.py](backend/resume_checkpoint.py),
-  [backend/_srt_mixin.py](backend/_srt_mixin.py),
-  [backend/nle_sidecar.py](backend/nle_sidecar.py)).
+- Editors and localization teams removing burned-in subtitles before translation or reburning.
+- Archivists and restoration operators repairing overlays while preserving timing, audio, color, and metadata.
+- Privacy-sensitive users who need local CPU or GPU processing without uploading footage.
+- Technical batch users who need CLI, watch-folder, report, and reproducibility controls.
 
-### Likely users
+These personas are [Corroborated] by VSR's own tracker and by the guided removal, batch, clean-plate, and localization features sold by [Adobe](https://helpx.adobe.com/after-effects/using/content-aware-fill.html), [DaVinci Resolve Studio](https://www.blackmagicdesign.com/products/davinciresolve/studio), [Mocha Pro](https://borisfx.com/products/mocha-pro/), and [NukeX](https://www.foundry.com/products/nuke-family/nukex).
 
-The implemented workflows fit privacy-sensitive creators, localization operators,
-archivists, batch processors, and editors who need local control. The project's own
-tracker confirms demand for portable operation, Docker, GPU compatibility, manual
-regions, and a beginner walkthrough
-([issue #1](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/1),
-[issue #3](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/3),
-[issue #5](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/5),
-[discussion #8](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8#discussioncomment-17848058)).
-There is not enough public demand evidence to justify a cloud service, collaboration
-suite, mobile app, or marketplace.
+### Platforms and distribution
 
-### Current strengths
+- [Verified] Windows 11 is the primary product surface. The repository builds a portable onedir bundle and NSIS installer, with a Linux CPU container as a secondary CLI path (`VideoSubtitleRemoverPro.spec`, `installer/vsr.nsi`, `Dockerfile`).
+- [Verified] Source setup supports CPU, NVIDIA CUDA 12.8, and DirectML dependency profiles. The v3.38.0 downloadable Windows artifact is not provider-labeled and its release SBOM shows the CPU ONNX Runtime profile (`setup.py`, `dependency_profiles.json`, `build/release/3.38.0`).
+- [Needs live validation] NVIDIA source inference has not yet been captured as frozen-build evidence on the current RTX 4070 SUPER host. DirectML also lacks current hardware evidence (`Roadmap_Blocked.md`).
 
-- Local long-form processing, resumable jobs, deterministic plans, and frozen-matte
-  reruns are stronger than the one-shot workflows documented by most focused
-  removers ([README.md](README.md),
-  [backend/job_worker.py](backend/job_worker.py)).
-- The package already preserves audio, attachments, subtitles, HDR metadata, color
-  tags, and variable-frame-rate output at the container level
-  ([backend/io.py](backend/io.py), [backend/processor.py](backend/processor.py),
-  [backend/release_verification.py](backend/release_verification.py)).
-- Dependency profiles, model manifests, advisory checks, checksums, support bundles,
-  and release evidence provide an unusually strong local software supply-chain
-  baseline for this product category
-  ([dependency_profiles.json](dependency_profiles.json),
-  [backend/adapter_manifest.py](backend/adapter_manifest.py),
-  [backend/security_checks.py](backend/security_checks.py)).
-- Manual regions, scripted regions, reference fills, mask corrections, scene cuts,
-  temporal aggregation, Poisson finishing, grain restoration, and translucent-text
-  handling are already implemented. Re-filing them would create duplicate roadmap
-  work ([backend/processor.py](backend/processor.py),
-  [backend/reference_fill.py](backend/reference_fill.py),
-  [backend/segmentation.py](backend/segmentation.py)).
+### Key integrations and data flows
 
-### Current friction
-
-- Test Cleanup opens frame zero instead of the selected moment, even though the GUI
-  presents a current preview and the README describes a selected-frame workflow
-  ([gui/preview_controller.py:704](gui/preview_controller.py#L704),
-  [README.md:55](README.md#L55)).
-- The low-resolution proxy helper describes fast planning but has no production
-  caller ([backend/proxy_workflow.py:45](backend/proxy_workflow.py#L45)).
-- OCR quadrilaterals are reduced to axis-aligned boxes before mask creation, which is
-  a poor fit for rotated signs and diagonal overlays
-  ([backend/detection.py:654](backend/detection.py#L654),
-  [WatermarkRemover-AI issue #38](https://github.com/D-Ogi/WatermarkRemover-AI/issues/38)).
-- The active GUI test is an import smoke test. Eighteen archived GUI modules are
-  ignored at collection time, including tests for region propagation, scaling,
-  localization, threading, and shutdown
-  ([tests/test_gui_import_smoke.py](tests/test_gui_import_smoke.py),
-  [tests/archive/conftest.py](tests/archive/conftest.py)).
-- **Needs live validation:** in one Windows accessibility-tree inspection, controls
-  inside the collapsed Advanced area remained discoverable. The panel is hidden with
-  pack_forget while individual child handles retain MSAA annotations
-  ([gui/settings_controller.py:99](gui/settings_controller.py#L99),
-  [backend/a11y.py](backend/a11y.py)). Microsoft documents that programmatically
-  hidden controls should be removed from the control view and that a complete,
-  logical tab order requires direct testing
-  ([UIA control element guidance](https://learn.microsoft.com/en-us/accessibility-tools-docs/items/wpf/control_iscontrolelement),
-  [Windows accessibility testing](https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-testing)).
+- FFmpeg and ffprobe handle probing, frame clocks, audio and subtitle stream handling, encoding, and verification (`backend/io.py`, `backend/processor.py`).
+- RapidOCR and optional PaddleOCR, EasyOCR, Surya, and VLM paths feed normalized text geometry into tracking (`backend/detection.py`, `backend/ocr_vlm.py`).
+- STTN, LaMa, VSR's ProPainter hybrid, external commands, and optional diffusion adapters repair masks through a shared registry (`backend/inpainter_registry.py`, `backend/inpainters_diffusion.py`).
+- Optional model downloads cross the local-only boundary. Update checks, crash uploads, VLM endpoints, VACE snapshots, and speech-model fetches must remain explicit and observable (`backend/model_downloads.py`, `backend/ocr_vlm.py`, `README.md`).
+- JSON settings, queue state, checkpoint fingerprints, reports, and reproducibility sidecars form the durable control plane (`gui/config.py`, `backend/resume_checkpoint.py`, `backend/batch_report.py`).
 
 ## Competitive Landscape
 
-### Focused open source tools
-
-| Project | Verified signal | Implication for VSR |
+| Product or project | What it does well | Learn and avoid |
 |---|---|---|
-| [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover) | The closest packaged lineage combines detection and inpainting. Users report low GPU utilization, multi-GPU contention, and blurred output in [#3](https://github.com/YaoFANGUK/video-subtitle-remover/issues/3), [#64](https://github.com/YaoFANGUK/video-subtitle-remover/issues/64), and [#200](https://github.com/YaoFANGUK/video-subtitle-remover/issues/200). | Keep provider visibility, bounded memory, and explicit quality evidence. Do not assume a larger model fixes workflow trust. |
-| [VideoWipe](https://github.com/KKenny0/videowipe) | Release 0.8.0 expanded reviewable wipe planning and execution ([release](https://github.com/KKenny0/videowipe/releases/tag/v0.8.0)). | VSR already has plan and batch concepts. Improve preview fidelity and proof instead of copying another plan format. |
-| [WatermarkRemover-AI](https://github.com/D-Ogi/WatermarkRemover-AI) | Its tracker documents diagonal-text failure and dependency pain in [#38](https://github.com/D-Ogi/WatermarkRemover-AI/issues/38) and [#48](https://github.com/D-Ogi/WatermarkRemover-AI/issues/48). | Preserve polygon geometry and avoid binding core UX to an archived image-only dependency. |
-| [DeWatermark](https://github.com/qwtoe/DeWatermark), [NotebookLM watermark remover](https://github.com/alpinist-GH/notebooklm-watermark-remover), [Seedance remover](https://github.com/bakhtiersizhaev/seedance-watermark-remover) | Narrow tools gain reliability from known overlay locations, template unions, or target-specific heuristics. NotebookLM 0.2.4 specifically corrected temporal union behavior ([release](https://github.com/alpinist-GH/notebooklm-watermark-remover/releases/tag/v0.2.4)). | A reviewed static-logo discovery pilot remains useful, but broad subtitle trust and quality work has higher priority. |
-| [video-text-remover](https://github.com/hjunior29/video-text-remover) and [video-text-eraser](https://github.com/sueun-dev/video-text-eraser) | Small tools expose simple masks and frame pipelines with much less packaging and recovery depth. | Preserve VSR's local production advantage. Borrow focused regression cases, not architecture. |
-| [IOPaint](https://github.com/Sanster/IOPaint) | Strong local inpainting UX, but the repository is archived and centered on still images. | Do not make it a runtime dependency. |
+| [YaoFANGUK Video Subtitle Remover](https://github.com/YaoFANGUK/video-subtitle-remover) | Provider-specific CPU, DirectML, and CUDA downloads; task-specific regions; PP-OCR; image batches | Learn from clear provider choices. Avoid ambiguous GPU claims and unmeasured quality; issues [#3](https://github.com/YaoFANGUK/video-subtitle-remover/issues/3), [#64](https://github.com/YaoFANGUK/video-subtitle-remover/issues/64), and [#200](https://github.com/YaoFANGUK/video-subtitle-remover/issues/200) report throughput, multi-GPU, blur, and bitrate problems. |
+| [VideoWipe](https://github.com/KKenny0/videowipe) | Streaming segments, long-video memory controls, repeatable timing, RSS, environment, and source identity in v0.8.0 | Copy the evidence shape, not GPL-3.0 code. Add cold and warm timing, RAM, VRAM, input identity, and actual provider to release benchmarks. |
+| [WatermarkRemover-AI](https://github.com/D-Ogi/WatermarkRemover-AI) | Guided mask workflow and a focused desktop surface | Keep manual guidance dependable. Avoid weak hardware communication and uncapped memory paths reported in [#38](https://github.com/D-Ogi/WatermarkRemover-AI/issues/38) and [#48](https://github.com/D-Ogi/WatermarkRemover-AI/issues/48). |
+| [IOPaint](https://github.com/Sanster/IOPaint) | Mature image-inpainting UI, model selection, plugins, and local operation | Reuse the clarity of model status and guided masks. Do not import an image-first plugin surface that bypasses VSR's video timing and provenance contracts. |
+| [ProPainter](https://github.com/sczhou/ProPainter) | Strong propagation and transformer-based video inpainting | Retain its temporal ideas as benchmark references. Do not bundle its noncommercial implementation, and do not assume 12 GB cards avoid OOM failures reported in [#76](https://github.com/sczhou/ProPainter/issues/76). |
+| [DiffuEraser](https://github.com/lixiaowen-xw/DiffuEraser) | Modern propagation plus diffusion repair | Benchmark only. Its dependency weight, runtime cost, and acceleration requests such as [#34](https://github.com/lixiaowen-xw/DiffuEraser/issues/34) do not support a default desktop backend. |
+| [CLEAR](https://github.com/silent-commit/CLEAR) | Apache-2.0 mask-free subtitle removal with released code and weights | It is the strongest new experimental candidate. Require redistribution review, 12 GB VRAM evidence, timing, color, and large-font tests before any adapter work. |
+| [SVOR](https://github.com/xiaomi-research/SVOR) | 2026 mask-free removal and degradation-aware training ideas | Use its mask-union and benchmark ideas. Avoid a default integration because the documented 24 GB to 33 GB VRAM requirement conflicts with the target desktop. |
+| [VOID](https://github.com/netflix/void-model) | Apache-2.0 object removal with mask reasoning | Its reasoning and benchmark design are useful. The documented 40 GB-plus VRAM path belongs in high-end experiments, not the normal release. |
+| [EffectErase](https://github.com/FudanCVL/EffectErase) | Explicit treatment of shadows, reflections, and associated effects | Add those failure classes to quality research. Do not bundle CC BY-NC assets or a SAM2.1 and Wan dependency chain. |
+| [Subtitle Edit](https://github.com/SubtitleEdit/subtitleedit/blob/main/docs/features/video-ocr.md) | Samples frames, collapses near-identical images and text, and selects a representative OCR result | Apply temporal consensus to VSR's existing tracked detections. Avoid a second whole-frame OCR pass per cue. |
+| [Adobe Content-Aware Fill](https://helpx.adobe.com/after-effects/using/content-aware-fill.html) | Guided masks, reference frames, fill ranges, and professional review | Keep donor frames, operator correction, and scoped reprocessing first-class. Avoid subscription or cloud dependence. |
+| [DaVinci Resolve Studio](https://www.blackmagicdesign.com/products/davinciresolve/studio) | Integrated object removal, tracking, color management, and finishing | Preserve color and timeline evidence as part of removal. Avoid claiming parity with a full NLE or expanding the minimal FCPXML sidecar into a fragile pseudo-editor. |
+| [Mocha Pro](https://borisfx.com/products/mocha-pro/) | Planar tracking, clean plates, occlusion controls, and guided removal | Keep clean plates and tracking visible to advanced operators. Avoid hiding failures behind an automatic result. |
+| [NukeX](https://www.foundry.com/products/nuke-family/nukex) | SmartVector, CopyCat, paint, and node-level inspectability | Learn from explicit stage identity and debuggable intermediate data. Avoid a node system that would overwhelm the focused desktop workflow. |
 
-### Research systems and model families
+Market conclusions:
 
-[LaMa](https://openaccess.thecvf.com/content/WACV2022/html/Suvorov_Resolution-Robust_Large_Mask_Inpainting_With_Fourier_Convolutions_WACV_2022_paper.html)
-remains the practical permissive baseline already supported by VSR. More advanced
-video models do not automatically fit a redistributable Windows desktop product:
-
-- [ProPainter](https://github.com/sczhou/ProPainter) has strong temporal results but
-  uses a noncommercial license and has continuing VRAM complaints such as
-  [issue #76](https://github.com/sczhou/ProPainter/issues/76).
-- [E2FGVI](https://github.com/MCG-NKU/E2FGVI) is CC BY-NC 4.0 and has a reported
-  long-video flicker problem in
-  [issue #49](https://github.com/MCG-NKU/E2FGVI/issues/49).
-- [VideoPainter](https://github.com/TencentARC/VideoPainter), [D2DF](https://github.com/bigD233/D2DF),
-  and [ROSE](https://github.com/Kunbyte-AI/ROSE) raise material GPU, model-size, or
-  license costs. ROSE's maintainer states that memory optimization was not a focus
-  ([issue #15](https://github.com/Kunbyte-AI/ROSE/issues/15)).
-- [CLEAR](https://github.com/silent-commit/CLEAR) is now reproducible enough for a
-  benchmark lane, but not for default shipping. Its model card says research use,
-  it depends on a 1.3B Wan base, and its tracker records persistent large-font and
-  global color-shift failures
-  ([model card](https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal),
-  [issue #2](https://github.com/silent-commit/CLEAR/issues/2),
-  [issue #5](https://github.com/silent-commit/CLEAR/issues/5)).
-- [SEDiT](https://arxiv.org/abs/2605.14894) is promising research, but no verified
-  redistributable code and weight route was found by the evidence cutoff.
-
-The most useful 2026 academic result for the current product is evaluation, not
-another backend. [PROVE](https://arxiv.org/abs/2605.14534) reports that common global
-metrics can disagree with perception and miss localized temporal defects. Its
-region-conditioned temporal approach compares shared restored regions across nearby
-frames, which directly addresses VSR's raw adjacent-frame ROI SSIM limitation
-([backend/quality.py:252](backend/quality.py#L252)).
-[VSR-Bench-400](https://openreview.net/pdf?id=MIRtxjuZF6),
-[EffectErase](https://github.com/FudanCVL/EffectErase), [Object-WIPER](https://openaccess.thecvf.com/content/CVPR2026/html/Kushwaha_Object-WIPER_Training-Free_Object_and_Associated_Effect_Removal_in_Videos_CVPR_2026_paper.html),
-and [BeyondMasks](https://yigitekin.github.io/BeyondMasks/) reinforce the need to
-evaluate effects, boundaries, motion, and content preservation rather than treating
-the hole alone as the quality target.
-
-### Professional and commercial workflows
-
-| Product | What its official workflow emphasizes | Relevant lesson |
-|---|---|---|
-| [Adobe After Effects Content-Aware Fill](https://helpx.adobe.com/after-effects/using/content-aware-fill.html) | Work areas, masks, fill methods, alpha expansion, and reference frames. Adobe documents 8, 16, and 32 bits per channel support ([help](https://helpx.adobe.com/ca/after-effects/desktop/remove-objects-from-your-videos/content-aware-fill.html)). | Make the judged time range and bit-depth behavior explicit. |
-| [DaVinci Resolve Studio](https://www.blackmagicdesign.com/products/davinciresolve/studio) | Object removal is integrated with tracking, review, grading, and delivery. | Keep restoration inside a reviewable media workflow. |
-| [Mocha Pro](https://borisfx.com/products/mocha-pro/) | Planar tracking, editable splines, remove modules, keyframes, and review. | Preserve editable geometry and temporal corrections. |
-| [Nuke CopyCat](https://learn.foundry.com/nuke/content/reference_guide/air_nodes/copycat.html) and [SmartVector](https://learn.foundry.com/nuke/content/comp_environment/smartpaint/smartvector.html) | High-control learned cleanup and vector-guided propagation. | Confidence maps and correction frames matter more than a hidden one-click pass. |
-| [Runway Edit Studio](https://help.runwayml.com/hc/en-us/articles/51683104370451-Creating-with-Edit-Studio) and [Filmora AI Object Remover](https://filmora.wondershare.com/guide/ai-video-object-remover.html) | Cloud or consumer flows prioritize speed and low-friction selection. | VSR should stay local and make its extra control understandable to beginners. |
-| [EchoSubs](https://www.echosubs.com/), [Subtitle Remover](https://www.subtitle-remover.com/), and [Media.io](https://www.media.io/video-watermark-remover.html) | Hosted services emphasize upload-and-download convenience and metered plans. | Local privacy, long-form processing, and inspectable evidence remain VSR's useful contrast. |
-
-Professional media QC products such as
-[Interra BATON](https://www.interrasystems.com/file-based-qc.php),
-[QScan](https://qscan.io/features), and
-[Telestream Qualify](https://docs.telestream.dev/docs/qualify-user-guide)
-show that delivery confidence depends on deterministic reports, severity, locations,
-and reviewable failures. VSR should report the worst restored frame pair and color
-drift region, not only one aggregate score.
-
-### Community and trend signals
-
-Community reports consistently describe occlusion, motion, flicker, memory, and
-selection quality as the hard problems
-([Stable Diffusion discussion](https://www.reddit.com/r/StableDiffusion/comments/1quw6ve/reliable_video_object_removal_inpainting_model/),
-[Adobe occlusion discussion](https://community.adobe.com/t5/after-effects-discussions/content-aware-fill-issues-when-anything-passes-in-front-of-the-mask/td-p/14046912),
-[Resolve feature discussion](https://forum.blackmagicdesign.com/viewtopic.php?f=33&hilit=magic+mask&t=199707),
-[Topaz Video discussion](https://community.topazlabs.com/t/topaz-video-ai-7-2-0-1b/94506?page=2)).
-Awesome lists and GitHub topic pages show a large research supply but do not resolve
-desktop distribution rights or maintenance fit
-([Awesome Image Inpainting](https://github.com/zengyh1900/Awesome-Image-Inpainting),
-[video-inpainting topic](https://github.com/topics/video-inpainting),
-[awesome-video](https://github.com/sitkevij/awesome-video),
-[awesome-ffmpeg](https://github.com/brandonhimpfen/awesome-ffmpeg),
-[awesome-ocr](https://github.com/kba/awesome-ocr)).
+- [Corroborated] VSR already exceeds focused open source peers in media fidelity, recovery, and review breadth. The clearest missing proof is provider-specific performance and frozen-build behavior, not another checkbox (`README.md`, [VideoWipe v0.8.0](https://github.com/KKenny0/videowipe/releases/tag/v0.8.0)).
+- [Corroborated] Long-video consistency, defective masks, occlusions, shadows, and reflections remain unsolved across current tools and research. Existing VSR temporal gates are the correct foundation; new model families should compete on a fixed corpus before integration ([BeyondMasks](https://yigitekin.github.io/BeyondMasks/), [PROVE](https://xiaomi-research.github.io/prove/), [DEVIL](https://openaccess.thecvf.com/content/CVPR2022/html/Szeto_The_DEVIL_Is_in_the_Details_A_Diagnostic_Evaluation_Benchmark_CVPR_2022_paper.html)).
+- [Corroborated] Commercial tools consistently expose masks, clean plates, tracking, batch work, and operator correction. VSR should make its existing guided path truthful and testable instead of pursuing one-click-only behavior.
 
 ## Reported Issues
 
 ### This repository
 
-The GitHub tracker had zero open issues and zero open pull requests on 2026-08-21.
-Seven issues were closed
-([issues](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues),
-[pull requests](https://github.com/SysAdminDoc/VideoSubtitleRemover/pulls)).
-Closed reports still provide useful regression evidence:
+[Verified] The public tracker has 0 open issues and 0 open pull requests as of 2026-08-23. All 7 closed issues were read, along with enabled discussions.
 
-- [Issue #1](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/1) covered RTX
-  50-series and TV-range color handling. The Blackwell lane and color-range
-  preservation now exist. Keep those paths in regression tests.
-- [Issue #2](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/2) alleged an
-  infostealer without a signature or reproducible indicator. The unsigned ZIP,
-  checksums, and SmartScreen guidance are now documented
-  ([README.md](README.md)). There is no evidence for re-filing malware work.
-- [Issue #3](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/3) asked for
-  a working frozen build, portable delivery, and Docker. Those delivery paths ship
-  now ([build_exe.bat](build_exe.bat), [Dockerfile](Dockerfile)).
-- [Issue #4](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/4) was a
-  missing file-dialog import and is fixed.
-- [Issue #5](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/5) reported
-  region selection and Inspect failures. A first closure did not satisfy the
-  reporter, then a second fix landed. The production code now stores selected
-  regions, but the corresponding interaction tests sit under the ignored archive
-  ([tests/archive/test_gui_smoke.py](tests/archive/test_gui_smoke.py)).
-- [Issue #6](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/6) contains
-  no sample or reproducible detail. It cannot support a new implementation item.
-- [Issue #7](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/7) reported
-  identical output across model selections. The backend now fails closed when an
-  inpainter is unavailable, with active tests
-  ([backend/device_provider.py](backend/device_provider.py),
-  [tests/test_device_provider.py](tests/test_device_provider.py)).
+- [Issue #7](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/7): the reported silent STTN fallback was fixed, but the separate request to apply a manual region with LaMa remains broken in the command bar and settings controller. RM-308 covers the traced current defect.
+- [Issue #1](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/1): CUDA 12.8 and RTX 50-series setup code landed, but the issue closed without reporter confirmation and the public frozen bundle remains CPU-oriented. RM-315 treats this as validation and distribution debt, not a confirmed current GPU bug.
+- [Issue #5](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/5): the first closure was premature, then queue selection and region propagation were fixed and moved into active workflow tests. Do not reopen unless those tests regress (`tests/test_gui_workflow_release.py`).
+- [Issues #3](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/3) and [#4](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/4): RapidOCR packaging and file-dialog failures are fixed and covered by the current build configuration. No new item.
+- [Issue #6](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/6): no sample, settings, or support bundle was provided. The report is not reproducible, so it does not justify a model change.
+- [Issue #2](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/2): the malware allegation had no scanner signature or VirusTotal evidence. Unsigned-binary reputation remains blocked on a signing identity, but there is no evidence of malicious code.
+- [Discussion #8](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8): a beginner walkthrough is the only unresolved concrete documentation request. It remains RM-306 in `Roadmap_Blocked.md` because recording and authenticated publishing are unavailable. It is not duplicated here.
+- [Discussion #9](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/9): the hardware and failure-feedback request has no replies. RM-315 should publish first-party measurements rather than wait for anecdotal submissions.
 
-The only unresolved concrete request is a beginner video showing import,
-translation, inpainting, and output
-([discussion #8](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8#discussioncomment-17848058)).
-[Discussion #9](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/9)
-has no replies and does not establish demand for another hardware lane.
+### External tracker and community signal
 
-### External trackers
+- [Corroborated] Focused removers repeatedly receive reports about low GPU use, OOM failures, unclear performance, blur, and output bitrate. These reports support RM-315 but are anecdotal, not cross-project benchmarks ([Yao #3](https://github.com/YaoFANGUK/video-subtitle-remover/issues/3), [Yao #200](https://github.com/YaoFANGUK/video-subtitle-remover/issues/200), [ProPainter #76](https://github.com/sczhou/ProPainter/issues/76), [VideoVanish discussion](https://news.ycombinator.com/item?id=45988018)).
+- [Corroborated] Occlusion and foreground crossings are persistent failure modes in professional and community workflows. Existing mask correction and donor tools should remain visible; model replacement alone is not an adequate response ([Adobe community](https://community.adobe.com/t5/after-effects-discussions/content-aware-fill-issues-when-anything-passes-in-front-of-the-mask/td-p/14046912), [Stable Diffusion community](https://www.reddit.com/r/StableDiffusion/comments/1quw6ve/reliable_video_object_removal_inpainting_model/)).
+- [Verified] Closed VSR reports show a recurring process risk: green unit tests have not always covered the exact GUI control users exercised. RM-308 therefore requires a command-bar workflow regression in the isolated GUI test environment, not only controller unit tests (`tests/test_gui_workflow_release.py`, commit history through 7ee0ce1).
 
-External reports cluster around four actionable failure classes:
+## Security, Privacy, and Reliability
 
-1. **Geometry:** diagonal text fails when a quadrilateral becomes a rectangle
-   ([WatermarkRemover-AI #38](https://github.com/D-Ogi/WatermarkRemover-AI/issues/38)).
-2. **Temporal quality:** blurred output, long-video flicker, occlusions, and persistent
-   overlays remain common
-   ([Yao #200](https://github.com/YaoFANGUK/video-subtitle-remover/issues/200),
-   [E2FGVI #49](https://github.com/MCG-NKU/E2FGVI/issues/49),
-   [CLEAR #2](https://github.com/silent-commit/CLEAR/issues/2)).
-3. **Performance:** low utilization, shared GPU memory, and propagation memory are
-   recurring complaints
-   ([Yao #3](https://github.com/YaoFANGUK/video-subtitle-remover/issues/3),
-   [Yao #64](https://github.com/YaoFANGUK/video-subtitle-remover/issues/64),
-   [Track Anything #4](https://github.com/gaomingqi/Track-Anything/issues/4)).
-4. **Dependency reliability:** downstream tools break when they depend on old,
-   archived, or tightly pinned stacks
-   ([WatermarkRemover-AI #48](https://github.com/D-Ogi/WatermarkRemover-AI/issues/48),
-   [IOPaint](https://github.com/Sanster/IOPaint)).
+### Current strengths
 
-These reports support polygon preservation, proxy planning, local quality metrics,
-and conservative dependency policy. They do not justify bundling the affected
-projects.
+- [Verified] A 2026-08-23 audit of the 32 installed release dependencies found no known vulnerability. Current floors include Python 3.13.15, ONNX Runtime 1.29.0 for CPU, OpenCV 5.0.0, Pillow 12.3.0, RapidOCR 3.9.2, idna 3.15, and PyInstaller 6.22.2 (`requirements.txt`, `dependency_profiles.json`, `build/release/3.38.0`).
+- [Verified] ONNX metadata is bounded before parsing, remote-code adapters are restricted, normal outputs publish atomically, resume checkpoints validate source and configuration fingerprints, and support bundles redact paths and secrets (`backend/onnx_model_info.py`, `backend/remote_model_policy.py`, `backend/adapter_manifest.py`, `backend/atomic_replace.py`, `backend/resume_checkpoint.py`, `backend/support_bundle.py`).
+- [Verified] Optional VLM network use is explicit and local processing remains the default. V3.38.0 added endpoint provenance and remote-VLM warnings (`backend/ocr_vlm.py`, `backend/batch_report.py`, `CHANGELOG.md`).
 
-## Security Privacy Reliability
+### Risks and missing guardrails
 
-### Current security posture
+| Finding | Evidence and required control |
+|---|---|
+| Explicit stages can silently change semantics | `backend/inpainters_diffusion.py`, `backend/detection.py`, `backend/processor.py`, and `backend/post_restore.py` contain broad fallback or unchanged-output paths. RM-307 must make explicit selections fail closed and reserve cross-engine fallback for Auto. |
+| Auto-fetched model identity is mutable | VACE uses an optional revision and accepts an unpinned snapshot. RM-312 must resolve and record an immutable commit plus artifact hashes before execution. Hugging Face's [download](https://huggingface.co/docs/huggingface_hub/guides/download) and [model security](https://huggingface.co/docs/hub/security-malware) guidance supports this boundary. |
+| Existing output can be mislabeled | Existence-only skip paths can generate fresh sidecars for stale bytes. RM-311 must bind source, configuration, and output hashes before a skip is called successful. |
+| Setup can report a partial environment as complete | `setup.py:568-656` silently switches dependency meaning after failure. RM-313 must expose a named locked profile, verify it, and leave a repairable failure state when no complete profile installs. |
+| Same-user writes are not coordinated between processes | `gui/config.py:141-148` uses process-local locks and `gui/app.py:159` ignores the existing-mutex result. RM-314 must prevent or serialize concurrent persisted-state mutation. |
+| Long processing does not hold the system awake | No power-request API is present. RM-316 must use `ES_SYSTEM_REQUIRED | ES_CONTINUOUS`, clear it on every exit path, never request `ES_DISPLAY_REQUIRED`, and remain a non-Windows no-op. |
+| Optional network behavior is described too broadly | `README.md` says only update checks and opt-in crash reports make outbound requests, while VACE and faster-whisper can download weights (`backend/model_downloads.py`). RM-312 documentation must list every opt-in network path and the immutable model identity it records. |
+| Security reporting is not documented | `.github/` has public issue forms but no **SECURITY.md**. This is useful follow-up work, but lower impact than the ten selected items because no private reporting channel has been established. |
 
-The reviewed CPU environment had no confirmed reachable runtime CVE on 2026-08-21.
-Python 3.13.15, OpenCV 5.0.0.93, Pillow 12.3.0, ONNX Runtime CPU 1.29.0, PyInstaller
-6.22.2, NSIS 3.12, external FFmpeg 9.0.1, Requests 2.34.2, urllib3 2.7.0, and idna
-3.15 are at or above their reviewed security floors
-([Python 3.13.15](https://www.python.org/downloads/release/python-31315/),
-[OpenCV 5.0.0](https://github.com/opencv/opencv/releases/tag/5.0.0),
-[Pillow 12.3.0](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html),
-[ONNX Runtime 1.29.0](https://github.com/microsoft/onnxruntime/releases/tag/v1.29.0),
-[PyInstaller 6.22.2](https://github.com/pyinstaller/pyinstaller/releases/tag/v6.22.2),
-[NSIS 3.12](https://nsis.sourceforge.io/Docs/AppendixF.html#v3.12),
-[FFmpeg downloads](https://ffmpeg.org/download.html)).
-The dependency profile and package consistency checks also passed locally
-([dependency_profiles.json](dependency_profiles.json),
-[backend/dependency_profiles.py](backend/dependency_profiles.py)).
+### Advisory assessment
 
-This result should not be weakened by false positives:
-
-- OpenCV 5.0.0.93 is beyond the fix for
-  [CVE-2025-53644](https://nvd.nist.gov/vuln/detail/CVE-2025-53644).
-- FFmpeg 9.0.1 contains the RASC bounds fix associated with
-  [CVE-2026-58049](https://nvd.nist.gov/vuln/detail/CVE-2026-58049) through
-  [fix commit f8d7795](https://github.com/FFmpeg/FFmpeg/commit/f8d7795dcca36a4dd412e89cbd83e3dfec1e0d81).
-- PyInstaller 6.22.2 is beyond
-  [GHSA-9fxf-4qw3-ghmr](https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr),
-  and the project ships an onedir, asInvoker build rather than the affected modern
-  onefile path ([build_exe.bat](build_exe.bat)).
-- The protobuf JSON recursion advisory does not map to VSR's direct binary ONNX
-  parsing path ([backend/onnx_model_info.py](backend/onnx_model_info.py),
-  [protobuf issue #26432](https://github.com/protocolbuffers/protobuf/issues/26432)).
-
-### P0 release gate defect
-
-Strict release verification rejects Torch below 2.6.0 because of CVE-2025-32434, but
-does not reject 2.6.0 through 2.9.1
-([backend/release_verification.py:525](backend/release_verification.py#L525)).
-PyTorch's 2026 advisory states that versions before 2.10.0 are affected by
-CVE-2026-24747
-([GHSA-63cw-57p8-fm3p](https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p)).
-Current project profiles use 2.11.0 or 2.13.0, so installed builds are safe
-([dependency_profiles.json](dependency_profiles.json)). The defect is the gate:
-it can approve a future or locally altered release with a known affected version.
-
-### P0 VLM endpoint boundary
-
-The PaddleOCR-VL llama.cpp path is documented and named as a local server, with a
-loopback default
-([README.md:380](README.md#L380),
-[backend/ocr_vlm.py:56](backend/ocr_vlm.py#L56)). Its URL normalizer strips whitespace
-and a trailing slash but performs no host, credential, or transport policy check
-([backend/ocr_vlm.py:311](backend/ocr_vlm.py#L311)). The reachability probe accepts
-HTTP and HTTPS for any parsed host, and PaddleOCRVL receives that URL before its
-predict call is given a temporary PNG of the frame
-([backend/ocr_vlm.py:320](backend/ocr_vlm.py#L320),
-[backend/ocr_vlm.py:490](backend/ocr_vlm.py#L490),
-[backend/ocr_vlm.py:514](backend/ocr_vlm.py#L514)).
-
-Loopback should remain automatic. Any non-loopback endpoint should require an
-explicit remote-processing acknowledgement, reject URL credentials, require HTTPS,
-resolve hostnames before use, and display that frame content can leave the machine.
-Tests must cover IPv4 loopback, IPv6 loopback, localhost, mapped addresses, redirects,
-DNS changes, malformed URLs, credentials, and probe bypass behavior.
-
-### Native media inventory gap
-
-OpenCV reports embedded FFmpeg libraries, including avcodec, while VSR's release
-evidence validates only the separately installed FFmpeg executable
-([backend/security_checks.py:262](backend/security_checks.py#L262),
-[backend/release_verification.py:1388](backend/release_verification.py#L1388)).
-Untrusted media is opened through cv2.VideoCapture
-([backend/io.py:1477](backend/io.py#L1477)). This is an inventory blind spot, not a
-confirmed vulnerability. Release evidence should record both media runtimes and
-their build versions. The container also installs an unversioned distribution
-FFmpeg package from an unpinned base image
-([Dockerfile:1](Dockerfile#L1)).
-
-### Optional execution lanes
-
-- The declared Python range accepts any 3.11 through 3.14 patch, while later
-  security checks enforce 3.11.16, 3.12.14, and 3.13.15 floors
-  ([dependency_profiles.json](dependency_profiles.json),
-  [backend/security_checks.py:108](backend/security_checks.py#L108),
-  [CVE-2026-11940](https://nvd.nist.gov/vuln/detail/CVE-2026-11940)).
-  Setup messaging should eventually enforce the same patch floors.
-- CPU ONNX Runtime 1.29.0 includes malformed-model and external-data hardening. CUDA
-  12 remains on 1.26.0 because newer PyPI GPU wheels moved to CUDA 13, and DirectML
-  remains on its legacy package
-  ([ONNX Runtime 1.29.0](https://github.com/microsoft/onnxruntime/releases/tag/v1.29.0),
-  [CUDA provider compatibility](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html),
-  [DirectML provider status](https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html)).
-  Custom or unhashed models should remain strongly gated on those older lanes.
-- PaddleOCR 3.7.0 supports newer PaddlePaddle releases than the project's 3.0.0 pin
-  ([PaddleOCR repository](https://github.com/PaddlePaddle/PaddleOCR),
-  [dependency_profiles.json](dependency_profiles.json)). Requalification is useful,
-  but it should not displace the verified safety and media-integrity work.
-
-### Reliability gaps
-
-- HDR frames are reduced from uint16 to uint8 by division by 257. Repaired pixels
-  are expanded by multiplication by 257, so the masked result can contain only 256
-  code values before later encoding
-  ([backend/processor.py:1520](backend/processor.py#L1520)). Metadata preservation
-  does not correct this pixel-precision loss. BT.2100 defines PQ and HLG transfer
-  systems, and BT.2446 covers conversion practice
-  ([ITU-R BT.2100-3](https://www.itu.int/rec/R-REC-BT.2100-3-202502-I/en),
-  [ITU-R BT.2446-1](https://www.itu.int/pub/R-REP-BT.2446-1-2021)).
-- VFR probing and manifests store decimal seconds rather than integer source
-  timestamps plus a rational time base
-  ([backend/io.py:52](backend/io.py#L52),
-  [backend/processor.py:2779](backend/processor.py#L2779)). FFmpeg and ffprobe expose
-  timestamp and time-base semantics directly
-  ([FFmpeg documentation](https://ffmpeg.org/ffmpeg.html),
-  [ffprobe documentation](https://ffmpeg.org/ffprobe.html),
-  [Matroska RFC 9559](https://www.rfc-editor.org/rfc/rfc9559.html)).
-- Temporal consistency is the mean raw SSIM between adjacent restored ROIs
-  ([backend/quality.py:252](backend/quality.py#L252)). Legitimate camera or object
-  motion can lower it, while a localized defect can disappear in the mean.
-  [PROVE](https://arxiv.org/abs/2605.14534) directly supports region-conditioned,
-  localized temporal evaluation.
-- TBE uses one-way DIS or Farneback warping without a forward-backward occlusion
-  confidence test
-  ([backend/inpainters/_common.py:907](backend/inpainters/_common.py#L907)).
-  Bidirectional consistency is an established optical-flow confidence principle
-  ([OpenCV DIS](https://docs.opencv.org/5.0/main_modules/classcv_1_1DISOpticalFlow.html),
-  [UnFlow](https://ojs.aaai.org/index.php/AAAI/article/view/12276)).
-  It remains a follow-on pilot after local quality metrics can identify the failing
-  clips.
+- [Verified] Current optional Torch floors are above fixes for [GHSA-53q9-r3pm-6pq6](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6) and [GHSA-63cw-57p8-fm3p](https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p). Known hashes and model identity remain necessary because malicious checkpoints are a separate trust boundary.
+- [Verified] PyInstaller 6.22.2 is above the [onefile privileged-extraction fix](https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr), and VSR ships onedir with an `asInvoker` installer.
+- [Verified] Pillow 12.3.0, idna 3.15, OpenCV 5.0.0, and ONNX Runtime 1.29.0 meet the reviewed current advisory floors ([Pillow notes](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html), [idna advisory](https://github.com/kjd/idna/security/advisories/GHSA-65pc-fj4g-8rjx), [OpenCV CVE-2025-53644](https://nvd.nist.gov/vuln/detail/CVE-2025-53644), [ONNX Runtime 1.29.0](https://github.com/microsoft/onnxruntime/releases/tag/v1.29.0)).
+- [Needs live validation] FFmpeg 9.0.1 is current, but its published security matrix does not yet prove whether the pinned build contains the [CVE-2026-58049 fix](https://github.com/FFmpeg/FFmpeg/commit/f8d7795dcca36a4dd412e89cbd83e3dfec1e0d81). Release evidence should record the exact source revision.
+- [Verified] CVE-2026-0994 concerns protobuf JSON parsing, not VSR's bounded ONNX wire parser. No VSR code calls `json_format` or `ParseDict`; a protobuf major-version jump is not justified without a transitive-call trace ([NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-0994), [follow-up issue](https://github.com/protocolbuffers/protobuf/issues/26432)).
 
 ## Architecture Assessment
 
-### Local findings
+### Boundary improvements
 
-1. **Release advisory enforcement is internally inconsistent.** Safe profile pins
-   coexist with an obsolete minimum in strict verification
-   ([dependency_profiles.json](dependency_profiles.json),
-   [backend/release_verification.py:525](backend/release_verification.py#L525)).
-2. **The optional local VLM boundary is descriptive, not enforced.** The README says
-   local, while code accepts a remote plaintext host
-   ([README.md:380](README.md#L380),
-   [backend/ocr_vlm.py:311](backend/ocr_vlm.py#L311)).
-3. **GUI proof regressed from behavioral tests to import smoke.** The archived suite
-   contains relevant interactions, but collection ignores every archived module
-   ([tests/archive/conftest.py](tests/archive/conftest.py),
-   [tests/test_gui_import_smoke.py](tests/test_gui_import_smoke.py)).
-4. **Test Cleanup is not time-faithful.** It reads the first decoded frame and runs a
-   single-frame cleanup even for temporal modes
-   ([gui/preview_controller.py:704](gui/preview_controller.py#L704)).
-5. **Planning proxy infrastructure is dormant.** The cache and generation helper has
-   no production caller ([backend/proxy_workflow.py](backend/proxy_workflow.py)).
-6. **OCR geometry loses rotation.** Polygon-like results are converted to min/max
-   boxes before later processing
-   ([backend/ocr_vlm.py:376](backend/ocr_vlm.py#L376),
-   [backend/detection.py:654](backend/detection.py#L654)).
-7. **VFR precision is represented with floats.** Exact source ticks are discarded at
-   the probe boundary ([backend/io.py:52](backend/io.py#L52)).
-8. **HDR repair is an 8-bit operation inside a high-bit wrapper.** The source surface
-   is uint16, but masked fill values are quantized through uint8
-   ([backend/processor.py:1520](backend/processor.py#L1520)).
-9. **Quality evidence is global and motion-sensitive.** Raw adjacent-frame SSIM does
-   not isolate local restoration flicker from legitimate motion
-   ([backend/quality.py:252](backend/quality.py#L252),
-   [PROVE](https://arxiv.org/abs/2605.14534)).
-10. **Two decoder stacks are shipped but only one is inventoried.** OpenCV's embedded
-    FFmpeg processes untrusted inputs without equivalent release evidence
-    ([backend/io.py:1477](backend/io.py#L1477),
-    [backend/release_verification.py:1388](backend/release_verification.py#L1388)).
+- [Verified] Model selection is centralized in registries, but outcome semantics are not. RM-307 should add a shared requested-stage result contract carrying requested implementation, actual implementation, provider, fallback chain, failure class, and recovery hint. `auto` may choose alternatives; a named implementation may not silently cross engines (`backend/inpainter_registry.py`, `backend/device_provider.py`, `backend/detection.py`, `backend/post_restore.py`).
+- [Verified] Fixed-region state is split between a command-bar string, settings toggles, persisted configuration, and processor behavior. RM-308 should establish one typed region mode with `automatic`, `manual-only`, and `guided-additive` semantics, then serialize it once (`gui/app.py`, `gui/settings_controller.py`, `gui/config.py`, `backend/processor.py`).
+- [Verified] SRT text is detached from tracked detection geometry even though detection records already carry text and confidence. RM-310 should preserve recognized text on the track and compute cue consensus there, with `backend/_srt_mixin.py` limited to timing and serialization (`backend/detection.py`, `backend/tracking.py`, `backend/_srt_mixin.py`).
+- [Verified] Checkpoint identity is stronger than completed-output identity. RM-311 should reuse the checkpoint fingerprint primitives in a versioned output-sidecar verifier instead of adding a second hashing design (`backend/resume_checkpoint.py`, `backend/batch_report.py`).
 
-The main processing method is also very large, and architecture documentation still
-describes it as roughly 250 lines
-([backend/processor.py:2247](backend/processor.py#L2247),
-[docs/architecture.md](docs/architecture.md)). A decomposition-only roadmap item was
-not selected because it would consume risk without closing a user-visible defect.
-The selected media-integrity work should establish smaller seams as part of normal
-implementation.
+### Refactor candidates
 
-### Candidate scoring
+- [Verified] `SubtitleRemover.process_video` is 1,169 lines, `RegionSelectorWindow.open` is 742 lines, `cli._run_processing` is 689 lines, and `ProcessingController._process_item` is 438 lines (`backend/processor.py:2683-3851`, `gui/region_controller.py:79`, `backend/cli.py:2035`, `gui/processing_controller.py:848`). `docs/architecture.md:438` still describes `process_video` as approximately 250 lines.
+- The processor extraction is already recorded as blocked in `Roadmap_Blocked.md`, so it is not duplicated. RM-307, RM-308, RM-310, and RM-311 should extract only the policy boundaries required by their tests. Architecture documentation must be regenerated or corrected in the same commits.
+- [Verified] Batch reports use fixed filenames and can overwrite prior evidence in a reused output directory (`backend/batch_report.py:390`). Timestamped or run-ID report retention is worthwhile, but it falls below the selected correctness and trust work.
 
-Scores use 1 as low and 5 as high. Effort and risk are costs, so lower is better.
-Novelty measures whether the capability is absent rather than partly shipped.
-Evidence combines current code, direct user reports, standards, and independent
-external confirmation.
+### Test and documentation gaps
 
-| Roadmap | Candidate | Fit | Impact | Effort | Risk | Dependencies | Novelty | Evidence | Tier |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---|
-| RM-297 | Correct PyTorch release security gate | 5 | 5 | 1 | 1 | 1 | 5 | 5 | P0 |
-| RM-298 | Enforce VLM endpoint privacy boundary | 5 | 5 | 2 | 2 | 1 | 5 | 5 | P0 |
-| RM-299 | Restore GUI workflow and accessibility proof | 5 | 5 | 3 | 2 | 2 | 4 | 5 | P1 |
-| RM-300 | Make Test Cleanup temporally representative | 5 | 5 | 3 | 2 | 2 | 5 | 5 | P1 |
-| RM-301 | Preserve OCR polygon geometry | 5 | 4 | 3 | 3 | 2 | 5 | 5 | P1 |
-| RM-302 | Preserve exact rational VFR timing | 5 | 4 | 4 | 4 | 2 | 5 | 4 | P1 |
-| RM-303 | Preserve linear-light high-bit HDR repairs | 5 | 5 | 5 | 5 | 2 | 5 | 5 | P1 |
-| RM-304 | Add local temporal and color-drift quality gates | 5 | 5 | 3 | 2 | 2 | 5 | 5 | P1 |
-| RM-305 | Inventory both FFmpeg runtimes | 5 | 4 | 3 | 2 | 2 | 5 | 5 | P1 |
-| RM-306 | Publish the requested beginner workflow | 5 | 3 | 2 | 1 | 1 | 5 | 5 | P2 |
+- No active test selects Manual region through the command bar and verifies the resulting processor command across all inpainting modes (`tests/test_gui_workflow_release.py`). RM-308 must add that isolated-desktop regression without using an active display.
+- Failure-injection tests currently assert silent TBE fallback for a failed diffusion adapter (`tests/test_hardening_inpaint.py:298-370`). RM-307 must invert those expectations for explicit requests and cover OCR, segmentation, tracking, restoration, and provenance.
+- The timing suite does not run an FFmpeg 9 fixture whose final frame has an irregular authoritative duration. RM-309 must add both parser unit tests and a real ffprobe integration test.
+- The SRT suite lacks multilingual near-match consensus, grapheme-boundary, and no-second-OCR assertions. RM-310 must cover Latin, CJK, and RTL samples using [Unicode UAX 29](https://www.unicode.org/reports/tr29/).
+- No multiprocessing test races settings or queue writes, and the mutex existence path is untested. RM-314 must exercise separate processes, not threads.
+- Release evidence records packages and runtime inventory but not provider-labeled frozen inference or a public cold and warm performance matrix. RM-315 must generate both from machine-readable evidence.
 
-### Recommended sequence
+### Category coverage decisions
 
-RM-297 and RM-298 should land first because they are small, verifiable safety
-boundaries. RM-299 should follow because later UI work needs an active behavioral
-test harness. RM-300 and RM-301 then improve what the user previews and selects.
-RM-302 and RM-303 change media representations and require dedicated fixtures.
-RM-304 should calibrate quality gates against those fixtures. RM-305 closes release
-inventory evidence. RM-306 can be recorded after the resulting workflow is stable.
-
-### Verification strategy
-
-- Use synthetic fixtures for deterministic geometry, timestamps, HDR ramps, motion,
-  flicker, and global color casts. Keep outside-mask pixels exact where the pipeline
-  promises preservation.
-- Add a small redistributable real-world corpus only when usage rights are recorded.
-  [EffectErase's dataset](https://huggingface.co/datasets/FudanCVL/EffectErase/tree/main)
-  is CC BY-NC 4.0, so it is suitable for research comparison but not an unrestricted
-  distributable commercial fixture.
-- Report worst cases with frame numbers, timestamps, mask overlays, and metric
-  components. A single pass/fail average is insufficient
-  ([PROVE](https://arxiv.org/abs/2605.14534),
-  [Telestream Qualify](https://docs.telestream.dev/docs/qualify-user-guide)).
-- Run GUI interaction, scaling, high-contrast, RTL, and accessibility-tree checks in
-  the local release workflow. Do not restore GitHub Actions
-  ([build_exe.bat](build_exe.bat),
-  [tools/ui_scaling_probe.py](tools/ui_scaling_probe.py)).
-- Mark Narrator and NVDA behavior **Needs live validation** until recorded on the
-  packaged build. MSAA names alone do not prove native UIA control patterns
-  ([Microsoft UIA provider guidance](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-serversideprovider)).
+- **Accessibility:** keyboard access, scaling, contrast, pseudo-localization, RTL, and MSAA metadata already have automated coverage. Native UIA and live Narrator or NVDA validation remain explicitly blocked in `Roadmap_Blocked.md`; no duplicate was added.
+- **Internationalization:** gettext, RTL mirroring, and pseudo-localization exist. A real locale requires human translation and review, so it is not an autonomous engineering item.
+- **Observability and testing:** logs, JSONL events, stage timings, crash capture, support bundles, and quality reports are strong. New tests and truthful provenance are embedded in RM-307 through RM-315.
+- **Documentation:** the beginner video remains RM-306 and blocked. Documentation changes required by setup, network, provider, and architecture work are part of each acceptance contract rather than standalone cleanup.
+- **Distribution and upgrades:** RM-313 and RM-315 cover setup profiles, runtime identity, frozen bundles, and upgrade evidence.
+- **Plugins:** the trusted in-process registry and external-command adapter are adequate. Automatic third-party discovery would expand the code-execution and support boundary without demonstrated demand.
+- **Mobile, cloud, collaboration, and multi-user services:** they conflict with the focused local Windows product. RM-314 addresses same-user process safety without adding accounts or synchronization.
+- **Offline and migration:** default processing is local, optional downloads need clearer identity under RM-312, and versioned config migration is already strong (`backend/config_schema.py`, `gui/config.py`).
 
 ## Rejected Ideas
 
-### Already shipped or duplicate
-
-Do not create new roadmap items for resumable isolated jobs, watch folders, matte
-export, frozen-matte reruns, donor references, manual and scripted regions, mask
-correction, scene cuts, quality reports, SRT, WebVTT, translation, FCPXML, EDL,
-support bundles, checksums, local release evidence, DirectML fallback, CUDA
-selection, lossless intermediates, audio preservation, HDR metadata, VFR output,
-high-contrast styling, RTL scaffolding, or MSAA naming. Each exists in current code
-or documentation
-([README.md](README.md), [backend](backend), [gui](gui), [tests](tests)).
-The selected HDR and VFR items correct precision inside existing features. They do
-not re-file the container-level features.
-
-### Model and backend proposals not selected
-
-- Do not bundle ProPainter, E2FGVI, VideoPainter, DiffuEraser, ROSE, D2DF, or CLEAR
-  as defaults. Current license, model-rights, VRAM, base-model, or dependency costs
-  conflict with a redistributable local desktop application
-  ([ProPainter](https://github.com/sczhou/ProPainter),
-  [E2FGVI](https://github.com/MCG-NKU/E2FGVI),
-  [VideoPainter](https://github.com/TencentARC/VideoPainter),
-  [DiffuEraser](https://github.com/lixiaowen-xw/DiffuEraser),
-  [ROSE](https://github.com/Kunbyte-AI/ROSE),
-  [D2DF](https://github.com/bigD233/D2DF),
-  [CLEAR model card](https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal)).
-- CLEAR is no longer rejected as nonexistent. Keep a research-only adapter manifest
-  and benchmark path until redistribution rights, consumer GPU cost, large-font
-  persistence, and color drift pass written gates
-  ([CLEAR repository](https://github.com/silent-commit/CLEAR),
-  [CLEAR #2](https://github.com/silent-commit/CLEAR/issues/2),
-  [CLEAR #5](https://github.com/silent-commit/CLEAR/issues/5)).
-- Do not add RAFT, XMem, or Cutie before bidirectional DIS confidence and the new
-  local quality metrics show that the existing OpenCV lane is inadequate
-  ([OpenCV DIS](https://docs.opencv.org/5.0/main_modules/classcv_1_1DISOpticalFlow.html),
-  [UnFlow](https://ojs.aaai.org/index.php/AAAI/article/view/12276)).
-- Do not add a generic model-plugin marketplace. Loading arbitrary weights or remote
-  code would weaken the existing manifest and immutable-source policy
-  ([backend/adapter_manifest.py](backend/adapter_manifest.py),
-  [backend/remote_model_policy.py](backend/remote_model_policy.py)).
-
-### Product directions not selected
-
-- Do not replace Tk with Qt or replace FFmpeg with Media Foundation. Both rewrites
-  would put mature codecs, containers, attachments, timestamps, and current GUI
-  behavior at risk without direct demand
-  ([FFmpeg documentation](https://ffmpeg.org/ffmpeg.html),
-  [Media Foundation D3D guidance](https://learn.microsoft.com/en-us/windows/win32/medfound/mf-source-reader-d3d-manager)).
-- Do not add REST, Gradio, cloud OCR, cloud inpainting, account sync, collaboration,
-  macOS, ROCm, mobile, winget, Microsoft Store, or a hosted service. The current
-  evidence supports local Windows production and a Linux CPU CLI, not those product
-  branches ([README.md](README.md), [issues](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues)).
-- Do not restore GitHub Actions. The repository's release policy is local, and the
-  current release script already gathers evidence
-  ([build_exe.bat](build_exe.bat),
-  [backend/release_verification.py](backend/release_verification.py)).
-- Do not claim WCAG conformance, complete screen-reader support, or bitwise
-  cross-provider determinism without live evidence. WCAG 2.2 is useful design
-  guidance but does not prove a native Windows application's behavior
-  ([WCAG 2.2](https://www.w3.org/TR/WCAG22/),
-  [Windows accessibility testing](https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-testing)).
-
-### Good ideas below the ten-item cut
-
-- Reviewed static-logo discovery remains useful after the existing synthetic
-  benchmark gains a real licensed clip
-  ([backend/static_logo_benchmark.py](backend/static_logo_benchmark.py),
-  [tests/clips/manifest.json](tests/clips/manifest.json)).
-- Bidirectional flow confidence is a strong follow-on if RM-304 identifies
-  motion-boundary donor failures
-  ([backend/inpainters/_common.py:907](backend/inpainters/_common.py#L907),
-  [UnFlow](https://ojs.aaai.org/index.php/AAAI/article/view/12276)).
-- Track-level OCR text consensus could improve SRT output, but it needs exact timing
-  from RM-302 and a multilingual grapheme corpus first
-  ([backend/_srt_mixin.py](backend/_srt_mixin.py),
-  [Unicode UAX 29](https://unicode.org/reports/tr29/)).
-- Output hashes, model hashes, provider options, and deterministic flags would
-  strengthen the sidecar after media timing and decoder inventory are stable
-  ([backend/batch_report.py](backend/batch_report.py),
-  [PyTorch reproducibility](https://docs.pytorch.org/docs/stable/notes/randomness.html)).
-- A Windows processing-time sleep request is low risk, but it has less direct
-  evidence than the selected work
-  ([SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate)).
-- IMSC 1.3, OpenTimelineIO, and native UIA fragment providers are credible future
-  paths. No direct user request currently outranks the selected work
-  ([IMSC 1.3](https://www.w3.org/TR/ttml-imsc1.3/),
-  [OpenTimelineIO](https://github.com/AcademySoftwareFoundation/OpenTimelineIO),
-  [UIA provider guidance](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-serversideprovider)).
+- **Default CLEAR, SVOR, VOID, EffectErase, DiffuEraser, VideoPainter, E2FGVI, or upstream ProPainter backend:** [Verified] current redistribution terms, model rights, dependency weight, or 12 GB consumer-GPU cost fail the product's default-lane constraints. Keep candidates benchmark-only ([CLEAR](https://github.com/silent-commit/CLEAR), [SVOR](https://github.com/xiaomi-research/SVOR), [VOID](https://github.com/netflix/void-model), [EffectErase](https://github.com/FudanCVL/EffectErase)).
+- **SEDiT integration:** no public implementation, weights, and usable license were verified as of 2026-08-23 ([project](https://zheng222.github.io/SEDiT_project/)).
+- **Object-WIPER backend:** the public repository exposes the TokSim metric rather than a complete removal backend and has no clear project license ([paper](https://openaccess.thecvf.com/content/CVPR2026/html/Kushwaha_Object-WIPER_Training-Free_Object_and_Associated_Effect_Removal_in_Videos_CVPR_2026_paper.html), [repository](https://github.com/sakshamsingh1/object_wiper)).
+- **Replace modular OCR and tracking with one end-to-end video transformer:** recent papers support long-term association but do not establish better desktop cost or multilingual accuracy for this product. Improve consensus around existing detections first ([Sequential Transformer](https://openaccess.thecvf.com/content/WACV2024/html/Zhang_Sequential_Transformer_for_End-to-End_Video_Text_Detection_WACV_2024_paper.html)).
+- **Make PP-OCRv6 the default from upstream metrics alone:** PaddleOCR states that v6 recognition metrics use a different internal evaluation set and are not directly comparable. Keep it opt-in until VSR's subtitle corpus proves a win ([PaddleOCR 3.7.0](https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0)).
+- **Use human matting models as subtitle-alpha estimators:** MatAnyone and Robust Video Matting target people, not glyph opacity, outlines, glow, or antialiasing. A labeled subtitle-matte benchmark would be required first ([MatAnyone](https://openaccess.thecvf.com/content/CVPR2025/html/Yang_MatAnyone_Stable_Video_Matting_with_Consistent_Memory_Propagation_CVPR_2025_paper.html), [RVM](https://github.com/PeterL1n/RobustVideoMatting)).
+- **Average-FPS timing, H.264 alpha, or repair in a tone-mapped HDR proxy:** these contradict the governing media contracts. Keep integer clocks, codec-specific alpha, and linear-light repair ([RFC 9559](https://www.rfc-editor.org/rfc/rfc9559.html), [FFmpeg codecs](https://www.ffmpeg.org/ffmpeg-codecs.html), [BT.2100-3](https://www.itu.int/rec/R-REC-BT.2100-3-202502-I/en)).
+- **Silent DirectML replacement with Windows ML:** DirectML is in sustained engineering, but managed provider updates change reproducibility. Any Windows ML work remains a separate hardware-gated experiment ([DirectML](https://learn.microsoft.com/en-us/windows/ai/directml/dml-get-started), [Windows ML](https://github.com/microsoft/WindowsML)).
+- **Qt rewrite, hosted processing, mobile client, account sync, collaboration, or a plugin marketplace:** these increase platform, privacy, and support costs without tracker demand. Preserve the local Windows desktop focus.
+- **GitHub build workflows, winget or Store distribution, and generic signing attestations:** repository policy requires local builds and direct release artifacts; a trusted code-signing identity remains the actual SmartScreen blocker.
+- **Refile RM-297 through RM-305 or RM-306:** RM-297 through RM-305 shipped in v3.37.0. RM-306 remains recorded once in `Roadmap_Blocked.md`.
 
 ## Sources
 
-All external sources were accessed on 2026-08-21. Repository paths refer to commit
-[d79ac68](https://github.com/SysAdminDoc/VideoSubtitleRemover/commit/d79ac688974640b2aadef6d917215f3c82024b01)
-unless a later roadmap-only commit is stated.
-
 ### Repository and tracker
 
-1. [README.md](README.md): product, setup, workflow, supported outputs, and privacy.
-2. [backend/processor.py](backend/processor.py): core processing, HDR conversion,
-   timing, restoration, and final assembly.
-3. [backend/io.py](backend/io.py): ffprobe timing and OpenCV media input.
-4. [backend/detection.py](backend/detection.py): OCR result normalization and boxes.
-5. [backend/ocr_vlm.py](backend/ocr_vlm.py): optional VLM endpoint and temporary
-   frame path.
-6. [gui/preview_controller.py](gui/preview_controller.py): preview and Test Cleanup.
-7. [backend/proxy_workflow.py](backend/proxy_workflow.py): dormant planning proxy.
-8. [backend/quality.py](backend/quality.py) and
-   [backend/_quality_mixin.py](backend/_quality_mixin.py): quality metrics and gates.
-9. [backend/security_checks.py](backend/security_checks.py) and
-   [backend/release_verification.py](backend/release_verification.py): advisory and
-   release evidence.
-10. [dependency_profiles.json](dependency_profiles.json): CPU, CUDA, and DirectML
-    pins.
-11. [backend/a11y.py](backend/a11y.py),
-    [gui/settings_controller.py](gui/settings_controller.py), and
-    [docs/architecture.md](docs/architecture.md): accessibility and UI claims.
-12. [tests/archive/conftest.py](tests/archive/conftest.py),
-    [tests/archive/test_gui_smoke.py](tests/archive/test_gui_smoke.py), and
-    [tests/test_gui_import_smoke.py](tests/test_gui_import_smoke.py): GUI coverage.
-13. [Issue tracker](https://github.com/SysAdminDoc/VideoSubtitleRemover/issues),
-    [pull requests](https://github.com/SysAdminDoc/VideoSubtitleRemover/pulls),
-    [discussion #8](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8),
-    and [discussion #9](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/9).
+- https://github.com/SysAdminDoc/VideoSubtitleRemover
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/tag/v3.38.0
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/issues
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/1
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/2
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/5
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/6
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/issues/7
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8
+- https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/9
 
-### Focused projects and direct issue evidence
+### Open source competitors and adjacent tools
 
-14. [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover),
-    including [#3](https://github.com/YaoFANGUK/video-subtitle-remover/issues/3),
-    [#64](https://github.com/YaoFANGUK/video-subtitle-remover/issues/64), and
-    [#200](https://github.com/YaoFANGUK/video-subtitle-remover/issues/200).
-15. [VideoWipe](https://github.com/KKenny0/videowipe) and
-    [release 0.8.0](https://github.com/KKenny0/videowipe/releases/tag/v0.8.0).
-16. [WatermarkRemover-AI](https://github.com/D-Ogi/WatermarkRemover-AI),
-    [issue #38](https://github.com/D-Ogi/WatermarkRemover-AI/issues/38), and
-    [issue #48](https://github.com/D-Ogi/WatermarkRemover-AI/issues/48).
-17. [DeWatermark](https://github.com/qwtoe/DeWatermark).
-18. [NotebookLM watermark remover](https://github.com/alpinist-GH/notebooklm-watermark-remover)
-    and [release 0.2.4](https://github.com/alpinist-GH/notebooklm-watermark-remover/releases/tag/v0.2.4).
-19. [Seedance watermark remover](https://github.com/bakhtiersizhaev/seedance-watermark-remover).
-20. [video-text-remover](https://github.com/hjunior29/video-text-remover).
-21. [video-text-eraser](https://github.com/sueun-dev/video-text-eraser).
-22. [IOPaint](https://github.com/Sanster/IOPaint).
-23. [Inpaint Anything](https://github.com/geekyutao/Inpaint-Anything).
-24. [Track Anything](https://github.com/gaomingqi/Track-Anything) and
-    [memory issue #4](https://github.com/gaomingqi/Track-Anything/issues/4).
+- https://github.com/YaoFANGUK/video-subtitle-remover
+- https://github.com/YaoFANGUK/video-subtitle-remover/issues/3
+- https://github.com/YaoFANGUK/video-subtitle-remover/issues/64
+- https://github.com/YaoFANGUK/video-subtitle-remover/issues/200
+- https://github.com/KKenny0/videowipe
+- https://github.com/KKenny0/videowipe/releases/tag/v0.8.0
+- https://github.com/D-Ogi/WatermarkRemover-AI
+- https://github.com/D-Ogi/WatermarkRemover-AI/issues/38
+- https://github.com/D-Ogi/WatermarkRemover-AI/issues/48
+- https://github.com/qwtoe/DeWatermark
+- https://github.com/alpinist-GH/notebooklm-watermark-remover
+- https://github.com/bakhtiersizhaev/seedance-watermark-remover
+- https://github.com/hjunior29/video-text-remover
+- https://github.com/sueun-dev/video-text-eraser
+- https://github.com/Sanster/IOPaint
+- https://github.com/geekyutao/Inpaint-Anything
+- https://github.com/gaomingqi/Track-Anything
+- https://github.com/sczhou/ProPainter
+- https://github.com/sczhou/ProPainter/issues/76
+- https://github.com/MCG-NKU/E2FGVI
+- https://github.com/lixiaowen-xw/DiffuEraser
+- https://github.com/lixiaowen-xw/DiffuEraser/issues/34
+- https://github.com/TencentARC/VideoPainter
+- https://github.com/bigD233/D2DF
+- https://github.com/Kunbyte-AI/ROSE
+- https://github.com/silent-commit/CLEAR
+- https://github.com/xiaomi-research/SVOR
+- https://github.com/netflix/void-model
+- https://github.com/FudanCVL/EffectErase
+- https://github.com/sakshamsingh1/object_wiper
+- https://github.com/pq-yang/MatAnyone2
+- https://github.com/PeterL1n/RobustVideoMatting
+- https://github.com/SubtitleEdit/subtitleedit/blob/main/docs/features/video-ocr.md
+- https://github.com/smacke/ffsubsync
+- https://github.com/aperumetsr/VideoSubFinder
 
-### Academic work, benchmarks, and model projects
+### Commercial and professional products
 
-25. [LaMa WACV 2022](https://openaccess.thecvf.com/content/WACV2022/html/Suvorov_Resolution-Robust_Large_Mask_Inpainting_With_Fourier_Convolutions_WACV_2022_paper.html).
-26. [ProPainter](https://github.com/sczhou/ProPainter) and
-    [issue #76](https://github.com/sczhou/ProPainter/issues/76).
-27. [E2FGVI](https://github.com/MCG-NKU/E2FGVI) and
-    [issue #49](https://github.com/MCG-NKU/E2FGVI/issues/49).
-28. [VideoPainter](https://github.com/TencentARC/VideoPainter).
-29. [D2DF](https://github.com/bigD233/D2DF).
-30. [ROSE](https://github.com/Kunbyte-AI/ROSE) and
-    [issue #15](https://github.com/Kunbyte-AI/ROSE/issues/15).
-31. [CLEAR paper](https://arxiv.org/abs/2603.21901),
-    [code](https://github.com/silent-commit/CLEAR),
-    [model card](https://huggingface.co/charlesw09/CLEAR-mask-free-video-subtitle-removal),
-    [issue #2](https://github.com/silent-commit/CLEAR/issues/2), and
-    [issue #5](https://github.com/silent-commit/CLEAR/issues/5).
-32. [SEDiT](https://arxiv.org/abs/2605.14894).
-33. [PROVE](https://arxiv.org/abs/2605.14534) and
-    [project site](https://xiaomi-research.github.io/prove/).
-34. [VSR-Bench-400](https://openreview.net/pdf?id=MIRtxjuZF6).
-35. [EffectErase](https://github.com/FudanCVL/EffectErase) and
-    [dataset](https://huggingface.co/datasets/FudanCVL/EffectErase/tree/main).
-36. [Object-WIPER, CVPR 2026](https://openaccess.thecvf.com/content/CVPR2026/html/Kushwaha_Object-WIPER_Training-Free_Object_and_Associated_Effect_Removal_in_Videos_CVPR_2026_paper.html).
-37. [BeyondMasks](https://yigitekin.github.io/BeyondMasks/).
-38. [ViTEX benchmark](https://vitex-bench.github.io/).
-39. [UnFlow](https://ojs.aaai.org/index.php/AAAI/article/view/12276) and
-    [reference implementation](https://github.com/simonmeister/UnFlow).
+- https://helpx.adobe.com/after-effects/using/content-aware-fill.html
+- https://www.adobe.com/products/aftereffects/plans.html
+- https://www.blackmagicdesign.com/products/davinciresolve/studio
+- https://borisfx.com/products/mocha-pro/
+- https://borisfx.com/documentation/mocha/2026.5.0/
+- https://www.foundry.com/products/nuke-family/nukex
+- https://learn.foundry.com/nuke/content/reference_guide/air_nodes/copycat.html
+- https://learn.foundry.com/nuke/content/comp_environment/smartpaint/smartvector.html
+- https://runway.com/pricing
+- https://help.runwayml.com/hc/en-us/articles/51683104370451-Creating-with-Edit-Studio
+- https://filmora.wondershare.com/guide/ai-video-object-remover.html
+- https://www.media.io/video-watermark-remover.html
+- https://www.echosubs.com/
+- https://www.subtitle-remover.com/
 
-### Standards and official engineering guidance
+### Discovery lists and community reports
 
-40. [ITU-R BT.2100-3](https://www.itu.int/rec/R-REC-BT.2100-3-202502-I/en).
-41. [ITU-R BT.2446-1](https://www.itu.int/pub/R-REP-BT.2446-1-2021).
-42. [FFmpeg documentation](https://ffmpeg.org/ffmpeg.html) and
-    [ffprobe documentation](https://ffmpeg.org/ffprobe.html).
-43. [Matroska specification, RFC 9559](https://www.rfc-editor.org/rfc/rfc9559.html).
-44. [OpenCV DIS optical flow](https://docs.opencv.org/5.0/main_modules/classcv_1_1DISOpticalFlow.html).
-45. [Microsoft UIA control element guidance](https://learn.microsoft.com/en-us/accessibility-tools-docs/items/wpf/control_iscontrolelement).
-46. [Microsoft accessibility testing](https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-testing).
-47. [Microsoft UIA server-side providers](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-serversideprovider).
-48. [WCAG 2.2](https://www.w3.org/TR/WCAG22/).
-49. [Unicode UAX 29](https://unicode.org/reports/tr29/) and
-    [BCP 47, RFC 5646](https://www.rfc-editor.org/info/rfc5646).
-50. [IMSC 1.3](https://www.w3.org/TR/ttml-imsc1.3/).
-51. [PyTorch reproducibility](https://docs.pytorch.org/docs/stable/notes/randomness.html).
-52. [Windows SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate).
+- https://github.com/suhwan-cho/awesome-video-inpainting
+- https://github.com/zengyh1900/Awesome-Image-Inpainting
+- https://github.com/topics/video-inpainting
+- https://github.com/sitkevij/awesome-video
+- https://github.com/brandonhimpfen/awesome-ffmpeg
+- https://github.com/kba/awesome-ocr
+- https://news.ycombinator.com/item?id=45988018
+- https://www.reddit.com/r/StableDiffusion/comments/1quw6ve/reliable_video_object_removal_inpainting_model/
+- https://community.adobe.com/t5/after-effects-discussions/content-aware-fill-issues-when-anything-passes-in-front-of-the-mask/td-p/14046912
+- https://forum.blackmagicdesign.com/viewtopic.php?f=33&hilit=magic+mask&t=199707
+- https://community.topazlabs.com/t/topaz-video-ai-7-2-0-1b/94506?page=2
 
-### Security advisories and dependency releases
+### Standards, specifications, and platform APIs
 
-53. [PyTorch GHSA-63cw-57p8-fm3p](https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p)
-    and [GHSA-53q9-r3pm-6pq6](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6).
-54. [Python 3.13.15](https://www.python.org/downloads/release/python-31315/),
-    [Python security release announcement](https://blog.python.org/2026/08/python-31214-31116-31021/),
-    and [CVE-2026-11940](https://nvd.nist.gov/vuln/detail/CVE-2026-11940).
-55. [ONNX Runtime 1.29.0](https://github.com/microsoft/onnxruntime/releases/tag/v1.29.0),
-    [CUDA provider compatibility](https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html),
-    and [DirectML provider status](https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html).
-56. [OpenCV 5.0.0](https://github.com/opencv/opencv/releases/tag/5.0.0) and
-    [CVE-2025-53644](https://nvd.nist.gov/vuln/detail/CVE-2025-53644).
-57. [Pillow 12.3.0](https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html)
-    and [CVE-2026-54058](https://nvd.nist.gov/vuln/detail/CVE-2026-54058).
-58. [FFmpeg downloads](https://ffmpeg.org/download.html),
-    [CVE-2026-58049](https://nvd.nist.gov/vuln/detail/CVE-2026-58049), and
-    [fix commit](https://github.com/FFmpeg/FFmpeg/commit/f8d7795dcca36a4dd412e89cbd83e3dfec1e0d81).
-59. [PyInstaller 6.22.2](https://github.com/pyinstaller/pyinstaller/releases/tag/v6.22.2),
-    [GHSA-9fxf-4qw3-ghmr](https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr),
-    and [CVE-2025-59042 advisory](https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-p2xp-xx3r-mffc).
-60. [NSIS 3.12 release notes](https://nsis.sourceforge.io/Docs/AppendixF.html#v3.12).
-61. [Requests advisory](https://github.com/psf/requests/security/advisories/GHSA-gc5v-m9x4-r6x2),
-    [urllib3 advisory](https://github.com/urllib3/urllib3/security/advisories/GHSA-qccp-gfcp-xxvc),
-    and [idna advisory](https://github.com/kjd/idna/security/advisories/GHSA-65pc-fj4g-8rjx).
-62. [RapidOCR 3.9.2](https://pypi.org/project/rapidocr/),
-    [RapidOCR model hashes](https://github.com/RapidAI/RapidOCR/blob/main/python/rapidocr/default_models.yaml),
-    [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), and
-    [Paddle installation matrix](https://www.paddlepaddle.org.cn/documentation/docs/zh/install/index_cn.html).
+- https://www.unicode.org/reports/tr29/
+- https://www.unicode.org/reports/tr14/
+- https://www.w3.org/TR/webvtt1/
+- https://www.w3.org/TR/ttml2/
+- https://www.w3.org/TR/ttml-imsc1.3/
+- https://www.w3.org/TR/png-3/
+- https://www.rfc-editor.org/rfc/rfc9043.html
+- https://www.rfc-editor.org/rfc/rfc9559.html
+- https://www.itu.int/rec/R-REC-BT.2100-3-202502-I/en
+- https://www.itu.int/pub/R-REP-BT.2446-1-2021
+- https://www.itu.int/pub/r-rep-bt.2390
+- https://ffmpeg.org/ffmpeg.html
+- https://ffmpeg.org/ffprobe.html
+- https://ffmpeg.org/doxygen/trunk/ffprobe_8c_source.html
+- https://www.ffmpeg.org/ffmpeg-codecs.html
+- https://www.ffmpeg.org/ffmpeg-filters.html
+- https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate
+- https://learn.microsoft.com/en-us/windows/powertoys/awake
+- https://learn.microsoft.com/en-us/windows/ai/directml/dml-get-started
+- https://github.com/microsoft/WindowsML
+- https://learn.microsoft.com/en-us/windows/ai/new-windows-ml/samples
+- https://learn.microsoft.com/en-us/windows/win32/medfound/uncompressed-video-media-types
+- https://learn.microsoft.com/en-us/windows/win32/api/dxgicommon/ne-dxgicommon-dxgi_color_space_type
 
-### Professional tools, community reports, and discovery lists
+### Academic work and benchmarks
 
-63. [Adobe After Effects plans](https://www.adobe.com/products/aftereffects/plans.html)
-    and [Content-Aware Fill](https://helpx.adobe.com/after-effects/using/content-aware-fill.html).
-64. [DaVinci Resolve Studio](https://www.blackmagicdesign.com/products/davinciresolve/studio).
-65. [Mocha Pro](https://borisfx.com/products/mocha-pro/) and
-    [2026.5 documentation](https://borisfx.com/documentation/mocha/2026.5.0/).
-66. [NukeX](https://www.foundry.com/products/nuke-family/nukex),
-    [CopyCat](https://learn.foundry.com/nuke/content/reference_guide/air_nodes/copycat.html),
-    and [SmartVector](https://learn.foundry.com/nuke/content/comp_environment/smartpaint/smartvector.html).
-67. [Runway pricing](https://runway.com/pricing) and
-    [Edit Studio](https://help.runwayml.com/hc/en-us/articles/51683104370451-Creating-with-Edit-Studio).
-68. [Filmora AI Object Remover](https://filmora.wondershare.com/guide/ai-video-object-remover.html).
-69. [EchoSubs](https://www.echosubs.com/),
-    [Subtitle Remover](https://www.subtitle-remover.com/), and
-    [Media.io](https://www.media.io/video-watermark-remover.html).
-70. [Interra BATON](https://www.interrasystems.com/file-based-qc.php),
-    [QScan](https://qscan.io/features), and
-    [Telestream Qualify](https://docs.telestream.dev/docs/qualify-user-guide).
-71. [Stable Diffusion community discussion](https://www.reddit.com/r/StableDiffusion/comments/1quw6ve/reliable_video_object_removal_inpainting_model/),
-    [Adobe occlusion discussion](https://community.adobe.com/t5/after-effects-discussions/content-aware-fill-issues-when-anything-passes-in-front-of-the-mask/td-p/14046912),
-    [Resolve discussion](https://forum.blackmagicdesign.com/viewtopic.php?f=33&hilit=magic+mask&t=199707),
-    and [Topaz discussion](https://community.topazlabs.com/t/topaz-video-ai-7-2-0-1b/94506?page=2).
-72. [Awesome Image Inpainting](https://github.com/zengyh1900/Awesome-Image-Inpainting),
-    [video-inpainting topic](https://github.com/topics/video-inpainting),
-    [awesome-video](https://github.com/sitkevij/awesome-video),
-    [awesome-ffmpeg](https://github.com/brandonhimpfen/awesome-ffmpeg), and
-    [awesome-ocr](https://github.com/kba/awesome-ocr).
+- https://openaccess.thecvf.com/content/WACV2022/html/Suvorov_Resolution-Robust_Large_Mask_Inpainting_With_Fourier_Convolutions_WACV_2022_paper.html
+- https://github.com/sczhou/ProPainter
+- https://github.com/MCG-NKU/E2FGVI
+- https://github.com/researchmm/STTN
+- https://github.com/ruiliu-ai/FuseFormer
+- https://arxiv.org/abs/2603.21901
+- https://zheng222.github.io/SEDiT_project/
+- https://xiaomi-research.github.io/prove/
+- https://openaccess.thecvf.com/content/CVPR2022/html/Szeto_The_DEVIL_Is_in_the_Details_A_Diagnostic_Evaluation_Benchmark_CVPR_2022_paper.html
+- https://openaccess.thecvf.com/content/CVPR2026/html/Kushwaha_Object-WIPER_Training-Free_Object_and_Associated_Effect_Removal_in_Videos_CVPR_2026_paper.html
+- https://yigitekin.github.io/BeyondMasks/
+- https://openaccess.thecvf.com/content/WACV2024/html/Zhang_Sequential_Transformer_for_End-to-End_Video_Text_Detection_WACV_2024_paper.html
+- https://openaccess.thecvf.com/content/CVPR2021/html/Feng_Semantic-Aware_Video_Text_Detection_CVPR_2021_paper.html
+- https://openaccess.thecvf.com/content/CVPR2024/html/Huang_Bridging_the_Gap_Between_End-to-End_and_Two-Step_Text_Spotting_CVPR_2024_paper.html
+- https://arxiv.org/abs/2503.04058
+- https://arxiv.org/abs/2312.01938
+- https://arxiv.org/abs/2405.19194
+- https://openaccess.thecvf.com/content/CVPR2025/html/Yang_MatAnyone_Stable_Video_Matting_with_Consistent_Memory_Propagation_CVPR_2025_paper.html
+- https://openaccess.thecvf.com/content/CVPR2026/html/Yang_MatAnyone_2_Scaling_Video_Matting_via_a_Learned_Quality_Evaluator_CVPR_2026_paper.html
+
+### Dependency releases and security advisories
+
+- https://www.python.org/downloads/release/python-31315/
+- https://www.python.org/downloads/release/python-3147/
+- https://blog.python.org/2026/08/python-31214-31116-31021/
+- https://www.ffmpeg.org/download.html
+- https://ffmpeg.org/security.html
+- https://github.com/FFmpeg/FFmpeg/commit/f8d7795dcca36a4dd412e89cbd83e3dfec1e0d81
+- https://nvd.nist.gov/vuln/detail/CVE-2026-58049
+- https://github.com/opencv/opencv/releases/tag/5.0.0
+- https://github.com/opencv/opencv/wiki/OpenCV-4-to-5-migration
+- https://nvd.nist.gov/vuln/detail/CVE-2025-53644
+- https://github.com/microsoft/onnxruntime/releases/tag/v1.29.0
+- https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html
+- https://onnxruntime.ai/docs/execution-providers/DirectML-ExecutionProvider.html
+- https://github.com/RapidAI/RapidOCR/releases/tag/v3.9.2
+- https://github.com/RapidAI/RapidOCR/blob/main/python/rapidocr/default_models.yaml
+- https://github.com/PaddlePaddle/PaddleOCR/releases/tag/v3.7.0
+- https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/module_usage/text_recognition.en.md
+- https://pillow.readthedocs.io/en/stable/releasenotes/12.3.0.html
+- https://pyinstaller.org/en/stable/CHANGES.html
+- https://github.com/pyinstaller/pyinstaller/security/advisories/GHSA-9fxf-4qw3-ghmr
+- https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6
+- https://github.com/pytorch/pytorch/security/advisories/GHSA-63cw-57p8-fm3p
+- https://github.com/kjd/idna/security/advisories/GHSA-65pc-fj4g-8rjx
+- https://nvd.nist.gov/vuln/detail/CVE-2026-0994
+- https://github.com/protocolbuffers/protobuf/issues/26432
+- https://github.com/protocolbuffers/protobuf/pull/27007
+- https://www.tcl-lang.org/software/tcltk/8.6.html
+- https://www.tcl-lang.org/software/tcltk/9.0.html
+- https://github.com/python/cpython/issues/124111
+- https://huggingface.co/docs/huggingface_hub/guides/download
+- https://huggingface.co/docs/huggingface_hub/en/package_reference/file_download
+- https://huggingface.co/docs/hub/security-malware
+- https://huggingface.co/docs/hub/main/security-pickle
 
 ## Open Questions
 
-1. **VLM transport details:** PaddleOCRVL is given the configured server URL and a
-   temporary frame PNG, but the dependency owns the final request body. Capture a
-   loopback request in a test fixture to document exactly what leaves the process
-   before finalizing user-facing privacy text
-   ([backend/ocr_vlm.py:490](backend/ocr_vlm.py#L490)).
-2. **Real accessibility behavior:** Does the packaged app expose collapsed Advanced
-   controls to Narrator or NVDA, and are canvas controls operable without a mouse?
-   The one observed tree is **Needs live validation**
-   ([backend/a11y.py](backend/a11y.py),
-   [Microsoft accessibility testing](https://learn.microsoft.com/en-us/windows/apps/design/accessibility/accessibility-testing)).
-3. **HDR source policy:** Which combinations of PQ, HLG, mastering metadata, and
-   missing or conflicting transfer tags should fail closed rather than use an
-   operator-selected override
-   ([ITU-R BT.2100-3](https://www.itu.int/rec/R-REC-BT.2100-3-202502-I/en))?
-4. **VFR repair policy:** When source timestamps are missing, repeated, or
-   non-monotonic, should VSR preserve, repair, or reject each class? Every repair
-   needs a sidecar record
-   ([ffprobe documentation](https://ffmpeg.org/ffprobe.html),
-   [Matroska RFC 9559](https://www.rfc-editor.org/rfc/rfc9559.html)).
-5. **Quality threshold calibration:** What false-positive rate is acceptable for
-   intentional camera motion, cuts, lighting changes, and animated backgrounds?
-   RM-304 needs a licensed calibration corpus, not only synthetic clips
-   ([PROVE](https://arxiv.org/abs/2605.14534)).
-6. **Polygon compatibility:** Which current OCR engines return true quadrilaterals
-   reliably, and which serialized plan consumers require a backward-compatible box
-   projection ([backend/detection.py](backend/detection.py),
-   [backend/track_plan.py](backend/track_plan.py))?
-7. **Embedded FFmpeg floor mapping:** OpenCV exposes library versions rather than a
-   clean FFmpeg product version. RM-305 needs a maintained, cited mapping or a
-   wheel-build provenance rule before it can fail a release
-   ([backend/security_checks.py](backend/security_checks.py)).
-8. **Tutorial hosting:** Discussion #8 establishes the content request but not the
-   preferred host. The implementation should keep a versioned transcript and
-   screenshots in the repository even if the video is hosted elsewhere
-   ([discussion #8](https://github.com/SysAdminDoc/VideoSubtitleRemover/discussions/8#discussioncomment-17848058)).
+1. **CUDA frozen-build envelope:** Can the existing portable layout include a CUDA 12.8 lane that passes package-size, cold-start, VRAM, and inference checks on the current 12 GB RTX 4070 SUPER without making CPU setup less clear? RM-315 requires measured evidence before release.
+2. **SRT equivalence thresholds:** Which confidence weighting and grapheme-aware distance thresholds minimize cue fragmentation without merging genuinely changed text across Latin, CJK, and RTL subtitle samples? RM-310 must calibrate these against a checked-in deterministic corpus.
+3. **FFmpeg source security identity:** Does the exact FFmpeg 9.0.1 binary shipped by the project include commit `f8d7795dcca36a4dd412e89cbd83e3dfec1e0d81` for CVE-2026-58049? The current product version alone cannot answer this.
+4. **Accessibility evidence:** Does the packaged app expose collapsed Advanced controls and canvas operations correctly to Narrator and NVDA? This requires the isolated assistive-technology environment already recorded in `Roadmap_Blocked.md`.
