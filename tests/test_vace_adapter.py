@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
+import hashlib
 import sys
 import tempfile
 import types
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 import cv2
 import numpy as np
@@ -18,6 +21,7 @@ if str(_ROOT) not in sys.path:
 from backend import inpainter_registry
 from backend.config import ProcessingConfig, RegisteredMode, _coerce_backend_mode
 from backend.inpainters_diffusion import (
+    VACE_DEFAULT_REVISION,
     VACE_DEFAULT_REPO_ID,
     _VaceBackend,
     _resolve_vace_checkpoint_dir,
@@ -37,6 +41,7 @@ class VaceAdapterTests(unittest.TestCase):
                 "VSR_VACE_AUTO_FETCH",
                 "VSR_VACE_REPO_ID",
                 "VSR_VACE_REVISION",
+                "VSR_ALLOW_UNVERIFIED_MODELS",
             )
         }
         inpainter_registry.unregister("vace")
@@ -65,40 +70,220 @@ class VaceAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             ckpt = Path(tmpdir) / "Wan2.1-VACE-1.3B"
             ckpt.mkdir()
-            (ckpt / "model_index.json").write_text("{}", encoding="utf-8")
-            env = {"VSR_VACE_CKPT_DIR": str(ckpt)}
-
-            resolved = _resolve_vace_checkpoint_dir(env, auto_fetch=False)
+            (ckpt / "model.bin").write_bytes(b"verified model")
+            env = {
+                "APPDATA": tmpdir,
+                "VSR_VACE_CKPT_DIR": str(ckpt),
+            }
+            with self._fake_manifest({"model.bin": b"verified model"}):
+                resolved = _resolve_vace_checkpoint_dir(env, auto_fetch=False)
 
         self.assertEqual(resolved, ckpt)
 
-    def test_vace_auto_fetch_uses_huggingface_snapshot_download(self):
+    def _fake_manifest(self, files):
+        from backend import adapter_manifest as manifest
+
+        entry = replace(
+            manifest.get_manifest_entry("vace-wan13b"),
+            expected_filenames=tuple(files),
+            sha256={
+                name: hashlib.sha256(content).hexdigest()
+                for name, content in files.items()
+            },
+            repository=VACE_DEFAULT_REPO_ID,
+            revision=VACE_DEFAULT_REVISION,
+        )
+        return mock.patch.dict(
+            manifest.ADAPTER_MANIFEST,
+            {"vace-wan13b": entry},
+            clear=False,
+        )
+
+    def _fake_huggingface(self, files, calls):
         fake_hf = types.ModuleType("huggingface_hub")
-        calls = []
 
         def snapshot_download(**kwargs):
             calls.append(kwargs)
             target = Path(kwargs["local_dir"])
             target.mkdir(parents=True, exist_ok=True)
-            (target / "model_index.json").write_text("{}", encoding="utf-8")
+            for relative, content in files.items():
+                path = target / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
             return str(target)
 
         fake_hf.snapshot_download = snapshot_download
+        return fake_hf
+
+    def test_vace_auto_fetch_uses_allowlisted_commit_and_files(self):
+        files = {"model.bin": b"verified model"}
+        calls = []
+        fake_hf = self._fake_huggingface(files, calls)
         with tempfile.TemporaryDirectory() as tmpdir:
             env = {
                 "APPDATA": tmpdir,
                 "VSR_VACE_AUTO_FETCH": "1",
-                "VSR_VACE_REVISION": "unit-test-revision",
             }
             sys.modules["huggingface_hub"] = fake_hf
             try:
-                resolved = _resolve_vace_checkpoint_dir(env)
+                with self._fake_manifest(files):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+                    from backend.adapter_manifest import load_adapter_provenance
+                    provenance = load_adapter_provenance("vace-wan13b", env)
             finally:
                 sys.modules.pop("huggingface_hub", None)
 
         self.assertIsNotNone(resolved)
         self.assertEqual(calls[0]["repo_id"], VACE_DEFAULT_REPO_ID)
-        self.assertEqual(calls[0]["revision"], "unit-test-revision")
+        self.assertEqual(calls[0]["revision"], VACE_DEFAULT_REVISION)
+        self.assertEqual(calls[0]["allow_patterns"], ["model.bin"])
+        self.assertEqual(provenance["repository"], VACE_DEFAULT_REPO_ID)
+        self.assertEqual(provenance["commit"], VACE_DEFAULT_REVISION)
+        self.assertEqual(provenance["cachePath"], str(resolved))
+        self.assertTrue(provenance["verified"])
+        self.assertFalse(provenance["unsafeOverride"])
+
+    def test_vace_auto_fetch_blocks_mutable_or_unallowlisted_identity(self):
+        calls = []
+        fake_hf = self._fake_huggingface({"model.bin": b"model"}, calls)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "APPDATA": tmpdir,
+                "VSR_VACE_AUTO_FETCH": "1",
+                "VSR_VACE_REPO_ID": "attacker/model",
+                "VSR_VACE_REVISION": "main",
+            }
+            sys.modules["huggingface_hub"] = fake_hf
+            try:
+                with self._fake_manifest({"model.bin": b"model"}):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+            finally:
+                sys.modules.pop("huggingface_hub", None)
+
+        self.assertIsNone(resolved)
+        self.assertEqual(calls, [])
+
+    def test_vace_auto_fetch_rejects_mutable_revision_even_with_override(self):
+        calls = []
+        files = {"model.bin": b"model"}
+        fake_hf = self._fake_huggingface(files, calls)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "APPDATA": tmpdir,
+                "VSR_VACE_AUTO_FETCH": "1",
+                "VSR_VACE_REVISION": "main",
+                "VSR_ALLOW_UNVERIFIED_MODELS": "1",
+            }
+            sys.modules["huggingface_hub"] = fake_hf
+            try:
+                with self._fake_manifest(files):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+            finally:
+                sys.modules.pop("huggingface_hub", None)
+
+        self.assertIsNone(resolved)
+        self.assertEqual(calls, [])
+
+    def test_vace_auto_fetch_missing_artifact_fails_before_use(self):
+        approved = {"one.bin": b"one", "two.bin": b"two"}
+        calls = []
+        fake_hf = self._fake_huggingface({"one.bin": b"one"}, calls)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"APPDATA": tmpdir, "VSR_VACE_AUTO_FETCH": "1"}
+            sys.modules["huggingface_hub"] = fake_hf
+            try:
+                with self._fake_manifest(approved):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+            finally:
+                sys.modules.pop("huggingface_hub", None)
+
+        self.assertIsNone(resolved)
+        self.assertEqual(len(calls), 1)
+
+    def test_vace_auto_fetch_hash_mismatch_fails_without_override(self):
+        calls = []
+        fake_hf = self._fake_huggingface({"model.bin": b"tampered"}, calls)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"APPDATA": tmpdir, "VSR_VACE_AUTO_FETCH": "1"}
+            sys.modules["huggingface_hub"] = fake_hf
+            try:
+                with self._fake_manifest({"model.bin": b"approved"}):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+            finally:
+                sys.modules.pop("huggingface_hub", None)
+
+        self.assertIsNone(resolved)
+        self.assertEqual(len(calls), 1)
+
+    def test_vace_reuses_verified_app_cache_without_network(self):
+        files = {"model.bin": b"verified model"}
+        calls = []
+        fake_hf = self._fake_huggingface(files, calls)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = (
+                Path(tmpdir)
+                / "VideoSubtitleRemoverPro"
+                / "models"
+                / "vace"
+                / "Wan2.1-VACE-1.3B"
+            )
+            root.mkdir(parents=True)
+            (root / "model.bin").write_bytes(files["model.bin"])
+            env = {"APPDATA": tmpdir, "VSR_VACE_AUTO_FETCH": "1"}
+            sys.modules["huggingface_hub"] = fake_hf
+            try:
+                with self._fake_manifest(files):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+            finally:
+                sys.modules.pop("huggingface_hub", None)
+
+        self.assertEqual(resolved, root)
+        self.assertEqual(calls, [])
+
+    def test_vace_production_manifest_is_complete_and_immutable(self):
+        from backend.adapter_manifest import get_manifest_entry
+
+        entry = get_manifest_entry("vace-wan13b")
+
+        self.assertEqual(entry.repository, VACE_DEFAULT_REPO_ID)
+        self.assertEqual(entry.revision, VACE_DEFAULT_REVISION)
+        self.assertEqual(len(entry.revision), 40)
+        self.assertEqual(set(entry.sha256), set(entry.expected_filenames))
+        self.assertTrue(all(
+            len(value) == 64
+            and all(char in "0123456789abcdef" for char in value)
+            for value in entry.sha256.values()
+        ))
+
+    def test_vace_unsafe_identity_override_is_persisted_in_provenance(self):
+        from backend.adapter_manifest import load_adapter_provenance
+
+        files = {"model.bin": b"different model"}
+        calls = []
+        fake_hf = self._fake_huggingface(files, calls)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "APPDATA": tmpdir,
+                "VSR_VACE_AUTO_FETCH": "1",
+                "VSR_VACE_REPO_ID": "reviewed-fork/model",
+                "VSR_VACE_REVISION": "d" * 40,
+                "VSR_ALLOW_UNVERIFIED_MODELS": "1",
+            }
+            sys.modules["huggingface_hub"] = fake_hf
+            try:
+                with self._fake_manifest({"model.bin": b"approved model"}):
+                    resolved = _resolve_vace_checkpoint_dir(env)
+                    provenance = load_adapter_provenance("vace-wan13b", env)
+            finally:
+                sys.modules.pop("huggingface_hub", None)
+
+        self.assertIsNotNone(resolved)
+        self.assertEqual(calls[0]["repo_id"], "reviewed-fork/model")
+        self.assertEqual(calls[0]["revision"], "d" * 40)
+        self.assertTrue(provenance["unsafeOverride"])
+        self.assertEqual(provenance["repository"], "reviewed-fork/model")
+        self.assertEqual(provenance["commit"], "d" * 40)
+        self.assertEqual(provenance["files"][0]["hashStatus"], "mismatch")
 
     def test_vace_loads_fake_local_package_and_blends_output(self):
         fake_module = types.ModuleType("vace")
@@ -116,14 +301,24 @@ class VaceAdapterTests(unittest.TestCase):
             ckpt = Path(tmpdir) / "Wan2.1-VACE-1.3B"
             ckpt.mkdir()
             (ckpt / "model_index.json").write_text("{}", encoding="utf-8")
-            os.environ["VSR_VACE_CKPT_DIR"] = str(ckpt)
             sys.modules["vace"] = fake_module
             try:
-                backend = _VaceBackend(device="cpu", config=ProcessingConfig())
-                frames = [np.full((16, 16, 3), 30, dtype=np.uint8) for _ in range(2)]
-                masks = [np.zeros((16, 16), dtype=np.uint8) for _ in range(2)]
-                masks[0][4:12, 4:12] = 255
-                out = backend.inpaint(frames, masks)
+                with self._fake_manifest({"model_index.json": b"{}"}), mock.patch.dict(
+                    os.environ,
+                    {"APPDATA": tmpdir, "VSR_VACE_CKPT_DIR": str(ckpt)},
+                    clear=False,
+                ):
+                    backend = _VaceBackend(device="cpu", config=ProcessingConfig())
+                    frames = [
+                        np.full((16, 16, 3), 30, dtype=np.uint8)
+                        for _ in range(2)
+                    ]
+                    masks = [
+                        np.zeros((16, 16), dtype=np.uint8)
+                        for _ in range(2)
+                    ]
+                    masks[0][4:12, 4:12] = 255
+                    out = backend.inpaint(frames, masks)
             finally:
                 sys.modules.pop("vace", None)
 
@@ -131,6 +326,34 @@ class VaceAdapterTests(unittest.TestCase):
         self.assertEqual(len(out), 2)
         self.assertEqual(out[0].shape, (16, 16, 3))
         self.assertGreater(int(out[0][8, 8, 0]), 30)
+
+    def test_vace_never_constructs_without_verified_checkpoint_argument(self):
+        fake_module = types.ModuleType("vace")
+        constructor_calls = []
+
+        class PathlessVACE:
+            def __init__(self, device=None):
+                constructor_calls.append(device)
+
+        fake_module.VACE = PathlessVACE
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt = Path(tmpdir) / "Wan2.1-VACE-1.3B"
+            ckpt.mkdir()
+            (ckpt / "model.bin").write_bytes(b"verified model")
+            sys.modules["vace"] = fake_module
+            try:
+                with self._fake_manifest({"model.bin": b"verified model"}), mock.patch.dict(
+                    os.environ,
+                    {"APPDATA": tmpdir, "VSR_VACE_CKPT_DIR": str(ckpt)},
+                    clear=False,
+                ):
+                    backend = _VaceBackend(device="cpu", config=ProcessingConfig())
+                    loaded = backend._load()
+            finally:
+                sys.modules.pop("vace", None)
+
+        self.assertIsNone(loaded)
+        self.assertEqual(constructor_calls, [])
 
     def test_vace_uses_upstream_wan_inference_entrypoint(self):
         fake_pkg = types.ModuleType("vace")
@@ -169,14 +392,24 @@ class VaceAdapterTests(unittest.TestCase):
             ckpt = Path(tmpdir) / "Wan2.1-VACE-1.3B"
             ckpt.mkdir()
             (ckpt / "model_index.json").write_text("{}", encoding="utf-8")
-            os.environ["VSR_VACE_CKPT_DIR"] = str(ckpt)
             sys.modules["vace"] = fake_pkg
             sys.modules["vace.vace_wan_inference"] = fake_script
             try:
-                backend = _VaceBackend(device="cpu", config=ProcessingConfig())
-                frames = [np.full((16, 16, 3), 30, dtype=np.uint8) for _ in range(2)]
-                masks = [np.full((16, 16), 255, dtype=np.uint8) for _ in range(2)]
-                out = backend.inpaint(frames, masks)
+                with self._fake_manifest({"model_index.json": b"{}"}), mock.patch.dict(
+                    os.environ,
+                    {"APPDATA": tmpdir, "VSR_VACE_CKPT_DIR": str(ckpt)},
+                    clear=False,
+                ):
+                    backend = _VaceBackend(device="cpu", config=ProcessingConfig())
+                    frames = [
+                        np.full((16, 16, 3), 30, dtype=np.uint8)
+                        for _ in range(2)
+                    ]
+                    masks = [
+                        np.full((16, 16), 255, dtype=np.uint8)
+                        for _ in range(2)
+                    ]
+                    out = backend.inpaint(frames, masks)
             finally:
                 sys.modules.pop("vace", None)
                 sys.modules.pop("vace.vace_wan_inference", None)

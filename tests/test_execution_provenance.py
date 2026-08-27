@@ -369,6 +369,38 @@ class SidecarAndReportTests(unittest.TestCase):
         self.assertTrue(payload["executionProvenance"]["anyFallback"])
         self.assertEqual(payload["engine"], "RapidOCR")
 
+    def test_stage_provenance_carries_verified_model_identity(self):
+        from backend.execution_provenance import ExecutionProvenance, StageProvenance
+
+        model = {
+            "schema": "vsr.model_provenance.v1",
+            "repository": "example/model",
+            "commit": "a" * 40,
+            "files": [{
+                "path": "weights.safetensors",
+                "expectedSha256": "b" * 64,
+                "actualSha256": "b" * 64,
+                "hashStatus": "verified",
+            }],
+            "cachePath": "C:/models/example",
+            "verified": True,
+            "unsafeOverride": False,
+        }
+        provenance = ExecutionProvenance(inpaint_mode="vace")
+        provenance.set_stage(StageProvenance(
+            stage="inpaint",
+            requested_implementation="vace",
+            actual_implementation="vace",
+            model_provenance=model,
+        ))
+
+        restored = ExecutionProvenance.from_dict(provenance.to_dict())
+        payload = restored.to_dict()
+
+        self.assertEqual(
+            payload["stages"]["inpaint"]["modelProvenance"], model
+        )
+
     def test_sidecar_engine_is_unrecorded_without_provenance(self):
         from backend.batch_report import build_output_sidecar
         from backend.config import ProcessingConfig

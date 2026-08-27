@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from types import SimpleNamespace
+from pathlib import Path
 from unittest import mock
 
 
@@ -128,6 +129,38 @@ class ModelDownloadHintTests(unittest.TestCase):
         self.assertEqual(len(hints), 1)
         self.assertEqual(hints[0].label, "Wan2.1-VACE 1.3B checkpoint")
         self.assertIn("huggingface_hub", hints[0].detail)
+        self.assertIn("immutable commit", hints[0].detail)
+
+    def test_backend_status_includes_recorded_model_provenance(self):
+        from backend import model_downloads as md
+        from backend.adapter_manifest import write_adapter_provenance
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                "HOME": tmpdir,
+                "USERPROFILE": tmpdir,
+                "APPDATA": tmpdir,
+            }
+            write_adapter_provenance(
+                "vace-wan13b",
+                {
+                    "schema": "vsr.model_provenance.v1",
+                    "repository": "Wan-AI/Wan2.1-VACE-1.3B",
+                    "commit": "a" * 40,
+                    "files": [],
+                    "cachePath": str(Path(tmpdir) / "models" / "vace"),
+                    "verified": True,
+                    "unsafeOverride": False,
+                },
+                env,
+            )
+
+            status = md.installed_backend_status(_cfg(), env)
+
+        self.assertEqual(
+            status["model_provenance"]["vace-wan13b"]["commit"],
+            "a" * 40,
+        )
 
     def test_videopainter_reports_checkpoint_and_wrapper_setup(self):
         from backend import model_downloads as md

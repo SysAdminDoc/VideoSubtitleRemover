@@ -44,6 +44,14 @@ import cv2
 import numpy as np
 
 from backend.inpainter_registry import register
+from backend.adapter_manifest import (
+    get_manifest_entry,
+    log_adapter_verification,
+    model_provenance_from_verification,
+    unsafe_override_enabled,
+    verify_adapter_path,
+    write_adapter_provenance,
+)
 from backend.config import ProcessingConfig
 from backend.inpainters import (
     BaseInpainter,
@@ -61,6 +69,7 @@ from backend.subprocess_policy import run_process
 logger = logging.getLogger(__name__)
 
 VACE_DEFAULT_REPO_ID = "Wan-AI/Wan2.1-VACE-1.3B"
+VACE_DEFAULT_REVISION = "574e6a744642ce3bee319afc31496b88bde8aac4"
 
 
 MASK_FREE_RESEARCH_ADAPTERS = {
@@ -280,14 +289,15 @@ class _DiffuEraserBackend(_DiffusionBackendBase):
 class _VaceBackend(_DiffusionBackendBase):
     MODE_NAME = "vace"
     REPO_HINT = (
-        "Set VSR_VACE_CKPT_DIR to a reviewed Wan2.1-VACE-1.3B snapshot, "
+        "Set VSR_VACE_CKPT_DIR to the pinned Wan2.1-VACE-1.3B snapshot, "
         "or set VSR_VACE_AUTO_FETCH=1 with huggingface_hub installed."
     )
 
     def _load(self):
-        ckpt_dir = _resolve_vace_checkpoint_dir()
+        ckpt_dir, provenance = _resolve_vace_checkpoint()
         if ckpt_dir is None:
             return None
+        self._model_provenance = provenance or {}
         try:
             from vace import VACE  # type: ignore
         except Exception:
@@ -297,8 +307,6 @@ class _VaceBackend(_DiffusionBackendBase):
                 {"ckpt_dir": str(ckpt_dir), "device": self.device},
                 {"model_dir": str(ckpt_dir), "device": self.device},
                 {"checkpoint_dir": str(ckpt_dir), "device": self.device},
-                {"device": self.device},
-                {},
             ):
                 try:
                     model = VACE(**kwargs)
@@ -335,6 +343,17 @@ class _VaceBackend(_DiffusionBackendBase):
             edge_ring=False,
         )
 
+    def execution_identity(self) -> dict:
+        payload = {
+            "implementation": self.MODE_NAME,
+            "provider": self.backend_name,
+            "effectiveDevice": self.device,
+        }
+        provenance = getattr(self, "_model_provenance", None)
+        if isinstance(provenance, dict) and provenance:
+            payload["modelProvenance"] = dict(provenance)
+        return payload
+
 
 def _vace_cache_dir(env=None) -> Path:
     source = os.environ if env is None else env
@@ -357,26 +376,113 @@ def _configured_vace_path(env=None) -> Optional[Path]:
     return None
 
 
-def _verify_vace_checkpoint_path(path: Path) -> bool:
+def _verify_vace_checkpoint(path: Path, env=None):
     try:
-        from backend.adapter_manifest import (
-            log_adapter_verification,
-            verify_adapter_path,
+        result = verify_adapter_path(
+            "vace-wan13b",
+            str(path),
+            strict_unknown=True,
+            env=env,
         )
-        result = verify_adapter_path("vace-wan13b", str(path))
         log_adapter_verification(result)
-        return bool(result.allowed)
+        return result
     except Exception as exc:
         logger.warning(f"VACE checkpoint verification failed: {exc}")
-        return False
+        return None
 
 
-def _resolve_vace_checkpoint_dir(env=None, *, auto_fetch: bool = True) -> Optional[Path]:
+def _verify_vace_checkpoint_path(path: Path, env=None) -> bool:
+    result = _verify_vace_checkpoint(path, env)
+    return bool(result is not None and result.allowed)
+
+
+def _is_full_commit(value: str) -> bool:
+    text = str(value or "").strip()
+    return len(text) == 40 and all(char in "0123456789abcdefABCDEF" for char in text)
+
+
+def _vace_fetch_identity(env) -> Optional[tuple[str, str, bool]]:
+    entry = get_manifest_entry("vace-wan13b")
+    allowed_repo = entry.repository or VACE_DEFAULT_REPO_ID
+    allowed_revision = entry.revision or VACE_DEFAULT_REVISION
+    repo_id = str(env.get("VSR_VACE_REPO_ID") or allowed_repo).strip()
+    revision = str(env.get("VSR_VACE_REVISION") or allowed_revision).strip()
+    if not repo_id or not _is_full_commit(revision):
+        logger.warning(
+            "VACE auto-fetch requires a full 40-character immutable commit"
+        )
+        return None
+    identity_override = repo_id != allowed_repo or revision != allowed_revision
+    if identity_override and not unsafe_override_enabled(env):
+        logger.warning(
+            "VACE auto-fetch rejected repository or commit outside the "
+            "allowlist. Set %s only after reviewing the exact immutable "
+            "snapshot.",
+            "VSR_ALLOW_UNVERIFIED_MODELS=1",
+        )
+        return None
+    return repo_id, revision, identity_override
+
+
+def _record_vace_provenance(
+    result,
+    *,
+    env,
+    repository: str,
+    revision: str,
+    cache_path: Path,
+    source: str,
+    identity_override: bool = False,
+) -> Optional[dict]:
+    payload = model_provenance_from_verification(
+        result,
+        repository=repository,
+        revision=revision,
+        cache_path=cache_path,
+        source=source,
+        identity_override=identity_override,
+    )
+    try:
+        write_adapter_provenance("vace-wan13b", payload, env)
+    except OSError as exc:
+        logger.warning("VACE provenance write failed: %s", exc)
+        return None
+    return payload
+
+
+def _resolve_vace_checkpoint(
+    env=None,
+    *,
+    auto_fetch: bool = True,
+) -> tuple[Optional[Path], Optional[dict]]:
     source = os.environ if env is None else env
+    entry = get_manifest_entry("vace-wan13b")
     configured = _configured_vace_path(source)
-    if configured is not None and configured.exists():
-        candidate = configured.parent if configured.is_file() else configured
-        return candidate if _verify_vace_checkpoint_path(candidate) else None
+    cached = _vace_cache_dir(source) if configured is None else None
+    local_candidate = configured if configured is not None else cached
+    if local_candidate is not None and local_candidate.exists():
+        candidate = (
+            local_candidate.parent
+            if local_candidate.is_file() else local_candidate
+        )
+        result = _verify_vace_checkpoint(candidate, source)
+        if result is not None and result.allowed:
+            provenance = _record_vace_provenance(
+                result,
+                env=source,
+                repository=entry.repository or VACE_DEFAULT_REPO_ID,
+                revision=entry.revision or VACE_DEFAULT_REVISION,
+                cache_path=candidate,
+                source=(
+                    "configured_local" if configured is not None else "app_cache"
+                ),
+            )
+            return (
+                (candidate, provenance)
+                if provenance is not None else (None, None)
+            )
+        if configured is not None:
+            return None, None
 
     auto_fetch_enabled = (
         str(source.get("VSR_VACE_AUTO_FETCH", "") or "").strip().lower()
@@ -387,10 +493,12 @@ def _resolve_vace_checkpoint_dir(env=None, *, auto_fetch: bool = True) -> Option
             "VACE enabled but no checkpoint directory is configured. Set "
             "VSR_VACE_CKPT_DIR or VSR_VACE_AUTO_FETCH=1."
         )
-        return None
+        return None, None
 
-    repo_id = str(source.get("VSR_VACE_REPO_ID") or VACE_DEFAULT_REPO_ID)
-    revision = str(source.get("VSR_VACE_REVISION") or "").strip() or None
+    identity = _vace_fetch_identity(source)
+    if identity is None:
+        return None, None
+    repo_id, revision, identity_override = identity
     local_dir = configured if configured is not None else _vace_cache_dir(source)
     try:
         from huggingface_hub import snapshot_download  # type: ignore
@@ -399,20 +507,37 @@ def _resolve_vace_checkpoint_dir(env=None, *, auto_fetch: bool = True) -> Option
             "VSR_VACE_AUTO_FETCH=1 requires huggingface_hub. Install "
             "`huggingface-hub` or set VSR_VACE_CKPT_DIR to a local snapshot."
         )
-        return None
+        return None, None
     try:
         local_dir.mkdir(parents=True, exist_ok=True)
         snapshot = snapshot_download(
             repo_id=repo_id,
             revision=revision,
             local_dir=str(local_dir),
-            local_dir_use_symlinks=False,
+            allow_patterns=list(entry.expected_filenames),
         )
         candidate = Path(snapshot)
-        return candidate if _verify_vace_checkpoint_path(candidate) else None
+        result = _verify_vace_checkpoint(candidate, source)
+        if result is None or not result.allowed:
+            return None, None
+        provenance = _record_vace_provenance(
+            result,
+            env=source,
+            repository=repo_id,
+            revision=revision,
+            cache_path=candidate,
+            source="auto_fetch",
+            identity_override=identity_override,
+        )
+        return (candidate, provenance) if provenance is not None else (None, None)
     except Exception as exc:
         logger.warning(f"VACE checkpoint auto-fetch failed: {exc}")
-        return None
+        return None, None
+
+
+def _resolve_vace_checkpoint_dir(env=None, *, auto_fetch: bool = True) -> Optional[Path]:
+    path, _provenance = _resolve_vace_checkpoint(env, auto_fetch=auto_fetch)
+    return path
 
 
 class _VaceWanScriptAdapter:

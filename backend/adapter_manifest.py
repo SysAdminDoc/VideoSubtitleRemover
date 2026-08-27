@@ -10,9 +10,11 @@ override.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 import logging
 import os
 from pathlib import Path
+import tempfile
 from typing import Dict, Mapping, Optional, Tuple
 
 from backend.model_hashes import hash_file
@@ -20,6 +22,7 @@ from backend.model_hashes import hash_file
 logger = logging.getLogger(__name__)
 
 UNSAFE_OVERRIDE_ENV = "VSR_ALLOW_UNVERIFIED_MODELS"
+MODEL_PROVENANCE_SCHEMA = "vsr.model_provenance.v1"
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
@@ -34,6 +37,8 @@ class AdapterManifestEntry:
     preferred_format: str = "unknown"
     remote_code_required: bool = False
     allow_directories: bool = False
+    repository: str = ""
+    revision: str = ""
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,9 @@ class AdapterVerification:
     actual_sha256: Optional[str] = None
     unsafe_override: bool = False
     strict_unknown: bool = False
+    repository: str = ""
+    revision: str = ""
+    files: Tuple[Dict[str, object], ...] = field(default_factory=tuple)
 
     def as_dict(self, include_path: bool = False) -> Dict[str, object]:
         filename = Path(self.path).name if self.path else None
@@ -72,6 +80,9 @@ class AdapterVerification:
             "sourceUrl": self.adapter.source_url,
             "remoteCodeRequired": self.adapter.remote_code_required,
             "allowDirectories": self.adapter.allow_directories,
+            "repository": self.repository or self.adapter.repository,
+            "commit": self.revision or self.adapter.revision,
+            "files": [dict(item) for item in self.files],
         }
         if include_path:
             payload["path"] = self.path
@@ -173,20 +184,58 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
             "VSR_VACE_CKPT_DIR",
             "VSR_VACE_MODEL_DIR",
             "VSR_VACE_WEIGHTS",
-            "VSR_VACE_MANIFEST",
         ),
         expected_filenames=(
             "diffusion_pytorch_model.safetensors",
             "models_t5_umt5-xxl-enc-bf16.pth",
             "Wan2.1_VAE.pth",
-            "model_index.json",
+            "config.json",
+            "google/umt5-xxl/special_tokens_map.json",
+            "google/umt5-xxl/spiece.model",
+            "google/umt5-xxl/tokenizer.json",
+            "google/umt5-xxl/tokenizer_config.json",
         ),
-        sha256={},
+        sha256={
+            "diffusion_pytorch_model.safetensors": (
+                "c46a6f5f7d32c453c3983bbc59761ea41cd02ad584fb55d1"
+                "a7ee2b76145847a2"
+            ),
+            "models_t5_umt5-xxl-enc-bf16.pth": (
+                "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5a"
+                "fe36745b746fd81d"
+            ),
+            "Wan2.1_VAE.pth": (
+                "38071ab59bd94681c686fa51d75a1968f64e470262043be3"
+                "1f7a094e442fd981"
+            ),
+            "config.json": (
+                "e19df24acf3f440e0aea37d299f22b96f88d164f3349ae69"
+                "6daecd960a35ab1e"
+            ),
+            "google/umt5-xxl/special_tokens_map.json": (
+                "7b8a9f5040adb67b5805abdfd42c1f8d0f3d0e711f107265"
+                "80eb3789cd0ad61d"
+            ),
+            "google/umt5-xxl/spiece.model": (
+                "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fb"
+                "b6a872905f452458"
+            ),
+            "google/umt5-xxl/tokenizer.json": (
+                "6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2"
+                "472967ca3d22602b"
+            ),
+            "google/umt5-xxl/tokenizer_config.json": (
+                "ed9a3a8b0faa71a70a32847e0435fe036e6e112d4df4edb7"
+                "bb48a921e344dc05"
+            ),
+        },
         license="Apache-2.0",
         source_url="https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
         preferred_format="HuggingFace snapshot directory",
         remote_code_required=False,
         allow_directories=True,
+        repository="Wan-AI/Wan2.1-VACE-1.3B",
+        revision="574e6a744642ce3bee319afc31496b88bde8aac4",
     ),
     "videopainter": AdapterManifestEntry(
         name="videopainter",
@@ -295,6 +344,147 @@ def _expected_hash(entry: AdapterManifestEntry, path: Path) -> Optional[str]:
     return None
 
 
+def _directory_artifact_path(root: Path, relative_name: str) -> Optional[Path]:
+    relative = Path(str(relative_name).replace("\\", "/"))
+    if relative.is_absolute() or not relative.parts:
+        return None
+    if any(part in {"", ".", ".."} or ":" in part for part in relative.parts):
+        return None
+    candidate = root.joinpath(*relative.parts)
+    try:
+        resolved_root = root.resolve()
+        resolved_candidate = candidate.resolve()
+    except OSError:
+        return None
+    if resolved_candidate != resolved_root and resolved_root not in resolved_candidate.parents:
+        return None
+    return candidate
+
+
+def _verify_directory(
+    entry: AdapterManifestEntry,
+    path: Path,
+    *,
+    override: bool,
+    strict_unknown: bool,
+) -> AdapterVerification:
+    files = []
+    missing = []
+    unreadable = []
+    unknown = []
+    mismatched = []
+    for relative_name in entry.expected_filenames:
+        expected = str(entry.sha256.get(relative_name, "") or "").lower()
+        artifact = _directory_artifact_path(path, relative_name)
+        record: Dict[str, object] = {
+            "path": relative_name,
+            "expectedSha256": expected or None,
+            "actualSha256": None,
+            "hashStatus": "missing",
+        }
+        if artifact is None:
+            record["hashStatus"] = "invalid_manifest_path"
+            missing.append(relative_name)
+            files.append(record)
+            continue
+        if not artifact.is_file():
+            missing.append(relative_name)
+            files.append(record)
+            continue
+        try:
+            actual = hash_file(artifact).lower()
+        except OSError:
+            record["hashStatus"] = "unreadable"
+            unreadable.append(relative_name)
+            files.append(record)
+            continue
+        record["actualSha256"] = actual
+        if not expected:
+            record["hashStatus"] = "unknown"
+            unknown.append(relative_name)
+        elif actual != expected:
+            record["hashStatus"] = "mismatch"
+            mismatched.append(relative_name)
+        else:
+            record["hashStatus"] = "verified"
+        files.append(record)
+
+    common = {
+        "adapter": entry,
+        "path": str(path),
+        "configured": True,
+        "exists": True,
+        "strict_unknown": strict_unknown,
+        "repository": entry.repository,
+        "revision": entry.revision,
+        "files": tuple(files),
+    }
+    if missing:
+        return AdapterVerification(
+            **common,
+            allowed=False,
+            hash_status="missing",
+            reason="required adapter artifacts are missing: " + ", ".join(missing),
+            unsafe_override=override,
+        )
+    if unreadable:
+        return AdapterVerification(
+            **common,
+            allowed=False,
+            hash_status="unreadable",
+            reason="required adapter artifacts are unreadable: " + ", ".join(unreadable),
+            unsafe_override=override,
+        )
+    if mismatched:
+        if override:
+            return AdapterVerification(
+                **common,
+                allowed=True,
+                hash_status="unsafe_override",
+                reason="unsafe override allowed mismatched adapter artifacts",
+                unsafe_override=True,
+            )
+        return AdapterVerification(
+            **common,
+            allowed=False,
+            hash_status="mismatch",
+            reason="adapter artifact SHA-256 mismatch: " + ", ".join(mismatched),
+            unsafe_override=False,
+        )
+    if unknown:
+        if override:
+            return AdapterVerification(
+                **common,
+                allowed=True,
+                hash_status="unsafe_override",
+                reason="unsafe override allowed unpinned adapter artifacts",
+                unsafe_override=True,
+            )
+        if strict_unknown or entry.remote_code_required or entry.revision:
+            return AdapterVerification(
+                **common,
+                allowed=False,
+                hash_status="unknown",
+                reason="required adapter artifacts have no pinned SHA-256: "
+                + ", ".join(unknown),
+                unsafe_override=False,
+            )
+        return AdapterVerification(
+            **common,
+            allowed=True,
+            hash_status="unknown",
+            reason="adapter artifacts have no pinned SHA-256",
+            unsafe_override=False,
+        )
+    return AdapterVerification(
+        **common,
+        allowed=True,
+        hash_status="verified",
+        reason="every required adapter artifact matches the manifest",
+        unsafe_override=False,
+    )
+
+
 def verify_adapter_path(
     adapter_name: str,
     model_path: str,
@@ -340,6 +530,14 @@ def verify_adapter_path(
                 f"adapter model file does not exist: {path}"
             ),
             unsafe_override=override,
+            strict_unknown=strict_unknown,
+        )
+
+    if path.is_dir() and (entry.sha256 or entry.repository or entry.revision):
+        return _verify_directory(
+            entry,
+            path,
+            override=override,
             strict_unknown=strict_unknown,
         )
 
@@ -428,6 +626,95 @@ def verify_adapter_path(
         unsafe_override=False,
         strict_unknown=False,
     )
+
+
+def _provenance_root(env: Optional[Mapping[str, str]] = None) -> Path:
+    source = os.environ if env is None else env
+    appdata = str(source.get("APPDATA", "") or "").strip()
+    if appdata:
+        return Path(appdata) / "VideoSubtitleRemoverPro" / "model-provenance"
+    home = str(source.get("USERPROFILE") or source.get("HOME") or "").strip()
+    base = Path(home) if home else Path.home()
+    return base / ".config" / "VideoSubtitleRemoverPro" / "model-provenance"
+
+
+def adapter_provenance_path(
+    adapter_name: str,
+    env: Optional[Mapping[str, str]] = None,
+) -> Path:
+    get_manifest_entry(adapter_name)
+    return _provenance_root(env) / f"{adapter_name}.json"
+
+
+def model_provenance_from_verification(
+    result: AdapterVerification,
+    *,
+    repository: str = "",
+    revision: str = "",
+    cache_path: Optional[str | Path] = None,
+    source: str = "local",
+    identity_override: bool = False,
+) -> Dict[str, object]:
+    return {
+        "schema": MODEL_PROVENANCE_SCHEMA,
+        "adapter": result.adapter.name,
+        "repository": repository or result.repository or result.adapter.repository,
+        "commit": revision or result.revision or result.adapter.revision,
+        "files": [dict(item) for item in result.files],
+        "cachePath": str(cache_path or result.path or ""),
+        "source": str(source or "local"),
+        "hashStatus": result.hash_status,
+        "verified": result.hash_status == "verified",
+        "unsafeOverride": bool(result.unsafe_override or identity_override),
+    }
+
+
+def write_adapter_provenance(
+    adapter_name: str,
+    payload: Mapping[str, object],
+    env: Optional[Mapping[str, str]] = None,
+) -> Path:
+    target = adapter_provenance_path(adapter_name, env)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    normalized = dict(payload)
+    normalized["schema"] = MODEL_PROVENANCE_SCHEMA
+    normalized["adapter"] = adapter_name
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        dir=str(target.parent),
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(normalized, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, target)
+    finally:
+        try:
+            Path(temp_name).unlink()
+        except OSError:
+            pass
+    return target
+
+
+def load_adapter_provenance(
+    adapter_name: str,
+    env: Optional[Mapping[str, str]] = None,
+) -> Optional[Dict[str, object]]:
+    target = adapter_provenance_path(adapter_name, env)
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("schema") != MODEL_PROVENANCE_SCHEMA:
+        return None
+    if payload.get("adapter") != adapter_name:
+        return None
+    return payload
 
 
 CONFORMANCE_MATRIX_SCHEMA = "vsr.adapter_conformance.v1"

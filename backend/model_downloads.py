@@ -51,6 +51,93 @@ _WHISPER_SIZES = {
     "large-v3": "~3 GB",
 }
 
+_OPTIONAL_OUTBOUND_MODEL_PATHS = (
+    {
+        "name": "PaddleOCR",
+        "trigger": "PaddleOCR is selected and its assets are not cached",
+        "source": "PaddleOCR package model registry",
+        "cache": "PaddleOCR user cache",
+        "pinPolicy": "package-managed; use a pre-populated cache for offline work",
+    },
+    {
+        "name": "EasyOCR",
+        "trigger": "EasyOCR is selected and its assets are not cached",
+        "source": "EasyOCR package model URLs",
+        "cache": "EasyOCR user model cache",
+        "pinPolicy": "package-managed; use a pre-populated cache for offline work",
+    },
+    {
+        "name": "Surya",
+        "trigger": "Surya is installed and VSR_ALLOW_GPL=1",
+        "source": "Surya package Hugging Face repositories",
+        "cache": "Hugging Face user cache",
+        "pinPolicy": "package-managed; use a pre-populated cache for offline work",
+    },
+    {
+        "name": "Florence-2",
+        "trigger": "VSR_VLM_OCR=florence2 with an approved remote revision",
+        "source": "huggingface.co/microsoft/Florence-2-base",
+        "cache": "Hugging Face user cache",
+        "pinPolicy": "VSR_FLORENCE2_REVISION must be a full commit",
+    },
+    {
+        "name": "Qwen2.5-VL",
+        "trigger": "VSR_VLM_OCR=qwen25vl with an approved remote revision",
+        "source": "huggingface.co/Qwen/Qwen2.5-VL-2B-Instruct",
+        "cache": "Hugging Face user cache",
+        "pinPolicy": "VSR_QWEN25VL_REVISION must be a pinned revision",
+    },
+    {
+        "name": "simple-lama-inpainting",
+        "trigger": "VSR_ENABLE_PYTORCH_LAMA=1 and no local weight is cached",
+        "source": "simple-lama-inpainting package model URL",
+        "cache": "Torch or simple-lama user cache",
+        "pinPolicy": "vendored big-lama.pt SHA-256 is checked before load",
+    },
+    {
+        "name": "Wan2.1-VACE-1.3B",
+        "trigger": "VSR_VACE_AUTO_FETCH=1",
+        "source": "huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
+        "cache": "VSR app model cache, vace directory",
+        "pinPolicy": "repository, full commit, and every required file hash are pinned",
+    },
+    {
+        "name": "faster-whisper",
+        "trigger": "Whisper fallback uses a size name instead of a local path",
+        "source": "faster-whisper package Hugging Face repositories",
+        "cache": "Hugging Face user cache",
+        "pinPolicy": "package-managed; set whisper_model_path for offline work",
+    },
+    {
+        "name": "MatAnyone 2",
+        "trigger": "VSR_MATANYONE=1 with an approved remote revision",
+        "source": "MatAnyone 2 configured model repository",
+        "cache": "Hugging Face user cache",
+        "pinPolicy": "VSR_MATANYONE_REVISION must be a pinned revision",
+    },
+    {
+        "name": "CoTracker3",
+        "trigger": "VSR_COTRACKER=1 with a remote repository",
+        "source": "github.com/facebookresearch/co-tracker via torch.hub",
+        "cache": "Torch Hub user cache",
+        "pinPolicy": "VSR_COTRACKER_REF must be a full commit",
+    },
+)
+
+
+def optional_outbound_model_paths() -> Tuple[dict, ...]:
+    """Return every runtime path that can fetch optional model material."""
+    return tuple(dict(item) for item in _OPTIONAL_OUTBOUND_MODEL_PATHS)
+
+
+def recorded_model_provenance(
+    env: Optional[Mapping[str, str]] = None,
+) -> dict:
+    from backend.adapter_manifest import load_adapter_provenance
+
+    payload = load_adapter_provenance("vace-wan13b", env)
+    return {"vace-wan13b": payload} if payload is not None else {}
+
 
 def _module_available(name: str) -> bool:
     try:
@@ -119,15 +206,22 @@ def _lama_weight_present(env: Mapping[str, str]) -> bool:
 
 
 def _vace_checkpoint_present(env: Mapping[str, str]) -> bool:
+    from backend.adapter_manifest import get_manifest_entry
+
+    required = get_manifest_entry("vace-wan13b").expected_filenames
     for key in ("VSR_VACE_CKPT_DIR", "VSR_VACE_MODEL_DIR", "VSR_VACE_WEIGHTS"):
         value = str(env.get(key, "") or "").strip()
-        if value and Path(value).exists():
-            return True
+        if value:
+            root = Path(value)
+            root = root.parent if root.is_file() else root
+            if root.is_dir() and all((root / name).is_file() for name in required):
+                return True
     app_cache = _app_model_dir(env) / "vace" / "Wan2.1-VACE-1.3B"
-    if _has_any_file(app_cache, suffixes=(".safetensors", ".pth", ".bin", ".json")):
+    if app_cache.is_dir() and all(
+        (app_cache / name).is_file() for name in required
+    ):
         return True
-    repo = str(env.get("VSR_VACE_REPO_ID") or _VACE_REPO_ID)
-    return _hf_repo_cached(env, repo)
+    return False
 
 
 def _videopainter_checkpoint_present(env: Mapping[str, str]) -> bool:
@@ -247,14 +341,23 @@ def _append_vlm_hints(hints: list[ModelDownloadHint], env: Mapping[str, str]) ->
             cache_hint="local llama.cpp model directory",
         ))
         return
-    if selected != "florence2":
+    policy_name = {
+        "florence2": "florence2",
+        "qwen25vl": "qwen25vl",
+        "qwen2.5vl": "qwen25vl",
+    }.get(selected)
+    if policy_name is None:
         return
-    source = resolve_remote_model_source("florence2", env)
+    source = resolve_remote_model_source(policy_name, env)
     if source.allowed and source.source_type == "remote" and not _hf_repo_cached(env, source.policy.repo):
+        label = (
+            "Florence-2 VLM OCR"
+            if policy_name == "florence2" else "Qwen2.5-VL VLM OCR"
+        )
         hints.append(ModelDownloadHint(
-            label="Florence-2 VLM OCR",
-            size_estimate="~450 MB+",
-            detail="First Florence-2 OCR use may download model and processor files.",
+            label=label,
+            size_estimate=("~450 MB+" if policy_name == "florence2" else "multi-GB"),
+            detail=f"First {label} use may download model and processor files.",
             cache_hint="%USERPROFILE%\\.cache\\huggingface\\hub",
         ))
 
@@ -289,7 +392,8 @@ def _append_vace_hints(hints: list[ModelDownloadHint], config, env: Mapping[str,
             size_estimate="multi-GB",
             detail=(
                 "VACE auto-fetch will download the Wan-AI/Wan2.1-VACE-1.3B "
-                "snapshot through huggingface_hub before inference."
+                "snapshot at an immutable commit through huggingface_hub, "
+                "then verify every required artifact before inference."
             ),
             cache_hint="%APPDATA%\\VideoSubtitleRemoverPro\\models\\vace",
         ))
@@ -987,6 +1091,8 @@ def installed_backend_status(
         "language_support": language_support_status(detection),
         "inpainting": inpainting,
         "pending_downloads": hints,
+        "model_provenance": recorded_model_provenance(source_env),
+        "optional_outbound_models": list(optional_outbound_model_paths()),
         "vlm_endpoint_privacy": vlm_endpoint_privacy_status(source_env),
     }
     status["summary"] = _summarize_backend_status(status)

@@ -1,4 +1,5 @@
 import os
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -217,6 +218,123 @@ class AdapterManifestVerificationTests(unittest.TestCase):
                 )
         self.assertIsNone(result)
         session.assert_not_called()
+
+    def test_directory_manifest_verifies_every_required_artifact(self):
+        from unittest import mock
+        from backend import adapter_manifest as manifest
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "snapshot"
+            tokenizer = root / "tokenizer"
+            tokenizer.mkdir(parents=True)
+            files = {
+                "weights.safetensors": b"model weights",
+                "tokenizer/config.json": b"{}",
+            }
+            for relative, content in files.items():
+                path = root / Path(relative)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            entry = manifest.AdapterManifestEntry(
+                name="unit-directory",
+                env_vars=("VSR_UNIT_DIR",),
+                expected_filenames=tuple(files),
+                sha256={
+                    name: hashlib.sha256(content).hexdigest()
+                    for name, content in files.items()
+                },
+                repository="example/model",
+                revision="a" * 40,
+                allow_directories=True,
+            )
+            with mock.patch.dict(
+                manifest.ADAPTER_MANIFEST,
+                {"unit-directory": entry},
+                clear=False,
+            ):
+                result = manifest.verify_adapter_path(
+                    "unit-directory", str(root), env={}
+                )
+
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.hash_status, "verified")
+        self.assertEqual(result.repository, "example/model")
+        self.assertEqual(result.revision, "a" * 40)
+        self.assertEqual(len(result.files), 2)
+        self.assertTrue(all(item["hashStatus"] == "verified" for item in result.files))
+
+    def test_directory_manifest_missing_file_fails_even_with_override(self):
+        from unittest import mock
+        from backend import adapter_manifest as manifest
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "snapshot"
+            root.mkdir()
+            (root / "one.bin").write_bytes(b"one")
+            entry = manifest.AdapterManifestEntry(
+                name="unit-directory",
+                env_vars=("VSR_UNIT_DIR",),
+                expected_filenames=("one.bin", "missing.bin"),
+                sha256={
+                    "one.bin": hashlib.sha256(b"one").hexdigest(),
+                    "missing.bin": hashlib.sha256(b"missing").hexdigest(),
+                },
+                repository="example/model",
+                revision="b" * 40,
+                allow_directories=True,
+            )
+            with mock.patch.dict(
+                manifest.ADAPTER_MANIFEST,
+                {"unit-directory": entry},
+                clear=False,
+            ):
+                result = manifest.verify_adapter_path(
+                    "unit-directory",
+                    str(root),
+                    env={manifest.UNSAFE_OVERRIDE_ENV: "1"},
+                )
+
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.hash_status, "missing")
+        self.assertIn("missing.bin", result.reason)
+
+    def test_directory_hash_mismatch_requires_recorded_unsafe_override(self):
+        from unittest import mock
+        from backend import adapter_manifest as manifest
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "snapshot"
+            root.mkdir()
+            (root / "weights.bin").write_bytes(b"tampered")
+            entry = manifest.AdapterManifestEntry(
+                name="unit-directory",
+                env_vars=("VSR_UNIT_DIR",),
+                expected_filenames=("weights.bin",),
+                sha256={"weights.bin": hashlib.sha256(b"approved").hexdigest()},
+                repository="example/model",
+                revision="c" * 40,
+                allow_directories=True,
+            )
+            with mock.patch.dict(
+                manifest.ADAPTER_MANIFEST,
+                {"unit-directory": entry},
+                clear=False,
+            ):
+                blocked = manifest.verify_adapter_path(
+                    "unit-directory", str(root), env={}
+                )
+                overridden = manifest.verify_adapter_path(
+                    "unit-directory",
+                    str(root),
+                    env={manifest.UNSAFE_OVERRIDE_ENV: "true"},
+                )
+
+        self.assertFalse(blocked.allowed)
+        self.assertEqual(blocked.hash_status, "mismatch")
+        self.assertTrue(overridden.allowed)
+        self.assertEqual(overridden.hash_status, "unsafe_override")
+        self.assertTrue(overridden.unsafe_override)
+        self.assertEqual(overridden.files[0]["hashStatus"], "mismatch")
 
 
 class AdapterConformanceMatrixTests(unittest.TestCase):

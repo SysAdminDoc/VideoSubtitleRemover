@@ -28,7 +28,11 @@ from backend.ffmpeg_profiles import (
     probe_ffmpeg_security,
 )
 from backend.import_safety import module_can_import
-from backend.model_downloads import installed_backend_status
+from backend.model_downloads import (
+    installed_backend_status,
+    optional_outbound_model_paths,
+    recorded_model_provenance,
+)
 from backend.opencv_ocr import collect_opencv_dnn_ocr_status
 from backend.security_checks import (
     FFMPEG_SECURITY_ADVISORY_IDS,
@@ -75,6 +79,7 @@ _SENSITIVE_KEYS = {
     "token",
     "window_geometry",
     "work_directory",
+    "cachepath",
 }
 _SENSITIVE_SUFFIXES = (
     "_dir",
@@ -93,7 +98,10 @@ _ENV_FLAG_KEYS = (
     "VSR_CRASH_REPORTS",
     "VSR_DISABLE_UPDATE_CHECK",
     "VSR_FORCE_CPU",
+    "VSR_VACE_AUTO_FETCH",
+    "VSR_ALLOW_UNVERIFIED_MODELS",
 )
+_TRUE_FLAG_VALUES = {"1", "true", "yes", "on"}
 
 
 def default_appdata_root() -> Path:
@@ -209,7 +217,8 @@ def _support_payload(*, app_version: str,
             "frozen": bool(getattr(sys, "frozen", False)),
         },
         "env_flags": {
-            key: bool(os.environ.get(key))
+            key: str(os.environ.get(key, "")).strip().lower()
+            in _TRUE_FLAG_VALUES
             for key in _ENV_FLAG_KEYS
         },
         "tools": {
@@ -224,6 +233,8 @@ def _support_payload(*, app_version: str,
             "onnxruntime": collect_onnxruntime_provider_status(),
         },
         "backend_status": installed_backend_status(),
+        "model_provenance": recorded_model_provenance(),
+        "optional_outbound_models": list(optional_outbound_model_paths()),
         "model_cache": model_cache_status(),
         "security": {
             "opencv_libpng": opencv_libpng_status(),

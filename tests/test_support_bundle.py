@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -149,6 +150,52 @@ class SupportBundleTests(unittest.TestCase):
 
             self.assertEqual(created.suffix, ".zip")
             self.assertTrue(created.exists())
+
+    def test_bundle_records_model_identity_but_redacts_cache_path(self):
+        from backend.adapter_manifest import write_adapter_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            env = {
+                "APPDATA": str(root),
+                "HOME": str(root),
+                "USERPROFILE": str(root),
+                "VSR_VACE_AUTO_FETCH": "0",
+                "VSR_ALLOW_UNVERIFIED_MODELS": "false",
+            }
+            cache_path = root / "private-user" / "models" / "vace"
+            payload = {
+                "schema": "vsr.model_provenance.v1",
+                "repository": "Wan-AI/Wan2.1-VACE-1.3B",
+                "commit": "a" * 40,
+                "files": [{
+                    "path": "weights.safetensors",
+                    "expectedSha256": "b" * 64,
+                    "actualSha256": "b" * 64,
+                    "hashStatus": "verified",
+                }],
+                "cachePath": str(cache_path),
+                "verified": True,
+                "unsafeOverride": False,
+            }
+            write_adapter_provenance("vace-wan13b", payload, env)
+            out = root / "support.zip"
+            with mock.patch.dict(os.environ, env, clear=False):
+                create_support_bundle(out, app_version="9.9.9")
+
+            with zipfile.ZipFile(out) as bundle:
+                support = json.loads(bundle.read("support.json"))
+
+        recorded = support["model_provenance"]["vace-wan13b"]
+        self.assertEqual(recorded["commit"], "a" * 40)
+        self.assertEqual(recorded["files"][0]["actualSha256"], "b" * 64)
+        self.assertEqual(recorded["cachePath"], "<redacted>")
+        self.assertFalse(support["env_flags"]["VSR_VACE_AUTO_FETCH"])
+        self.assertFalse(support["env_flags"]["VSR_ALLOW_UNVERIFIED_MODELS"])
+        self.assertTrue(any(
+            item["name"] == "Wan2.1-VACE-1.3B"
+            for item in support["optional_outbound_models"]
+        ))
 
     def test_cli_support_bundle_entrypoint_is_dependency_light(self):
         with tempfile.TemporaryDirectory() as tmp:

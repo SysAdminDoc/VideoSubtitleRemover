@@ -24,13 +24,18 @@
 Video Subtitle Remover Pro uses real AI neural networks to remove hard-coded subtitles and text watermarks from videos and images. Unlike simple blur or crop methods, it intelligently fills in removed areas with content that matches the surrounding video.
 
 All media processing is local. No account, subscription, or upload is required:
-your video, images, masks, OCR text, and outputs stay on this computer. In the
-normal runtime, the only outbound requests made by the application are the
-opt-in GitHub update check and the opt-in crash report. Leave **Check for
-updates on startup** off (the persisted `update_check` setting is `false`) to
-disable the update request. Crash reporting is disabled unless both
-`VSR_GLITCHTIP_DSN` and `VSR_CRASH_REPORTS=1` are set; unset either variable, or
-set `VSR_CRASH_REPORTS=0`, to disable it.
+your video, images, masks, OCR text, and outputs stay on this computer. The
+default OCR and cleanup path does not fetch models at runtime. Optional engines
+can download model material after you enable them. Every such route is listed
+under [Optional model network paths](#optional-model-network-paths) and in the
+[privacy and network guide](docs/privacy-and-network.md).
+
+The two non-model requests are an opt-in GitHub update check and
+an opt-in crash report. The `update_check` setting is `false` by default.
+Leave **Check for updates on startup** off to disable the update request. Crash
+reporting is disabled unless both `VSR_GLITCHTIP_DSN` and
+`VSR_CRASH_REPORTS=1` are set. Unset either variable, or set
+`VSR_CRASH_REPORTS=0`, to disable it.
 
 Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), enhanced with a professional interface, real LaMa inpainting, multi-engine detection, and a 52-code language picker backed by broader OCR engine coverage.
 
@@ -505,7 +510,14 @@ longer receive a release exception.
 Wan2.1-VACE is available as an opt-in registry mode: set `VSR_VACE=1`, install
 the reviewed upstream `vace` package, then either set `VSR_VACE_CKPT_DIR` to a
 local `Wan-AI/Wan2.1-VACE-1.3B` snapshot or set `VSR_VACE_AUTO_FETCH=1` with
-`huggingface-hub` installed to fetch it into the app model cache.
+`huggingface-hub` installed. Auto-fetch is fixed to repository
+`Wan-AI/Wan2.1-VACE-1.3B` at commit
+`574e6a744642ce3bee319afc31496b88bde8aac4`. VSR downloads only the eight files
+needed by the upstream VACE runtime and checks every SHA-256 before importing
+or constructing the model. Repository or commit changes require a full
+40-character commit plus `VSR_ALLOW_UNVERIFIED_MODELS=1`. Hash exceptions use
+the same explicit flag. Both cases are marked unsafe in the model provenance
+record, output sidecar, batch evidence, and support bundle.
 VideoPainter is available only as a strict local research adapter: set
 `VSR_VIDEOPAINTER=1`, review the upstream research/non-commercial and CogVideoX
 license terms, set `VSR_VIDEOPAINTER_CKPT_DIR` to a local checkpoint root, set
@@ -551,6 +563,32 @@ crash the GUI process during import. Its NumPy <2 cap also conflicts with the
 primary OpenCV runtime, so use a separate legacy environment. Prefer the
 maintained `VSR_LAMA_ONNX` or `VSR_OPENCV_LAMA` paths for automatic LaMa
 acceleration.
+
+### Optional model network paths
+
+The default RapidOCR, OpenCV, TBE, and ONNX paths use installed or local files.
+These are the runtime paths that may contact a model host after an explicit
+opt-in or optional-engine selection:
+
+| Optional path | What enables it | Download owner and cache |
+|---|---|---|
+| PaddleOCR | PaddleOCR is selected and its assets are absent | PaddleOCR manages its model URLs and user cache |
+| EasyOCR | EasyOCR is selected and its assets are absent | EasyOCR manages its model URLs and user model cache |
+| Surya | Surya is installed and `VSR_ALLOW_GPL=1` | Surya manages its Hugging Face models and cache |
+| Florence-2 | `VSR_VLM_OCR=florence2` with `VSR_FLORENCE2_REVISION` | Hugging Face; a full commit is required because repository code executes |
+| Qwen2.5-VL | `VSR_VLM_OCR=qwen25vl` with `VSR_QWEN25VL_REVISION` | Hugging Face; a pinned revision is required |
+| simple-lama-inpainting | `VSR_ENABLE_PYTORCH_LAMA=1` and no local weight | The package manages the download; VSR checks the known `big-lama.pt` hash |
+| Wan2.1-VACE-1.3B | `VSR_VACE_AUTO_FETCH=1` | Hugging Face; VSR pins the repository, full commit, and eight file hashes |
+| faster-whisper | Whisper fallback uses a size name rather than a local path | faster-whisper manages its Hugging Face model and cache |
+| MatAnyone 2 | `VSR_MATANYONE=1` with `VSR_MATANYONE_REVISION` | The adapter uses its configured remote model repository at a pinned revision |
+| CoTracker3 | `VSR_COTRACKER=1` with a remote source | `torch.hub` fetches the reviewed GitHub repository at `VSR_COTRACKER_REF`, which must be a full commit |
+
+PaddleOCR-VL through llama.cpp, FFmpeg Whisper, VideoPainter, and FloED require
+local models or local wrapper commands. VSR does not auto-fetch those assets.
+For a network-silent run, pre-populate the needed caches or configure local
+paths, disable the update check and crash reporting, then disconnect the
+machine. See [Privacy, network access, and offline use](docs/privacy-and-network.md)
+for host details and verification behavior.
 
 ## CLI Usage
 
@@ -1444,7 +1482,7 @@ VideoSubtitleRemover/
 |   `-- model_hashes.py       # Vendored SHA-256 weight hashes
 |-- docs/
 |   |-- architecture.md       # Pipeline map for new contributors
-|   `-- (retired audit material is kept in local maintainer notes)
+|   `-- privacy-and-network.md # Optional downloads and offline operation
 |-- ROADMAP.md                # Active incomplete work
 |-- RESEARCH.md               # Current research synthesis
 |-- setup.py                  # First-time environment setup
@@ -1465,9 +1503,9 @@ See [docs/architecture.md](docs/architecture.md) for a walkthrough of
 the detect -> tracker -> mask -> TBE -> refine -> mux pipeline and the
 "add a new feature" checklist.
 
-Maintainers keep active planning and research notes locally; the published
-documentation surface is the architecture guide above and the usage sections
-in this README.
+Maintainers keep active planning and research notes locally. Published
+documentation includes the architecture guide, privacy and network guide, and
+the usage sections in this README.
 
 ## Translating VSR
 

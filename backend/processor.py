@@ -1163,6 +1163,9 @@ class SubtitleRemover(
         stage.outcome = "executed"
         stage.failure_class = ""
         stage.recovery_hint = ""
+        model_provenance = identity.get("modelProvenance")
+        if isinstance(model_provenance, dict):
+            stage.model_provenance = dict(model_provenance)
         executions = identity.get("actualExecutions")
         if isinstance(executions, list) and executions:
             previous_counts = sync_state.get("execution_counts", {})

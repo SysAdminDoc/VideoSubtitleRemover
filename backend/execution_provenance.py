@@ -156,6 +156,7 @@ class StageProvenance:
     outcome: str = "executed"
     failure_class: str = ""
     recovery_hint: str = ""
+    model_provenance: dict = field(default_factory=dict)
 
     @property
     def implementation_fell_back(self) -> bool:
@@ -322,6 +323,8 @@ class StageProvenance:
             ),
             "label": self.label(),
         }
+        if self.model_provenance:
+            payload["modelProvenance"] = dict(self.model_provenance)
         return payload
 
 
@@ -597,5 +600,10 @@ class ExecutionProvenance:
                     outcome=str(raw.get("outcome") or "executed"),
                     failure_class=str(raw.get("failureClass") or ""),
                     recovery_hint=str(raw.get("recoveryHint") or ""),
+                    model_provenance=(
+                        dict(raw.get("modelProvenance"))
+                        if isinstance(raw.get("modelProvenance"), dict)
+                        else {}
+                    ),
                 ))
         return item

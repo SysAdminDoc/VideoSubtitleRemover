@@ -4,6 +4,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- VACE auto-fetch now uses the allowlisted
+  `Wan-AI/Wan2.1-VACE-1.3B` repository at full commit
+  `574e6a744642ce3bee319afc31496b88bde8aac4`. Only the eight runtime artifacts
+  are downloaded, and every file must match its pinned SHA-256 before model
+  import or construction. Missing files cannot be bypassed. A different full
+  commit, repository, or mismatched hash requires the explicit
+  `VSR_ALLOW_UNVERIFIED_MODELS=1` override and is recorded as unsafe.
+- Verified model provenance now records repository, commit, file hashes, cache
+  path, and override state. It is carried into execution sidecars and batch
+  evidence, while support bundles retain the identity and redact the local
+  cache path. The network guide now lists every optional runtime model fetch
+  and its offline alternative.
+
 ### Fixed
 
 - Skip-existing now verifies a v3 output sidecar before accepting prior work.
