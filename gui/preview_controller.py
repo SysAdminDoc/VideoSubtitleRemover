@@ -277,6 +277,10 @@ class PreviewControllerMixin:
         """Return media-first preview bounds for the current workbench size."""
         surface = getattr(self, "_preview_media_surface", self._preview_frame)
         try:
+            surface.update_idletasks()
+        except Exception:
+            pass
+        try:
             max_w = max(320, surface.winfo_width() - 4)
         except Exception:
             max_w = 960
@@ -1918,7 +1922,9 @@ class PreviewControllerMixin:
             return
         self._stop_throbber()
         self._set_preview_empty_state_visible(False)
-        self._preview_photo = ImageTk.PhotoImage(img)
+        max_w, max_h = self._preview_display_bounds()
+        fitted_image = _fit_preview_image(img, max_w, max_h)
+        self._preview_photo = ImageTk.PhotoImage(fitted_image)
         self.preview_title_label.config(
             text=tr("Composed mask for {name}").format(
                 name=Path(cache["item_file"]).name))
@@ -2004,7 +2010,10 @@ class PreviewControllerMixin:
             # compositing and resizing above intentionally stays on the
             # preview worker, while PhotoImage construction happens only in
             # this callback dispatched through Tk's event loop.
-            self._preview_photo = ImageTk.PhotoImage(display_image)
+            current_w, current_h = self._preview_display_bounds()
+            fitted_image = _fit_preview_image(
+                display_image, current_w, current_h)
+            self._preview_photo = ImageTk.PhotoImage(fitted_image)
             self.preview_title_label.config(text=title)
             self.preview_meta_label.config(text=meta)
             self._preview_label.config(image=self._preview_photo, text="")

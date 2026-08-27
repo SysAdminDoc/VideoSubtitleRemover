@@ -763,24 +763,57 @@ class RegionSelectorWindow:
             self.win._vsr_ocr_overlay_ids = self.ocr_overlay_ids
             self.win._vsr_run_live_ocr = self._run_live_ocr_probe
 
-            # Action row: Add another, Clear all, Save.
+            # Keep the core decision obvious; time and motion tools stay in a
+            # named menu for users who need them.
             actions = tk.Frame(body, bg=Theme.BG_OVERLAY)
             actions.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_MD))
 
             ModernButton(actions, text=tr("Clear all"), command=self._clear_all,
                          style="ghost", size="sm", width=92).pack(side="left")
             if self.is_video:
-                ModernButton(actions, text=tr("Add timed"), command=self._add_timed_regions,
-                             style="secondary", size="sm", width=96).pack(
-                                 side="left", padx=(Theme.S_SM, 0))
-                ModernButton(actions, text=tr("Add keyframe"),
-                             command=self._add_region_keyframe,
-                             style="secondary", size="sm", width=108).pack(
-                                 side="left", padx=(Theme.S_SM, 0))
-                ModernButton(actions, text=tr("Save motion"),
-                             command=self._commit_motion_track,
-                             style="secondary", size="sm", width=108).pack(
-                                 side="left", padx=(Theme.S_SM, 0))
+                def _open_region_tools(button):
+                    menu = tk.Menu(
+                        self.win,
+                        tearoff=False,
+                        bg=Theme.BG_RAISED,
+                        fg=Theme.TEXT_PRIMARY,
+                        activebackground=Theme.BLUE_MUTED,
+                        activeforeground=Theme.TEXT_PRIMARY,
+                        bd=1,
+                        relief="solid",
+                    )
+                    menu.add_command(
+                        label=tr("Add timed region"),
+                        command=self._add_timed_regions,
+                    )
+                    menu.add_command(
+                        label=tr("Add motion keyframe"),
+                        command=self._add_region_keyframe,
+                    )
+                    menu.add_command(
+                        label=tr("Save motion track"),
+                        command=self._commit_motion_track,
+                    )
+                    try:
+                        menu.tk_popup(
+                            button.winfo_rootx(),
+                            button.winfo_rooty() + button.winfo_height(),
+                        )
+                    finally:
+                        menu.grab_release()
+
+                region_tools_btn = ModernButton(
+                    actions,
+                    text=tr("Time and motion tools"),
+                    command=None,
+                    style="secondary",
+                    size="sm",
+                    width=164,
+                )
+                region_tools_btn.command = (
+                    lambda button=region_tools_btn: _open_region_tools(button)
+                )
+                region_tools_btn.pack(side="left", padx=(Theme.S_SM, 0))
             ModernButton(actions, text=tr("Save region"), command=self._save_and_close,
                          style="primary", size="sm", width=112).pack(
                              side="right")

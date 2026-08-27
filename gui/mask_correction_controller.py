@@ -349,10 +349,13 @@ class MaskCorrectionWindow:
             ).pack(
                 fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
-            self.status_var = tk.StringVar(value=tr("Loading review frame..."))
+            self.status_var = tk.StringVar(value=tr("Preparing review frame..."))
             status = tk.Label(
                 preview_column, textvariable=self.status_var, font=f(Theme.F_META),
-                bg=Theme.BG_DARK, fg=Theme.TEXT_MUTED, anchor="w")
+                bg=Theme.BG_TERTIARY, fg=Theme.INFO, anchor="w",
+                padx=Theme.S_MD, pady=Theme.S_SM,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER_SUBTLE)
 
             self.canvas = tk.Canvas(
                 preview_column, width=self.display_w, height=self.display_h,
@@ -393,7 +396,7 @@ class MaskCorrectionWindow:
             set_accessible_metadata(
                 frame_slider, role="slider", label=tr("Review frame"),
                 description=tr("Choose the source frame to inspect and correct."))
-            status.pack(fill="x")
+            status.pack(fill="x", pady=(Theme.S_XS, 0))
             set_accessible_metadata(
                 status, role="status", label=tr("Mask correction status"))
 
@@ -731,8 +734,9 @@ class MaskCorrectionWindow:
         self.state["request"] += 1
         request_id = self.state["request"]
         self.render()
-        self.status_var.set(tr("Loading detected mask for frame {frame}...").format(
-            frame=index))
+        self.status_var.set(
+            tr("Preparing detected mask for frame {frame}...").format(
+                frame=index + 1))
 
         threading.Thread(
             target=partial(
@@ -833,8 +837,8 @@ class MaskCorrectionWindow:
         self.state["base_mask"], source = result
         self.render()
         self.status_var.set(
-            tr("Frame {frame}; base mask from {source}").format(
-                frame=index, source=source,
+            tr("Frame {frame} is ready. Base mask: {source}").format(
+                frame=index + 1, source=source,
             )
         )
 

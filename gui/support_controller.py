@@ -657,8 +657,11 @@ class SupportControllerMixin:
             fg=Theme.TEXT_MUTED,
         ).pack(anchor="w", pady=(2, 0))
 
-        det_label = ", ".join(self.ai_engines["detection"]) or tr("None")
-        inp_label = ", ".join(self.ai_engines["inpainting"]) or tr("None")
+        checking_system = bool(getattr(self, "_hardware_probe_pending", False))
+        det_label = ", ".join(self.ai_engines["detection"]) or (
+            tr("Checking...") if checking_system else tr("None"))
+        inp_label = ", ".join(self.ai_engines["inpainting"]) or (
+            tr("Checking...") if checking_system else tr("None"))
         gpu_count = len(self.gpus)
         gpu_label = (
             ntr("{count} GPU", "{count} GPUs", gpu_count).format(
@@ -716,28 +719,46 @@ class SupportControllerMixin:
         fact(
             system,
             tr("FFmpeg"),
-            tr("Ready") if self.ffmpeg_ready else tr("Missing"),
-            Theme.SUCCESS if self.ffmpeg_ready else Theme.WARNING,
+            (
+                tr("Ready") if self.ffmpeg_ready
+                else tr("Checking...") if checking_system
+                else tr("Missing")
+            ),
+            (
+                Theme.SUCCESS if self.ffmpeg_ready
+                else Theme.INFO if checking_system
+                else Theme.WARNING
+            ),
         )
         fact(system, tr("Model cache"), cache_label)
-        fact(
-            system,
-            tr("Before cleanup"),
-            tr("Review a sample frame"),
-        )
 
         summary = (self.backend_status or {}).get("summary", {})
         tone = str(summary.get("tone") or "neutral")
         ready = tone == "success"
+        checking_runtime = checking_system or (
+            tone == "neutral"
+            and any(
+                "checking" in str(summary.get(key) or "").lower()
+                for key in ("detection", "inpainting", "model_files")
+            )
+        )
         section_title(runtime, tr("Runtime status"))
         status_row = tk.Frame(runtime, bg=Theme.BG_SECONDARY)
         status_row.pack(fill="x", pady=(Theme.S_XS, Theme.S_MD))
         tk.Label(
             status_row,
-            text=tr("Ready") if ready else tr("Needs attention"),
+            text=(
+                tr("Ready") if ready
+                else tr("Checking system") if checking_runtime
+                else tr("Needs attention")
+            ),
             font=f(Theme.F_BODY, "bold"),
             bg=Theme.BG_SECONDARY,
-            fg=Theme.SUCCESS if ready else Theme.WARNING,
+            fg=(
+                Theme.SUCCESS if ready
+                else Theme.INFO if checking_runtime
+                else Theme.WARNING
+            ),
         ).pack(side="left")
         fact(runtime, tr("Detection"), summary.get("detection") or tr("Unknown"))
         fact(runtime, tr("Inpainting"), summary.get("inpainting") or tr("Unknown"))
@@ -759,30 +780,55 @@ class SupportControllerMixin:
             justify="left",
         ).pack(anchor="w", pady=(Theme.S_MD, 0))
 
+        guidance = tk.Frame(
+            content,
+            bg=Theme.BG_TERTIARY,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER_SUBTLE,
+        )
+        guidance.pack(fill="x", pady=(Theme.S_LG, 0))
+        tk.Label(
+            guidance,
+            text=tr("Before cleanup"),
+            font=f(Theme.F_BODY_SM, "bold"),
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_PRIMARY,
+        ).pack(side="left", padx=(Theme.S_MD, Theme.S_SM), pady=Theme.S_SM)
+        tk.Label(
+            guidance,
+            text=tr("Review a sample frame to confirm the subtitle region."),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_TERTIARY,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left", pady=Theme.S_SM)
+
         actions = tk.Frame(body, bg=Theme.BG_SECONDARY)
         actions.pack(fill="x")
         tk.Frame(actions, bg=Theme.BORDER_SUBTLE, height=1).pack(fill="x")
         actions_inner = tk.Frame(actions, bg=Theme.BG_SECONDARY)
-        actions_inner.pack(side="right", padx=24, pady=16)
+        actions_inner.pack(fill="x", padx=24, pady=16)
 
-        ModernButton(actions_inner, text=tr("Open log"), width=96,
+        support_actions = tk.Frame(actions_inner, bg=Theme.BG_SECONDARY)
+        support_actions.pack(side="left")
+
+        ModernButton(support_actions, text=tr("Open log"), width=96,
                      command=self._open_log_file, style="ghost", size="md").pack(side="left")
-        model_cache_btn = ModernButton(actions_inner, text=tr("Model cache"), width=116,
+        model_cache_btn = ModernButton(support_actions, text=tr("Model cache"), width=116,
                                        command=None, style="ghost", size="md")
         model_cache_btn.command = (
             lambda btn=model_cache_btn: self._open_model_cache_menu(btn)
         )
         model_cache_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text=tr("FFmpeg commands"), width=142,
+        ModernButton(support_actions, text=tr("FFmpeg commands"), width=142,
                      command=self._show_ffmpeg_commands, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(actions_inner, text=tr("Support bundle"), width=128,
+        ModernButton(support_actions, text=tr("Support bundle"), width=128,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
         close_btn = ModernButton(actions_inner, text=tr("Close"), width=84,
                      command=_close_about,
                      style="primary", size="md")
-        close_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        close_btn.pack(side="right")
 
         dialog.bind("<Escape>", lambda e: _close_about())
         dialog.protocol("WM_DELETE_WINDOW", _close_about)

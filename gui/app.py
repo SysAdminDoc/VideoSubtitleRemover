@@ -1462,12 +1462,25 @@ class VideoSubtitleRemoverApp(
             self, "_inspector_summary_buttons", {}
         ).items():
             expanded = section == open_section
+            row = self._inspector_summary_row_frames.get(section)
+            divider = getattr(
+                self, "_inspector_summary_dividers", {}
+            ).get(section)
+            if open_section is not None and not expanded:
+                if row is not None:
+                    row.pack_forget()
+                if divider is not None:
+                    divider.pack_forget()
+            else:
+                if divider is not None and not divider.winfo_manager():
+                    divider.pack(fill="x")
+                if row is not None and not row.winfo_manager():
+                    row.pack(fill="x")
             row_bg = Theme.BG_CARD_HOVER if expanded else Theme.BG_SECONDARY
             button.configure(
                 bg=row_bg,
                 fg=Theme.TEXT_PRIMARY if expanded else Theme.TEXT_SECONDARY,
             )
-            row = self._inspector_summary_row_frames.get(section)
             if row is not None:
                 row.configure(bg=row_bg)
             chevron = self._inspector_summary_chevrons.get(section)
@@ -1483,8 +1496,11 @@ class VideoSubtitleRemoverApp(
                 role="button",
                 label=title,
                 state="expanded" if expanded else "collapsed",
-                description=tr("Show {section} settings.").format(
-                    section=title),
+                description=(
+                    tr("Hide {section} settings.")
+                    if expanded
+                    else tr("Show {section} settings.")
+                ).format(section=title),
             )
 
 

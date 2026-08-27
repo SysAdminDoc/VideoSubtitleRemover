@@ -36,9 +36,24 @@ class ResponsiveLayoutMixin:
                 self._content_window,
                 width=max(1, event.width - gutter),
             )
+            self._fit_content_window_height()
             self._content_canvas.configure(
                 scrollregion=self._content_canvas.bbox("all"))
             self._sync_content_scrollbar()
+
+    def _fit_content_window_height(self) -> None:
+        """Fill spare workbench height while preserving overflow scrolling."""
+        canvas = getattr(self, "_content_canvas", None)
+        content = getattr(self, "_content", None)
+        window = getattr(self, "_content_window", None)
+        if canvas is None or content is None or window is None:
+            return
+        try:
+            target_height = max(
+                canvas.winfo_height(), content.winfo_reqheight())
+            canvas.itemconfig(window, height=max(1, target_height))
+        except tk.TclError:
+            pass
 
     def _sync_content_scrollbar(self):
         """Show workbench scrolling only when the content is taller."""
@@ -159,7 +174,12 @@ class ResponsiveLayoutMixin:
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
             self._content.rowconfigure(2, weight=0)
-            self._preview_col.grid(row=0, column=0, sticky="nsew",
+            preview_sticky = (
+                "new"
+                if getattr(self, "_inspector_open_section", None)
+                else "nsew"
+            )
+            self._preview_col.grid(row=0, column=0, sticky=preview_sticky,
                                    padx=(0, 0))
             self._settings_col.grid(row=0, column=1, sticky="nsew")
 

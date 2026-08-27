@@ -131,25 +131,79 @@ class TrackPlanControllerMixin:
         ).pack(anchor="w")
         tk.Label(
             content,
-            text=ntr("{n} track found. Unchecked tracks are kept on screen: "
-                     "their frames and region are excluded from cleanup.",
-                     "{n} tracks found. Unchecked tracks are kept on screen: "
-                     "their frames and region are excluded from cleanup.",
-                     len(tracks)).format(n=len(tracks)),
+            text=ntr(
+                "{n} track found. Select it to remove the text, or clear it "
+                "to keep the text visible.",
+                "{n} tracks found. Select the tracks to remove, or clear a "
+                "track to keep its text visible.",
+                len(tracks),
+            ).format(n=len(tracks)),
             font=f(Theme.F_BODY_SM), bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_SECONDARY, wraplength=520, justify="left",
+            fg=Theme.TEXT_SECONDARY, wraplength=640, justify="left",
         ).pack(anchor="w", pady=(2, Theme.S_LG))
 
         fps = float(plan.get("fps") or 0.0) or 30.0
         remove_vars = []
         thumbnails = []
+        track_rows = []
+        selection_var = tk.StringVar()
+
+        def _refresh_selection():
+            selected = sum(1 for _track, var in remove_vars if var.get())
+            selection_var.set(
+                ntr(
+                    "{n} track selected for removal",
+                    "{n} tracks selected for removal",
+                    selected,
+                ).format(n=selected)
+            )
+            for row, var in track_rows:
+                row.configure(
+                    highlightbackground=(
+                        Theme.BLUE_PRIMARY if var.get()
+                        else Theme.BORDER_SUBTLE
+                    )
+                )
+
+        def _set_all(value: bool):
+            for _track, var in remove_vars:
+                var.set(value)
+            _refresh_selection()
+
+        selection_bar = tk.Frame(content, bg=Theme.BG_SECONDARY)
+        selection_bar.pack(fill="x", pady=(0, Theme.S_SM))
+        tk.Label(
+            selection_bar,
+            textvariable=selection_var,
+            font=f(Theme.F_META, "bold"),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
+        ).pack(side="left")
+        bulk_actions = tk.Frame(selection_bar, bg=Theme.BG_SECONDARY)
+        bulk_actions.pack(side="right")
+        ModernButton(
+            bulk_actions, text=tr("Remove all"), width=102,
+            command=lambda: _set_all(True), style="ghost", size="sm",
+        ).pack(side="left")
+        ModernButton(
+            bulk_actions, text=tr("Keep all"), width=88,
+            command=lambda: _set_all(False), style="ghost", size="sm",
+        ).pack(side="left", padx=(Theme.S_SM, 0))
+
         for track in tracks:
-            row = tk.Frame(content, bg=Theme.BG_CARD)
+            row = tk.Frame(
+                content,
+                bg=Theme.BG_CARD,
+                highlightthickness=1,
+                highlightbackground=Theme.BORDER_SUBTLE,
+            )
             row.pack(fill="x", pady=(0, Theme.S_SM))
             var = tk.BooleanVar(value=not track.get("keep"))
             remove_vars.append((track, var))
+            track_rows.append((row, var))
             ModernToggle(
-                row, text=tr("Remove"), variable=var,
+                row, text=tr("Remove from video"), variable=var,
+                command=_refresh_selection,
                 bg=Theme.BG_CARD,
             ).pack(side="left", padx=Theme.S_MD, pady=Theme.S_SM)
             encoded = track.get("thumbnail_png_base64") or ""
@@ -172,12 +226,13 @@ class TrackPlanControllerMixin:
             start, end = track["start_frame"], track["end_frame"]
             tk.Label(
                 text_col,
-                text=tr("Frames {start}-{end}  ({begin}s to {finish}s)").format(
+                text=tr("Frames {start}-{end}, {begin}s to {finish}s").format(
                     start=start, end=end,
                     begin=round(start / fps, 1), finish=round(end / fps, 1)),
                 font=f(Theme.F_META), bg=Theme.BG_CARD,
                 fg=Theme.TEXT_MUTED, anchor="w",
             ).pack(anchor="w")
+        _refresh_selection()
         # PhotoImages are garbage collected unless referenced; pin them to
         # the dialog for its lifetime.
         dialog._vsr_track_thumbnails = thumbnails
@@ -214,19 +269,19 @@ class TrackPlanControllerMixin:
 
         actions = tk.Frame(content, bg=Theme.BG_SECONDARY)
         actions.pack(fill="x", pady=(Theme.S_LG, 0))
-        apply_btn = ModernButton(
-            actions, text=tr("Apply to this file"), width=150,
-            command=_apply, style="primary", size="md",
-        )
-        apply_btn.pack(side="left")
         ModernButton(
             actions, text=tr("Save plan..."), width=120,
             command=_save, style="ghost", size="md",
-        ).pack(side="left", padx=(Theme.S_SM, 0))
+        ).pack(side="left")
+        apply_btn = ModernButton(
+            actions, text=tr("Apply selection"), width=142,
+            command=_apply, style="primary", size="md",
+        )
+        apply_btn.pack(side="right")
         ModernButton(
             actions, text=tr("Cancel"), width=96,
             command=_close, style="ghost", size="md",
-        ).pack(side="right")
+        ).pack(side="right", padx=(0, Theme.S_SM))
 
         dialog.bind("<Escape>", lambda _event: _close())
         dialog.bind(
@@ -234,8 +289,8 @@ class TrackPlanControllerMixin:
             lambda _event: apply_btn.command() if apply_btn.command else None,
         )
         dialog.protocol("WM_DELETE_WINDOW", _close)
-        fit_dialog_to_work_area(dialog, self.root, min_width=560,
-                                min_height=360)
+        fit_dialog_to_work_area(dialog, self.root, min_width=700,
+                                min_height=440)
         dialog.deiconify()
         dialog.grab_set()
         try:

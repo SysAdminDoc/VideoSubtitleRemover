@@ -47,13 +47,13 @@ class QualityReviewControllerMixin:
     @staticmethod
     def _stage_label(name: str) -> str:
         labels = {
-            "decode": "decode",
+            "decode": tr("Decoding"),
             "ocr": "OCR",
-            "mask": "mask",
-            "inpaint": "inpaint",
-            "encode": "encode",
-            "mux": "mux",
-            "quality": "quality",
+            "mask": tr("Mask creation"),
+            "inpaint": tr("Inpainting"),
+            "encode": tr("Encoding"),
+            "mux": tr("Finalizing output"),
+            "quality": tr("Quality review"),
         }
         return labels.get(str(name or ""), str(name or ""))
 
@@ -118,7 +118,7 @@ class QualityReviewControllerMixin:
                  bg=Theme.BG_SECONDARY, fg=title_color).pack(anchor="w")
         if elapsed:
             tk.Label(content, text=tr(
-                         "Total time {elapsed} - {count} item{suffix} processed"
+                         "Total time {elapsed}, {count} item{suffix} processed"
                      ).format(
                          elapsed=elapsed,
                          count=total,
@@ -177,8 +177,9 @@ class QualityReviewControllerMixin:
 
         stat(stats, tr("COMPLETED"), complete, Theme.SUCCESS, Theme.SUCCESS_BG).pack(
             side="left")
-        stat(stats, tr("FAILED"), errors, Theme.ERROR, Theme.ERROR_BG).pack(
-            side="left", padx=(Theme.S_SM, 0))
+        if errors:
+            stat(stats, tr("FAILED"), errors, Theme.ERROR, Theme.ERROR_BG).pack(
+                side="left", padx=(Theme.S_SM, 0))
         if paused:
             stat(stats, tr("PAUSED"), paused, Theme.WARNING, Theme.WARNING_BG).pack(
                 side="left", padx=(Theme.S_SM, 0))
@@ -207,8 +208,8 @@ class QualityReviewControllerMixin:
             tk.Label(
                 stage_card,
                 text=tr(
-                    "{stage} dominated this run. Open the report for per-item "
-                    "decode, OCR, mask, inpaint, encode, mux, and quality timings."
+                    "{stage} took the most time in this run. Open the report "
+                    "to review timing for each processing stage."
                 ).format(stage=slow_text),
                 font=f(Theme.F_META),
                 bg=Theme.BG_CARD,
@@ -347,8 +348,8 @@ class QualityReviewControllerMixin:
             open_button = ModernButton(
                 actions_inner, text=tr("Open output"), width=132,
                 command=_open_output_and_close,
-                style="accent" if review_count == 0 else "ghost",
-                size="md", icon="^",
+                style="primary" if review_count == 0 else "ghost",
+                size="md",
             )
             if default_button is None:
                 default_button = open_button
@@ -389,7 +390,9 @@ class QualityReviewControllerMixin:
             retry_failed_button.pack(side="left", padx=(Theme.S_SM, 0))
         close_button = ModernButton(
             actions_inner, text=tr("Close"), width=92,
-            command=_close, style="primary", size="md",
+            command=_close,
+            style="ghost" if complete > 0 else "primary",
+            size="md",
         )
         close_button.pack(side="left", padx=(Theme.S_SM, 0))
         if default_button is None:

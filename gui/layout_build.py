@@ -1679,11 +1679,17 @@ class LayoutBuildMixin:
         self._inspector_summary_titles = dict(rows)
         self._inspector_summary_rows = []
         self._inspector_summary_row_frames = {}
+        self._inspector_summary_dividers = {}
         self._inspector_summary_buttons = {}
         self._inspector_summary_chevrons = {}
+        summary_rows = tk.Frame(settings, bg=Theme.BG_SECONDARY)
+        summary_rows.pack(fill="x")
+        self._inspector_summary_container = summary_rows
         for section_key, title in rows:
-            self._divider(settings)
-            row = tk.Frame(settings, bg=Theme.BG_SECONDARY)
+            divider = tk.Frame(
+                summary_rows, bg=Theme.BORDER_SUBTLE, height=1)
+            divider.pack(fill="x")
+            row = tk.Frame(summary_rows, bg=Theme.BG_SECONDARY)
             row.pack(fill="x")
             button = tk.Button(
                 row,
@@ -1730,6 +1736,7 @@ class LayoutBuildMixin:
             )
             self._inspector_summary_rows.append(button)
             self._inspector_summary_row_frames[section_key] = row
+            self._inspector_summary_dividers[section_key] = divider
             self._inspector_summary_buttons[section_key] = button
             self._inspector_summary_chevrons[section_key] = chevron
             if section_key == "advanced":
@@ -1951,6 +1958,10 @@ class LayoutBuildMixin:
         self.preview_status_chip.pack(
             side="right", anchor="n", padx=(Theme.S_SM, Theme.S_SM))
 
+        preview_controls = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        preview_controls.pack(side="bottom", fill="x")
+        self._preview_controls = preview_controls
+
         media_surface = tk.Frame(
             section, bg=Theme.BG_DARK, highlightthickness=1,
             highlightbackground=Theme.BORDER_SUBTLE,
@@ -2017,7 +2028,8 @@ class LayoutBuildMixin:
         )
         self._preview_empty_action.pack()
 
-        self.preview_timeline = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        self.preview_timeline = tk.Frame(
+            preview_controls, bg=Theme.BG_SECONDARY)
         self.preview_timeline_label = tk.Label(
             self.preview_timeline,
             text=tr("Preview time"),
@@ -2053,7 +2065,7 @@ class LayoutBuildMixin:
         self.preview_timeline.pack_forget()
 
         self.preview_action_hint = tk.Label(
-            section,
+            preview_controls,
             text=tr("Add media, then select a queue item to enable preview tools."),
             font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
             fg=Theme.TEXT_MUTED, wraplength=520, justify="left", anchor="w",
@@ -2061,7 +2073,7 @@ class LayoutBuildMixin:
         # State is already expressed in the preview title, status, and disabled
         # controls. Keep this label for accessibility/status updates, not layout.
 
-        preview_actions = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        preview_actions = tk.Frame(preview_controls, bg=Theme.BG_SECONDARY)
         self._preview_primary_actions = preview_actions
 
         self.preview_region_btn = ModernButton(
@@ -2117,10 +2129,9 @@ class LayoutBuildMixin:
 
         preview_actions.pack(
             fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
-        self.preview_action_hint.pack(
-            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
-        self.preview_mask_tuning = tk.Frame(section, bg=Theme.BG_SECONDARY)
+        self.preview_mask_tuning = tk.Frame(
+            preview_controls, bg=Theme.BG_SECONDARY)
         tuning_label = tk.Frame(
             self.preview_mask_tuning, bg=Theme.BG_SECONDARY)
         tuning_label.pack(side="left")
@@ -2365,18 +2376,18 @@ class LayoutBuildMixin:
         )
         self.queue_move_up_btn = ModernButton(
             btn_frame,
-            text="^",
+            text=tr("Up"),
             accessible_label=N_("Move item up"),
-            width=40,
+            width=54,
             command=lambda: self._move_selected_queue_item(-1),
             style="toolbar",
             size="sm",
         )
         self.queue_move_down_btn = ModernButton(
             btn_frame,
-            text="v",
+            text=tr("Down"),
             accessible_label=N_("Move item down"),
-            width=40,
+            width=64,
             command=lambda: self._move_selected_queue_item(1),
             style="toolbar",
             size="sm",

@@ -16,6 +16,7 @@ from unittest import mock
 
 from backend.a11y import accessible_metadata
 from gui.preview_controller import PreviewControllerMixin, _fit_preview_image
+from gui.quality_controller import QualityReviewControllerMixin
 from gui.theme import Theme
 from gui.utils import (
     dispatch_to_ui,
@@ -75,6 +76,16 @@ class DesignTokenReleaseTests(unittest.TestCase):
 
         self.assertEqual(fitted.size, (720, 540))
         self.assertEqual(source.size, (160, 120))
+
+    def test_batch_stage_labels_use_reader_facing_names(self):
+        self.assertEqual(
+            QualityReviewControllerMixin._stage_label("inpaint"),
+            "Inpainting",
+        )
+        self.assertEqual(
+            QualityReviewControllerMixin._stage_label("mux"),
+            "Finalizing output",
+        )
 
 
 class UiThreadDispatchTests(unittest.TestCase):
@@ -255,6 +266,96 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
             )
             dispatched.assert_called_once_with()
         finally:
+            self._destroy_app(app)
+
+    def test_track_review_explains_selection_and_offers_bulk_actions(self):
+        app = self._make_app()
+        dialog = None
+        try:
+            source = Path(self._tmpdir.name) / "tracks.png"
+            source.write_bytes(b"not a real image")
+            item = self._app_exports.QueueItem(
+                id="track-review-target",
+                file_path=str(source),
+                output_path=str(source.with_name("tracks-clean.png")),
+                config=self._app_exports.ProcessingConfig(),
+            )
+            app.queue.append(item)
+            app._show_track_plan_dialog(item.id, {
+                "fps": 24.0,
+                "tracks": [
+                    {
+                        "start_frame": 0,
+                        "end_frame": 24,
+                        "sample_text": "Dialogue",
+                        "keep": False,
+                    },
+                    {
+                        "start_frame": 25,
+                        "end_frame": 48,
+                        "sample_text": "Logo",
+                        "keep": True,
+                    },
+                ],
+            })
+            dialog = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+            )
+            dialog.update_idletasks()
+            visible_text = [
+                str(widget.cget("text"))
+                for widget in self._walk(dialog)
+                if isinstance(widget, tk.Label)
+            ]
+            button_text = {
+                str(getattr(widget, "text", ""))
+                for widget in self._walk(dialog)
+            }
+            self.assertTrue(any(
+                "Select the tracks to remove" in text
+                for text in visible_text
+            ))
+            self.assertTrue({
+                "Remove all", "Keep all", "Apply selection",
+            }.issubset(button_text))
+        finally:
+            if dialog is not None:
+                try:
+                    dialog.grab_release()
+                except tk.TclError:
+                    pass
+                dialog.destroy()
+            self._destroy_app(app)
+
+    def test_help_uses_neutral_copy_while_runtime_probe_is_active(self):
+        app = self._make_app()
+        dialog = None
+        try:
+            app._hardware_probe_pending = True
+            app.ffmpeg_ready = False
+            app.ai_engines = {"detection": [], "inpainting": []}
+            app._show_about()
+            dialog = next(
+                child for child in app.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
+            )
+            dialog.update_idletasks()
+            visible_text = [
+                str(widget.cget("text"))
+                for widget in self._walk(dialog)
+                if isinstance(widget, tk.Label)
+            ]
+            self.assertIn("Checking system", visible_text)
+            self.assertNotIn("Needs attention", visible_text)
+            self.assertGreaterEqual(visible_text.count("Checking..."), 3)
+        finally:
+            if dialog is not None:
+                try:
+                    dialog.grab_release()
+                except tk.TclError:
+                    pass
+                dialog.destroy()
             self._destroy_app(app)
 
     def test_region_changes_propagate_to_idle_queue_snapshots(self):
