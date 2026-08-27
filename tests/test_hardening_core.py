@@ -1089,7 +1089,10 @@ class EndToEndPipelineTests(unittest.TestCase):
                 cap.release()
             self.assertEqual(frames_read, 8)
 
-    def test_vfr_pipeline_preserves_pts_tail_and_audio_sync(self):
+    def _assert_vfr_pipeline_preserves_pts_tail_and_audio_sync(
+        self,
+        durations,
+    ):
         if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
             self.skipTest("ffmpeg/ffprobe not on PATH")
 
@@ -1101,7 +1104,6 @@ class EndToEndPipelineTests(unittest.TestCase):
             from PIL import Image
 
             tmp = Path(tmpdir)
-            durations = [0.033, 0.067, 0.041, 0.109, 0.052, 0.074, 0.038, 0.096]
             frames = [
                 Image.fromarray(np.full(
                     (48, 64, 3),
@@ -1260,6 +1262,16 @@ class EndToEndPipelineTests(unittest.TestCase):
                 return max(ends)
 
             self.assertLessEqual(abs(packet_end("v:0") - packet_end("a:0")), 0.05)
+
+    def test_vfr_pipeline_preserves_pts_tail_and_audio_sync(self):
+        self._assert_vfr_pipeline_preserves_pts_tail_and_audio_sync([
+            0.033, 0.067, 0.041, 0.109, 0.052, 0.074, 0.038, 0.096,
+        ])
+
+    def test_constant_pts_with_long_final_hold_round_trips_exactly(self):
+        self._assert_vfr_pipeline_preserves_pts_tail_and_audio_sync([
+            0.040, 0.040, 1.000,
+        ])
 
     def test_vfr_pts_drive_ranges_srt_and_checkpoint_manifest(self):
         from backend import resume_checkpoint as rc

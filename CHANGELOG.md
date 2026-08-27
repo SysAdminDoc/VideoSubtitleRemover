@@ -15,7 +15,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   older packet-duration names kept only as fallbacks. Variable-rate outputs use
   a lossless PNG timing carrier before the final codec, so an irregular final
   frame keeps its authoritative duration through audio muxing. Release evidence
-  verifies the current fields against the installed runtime.
+  verifies the current fields against the installed runtime. Duration variance
+  now triggers that exact path even when every preceding PTS delta is constant.
 - Manual region now opens the region editor when no saved shape exists. An
   existing fixed, timed, or moving region is preserved and shown immediately,
   bypasses OCR only when Manual region is active, and supplies the same mask to

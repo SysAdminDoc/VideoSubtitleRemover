@@ -132,6 +132,7 @@ def test_probe_keeps_authoritative_long_final_frame_duration():
     assert timing is not None
     assert timing.duration_ticks == [40, 40, 1000]
     assert timing.total_duration_ticks == 1080
+    assert timing.is_vfr
     assert not any(
         item["kind"] in {"missing_duration", "repaired_duration"}
         for item in timing.anomalies

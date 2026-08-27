@@ -1191,7 +1191,11 @@ def _probe_video_frame_timing(
     durations.append(int(last_duration))
 
     tolerance = max(1, int(round(typical_tick * 0.01)))
-    is_vfr = any(abs(value - typical_tick) > tolerance for value in positive_deltas)
+    variable_spacing = any(
+        abs(value - typical_tick) > tolerance for value in positive_deltas)
+    variable_duration = any(
+        abs(value - typical_tick) > tolerance for value in durations)
+    is_vfr = variable_spacing or variable_duration
     observed_duration_ticks = timestamp_ticks[-1] + durations[-1]
     observed_duration = _ticks_to_seconds(
         observed_duration_ticks, time_base_num, time_base_den)
