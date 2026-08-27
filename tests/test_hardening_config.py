@@ -523,10 +523,15 @@ class DependencyFloorTests(unittest.TestCase):
         text = self._read_requirements()
         self.assertIn("Pillow>=12.3.0", text)
 
-    def test_pillow_floor_is_12_3_0_in_setup_py(self):
+    def test_setup_reads_the_profile_with_the_pillow_floor(self):
         root = Path(__file__).resolve().parents[1]
         setup_text = (root / "setup.py").read_text(encoding="utf-8")
-        self.assertIn("Pillow>=12.3.0", setup_text)
+        profile = json.loads(
+            (root / "dependency_profiles.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("profile_required_packages", setup_text)
+        self.assertIn("Pillow", profile["commonRequiredPackages"])
+        self.assertIn("Pillow==12.3.0", profile["commonConstraints"])
 
     def test_pillow_floor_is_12_3_0_in_the_local_build_gate(self):
         # This assertion used to target .github/workflows/build.yml, which was

@@ -4,6 +4,8 @@
 # generated dependency_profiles/{cpu,nvidia,directml}.txt files. Edit
 # dependency_profiles.json and run `python -m backend.dependency_profiles
 # update` when intentionally changing reviewed versions.
+# setup.py accepts only a complete named profile. It reports a failed install
+# and a profile-specific repair command instead of falling back to a partial set.
 
 # Core
 # opencv-python >= 5.0.0.93 patches CVE-2025-53644 and bundles libpng 1.6.57,
@@ -72,7 +74,7 @@ protobuf>=6.33.5
 # For AMD/Intel (DirectML via ONNX Runtime):
 # pip install onnxruntime-directml==1.24.4
 # Intel CPU/iGPU users can add OpenVINO for RapidOCR:
-# pip install openvino>=2025.0.0
+# pip install openvino==2026.2.1 --constraint dependency_profiles/directml.txt
 # pip install torch>=2.11.0 torchvision>=0.26.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 

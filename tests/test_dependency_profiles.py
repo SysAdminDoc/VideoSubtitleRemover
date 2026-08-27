@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 from backend import dependency_caps
 from backend import dependency_profiles
@@ -26,6 +27,32 @@ class DependencyProfileTests(unittest.TestCase):
             self.assertIn("Manifest-SHA256:", text)
             self.assertIn("numpy==2.4.6", text)
             self.assertIn("Pillow==12.3.0", text)
+
+        manifest = dependency_profiles.load_profile_manifest()
+        self.assertEqual(
+            set(manifest["commonRequiredPackages"]),
+            {
+                "numpy",
+                "protobuf",
+                "opencv-python",
+                "Pillow",
+                "idna",
+                "rapidocr",
+                "torch",
+                "torchvision",
+            },
+        )
+        expected_provider_package = {
+            "cpu": "onnxruntime",
+            "nvidia": "onnxruntime-gpu",
+            "directml": "onnxruntime-directml",
+        }
+        for name, package in expected_provider_package.items():
+            self.assertEqual(manifest["profiles"][name]["requiredPackages"], [package])
+            self.assertTrue(manifest["profiles"][name]["capabilities"])
+            required = dependency_profiles.profile_required_packages(name)
+            self.assertEqual(len(required), 9)
+            self.assertTrue(all(item["expectedVersion"] for item in required))
 
         self.assertIn("onnxruntime==1.29.0", (
             dependency_profiles.profile_constraint_path("cpu").read_text(
@@ -196,6 +223,133 @@ class DependencyProfileTests(unittest.TestCase):
             "directml", ort_module=fake_ort)
         self.assertFalse(result["passed"])
         self.assertTrue(result["fellBack"])
+
+    def test_runtime_verifier_requires_every_exact_profile_package(self):
+        required = dependency_profiles.profile_required_packages("cpu")
+        versions = {
+            item["name"]: item["expectedVersion"]
+            for item in required
+        }
+        statuses, errors = dependency_profiles.verify_required_package_versions(
+            "cpu",
+            package_versions=versions,
+        )
+        self.assertEqual(errors, [])
+        self.assertTrue(all(item["satisfied"] for item in statuses))
+
+        missing = dict(versions)
+        missing.pop("protobuf")
+        _statuses, errors = dependency_profiles.verify_required_package_versions(
+            "cpu",
+            package_versions=missing,
+        )
+        self.assertTrue(any("protobuf==6.33.6" in item for item in errors))
+
+        mismatched = dict(versions)
+        mismatched["opencv-python"] = "5.0.0.92"
+        _statuses, errors = dependency_profiles.verify_required_package_versions(
+            "cpu",
+            package_versions=mismatched,
+        )
+        self.assertTrue(any("resolved as 5.0.0.92" in item for item in errors))
+
+    def test_runtime_verifier_accepts_reviewed_local_wheel_suffix(self):
+        required = dependency_profiles.profile_required_packages("nvidia")
+        versions = {
+            item["name"]: item["expectedVersion"]
+            for item in required
+        }
+        versions["torch"] += "+cu128"
+
+        _statuses, errors = dependency_profiles.verify_required_package_versions(
+            "nvidia",
+            package_versions=versions,
+        )
+
+        self.assertEqual(errors, [])
+
+    def test_runtime_verifier_rejects_competing_binary_owners(self):
+        required = dependency_profiles.profile_required_packages("cpu")
+        versions = {
+            item["name"]: item["expectedVersion"]
+            for item in required
+        }
+        versions["opencv-python-headless"] = "5.0.0.93"
+        versions["onnxruntime-gpu"] = "1.26.0"
+
+        _statuses, errors = dependency_profiles.verify_required_package_versions(
+            "cpu",
+            package_versions=versions,
+        )
+
+        self.assertEqual(
+            sum("Conflicting runtime distributions" in item for item in errors),
+            2,
+        )
+
+    def test_runtime_import_failure_is_classified(self):
+        def importer(name):
+            if name == "cv2":
+                raise OSError("simulated DLL load failure")
+            return object()
+
+        result = dependency_profiles.run_profile_import_smoke(
+            "cpu",
+            importer=importer,
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["failures"][0]["package"], "opencv-python")
+        self.assertIn("DLL load failure", result["failures"][0]["error"])
+
+    def test_verify_command_exits_nonzero_for_an_invalid_runtime(self):
+        invalid = {
+            "schema": dependency_profiles.PROFILE_STATUS_SCHEMA,
+            "profile": "cpu",
+            "valid": False,
+            "errors": ["simulated missing package"],
+        }
+        with mock.patch.object(
+            dependency_profiles,
+            "collect_dependency_profile_status",
+            return_value=invalid,
+        ) as collect:
+            with mock.patch("builtins.print"):
+                code = dependency_profiles.main(["verify", "--profile", "cpu"])
+
+        self.assertEqual(code, 1)
+        self.assertTrue(collect.call_args.kwargs["verify_runtime"])
+        self.assertTrue(collect.call_args.kwargs["run_provider_smoke"])
+        self.assertTrue(collect.call_args.kwargs["run_import_checks"])
+        self.assertTrue(collect.call_args.kwargs["run_package_check"])
+
+    def test_verify_command_writes_an_atomic_machine_report(self):
+        valid = {
+            "schema": dependency_profiles.PROFILE_STATUS_SCHEMA,
+            "profile": "cpu",
+            "valid": True,
+            "errors": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "nested" / "verification.json"
+            with mock.patch.object(
+                dependency_profiles,
+                "collect_dependency_profile_status",
+                return_value=valid,
+            ):
+                with mock.patch("builtins.print"):
+                    code = dependency_profiles.main([
+                        "verify",
+                        "--profile",
+                        "cpu",
+                        "--output",
+                        str(target),
+                    ])
+            payload = json.loads(target.read_text(encoding="utf-8"))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(payload, valid)
+        self.assertFalse(target.with_suffix(".json.tmp").exists())
 
     def test_real_cpu_provider_smoke_runs_one_inference_session(self):
         result = dependency_profiles.run_profile_provider_smoke("cpu")

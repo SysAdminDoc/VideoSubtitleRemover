@@ -1,4 +1,5 @@
 import importlib.metadata as metadata
+import json
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -13,20 +14,27 @@ class DependencyCapTests(unittest.TestCase):
     def test_requirements_setup_and_profiles_use_ocr_caps(self):
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         setup = (ROOT / "setup.py").read_text(encoding="utf-8")
-        profiles = (ROOT / "dependency_profiles.json").read_text(encoding="utf-8")
+        profiles = json.loads(
+            (ROOT / "dependency_profiles.json").read_text(encoding="utf-8")
+        )
 
         self.assertIn("rapidocr>=2.0.0,<4.0.0", requirements)
-        self.assertIn("rapidocr>=2.0.0,<4.0.0", setup)
+        self.assertIn("profile_required_packages", setup)
+        self.assertIn("ensure_profile_current", setup)
         self.assertIn("paddleocr>=3.0.0,<4.0.0", requirements)
-        self.assertIn("paddleocr==3.7.0", profiles)
+        for profile in profiles["profiles"].values():
+            combined = [
+                *profiles["commonConstraints"],
+                *profile["constraints"],
+            ]
+            self.assertIn("rapidocr==3.9.2", combined)
+            self.assertIn("paddleocr==3.7.0", combined)
+            self.assertIn("Pillow==12.3.0", combined)
 
         self.assertNotIn("rapidocr-onnxruntime", requirements)
         self.assertIn("opencv-python>=5.0.0.93", requirements)
         self.assertIn(
             f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", requirements
-        )
-        self.assertIn(
-            f"Pillow>={dependency_caps.PILLOW_MINIMUM_VERSION}", setup
         )
         self.assertNotIn("opencv-python>=5.0.0.93,<", requirements)
         self.assertIn("numpy>=2.4.6,<2.5.0", requirements)

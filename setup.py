@@ -9,6 +9,8 @@ Run: python setup.py
 import os
 import sys
 import argparse
+import datetime as _dt
+import json
 import subprocess
 import platform
 import shutil
@@ -19,6 +21,8 @@ from pathlib import Path
 from backend.dependency_profiles import (
     SUPPORTED_PROFILES,
     ensure_profile_current,
+    profile_capabilities,
+    profile_required_packages,
     select_profile,
 )
 
@@ -53,6 +57,11 @@ TORCHVISION_MINIMUM = "0.26.0"
 TORCH_SPEC = f"torch>={TORCH_MINIMUM}"
 TORCHVISION_SPEC = f"torchvision>={TORCHVISION_MINIMUM}"
 SETUP_PROGRESS_ENV = "VSR_SETUP_PROGRESS_FILE"
+SETUP_REPORT_SCHEMA = "vsr.setup_report.v1"
+SETUP_REPORT_PATH = Path("venv/.vsr-setup-report.json")
+PROFILE_VERIFY_REPORT_PATH = Path("venv/.vsr-profile-verification.json")
+PROFILE_VERIFY_TIMEOUT_SECONDS = 300
+_ACTIVE_SETUP_PROFILE = "auto"
 
 
 def _setup_progress_path():
@@ -122,6 +131,178 @@ def _apply_profile_override(gpu_info, requested):
     info["cuda_disabled_by_python"] = False
     info["dependency_profile"] = requested
     return info
+
+
+def _setup_repair_command(profile_name):
+    profile = profile_name if profile_name in SUPPORTED_PROFILES else "auto"
+    return f"python setup.py --repair --profile {profile}"
+
+
+def write_setup_report(
+    profile_name,
+    status,
+    *,
+    stage="",
+    message="",
+    verification=None,
+    path=None,
+):
+    """Write the last setup outcome atomically inside the repo venv."""
+    target = Path(path) if path is not None else SETUP_REPORT_PATH
+    if not target.parent.exists():
+        return False
+    try:
+        capabilities = list(profile_capabilities(profile_name))
+        required_packages = [
+            dict(item) for item in profile_required_packages(profile_name)
+        ]
+    except (OSError, ValueError, KeyError):
+        capabilities = []
+        required_packages = []
+    payload = {
+        "schema": SETUP_REPORT_SCHEMA,
+        "createdAt": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "profile": str(profile_name),
+        "status": str(status),
+        "stage": str(stage),
+        "message": str(message),
+        "repairCommand": _setup_repair_command(profile_name),
+        "capabilities": capabilities,
+        "requiredPackages": required_packages,
+        "verification": (
+            dict(verification) if isinstance(verification, dict) else None
+        ),
+    }
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    try:
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(target)
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        return False
+    return True
+
+
+def _setup_failed(profile_name, stage, message, verification=None):
+    repair = _setup_repair_command(profile_name)
+    write_setup_progress("Setup failed. Review the console details.", 100, "ERROR")
+    report_written = write_setup_report(
+        profile_name,
+        "failed",
+        stage=stage,
+        message=message,
+        verification=verification,
+    )
+    print(f"{Colors.RED}  ERROR: {message}{Colors.END}")
+    print(f"  Repair command: {repair}")
+    if report_written:
+        print(f"  Setup report: {SETUP_REPORT_PATH}")
+    return 1
+
+
+def _print_profile_contract(profile_name):
+    required = profile_required_packages(profile_name)
+    print(f"  Dependency profile: {profile_name}")
+    print("  Locked required packages:")
+    for item in required:
+        print(f"    * {item['name']}=={item['expectedVersion']}")
+    print("  Expected capabilities:")
+    for capability in profile_capabilities(profile_name):
+        print(f"    * {capability}")
+
+
+def verify_installed_profile(profile_name, *, report_path=None):
+    """Run the same locked-profile verifier used by source launchers."""
+    target = (
+        Path(report_path)
+        if report_path is not None
+        else PROFILE_VERIFY_REPORT_PATH
+    )
+    try:
+        target.unlink(missing_ok=True)
+    except OSError as exc:
+        return {
+            "schema": "vsr.dependency_profile_status.v1",
+            "profile": profile_name,
+            "valid": False,
+            "errors": [f"Could not prepare the profile report: {exc}"],
+        }
+    command = [
+        get_python_command(),
+        "-m",
+        "backend.dependency_profiles",
+        "verify",
+        "--profile",
+        profile_name,
+        "--output",
+        str(target),
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=PROFILE_VERIFY_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {
+            "schema": "vsr.dependency_profile_status.v1",
+            "profile": profile_name,
+            "valid": False,
+            "errors": [str(exc)],
+        }
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, TypeError, json.JSONDecodeError):
+        payload = {
+            "schema": "vsr.dependency_profile_status.v1",
+            "profile": profile_name,
+            "valid": False,
+            "errors": [
+                (result.stderr or result.stdout or "profile verifier returned no report").strip()
+            ],
+        }
+    finally:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+    if result.returncode != 0:
+        payload["valid"] = False
+        if not payload.get("errors"):
+            payload["errors"] = [
+                f"profile verifier exited with code {result.returncode}"
+            ]
+    return payload
+
+
+def _print_profile_verification(payload):
+    print("  Verified required packages:")
+    for item in payload.get("requiredPackages", []):
+        if not isinstance(item, dict):
+            continue
+        print(
+            f"    * {item.get('name')}=={item.get('installedVersion')} "
+            f"(expected {item.get('expectedVersion')})"
+        )
+    smoke = payload.get("providerSmoke")
+    if isinstance(smoke, dict):
+        active = ", ".join(smoke.get("activeProviders") or []) or "none"
+        print(f"  Provider inference: {active}")
+    print("  Verified capabilities:")
+    for capability in payload.get("capabilities", []):
+        print(f"    * {capability}")
 
 
 def _windows_cuda_wheels_unavailable(version=None, system_name=None):
@@ -560,13 +741,12 @@ def install_paddlepaddle(gpu_info):
     except subprocess.TimeoutExpired:
         return False
     except subprocess.CalledProcessError as e:
-        print(f"{Colors.YELLOW}  WARNING: PaddlePaddle installation failed: {e}{Colors.END}")
-        print(f"  Text detection will use fallback method")
-        return True
+        print(f"{Colors.RED}  ERROR: PaddlePaddle installation failed: {e}{Colors.END}")
+        return False
 
 
 def install_dependencies(gpu_info=None):
-    """Install remaining dependencies."""
+    """Install the selected locked profile without partial fallback."""
     print(f"\n{Colors.BLUE}[6/6]{Colors.END} Installing other dependencies...")
     
     pip = get_pip_command()
@@ -577,6 +757,12 @@ def install_dependencies(gpu_info=None):
     )
     if directml_requested and not _preflight_directml_distribution(pip):
         return False
+    if not REQUIREMENTS_FILE.is_file():
+        print(
+            f"{Colors.RED}  ERROR: Required dependency list is missing: "
+            f"{REQUIREMENTS_FILE}{Colors.END}"
+        )
+        return False
 
     try:
         print("  Refreshing packaging tools...")
@@ -585,33 +771,12 @@ def install_dependencies(gpu_info=None):
             "refreshing packaging tools",
         )
 
-        installed_from_requirements = False
-        if REQUIREMENTS_FILE.exists():
-            print(f"  Installing dependencies from {REQUIREMENTS_FILE}...")
-            try:
-                _run_pip_install(
-                    [pip, 'install', '-r', str(REQUIREMENTS_FILE), *profile_args],
-                    "installing requirements.txt",
-                )
-                print(f"  [OK] Requirements installed")
-                installed_from_requirements = True
-            except subprocess.CalledProcessError:
-                print(f"  Requirements install hit an optional dependency issue, falling back to the core stack...")
-
-        if not installed_from_requirements:
-            core_packages = [
-                'numpy>=2.4.6,<2.5.0',
-                'opencv-python>=5.0.0.93',
-                'Pillow>=12.3.0',
-                'rapidocr>=2.0.0,<4.0.0',
-            ]
-
-            for package in core_packages:
-                print(f"  Installing {package}...")
-                _run_pip_install(
-                    [pip, 'install', package, *profile_args],
-                    f"installing {package}",
-                )
+        print(f"  Installing dependencies from {REQUIREMENTS_FILE}...")
+        _run_pip_install(
+            [pip, 'install', '-r', str(REQUIREMENTS_FILE), *profile_args],
+            "installing requirements.txt",
+        )
+        print("  [OK] Requirements install command completed")
 
         if directml_requested:
             print("  Installing ONNX Runtime DirectML provider...")
@@ -620,31 +785,16 @@ def install_dependencies(gpu_info=None):
                 "installing ONNX Runtime DirectML",
             )
             print(f"  [OK] ONNX Runtime DirectML installed")
-            if gpu_info.get("intel"):
-                print("  Installing OpenVINO runtime for RapidOCR...")
-                try:
-                    _run_pip_install(
-                        [pip, 'install', 'openvino>=2025.0.0', *profile_args],
-                        "installing OpenVINO runtime",
-                    )
-                    print(f"  [OK] OpenVINO runtime installed")
-                except subprocess.CalledProcessError as exc:
-                    print(f"{Colors.YELLOW}  WARNING: OpenVINO install failed: {exc}{Colors.END}")
-                    print("  RapidOCR will use ONNX Runtime unless OpenVINO is installed manually.")
         elif gpu_info and gpu_info.get("nvidia") and not gpu_info.get("cuda_disabled_by_python"):
             print("  Installing ONNX Runtime CUDA provider...")
             print(f"  Installing {ONNXRUNTIME_GPU_SPEC} (CUDA 12.x line).")
             print("  ONNX Runtime 1.27+ is CUDA 13 only; on a CUDA 13 host install")
             print("  the cuda13 wheel manually per onnxruntime.ai/docs/install.")
-            try:
-                _run_pip_install(
-                    [pip, 'install', ONNXRUNTIME_GPU_SPEC, *profile_args],
-                    "installing ONNX Runtime CUDA",
-                )
-                print(f"  [OK] ONNX Runtime CUDA provider installed")
-            except subprocess.CalledProcessError as exc:
-                print(f"{Colors.YELLOW}  WARNING: ONNX Runtime CUDA install failed: {exc}{Colors.END}")
-                print("  LaMa ONNX will use CPU/DirectML if available; PyTorch/Paddle paths are unchanged.")
+            _run_pip_install(
+                [pip, 'install', ONNXRUNTIME_GPU_SPEC, *profile_args],
+                "installing ONNX Runtime CUDA",
+            )
+            print(f"  [OK] ONNX Runtime CUDA provider installed")
         else:
             print("  Installing ONNX Runtime CPU provider...")
             _run_pip_install(
@@ -653,7 +803,7 @@ def install_dependencies(gpu_info=None):
             )
             print("  [OK] ONNX Runtime CPU provider installed")
 
-        print(f"  [OK] All dependencies installed")
+        print("  [OK] Locked dependency install finished; verification pending")
         return True
     except subprocess.TimeoutExpired:
         return False
@@ -700,7 +850,7 @@ set "VSR_SETUP_REPAIR=0"
 if not exist "venv\\Scripts\\python.exe" (
     set "VSR_SETUP_REPAIR=1"
 ) else (
-    "venv\\Scripts\\python.exe" -c "import cv2, PIL, numpy" >nul 2>nul
+    "venv\\Scripts\\python.exe" -m backend.dependency_profiles verify >nul 2>nul
     if errorlevel 1 set "VSR_SETUP_REPAIR=1"
 )
 
@@ -773,7 +923,7 @@ set "VSR_SETUP_REPAIR=0"
 if not exist "venv\\Scripts\\python.exe" (
     set "VSR_SETUP_REPAIR=1"
 ) else (
-    "venv\\Scripts\\python.exe" -c "import cv2, PIL, numpy" >nul 2>nul
+    "venv\\Scripts\\python.exe" -m backend.dependency_profiles verify >nul 2>nul
     if errorlevel 1 set "VSR_SETUP_REPAIR=1"
 )
 
@@ -845,7 +995,7 @@ function Invoke-VsrProbe {
 
 $needsRepair = -not (Test-Path ".\\venv\\Scripts\\python.exe")
 if (-not $needsRepair) {
-    if ((Invoke-VsrProbe ".\\venv\\Scripts\\python.exe" @("-c", "import cv2, PIL, numpy")) -ne 0) {
+    if ((Invoke-VsrProbe ".\\venv\\Scripts\\python.exe" @("-m", "backend.dependency_profiles", "verify")) -ne 0) {
         $needsRepair = $true
     }
 }
@@ -939,6 +1089,7 @@ def _anchor_working_directory():
 
 def main(argv=None):
     """Main setup function."""
+    global _ACTIVE_SETUP_PROFILE
     args = parse_setup_args(argv)
     # Every path below (venv/, requirements.txt, the generated launchers) is
     # relative, so running `python C:\\path\\to\\setup.py` from another
@@ -954,48 +1105,117 @@ def main(argv=None):
     
     # Step 1: Check Python
     if not check_python():
-        sys.exit(1)
+        return _setup_failed(
+            "auto",
+            "python_check",
+            "The Python runtime does not meet setup requirements.",
+        )
     
     # Step 2: Detect GPU
     write_setup_progress("Detecting graphics hardware...", 20)
     gpu_info = _apply_profile_override(detect_gpu(), args.profile)
     profile_name = _dependency_profile_name(gpu_info)
+    _ACTIVE_SETUP_PROFILE = profile_name
     try:
         ensure_profile_current(profile_name)
     except RuntimeError as exc:
-        print(f"{Colors.RED}ERROR: {exc}{Colors.END}")
-        sys.exit(1)
-    print(f"  Dependency profile: {profile_name}")
+        return _setup_failed(profile_name, "profile_preflight", str(exc))
+    _print_profile_contract(profile_name)
     
     # Step 3: Create virtual environment
     write_setup_progress("Creating the isolated runtime...", 35)
     if not create_virtual_env(repair=args.repair):
-        sys.exit(1)
+        return _setup_failed(
+            profile_name,
+            "virtual_environment",
+            "The repo-local virtual environment could not be created.",
+        )
+    if not write_setup_report(
+        profile_name,
+        "running",
+        stage="profile_install",
+        message="Installing the selected locked dependency profile.",
+    ):
+        return _setup_failed(
+            profile_name,
+            "setup_report",
+            "The setup report could not be written inside the virtual environment.",
+        )
     
     # Step 4: Install PyTorch
     write_setup_progress("Installing the compute runtime...", 50)
     if not install_pytorch(gpu_info):
-        sys.exit(1)
+        partial_verification = verify_installed_profile(profile_name)
+        return _setup_failed(
+            profile_name,
+            "pytorch_install",
+            "The locked PyTorch runtime could not be installed.",
+            partial_verification,
+        )
+    resolved_profile = _dependency_profile_name(gpu_info)
+    if resolved_profile != profile_name:
+        profile_name = resolved_profile
+        _ACTIVE_SETUP_PROFILE = profile_name
+        try:
+            ensure_profile_current(profile_name)
+        except RuntimeError as exc:
+            return _setup_failed(profile_name, "profile_preflight", str(exc))
+        print("  Python compatibility changed the resolved install profile.")
+        _print_profile_contract(profile_name)
     
     # Step 5: Install the default RapidOCR/ONNX dependency set. PaddleOCR and
     # its PaddlePaddle runtime remain isolated opt-ins because they install a
     # competing OpenCV wheel into the environment.
     write_setup_progress("Installing OCR and application dependencies...", 72)
     if not install_dependencies(gpu_info):
-        sys.exit(1)
+        partial_verification = verify_installed_profile(profile_name)
+        return _setup_failed(
+            profile_name,
+            "dependency_install",
+            "The locked application dependency profile could not be installed.",
+            partial_verification,
+        )
+
+    write_setup_progress("Verifying the installed dependency profile...", 88)
+    verification = verify_installed_profile(profile_name)
+    if verification.get("valid") is not True:
+        errors = [str(item) for item in verification.get("errors", []) if item]
+        detail = "; ".join(errors[:4]) or "the profile verifier rejected the runtime"
+        return _setup_failed(
+            profile_name,
+            "profile_verification",
+            f"Installed profile verification failed: {detail}",
+            verification,
+        )
+    _print_profile_verification(verification)
     
     # Check FFmpeg
-    write_setup_progress("Checking video tools...", 92)
+    write_setup_progress("Checking video tools...", 94)
     ffmpeg_ok = check_ffmpeg()
     
     # Create launcher
     create_launcher()
+    if not write_setup_report(
+        profile_name,
+        "verified",
+        stage="complete",
+        message="The locked profile passed every runtime verification check.",
+        verification=verification,
+    ):
+        return _setup_failed(
+            profile_name,
+            "setup_report",
+            "The verified setup report could not be written.",
+            verification,
+        )
     write_setup_progress("Setup complete. Starting the application...", 100, "DONE")
     
     # Done!
     print(f"\n{Colors.GREEN}{'='*60}{Colors.END}")
     print(f"{Colors.GREEN}  SETUP COMPLETE!{Colors.END}")
     print(f"{Colors.GREEN}{'='*60}{Colors.END}")
+    print(f"\n  Verified profile: {Colors.BOLD}{profile_name}{Colors.END}")
+    print(f"  Setup report: {Colors.BOLD}{SETUP_REPORT_PATH}{Colors.END}")
     print(f"\n  To run the application:")
     print(f"    * Double-click: {Colors.BOLD}Run_VSR_Pro.bat{Colors.END}")
     print(f"    * Troubleshooting: {Colors.BOLD}Run_VSR_Pro_Debug.bat{Colors.END}")
@@ -1013,16 +1233,25 @@ def main(argv=None):
         print(f"{Colors.YELLOW}CPU (slower){Colors.END}")
     if not ffmpeg_ok:
         print(f"\n  {Colors.YELLOW}FFmpeg is still missing.{Colors.END} Video outputs will work, but audio preservation stays unavailable until FFmpeg is installed.")
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        raise SystemExit(main())
     except KeyboardInterrupt:
-        write_setup_progress("Setup was cancelled.", 100, "ERROR")
+        _setup_failed(
+            _ACTIVE_SETUP_PROFILE,
+            "cancelled",
+            "Setup was cancelled.",
+        )
         print(f"\n{Colors.YELLOW}Setup cancelled.{Colors.END}")
-        sys.exit(1)
+        raise SystemExit(1)
     except Exception as e:
-        write_setup_progress("Setup failed. Review the console details.", 100, "ERROR")
+        _setup_failed(
+            _ACTIVE_SETUP_PROFILE,
+            "unexpected_error",
+            str(e),
+        )
         print(f"\n{Colors.RED}Setup failed: {e}{Colors.END}")
-        sys.exit(1)
+        raise SystemExit(1)

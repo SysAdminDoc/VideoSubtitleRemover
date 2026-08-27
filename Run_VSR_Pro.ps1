@@ -28,7 +28,7 @@ function Invoke-VsrProbe {
 
 $needsRepair = -not (Test-Path ".\venv\Scripts\python.exe")
 if (-not $needsRepair) {
-    if ((Invoke-VsrProbe ".\venv\Scripts\python.exe" @("-c", "import cv2, PIL, numpy")) -ne 0) {
+    if ((Invoke-VsrProbe ".\venv\Scripts\python.exe" @("-m", "backend.dependency_profiles", "verify")) -ne 0) {
         $needsRepair = $true
     }
 }

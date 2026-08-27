@@ -1,7 +1,9 @@
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -245,6 +247,48 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertIn("Timed out", output)
         self.assertIn("PyPI mirror", output)
 
+    def test_requirements_failure_never_falls_back_to_a_partial_stack(self):
+        failure = self.setup_mod.subprocess.CalledProcessError(
+            1, ["pip", "install", "-r", "requirements.txt"]
+        )
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(
+                self.setup_mod,
+                "_run_pip_install",
+                side_effect=[None, failure],
+            ) as install:
+                with mock.patch("builtins.print") as printed:
+                    ok = self.setup_mod.install_dependencies({})
+
+        self.assertFalse(ok)
+        self.assertEqual(install.call_count, 2)
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertNotIn("falling back", output.lower())
+        self.assertNotIn("All dependencies installed", output)
+
+    def test_nvidia_provider_failure_is_not_reported_as_success(self):
+        failure = self.setup_mod.subprocess.CalledProcessError(
+            1, ["pip", "install", "onnxruntime-gpu"]
+        )
+        gpu_info = {
+            "nvidia": True,
+            "amd": False,
+            "intel": False,
+            "cuda_disabled_by_python": False,
+        }
+        with mock.patch.object(self.setup_mod, "get_pip_command", return_value="pip"):
+            with mock.patch.object(
+                self.setup_mod,
+                "_run_pip_install",
+                side_effect=[None, None, failure],
+            ):
+                with mock.patch("builtins.print") as printed:
+                    ok = self.setup_mod.install_dependencies(gpu_info)
+
+        self.assertFalse(ok)
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertNotIn("All dependencies installed", output)
+
     def test_paddlepaddle_timeout_returns_false(self):
         gpu_info = {
             "nvidia": False,
@@ -302,7 +346,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertFalse(any("torch-directml" in call for call in calls))
         self.assertFalse(any("openvino" in call for call in calls))
 
-    def test_intel_dependencies_install_openvino_for_rapidocr(self):
+    def test_intel_uses_the_same_locked_directml_core_as_amd(self):
         gpu_info = {
             "nvidia": False,
             "amd": False,
@@ -318,7 +362,7 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         self.assertTrue(ok)
         calls = [" ".join(call.args[0]) for call in run.call_args_list]
         self.assertTrue(any("onnxruntime-directml==1.24.4" in call for call in calls))
-        self.assertTrue(any("openvino>=2025.0.0" in call for call in calls))
+        self.assertFalse(any("openvino" in call for call in calls))
 
     def test_directml_unavailable_fails_before_environment_mutation(self):
         gpu_info = {
@@ -438,7 +482,9 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
 
         for name, content in tracked.items():
             self.assertIn("setup.py --repair", content, name)
-            self.assertIn("import cv2, PIL, numpy", content, name)
+            self.assertIn("backend.dependency_profiles", content, name)
+            self.assertIn("verify", content, name)
+            self.assertNotIn("import cv2, PIL, numpy", content, name)
             self.assertNotIn("setup.py\n", content, name)
         self.assertIn("scripts\\setup_splash.py", tracked["Run_VSR_Pro.bat"])
         self.assertIn("VSR_SETUP_PROGRESS_FILE", tracked["Run_VSR_Pro.bat"])
@@ -447,6 +493,288 @@ class PythonCudaWheelGuardTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         source = (root / "setup.py").read_text(encoding="utf-8")
         self.assertNotIn("input(", source)
+
+    def test_profile_verifier_uses_the_venv_and_named_profile(self):
+        payload = {
+            "schema": "vsr.dependency_profile_status.v1",
+            "profile": "cpu",
+            "valid": True,
+            "requiredPackages": [],
+            "capabilities": [],
+        }
+        result = SimpleNamespace(returncode=0, stdout="import banner", stderr="")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            report = Path(tmpdir) / "verification.json"
+
+            def write_report(*_args, **_kwargs):
+                report.write_text(json.dumps(payload), encoding="utf-8")
+                return result
+
+            with mock.patch.object(
+                self.setup_mod, "get_python_command", return_value="venv-python"
+            ):
+                with mock.patch.object(
+                    self.setup_mod.subprocess,
+                    "run",
+                    side_effect=write_report,
+                ) as run:
+                    actual = self.setup_mod.verify_installed_profile(
+                        "cpu",
+                        report_path=report,
+                    )
+
+            self.assertFalse(report.exists())
+
+        self.assertTrue(actual["valid"])
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                "venv-python",
+                "-m",
+                "backend.dependency_profiles",
+                "verify",
+                "--profile",
+                "cpu",
+                "--output",
+                str(report),
+            ],
+        )
+
+    def test_failed_setup_report_is_atomic_and_rerunnable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            target = Path(tmpdir) / "venv" / ".vsr-setup-report.json"
+            target.parent.mkdir()
+            written = self.setup_mod.write_setup_report(
+                "cpu",
+                "failed",
+                stage="dependency_install",
+                message="simulated resolver failure",
+                path=target,
+            )
+            payload = json.loads(target.read_text(encoding="utf-8"))
+
+        self.assertTrue(written)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["stage"], "dependency_install")
+        self.assertEqual(len(payload["requiredPackages"]), 9)
+        self.assertEqual(
+            payload["repairCommand"],
+            "python setup.py --repair --profile cpu",
+        )
+        self.assertFalse(target.with_suffix(".json.tmp").exists())
+
+    def test_main_cannot_print_complete_after_verification_failure(self):
+        invalid = {
+            "schema": "vsr.dependency_profile_status.v1",
+            "profile": "cpu",
+            "valid": False,
+            "errors": ["Required package protobuf==6.33.6 is not installed"],
+        }
+        gpu = {
+            "nvidia": False,
+            "amd": False,
+            "intel": False,
+            "blackwell": False,
+            "cuda_disabled_by_python": False,
+        }
+        patches = (
+            mock.patch.object(self.setup_mod, "_anchor_working_directory"),
+            mock.patch.object(self.setup_mod, "print_banner"),
+            mock.patch.object(self.setup_mod, "check_python", return_value=True),
+            mock.patch.object(self.setup_mod, "detect_gpu", return_value=gpu),
+            mock.patch.object(self.setup_mod, "ensure_profile_current"),
+            mock.patch.object(self.setup_mod, "_print_profile_contract"),
+            mock.patch.object(self.setup_mod, "create_virtual_env", return_value=True),
+            mock.patch.object(self.setup_mod, "install_pytorch", return_value=True),
+            mock.patch.object(self.setup_mod, "install_dependencies", return_value=True),
+            mock.patch.object(
+                self.setup_mod, "verify_installed_profile", return_value=invalid
+            ),
+            mock.patch.object(self.setup_mod, "write_setup_report", return_value=True),
+            mock.patch.object(self.setup_mod, "write_setup_progress"),
+            mock.patch.object(self.setup_mod, "check_ffmpeg"),
+            mock.patch.object(self.setup_mod, "create_launcher"),
+        )
+        started = []
+        try:
+            for item in patches:
+                started.append(item.start())
+            with mock.patch("builtins.print") as printed:
+                code = self.setup_mod.main(["--profile", "cpu"])
+        finally:
+            for item in reversed(patches):
+                item.stop()
+
+        self.assertEqual(code, 1)
+        started[-1].assert_not_called()
+        started[-2].assert_not_called()
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertNotIn("SETUP COMPLETE", output)
+        self.assertIn("python setup.py --repair --profile cpu", output)
+
+    def test_main_reports_success_only_after_full_profile_verification(self):
+        valid = {
+            "schema": "vsr.dependency_profile_status.v1",
+            "profile": "cpu",
+            "valid": True,
+            "errors": [],
+            "requiredPackages": [],
+            "capabilities": ["CPU inference"],
+            "providerSmoke": {
+                "activeProviders": ["CPUExecutionProvider"],
+            },
+        }
+        gpu = {
+            "nvidia": False,
+            "amd": False,
+            "intel": False,
+            "blackwell": False,
+            "cuda_disabled_by_python": False,
+        }
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "_anchor_working_directory"
+            ))
+            stack.enter_context(mock.patch.object(self.setup_mod, "print_banner"))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "check_python", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "detect_gpu", return_value=gpu
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "ensure_profile_current"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "_print_profile_contract"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "_print_profile_verification"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "create_virtual_env", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "install_pytorch", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "install_dependencies", return_value=True
+            ))
+            verify = stack.enter_context(mock.patch.object(
+                self.setup_mod,
+                "verify_installed_profile",
+                return_value=valid,
+            ))
+            report = stack.enter_context(mock.patch.object(
+                self.setup_mod, "write_setup_report", return_value=True
+            ))
+            progress = stack.enter_context(mock.patch.object(
+                self.setup_mod, "write_setup_progress"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "check_ffmpeg", return_value=True
+            ))
+            launcher = stack.enter_context(mock.patch.object(
+                self.setup_mod, "create_launcher"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod.platform, "system", return_value="Windows"
+            ))
+            with mock.patch("builtins.print") as printed:
+                code = self.setup_mod.main(["--profile", "cpu"])
+
+        self.assertEqual(code, 0)
+        verify.assert_called_once_with("cpu")
+        launcher.assert_called_once_with()
+        self.assertEqual(report.call_args_list[-1].args[:2], ("cpu", "verified"))
+        self.assertEqual(report.call_args_list[-1].kwargs["verification"], valid)
+        self.assertTrue(any(
+            call.args[2] == "DONE"
+            for call in progress.call_args_list
+            if len(call.args) >= 3
+        ))
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn("SETUP COMPLETE", output)
+
+    def test_main_install_failure_is_diagnosable_and_rerunnable(self):
+        gpu = {
+            "nvidia": False,
+            "amd": False,
+            "intel": False,
+            "blackwell": False,
+            "cuda_disabled_by_python": False,
+        }
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "_anchor_working_directory"
+            ))
+            stack.enter_context(mock.patch.object(self.setup_mod, "print_banner"))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "check_python", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "detect_gpu", return_value=gpu
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "ensure_profile_current"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "_print_profile_contract"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "create_virtual_env", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "install_pytorch", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "install_dependencies", return_value=False
+            ))
+            partial = {
+                "schema": "vsr.dependency_profile_status.v1",
+                "profile": "cpu",
+                "valid": False,
+                "errors": ["simulated missing package"],
+            }
+            verify = stack.enter_context(mock.patch.object(
+                self.setup_mod,
+                "verify_installed_profile",
+                return_value=partial,
+            ))
+            report = stack.enter_context(mock.patch.object(
+                self.setup_mod, "write_setup_report", return_value=True
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod, "write_setup_progress"
+            ))
+            ffmpeg = stack.enter_context(mock.patch.object(
+                self.setup_mod, "check_ffmpeg"
+            ))
+            launcher = stack.enter_context(mock.patch.object(
+                self.setup_mod, "create_launcher"
+            ))
+            stack.enter_context(mock.patch.object(
+                self.setup_mod.platform, "system", return_value="Windows"
+            ))
+            with mock.patch("builtins.print") as printed:
+                code = self.setup_mod.main(["--profile", "cpu"])
+
+        self.assertEqual(code, 1)
+        verify.assert_called_once_with("cpu")
+        ffmpeg.assert_not_called()
+        launcher.assert_not_called()
+        self.assertEqual(report.call_args_list[-1].args[:2], ("cpu", "failed"))
+        self.assertEqual(
+            report.call_args_list[-1].kwargs["stage"],
+            "dependency_install",
+        )
+        self.assertEqual(
+            report.call_args_list[-1].kwargs["verification"],
+            partial,
+        )
+        output = "\n".join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertNotIn("SETUP COMPLETE", output)
+        self.assertIn("python setup.py --repair --profile cpu", output)
 
 
 if __name__ == "__main__":

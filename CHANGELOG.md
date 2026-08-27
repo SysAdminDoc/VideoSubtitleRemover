@@ -21,6 +21,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Setup now installs one named, locked CPU, NVIDIA, or DirectML profile and
+  refuses to report success after any partial failure. It prints the profile's
+  exact packages and capabilities, writes an atomic setup report, and exits
+  with a profile-specific repair command when installation or verification
+  fails. Setup and every source launcher now share a strict verifier for exact
+  versions, runtime imports, dependency consistency, and real provider
+  inference. Intel uses the deterministic DirectML core, while OpenVINO stays
+  an explicit optional add-on.
 - Skip-existing now verifies a v3 output sidecar before accepting prior work.
   Source SHA-256, normalized processing settings, output path, byte size, and
   output SHA-256 must all match. Missing, older, changed, or truncated evidence

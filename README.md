@@ -112,14 +112,20 @@ the download against the published `SHA256SUMS.txt` file.
 1. **Download** or clone this repository
 2. **Double-click** `Run_VSR_Pro.bat`. The first run automatically:
    - Creates a virtual environment
-   - Detects your GPU and installs appropriate packages
+   - Detects your GPU and selects a named CPU, NVIDIA, or DirectML profile
    - Shows a compact six-stage setup splash while the runtime is prepared
-   - Installs the reviewed RapidOCR/ONNX runtime for the detected hardware
-   - Launches the application
-   - On later launches, verifies core packages and repairs a broken `venv`
-     without stdin prompts
+   - Prints and installs every exact package required by that profile
+   - Checks package versions, imports, dependency consistency, and one real
+     inference on the claimed ONNX Runtime provider before launching
+   - On later launches, runs the same verifier and repairs a broken `venv`
+     without asking for input
    - Use `Run_VSR_Pro_Debug.bat` for a visible troubleshooting console, or
      `Run_VSR_Pro.ps1` when you prefer launching from PowerShell
+
+Setup never treats a partial install as complete. A failure exits with a
+nonzero code, prints a profile-specific repair command such as
+`python setup.py --repair --profile cpu`, and keeps the last result in
+`venv/.vsr-setup-report.json`.
 
 ### Windows Package Manager
 
@@ -144,22 +150,30 @@ python -m venv venv
 # Choose a reviewed profile: cpu, nvidia, or directml.
 $profile = "cpu"
 
-# Install PyTorch (Python 3.12/3.13 recommended for CUDA):
-# NVIDIA RTX 20/30/40/50-series:
-pip install "torch>=2.11.0" "torchvision>=0.26.0" --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cu128
-# CPU:
-pip install "torch>=2.11.0" "torchvision>=0.26.0" --constraint "dependency_profiles/$profile.txt" --index-url https://download.pytorch.org/whl/cpu
+# Install PyTorch. Python 3.12 or 3.13 is recommended for NVIDIA CUDA.
+$torchIndex = if ($profile -eq "nvidia") { "https://download.pytorch.org/whl/cu128" } else { "https://download.pytorch.org/whl/cpu" }
+pip install "torch>=2.11.0" "torchvision>=0.26.0" --constraint "dependency_profiles/$profile.txt" --index-url $torchIndex
 
 # Install dependencies
 pip install -r requirements.txt --constraint "dependency_profiles/$profile.txt"
+
+# Install the profile's ONNX Runtime provider
+$provider = @{ cpu = "onnxruntime"; nvidia = "onnxruntime-gpu"; directml = "onnxruntime-directml" }[$profile]
+pip install $provider --constraint "dependency_profiles/$profile.txt"
+
+# Verify exact versions, imports, dependency consistency, and provider inference
+python -m backend.dependency_profiles verify --profile $profile
 
 # Run
 python VideoSubtitleRemover.py
 ```
 
 `python setup.py --profile auto` selects the reviewed CPU, NVIDIA, or DirectML
-profile from detected hardware; pass a profile name explicitly for repeatable
-CI or repair installs. Maintainers update `dependency_profiles.json`, run
+profile from detected hardware. Pass a profile name explicitly for repeatable
+installs and repairs. Setup prints the profile's exact required packages and
+capabilities before it changes the environment. It writes a verified report
+only after the same runtime verifier used by the launchers succeeds.
+Maintainers update `dependency_profiles.json`, run
 `python -m backend.dependency_profiles update`, review the emitted diffs, and
 then run `python -m backend.dependency_profiles check`. Generated constraint
 and manifest SHA-256 values are included in release evidence. PaddleOCR,
@@ -397,7 +411,7 @@ track plans remain valid.
 
 | Priority | Engine | Install | Languages | Notes |
 |----------|--------|---------|-----------|-------|
-| 1 | **RapidOCR 3.9.2** (OpenCV/ONNX/OpenVINO PP-OCRv6; PP-OCRv5 fallback) | `pip install "rapidocr==3.9.2"`; Intel: `pip install "openvino>=2025.0.0"` | 100+ | OpenCV 5 DNN is the dependency-light PP-OCRv6 CPU path; RapidOCR providers can compare v6 and v5 |
+| 1 | **RapidOCR 3.9.2** (OpenCV/ONNX/OpenVINO PP-OCRv6; PP-OCRv5 fallback) | `pip install "rapidocr==3.9.2"`; Intel: `pip install "openvino==2026.2.1" --constraint dependency_profiles/directml.txt` | 100+ | OpenCV 5 DNN is the dependency-light PP-OCRv6 CPU path; RapidOCR providers can compare v6 and v5 |
 | 2 | PaddleOCR (reviewed opt-in) | `pip install "paddleocr==3.7.0" --constraint dependency_profiles/cpu.txt` in an isolated environment | 106 | Explicit PP-OCRv5 mobile (default, smaller/faster) or server models, or a PP-OCRv6 tier (`tiny`, `small`, `medium`) via `--paddleocr-variant`; installs its own OpenCV wheel |
 | 3 | Surya | `pip install surya-ocr` | 90+ | Layout-aware (GPL) |
 | 4 | EasyOCR (frozen) | `pip install "easyocr==1.7.2" --constraint dependency_profiles/cpu.txt` in an isolated environment | 80+ | Frozen legacy fallback; last release 2024-09-24; installs its own OpenCV wheel |
@@ -459,16 +473,23 @@ for the current installation and deprecation status.
 
 `python -m backend.dependency_profiles smoke --profile
 <name>` creates one real inference session on the profile's claimed
-provider and fails if ONNX Runtime silently falls back. Every supported
-environment installs `protobuf>=6.33.5` (CVE-2026-0994); older builds are
+provider and fails if ONNX Runtime silently falls back. Use the stricter
+`verify` command shown above for a full environment check. It also checks
+every exact required package, imports each runtime module, and runs `pip check`.
+The source launchers use that command before starting the app.
+Every supported environment installs `protobuf>=6.33.5` (CVE-2026-0994); older builds are
 a blocking release advisory. On
-AMD/Intel systems, setup preflights and installs the latest published/reviewed
+AMD and Intel systems use the same deterministic DirectML core. Setup
+preflights and installs the latest published and reviewed
 DirectML wheel, `onnxruntime-directml==1.24.4`; incompatible Python/platform
 combinations fail before the environment is changed and point to CPU or the
 Windows ML audit. DirectML is in sustained engineering, with new Windows ONNX
 Runtime feature development moving to Windows ML, so diagnostics and release
-evidence report that lifecycle separately from CPU/CUDA security floors. On
-Intel systems setup also tries `openvino>=2025.0.0` so RapidOCR can use its
+evidence report that lifecycle separately from CPU/CUDA security floors.
+OpenVINO remains an optional Intel add-on and setup does not install it
+silently. Install the reviewed version with
+`pip install "openvino==2026.2.1" --constraint dependency_profiles/directml.txt`
+if you want RapidOCR's
 OpenVINO engine for CPU/iGPU OCR acceleration. OpenCV 5 DNN runs RapidOCR's
 bundled PP-OCRv6 detection and recognition models on CPU without ONNX Runtime;
 `python -m backend.cli --ocr-benchmark --ocr-engine opencv-dnn` records recall,

@@ -3,7 +3,7 @@
 # Profile: directml
 # Provider: DmlExecutionProvider
 # Reviewed: 2026-08-20
-# Manifest-SHA256: a4287940fcbafe7e8cbac7b3a5c9bc50ed77db28bb72eda87f61225e79fc30c6
+# Manifest-SHA256: 1916c5fbcec67f8f70eea1858b1119c238947951a7588dc93f268553bb8c935f
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c

@@ -14,6 +14,16 @@
     "easyocr==1.7.2",
     "simple-lama-inpainting==0.1.2"
   ],
+  "commonRequiredPackages": [
+    "numpy",
+    "protobuf",
+    "opencv-python",
+    "Pillow",
+    "idna",
+    "rapidocr",
+    "torch",
+    "torchvision"
+  ],
   "profiles": {
     "cpu": {
       "constraints": [
@@ -23,6 +33,14 @@
         "paddlepaddle==3.0.0"
       ],
       "provider": "CPUExecutionProvider",
+      "requiredPackages": [
+        "onnxruntime"
+      ],
+      "capabilities": [
+        "RapidOCR and LaMa ONNX through CPUExecutionProvider",
+        "PyTorch CPU inference",
+        "OpenCV 5 DNN OCR and inpainting"
+      ],
       "indexes": [
         "https://pypi.org/simple",
         "https://download.pytorch.org/whl/cpu",
@@ -37,6 +55,14 @@
         "paddlepaddle-gpu==3.0.0"
       ],
       "provider": "CUDAExecutionProvider",
+      "requiredPackages": [
+        "onnxruntime-gpu"
+      ],
+      "capabilities": [
+        "RapidOCR and LaMa ONNX through CUDAExecutionProvider",
+        "PyTorch CUDA 12.8 inference",
+        "OpenCV 5 DNN CPU fallback"
+      ],
       "indexes": [
         "https://pypi.org/simple",
         "https://download.pytorch.org/whl/cu128",
@@ -53,6 +79,14 @@
         "openvino==2026.2.1"
       ],
       "provider": "DmlExecutionProvider",
+      "requiredPackages": [
+        "onnxruntime-directml"
+      ],
+      "capabilities": [
+        "RapidOCR and LaMa ONNX through DmlExecutionProvider",
+        "PyTorch CPU fallback",
+        "OpenCV 5 DNN CPU fallback; OpenVINO remains an optional Intel add-on"
+      ],
       "indexes": [
         "https://pypi.org/simple",
         "https://download.pytorch.org/whl/cpu",

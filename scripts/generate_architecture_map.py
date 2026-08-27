@@ -67,7 +67,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/crash_reporter.py": "Opt-in crash reporter (allowlisted minimal events).",
     "backend/decode_accel.py": "Hardware decode hints (D3D11/VAAPI/MFX/PyNv).",
     "backend/dependency_caps.py": "Dependency ceilings and execution-provider lanes.",
-    "backend/dependency_profiles.py": "Reviewed CPU/NVIDIA/DirectML dependency locks.",
+    "backend/dependency_profiles.py": "Locked profiles plus package, import, pip, and provider verification.",
     "backend/detection.py": "OCR cascade, selectable engines, execution provenance.",
     "backend/detection_geometry.py": "OCR boxes, polygons, text, confidence, track IDs.",
     "backend/device_provider.py": "Device strategy and inpainter construction.",
@@ -145,13 +145,13 @@ DESCRIPTIONS: dict[str, str] = {
 
 TOP_LEVEL = (
     ("VideoSubtitleRemover.py", "Entry point (thin launcher -> gui.app)."),
-    ("setup.py", "First-run venv bootstrap and dependency profiles."),
+    ("setup.py", "Validated venv bootstrap with atomic setup reports."),
     ("build_exe.bat", "Local PyInstaller build, evidence, release staging."),
     ("requirements.txt", "Pinned and advisory dependency floors."),
     ("dependency_profiles.json", "Reviewed CPU/NVIDIA/DirectML profile manifest."),
-    ("Run_VSR_Pro.bat", "Windows launcher."),
-    ("Run_VSR_Pro_Debug.bat", "Windows launcher with a visible console."),
-    ("Run_VSR_Pro.ps1", "PowerShell launcher."),
+    ("Run_VSR_Pro.bat", "Windows launcher with profile verification and repair."),
+    ("Run_VSR_Pro_Debug.bat", "Visible-console launcher with profile repair."),
+    ("Run_VSR_Pro.ps1", "PowerShell launcher with profile verification and repair."),
 )
 
 

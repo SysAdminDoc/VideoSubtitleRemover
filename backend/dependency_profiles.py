@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
+import sys
 import tempfile
 from typing import Any, Mapping, Sequence
 
@@ -21,6 +23,7 @@ from backend.dependency_caps import (
     provider_lane_for_profile,
     version_in_lane,
 )
+from backend.subprocess_policy import run_process
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +35,28 @@ PROFILE_ENV = "VSR_DEPENDENCY_PROFILE"
 PROFILE_SMOKE_SCHEMA = "vsr.dependency_profile_smoke.v1"
 SUPPORTED_PROFILES = ("cpu", "nvidia", "directml")
 _EXACT_PIN = re.compile(r"^\s*([A-Za-z0-9._-]+)\s*==\s*([0-9][0-9A-Za-z.+-]*)\s*$")
+_PACKAGE_IMPORTS = {
+    "numpy": "numpy",
+    "protobuf": "google.protobuf",
+    "opencv-python": "cv2",
+    "pillow": "PIL",
+    "idna": "idna",
+    "rapidocr": "rapidocr",
+    "torch": "torch",
+    "torchvision": "torchvision",
+    "onnxruntime": "onnxruntime",
+    "onnxruntime-gpu": "onnxruntime",
+    "onnxruntime-directml": "onnxruntime",
+}
+_CONFLICT_GROUPS = (
+    (
+        "opencv-python",
+        "opencv-contrib-python",
+        "opencv-python-headless",
+        "opencv-contrib-python-headless",
+    ),
+    ("onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"),
+)
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -60,6 +85,11 @@ def load_profile_manifest(path: str | Path = MANIFEST_PATH) -> dict[str, Any]:
     common = payload.get("commonConstraints")
     if not isinstance(common, list) or not all(isinstance(item, str) for item in common):
         raise ValueError("commonConstraints must be a list of requirement strings")
+    common_required = payload.get("commonRequiredPackages")
+    if not isinstance(common_required, list) or not all(
+        isinstance(item, str) and item.strip() for item in common_required
+    ):
+        raise ValueError("commonRequiredPackages must be a list of package names")
     hashes = payload.get("reviewedArtifactHashes", {})
     if not isinstance(hashes, dict) or any(
         not isinstance(value, str)
@@ -74,6 +104,8 @@ def load_profile_manifest(path: str | Path = MANIFEST_PATH) -> dict[str, Any]:
             raise ValueError(f"Profile {name!r} must be an object")
         constraints = profile.get("constraints")
         indexes = profile.get("indexes")
+        required = profile.get("requiredPackages")
+        capabilities = profile.get("capabilities")
         if not isinstance(constraints, list) or not all(
             isinstance(item, str) for item in constraints
         ):
@@ -82,6 +114,27 @@ def load_profile_manifest(path: str | Path = MANIFEST_PATH) -> dict[str, Any]:
             isinstance(item, str) and item.startswith("https://") for item in indexes
         ):
             raise ValueError(f"Profile {name!r} indexes are invalid")
+        if not isinstance(required, list) or not all(
+            isinstance(item, str) and item.strip() for item in required
+        ):
+            raise ValueError(f"Profile {name!r} requiredPackages are invalid")
+        if not isinstance(capabilities, list) or not all(
+            isinstance(item, str) and item.strip() for item in capabilities
+        ):
+            raise ValueError(f"Profile {name!r} capabilities are invalid")
+        required_names = [
+            _normalize_package_name(item)
+            for item in [*common_required, *required]
+        ]
+        if len(required_names) != len(set(required_names)):
+            raise ValueError(f"Profile {name!r} repeats a required package")
+        pins = _exact_pins([*common, *constraints])
+        missing_pins = sorted(set(required_names) - set(pins))
+        if missing_pins:
+            raise ValueError(
+                f"Profile {name!r} required packages lack exact pins: "
+                + ", ".join(missing_pins)
+            )
     problems = constraint_range_problems(payload)
     if problems:
         raise ValueError(
@@ -96,8 +149,48 @@ def _exact_pins(requirements: Sequence[str]) -> dict[str, str]:
     for requirement in requirements:
         match = _EXACT_PIN.match(str(requirement))
         if match:
-            pins[match.group(1).lower().replace("_", "-")] = match.group(2)
+            pins[_normalize_package_name(match.group(1))] = match.group(2)
     return pins
+
+
+def _normalize_package_name(value: str) -> str:
+    return re.sub(r"[-_.]+", "-", str(value).strip().lower())
+
+
+def profile_required_packages(
+    name: str,
+    manifest: Mapping[str, Any] | None = None,
+    *,
+    manifest_path: str | Path = MANIFEST_PATH,
+) -> tuple[dict[str, str], ...]:
+    payload = dict(manifest or load_profile_manifest(manifest_path))
+    if name not in SUPPORTED_PROFILES:
+        raise ValueError(f"Unsupported dependency profile: {name!r}")
+    profile = payload["profiles"][name]
+    required = [
+        *payload["commonRequiredPackages"],
+        *profile["requiredPackages"],
+    ]
+    pins = _exact_pins([
+        *payload["commonConstraints"],
+        *profile["constraints"],
+    ])
+    return tuple({
+        "name": _normalize_package_name(package),
+        "expectedVersion": pins[_normalize_package_name(package)],
+    } for package in required)
+
+
+def profile_capabilities(
+    name: str,
+    manifest: Mapping[str, Any] | None = None,
+    *,
+    manifest_path: str | Path = MANIFEST_PATH,
+) -> tuple[str, ...]:
+    payload = dict(manifest or load_profile_manifest(manifest_path))
+    if name not in SUPPORTED_PROFILES:
+        raise ValueError(f"Unsupported dependency profile: {name!r}")
+    return tuple(str(item) for item in payload["profiles"][name]["capabilities"])
 
 
 def constraint_range_problems(manifest: Mapping[str, Any]) -> list[str]:
@@ -393,6 +486,148 @@ def _installed_provider_profile(
     return "cpu"
 
 
+def _installed_distribution_version(package: str) -> str | None:
+    try:
+        return str(metadata.version(package))
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def _runtime_package_versions(
+    required: Sequence[Mapping[str, str]],
+    supplied: Mapping[str, str] | None,
+) -> dict[str, str]:
+    if supplied is not None:
+        return {
+            _normalize_package_name(name): str(version)
+            for name, version in supplied.items()
+        }
+    names = {
+        str(item["name"])
+        for item in required
+    }
+    for group in _CONFLICT_GROUPS:
+        names.update(group)
+    versions: dict[str, str] = {}
+    for name in sorted(names):
+        version = _installed_distribution_version(name)
+        if version is not None:
+            versions[name] = version
+    return versions
+
+
+def _matches_exact_version(installed: str, expected: str) -> bool:
+    actual = str(installed).strip()
+    reviewed = str(expected).strip()
+    return actual == reviewed or actual.split("+", 1)[0] == reviewed
+
+
+def verify_required_package_versions(
+    name: str,
+    *,
+    package_versions: Mapping[str, str] | None = None,
+    manifest: Mapping[str, Any] | None = None,
+    manifest_path: str | Path = MANIFEST_PATH,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    payload = dict(manifest or load_profile_manifest(manifest_path))
+    required = profile_required_packages(
+        name,
+        payload,
+        manifest_path=manifest_path,
+    )
+    installed = _runtime_package_versions(required, package_versions)
+    statuses: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for item in required:
+        package = item["name"]
+        expected = item["expectedVersion"]
+        actual = installed.get(package)
+        matched = bool(
+            actual is not None and _matches_exact_version(actual, expected)
+        )
+        statuses.append({
+            "name": package,
+            "expectedVersion": expected,
+            "installedVersion": actual,
+            "satisfied": matched,
+        })
+        if actual is None:
+            errors.append(
+                f"Required package {package}=={expected} is not installed"
+            )
+        elif not matched:
+            errors.append(
+                f"Required package {package}=={expected} resolved as {actual}"
+            )
+    for group in _CONFLICT_GROUPS:
+        present = [package for package in group if installed.get(package)]
+        if len(present) > 1:
+            errors.append(
+                "Conflicting runtime distributions are installed: "
+                + ", ".join(present)
+            )
+    return statuses, errors
+
+
+def run_profile_import_smoke(
+    name: str,
+    *,
+    importer=None,
+    manifest_path: str | Path = MANIFEST_PATH,
+) -> dict[str, Any]:
+    load = importlib.import_module if importer is None else importer
+    required = profile_required_packages(name, manifest_path=manifest_path)
+    modules = []
+    failures = []
+    seen = set()
+    for item in required:
+        package = item["name"]
+        module_name = _PACKAGE_IMPORTS.get(package)
+        if not module_name or module_name in seen:
+            continue
+        seen.add(module_name)
+        try:
+            load(module_name)
+        except Exception as exc:  # noqa: BLE001
+            failures.append({
+                "package": package,
+                "module": module_name,
+                "error": str(exc),
+            })
+        else:
+            modules.append(module_name)
+    return {
+        "passed": not failures,
+        "modules": modules,
+        "failures": failures,
+    }
+
+
+def run_pip_check(timeout: float = 120.0) -> dict[str, Any]:
+    try:
+        result = run_process(
+            [sys.executable, "-m", "pip", "check"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "passed": False,
+            "returnCode": None,
+            "output": str(exc),
+        }
+    output = "\n".join(
+        part.strip() for part in (result.stdout, result.stderr) if part.strip()
+    )
+    return {
+        "passed": result.returncode == 0,
+        "returnCode": int(result.returncode),
+        "output": output,
+    }
+
+
 def collect_dependency_profile_status(
     *,
     profile: str | None = None,
@@ -401,6 +636,9 @@ def collect_dependency_profile_status(
     manifest_path: str | Path = MANIFEST_PATH,
     profile_dir: str | Path = PROFILE_DIR,
     run_provider_smoke: bool = False,
+    verify_runtime: bool = False,
+    run_import_checks: bool = False,
+    run_package_check: bool = False,
 ) -> dict[str, Any]:
     environment = os.environ if env is None else env
     requested = str(profile or environment.get(PROFILE_ENV, "")).strip().lower()
@@ -425,6 +663,10 @@ def collect_dependency_profile_status(
             "intentionalExceptions": [],
             "providerLanes": collect_provider_lane_status(package_versions),
             "providerSmoke": None,
+            "requiredPackages": [],
+            "capabilities": [],
+            "importSmoke": None,
+            "pipCheck": None,
         }
     path = profile_constraint_path(name, profile_dir)
     actual = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -433,6 +675,21 @@ def collect_dependency_profile_status(
     elif actual != expected:
         errors.append(f"Constraint file is stale: {path}")
     profile_data = manifest["profiles"][name]
+    required_packages = [
+        dict(item) for item in profile_required_packages(
+            name,
+            manifest,
+            manifest_path=manifest_path,
+        )
+    ]
+    if verify_runtime:
+        required_packages, runtime_errors = verify_required_package_versions(
+            name,
+            package_versions=package_versions,
+            manifest=manifest,
+            manifest_path=manifest_path,
+        )
+        errors.extend(runtime_errors)
     lanes = collect_provider_lane_status(package_versions)
     protobuf = lanes.get("protobuf", {})
     if protobuf.get("satisfied") is False:
@@ -448,11 +705,32 @@ def collect_dependency_profile_status(
                 "Provider inference smoke failed for profile "
                 f"{name!r}: {smoke.get('error') or 'unknown error'}"
             )
+    import_smoke = None
+    if run_import_checks:
+        import_smoke = run_profile_import_smoke(
+            name,
+            manifest_path=manifest_path,
+        )
+        for failure in import_smoke.get("failures", []):
+            errors.append(
+                f"Runtime import failed for {failure.get('package')}: "
+                f"{failure.get('error') or 'unknown error'}"
+            )
+    pip_check = None
+    if run_package_check:
+        pip_check = run_pip_check()
+        if pip_check.get("passed") is not True:
+            errors.append(
+                "pip check failed: "
+                + str(pip_check.get("output") or "unknown error")
+            )
     return {
         "schema": PROFILE_STATUS_SCHEMA,
         "profile": name,
         "source": source,
         "provider": profile_data["provider"],
+        "capabilities": list(profile_data["capabilities"]),
+        "requiredPackages": required_packages,
         "valid": not errors,
         "errors": errors,
         "manifest": _display_path(Path(manifest_path)),
@@ -465,6 +743,8 @@ def collect_dependency_profile_status(
         "intentionalExceptions": list(manifest.get("intentionalExceptions", [])),
         "providerLanes": lanes,
         "providerSmoke": smoke,
+        "importSmoke": import_smoke,
+        "pipCheck": pip_check,
     }
 
 
@@ -475,25 +755,58 @@ def _print_diffs(changes: Mapping[str, str]) -> None:
             print(diff, end="" if diff.endswith("\n") else "\n")
 
 
+def _write_status_report(path: str | Path, status: Mapping[str, Any]) -> None:
+    """Write a verifier report atomically for setup and support tooling."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    try:
+        temporary.write_text(
+            json.dumps(dict(status), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(target)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Check, regenerate, or inspect reviewed dependency profiles."
     )
-    parser.add_argument("command", choices=("check", "update", "status", "smoke"))
+    parser.add_argument(
+        "command",
+        choices=("check", "update", "status", "smoke", "verify"),
+    )
     parser.add_argument("--profile", choices=SUPPORTED_PROFILES)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--manifest", default=str(MANIFEST_PATH))
     parser.add_argument("--profile-dir", default=str(PROFILE_DIR))
+    parser.add_argument(
+        "--output",
+        help="Atomically write status, smoke, or verification JSON to this path.",
+    )
     args = parser.parse_args(argv)
 
-    if args.command in ("status", "smoke"):
+    if args.command in ("status", "smoke", "verify"):
+        verify = args.command == "verify"
         status = collect_dependency_profile_status(
             profile=args.profile,
             manifest_path=args.manifest,
             profile_dir=args.profile_dir,
-            run_provider_smoke=args.command == "smoke",
+            run_provider_smoke=args.command in {"smoke", "verify"},
+            verify_runtime=verify,
+            run_import_checks=verify,
+            run_package_check=verify,
         )
         print(json.dumps(status, indent=2, sort_keys=True))
+        if args.output:
+            try:
+                _write_status_report(args.output, status)
+            except OSError as exc:
+                print(f"Could not write dependency profile report: {exc}", file=sys.stderr)
+                return 2
         return 0 if status.get("valid") or args.command == "status" else 1
 
     changes = update_profiles(

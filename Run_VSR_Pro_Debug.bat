@@ -10,7 +10,7 @@ set "VSR_SETUP_REPAIR=0"
 if not exist "venv\Scripts\python.exe" (
     set "VSR_SETUP_REPAIR=1"
 ) else (
-    "venv\Scripts\python.exe" -c "import cv2, PIL, numpy" >nul 2>nul
+    "venv\Scripts\python.exe" -m backend.dependency_profiles verify >nul 2>nul
     if errorlevel 1 set "VSR_SETUP_REPAIR=1"
 )
 
