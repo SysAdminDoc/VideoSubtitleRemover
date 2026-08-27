@@ -164,6 +164,7 @@ from backend.tracking import (
     _box_from_state as _box_from_state,
     _iou as _iou,
     SubtitleTracker,
+    _group_horizontal_geometry,
     _group_horizontal_line,
     _phash,
     _phash_distance,
@@ -472,6 +473,7 @@ class _FrameLoopState:
     last_hash: Any
     tracker: Optional[SubtitleTracker]
     fixed_mask_cache: dict
+    srt_tracker: Optional[SubtitleTracker] = None
     # RM-292: (mask, frames_remaining) so a fade-out hold survives a batch
     # boundary instead of ending wherever the decode happened to split.
     fade_carry: Any = None
@@ -834,8 +836,9 @@ class SubtitleRemover(
         self.on_preview_frame: Optional[Callable[[np.ndarray, int, int], None]] = None
         self.live_preview_stride: int = 6   # emit every Nth processed frame
         self._hw_encoder: Optional[str] = None
-        # SRT collection: (frame_idx, text) per detection used for export
-        self._srt_entries: List[Tuple[int, str]] = []
+        # Rich tracked OCR observations; legacy (frame_idx, text) tuples remain
+        # accepted by the writer for integrations that populate this directly.
+        self._srt_entries: List[Any] = []
         # v3.12 quality report -- populated at end of process_video when
         # config.quality_report is on. None until the first run completes.
         self.last_quality_report: Optional[dict] = None
@@ -2564,10 +2567,12 @@ class SubtitleRemover(
                     state.last_mask = None
                     state.last_hash = None
                     if state.tracker is not None:
-                        state.tracker = SubtitleTracker(
-                            self.config.kalman_iou_threshold,
-                            self.config.kalman_max_age,
-                        )
+                        state.tracker.reset()
+                    if (
+                        state.srt_tracker is not None
+                        and state.srt_tracker is not state.tracker
+                    ):
+                        state.srt_tracker.reset()
             # RM-153: a frozen matte is this job's authoritative mask. It
             # was reviewed and approved frame by frame against exactly
             # these frames, so detection, tracking, and every heuristic
@@ -2721,8 +2726,25 @@ class SubtitleRemover(
                             if text_matches_detection_language(
                                 result[5], self.config.detection_lang)
                         ]
-                        detected_boxes = [result[:4] for result in matched]
-                        det_confs = [result[4] for result in matched]
+                        detection_geometry = [
+                            detection
+                            for result in matched
+                            for detection in [DetectionGeometry.from_box(
+                                result[:4],
+                                frame.shape,
+                                confidence=result[4],
+                                text=result[5],
+                            )]
+                            if detection is not None
+                        ]
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                        det_confs = [
+                            detection.confidence
+                            for detection in detection_geometry
+                        ]
                     if self.config.quality_report and det_confs:
                         review_floor = min(
                             0.9,
@@ -2764,11 +2786,24 @@ class SubtitleRemover(
                     else:
                         det_results = self.detector.detect_with_confidence(
                             det_frame, self.config.detection_threshold)
-                        detected_boxes = [
-                            (x1, y1, x2, y2)
-                            for x1, y1, x2, y2, _ in det_results
+                        detection_geometry = [
+                            detection
+                            for x1, y1, x2, y2, confidence in det_results
+                            for detection in [DetectionGeometry.from_box(
+                                (x1, y1, x2, y2),
+                                frame.shape,
+                                confidence=confidence,
+                            )]
+                            if detection is not None
                         ]
-                        det_confs = [c for _, _, _, _, c in det_results]
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                        det_confs = [
+                            detection.confidence
+                            for detection in detection_geometry
+                        ]
                     if self.config.quality_report and det_confs:
                         review_floor = min(
                             0.9,
@@ -2803,26 +2838,61 @@ class SubtitleRemover(
                             detection.bbox
                             for detection in detection_geometry
                         ]
+                    elif (
+                        state.srt_tracker is not None
+                        and callable(getattr(
+                            self.detector, "detect_with_text", None))
+                    ):
+                        text_results = self.detector.detect_with_text(
+                            det_frame, self.config.detection_threshold)
+                        detection_geometry = [
+                            detection
+                            for result in text_results
+                            for detection in [DetectionGeometry.from_box(
+                                result[:4],
+                                frame.shape,
+                                confidence=result[4],
+                                text=result[5],
+                            )]
+                            if detection is not None
+                        ]
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
                     else:
                         detected_boxes = self.detector.detect(
                             det_frame, self.config.detection_threshold)
                 self._record_ocr_detection(detected_boxes)
                 if self.config.karaoke_grouping and detected_boxes:
-                    detected_boxes = _group_horizontal_line(
-                        detected_boxes,
-                        x_gap_px=self.config.karaoke_x_gap_px,
-                        y_overlap_ratio=self.config.karaoke_y_overlap,
-                    )
-                    if geometry_detector:
-                        detection_geometry = self._legacy_geometry(
-                            detected_boxes)
+                    if detection_geometry:
+                        detection_geometry = _group_horizontal_geometry(
+                            detection_geometry,
+                            x_gap_px=self.config.karaoke_x_gap_px,
+                            y_overlap_ratio=self.config.karaoke_y_overlap,
+                        )
+                        detected_boxes = [
+                            detection.bbox
+                            for detection in detection_geometry
+                        ]
+                    else:
+                        detected_boxes = _group_horizontal_line(
+                            detected_boxes,
+                            x_gap_px=self.config.karaoke_x_gap_px,
+                            y_overlap_ratio=self.config.karaoke_y_overlap,
+                        )
                     det_confs = None
                 if state.tracker is not None:
                     update_geometry = getattr(
                         state.tracker, "update_with_geometry", None)
-                    if geometry_detector and callable(update_geometry):
+                    if callable(update_geometry):
+                        tracking_geometry = (
+                            detection_geometry
+                            if detection_geometry
+                            else self._legacy_geometry(detected_boxes)
+                        )
                         smoothed_geometry = list(
-                            update_geometry(list(detection_geometry)))
+                            update_geometry(list(tracking_geometry)))
                     else:
                         smoothed_geometry = self._legacy_geometry(
                             state.tracker.update(list(detected_boxes)))
@@ -2835,7 +2905,21 @@ class SubtitleRemover(
                     smoothed = list(detected_boxes)
                     smoothed_geometry = (
                         list(detection_geometry)
-                        if geometry_detector else self._legacy_geometry(smoothed)
+                        if detection_geometry else self._legacy_geometry(smoothed)
+                    )
+                srt_geometry = list(smoothed_geometry)
+                if (
+                    state.srt_tracker is not None
+                    and state.srt_tracker is not state.tracker
+                ):
+                    srt_geometry = list(
+                        state.srt_tracker.update_with_geometry(
+                            list(
+                                detection_geometry
+                                if detection_geometry
+                                else self._legacy_geometry(detected_boxes)
+                            )
+                        )
                     )
                 if (state.tracker is not None
                         and (not self.config.remove_chyrons
@@ -2876,7 +2960,7 @@ class SubtitleRemover(
                     )
                 ):
                     self._collect_srt_entry(
-                        frame, state.frame_idx, detected_boxes)
+                        frame, state.frame_idx, srt_geometry)
 
             if (not boxes and ctx.whisper_spans
                     and self.config.whisper_fallback):
@@ -3942,6 +4026,22 @@ class SubtitleRemover(
             tracker = (SubtitleTracker(self.config.kalman_iou_threshold,
                                          self.config.kalman_max_age)
                         if self.config.kalman_tracking else None)
+            collect_srt_text = bool(
+                self.config.export_srt
+                or (
+                    self.config.translation_enabled
+                    and not self.config.translation_srt
+                    and not self.config.translation_source_srt
+                )
+            )
+            srt_tracker = (
+                tracker
+                if collect_srt_text and tracker is not None
+                else SubtitleTracker(
+                    self.config.kalman_iou_threshold,
+                    self.config.kalman_max_age,
+                ) if collect_srt_text else None
+            )
             # v3.10: pHash for adaptive mask reuse
             last_hash = None
 
@@ -4035,6 +4135,7 @@ class SubtitleRemover(
                 last_mask=last_mask,
                 last_hash=last_hash,
                 tracker=tracker,
+                srt_tracker=srt_tracker,
                 fixed_mask_cache=fixed_mask_cache,
                 written_idx=frame_idx,
             )

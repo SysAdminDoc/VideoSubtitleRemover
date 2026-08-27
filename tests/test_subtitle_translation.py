@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from backend._srt_mixin import SrtFrameObservation, SrtTextObservation
 from backend.config import ProcessingConfig, normalize_processing_config
 from backend.subtitle_translation import (
     SubtitleTranslationError,
@@ -147,7 +148,17 @@ class SubtitleTranslationProcessorTests(unittest.TestCase):
             translation_target_lang="fr",
             use_hw_encode=False,
         ))
-        remover._srt_entries = [(0, "Hello"), (1, "Hello"), (20, "World")]
+        remover._srt_entries = [
+            SrtFrameObservation(
+                frame_idx,
+                (SrtTextObservation(3, text, confidence),),
+            )
+            for frame_idx, text, confidence in (
+                (0, "Helo", 0.3),
+                (1, "Hello", 0.95),
+                (20, "World", 0.9),
+            )
+        ]
         remover._whisper_segments = []
         remover.last_translation = {"requested": True, "status": "pending"}
         remover._translation_burn_path = ""

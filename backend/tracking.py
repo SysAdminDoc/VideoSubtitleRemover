@@ -18,6 +18,7 @@ Pure numpy + cv2 dependencies. No optional packages required.
 
 from __future__ import annotations
 
+import unicodedata
 from typing import List, Tuple
 
 import cv2
@@ -49,6 +50,7 @@ class _KalmanBox:
         polygon=None,
         confidence: float = 1.0,
         text: str = "",
+        track_id: int = -1,
     ):
         x1, y1, x2, y2 = box
         cx = (x1 + x2) / 2.0
@@ -77,6 +79,7 @@ class _KalmanBox:
         self.polygon = polygon
         self.confidence = float(confidence)
         self.text = str(text or "")
+        self.track_id = int(track_id)
         self._polygon_box = tuple(int(value) for value in box)
 
     def predict(self) -> Tuple[int, int, int, int]:
@@ -98,8 +101,9 @@ class _KalmanBox:
         if detection is not None:
             self.polygon = remap_polygon(
                 detection.polygon, detection.bbox, current_box)
-            self.confidence = detection.confidence
-            self.text = detection.text
+            if detection.text.strip() or not self.text.strip():
+                self.confidence = detection.confidence
+                self.text = detection.text
         elif self.polygon:
             self.polygon = remap_polygon(
                 self.polygon, previous_box, current_box)
@@ -121,6 +125,7 @@ class _KalmanBox:
             polygon,
             self.confidence,
             self.text,
+            self.track_id,
         )
 
 
@@ -175,9 +180,21 @@ class SubtitleTracker:
         self.iou_threshold = iou_threshold
         self.max_age = max_age
         self._tracks: List[_KalmanBox] = []
+        self._next_track_id = 0
 
     def reset(self):
         self._tracks = []
+
+    def _new_track(self, detection: DetectionGeometry) -> _KalmanBox:
+        track = _KalmanBox(
+            detection.bbox,
+            detection.polygon,
+            detection.confidence,
+            detection.text,
+            self._next_track_id,
+        )
+        self._next_track_id += 1
+        return track
 
     def update_with_geometry(
         self, detections: List[DetectionGeometry]
@@ -189,12 +206,7 @@ class SubtitleTracker:
                 normalized.append(detection)
         if not self._tracks:
             self._tracks = [
-                _KalmanBox(
-                    detection.bbox,
-                    detection.polygon,
-                    detection.confidence,
-                    detection.text,
-                )
+                self._new_track(detection)
                 for detection in normalized
             ]
             return [track.geometry() for track in self._tracks]
@@ -228,12 +240,7 @@ class SubtitleTracker:
 
         for di, detection in enumerate(normalized):
             if di not in used_det:
-                self._tracks.append(_KalmanBox(
-                    detection.bbox,
-                    detection.polygon,
-                    detection.confidence,
-                    detection.text,
-                ))
+                self._tracks.append(self._new_track(detection))
 
         self._tracks = [t for t in self._tracks if t.age <= self.max_age]
         return [track.geometry() for track in self._tracks]
@@ -299,6 +306,97 @@ def _group_horizontal_line(
             used.add(i)
         merged = new_merged
     return merged
+
+
+def _group_horizontal_geometry(
+    detections: List[DetectionGeometry],
+    x_gap_px: int = 20,
+    y_overlap_ratio: float = 0.5,
+) -> List[DetectionGeometry]:
+    """Merge same-line OCR records without discarding text or confidence."""
+    normalized = [
+        detection
+        for value in detections
+        for detection in [as_detection_geometry(value)]
+        if detection is not None
+    ]
+    if len(normalized) <= 1:
+        return normalized
+
+    groups = [[detection] for detection in normalized]
+
+    def group_box(group):
+        return (
+            min(item.bbox[0] for item in group),
+            min(item.bbox[1] for item in group),
+            max(item.bbox[2] for item in group),
+            max(item.bbox[3] for item in group),
+        )
+
+    def should_merge(first, second) -> bool:
+        a = group_box(first)
+        b = group_box(second)
+        a_height = max(1, a[3] - a[1])
+        b_height = max(1, b[3] - b[1])
+        overlap = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+        y_overlap = overlap / float(min(a_height, b_height))
+        x_gap = max(a[0], b[0]) - min(a[2], b[2])
+        return y_overlap >= y_overlap_ratio and x_gap <= x_gap_px
+
+    changed = True
+    while changed:
+        changed = False
+        merged_groups = []
+        used = set()
+        for index, group in enumerate(groups):
+            if index in used:
+                continue
+            combined = list(group)
+            used.add(index)
+            for other_index in range(index + 1, len(groups)):
+                if other_index in used:
+                    continue
+                if should_merge(combined, groups[other_index]):
+                    combined.extend(groups[other_index])
+                    used.add(other_index)
+                    changed = True
+            merged_groups.append(combined)
+        groups = merged_groups
+
+    output = []
+    for group in groups:
+        box = group_box(group)
+        texts = [item for item in group if item.text.strip()]
+        rtl = any(_strong_text_direction(item.text) == "rtl" for item in texts)
+        texts.sort(key=lambda item: item.bbox[0], reverse=rtl)
+        text = " ".join(item.text.strip() for item in texts).strip()
+        if texts:
+            weights = [max(1, len(item.text.strip())) for item in texts]
+            confidence = sum(
+                item.confidence * weight
+                for item, weight in zip(texts, weights)
+            ) / float(sum(weights))
+        else:
+            confidence = sum(item.confidence for item in group) / len(group)
+        output.append(DetectionGeometry(
+            box,
+            group[0].polygon if len(group) == 1 else None,
+            confidence,
+            text,
+            group[0].track_id if len(group) == 1 else None,
+        ))
+    return output
+
+
+def _strong_text_direction(text: str) -> str:
+    """Return the first strong Unicode direction in text."""
+    for character in str(text or ""):
+        direction = unicodedata.bidirectional(character)
+        if direction in {"R", "AL"}:
+            return "rtl"
+        if direction == "L":
+            return "ltr"
+    return ""
 
 
 def _phash(frame: np.ndarray, size: int = 8) -> np.ndarray:

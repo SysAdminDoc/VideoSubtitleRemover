@@ -41,6 +41,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **AUTO Inpaint Routing:** Scene-cut-aware routing between STTN and ProPainter mode using temporal exposure and measured motion
 - **Multi-Engine Detection:** RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
 - **Polygon-Aware OCR Masks:** OCR quadrilaterals stay attached to their legacy boxes through tracking, saved track plans, masks, and preview overlays, so rotated text doesn't widen removal to its full axis-aligned bounds
+- **Stable SRT Export:** SRT sidecars reuse the text and confidence already attached to OCR tracks. Conservative Unicode-aware consensus absorbs low-confidence character jitter, keeps real caption changes separate, and writes the source frame clock without a second full-frame OCR pass
 - **Lossless Pipeline:** FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
 - **Exact Variable-Frame-Rate Timing:** FFmpeg 9 frame durations and integer PTS survive the final codec and audio mux, including an irregular last frame; older packet-duration fields remain a compatibility fallback
 - **Modern Codec Output:** Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, mask-aware film-grain restoration plus native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
@@ -56,7 +57,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Erase, Translate, and Re-embed:** Opt into one cleanup pass that accepts a translated SRT or sends OCR/Whisper/source-SRT cues to a pluggable local command, then burns the validated result with configurable ASS styling and hash-backed provenance
 - **Inpaint Preview:** "Test cleanup" uses the selected video timestamp for single-frame modes and a scene-bounded before/current/after source window for temporal modes. The result reports its timestamp, frame range, and low-resolution planning proxy while inpainting the full-resolution source frame
 - **Cached Mask Tuning:** Adjust mask dilation in the preview pane and see the composed result immediately without rerunning OCR
-- **Seamless Boundaries:** Gaussian alpha feathering at every inpaint boundary, no visible cut lines
+- **Clean Boundaries:** Gaussian alpha feathering at every inpaint boundary, with no visible cut lines
 - **Language Support:** 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
 - **GPU Acceleration:** NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
 - **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; saving activates the same complete mask in Auto, STTN, LaMa, and ProPainter, while Automatic keeps the saved shapes available and adds OCR detections
@@ -240,7 +241,7 @@ python tools/local_smoke.py
 `build_exe.bat` is the fail-closed local release command. It runs the Ruff
 source-hygiene gate and complete unit suite, builds the PyInstaller folder,
 compiles the production NSIS
-installer plus a non-elevated extraction harness, smoke-tests every frozen
+installer plus a non-elevated extraction runner, smoke-tests every frozen
 entry point and the extracted installer payload, runs the reference corpus,
 audits the exact frozen Python components with `pip-audit`, and applies strict
 runtime/advisory gates. It exits nonzero at the first failed stage.
@@ -575,8 +576,9 @@ the simplest deterministic path:
 python -m backend.processor -i input.mp4 -o localized.mp4 --translated-srt captions.es.srt --translation-style "FontSize=24,Outline=2"
 ```
 
-To generate captions, provide a source SRT or let the existing OCR collection
-(and then an enabled Whisper fallback) supply source cues. VSR invokes the
+To generate captions, provide a source SRT or let tracked OCR consensus supply
+source cues. Engines that return only boxes use fallback recognition, followed
+by an enabled Whisper fallback when OCR remains empty. VSR invokes the
 selected command directly without a shell and sends one bounded JSON document
 on stdin; VSR does not include or contact a translation service. The chosen
 command controls how cue text is handled:
@@ -944,7 +946,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--ffmpeg-whisper-vad-model` | Path to a Silero VAD ONNX model for FFmpeg Whisper. | - | - | Public |
 | `--ffmpeg-whisper-vad-threshold` | VAD confidence threshold (0.0-1.0, default 0.5). | 0.5 | 0..1 | Public |
 | `--ffmpeg-whisper-min-speech` | Minimum speech duration for VAD segments (default 0). | 0.0 | 0..30 seconds | Public |
-| `--export-srt` | Write an .srt sidecar with detected text | Off | - | Public |
+| `--export-srt` | Write an .srt sidecar from tracked OCR consensus | Off | - | Public |
 | `--ocr-fix` | Apply a per-language OCR-fix replace list to the exported SRT text (built-in defaults plus %APPDATA%/VideoSubtitleRemoverPro/ocr_fix/{lang}.json). | Off | - | Public |
 | `--soft-subtitle-dry-run` | Print embedded subtitle tracks and planned action, then exit. | Off | - | Public |
 | `--soft-subtitle-plan-json` | Write soft-subtitle dry-run preflight details as JSON. | - | - | Public |

@@ -119,6 +119,7 @@ class DetectionGeometry:
     polygon: Optional[Polygon] = None
     confidence: float = 1.0
     text: str = ""
+    track_id: Optional[int] = None
 
     def __post_init__(self) -> None:
         box = tuple(int(value) for value in self.bbox[:4])
@@ -137,6 +138,13 @@ class DetectionGeometry:
             confidence = 1.0
         object.__setattr__(self, "confidence", confidence)
         object.__setattr__(self, "text", str(self.text or ""))
+        track_id = self.track_id
+        if track_id is not None:
+            try:
+                track_id = int(track_id)
+            except (TypeError, ValueError):
+                track_id = None
+        object.__setattr__(self, "track_id", track_id)
 
     @classmethod
     def from_box(
@@ -146,11 +154,12 @@ class DetectionGeometry:
         *,
         confidence: float = 1.0,
         text: str = "",
+        track_id: Optional[int] = None,
     ) -> Optional["DetectionGeometry"]:
         box = normalize_box(values, frame_shape)
         if box is None:
             return None
-        return cls(box, None, confidence, text)
+        return cls(box, None, confidence, text, track_id)
 
     @classmethod
     def from_polygon(
@@ -160,11 +169,14 @@ class DetectionGeometry:
         *,
         confidence: float = 1.0,
         text: str = "",
+        track_id: Optional[int] = None,
     ) -> Optional["DetectionGeometry"]:
         polygon = normalize_polygon(values, frame_shape)
         if polygon is None:
             return None
-        return cls(polygon_bbox(polygon), polygon, confidence, text)
+        return cls(
+            polygon_bbox(polygon), polygon, confidence, text, track_id
+        )
 
 
 def geometry_from_coords(
@@ -174,6 +186,7 @@ def geometry_from_coords(
     polygon: bool = False,
     confidence: float = 1.0,
     text: str = "",
+    track_id: Optional[int] = None,
 ) -> Optional[DetectionGeometry]:
     """Parse either a box or polygon while preserving the requested shape."""
     if polygon:
@@ -182,6 +195,7 @@ def geometry_from_coords(
             frame_shape,
             confidence=confidence,
             text=text,
+            track_id=track_id,
         )
         if result is not None:
             return result
@@ -191,6 +205,7 @@ def geometry_from_coords(
             frame_shape,
             confidence=confidence,
             text=text,
+            track_id=track_id,
         )
     except (TypeError, ValueError):
         return None
@@ -204,11 +219,13 @@ def as_detection_geometry(value: Any) -> Optional[DetectionGeometry]:
         raw_polygon = value.get("polygon", value.get("poly"))
         confidence = value.get("confidence", value.get("score", 1.0))
         text = value.get("text", "")
+        track_id = value.get("track_id", value.get("trackId"))
         if raw_polygon is not None:
             result = DetectionGeometry.from_polygon(
                 raw_polygon,
                 confidence=confidence,
                 text=text,
+                track_id=track_id,
             )
             if result is not None:
                 return result
@@ -216,6 +233,7 @@ def as_detection_geometry(value: Any) -> Optional[DetectionGeometry]:
             value.get("bbox", value.get("box", ())),
             confidence=confidence,
             text=text,
+            track_id=track_id,
         )
     try:
         result = DetectionGeometry.from_box(value[:4])

@@ -965,7 +965,7 @@ def _build_parser(mode_choices):
                        help="Base seconds between transient retries (0-600; "
                             "each later attempt waits a multiple of this value)")
     parser.add_argument("--export-srt", action="store_true",
-                       help="Write an .srt sidecar with detected text")
+                       help="Write an .srt sidecar from tracked OCR consensus")
     parser.add_argument("--ocr-fix", action="store_true",
                        help=("Apply a per-language OCR-fix replace list to the "
                              "exported SRT text (built-in defaults plus "

@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- SRT export now reuses text and confidence from tracked OCR detections instead
+  of running recognition across the full frame a second time. Conservative
+  Unicode-aware consensus absorbs low-confidence character jitter without
+  joining real caption changes. Exact VFR frame timing is unchanged, and OCR
+  engines that return only boxes keep the fallback recognition path.
 - FFmpeg 9 frame probes now read `duration` and `duration_time` first, with the
   older packet-duration names kept only as fallbacks. Variable-rate outputs use
   a lossless PNG timing carrier before the final codec, so an irregular final
@@ -285,7 +290,7 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   mid-scene kept being applied until the next real detection frame. Reuse is
   now suppressed whenever any correction carries a time or frame bound.
 
-- **Six small robustness gaps closed.** A non-finite tracker width or height
+- **Six small reliability gaps closed.** A non-finite tracker width or height
   reached `int(round(...))` and failed the whole job with an OverflowError. A
   correction carrying only an end frame ignored that bound, and could raise a
   TypeError out of the frame loop. Overlapping review spans of the same kind
@@ -439,7 +444,7 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   install-root cleanup.
 
 - **GUI batch startup now rolls back cleanly after preflight errors.** A failed
-  report or output-volume preflight unlocks settings, restores the Start
+  report or output-volume preflight re-enables settings, restores the Start
   action, clears the timer state, and surfaces an error instead of wedging the
   window in a phantom processing state. Danger actions now use AA-safe dark
   ink, and stretched buttons redraw and remain clickable across their full
@@ -2183,7 +2188,7 @@ centered on the new process-isolation path.
   bundles, and completion/review surfaces now include decode, OCR, mask,
   inpaint, encode, mux, and quality-analysis timings with slowest-stage
   summaries for diagnosing bottlenecks.
-- **Static-logo cleanup research benchmark.** A benchmark-only harness now
+- **Static-logo cleanup research benchmark.** A benchmark-only runner now
   compares the current per-frame cv2 cleanup against a deterministic
   InpaintDelogo-style static-logo path, with manifest license/hash gates,
   structured quality metrics, and no new default dependency or user-facing
@@ -2922,7 +2927,7 @@ the default pipeline is byte-identical for users who do not opt in.
   `docs/edge_case_corpus.md` documents the submission flow,
   acceptance criteria (single failure mode, CC0 / public domain,
   <20s clips), and the baseline-compile recipe so contributors can
-  expand the regression harness.
+  expand the regression runner.
 
 - **Proxy-file workflow (RM-34).** New
   `backend/proxy_workflow.ensure_proxy(path, height, crf)` builds a
@@ -2956,7 +2961,8 @@ the default pipeline is byte-identical for users who do not opt in.
   `backend/post_restore.seedvr2_restore` runs the SeedVR2 wrapper
   (or whatever CLI `VSR_SEEDVR2_CMD` names) as another post-cleanup
   stage. 16B-param diffusion transformer, single sampling step,
-  best-in-class quality on heavily-degraded footage. CLI `--seedvr2`.
+  the strongest restoration quality available in that release on heavily
+  degraded footage. CLI `--seedvr2`.
 - **TensorRT engine cache for the LaMa-ONNX backend (RM-70, opt-in).**
   New `backend/tensorrt_compile.maybe_compile_engine` invokes
   `polygraphy convert` once per ONNX, caches the result in
@@ -3070,7 +3076,7 @@ byte-identical for users who do not opt in.
   post-cleanup output through whichever of `swinir-ncnn-vulkan`,
   `realsr-ncnn-vulkan`, or `swinir` is on PATH. Skipped silently
   when no binary is found.
-- **Synthetic reference-clip regression harness (RFP-T-1).** New
+- **Synthetic reference-clip regression runner (RFP-T-1).** New
   `tests/test_reference_clips.py` generates eight deterministic
   synthetic clips (static dialogue / motion pan / dissolve cuts /
   karaoke / persistent chyron / vertical text column / thin font /
@@ -3788,10 +3794,10 @@ gradients) and shipping the workflow features users keep asking for
   When combined with auto detection the rects are unioned with
   per-frame detections.
 
-**Robustness**
+**Reliability**
 - **Adaptive batch sizing** -- on CUDA init, probe free VRAM via
   NVML (`pynvml`) and scale `sttn_max_load_num` to match. Defaults
-  to on, clamped to [8, 512]. Prevents OOM on 4K, unlocks headroom
+  to on, clamped to [8, 512]. Prevents OOM on 4K and leaves more headroom
   on 24 GB cards.
 
 **CLI**
@@ -3809,10 +3815,10 @@ gradients) and shipping the workflow features users keep asking for
 
 ## [v3.8.0] - 2026-04-17
 
-Real video inpainting, faster detection, seamless boundaries. This is the
+Real video inpainting, faster detection, clean boundaries. This is the
 first release where STTN and ProPainter actually do something meaningfully
 different from `cv2.inpaint` -- we keep the STTN / ProPainter names because
-they describe the user-facing niche (temporal propagation, motion-robust),
+they describe the user-facing niche (temporal propagation, motion-tolerant),
 but the implementations are now homegrown and do not require external
 model weight downloads.
 

@@ -154,7 +154,7 @@ def test_manual_region_mode_without_a_region_fails_before_ocr():
         remover._decode_and_build_batch(ctx, state)
 
 
-def test_frame_loop_state_has_only_eight_carried_mutables():
+def test_frame_loop_state_has_only_nine_carried_mutables():
     # This list is a guardrail against state creep in the frame loop, so it
     # is updated only when a new carried value is a deliberate design choice.
     # fade_carry (RM-292) is one: a fade-out hold has to survive the batch
@@ -162,13 +162,16 @@ def test_frame_loop_state_has_only_eight_carried_mutables():
     # is the same state in a worse place. fade_pending and written_idx
     # (RM-296) are the other two: a fade-in hold looks forward, so the tail
     # of a batch has to wait for the next one, which means the decode cursor
-    # and the write cursor stop being the same number.
+    # and the write cursor stop being the same number. srt_tracker (RM-310)
+    # keeps OCR identities stable when mask smoothing is disabled without
+    # changing the user's mask-tracking setting.
     assert [item.name for item in fields(_FrameLoopState)] == [
         "frame_idx",
         "last_mask",
         "last_hash",
         "tracker",
         "fixed_mask_cache",
+        "srt_tracker",
         "fade_carry",
         "fade_pending",
         "written_idx",

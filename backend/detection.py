@@ -1089,6 +1089,7 @@ class SubtitleDetector:
                         frame.shape,
                         confidence=record.confidence,
                         text=record.text,
+                        track_id=record.track_id,
                     )
                 else:
                     rx1, ry1, rx2, ry2 = record.bbox
@@ -1097,6 +1098,7 @@ class SubtitleDetector:
                         frame.shape,
                         confidence=record.confidence,
                         text=record.text,
+                        track_id=record.track_id,
                     )
                 if transformed is not None:
                     output.append(transformed)
@@ -1116,6 +1118,7 @@ class SubtitleDetector:
                     frame_shape,
                     confidence=record.confidence,
                     text=record.text,
+                    track_id=record.track_id,
                 )
             else:
                 clipped = DetectionGeometry.from_box(
@@ -1123,6 +1126,7 @@ class SubtitleDetector:
                     frame_shape,
                     confidence=record.confidence,
                     text=record.text,
+                    track_id=record.track_id,
                 )
             if clipped is not None:
                 output.append(clipped)
