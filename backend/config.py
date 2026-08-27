@@ -123,7 +123,8 @@ class ProcessingConfig:
     mode: InpaintMode = InpaintMode.STTN
     device: str = "cuda:0"
 
-    # STTN settings
+    # Manual-only mask mode. The field keeps its legacy STTN-prefixed name for
+    # config and sidecar compatibility, but it applies before every inpainter.
     sttn_skip_detection: bool = False
     sttn_neighbor_stride: int = 10
     sttn_reference_length: int = 10

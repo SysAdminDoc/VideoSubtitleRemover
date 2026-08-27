@@ -783,7 +783,8 @@ def _build_parser(mode_choices):
         help="Only mask OCR text matching the selected language's script.",
     )
     parser.add_argument("--skip-detection", action="store_true",
-                       help="Skip automatic detection (STTN only)")
+                       help=("Use configured manual regions as the complete "
+                             "mask with any inpainting mode."))
     parser.add_argument("--fast", action="store_true", help="Fast mode (LAMA only)")
     parser.add_argument("--no-audio", action="store_true", help="Don't preserve audio")
     parser.add_argument("--crf", type=int, default=23, help="Output CRF quality (15-35)")

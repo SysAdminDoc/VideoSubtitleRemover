@@ -600,12 +600,9 @@ class AdvancedSettingsControllerMixin:
         """Enable/disable mode-specific toggles based on selected algorithm."""
         mode = self.mode_var.get()
 
-        # Skip detection only for STTN
-        if mode == "STTN":
-            self.skip_check.set_enabled(True)
-        else:
-            self.skip_detection_var.set(False)
-            self.skip_check.set_enabled(False)
+        # A fixed region defines the mask before inpainting, so it is valid for
+        # every cleanup profile rather than belonging to STTN.
+        self.skip_check.set_enabled(True)
 
         # LAMA fast only for LAMA
         if mode == "LAMA":

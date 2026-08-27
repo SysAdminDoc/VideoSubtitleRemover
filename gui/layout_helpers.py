@@ -174,4 +174,14 @@ class LayoutHelpersMixin:
                 bool(spans) or bool(keyframe_tracks) or bool(areas)
                 or self.config.subtitle_area is not None
             )
+            if has_manual and self.config.sttn_skip_detection:
+                self.region_meta.config(
+                    text=tr("Manual-only mask; automatic detection is off"),
+                    fg=Theme.SUCCESS,
+                )
+            elif has_manual:
+                self.region_meta.config(
+                    text=tr("Saved region; automatic detection is on"),
+                    fg=Theme.TEXT_SECONDARY,
+                )
             self.region_reset_btn.set_enabled(has_manual and not self.is_processing)

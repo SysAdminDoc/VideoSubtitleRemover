@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import tkinter as tk
 import unittest
 from pathlib import Path
@@ -270,6 +271,109 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
             item.config.subtitle_region_spans,
             app.config.subtitle_region_spans,
         )
+
+    def test_manual_region_command_is_cross_profile_and_requires_a_region(self):
+        app = self._make_app()
+        try:
+            source = Path(self._tmpdir.name) / "manual-region.png"
+            source.write_bytes(b"not a real image")
+            item = self._app_exports.QueueItem(
+                id="manual-region-target",
+                file_path=str(source),
+                output_path=str(source.with_name("manual-region-clean.png")),
+                config=self._app_exports.ProcessingConfig(),
+            )
+            app.queue.append(item)
+            app._selected_queue_item_id = item.id
+
+            with mock.patch.object(app, "_open_region_selector") as editor:
+                app._command_region_var.set("Manual region")
+                app._on_command_region_changed()
+
+            editor.assert_called_once_with()
+            self.assertFalse(app.skip_detection_var.get())
+            self.assertFalse(app.config.sttn_skip_detection)
+            self.assertEqual(app._command_region_var.get(), "Automatic")
+
+            saved = (10, 20, 110, 54)
+            app.config.subtitle_area = saved
+            app.config.subtitle_areas = [saved]
+            with mock.patch.object(app, "_show_preview") as preview:
+                app._command_region_var.set("Manual region")
+                app._on_command_region_changed()
+
+            preview.assert_called_once_with(item, show_mask=True)
+            self.assertEqual(app.config.subtitle_area, saved)
+            self.assertTrue(app.config.sttn_skip_detection)
+            self.assertTrue(item.config.sttn_skip_detection)
+            self.assertEqual(item.config.subtitle_area, saved)
+            self.assertEqual(app._command_region_var.get(), "Manual region")
+
+            for mode in ("Auto", "STTN", "LAMA", "ProPainter"):
+                with self.subTest(mode=mode):
+                    app._on_mode_picker_changed(mode)
+                    self.assertTrue(app.skip_check.enabled)
+                    self.assertTrue(app.skip_detection_var.get())
+                    self.assertTrue(app.config.sttn_skip_detection)
+
+            app._command_region_var.set("Automatic")
+            app._on_command_region_changed()
+            self.assertFalse(app.config.sttn_skip_detection)
+            self.assertFalse(item.config.sttn_skip_detection)
+            self.assertEqual(app.config.subtitle_area, saved)
+
+            with mock.patch.object(app, "_update_status") as status:
+                app._reset_region()
+            self.assertIsNone(app.config.subtitle_area)
+            self.assertIsNone(app.config.subtitle_areas)
+            self.assertFalse(app.config.sttn_skip_detection)
+            self.assertIn("Cleared manual subtitle regions", status.call_args.args[0])
+            self.assertTrue(status.call_args.kwargs["toast"])
+        finally:
+            self._destroy_app(app)
+
+    def test_manual_region_preview_bypasses_ocr_and_labels_saved_mask(self):
+        from PIL import Image
+
+        app = self._make_app()
+        try:
+            source = Path(self._tmpdir.name) / "manual-mask-preview.png"
+            Image.new("RGB", (320, 180), "#182132").save(source)
+            saved = (40, 120, 280, 165)
+            item = self._app_exports.QueueItem(
+                id="manual-mask-preview",
+                file_path=str(source),
+                output_path=str(source.with_name("manual-mask-preview-clean.png")),
+                config=self._app_exports.ProcessingConfig(
+                    subtitle_area=saved,
+                    subtitle_areas=[saved],
+                    sttn_skip_detection=True,
+                ),
+            )
+            app.queue.append(item)
+            app._selected_queue_item_id = item.id
+            app.config.subtitle_area = saved
+            app.config.subtitle_areas = [saved]
+            app.config.sttn_skip_detection = True
+            app.skip_detection_var.set(True)
+            app._preview_detector = None
+
+            with mock.patch(
+                "backend.detection.SubtitleDetector",
+                side_effect=AssertionError("manual preview must bypass OCR"),
+            ) as detector_type:
+                app._show_preview(item, show_mask=True)
+                deadline = time.monotonic() + 5.0
+                while app._preview_photo is None and time.monotonic() < deadline:
+                    app.root.update()
+                    time.sleep(0.01)
+
+            detector_type.assert_not_called()
+            self.assertIsNotNone(app._preview_photo)
+            self.assertIn("Manual mask", app._preview_label.cget("text"))
+            self.assertIn("manual mask cached", app.preview_meta_label.cget("text"))
+        finally:
+            self._destroy_app(app)
 
     def test_collapsed_advanced_controls_leave_control_view_and_tab_order(self):
         app = self._make_app(withdraw=False)

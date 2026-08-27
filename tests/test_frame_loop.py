@@ -14,6 +14,146 @@ from backend.processor import (
 )
 
 
+@pytest.mark.parametrize("mode", ["auto", "sttn", "lama", "propainter"])
+def test_manual_region_mask_is_identical_across_inpainting_modes(mode):
+    from backend.config import ProcessingConfig, normalize_processing_config
+
+    class Reader:
+        def __init__(self, frame):
+            self.frame = frame
+            self.used = False
+
+        def read(self):
+            if self.used:
+                return False, None
+            self.used = True
+            return True, self.frame.copy()
+
+    class Detector:
+        def __getattr__(self, name):
+            if name.startswith("detect"):
+                raise AssertionError("manual-only mode must not inspect OCR")
+            raise AttributeError(name)
+
+    frame = np.zeros((10, 12, 3), dtype=np.uint8)
+    rect = (2, 3, 8, 7)
+    config = normalize_processing_config(ProcessingConfig(
+        mode=mode,
+        device="cpu",
+        sttn_skip_detection=True,
+        subtitle_area=rect,
+        subtitle_areas=[rect],
+        phash_skip_enable=False,
+    ))
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = config
+    remover.detector = Detector()
+    remover._color_metadata = None
+    remover.last_detection_stats = {"frames_total": 0}
+    skipped = []
+    remover._record_detection_skip = skipped.append
+    remover._time_stage = lambda _name: contextlib.nullcontext()
+
+    def create_mask(shape, boxes, **_kwargs):
+        mask = np.zeros(shape[:2], dtype=np.uint8)
+        for x1, y1, x2, y2 in boxes:
+            mask[y1:y2, x1:x2] = 255
+        return mask
+
+    remover._create_mask = create_mask
+    remover._apply_polygon_region_shapes = lambda mask, _shapes: mask
+    remover._apply_manual_mask_corrections = (
+        lambda mask, _seconds, _index: mask
+    )
+
+    ctx = _FrameLoopContext.__new__(_FrameLoopContext)
+    values = {
+        "start_frame": 0,
+        "end_frame": 1,
+        "fps": 30.0,
+        "frame_timing": None,
+        "high_bit_depth_surface": False,
+        "batch_size": 1,
+        "timed_region_spans": False,
+        "timed_mask_corrections": False,
+        "static_fixed_shapes": [{"rect": rect}],
+        "selective_ranges": [],
+        "reader": Reader(frame),
+        "selective_cap": None,
+        "matte_reader": None,
+        "frozen_matte": False,
+        "frame_skip": 0,
+        "keyframe_set": None,
+        "whisper_spans": [],
+    }
+    for name, value in values.items():
+        object.__setattr__(ctx, name, value)
+    state = _FrameLoopState(
+        frame_idx=0,
+        last_mask=None,
+        last_hash=None,
+        tracker=None,
+        fixed_mask_cache={},
+    )
+
+    batch = remover._decode_and_build_batch(ctx, state)
+
+    expected = np.zeros(frame.shape[:2], dtype=np.uint8)
+    expected[3:7, 2:8] = 255
+    np.testing.assert_array_equal(batch.masks[0], expected)
+    assert skipped == ["manual_region"]
+
+
+def test_manual_region_mode_without_a_region_fails_before_ocr():
+    from backend.config import ProcessingConfig, normalize_processing_config
+
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = normalize_processing_config(ProcessingConfig(
+        mode="auto",
+        device="cpu",
+        sttn_skip_detection=True,
+        phash_skip_enable=False,
+    ))
+    remover._color_metadata = None
+    remover.last_detection_stats = {"frames_total": 0}
+    remover._time_stage = lambda _name: contextlib.nullcontext()
+
+    class Reader:
+        def read(self):
+            return True, frame.copy()
+
+    ctx = _FrameLoopContext.__new__(_FrameLoopContext)
+    values = {
+        "start_frame": 0,
+        "end_frame": 1,
+        "fps": 30.0,
+        "frame_timing": None,
+        "high_bit_depth_surface": False,
+        "batch_size": 1,
+        "timed_region_spans": False,
+        "timed_mask_corrections": False,
+        "static_fixed_shapes": [],
+        "selective_ranges": [],
+        "reader": Reader(),
+        "selective_cap": None,
+        "matte_reader": None,
+        "frozen_matte": False,
+    }
+    for name, value in values.items():
+        object.__setattr__(ctx, name, value)
+    state = _FrameLoopState(
+        frame_idx=0,
+        last_mask=None,
+        last_hash=None,
+        tracker=None,
+        fixed_mask_cache={},
+    )
+
+    with pytest.raises(ValueError, match="needs a fixed, timed, or moving"):
+        remover._decode_and_build_batch(ctx, state)
+
+
 def test_frame_loop_state_has_only_eight_carried_mutables():
     # This list is a guardrail against state creep in the frame loop, so it
     # is updated only when a new carried value is a deliberate design choice.

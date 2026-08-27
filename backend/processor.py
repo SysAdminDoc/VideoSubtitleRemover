@@ -1926,16 +1926,18 @@ class SubtitleRemover(
             self._report_progress(0.3, "Detecting text regions...")
             fixed_shapes = self._fixed_region_shapes(0.0) or []
             fixed = self._fixed_region_boxes(0.0)
+            manual_only = bool(self.config.sttn_skip_detection)
+            if manual_only and not fixed_shapes:
+                raise ValueError(
+                    "Manual region mode needs a fixed region for image cleanup"
+                )
             confidences = None
             detection_geometry: List[DetectionGeometry] = []
             self.last_detection_stats["frames_total"] = 1
             with self._time_stage("ocr"):
-                if fixed:
-                    boxes = fixed
+                if manual_only:
+                    boxes = list(fixed or [])
                     detection_geometry = self._legacy_geometry(boxes)
-                    self._record_detection_skip("manual_region")
-                elif fixed_shapes and self.config.sttn_skip_detection:
-                    boxes = []
                     self._record_detection_skip("manual_region")
                 elif self.config.language_mask_filter:
                     from backend.detection import text_matches_detection_language
@@ -2010,6 +2012,14 @@ class SubtitleRemover(
                         boxes = self.detector.detect(
                             image, self.config.detection_threshold)
                     self._record_ocr_detection(boxes)
+
+                if not manual_only and fixed:
+                    boxes = list(fixed) + list(boxes)
+                    detection_geometry = (
+                        self._legacy_geometry(list(fixed))
+                        + detection_geometry
+                    )
+                    confidences = None
 
             if not boxes and not fixed_shapes:
                 logger.info("No text detected, copying original")
@@ -2578,6 +2588,14 @@ class SubtitleRemover(
                 self._fixed_region_shapes(frame_seconds)
                 if ctx.timed_region_spans else ctx.static_fixed_shapes
             )
+            if (
+                self.config.sttn_skip_detection
+                and not fixed_shapes
+                and not ctx.timed_region_spans
+            ):
+                raise ValueError(
+                    "Manual region mode needs a fixed, timed, or moving region"
+                )
             fixed_boxes = (
                 [tuple(shape["rect"]) for shape in fixed_shapes or []
                  if "rect" in shape]

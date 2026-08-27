@@ -64,7 +64,12 @@ class RegionControllerHost(Protocol):
     root: Any
     config: ProcessingConfig
 
-    def _update_status(self, message: str, tone: str = "neutral", toast: bool = False): ...
+    def _update_status(
+        self,
+        message: str,
+        tone: str = "neutral",
+        toast: bool = False,
+    ): ...
 
 
 class RegionSelectorWindow:
@@ -1975,6 +1980,15 @@ class RegionSelectorWindow:
             self.config.subtitle_region_spans = None
             self.config.subtitle_region_keyframes = None
             self._update_status(N_("Cleared manual subtitle regions"), "info")
+        self._set_manual_region_mode(
+            bool(
+                self.config.subtitle_area
+                or self.config.subtitle_areas
+                or self.config.subtitle_region_spans
+                or self.config.subtitle_region_keyframes
+            ),
+            sync_items=False,
+        )
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         self.win.destroy()
@@ -1989,6 +2003,62 @@ class RegionSelectorWindow:
 
 class RegionEditorControllerMixin:
     """Focused behavior mixed into the composed GUI host."""
+
+    def _has_manual_region(self) -> bool:
+        """Return whether any fixed, timed, or moving region is saved."""
+        return bool(
+            self.config.subtitle_area
+            or getattr(self.config, "subtitle_areas", None)
+            or getattr(self.config, "subtitle_region_spans", None)
+            or getattr(self.config, "subtitle_region_keyframes", None)
+        )
+
+    def _set_manual_region_mode(
+        self,
+        enabled: bool,
+        *,
+        sync_items: bool = True,
+    ) -> bool:
+        """Set the engine-independent manual-only mask mode."""
+        active = bool(enabled and self._has_manual_region())
+        self.config.sttn_skip_detection = active
+        variable = getattr(self, "skip_detection_var", None)
+        if variable is not None and bool(variable.get()) != active:
+            variable.set(active)
+        if sync_items:
+            self._apply_region_settings_to_idle_items()
+            update_label = getattr(self, "_update_region_label_display", None)
+            if callable(update_label):
+                update_label()
+        sync_command = getattr(self, "_sync_command_region", None)
+        if callable(sync_command):
+            sync_command()
+        return active
+
+    def _on_manual_region_toggled(self) -> bool:
+        """Apply the manual-only toggle or collect its missing region."""
+        requested = bool(self.skip_detection_var.get())
+        if requested and not self._has_manual_region():
+            self._set_manual_region_mode(False)
+            self._update_status(
+                N_("Draw a subtitle region before turning on Manual region"),
+                "info",
+                toast=True,
+            )
+            self._open_region_selector()
+            return False
+        active = self._set_manual_region_mode(requested)
+        if active:
+            message = N_("Manual region is active for every cleanup profile")
+        elif self._has_manual_region():
+            message = N_(
+                "Automatic detection is active; your saved manual regions "
+                "are still available"
+            )
+        else:
+            message = N_("Automatic subtitle detection is active")
+        self._update_status(message, "success" if active else "info", toast=True)
+        return active
 
     def _open_region_selector(self):
         """Start direct preview-pane region editing, with modal fallback."""
@@ -2013,6 +2083,14 @@ class RegionEditorControllerMixin:
         self.config.subtitle_areas = None
         self.config.subtitle_region_spans = None
         self.config.subtitle_region_keyframes = None
+        self._set_manual_region_mode(False, sync_items=False)
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
-        self._update_status(N_("Subtitle detection returned to automatic mode"))
+        self._update_status(
+            N_(
+                "Cleared manual subtitle regions; automatic detection is "
+                "active"
+            ),
+            "success",
+            toast=True,
+        )

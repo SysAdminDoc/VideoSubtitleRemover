@@ -103,8 +103,22 @@ class RegionSaveGuardTests(unittest.TestCase):
             editor.messages.append((text, tone))
         )
         editor._commit_motion_track = lambda: True
+        editor.manual_modes = []
+        editor._set_manual_region_mode = lambda enabled, **kwargs: (
+            editor.manual_modes.append((enabled, kwargs))
+        )
+        editor.region_settings_applied = False
+        editor._apply_region_settings_to_idle_items = lambda: setattr(
+            editor, "region_settings_applied", True
+        )
+        editor.region_label_updated = False
+        editor._update_region_label_display = lambda: setattr(
+            editor, "region_label_updated", True
+        )
         editor.closed = False
-        editor._close = lambda: setattr(editor, "closed", True)
+        editor.win = SimpleNamespace(
+            destroy=lambda: setattr(editor, "closed", True)
+        )
         for key, value in state.items():
             setattr(editor, key, value)
         return editor
@@ -134,3 +148,18 @@ class RegionSaveGuardTests(unittest.TestCase):
         self.assertNotIn("cleared", text.lower())
         self.assertIsNone(editor.config.subtitle_areas)
         self.assertFalse(editor.closed)
+
+    def test_saved_rectangle_activates_manual_mode_and_syncs_queue(self):
+        from gui.region_controller import RegionSelectorWindow
+
+        rect = (10, 20, 110, 54)
+        editor = self._editor(rects=[rect])
+
+        RegionSelectorWindow._save_and_close(editor)
+
+        self.assertEqual(editor.config.subtitle_area, rect)
+        self.assertEqual(editor.config.subtitle_areas, [rect])
+        self.assertEqual(editor.manual_modes, [(True, {"sync_items": False})])
+        self.assertTrue(editor.region_settings_applied)
+        self.assertTrue(editor.region_label_updated)
+        self.assertTrue(editor.closed)

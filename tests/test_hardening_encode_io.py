@@ -264,6 +264,59 @@ class MediaInputFailureTests(unittest.TestCase):
         self.assertEqual(
             remover.last_detection_stats["unique_regions_detected"], 1)
 
+    def test_process_image_saved_region_respects_manual_or_automatic_detection(self):
+        class FakeDetector:
+            def __init__(self):
+                self.calls = 0
+
+            def detect(self, *_args, **_kwargs):
+                self.calls += 1
+                return [(45, 2, 53, 10)]
+
+        class CapturingInpainter:
+            def __init__(self):
+                self.mask = None
+
+            def inpaint(self, frames, masks):
+                self.mask = masks[0].copy()
+                return frames
+
+        fixed = (2, 25, 10, 33)
+        for manual_only in (False, True):
+            with self.subTest(manual_only=manual_only):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    work = Path(tmpdir)
+                    source = work / "saved-region.png"
+                    output = work / "saved-region-clean.png"
+                    image = np.full((40, 60, 3), 128, dtype=np.uint8)
+                    self.assertTrue(processor.cv2.imwrite(str(source), image))
+
+                    remover = processor.SubtitleRemover.__new__(
+                        processor.SubtitleRemover
+                    )
+                    remover.config = processor.ProcessingConfig(
+                        subtitle_area=fixed,
+                        subtitle_areas=[fixed],
+                        sttn_skip_detection=manual_only,
+                        mask_dilate_px=0,
+                    )
+                    detector = FakeDetector()
+                    remover.detector = detector
+                    inpainter = CapturingInpainter()
+                    remover.inpainter = inpainter
+                    remover.on_progress = None
+                    remover.last_stage_timings = remover._empty_stage_timings()
+
+                    ok = remover.process_image(str(source), str(output))
+
+                self.assertTrue(ok)
+                self.assertEqual(int(inpainter.mask[29, 6]), 255)
+                self.assertEqual(
+                    int(inpainter.mask[6, 49]),
+                    0 if manual_only else 255,
+                )
+                self.assertEqual(detector.calls, 0 if manual_only else 1)
+
     def test_process_image_filters_masks_by_selected_language_script(self):
         class FakeDetector:
             def detect_with_text(self, *_args, **_kwargs):

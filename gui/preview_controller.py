@@ -1454,6 +1454,7 @@ class PreviewControllerMixin:
             existing.append(new_rect)
         self.config.subtitle_areas = existing
         self.config.subtitle_area = existing[0] if existing else rect
+        self._set_manual_region_mode(True, sync_items=False)
         self._apply_region_settings_to_idle_items()
         self._update_region_label_display()
         item = self._queue_item_by_id(state["item_id"])
@@ -1569,6 +1570,8 @@ class PreviewControllerMixin:
             mask_import_mode = getattr(
                 item_config, "mask_import_mode", "replace")
             mask_dilate_px = getattr(item_config, "mask_dilate_px", 0)
+            manual_only = bool(getattr(
+                item_config, "sttn_skip_detection", False))
 
             def _preview_bg():
                 try:
@@ -1607,7 +1610,8 @@ class PreviewControllerMixin:
                             mask_import_mode=mask_import_mode,
                             mask_dilate_px=mask_dilate_px,
                             ocr_variant=ocr_variant,
-                            preview_timestamp=preview_timestamp)
+                            preview_timestamp=preview_timestamp,
+                            manual_only=manual_only)
                     else:
                         self._preview_bg_normal(
                             raw_frame, item_file, item_id, item_status,
@@ -1643,41 +1647,41 @@ class PreviewControllerMixin:
                           max_w, max_h, _cv2, to_pil,
                           mask_corrections=None, mask_import_path="",
                           mask_import_mode="replace", mask_dilate_px=0,
-                          ocr_variant="v6", preview_timestamp=0.0):
+                          ocr_variant="v6", preview_timestamp=0.0,
+                          manual_only=False):
         try:
-            from backend.detection import SubtitleDetector
-            with self._detector_lock:
-                if (
-                    self._preview_detector is None
-                    or self._preview_detector_lang != lang
-                    or getattr(
-                        self, "_preview_detector_engine", None) != ocr_engine
-                    or (getattr(
-                        self, "_preview_detector_variant", None) or "v6") != ocr_variant
-                ):
-                    self._preview_detector = SubtitleDetector(
-                        lang=lang,
-                        engine=ocr_engine,
-                        rapidocr_variant=ocr_variant,
-                    )
-                    self._preview_detector_lang = lang
-                    self._preview_detector_engine = ocr_engine
-                    self._preview_detector_variant = ocr_variant
-                det = self._preview_detector
-                frame_copy = raw_frame.copy()
-                detections = []
-                if sub_areas or manual_shapes:
-                    boxes = sub_areas
-                    detections = [
-                        detection
-                        for box in boxes
-                        for detection in [DetectionGeometry.from_box(box)]
-                        if detection is not None
-                    ]
-                elif (timed_regions_configured
-                      and getattr(self.config, "sttn_skip_detection", False)):
-                    boxes = []
-                else:
+            frame_copy = raw_frame.copy()
+            manual_detections = [
+                detection
+                for box in sub_areas
+                for detection in [DetectionGeometry.from_box(box)]
+                if detection is not None
+            ]
+            engine = tr("Manual region")
+            if manual_only:
+                detections = manual_detections
+            else:
+                from backend.detection import SubtitleDetector
+                with self._detector_lock:
+                    if (
+                        self._preview_detector is None
+                        or self._preview_detector_lang != lang
+                        or getattr(
+                            self, "_preview_detector_engine", None) != ocr_engine
+                        or (getattr(
+                            self, "_preview_detector_variant", None) or "v6")
+                        != ocr_variant
+                    ):
+                        self._preview_detector = SubtitleDetector(
+                            lang=lang,
+                            engine=ocr_engine,
+                            rapidocr_variant=ocr_variant,
+                        )
+                        self._preview_detector_lang = lang
+                        self._preview_detector_engine = ocr_engine
+                        self._preview_detector_variant = ocr_variant
+                    det = self._preview_detector
+                    engine = det._engine_name
                     # Inference stays INSIDE the lock: PaddleOCR/EasyOCR
                     # predictors are not thread-safe, and two review-mask
                     # requests (or one racing the batch ETA probe) share this
@@ -1696,6 +1700,8 @@ class PreviewControllerMixin:
                             for detection in [DetectionGeometry.from_box(box)]
                             if detection is not None
                         ]
+                detections = manual_detections + detections
+            boxes = [detection.bbox for detection in detections]
             vis = frame_copy.copy()
             # Detection boxes use the theme's danger accent (BGR for cv2) so
             # they stay visible in the high-contrast palette.
@@ -1754,18 +1760,28 @@ class PreviewControllerMixin:
                     f" Imported {imported_info['format'].upper()} matte "
                     f"composed in {mask_import_mode} mode."
                 )
-            engine = det._engine_name
-            n = len(boxes) + sum(
+            n = len(detections) + sum(
                 1 for shape in manual_shapes or [] if "polygon" in shape)
             timestamp_label = (
                 self._format_preview_timestamp(preview_timestamp)
                 if preview_timestamp > 0.001 else ""
             )
             if not timestamp_label:
-                if (sub_areas or manual_shapes) and timed_regions_configured:
+                if manual_only and (sub_areas or manual_shapes):
+                    meta = tr(
+                        "Manual-only mask is active on the first frame.")
+                elif manual_only and timed_regions_configured:
+                    meta = tr(
+                        "Timed manual-only mask is inactive on the first frame.")
+                elif manual_only:
+                    meta = tr("Manual region needs a saved mask.")
+                elif (sub_areas or manual_shapes) and timed_regions_configured:
                     meta = "Timed manual region is active on the first frame."
                 elif sub_areas:
-                    meta = "Manual region applied. Detection used your saved subtitle band."
+                    meta = tr(
+                        "Saved region added to {engine} detection on the first "
+                        "frame."
+                    ).format(engine=engine)
                 elif timed_regions_configured:
                     meta = "Timed manual regions are configured but inactive on the first frame."
                 elif n:
@@ -1773,14 +1789,24 @@ class PreviewControllerMixin:
                 else:
                     meta = ("No regions were found on the first frame. Try Set region, or lower the "
                             "Threshold in detailed controls.")
+            elif manual_only and (sub_areas or manual_shapes):
+                meta = tr(
+                    "Manual-only mask is active at {timestamp}."
+                ).format(timestamp=timestamp_label)
+            elif manual_only and timed_regions_configured:
+                meta = tr(
+                    "Timed manual-only mask is inactive at {timestamp}."
+                ).format(timestamp=timestamp_label)
+            elif manual_only:
+                meta = tr("Manual region needs a saved mask.")
             elif (sub_areas or manual_shapes) and timed_regions_configured:
                 meta = tr(
                     "Timed manual region is active at {timestamp}."
                 ).format(timestamp=timestamp_label)
             elif sub_areas:
                 meta = tr(
-                    "Manual region applied at {timestamp}. Detection used your saved subtitle band."
-                ).format(timestamp=timestamp_label)
+                    "Saved region added to {engine} detection at {timestamp}."
+                ).format(engine=engine, timestamp=timestamp_label)
             elif timed_regions_configured:
                 meta = tr(
                     "Timed manual regions are configured but inactive at {timestamp}."
@@ -1811,6 +1837,7 @@ class PreviewControllerMixin:
                 "engine": engine,
                 "region_count": n,
                 "meta": meta,
+                "manual_only": bool(manual_only),
             }
             if preview_request_id != self._preview_request_id:
                 return
@@ -1881,15 +1908,22 @@ class PreviewControllerMixin:
             text=tr("Composed mask for {name}").format(
                 name=Path(cache["item_file"]).name))
         meta = cache["meta"] + cache["imported_note"]
-        meta += " " + tr("Dilation: {px} px; detection cached.").format(
-            px=dilation)
+        if cache.get("manual_only"):
+            meta += " " + tr(
+                "Dilation: {px} px; manual mask cached."
+            ).format(px=dilation)
+        else:
+            meta += " " + tr("Dilation: {px} px; detection cached.").format(
+                px=dilation)
         self.preview_meta_label.config(text=meta)
         n = cache["region_count"]
         engine = cache["engine"]
         self._preview_label.config(
             image=self._preview_photo,
             text=(
-                tr("{engine}: {n} detected").format(engine=engine, n=n)
+                tr("Manual mask: {n} region(s)").format(n=n)
+                if cache.get("manual_only") and n
+                else tr("{engine}: {n} detected").format(engine=engine, n=n)
                 if n else tr("No text detected")))
 
     def _preview_bg_normal(self, raw_frame, item_file, item_id, item_status,

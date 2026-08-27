@@ -58,7 +58,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Seamless Boundaries:** Gaussian alpha feathering at every inpaint boundary, no visible cut lines
 - **Language Support:** 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
 - **GPU Acceleration:** NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
-- **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; use optional start/end seconds to save time-ranged manual masks
+- **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; saving activates the same complete mask in Auto, STTN, LaMa, and ProPainter, while Automatic keeps the saved shapes available and adds OCR detections
 - **Live Region OCR Feedback:** While drawing a rectangle, inspect detected text boxes and confidence before saving the region
 - **Selected-Language Masks:** Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
 - **Batch Processing:** Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
@@ -873,7 +873,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--gpu`, `-g` | GPU device ID (-1 for CPU) | 0 | -1 or >=0 | Public |
 | `--lang`, `-l` | Detection language | en | - | Public |
 | `--language-filter` | Only mask OCR text matching the selected language's script. | Off | - | Public |
-| `--skip-detection` | Skip automatic detection (STTN only) | Off | - | Public |
+| `--skip-detection` | Use configured manual regions as the complete mask with any inpainting mode. | Off | - | Public |
 | `--fast` | Fast mode (LAMA only) | Off | - | Public |
 | `--threshold` | Detection threshold (0.1-1.0) | 0.5 | 0.1..1.0 | Public |
 | `--vertical` | Vertical-text mode (rotate frames 90 CCW before OCR). | Off | - | Public |
@@ -1038,6 +1038,12 @@ rectangles, `subtitle_region_spans` for frame-time-specific masks, or
   "sttn_skip_detection": true
 }
 ```
+
+`sttn_skip_detection` is a legacy compatibility name. When it's enabled, the
+configured fixed, timed, or moving regions become the complete mask before the
+selected inpainter runs. It behaves the same in Auto, STTN, LaMa, and
+ProPainter, and it must be paired with at least one region. Disable it to keep
+the saved shapes while adding automatic OCR detections to the mask.
 
 Moving-region tracks use source-pixel coordinates and require at least two
 same-shape anchors. Polygon anchors keep the same vertex count across the

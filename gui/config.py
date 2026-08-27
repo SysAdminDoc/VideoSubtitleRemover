@@ -470,6 +470,8 @@ class ProcessingConfig:
     # CUDA for a DirectML adapter fails and silently lands on CPU.
     gpu_backend: str = ""
 
+    # Legacy field name retained for settings compatibility. The fixed mask is
+    # engine-independent and applies to Auto, STTN, LaMa, and ProPainter.
     sttn_skip_detection: bool = False
     sttn_neighbor_stride: int = 10
     sttn_reference_length: int = 10

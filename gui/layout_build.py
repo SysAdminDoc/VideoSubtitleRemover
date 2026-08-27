@@ -609,10 +609,17 @@ class LayoutBuildMixin:
             checks_frame,
             text=tr("Use a fixed subtitle region"),
             variable=self.skip_detection_var,
+            command=self._on_manual_region_toggled,
             wraplength=300,
         )
         self.skip_check.pack(anchor="w")
-        Tooltip(self.skip_check, tr("Skip repeated detection when you have already set a precise subtitle region."))
+        Tooltip(
+            self.skip_check,
+            tr(
+                "Use your saved region as the complete mask with any cleanup "
+                "profile."
+            ),
+        )
 
         self.lama_check = ModernToggle(
             checks_frame,

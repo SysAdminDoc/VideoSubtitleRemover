@@ -746,7 +746,7 @@ class ExecutedSurfaceTests(unittest.TestCase):
                 "--watch", str(watch_dir), "--watch-once",
                 "--watch-stable-seconds", "0", "--watch-interval", "0.1",
                 "--out-dir", str(out_dir), "--mode", "sttn", "--gpu", "-1",
-                "--no-audio", "--skip-detection", "--end", "0.4",
+                "--no-audio", "--end", "0.4",
             ])
             outputs = sorted(path.name for path in out_dir.glob("*.mp4"))
             summary = out_dir / "vsr-batch-summary.json"
@@ -765,7 +765,7 @@ class ExecutedSurfaceTests(unittest.TestCase):
             export = self._run_real_cli([
                 "-i", str(clip), "-o", str(output), "--nle-sidecar", "edl",
                 "--mode", "sttn", "--gpu", "-1", "--no-audio",
-                "--skip-detection", "--end", "0.4",
+                "--end", "0.4",
             ])
             self.assertEqual(
                 export.returncode, 0, export.stderr or export.stdout)

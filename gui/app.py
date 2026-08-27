@@ -652,10 +652,12 @@ class VideoSubtitleRemoverApp(
             getattr(self.config, "subtitle_region_spans", None))
         keyframe_tracks = normalize_region_keyframe_tracks(
             getattr(self.config, "subtitle_region_keyframes", None))
+        manual_only = bool(self.config.sttn_skip_detection)
         updated = 0
         with self.queue_lock:
             for item in self.queue:
                 if item.status == ProcessingStatus.IDLE:
+                    item.config.sttn_skip_detection = manual_only
                     item.config.subtitle_area = area
                     item.config.subtitle_areas = list(areas) if areas else None
                     item.config.subtitle_region_spans = (
@@ -1383,6 +1385,17 @@ class VideoSubtitleRemoverApp(
         choice = self._command_region_var.get()
         if choice == tr("Set region..."):
             self._open_region_selector()
+        elif choice == tr("Manual region"):
+            self.skip_detection_var.set(True)
+            if self._on_manual_region_toggled():
+                selected = self._get_selected_queue_item(
+                    fallback_to_first=True
+                )
+                if selected is not None:
+                    self._show_preview(selected, show_mask=True)
+        elif choice == tr("Automatic"):
+            self.skip_detection_var.set(False)
+            self._on_manual_region_toggled()
         self._sync_command_region()
 
 
