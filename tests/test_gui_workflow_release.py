@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from backend.a11y import accessible_metadata
-from gui.preview_controller import PreviewControllerMixin
+from gui.preview_controller import PreviewControllerMixin, _fit_preview_image
 from gui.theme import Theme
 from gui.utils import (
     dispatch_to_ui,
@@ -66,6 +66,15 @@ class DesignTokenReleaseTests(unittest.TestCase):
             (Theme.R_SM, Theme.R_MD, Theme.R_LG, Theme.R_XL),
             (4, 6, 8, 10),
         )
+
+    def test_preview_fit_enlarges_small_frames_without_distortion(self):
+        from PIL import Image
+
+        source = Image.new("RGB", (160, 120), "#182132")
+        fitted = _fit_preview_image(source, 960, 540)
+
+        self.assertEqual(fitted.size, (720, 540))
+        self.assertEqual(source.size, (160, 120))
 
 
 class UiThreadDispatchTests(unittest.TestCase):
@@ -224,9 +233,15 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
             app._selected_queue_item_id = None
 
             app._update_queue_display()
+            app.root.update_idletasks()
 
             self.assertEqual(app._selected_queue_item_id, item.id)
             self.assertIs(app._get_selected_queue_item(), item)
+            self.assertEqual(app._preview_primary_actions.winfo_manager(), "pack")
+            self.assertEqual(app._preview_tools_btn.winfo_manager(), "pack")
+            self.assertEqual(app.preview_status_chip.winfo_manager(), "pack")
+            self.assertEqual(app.queue_canvas.cget("height"), "60")
+            self.assertEqual(app._queue_table_header.winfo_manager(), "")
             self.assertTrue(app.preview_inpaint_btn.enabled)
             self.assertEqual(
                 app.preview_inpaint_btn.command,

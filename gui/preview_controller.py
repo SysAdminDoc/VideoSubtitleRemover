@@ -39,6 +39,23 @@ from backend.safe_image import safe_imread
 logger = logging.getLogger(__name__)
 
 
+def _fit_preview_image(image, max_w: int, max_h: int):
+    """Return an aspect-fit copy that may enlarge small source frames."""
+    max_w = max(1, int(max_w))
+    max_h = max(1, int(max_h))
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return image.copy()
+    scale = min(max_w / width, max_h / height)
+    target = (
+        max(1, int(round(width * scale))),
+        max(1, int(round(height * scale))),
+    )
+    if target == image.size:
+        return image.copy()
+    return image.resize(target, Image.LANCZOS)
+
+
 def _read_video_frames_at_indices(video_path: str, frame_indices):
     """Read selected full-resolution source frames for preview rendering."""
     import cv2
@@ -233,6 +250,8 @@ class PreviewControllerMixin:
                 return
             self._live_preview_last_ts = now
             if PIL_AVAILABLE:
+                max_w, max_h = self._preview_display_bounds()
+                pil_img = _fit_preview_image(pil_img, max_w, max_h)
                 self._preview_photo = ImageTk.PhotoImage(pil_img)
                 self._preview_label.config(image=self._preview_photo, text="")
             if total:
@@ -251,32 +270,23 @@ class PreviewControllerMixin:
         self.preview_title_label.config(text=tr(title))
         self.preview_meta_label.config(text=tr(body))
         self._set_preview_empty_state_visible(True, title, body)
-        if PIL_AVAILABLE:
-            try:
-                w, h = 960, 540
-                base = Image.new("RGB", (w, h), self._hex_to_rgb(Theme.BG_TERTIARY))
-                self._preview_photo = ImageTk.PhotoImage(base)
-                self._preview_label.config(image=self._preview_photo, text="")
-            except Exception:
-                self._preview_label.config(text="", image="")
-                self._preview_photo = None
-        else:
-            self._preview_label.config(text="", image="")
-            self._preview_photo = None
+        self._preview_label.config(text="", image="")
+        self._preview_photo = None
 
     def _preview_display_bounds(self) -> tuple[int, int]:
         """Return media-first preview bounds for the current workbench size."""
+        surface = getattr(self, "_preview_media_surface", self._preview_frame)
         try:
-            max_w = max(320, self._preview_frame.winfo_width() - 36)
+            max_w = max(320, surface.winfo_width() - 4)
         except Exception:
             max_w = 960
         try:
-            available_h = self._preview_frame.winfo_height() - 72
+            available_h = surface.winfo_height() - 4
         except Exception:
             available_h = 540
-        if available_h < 240:
-            available_h = 540
-        return max_w, max(320, min(540, available_h))
+        if available_h < 180:
+            available_h = 360
+        return max_w, max(180, min(540, available_h))
 
     def _set_preview_unavailable(
         self,
@@ -305,7 +315,7 @@ class PreviewControllerMixin:
         )
         try:
             self.preview_status_chip.config(
-                text=chip_text, fg=chip_fg, bg=Theme.BG_SECONDARY)
+                text=chip_text, fg=chip_fg, bg=Theme.BG_TERTIARY)
         except Exception:
             pass
 
@@ -395,13 +405,13 @@ class PreviewControllerMixin:
             self.preview_status_chip.config(
                 text=badge["label"],
                 fg=badge["color"],
-                bg=Theme.BG_SECONDARY,
+                bg=Theme.BG_TERTIARY,
             )
         else:
             self.preview_status_chip.config(
                 text=tr("Waiting"),
                 fg=Theme.TEXT_MUTED,
-                bg=Theme.BG_SECONDARY,
+                bg=Theme.BG_TERTIARY,
             )
 
     def _open_selected_mask_preview(self):
@@ -450,7 +460,10 @@ class PreviewControllerMixin:
         slider.set_enabled(not self.is_processing)
         self.preview_time_value_var.set(self._format_preview_timestamp(timestamp))
         if not panel.winfo_manager():
-            panel.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+            panel.pack(
+                fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM),
+                before=self._preview_primary_actions,
+            )
 
     def _configure_preview_timeline(
         self,
@@ -519,6 +532,7 @@ class PreviewControllerMixin:
                     fill="x",
                     padx=Theme.S_XL,
                     pady=(0, Theme.S_LG),
+                    before=self._preview_primary_actions,
                 )
         elif panel.winfo_manager():
             panel.pack_forget()
@@ -1110,7 +1124,7 @@ class PreviewControllerMixin:
             self._stop_throbber()
             self._set_preview_empty_state_visible(False)
             max_w, max_h = self._preview_display_bounds()
-            pil_img.thumbnail((max_w, max_h), Image.LANCZOS)
+            pil_img = _fit_preview_image(pil_img, max_w, max_h)
             self._preview_photo = ImageTk.PhotoImage(pil_img)
             self._preview_label.config(image=self._preview_photo, text="")
             self.preview_title_label.config(text=tr("Inpaint preview"))
@@ -1257,8 +1271,7 @@ class PreviewControllerMixin:
                     180, min(280, self._preview_frame.winfo_height() - 110))
             except Exception:
                 max_h = 240
-            display_img = source_img.copy()
-            display_img.thumbnail((max_w, max_h), Image.LANCZOS)
+            display_img = _fit_preview_image(source_img, max_w, max_h)
 
             timed_rects = self._active_timed_region_rects(
                 getattr(self.config, "subtitle_region_spans", None), 0.0,
@@ -1528,7 +1541,7 @@ class PreviewControllerMixin:
             badge = status_ui(item.status)
             self.preview_status_chip.config(
                 text=badge["label"], fg=badge["color"],
-                bg=Theme.BG_SECONDARY)
+                bg=Theme.BG_TERTIARY)
 
             max_w, max_h = self._preview_display_bounds()
 
@@ -1894,8 +1907,8 @@ class PreviewControllerMixin:
             255,
         ).astype(np.uint8)
         img = cache["to_pil"](vis)
-        img.thumbnail((cache["max_w"], cache["max_h"]), Image.LANCZOS)
-        return img
+        return _fit_preview_image(
+            img, cache["max_w"], cache["max_h"])
 
     def _apply_cached_preview_mask(self, cache: dict, img, dilation: int):
         if (
@@ -1943,8 +1956,8 @@ class PreviewControllerMixin:
 
         if output_img:
             half_w = max_w // 2 - 2
-            input_img.thumbnail((half_w, max_h), Image.LANCZOS)
-            output_img.thumbnail((half_w, max_h), Image.LANCZOS)
+            input_img = _fit_preview_image(input_img, half_w, max_h)
+            output_img = _fit_preview_image(output_img, half_w, max_h)
             total_w = input_img.width + output_img.width + 4
             total_h = max(input_img.height, output_img.height)
             composite = Image.new("RGB", (total_w, total_h),
@@ -1968,8 +1981,7 @@ class PreviewControllerMixin:
             if quality_note:
                 meta += f" Quality check: {quality_note}."
         else:
-            input_img.thumbnail((max_w, max_h), Image.LANCZOS)
-            display_image = input_img
+            display_image = _fit_preview_image(input_img, max_w, max_h)
             title = f"Source frame for {Path(item_file).name}"
             soft_summary = _format_soft_subtitle_summary(item_soft)
             if soft_summary:

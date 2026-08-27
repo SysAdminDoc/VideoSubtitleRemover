@@ -150,6 +150,41 @@ class AdvancedSettingsControllerMixin:
                     pass
         if hasattr(self, "_sync_inspector_disclosure_state"):
             self._sync_inspector_disclosure_state()
+        if section is not None:
+            try:
+                self.root.after_idle(
+                    lambda selected=section: self._reveal_inspector_section(
+                        selected))
+            except tk.TclError:
+                pass
+
+    def _reveal_inspector_section(self, section: str) -> None:
+        """Scroll newly opened controls into view inside the workbench."""
+        canvas = getattr(self, "_content_canvas", None)
+        content = getattr(self, "_content", None)
+        panels = getattr(self, "_inspector_section_primary_panels", {})
+        targets = panels.get(section, ())
+        if canvas is None or content is None or not targets:
+            return
+        target = targets[0][0]
+        try:
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if not bbox or bbox[3] <= bbox[1]:
+                return
+            total_height = max(1, bbox[3] - bbox[1])
+            target_top = max(
+                0,
+                target.winfo_rooty() - content.winfo_rooty() - Theme.S_MD,
+            )
+            target_bottom = target_top + target.winfo_height()
+            view_top, view_bottom = canvas.yview()
+            visible_top = view_top * total_height
+            visible_bottom = view_bottom * total_height
+            if target_top < visible_top or target_bottom > visible_bottom:
+                canvas.yview_moveto(min(1.0, target_top / total_height))
+        except (AttributeError, tk.TclError):
+            pass
 
     def _toggle_advanced(self, event=None):
         """Toggle the Advanced inspector category."""

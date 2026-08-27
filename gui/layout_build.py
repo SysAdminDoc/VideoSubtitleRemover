@@ -56,14 +56,15 @@ class LayoutBuildMixin:
         queue_row = tk.Frame(main_container, bg=Theme.BG_DARK)
         queue_row.pack(side="bottom", fill="x")
         self._queue_row = queue_row
+        # Retain the compatibility handle used by responsive probes, but keep
+        # the queue full-width. A blank 380 px block beside a short queue read
+        # like an unfinished panel and hid useful filename space.
         self._queue_inspector_spacer = tk.Frame(
             queue_row,
-            bg=Theme.BG_SECONDARY,
-            width=380,
-            highlightthickness=1,
-            highlightbackground=Theme.BORDER_SUBTLE,
+            bg=Theme.BG_DARK,
+            width=0,
+            highlightthickness=0,
         )
-        self._queue_inspector_spacer.pack(side="right", fill="y")
         self._queue_inspector_spacer.pack_propagate(False)
         queue_main = tk.Frame(queue_row, bg=Theme.BG_DARK)
         queue_main.pack(side="left", fill="both", expand=True)
@@ -248,7 +249,7 @@ class LayoutBuildMixin:
         self._header_title_label = tk.Label(
             left,
             text=full_title,
-            font=f(Theme.F_DISPLAY, "bold"),
+            font=f(Theme.F_HEADING, "bold"),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_PRIMARY,
         )
@@ -276,6 +277,10 @@ class LayoutBuildMixin:
             bg=Theme.BG_DARK,
             fg=Theme.GREEN_PRIMARY,
         )
+        self._header_version_label.pack(
+            side="left", padx=(Theme.S_SM, 0), anchor="center")
+        self._header_intro_label.pack(
+            side="left", padx=(Theme.S_MD, 0), anchor="center")
 
         right = tk.Frame(header_top, bg=Theme.BG_DARK)
         right.pack(side="right", anchor="n")
@@ -1904,22 +1909,26 @@ class LayoutBuildMixin:
         )
         self._preview_heading_label.pack(anchor="w")
         self.preview_title_label = tk.Label(
-            preview_text, text=tr("Preview"),
-            font=f(Theme.F_META), bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_MUTED,
+            preview_text, text=tr("No media selected"),
+            font=f(Theme.F_BODY_SM, "bold"), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
         )
+        self.preview_title_label.pack(anchor="w", pady=(2, 0))
         self.preview_meta_label = tk.Label(
             preview_text,
             text=tr("Select a queue item to inspect its subtitle region."),
             font=f(Theme.F_META), wraplength=520, justify="left",
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
         )
-        # Kept for live status and accessibility; the visual header stays terse.
+        self.preview_meta_label.pack(anchor="w", pady=(2, 0))
 
         self.preview_status_chip = tk.Label(
             preview_header, text=tr("Waiting"),
             font=f(Theme.F_META, "bold"),
-            bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
+            bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
+            padx=10, pady=4,
+            highlightthickness=1,
+            highlightbackground=Theme.BORDER_SUBTLE,
         )
         self.preview_ab_btn = ModernButton(
             preview_header, text=tr("Before / after"), width=118,
@@ -1932,15 +1941,19 @@ class LayoutBuildMixin:
 
         self._preview_tools_btn = ModernButton(
             preview_header,
-            text=tr("Preview tools"),
-            width=112,
+            text=tr("More tools"),
+            width=106,
             command=self._open_preview_tools_menu,
             style="ghost",
             size="sm",
         )
+        self._preview_tools_btn.pack(side="right", anchor="n")
+        self.preview_status_chip.pack(
+            side="right", anchor="n", padx=(Theme.S_SM, Theme.S_SM))
 
         media_surface = tk.Frame(
-            section, bg=Theme.BG_DARK, highlightthickness=0,
+            section, bg=Theme.BG_DARK, highlightthickness=1,
+            highlightbackground=Theme.BORDER_SUBTLE,
         )
         media_surface.pack(
             fill="both", expand=True, padx=Theme.S_MD,
@@ -1969,7 +1982,7 @@ class LayoutBuildMixin:
             "<Menu>", self._open_preview_tools_menu, add="+")
         Tooltip(
             self._preview_label,
-            tr("Double-click for full size, draw a region, or right-click for preview tools."),
+            tr("Double-click for full size, or use the visible preview tools."),
         )
 
         self._preview_empty_title_var = tk.StringVar()
@@ -2053,7 +2066,7 @@ class LayoutBuildMixin:
 
         self.preview_region_btn = ModernButton(
             preview_actions, text=tr("Set region"), width=104,
-            command=self._open_region_selector, style="accent", size="sm",
+            command=self._open_region_selector, style="secondary", size="sm",
         )
         self.preview_region_btn.pack(side="left")
         Tooltip(self.preview_region_btn,
@@ -2101,6 +2114,11 @@ class LayoutBuildMixin:
             self.preview_correction_btn,
             tr("Paint frame-local mask corrections for a selective rerun."),
         )
+
+        preview_actions.pack(
+            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+        self.preview_action_hint.pack(
+            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         self.preview_mask_tuning = tk.Frame(section, bg=Theme.BG_SECONDARY)
         tuning_label = tk.Frame(
@@ -2375,15 +2393,15 @@ class LayoutBuildMixin:
         Tooltip(self.queue_move_up_btn, tr("Move the selected item up."))
         Tooltip(self.queue_move_down_btn, tr("Move the selected item down."))
 
-        self.start_btn = ModernButton(btn_frame, text=tr("Start batch"), width=180,
+        self.start_btn = ModernButton(btn_frame, text=tr("Start cleanup"), width=180,
                                      height=44,
                                      command=self._start_processing,
-                                     style="primary", size="lg", icon=">")
+                                     style="primary", size="lg")
         self.start_btn.pack(side="right")
 
         self.open_output_btn = ModernButton(btn_frame, text=tr("Open output"), width=132,
                                             command=self._open_output_folder,
-                                            style="ghost", size="sm", icon="^")
+                                            style="ghost", size="sm")
         self.open_output_btn.pack(side="right", padx=(0, Theme.S_SM))
 
         self.retry_btn = ModernButton(btn_frame, text=tr("Retry failed"), width=124,

@@ -69,6 +69,7 @@ class ResponsiveLayoutMixin:
             self._toggle_log_panel()
         compact = width < 1260 or self._text_scale_percent >= 150
         self._layout_command_strip(compact=compact)
+        self._layout_preview_actions(compact=compact)
         if hasattr(self, "_header_title_label"):
             title_wrap = (
                 1200 if self._text_scale_percent >= 150
@@ -77,6 +78,11 @@ class ResponsiveLayoutMixin:
             self._header_title_label.configure(wraplength=title_wrap)
             self._header_version_label.pack_forget()
             self._header_intro_label.pack_forget()
+            if not compact:
+                self._header_version_label.pack(
+                    side="left", padx=(Theme.S_SM, 0), anchor="center")
+                self._header_intro_label.pack(
+                    side="left", padx=(Theme.S_MD, 0), anchor="center")
         if hasattr(self, "_log_title_cluster"):
             self._log_title_cluster.pack_forget()
             self._badge_row.pack_forget()
@@ -95,10 +101,7 @@ class ResponsiveLayoutMixin:
         mode = "stacked" if compact else "wide"
         spacer = getattr(self, "_queue_inspector_spacer", None)
         if spacer is not None:
-            if mode == "stacked":
-                spacer.pack_forget()
-            elif not spacer.winfo_manager():
-                spacer.pack(side="right", fill="y")
+            spacer.pack_forget()
         if mode == self._layout_mode:
             self._layout_header(width=width, compact=compact)
             self._layout_queue_actions(
@@ -246,6 +249,29 @@ class ResponsiveLayoutMixin:
                     side="bottom", fill="x", padx=Theme.S_MD,
                     pady=(Theme.S_XL, Theme.S_MD))
 
+    def _layout_preview_actions(self, *, compact: bool) -> None:
+        """Keep the common preview workflow visible at every supported width."""
+        row = getattr(self, "_preview_primary_actions", None)
+        if row is None:
+            return
+        buttons = (
+            self.preview_region_btn,
+            self.preview_mask_btn,
+            self.preview_inpaint_btn,
+            self.preview_track_plan_btn,
+            self.preview_zoom_btn,
+            self.preview_correction_btn,
+        )
+        for button in buttons:
+            button.pack_forget()
+        self.preview_region_btn.pack(side="left")
+        self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        if not compact:
+            self.preview_track_plan_btn.pack(
+                side="left", padx=(Theme.S_SM, 0))
+            self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
+
     def _layout_queue_actions(self, *, compact: bool, dense: bool):
         """Keep primary queue controls visible at narrow or scaled layouts."""
         if not hasattr(self, "_queue_action_frame"):
@@ -286,7 +312,9 @@ class ResponsiveLayoutMixin:
                 button.pack(side="left")
 
         queue_empty = not self.queue and not self.is_processing
-        self.queue_canvas.configure(height=40 if queue_empty else (64 if dense else 88))
+        single_idle = len(self.queue) == 1 and not self.is_processing
+        queue_height = 40 if queue_empty else (60 if single_idle else (64 if dense else 88))
+        self.queue_canvas.configure(height=queue_height)
         self._queue_dense_mode = dense
         self._queue_subtitle_label.pack_forget()
         if hasattr(self, "_queue_count_cluster"):
@@ -294,7 +322,7 @@ class ResponsiveLayoutMixin:
                 self._queue_count_cluster.pack_forget()
             elif not self._queue_count_cluster.winfo_manager():
                 self._queue_count_cluster.pack(side="right", padx=(0, Theme.S_MD))
-        if dense or queue_empty:
+        if dense or queue_empty or single_idle:
             self._queue_batch_frame.pack_forget()
             self._queue_batch_bar_frame.pack_forget()
             if hasattr(self, "_queue_table_header"):
@@ -307,7 +335,8 @@ class ResponsiveLayoutMixin:
                 fill="x", padx=Theme.S_MD, pady=(0, 1),
                 before=self._queue_container,
             )
-        show_batch_progress = bool(self.queue or self.is_processing)
+        show_batch_progress = bool(
+            (self.queue or self.is_processing) and not single_idle)
         if not dense and show_batch_progress:
             if not self._queue_batch_frame.winfo_manager():
                 self._queue_batch_frame.pack(
