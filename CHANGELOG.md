@@ -4,6 +4,36 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.40.0] - 2026-08-27
+
+### Changed
+
+- The workbench now uses a quieter product header, aligned command controls,
+  wider media gutters, and a shorter preview heading. The file name leads the
+  preview once media is loaded.
+- Set region, Review mask, and Test cleanup remain visible. Track planning,
+  full-size viewing, mask correction, and queue maintenance now live under
+  focused More menus.
+- Detection controls use stacked labels, values, and sliders. Opening any
+  inspector category keeps the panel near its closed width instead of pushing
+  the video into a narrow column.
+- The empty preview uses one clear instruction surface. Queue rows size to their
+  rendered content at the active display scale, so file details stay readable
+  without a scrollbar for one item.
+- Nine product screenshots were recaptured with `static_dialogue.mkv`. The main
+  flow and detailed controls were checked in the default and high-contrast
+  themes on isolated Windows desktops.
+
+### Fixed
+
+- Opening Detection no longer lets long hints, toggles, or fixed slider widths
+  expand the inspector by more than 200 pixels.
+- Idle queue metadata is no longer clipped at 125 percent Windows scaling.
+- At 200 percent app text on a 125 percent Windows display, the command strip
+  now removes redundant labels and keeps a useful part of the scrollable
+  workbench visible. Preview status and tools move below long file names before
+  they can overlap.
+
 ## [3.39.0] - 2026-08-27
 
 ### Changed

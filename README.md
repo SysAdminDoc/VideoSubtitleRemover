@@ -6,7 +6,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.39.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.40.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
@@ -41,7 +41,11 @@ This project builds on [YaoFANGUK/video-subtitle-remover](https://github.com/Yao
 
 ## Interface
 
-The main workspace keeps the current frame, common review actions, cleanup settings, and processing queue in one view. Detailed controls stay available without covering the video.
+The main workspace keeps the current frame large even when settings are open.
+Set region, Review mask, and Test cleanup stay visible. Less common commands sit
+under More, and each queue row grows to fit its filename and file details. At
+larger text sizes, the command strip and preview header reflow instead of
+crowding the work area.
 
 ![Video Subtitle Remover Pro workspace with a test video loaded](assets/screenshots/02-main-media.png)
 

@@ -109,7 +109,7 @@ class LayoutHelpersMixin:
             self.output_dir_meta.config(text=tr("Custom location"))
             full_command_text = tr("Custom folder")
             command_text = (
-                ""
+                tr("Output")
                 if self._text_scale_percent >= 200
                 else full_command_text
             )
@@ -119,7 +119,7 @@ class LayoutHelpersMixin:
             self.output_dir_meta.config(text=tr("Default workflow"))
             full_command_text = tr("Same as source")
             command_text = (
-                ""
+                tr("Output")
                 if self._text_scale_percent >= 200
                 else full_command_text
             )

@@ -267,8 +267,8 @@ class PreviewControllerMixin:
     def _set_preview_placeholder(self, title: str, body: str):
         """Show the empty-state preview guidance."""
         self._stop_throbber()
-        self.preview_title_label.config(text=tr(title))
-        self.preview_meta_label.config(text=tr(body))
+        self.preview_title_label.config(text=tr("Preview"))
+        self.preview_meta_label.config(text=tr("No media selected"))
         self._set_preview_empty_state_visible(True, title, body)
         self._preview_label.config(text="", image="")
         self._preview_photo = None
@@ -1988,7 +1988,7 @@ class PreviewControllerMixin:
                 meta += f" Quality check: {quality_note}."
         else:
             display_image = _fit_preview_image(input_img, max_w, max_h)
-            title = f"Source frame for {Path(item_file).name}"
+            title = Path(item_file).name
             soft_summary = _format_soft_subtitle_summary(item_soft)
             if soft_summary:
                 meta = (
@@ -1997,8 +1997,8 @@ class PreviewControllerMixin:
                 )
             else:
                 meta = (
-                    "Use Set region to draw the subtitle band, or Review mask "
-                    "to confirm what the detector finds automatically."
+                    "Source frame. Set the subtitle region or review automatic "
+                    "detection."
                 )
 
         def _update_normal():

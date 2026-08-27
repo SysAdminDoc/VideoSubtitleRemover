@@ -84,6 +84,7 @@ class ResponsiveLayoutMixin:
             self._toggle_log_panel()
         compact = width < 1260 or self._text_scale_percent >= 150
         self._layout_command_strip(compact=compact)
+        self._layout_preview_header(compact=compact)
         self._layout_preview_actions(compact=compact)
         if hasattr(self, "_header_title_label"):
             title_wrap = (
@@ -93,11 +94,6 @@ class ResponsiveLayoutMixin:
             self._header_title_label.configure(wraplength=title_wrap)
             self._header_version_label.pack_forget()
             self._header_intro_label.pack_forget()
-            if not compact:
-                self._header_version_label.pack(
-                    side="left", padx=(Theme.S_SM, 0), anchor="center")
-                self._header_intro_label.pack(
-                    side="left", padx=(Theme.S_MD, 0), anchor="center")
         if hasattr(self, "_log_title_cluster"):
             self._log_title_cluster.pack_forget()
             self._badge_row.pack_forget()
@@ -125,7 +121,7 @@ class ResponsiveLayoutMixin:
             )
             if hasattr(self, "preview_meta_label"):
                 self.preview_meta_label.config(
-                    wraplength=720 if mode == "stacked" else 520)
+                    wraplength=720 if mode == "stacked" else 760)
             if hasattr(self, "preview_action_hint"):
                 self.preview_action_hint.config(
                     wraplength=720 if mode == "stacked" else 520)
@@ -169,7 +165,7 @@ class ResponsiveLayoutMixin:
             self._content.columnconfigure(
                 0, weight=1, minsize=620, uniform="")
             self._content.columnconfigure(
-                1, weight=0, minsize=380, uniform="")
+                1, weight=0, minsize=360, uniform="")
             self._content.columnconfigure(2, weight=0, minsize=0, uniform="")
             self._content.rowconfigure(0, weight=1)
             self._content.rowconfigure(1, weight=0)
@@ -180,15 +176,16 @@ class ResponsiveLayoutMixin:
                 else "nsew"
             )
             self._preview_col.grid(row=0, column=0, sticky=preview_sticky,
-                                   padx=(0, 0))
-            self._settings_col.grid(row=0, column=1, sticky="nsew")
+                                   padx=(0, Theme.S_XS))
+            self._settings_col.grid(
+                row=0, column=1, sticky="nsew", padx=(Theme.S_XS, 0))
 
             self._footer_left.pack_forget()
             self._footer_left.pack(
                 side="left", padx=Theme.S_LG, pady=Theme.S_XS)
             self.status_hint.pack_forget()
 
-        self.preview_meta_label.config(wraplength=720 if stacked else 520)
+        self.preview_meta_label.config(wraplength=720 if stacked else 760)
         if hasattr(self, "preview_action_hint"):
             self.preview_action_hint.config(wraplength=720 if stacked else 520)
         self.status_hint.config(wraplength=520 if stacked else 360)
@@ -228,7 +225,8 @@ class ResponsiveLayoutMixin:
                     button.set_text(button._vsr_header_full_text)
             self._header_actions_compact = compact_actions
         self._header_right.pack(side="right", anchor="n")
-        self._header_left.pack(side="left", fill="y", expand=True)
+        self._header_left.pack(
+            side="left", fill="both", expand=True, anchor="w")
         if compact:
             self._header_chips.pack(
                 side="right", padx=(Theme.S_SM, Theme.S_LG))
@@ -305,10 +303,30 @@ class ResponsiveLayoutMixin:
         self.preview_region_btn.pack(side="left")
         self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        if not compact:
-            self.preview_track_plan_btn.pack(
-                side="left", padx=(Theme.S_SM, 0))
-            self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
+
+    def _layout_preview_header(self, *, compact: bool) -> None:
+        """Stack preview context and actions before they can overlap."""
+        text = getattr(self, "_preview_text", None)
+        actions = getattr(self, "_preview_header_actions", None)
+        if text is None or actions is None:
+            return
+        dense = compact and self._text_scale_percent >= 200
+        text.pack_forget()
+        actions.pack_forget()
+        self.preview_status_chip.pack_forget()
+        self._preview_tools_btn.pack_forget()
+        if dense:
+            text.pack(fill="x")
+            actions.pack(fill="x", pady=(Theme.S_SM, 0))
+            self.preview_status_chip.pack(side="left", anchor="w")
+            self._preview_tools_btn.pack(side="right", anchor="e")
+            return
+        text.pack(side="left", fill="x", expand=True)
+        actions.pack(side="right", anchor="n")
+        self._preview_tools_btn.pack(side="right", anchor="n")
+        self.preview_status_chip.pack(
+            side="right", anchor="n", padx=(Theme.S_SM, Theme.S_SM)
+        )
 
     def _layout_queue_actions(self, *, compact: bool, dense: bool):
         """Keep primary queue controls visible at narrow or scaled layouts."""
@@ -333,25 +351,21 @@ class ResponsiveLayoutMixin:
         if hasattr(self, "inspector_start_btn"):
             self.inspector_start_btn.pack_forget()
         self.queue_add_btn.pack(side="left")
-        if compact or dense:
-            self._queue_more_btn.pack(side="left", padx=(Theme.S_SM, 0))
-        else:
-            separators = getattr(self, "_queue_action_separators", ())
-            actions = (
-                self.queue_remove_btn,
-                self.queue_clear_completed_btn,
-                self.queue_move_up_btn,
-                self.queue_move_down_btn,
-            )
-            for index, button in enumerate(actions):
-                if index < len(separators) and index < 3:
-                    separators[index].pack(
-                        side="left", fill="y", padx=Theme.S_SM, pady=2)
-                button.pack(side="left")
+        self._queue_more_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         queue_empty = not self.queue and not self.is_processing
         single_idle = len(self.queue) == 1 and not self.is_processing
-        queue_height = 40 if queue_empty else (60 if single_idle else (64 if dense else 88))
+        try:
+            self.queue_frame.update_idletasks()
+            queue_content_height = max(1, int(self.queue_frame.winfo_reqheight()))
+        except (AttributeError, tk.TclError, TypeError, ValueError):
+            queue_content_height = 1
+        if queue_empty:
+            queue_height = max(40, min(72, queue_content_height + 2))
+        elif single_idle:
+            queue_height = max(72, min(120, queue_content_height + 2))
+        else:
+            queue_height = 64 if dense else 88
         self.queue_canvas.configure(height=queue_height)
         self._queue_dense_mode = dense
         self._queue_subtitle_label.pack_forget()

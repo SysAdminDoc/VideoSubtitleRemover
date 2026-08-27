@@ -251,8 +251,34 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
             self.assertEqual(app._preview_primary_actions.winfo_manager(), "pack")
             self.assertEqual(app._preview_tools_btn.winfo_manager(), "pack")
             self.assertEqual(app.preview_status_chip.winfo_manager(), "pack")
-            self.assertEqual(app.queue_canvas.cget("height"), "60")
+            self.assertGreaterEqual(
+                int(app.queue_canvas.cget("height")),
+                app.queue_frame.winfo_reqheight(),
+            )
             self.assertEqual(app._queue_table_header.winfo_manager(), "")
+            self.assertEqual(app._queue_scrollbar.winfo_manager(), "")
+            self.assertEqual(app._preview_heading_label.winfo_manager(), "")
+            self.assertEqual(app.preview_track_plan_btn.winfo_manager(), "")
+            self.assertEqual(app.preview_zoom_btn.winfo_manager(), "")
+            self.assertEqual(app.queue_remove_btn.winfo_manager(), "")
+            self.assertEqual(app.queue_clear_completed_btn.winfo_manager(), "")
+            self.assertEqual(app._queue_more_btn.winfo_manager(), "pack")
+            preview_menu = mock.Mock()
+            with mock.patch.object(
+                self._gui_app_module.tk,
+                "Menu",
+                return_value=preview_menu,
+            ):
+                app._open_preview_tools_menu()
+            preview_menu_labels = [
+                call.kwargs.get("label")
+                for call in preview_menu.add_command.call_args_list
+            ]
+            self.assertIn("Track plan", preview_menu_labels)
+            self.assertIn("Full size", preview_menu_labels)
+            app._set_inspector_section("detection")
+            app.root.update_idletasks()
+            self.assertLessEqual(app._settings_col.winfo_reqwidth(), 400)
             self.assertTrue(app.preview_inpaint_btn.enabled)
             self.assertEqual(
                 app.preview_inpaint_btn.command,

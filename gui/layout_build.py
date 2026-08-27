@@ -54,7 +54,10 @@ class LayoutBuildMixin:
         # Keep the operational queue and primary action visible while the
         # preview/inspector workbench scrolls independently above it.
         queue_row = tk.Frame(main_container, bg=Theme.BG_DARK)
-        queue_row.pack(side="bottom", fill="x")
+        queue_row.pack(
+            side="bottom", fill="x",
+            padx=Theme.S_MD, pady=(Theme.S_SM, 0),
+        )
         self._queue_row = queue_row
         # Retain the compatibility handle used by responsive probes, but keep
         # the queue full-width. A blank 380 px block beside a short queue read
@@ -74,7 +77,10 @@ class LayoutBuildMixin:
         # A single scroll surface keeps the three-part workbench usable at the
         # 980x720 minimum without compromising the desktop hierarchy.
         content_shell = tk.Frame(main_container, bg=Theme.BG_DARK)
-        content_shell.pack(fill="both", expand=True)
+        content_shell.pack(
+            fill="both", expand=True,
+            padx=Theme.S_MD, pady=(Theme.S_MD, 0),
+        )
         self._content_canvas = tk.Canvas(
             content_shell, bg=Theme.BG_DARK, highlightthickness=0)
         content_scroll = ttk.Scrollbar(
@@ -92,7 +98,7 @@ class LayoutBuildMixin:
         self._content_canvas.bind("<Configure>", self._on_content_canvas_configure)
         register_wheel_surface(self._content_canvas)
         content.columnconfigure(0, weight=1, minsize=620, uniform="")
-        content.columnconfigure(1, weight=0, minsize=380, uniform="")
+        content.columnconfigure(1, weight=0, minsize=360, uniform="")
         content.columnconfigure(2, weight=0, minsize=0)
         content.rowconfigure(0, weight=1)
         self._content = content
@@ -106,13 +112,14 @@ class LayoutBuildMixin:
         # Preview is the primary work surface.
         preview_col = tk.Frame(content, bg=Theme.BG_DARK)
         preview_col.grid(row=0, column=0, sticky="nsew",
-                         padx=(0, 0))
+                         padx=(0, Theme.S_XS))
         self._preview_col = preview_col
         self._build_preview_section(preview_col)
 
         # Focused inspector: cleanup profile, region, output, then details.
         settings_col = tk.Frame(content, bg=Theme.BG_DARK)
-        settings_col.grid(row=0, column=1, sticky="nsew")
+        settings_col.grid(
+            row=0, column=1, sticky="nsew", padx=(Theme.S_XS, 0))
         self._settings_col = settings_col
         self._build_settings_section(settings_col)
 
@@ -132,24 +139,33 @@ class LayoutBuildMixin:
         self._command_inner = inner
 
         import_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
+        import_label = tk.Label(
+            import_block,
+            text=tr("Media"),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_SECONDARY,
+        )
+        import_label.pack(anchor="w", pady=(0, Theme.S_XS))
         self.drop_area = DragDropFrame(
             import_block, self._on_files_dropped, height=38, compact=True)
         self.drop_area.pack(fill="x")
         self._import_section = import_block
 
         mode_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
-        tk.Label(
+        mode_label = tk.Label(
             mode_block,
             text=tr("Profile") if dense_copy else tr("Cleanup profile"),
             font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
-        ).pack(anchor="w", pady=(0, Theme.S_XS))
+        )
+        mode_label.pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_profile_var = tk.StringVar()
         self._command_mode_combo = ttk.Combobox(
             mode_block, textvariable=self._command_profile_var,
             values=(tr("Balanced"), tr("Motion"), tr("Detail"), tr("Temporal")),
-            state="readonly",
-            style="Dark.TCombobox", font=f(Theme.F_BODY_SM), width=18,
+            state="readonly", style="Dark.TCombobox",
+            font=f(Theme.F_BODY_SM), width=14 if dense_copy else 18,
         )
         self._command_mode_combo.pack(fill="x")
         set_accessible_metadata(
@@ -164,18 +180,19 @@ class LayoutBuildMixin:
         self._sync_command_profile()
 
         region_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
-        tk.Label(
+        region_label = tk.Label(
             region_block,
             text=tr("Region") if dense_copy else tr("Subtitle region"),
             font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
-        ).pack(anchor="w", pady=(0, Theme.S_XS))
+        )
+        region_label.pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_region_var = tk.StringVar()
         self._command_region_combo = ttk.Combobox(
             region_block, textvariable=self._command_region_var,
             values=(tr("Automatic"), tr("Manual region"), tr("Set region...")),
             state="readonly", style="Dark.TCombobox",
-            font=f(Theme.F_BODY_SM), width=18,
+            font=f(Theme.F_BODY_SM), width=14 if dense_copy else 18,
         )
         self._command_region_combo.pack(fill="x")
         set_accessible_metadata(
@@ -190,14 +207,14 @@ class LayoutBuildMixin:
         self._sync_command_region()
 
         output_block = tk.Frame(inner, bg=Theme.BG_SECONDARY)
-        tk.Label(
+        output_label = tk.Label(
             output_block, text=tr("Output"), font=f(Theme.F_BODY_SM),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_SECONDARY,
-        ).pack(anchor="w", pady=(0, Theme.S_XS))
+        )
+        output_label.pack(anchor="w", pady=(0, Theme.S_XS))
         self._command_output_btn = ModernButton(
             output_block,
-            text="" if dense_copy else tr("Same as source"),
-            icon="..." if dense_copy else None,
+            text=tr("Output") if dense_copy else tr("Same as source"),
             accessible_label=tr("Same as source"),
             width=176,
             command=self._choose_output_dir, style="secondary", size="md",
@@ -218,6 +235,12 @@ class LayoutBuildMixin:
 
         self._command_blocks = (
             import_block, mode_block, region_block, output_block, start_block,
+        )
+        self._command_label_controls = (
+            (import_label, self.drop_area),
+            (mode_label, self._command_mode_combo),
+            (region_label, self._command_region_combo),
+            (output_label, self._command_output_btn),
         )
         self._layout_command_strip(compact=False)
         self._divider(strip)
@@ -249,7 +272,7 @@ class LayoutBuildMixin:
         self._header_title_label = tk.Label(
             left,
             text=full_title,
-            font=f(Theme.F_DISPLAY, "bold"),
+            font=f(Theme.F_HEADING, "bold"),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_PRIMARY,
         )
@@ -277,11 +300,6 @@ class LayoutBuildMixin:
             bg=Theme.BG_DARK,
             fg=Theme.GREEN_PRIMARY,
         )
-        self._header_version_label.pack(
-            side="left", padx=(Theme.S_SM, 0), anchor="center")
-        self._header_intro_label.pack(
-            side="left", padx=(Theme.S_MD, 0), anchor="center")
-
         right = tk.Frame(header_top, bg=Theme.BG_DARK)
         right.pack(side="right", anchor="n")
         self._header_right = right
@@ -615,7 +633,7 @@ class LayoutBuildMixin:
             text=tr("Use a fixed subtitle region"),
             variable=self.skip_detection_var,
             command=self._on_manual_region_toggled,
-            wraplength=300,
+            wraplength=270,
         )
         self.skip_check.pack(anchor="w")
         Tooltip(
@@ -630,7 +648,7 @@ class LayoutBuildMixin:
             checks_frame,
             text=tr("Fast LaMa cleanup"),
             variable=self.lama_fast_var,
-            wraplength=300,
+            wraplength=270,
         )
         self.lama_check.pack(anchor="w", pady=(Theme.S_SM, 0))
         Tooltip(self.lama_check, tr("LaMa fast mode is useful for quick passes and lower-resolution drafts."))
@@ -639,7 +657,7 @@ class LayoutBuildMixin:
             checks_frame,
             text=tr("Preserve source audio"),
             variable=self.preserve_audio_var,
-            wraplength=300,
+            wraplength=270,
         )
         self.preserve_audio_check.pack(anchor="w", pady=(Theme.S_SM, 0))
         self.ffmpeg_warning_label = tk.Label(
@@ -648,7 +666,7 @@ class LayoutBuildMixin:
             font=f(Theme.F_META),
             bg=Theme.BG_CARD,
             fg=Theme.INFO,
-            wraplength=320,
+            wraplength=280,
             justify="left",
         )
         self._refresh_ffmpeg_warning()
@@ -660,8 +678,7 @@ class LayoutBuildMixin:
         region_surface.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         region_text = tk.Frame(region_surface, bg=Theme.BG_CARD)
-        region_text.pack(side="left", fill="x", expand=True,
-                         pady=Theme.S_XS)
+        region_text.pack(fill="x", pady=Theme.S_XS)
 
         self.region_label = tk.Label(region_text, text="", font=f(Theme.F_BODY, "bold"),
                                      bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY,
@@ -674,7 +691,7 @@ class LayoutBuildMixin:
         self.region_meta.pack(anchor="w", pady=(2, 0))
 
         region_actions = tk.Frame(region_surface, bg=Theme.BG_CARD)
-        region_actions.pack(side="right", pady=Theme.S_XS)
+        region_actions.pack(fill="x", pady=(Theme.S_SM, Theme.S_XS))
 
         self.region_btn = ModernButton(region_actions, text=tr("Set region"), width=88,
                                        command=self._open_region_selector_modal, style="accent",
@@ -726,17 +743,17 @@ class LayoutBuildMixin:
             font=f(Theme.F_BODY_SM),
             bg=Theme.BG_CARD,
             fg=Theme.TEXT_SECONDARY,
-        ).pack(side="left")
+        ).pack(anchor="w")
         self.ocr_engine_combo = ttk.Combobox(
             engine_row,
             textvariable=self.ocr_engine_var,
             values=tuple(self._ocr_engine_by_label),
-            width=24,
+            width=20,
             state="readonly",
             style="Dark.TCombobox",
             font=f(Theme.F_BODY_SM),
         )
-        self.ocr_engine_combo.pack(side="right")
+        self.ocr_engine_combo.pack(fill="x", pady=(Theme.S_XS, 0))
         self.ocr_engine_combo.bind(
             "<<ComboboxSelected>>", self._on_ocr_engine_changed)
         Tooltip(
@@ -752,7 +769,7 @@ class LayoutBuildMixin:
             fg=Theme.TEXT_MUTED,
             anchor="w",
             justify="left",
-            wraplength=500,
+            wraplength=280,
         )
         self.vlm_privacy_label.pack(
             fill="x",
@@ -770,7 +787,7 @@ class LayoutBuildMixin:
             font=f(Theme.F_BODY_SM),
             bg=Theme.BG_CARD,
             fg=Theme.TEXT_SECONDARY,
-        ).pack(side="left")
+        ).pack(anchor="w")
         rapidocr_variant_combo = ttk.Combobox(
             variant_row,
             textvariable=self.rapidocr_variant_var,
@@ -780,7 +797,7 @@ class LayoutBuildMixin:
             style="Dark.TCombobox",
             font=f(Theme.F_BODY_SM),
         )
-        rapidocr_variant_combo.pack(side="right")
+        rapidocr_variant_combo.pack(fill="x", pady=(Theme.S_XS, 0))
         rapidocr_variant_combo.bind(
             "<<ComboboxSelected>>", self._on_rapidocr_variant_changed)
         Tooltip(
@@ -1905,32 +1922,39 @@ class LayoutBuildMixin:
 
         preview_header = tk.Frame(section, bg=Theme.BG_SECONDARY)
         preview_header.pack(fill="x", padx=Theme.S_MD,
-                            pady=(Theme.S_MD, Theme.S_SM))
+                            pady=(Theme.S_SM, Theme.S_SM))
+        self._preview_header = preview_header
 
         preview_text = tk.Frame(preview_header, bg=Theme.BG_SECONDARY)
         preview_text.pack(side="left", fill="x", expand=True)
+        self._preview_text = preview_text
         self._preview_heading_label = tk.Label(
             preview_text, text=tr("Preview"),
             font=f(Theme.F_HEADING, "bold"),
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY,
         )
-        self._preview_heading_label.pack(anchor="w")
         self.preview_title_label = tk.Label(
             preview_text, text=tr("No media selected"),
-            font=f(Theme.F_BODY_SM, "bold"), bg=Theme.BG_SECONDARY,
-            fg=Theme.TEXT_SECONDARY,
+            font=f(Theme.F_TITLE, "bold"), bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_PRIMARY,
         )
-        self.preview_title_label.pack(anchor="w", pady=(2, 0))
+        self.preview_title_label.pack(anchor="w")
         self.preview_meta_label = tk.Label(
             preview_text,
             text=tr("Select a queue item to inspect its subtitle region."),
-            font=f(Theme.F_META), wraplength=520, justify="left",
+            font=f(Theme.F_META), wraplength=760, justify="left",
             bg=Theme.BG_SECONDARY, fg=Theme.TEXT_MUTED,
         )
-        self.preview_meta_label.pack(anchor="w", pady=(2, 0))
+        self.preview_meta_label.pack(anchor="w", pady=(Theme.S_XS, 0))
+
+        preview_header_actions = tk.Frame(
+            preview_header, bg=Theme.BG_SECONDARY
+        )
+        preview_header_actions.pack(side="right", anchor="n")
+        self._preview_header_actions = preview_header_actions
 
         self.preview_status_chip = tk.Label(
-            preview_header, text=tr("Waiting"),
+            preview_header_actions, text=tr("Waiting"),
             font=f(Theme.F_META, "bold"),
             bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
             padx=10, pady=4,
@@ -1938,7 +1962,7 @@ class LayoutBuildMixin:
             highlightbackground=Theme.BORDER_SUBTLE,
         )
         self.preview_ab_btn = ModernButton(
-            preview_header, text=tr("Before / after"), width=118,
+            preview_header_actions, text=tr("Before / after"), width=118,
             command=self._open_ab_scrubber, style="ghost", size="sm",
         )
         Tooltip(
@@ -1947,9 +1971,10 @@ class LayoutBuildMixin:
         )
 
         self._preview_tools_btn = ModernButton(
-            preview_header,
-            text=tr("More tools"),
-            width=106,
+            preview_header_actions,
+            text=tr("More"),
+            accessible_label=tr("More preview tools"),
+            width=76,
             command=self._open_preview_tools_menu,
             style="ghost",
             size="sm",
@@ -1968,7 +1993,7 @@ class LayoutBuildMixin:
         )
         media_surface.pack(
             fill="both", expand=True, padx=Theme.S_MD,
-            pady=(0, Theme.S_MD))
+            pady=(0, Theme.S_SM))
         self._preview_media_surface = media_surface
 
         self._preview_label = tk.Label(
@@ -2104,7 +2129,6 @@ class LayoutBuildMixin:
             command=self._open_track_plan_review,
             style="ghost", size="sm",
         )
-        self.preview_track_plan_btn.pack(side="left", padx=(Theme.S_SM, 0))
         Tooltip(self.preview_track_plan_btn,
                 tr("Scan the whole file and review every text track "
                    "before cleanup."))
@@ -2113,13 +2137,11 @@ class LayoutBuildMixin:
             preview_actions, text=tr("Full size"), width=86,
             command=self._open_preview_zoom, style="ghost", size="sm",
         )
-        self.preview_zoom_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self.preview_correction_btn = ModernButton(
             preview_actions, text=tr("Correct mask"), width=112,
             command=self._open_selected_mask_correction,
             style="ghost", size="sm",
         )
-        self.preview_correction_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         Tooltip(self.preview_zoom_btn, tr("Open the source frame at full size."))
         Tooltip(
@@ -2128,7 +2150,7 @@ class LayoutBuildMixin:
         )
 
         preview_actions.pack(
-            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
+            fill="x", padx=Theme.S_MD, pady=(0, Theme.S_MD))
 
         self.preview_mask_tuning = tk.Frame(
             preview_controls, bg=Theme.BG_SECONDARY)
@@ -2171,7 +2193,7 @@ class LayoutBuildMixin:
             fg=Theme.TEXT_PRIMARY,
         ).pack(side="right")
         self._set_preview_placeholder(
-            "Preview a sample frame",
+            "Choose media to preview a frame",
             "Add media, then select a queue item to inspect its subtitle region.",
         )
 
@@ -2182,7 +2204,7 @@ class LayoutBuildMixin:
         self._divider(section)
 
         header = tk.Frame(section, bg=Theme.BG_SECONDARY)
-        header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_MD, Theme.S_XS))
+        header.pack(fill="x", padx=Theme.S_MD, pady=(Theme.S_SM, Theme.S_XS))
 
         btn_frame = tk.Frame(header, bg=Theme.BG_SECONDARY)
         btn_frame.pack(side="right")
@@ -2192,7 +2214,7 @@ class LayoutBuildMixin:
         heading.pack(side="left", fill="x", expand=True)
 
         tk.Label(heading, text=tr("Processing queue"),
-                 font=f(Theme.F_HEADING, "bold"),
+                 font=f(Theme.F_TITLE, "bold"),
                  bg=Theme.BG_SECONDARY, fg=Theme.TEXT_PRIMARY).pack(anchor="w")
         self._queue_subtitle_label = tk.Label(
             heading,
@@ -2431,9 +2453,10 @@ class LayoutBuildMixin:
         self.clear_btn.pack(side="left", padx=(Theme.S_SM, 0))
 
         self._queue_more_btn = ModernButton(
-            btn_frame, text=tr("Queue actions"), width=124,
+            btn_frame, text=tr("More"), width=76,
             command=self._open_queue_actions_menu,
-            style="ghost", size="sm", icon="...",
+            style="ghost", size="sm",
+            accessible_label=tr("More queue actions"),
         )
 
         self._refresh_action_states()

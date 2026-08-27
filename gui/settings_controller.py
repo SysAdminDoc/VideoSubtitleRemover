@@ -50,17 +50,20 @@ class AdvancedSettingsControllerMixin:
 
     def _create_slider(self, parent, label, min_val, max_val, default, attr_name,
                        hint: str = ""):
-        """Create a labeled slider row with a quiet inline value readout."""
+        """Create a readable stacked slider with an inline value readout."""
         parent_bg = parent.cget("bg") if hasattr(parent, "cget") else Theme.BG_CARD
         row = tk.Frame(parent, bg=parent_bg)
-        row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_XS, 2))
+        row.pack(fill="x", padx=Theme.S_LG, pady=(Theme.S_SM, Theme.S_XS))
 
-        tk.Label(row, text=tr(label), font=f(Theme.F_BODY_SM),
+        label_row = tk.Frame(row, bg=parent_bg)
+        label_row.pack(fill="x")
+
+        tk.Label(label_row, text=tr(label), font=f(Theme.F_BODY_SM),
                  bg=parent_bg, fg=Theme.TEXT_SECONDARY,
-                 width=16, anchor="w").pack(side="left")
+                 anchor="w").pack(side="left")
 
         value_label = tk.Label(
-            row,
+            label_row,
             text=str(default),
             font=f(Theme.F_BODY_SM, "bold"),
             bg=parent_bg,
@@ -72,8 +75,9 @@ class AdvancedSettingsControllerMixin:
         value_label.pack(side="right", padx=(Theme.S_MD, 0))
 
         slider = ModernSlider(row, from_=min_val, to=max_val, value=default,
-                              bg=parent_bg, accessible_label=tr(label))
-        slider.pack(side="left", fill="x", expand=True, padx=(Theme.S_SM, 0))
+                              width=180, bg=parent_bg,
+                              accessible_label=tr(label))
+        slider.pack(fill="x", pady=(Theme.S_XS, 0))
         self._settings_sliders.append(slider)
         self._settings_slider_by_attr[attr_name] = (slider, value_label)
 
@@ -91,11 +95,10 @@ class AdvancedSettingsControllerMixin:
         slider.command = on_change
 
         if hint:
-            tk.Label(parent, text=tr(hint), font=f(Theme.F_META),
+            tk.Label(row, text=tr(hint), font=f(Theme.F_META),
                      bg=parent_bg, fg=Theme.TEXT_MUTED,
-                     anchor="w", justify="left").pack(
-                         fill="x", padx=(Theme.S_LG, Theme.S_LG),
-                         pady=(0, Theme.S_XS))
+                     anchor="w", justify="left", wraplength=280).pack(
+                         fill="x", pady=(Theme.S_XS, 0))
 
     def _set_inspector_section(self, section: Optional[str]) -> None:
         """Show one inspector category and keep every other category hidden."""

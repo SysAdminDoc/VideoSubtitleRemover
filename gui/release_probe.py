@@ -336,6 +336,30 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
             if app._content_canvas.winfo_height() < 100:
                 failures.append("scrollable workbench is too short")
 
+            def root_rect(widget):
+                return (
+                    widget.winfo_rootx(),
+                    widget.winfo_rooty(),
+                    widget.winfo_rootx() + widget.winfo_width(),
+                    widget.winfo_rooty() + widget.winfo_height(),
+                )
+
+            def overlaps(first, second):
+                return (
+                    first[0] < second[2]
+                    and first[2] > second[0]
+                    and first[1] < second[3]
+                    and first[3] > second[1]
+                )
+
+            title_rect = root_rect(app.preview_title_label)
+            for name, widget in (
+                ("preview status", app.preview_status_chip),
+                ("preview tools", app._preview_tools_btn),
+            ):
+                if overlaps(title_rect, root_rect(widget)):
+                    failures.append(f"{name} overlaps the preview title")
+
             for name, button in major_buttons:
                 if button.enabled and int(button.cget("takefocus")) != 1:
                     failures.append(f"{name} action is not keyboard focusable")
@@ -384,9 +408,9 @@ def run_probe(scale: int, high_contrast: bool, locale: str) -> dict:
                 failures.append("button height did not scale with its text")
             header_font = tkfont.Font(font=app._header_title_label.cget("font"))
             if abs(int(header_font.cget("size"))) < round(
-                Theme.F_DISPLAY * scale / 100
+                Theme.F_HEADING * scale / 100
             ):
-                failures.append("display font did not reach the requested scale")
+                failures.append("header font did not reach the requested scale")
 
             verbose_labels = [
                 label for label in labels

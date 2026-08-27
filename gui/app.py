@@ -1316,13 +1316,26 @@ class VideoSubtitleRemoverApp(
         blocks = getattr(self, "_command_blocks", ())
         if not blocks:
             return
+        dense = compact and self._text_scale_percent >= 200
+        for label, control in getattr(
+            self, "_command_label_controls", ()
+        ):
+            label.pack_forget()
+            if not dense:
+                label.pack(
+                    anchor="w",
+                    pady=(0, Theme.S_XS),
+                    before=control,
+                )
+        self.command_start_btn.pack_configure(
+            pady=(0, 0) if dense else (Theme.S_LG, 0)
+        )
         for block in blocks:
             block.grid_forget()
         for column in range(6):
             self._command_inner.columnconfigure(
                 column, weight=0, uniform="", minsize=0)
         if compact:
-            dense = self._text_scale_percent >= 200
             for column in range(2 if dense else 3):
                 self._command_inner.columnconfigure(
                     column, weight=1, uniform="command_compact")
@@ -1526,6 +1539,8 @@ class VideoSubtitleRemoverApp(
             relief="solid",
         )
         entries = (
+            (tr("Track plan"), self.preview_track_plan_btn,
+             self._open_track_plan_review),
             (tr("Before / after"), self.preview_ab_btn, self._open_ab_scrubber),
             (tr("Set region"), self.preview_region_btn, self._open_region_selector),
             (tr("Review mask"), self.preview_mask_btn, self._open_selected_mask_preview),
@@ -1841,8 +1856,8 @@ class VideoSubtitleRemoverApp(
                     _format_soft_subtitle_summary(records)
                     if records else
                     tr(
-                        "Use Set region to draw the subtitle band, or Review "
-                        "mask to confirm what the detector finds automatically."
+                        "Source frame. Set the subtitle region or review "
+                        "automatic detection."
                     )
                 )
             )

@@ -317,7 +317,7 @@ class QueueViewMixin:
             self._hide_filter_empty_state()
             self._build_queue_empty_state()
             self._set_preview_placeholder(
-                "Preview a sample frame",
+                "Choose media to preview a frame",
                 "Add files to preview them. Use Set region to mark the subtitle band before processing.",
             )
         else:

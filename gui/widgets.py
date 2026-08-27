@@ -892,7 +892,7 @@ class ModernToggle(tk.Canvas):
 
     def __init__(self, parent, text="", variable=None, command=None,
                  bg=None, fg=None, **kwargs):
-        wraplength = max(160, int(kwargs.pop("wraplength", 560)))
+        wraplength = max(160, int(kwargs.pop("wraplength", 270)))
         self.BOX = scaled_control_size(type(self).BOX)
         self.GAP = scaled_control_size(type(self).GAP)
         self.variable = variable if variable is not None else tk.BooleanVar(value=False)
@@ -1989,7 +1989,10 @@ class DragDropFrame(tk.Frame):
             inner,
             text=tr("Add media") if compact
             else tr("Add files to the queue"),
-                            font=f(Theme.F_TITLE, "bold"), bg=self.normal_bg,
+                            font=f(
+                                Theme.F_BODY_SM if compact else Theme.F_TITLE,
+                                "bold",
+                            ), bg=self.normal_bg,
                             fg=Theme.TEXT_PRIMARY)
         if compact:
             main_text.pack(side="left")
