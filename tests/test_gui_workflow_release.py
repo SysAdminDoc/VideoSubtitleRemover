@@ -375,6 +375,79 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_automatic_cleanup_preview_combines_saved_region_and_ocr(self):
+        from PIL import Image
+        from backend import processor
+
+        app = self._make_app()
+        try:
+            source = Path(self._tmpdir.name) / "automatic-cleanup-preview.png"
+            Image.new("RGB", (320, 180), "#182132").save(source)
+            saved = (40, 120, 120, 165)
+            detected = (220, 20, 280, 55)
+            item = self._app_exports.QueueItem(
+                id="automatic-cleanup-preview",
+                file_path=str(source),
+                output_path=str(
+                    source.with_name("automatic-cleanup-preview-clean.png")
+                ),
+                config=self._app_exports.ProcessingConfig(
+                    subtitle_area=saved,
+                    subtitle_areas=[saved],
+                    sttn_skip_detection=False,
+                    mask_dilate_px=0,
+                ),
+            )
+            app.queue.append(item)
+            app._selected_queue_item_id = item.id
+            captured_masks = []
+
+            class FakeDetector:
+                def __init__(self):
+                    self.calls = 0
+
+                def detect(self, frame, threshold):
+                    self.calls += 1
+                    return [detected]
+
+            class CapturingInpainter:
+                def inpaint(self, frames, masks):
+                    captured_masks.extend(mask.copy() for mask in masks)
+                    return [frame.copy() for frame in frames]
+
+            detector = FakeDetector()
+
+            def build_remover(backend_cfg):
+                remover = processor.SubtitleRemover.__new__(
+                    processor.SubtitleRemover
+                )
+                remover.config = backend_cfg
+                remover.detector = detector
+                remover.inpainter = CapturingInpainter()
+                return remover
+
+            app._preview_remover_for = build_remover
+            app._open_selected_inpaint_preview()
+            deadline = time.monotonic() + 5.0
+            while not captured_masks and time.monotonic() < deadline:
+                app.root.update()
+                time.sleep(0.01)
+
+            self.assertEqual(detector.calls, 1)
+            self.assertTrue(captured_masks)
+            mask = captured_masks[0]
+            self.assertEqual(int(mask[140, 80]), 255)
+            self.assertEqual(int(mask[35, 250]), 255)
+            while (
+                "2 region(s) masked" not in app.preview_meta_label.cget("text")
+                and time.monotonic() < deadline
+            ):
+                app.root.update()
+                time.sleep(0.01)
+            self.assertIn("2 region(s) masked", app.preview_meta_label.cget("text"))
+        finally:
+            self._destroy_app(app)
+
     def test_collapsed_advanced_controls_leave_control_view_and_tab_order(self):
         app = self._make_app(withdraw=False)
         try:

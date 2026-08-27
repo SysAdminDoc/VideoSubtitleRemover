@@ -966,10 +966,8 @@ class PreviewControllerMixin:
                 backend_cfg.device = self._gui_to_backend_device(
                     snapshot_cfg.use_gpu, snapshot_cfg.gpu_id)
                 remover = self._preview_remover_for(backend_cfg)
-                timed_configured = bool(
-                    getattr(snapshot_cfg, "subtitle_region_spans", None)
-                    or getattr(
-                        snapshot_cfg, "subtitle_region_keyframes", None))
+                manual_only = bool(getattr(
+                    snapshot_cfg, "sttn_skip_detection", False))
                 mode = getattr(snapshot_cfg.mode, "value", str(snapshot_cfg.mode))
                 temporal_mode = mode in {
                     InpaintMode.AUTO.value,
@@ -1002,13 +1000,9 @@ class PreviewControllerMixin:
                     current_time = float(frame_index) / fps
                     active_shapes = remover._fixed_region_shapes(current_time) or []
                     fixed = remover._fixed_region_boxes(current_time)
-                    if fixed:
-                        boxes = list(fixed)
+                    if manual_only:
+                        boxes = list(fixed or [])
                         detections = remover._legacy_geometry(boxes)
-                    elif (timed_configured
-                          and getattr(snapshot_cfg, "sttn_skip_detection", False)):
-                        boxes = []
-                        detections = []
                     else:
                         detect_geometry = getattr(
                             remover.detector, "detect_with_geometry", None)
@@ -1021,13 +1015,21 @@ class PreviewControllerMixin:
                                 detection.bbox for detection in detections
                             ]
                         else:
-                            boxes = remover.detector.detect(
+                            boxes = list(remover.detector.detect(
                                 current_frame,
                                 snapshot_cfg.detection_threshold,
-                            )
+                            ))
                             detections = remover._legacy_geometry(boxes)
+                        if fixed:
+                            boxes.extend(fixed)
+                            detections.extend(remover._legacy_geometry(fixed))
                     boxes_per_frame.append(boxes)
-                    region_count = max(region_count, len(boxes) + len(active_shapes))
+                    polygon_count = sum(
+                        1 for shape in active_shapes
+                        if isinstance(shape, dict) and shape.get("polygon")
+                    )
+                    region_count = max(
+                        region_count, len(boxes) + polygon_count)
                     mask = remover._create_mask(
                         current_frame.shape,
                         boxes,

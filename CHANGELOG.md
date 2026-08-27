@@ -20,7 +20,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   existing fixed, timed, or moving region is preserved and shown immediately,
   bypasses OCR only when Manual region is active, and supplies the same mask to
   Auto, STTN, LaMa, and ProPainter. Clear region returns to automatic detection
-  with visible feedback.
+  with visible feedback. Automatic cleanup previews now combine saved regions
+  with OCR detections and report each region once.
 - Named OCR, inpainting, segmentation, tracking, and restoration requests now
   fail with a classified reason and recovery guidance when they can't execute.
   Missing or malformed tracker visibility and unchanged segmentation mattes

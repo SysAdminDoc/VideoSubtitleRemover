@@ -61,7 +61,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Clean Boundaries:** Gaussian alpha feathering at every inpaint boundary, with no visible cut lines
 - **Language Support:** 52 selectable OCR language codes in the GUI, with installed OCR engines reporting broader capacity: RapidOCR 100+, PaddleOCR 106, Surya 90+ (GPL opt-in), and EasyOCR 80+; gettext catalogs in `locale/<BCP-47 tag>/LC_MESSAGES/vsr.mo` are packaged, preserve script/territory fallback, and follow the Windows interface locale
 - **GPU Acceleration:** NVIDIA CUDA, AMD/Intel DirectML through ONNX Runtime, hardware-decode hints (D3D11 / VAAPI / MFX), CPU fallback
-- **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; saving activates the same complete mask in Auto, STTN, LaMa, and ProPainter, while Automatic keeps the saved shapes available and adds OCR detections
+- **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; saving activates the same complete mask in Auto, STTN, LaMa, and ProPainter, while Automatic keeps the saved shapes and adds OCR detections during processing, mask review, and cleanup previews
 - **Live Region OCR Feedback:** While drawing a rectangle, inspect detected text boxes and confidence before saving the region
 - **Selected-Language Masks:** Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
 - **Batch Processing:** Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
