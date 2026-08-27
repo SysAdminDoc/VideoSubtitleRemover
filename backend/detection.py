@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
@@ -24,6 +25,14 @@ import numpy as np
 
 from backend.import_safety import module_can_import as _module_can_import
 from backend.detection_geometry import DetectionGeometry
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    FAILURE_POLICY_BLOCKED,
+    FAILURE_RUNTIME,
+    STAGE_FAILURE_CLASSES,
+    RequestedStageError,
+)
 from backend.ocr_variants import (
     normalize_paddleocr_variant as _normalize_paddleocr_variant,
     paddleocr_model_names as _paddleocr_model_names,
@@ -48,8 +57,57 @@ RAPIDOCR_VARIANT_CHOICES = ("v6", "v5")
 PADDLEOCR_VARIANT_CHOICES = ("mobile", "server")
 
 
-def normalize_ocr_engine(value: object) -> str:
-    """Return a supported detector selector, defaulting invalid values to auto."""
+def _classify_ocr_runtime(method):
+    """Convert any uncategorized public OCR failure into stage evidence."""
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except RequestedStageError:
+            raise
+        except Exception as exc:
+            requested = str(
+                getattr(self, "_requested_engine", "")
+                or getattr(self, "engine", "auto")
+            )
+            actual = str(
+                getattr(self, "_actual_implementation", "") or requested
+            )
+            provider = str(getattr(self, "_provider_name", "") or "")
+            step = {
+                "implementation": actual,
+                "outcome": "runtime_failed",
+                "provider": provider,
+                "failureClass": FAILURE_RUNTIME,
+                "reason": str(exc),
+            }
+            raise RequestedStageError(
+                stage="ocr",
+                requested_implementation=requested,
+                actual_implementation=actual,
+                provider=provider,
+                failure_class=FAILURE_RUNTIME,
+                detail=str(exc),
+                recovery_hint=self._recovery_hint_for(
+                    actual if requested == "auto" else requested
+                ),
+                fallback_chain=(
+                    list(getattr(self, "_fallback_chain", [])) + [step]
+                ),
+                selection_policy=("auto" if requested == "auto" else "explicit"),
+                cause=exc,
+            ) from exc
+
+    return wrapped
+
+
+def normalize_ocr_engine(value: object, *, strict: bool = False) -> str:
+    """Return a supported detector selector.
+
+    Compatibility callers may still request the historical Auto default. Runtime
+    configuration uses ``strict=True`` so a misspelled named engine cannot turn
+    into a different implementation without the user's knowledge.
+    """
     normalized = str(value or "auto").strip().lower()
     aliases = {
         "paddle": "paddleocr",
@@ -58,7 +116,14 @@ def normalize_ocr_engine(value: object) -> str:
         "fallback": "opencv",
     }
     normalized = aliases.get(normalized, normalized)
-    return normalized if normalized in OCR_ENGINE_CHOICES else "auto"
+    if normalized in OCR_ENGINE_CHOICES:
+        return normalized
+    if strict:
+        choices = ", ".join(OCR_ENGINE_CHOICES)
+        raise ValueError(
+            f"Unsupported OCR engine {value!r}. Choose one of: {choices}"
+        )
+    return "auto"
 
 
 def normalize_rapidocr_variant(value: object) -> str:
@@ -183,17 +248,31 @@ def _rapidocr_openvino_params(rapid_module, device: str) -> Optional[Dict[str, A
     openvino_type = getattr(engine_type, "OPENVINO", None) if engine_type else None
     if openvino_type is None:
         if forced:
-            logger.info(
-                "RapidOCR OpenVINO requested, but the installed RapidOCR "
-                "package does not expose EngineType.OPENVINO; using ONNX "
-                "Runtime instead."
+            raise RequestedStageError(
+                stage="ocr",
+                requested_implementation="rapidocr",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail=(
+                    "the installed RapidOCR package does not expose the "
+                    "requested OpenVINO engine"
+                ),
+                recovery_hint=(
+                    "Install a RapidOCR build with OpenVINO support or clear "
+                    "VSR_RAPIDOCR_ENGINE."
+                ),
             )
         return None
     if not _openvino_runtime_available():
         if forced:
-            logger.info(
-                "RapidOCR OpenVINO requested, but openvino is not installed; "
-                "using ONNX Runtime instead."
+            raise RequestedStageError(
+                stage="ocr",
+                requested_implementation="rapidocr",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail="the explicitly requested OpenVINO runtime is unavailable",
+                recovery_hint=(
+                    "Install the locked OpenVINO profile or clear "
+                    "VSR_RAPIDOCR_ENGINE."
+                ),
             )
         return None
     return {
@@ -214,9 +293,18 @@ def _rapidocr_variant_params(rapid_module, variant: str) -> Dict[str, Any]:
     member = getattr(enum_type, f"PPOCR{variant.upper()}", None)
     if member is None:
         if variant == "v5":
-            logger.warning(
-                "RapidOCR does not expose OCRVersion.PPOCRV5; "
-                "using the installed package default instead."
+            raise RequestedStageError(
+                stage="ocr",
+                requested_implementation="rapidocr-v5",
+                failure_class=FAILURE_POLICY_BLOCKED,
+                detail=(
+                    "the installed RapidOCR package does not expose "
+                    "OCRVersion.PPOCRV5"
+                ),
+                recovery_hint=(
+                    "Install the locked RapidOCR v5-capable profile or choose "
+                    "the v6 model family."
+                ),
             )
         return {}
     params = {
@@ -264,6 +352,19 @@ def _build_rapidocr(
                 params=_merge_rapidocr_params(variant_params, openvino_params)
             ), "OpenVINO"
         except Exception as exc:
+            if _rapidocr_engine_preference() in {"openvino", "ov"}:
+                raise RequestedStageError(
+                    stage="ocr",
+                    requested_implementation="rapidocr",
+                    actual_implementation="rapidocr",
+                    provider="OpenVINO",
+                    failure_class=FAILURE_INITIALIZATION,
+                    detail=str(exc),
+                    recovery_hint=(
+                        "Repair the OpenVINO provider or clear "
+                        "VSR_RAPIDOCR_ENGINE."
+                    ),
+                ) from exc
             logger.warning(
                 "RapidOCR OpenVINO engine init failed; retrying ONNX "
                 f"Runtime provider: {exc}"
@@ -285,16 +386,20 @@ def _build_rapidocr(
         return rapid_cls(), "CPU"
     except (KeyError, TypeError, ValueError) as exc:
         if variant_params:
-            logger.warning(
-                "RapidOCR %s variant is not supported by this package; "
-                "using its default model: %s",
-                normalize_rapidocr_variant(variant),
-                exc,
+            raise RequestedStageError(
+                stage="ocr",
+                requested_implementation=(
+                    f"rapidocr-{normalize_rapidocr_variant(variant)}"
+                ),
+                actual_implementation="rapidocr",
+                provider="CPUExecutionProvider",
+                failure_class=FAILURE_INITIALIZATION,
+                detail=str(exc),
+                recovery_hint=(
+                    "Install a RapidOCR package that supports the selected "
+                    "model generation or choose a supported variant."
+                ),
             )
-            try:
-                return rapid_cls(), "CPU"
-            except TypeError:
-                return rapid_cls(params={}), "CPU"
         return rapid_cls(params={}), "CPU"
 
 
@@ -332,7 +437,8 @@ class SubtitleDetector:
         self.device = device
         self.lang = lang
         self.vertical = bool(vertical)
-        self.engine = normalize_ocr_engine(engine)
+        self.engine = normalize_ocr_engine(engine, strict=True)
+        self._requested_engine = self.engine
         self.rapidocr_variant = normalize_rapidocr_variant(rapidocr_variant)
         self.paddleocr_variant = normalize_paddleocr_variant(
             paddleocr_variant)
@@ -348,11 +454,171 @@ class SubtitleDetector:
         self._provider_name = ""
         self._effective_device = ""
         self._provenance_reason = ""
+        self._actual_implementation = ""
+        self._fallback_chain: List[dict] = []
+        self._execution_counts: Dict[Tuple[str, str, str], int] = {}
         self._load_model()
         self._finalize_provenance()
 
     def _is_gpu_device(self) -> bool:
         return 'cuda' in self.device
+
+    @property
+    def _is_auto_request(self) -> bool:
+        return getattr(
+            self, "_requested_engine", getattr(self, "engine", "auto")
+        ) == "auto"
+
+    @staticmethod
+    def _recovery_hint_for(engine: str) -> str:
+        hints = {
+            "rapidocr": (
+                "Install the selected RapidOCR profile and its model files, "
+                "or select Auto."
+            ),
+            "opencv-dnn": (
+                "Use the PP-OCRv6 variant with OpenCV 5 and the reviewed "
+                "model files, or select Auto."
+            ),
+            "paddleocr": (
+                "Install the selected PaddleOCR profile and model family, "
+                "or select Auto."
+            ),
+            "easyocr": "Install EasyOCR and its language models, or select Auto.",
+            "surya": (
+                "Set VSR_ALLOW_GPL=1 after reviewing the license and install "
+                "Surya, or select Auto."
+            ),
+        }
+        if engine.startswith("vlm-"):
+            return (
+                "Configure the selected VLM model or local endpoint and verify "
+                "its dependencies, or select Auto."
+            )
+        return hints.get(
+            engine,
+            "Install and configure the requested OCR implementation, or select Auto.",
+        )
+
+    def _record_attempt(
+        self,
+        implementation: str,
+        outcome: str,
+        *,
+        provider: str = "",
+        failure_class: str = "",
+        reason: str = "",
+    ) -> None:
+        chain = getattr(self, "_fallback_chain", None)
+        if not isinstance(chain, list):
+            chain = []
+            self._fallback_chain = chain
+        chain.append({
+            "implementation": implementation,
+            "outcome": outcome,
+            "provider": provider,
+            "failureClass": failure_class,
+            "reason": reason,
+        })
+
+    def _select_implementation(self, implementation: str, provider: str) -> None:
+        self._actual_implementation = implementation
+        self._record_attempt(
+            implementation,
+            "selected",
+            provider=provider,
+        )
+
+    def _mark_execution(self) -> None:
+        """Record one successful inference against the selected provider."""
+        implementation = str(
+            getattr(self, "_actual_implementation", "")
+            or getattr(self, "_requested_engine", "")
+        )
+        provider = str(getattr(self, "_provider_name", "") or "")
+        effective = str(
+            getattr(self, "_effective_device", "")
+            or getattr(self, "device", "unknown")
+        )
+        key = (implementation, provider, effective)
+        counts = getattr(self, "_execution_counts", None)
+        if not isinstance(counts, dict):
+            counts = {}
+            self._execution_counts = counts
+        counts[key] = counts.get(key, 0) + 1
+
+    def _completed_execution(self, result):
+        self._mark_execution()
+        return result
+
+    def _fail_requested(
+        self,
+        implementation: str,
+        failure_class: str,
+        detail: object,
+        *,
+        provider: str = "",
+    ) -> None:
+        reason = str(detail or "requested implementation is unavailable")
+        step = {
+            "implementation": implementation,
+            "outcome": (
+                "runtime_failed"
+                if failure_class == FAILURE_RUNTIME else "load_failed"
+            ),
+            "provider": provider,
+            "failureClass": failure_class,
+            "reason": reason,
+        }
+        if self._is_auto_request:
+            self._record_attempt(
+                implementation,
+                step["outcome"],
+                provider=provider,
+                failure_class=failure_class,
+                reason=reason,
+            )
+            return
+        raise RequestedStageError(
+            stage="ocr",
+            requested_implementation=getattr(
+                self, "_requested_engine", implementation),
+            actual_implementation=(
+                implementation if failure_class == FAILURE_RUNTIME else ""
+            ),
+            provider=provider,
+            failure_class=failure_class,
+            detail=reason,
+            recovery_hint=self._recovery_hint_for(
+                getattr(self, "_requested_engine", implementation)),
+            fallback_chain=list(self._fallback_chain) + [step],
+        )
+
+    def _switch_auto_to_opencv(self, failed: str, exc: BaseException) -> None:
+        """Reserve cross-engine runtime recovery for the Auto selector."""
+        failure_class = str(
+            getattr(exc, "failure_class", FAILURE_RUNTIME)
+        )
+        if failure_class not in STAGE_FAILURE_CLASSES:
+            failure_class = FAILURE_RUNTIME
+        self._fail_requested(
+            failed,
+            failure_class,
+            exc,
+            provider=self._provider_name,
+        )
+        self._vlm_detector = None
+        self._rapid_model = None
+        self._paddle_model = None
+        self._surya_det = None
+        self._easyocr_reader = None
+        self._engine_name = "OpenCV fallback"
+        self._provider_name = "cv2"
+        self._effective_device = "cpu"
+        self._provenance_reason = (
+            f"Auto changed from {failed} to OpenCV after a runtime failure"
+        )
+        self._select_implementation("opencv", "cv2")
 
     def _finalize_provenance(self) -> None:
         """Resolve the effective compute class from the loaded engine."""
@@ -385,23 +651,49 @@ class SubtitleDetector:
         """Return the OCR stage's requested/effective execution record."""
         from backend.execution_provenance import StageProvenance
 
-        engine = self._engine_name
+        engine = getattr(self, "_engine_name", "")
         if engine == "PaddleOCR" and getattr(self, "_paddle_model_variant", ""):
             engine = f"{engine} ({self._paddle_model_variant})"
         return StageProvenance(
             stage="ocr",
-            requested_device=self.device,
-            effective_device=self._effective_device or "cpu",
+            requested_device=getattr(self, "device", "cpu"),
+            effective_device=getattr(self, "_effective_device", "") or "cpu",
             engine=engine,
-            backend=self._engine_name,
-            provider=self._provider_name,
-            fallback_reason=self._provenance_reason,
+            backend=getattr(self, "_engine_name", ""),
+            provider=getattr(self, "_provider_name", ""),
+            fallback_reason=getattr(self, "_provenance_reason", ""),
+            requested_implementation=getattr(
+                self, "_requested_engine", getattr(self, "engine", "auto")),
+            actual_implementation=(
+                getattr(self, "_actual_implementation", "")
+                or normalize_ocr_engine(getattr(self, "engine", "auto"))
+            ),
+            fallback_chain=list(getattr(self, "_fallback_chain", [])),
+            actual_executions=[
+                {
+                    "implementation": implementation,
+                    "provider": provider,
+                    "effectiveDevice": effective,
+                    "executionCount": count,
+                }
+                for (implementation, provider, effective), count
+                in sorted(getattr(self, "_execution_counts", {}).items())
+            ],
+            selection_policy=(
+                "auto" if self._is_auto_request else "explicit"
+            ),
+            outcome=(
+                "executed"
+                if getattr(self, "_execution_counts", {}) else "initialized"
+            ),
         )
 
     def _load_model(self):
         """Load detection model: VLM (opt-in) > RapidOCR > PaddleOCR > Surya >
         EasyOCR (frozen; last release 2024-09-24) > OpenCV fallback."""
-        self.engine = normalize_ocr_engine(getattr(self, "engine", "auto"))
+        self.engine = normalize_ocr_engine(
+            getattr(self, "engine", "auto"), strict=True
+        )
         self.rapidocr_variant = normalize_rapidocr_variant(
             getattr(self, "rapidocr_variant", "v6")
         )
@@ -409,12 +701,10 @@ class SubtitleDetector:
             getattr(self, "paddleocr_variant", "mobile")
         )
         if self.engine.startswith("vlm-"):
-            # An explicitly picked VLM engine, no env var involved. A pick
-            # whose model cannot load falls back to the automatic cascade,
-            # mirroring the warm-load rule below: a detector that silently
-            # returns [] forever would report success with every subtitle
-            # still burned in.
+            # A named VLM is an explicit semantic choice. It must not become
+            # the automatic cascade when its model cannot load.
             requested = self.engine[len("vlm-"):]
+            failure = "the selected VLM did not return a usable detector"
             try:
                 from backend.ocr_vlm import build_named_vlm_detector
                 vlm = build_named_vlm_detector(requested, self.device)
@@ -425,19 +715,25 @@ class SubtitleDetector:
                     self._engine_name = f"VLM ({vlm.name})"
                     self._provider_name = (
                         getattr(vlm, "provider", "") or self.device)
+                    self._select_implementation(
+                        self.engine, self._provider_name)
                     logger.info(f"VLM OCR detector active: {vlm.name}")
                     return
+            except RequestedStageError:
+                raise
             except Exception as exc:
-                logger.warning(f"VLM engine {requested} failed to load: {exc}")
-            logger.warning(
-                "Selected VLM engine %s is unavailable; using the automatic "
-                "cascade instead", requested)
-            self.engine = "auto"
+                failure = str(exc)
+            self._fail_requested(
+                self.engine,
+                FAILURE_INITIALIZATION,
+                failure,
+            )
         if self.engine == "surya" and not _surya_allowed():
-            logger.warning(
-                "Surya is GPL-licensed and needs the VSR_ALLOW_GPL=1 opt-in; "
-                "using the automatic cascade instead")
-            self.engine = "auto"
+            self._fail_requested(
+                "surya",
+                FAILURE_POLICY_BLOCKED,
+                "VSR_ALLOW_GPL=1 was not set",
+            )
 
         if self.engine == "auto":
             try:
@@ -455,29 +751,41 @@ class SubtitleDetector:
                         "back to the standard OCR cascade",
                         getattr(vlm, "name", "unknown"),
                     )
+                    self._fail_requested(
+                        f"vlm-{getattr(vlm, 'name', 'auto')}",
+                        FAILURE_INITIALIZATION,
+                        "the configured VLM model could not be loaded",
+                    )
                     vlm = None
                 if vlm is not None:
                     self._vlm_detector = vlm
                     self._engine_name = f"VLM ({vlm.name})"
                     self._provider_name = getattr(vlm, "provider", "") or self.device
+                    self._select_implementation(
+                        f"vlm-{vlm.name}", self._provider_name)
                     logger.info(f"VLM OCR detector active: {vlm.name}")
                     return
+            except RequestedStageError:
+                raise
             except Exception as exc:
                 logger.debug(f"VLM detector probe failed: {exc}")
+                self._fail_requested(
+                    "vlm-auto", FAILURE_INITIALIZATION, exc)
         self._vlm_detector = None
 
         if self.engine == "opencv":
             self._engine_name = "OpenCV fallback"
             self._provider_name = "cv2"
+            self._select_implementation("opencv", "cv2")
             logger.info("OpenCV fallback detection selected")
             return
 
         if self.engine == "opencv-dnn" and self.rapidocr_variant != "v6":
-            logger.info(
-                "RapidOCR PP-OCRv5 selected; bypassing the OpenCV DNN adapter "
-                "which is pinned to PP-OCRv6."
+            self._fail_requested(
+                "opencv-dnn",
+                FAILURE_POLICY_BLOCKED,
+                "the OpenCV DNN adapter supports only PP-OCRv6",
             )
-            self.engine = "rapidocr"
 
         if self.engine == "opencv-dnn" or (
             self.engine in {"auto", "rapidocr"}
@@ -489,19 +797,36 @@ class SubtitleDetector:
                 self._rapid_model = build_opencv_dnn_rapidocr()
                 self._engine_name = "RapidOCR (OpenCV 5 DNN)"
                 self._provider_name = "cv2-dnn"
+                self._select_implementation(
+                    (
+                        "opencv-dnn"
+                        if self._requested_engine == "opencv-dnn"
+                        else "rapidocr"
+                    ),
+                    "cv2-dnn",
+                )
                 logger.info(
                     "RapidOCR loaded via OpenCV 5 DNN PP-OCRv6 "
                     f"(lang={self.lang})"
                 )
                 return
+            except RequestedStageError:
+                raise
             except Exception as exc:
                 logger.warning(
                     "OpenCV 5 DNN OCR init failed; retrying RapidOCR "
                     f"provider: {exc}"
                 )
+                if self.engine == "opencv-dnn":
+                    self._fail_requested(
+                        "opencv-dnn", FAILURE_INITIALIZATION, exc)
+                elif self.engine == "auto":
+                    self._fail_requested(
+                        "rapidocr-opencv-dnn", FAILURE_INITIALIZATION, exc)
 
         # RapidOCR (ONNX/OpenVINO provider fallback)
         if self.engine in {"auto", "rapidocr"}:
+            rapid_failure: object = "RapidOCR returned no implementation"
             try:
                 rapid_obj = None
                 if _module_can_import("rapidocr"):
@@ -532,6 +857,8 @@ class SubtitleDetector:
                         "DirectML": "DmlExecutionProvider",
                         "OpenVINO": "OpenVINO",
                     }.get(rapid_provider, "CPUExecutionProvider")
+                    self._select_implementation(
+                        "rapidocr", self._provider_name)
                     if rapid_provider == "OpenVINO":
                         logger.info(
                             f"RapidOCR loaded via OpenVINO engine (lang={self.lang})"
@@ -542,14 +869,27 @@ class SubtitleDetector:
                             f"provider (lang={self.lang})"
                         )
                     return
-            except ImportError:
-                pass
+            except ImportError as exc:
+                rapid_failure = exc
+            except RequestedStageError:
+                raise
             except Exception as e:
+                rapid_failure = e
                 logger.warning(f"RapidOCR init failed: {e}")
+            self._fail_requested(
+                "rapidocr",
+                (
+                    FAILURE_DEPENDENCY_MISSING
+                    if isinstance(rapid_failure, ImportError)
+                    else FAILURE_INITIALIZATION
+                ),
+                rapid_failure,
+            )
 
         # PaddleOCR with an explicit model family: a PP-OCRv5 mobile/server
         # build or a PP-OCRv6 tiny/small/medium tier.
         if self.engine in {"auto", "paddleocr"}:
+            paddle_failure: object = "PaddleOCR returned no implementation"
             try:
                 from backend.paddle_compat import build_paddleocr
                 self._paddle_model = build_paddleocr(
@@ -560,30 +900,58 @@ class SubtitleDetector:
                 self._engine_name = "PaddleOCR"
                 self._provider_name = (
                     "cuda" if self._is_gpu_device() else "cpu")
+                self._select_implementation(
+                    "paddleocr", self._provider_name)
                 logger.info(
                     f"PaddleOCR loaded (lang={self.lang}, "
                     f"model={self._paddle_model_variant})")
                 return
-            except ImportError:
-                pass
+            except ImportError as exc:
+                paddle_failure = exc
+            except RequestedStageError:
+                raise
             except Exception as e:
+                paddle_failure = e
                 logger.warning(f"PaddleOCR init failed: {e}")
+            self._fail_requested(
+                "paddleocr",
+                (
+                    FAILURE_DEPENDENCY_MISSING
+                    if isinstance(paddle_failure, ImportError)
+                    else FAILURE_INITIALIZATION
+                ),
+                paddle_failure,
+            )
 
         # Surya (GPL, opt-in via VSR_ALLOW_GPL) remains auto-only because it
         # cannot be offered as a bundled MIT-clean selector.
         if self.engine in {"auto", "surya"} and _surya_allowed():
+            surya_failure: object = "Surya returned no implementation"
             try:
                 from surya.detection import DetectionPredictor
                 self._surya_det = DetectionPredictor()
                 self._engine_name = "Surya"
                 self._provider_name = (
                     "cuda" if self._is_gpu_device() else "cpu")
+                self._select_implementation("surya", self._provider_name)
                 logger.info("Surya text detection loaded (GPL opt-in via VSR_ALLOW_GPL)")
                 return
-            except ImportError:
-                pass
+            except ImportError as exc:
+                surya_failure = exc
+            except RequestedStageError:
+                raise
             except Exception as e:
+                surya_failure = e
                 logger.warning(f"Surya init failed: {e}")
+            self._fail_requested(
+                "surya",
+                (
+                    FAILURE_DEPENDENCY_MISSING
+                    if isinstance(surya_failure, ImportError)
+                    else FAILURE_INITIALIZATION
+                ),
+                surya_failure,
+            )
         elif self.engine == "auto":
             try:
                 import surya.detection  # noqa: F401
@@ -598,21 +966,25 @@ class SubtitleDetector:
 
         # EasyOCR
         if self.engine not in {"auto", "easyocr"}:
-            self._engine_name = "OpenCV fallback"
-            self._provider_name = "cv2"
-            logger.warning(
-                "%s was selected but is unavailable; using OpenCV fallback",
+            self._fail_requested(
                 self.engine,
+                FAILURE_INITIALIZATION,
+                "the requested engine reached no usable implementation",
             )
-            return
         if not _module_can_import("easyocr"):
+            self._fail_requested(
+                "easyocr",
+                FAILURE_DEPENDENCY_MISSING,
+                "EasyOCR is unavailable or failed its import probe",
+            )
             self._engine_name = "OpenCV fallback"
             self._provider_name = "cv2"
-            logger.warning(
-                "EasyOCR is unavailable or failed its import probe; "
-                "using OpenCV fallback detection"
+            self._provenance_reason = (
+                "Auto exhausted configured OCR implementations and selected OpenCV"
             )
+            self._select_implementation("opencv", "cv2")
             return
+        easy_failure: object = "EasyOCR returned no implementation"
         try:
             import easyocr
             gpu = self._is_gpu_device()
@@ -640,17 +1012,36 @@ class SubtitleDetector:
             self._easyocr_reader = easyocr.Reader(lang_list, gpu=gpu, verbose=False)
             self._engine_name = "EasyOCR"
             self._provider_name = "cuda" if gpu else "cpu"
+            self._select_implementation("easyocr", self._provider_name)
             logger.info(f"EasyOCR loaded (lang={lang_list})")
             return
-        except ImportError:
-            pass
+        except ImportError as exc:
+            easy_failure = exc
+        except RequestedStageError:
+            raise
         except Exception as e:
+            easy_failure = e
             logger.warning(f"EasyOCR init failed: {e}")
+
+        self._fail_requested(
+            "easyocr",
+            (
+                FAILURE_DEPENDENCY_MISSING
+                if isinstance(easy_failure, ImportError)
+                else FAILURE_INITIALIZATION
+            ),
+            easy_failure,
+        )
 
         self._engine_name = "OpenCV fallback"
         self._provider_name = "cv2"
-        logger.warning("No OCR engine available, using OpenCV fallback detection")
+        self._provenance_reason = (
+            "Auto exhausted configured OCR implementations and selected OpenCV"
+        )
+        self._select_implementation("opencv", "cv2")
+        logger.warning("No OCR engine available; Auto selected OpenCV detection")
 
+    @_classify_ocr_runtime
     def detect(self, frame: np.ndarray, threshold: float = 0.5) -> List[Tuple[int, int, int, int]]:
         """Detect text regions in a frame. Returns axis-aligned boxes.
         When self.vertical is set, rotates the frame 90 CCW before
@@ -668,9 +1059,12 @@ class SubtitleDetector:
                 oy2 = min(h, rx2)
                 if ox2 > ox1 and oy2 > oy1:
                     out.append((ox1, oy1, ox2, oy2))
-            return out
-        return self._detect_axis_aligned(frame, threshold)
+            return self._completed_execution(out)
+        return self._completed_execution(
+            self._detect_axis_aligned(frame, threshold)
+        )
 
+    @_classify_ocr_runtime
     def detect_with_geometry(
         self, frame: np.ndarray, threshold: float = 0.5
     ) -> List[DetectionGeometry]:
@@ -706,9 +1100,9 @@ class SubtitleDetector:
                     )
                 if transformed is not None:
                     output.append(transformed)
-            return output
-        return self._clip_geometry_to_frame(
-            self._detect_geometry(frame, threshold), frame.shape)
+            return self._completed_execution(output)
+        return self._completed_execution(self._clip_geometry_to_frame(
+            self._detect_geometry(frame, threshold), frame.shape))
 
     @staticmethod
     def _clip_geometry_to_frame(
@@ -734,6 +1128,7 @@ class SubtitleDetector:
                 output.append(clipped)
         return output
 
+    @_classify_ocr_runtime
     def detect_with_confidence(
         self, frame: np.ndarray, threshold: float = 0.5
     ) -> List[Tuple[int, int, int, int, float]]:
@@ -750,9 +1145,12 @@ class SubtitleDetector:
                 oy2 = min(h, rx2)
                 if ox2 > ox1 and oy2 > oy1:
                     out.append((ox1, oy1, ox2, oy2, conf))
-            return out
-        return self._detect_axis_aligned_conf(frame, threshold)
+            return self._completed_execution(out)
+        return self._completed_execution(
+            self._detect_axis_aligned_conf(frame, threshold)
+        )
 
+    @_classify_ocr_runtime
     def detect_with_text(
         self, frame: np.ndarray, threshold: float = 0.5
     ) -> List[Tuple[int, int, int, int, float, str]]:
@@ -773,9 +1171,12 @@ class SubtitleDetector:
                 oy2 = min(h, rx2)
                 if ox2 > ox1 and oy2 > oy1:
                     output.append((ox1, oy1, ox2, oy2, conf, text))
-            return output
-        return self._detect_axis_aligned_text(frame, threshold)
+            return self._completed_execution(output)
+        return self._completed_execution(
+            self._detect_axis_aligned_text(frame, threshold)
+        )
 
+    @_classify_ocr_runtime
     def benchmark_detect(
         self,
         frame: np.ndarray,
@@ -796,13 +1197,19 @@ class SubtitleDetector:
                 "text",
             )
             if texts is None:
-                return boxes, []
+                return self._completed_execution((boxes, []))
             if isinstance(texts, str):
-                return boxes, [texts]
-            return boxes, [str(text) for text in texts if str(text).strip()]
+                return self._completed_execution((boxes, [texts]))
+            return self._completed_execution((
+                boxes,
+                [str(text) for text in texts if str(text).strip()],
+            ))
         except Exception as exc:
             logger.error(f"RapidOCR benchmark error: {exc}")
-            return self._fallback_detection(frame), []
+            self._switch_auto_to_opencv("rapidocr", exc)
+            return self._completed_execution(
+                (self._fallback_detection(frame), [])
+            )
 
     def _detect_axis_aligned_conf(
         self, frame: np.ndarray, threshold: float
@@ -816,6 +1223,7 @@ class SubtitleDetector:
                     self._paddle_model, frame, threshold)]
             except Exception as exc:
                 logger.error(f"PaddleOCR confidence detection error: {exc}")
+                self._switch_auto_to_opencv("paddleocr", exc)
                 return [(*box, 1.0) for box in self._fallback_detection(frame)]
         if self._surya_det is not None:
             try:
@@ -831,6 +1239,7 @@ class SubtitleDetector:
                 return output
             except Exception as exc:
                 logger.error(f"Surya confidence detection error: {exc}")
+                self._switch_auto_to_opencv("surya", exc)
                 return [(*box, 1.0) for box in self._fallback_detection(frame)]
         if self._easyocr_reader is not None:
             try:
@@ -848,6 +1257,7 @@ class SubtitleDetector:
                 return output
             except Exception as exc:
                 logger.error(f"EasyOCR confidence detection error: {exc}")
+                self._switch_auto_to_opencv("easyocr", exc)
                 return [(*box, 1.0) for box in self._fallback_detection(frame)]
         boxes = self._detect_axis_aligned(frame, threshold)
         return [(x1, y1, x2, y2, 1.0) for (x1, y1, x2, y2) in boxes]
@@ -855,12 +1265,17 @@ class SubtitleDetector:
     def _detect_axis_aligned_text(
         self, frame: np.ndarray, threshold: float
     ) -> List[Tuple[int, int, int, int, float, str]]:
+        if self._vlm_detector is not None:
+            self._detect_geometry(frame, threshold)
+            return []
         if self._rapid_model is not None:
             try:
                 return self._rapid_output_to_text_boxes(
                     self._rapid_model(frame), threshold)
             except Exception as exc:
                 logger.error(f"RapidOCR text detection error: {exc}")
+                self._switch_auto_to_opencv("rapidocr", exc)
+                self._fallback_detection(frame)
                 return []
         if self._paddle_model is not None:
             try:
@@ -869,6 +1284,8 @@ class SubtitleDetector:
                     self._paddle_model, frame, threshold)
             except Exception as exc:
                 logger.error(f"PaddleOCR text detection error: {exc}")
+                self._switch_auto_to_opencv("paddleocr", exc)
+                self._fallback_detection(frame)
                 return []
         if self._easyocr_reader is not None:
             try:
@@ -885,6 +1302,13 @@ class SubtitleDetector:
                 return output
             except Exception as exc:
                 logger.error(f"EasyOCR text detection error: {exc}")
+                self._switch_auto_to_opencv("easyocr", exc)
+                self._fallback_detection(frame)
+                return []
+        elif self._surya_det is not None:
+            self._detect_surya(frame, threshold)
+        else:
+            self._fallback_detection(frame)
         return []
 
     @classmethod
@@ -954,6 +1378,7 @@ class SubtitleDetector:
             return self._rapid_output_to_boxes_conf(output, threshold)
         except Exception as e:
             logger.error(f"RapidOCR detection error: {e}")
+            self._switch_auto_to_opencv("rapidocr", e)
             return [(x1, y1, x2, y2, 1.0)
                     for (x1, y1, x2, y2) in self._fallback_detection(frame)]
 
@@ -1006,7 +1431,10 @@ class SubtitleDetector:
             try:
                 return vlm.detect(frame, threshold)
             except Exception as exc:
-                logger.warning(f"VLM detector errored, falling back: {exc}")
+                logger.warning(f"VLM detector errored: {exc}")
+                self._switch_auto_to_opencv(
+                    getattr(self, "_actual_implementation", "vlm"), exc)
+                return self._fallback_detection(frame)
         if self._rapid_model is not None:
             return self._detect_rapid(frame, threshold)
         elif self._paddle_model is not None:
@@ -1035,7 +1463,17 @@ class SubtitleDetector:
                 ]
             except Exception as exc:
                 logger.warning(
-                    f"VLM geometry detector errored, falling back: {exc}")
+                    f"VLM geometry detector errored: {exc}")
+                self._switch_auto_to_opencv(
+                    getattr(self, "_actual_implementation", "vlm"), exc)
+                return [
+                    detection
+                    for box in self._fallback_detection(frame)
+                    for detection in [
+                        DetectionGeometry.from_box(box, frame.shape)
+                    ]
+                    if detection is not None
+                ]
         if self._rapid_model is not None:
             return self._detect_rapid_geometry(frame, threshold)
         if self._paddle_model is not None:
@@ -1057,6 +1495,7 @@ class SubtitleDetector:
             return self._rapid_output_to_boxes(output, threshold)
         except Exception as e:
             logger.error(f"RapidOCR detection error: {e}")
+            self._switch_auto_to_opencv("rapidocr", e)
             return self._fallback_detection(frame)
 
     def _detect_rapid_geometry(
@@ -1067,6 +1506,7 @@ class SubtitleDetector:
                 self._rapid_model(frame), threshold, frame.shape)
         except Exception as exc:
             logger.error(f"RapidOCR geometry detection error: {exc}")
+            self._switch_auto_to_opencv("rapidocr", exc)
             return [
                 detection
                 for box in self._fallback_detection(frame)
@@ -1304,6 +1744,7 @@ class SubtitleDetector:
             return extract_paddle_boxes(self._paddle_model, frame, threshold)
         except Exception as e:
             logger.error(f"PaddleOCR detection error: {e}")
+            self._switch_auto_to_opencv("paddleocr", e)
             return self._fallback_detection(frame)
 
     def _detect_paddle_geometry(
@@ -1315,6 +1756,7 @@ class SubtitleDetector:
                 self._paddle_model, frame, threshold)
         except Exception as exc:
             logger.error(f"PaddleOCR geometry detection error: {exc}")
+            self._switch_auto_to_opencv("paddleocr", exc)
             return [
                 detection
                 for box in self._fallback_detection(frame)
@@ -1337,6 +1779,7 @@ class SubtitleDetector:
             return boxes
         except Exception as e:
             logger.error(f"Surya detection error: {e}")
+            self._switch_auto_to_opencv("surya", e)
             return self._fallback_detection(frame)
 
     def _detect_surya_geometry(
@@ -1373,6 +1816,7 @@ class SubtitleDetector:
             return output
         except Exception as exc:
             logger.error(f"Surya geometry detection error: {exc}")
+            self._switch_auto_to_opencv("surya", exc)
             return [
                 detection
                 for box in self._fallback_detection(frame)
@@ -1394,6 +1838,7 @@ class SubtitleDetector:
             return boxes
         except Exception as e:
             logger.error(f"EasyOCR detection error: {e}")
+            self._switch_auto_to_opencv("easyocr", e)
             return self._fallback_detection(frame)
 
     def _detect_easyocr_geometry(
@@ -1418,6 +1863,7 @@ class SubtitleDetector:
             return output
         except Exception as exc:
             logger.error(f"EasyOCR geometry detection error: {exc}")
+            self._switch_auto_to_opencv("easyocr", exc)
             return [
                 detection
                 for box in self._fallback_detection(frame)

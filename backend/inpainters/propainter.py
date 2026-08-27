@@ -87,6 +87,8 @@ class ProPainterInpainter(BaseInpainter):
             if self._lama is not None:
                 from PIL import Image
                 refined = []
+                refinement_successes = 0
+                refinement_failures = 0
                 for frame, inpainted, mask in zip(frames, results, masks):
                     if mask.max() == 0:
                         refined.append(inpainted)
@@ -110,12 +112,20 @@ class ProPainterInpainter(BaseInpainter):
                                 [frame], [blend], [mask], self.config,
                             )[0]
                         )
+                        refinement_successes += 1
                     except Exception:
+                        refinement_failures += 1
                         logger.warning(
                             "ProPainter LaMa residual refinement failed",
                             exc_info=True,
                         )
                         refined.append(inpainted)
+                if refinement_failures:
+                    self._last_backend_name = (
+                        "TBE + partial LaMa refinement"
+                        if refinement_successes
+                        else "TBE (LaMa refinement failed)"
+                    )
                 return refined
             return results
         filled = [_cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)

@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import types
@@ -91,6 +92,65 @@ class AutoInpainterUnloadTests(unittest.TestCase):
         self.assertEqual(sttn_calls, [2])
         self.assertEqual(propainter_calls, [2])
 
+    def test_auto_route_failure_names_the_route_and_full_trace(self):
+        from backend.execution_provenance import RequestedStageError
+
+        auto = self._auto_inpainter()
+        auto._sttn.inpaint = unittest.mock.Mock(
+            side_effect=RuntimeError("synthetic STTN failure")
+        )
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        first = np.zeros((8, 8), dtype=np.uint8)
+        second = np.zeros((8, 8), dtype=np.uint8)
+        first[1, 1] = 255
+        second[6, 6] = 255
+
+        with self.assertRaises(RequestedStageError) as raised:
+            auto.inpaint([frame, frame], [first, second])
+
+        error = raised.exception
+        self.assertEqual(error.requested_implementation, "auto")
+        self.assertEqual(error.actual_implementation, "sttn")
+        self.assertEqual(error.selection_policy, "auto")
+        self.assertEqual(error.fallback_chain[-1]["implementation"], "sttn")
+        self.assertEqual(error.fallback_chain[-1]["outcome"], "runtime_failed")
+
+    def test_auto_lazy_propainter_initialization_failure_names_route(self):
+        from backend.execution_provenance import (
+            FAILURE_INITIALIZATION,
+            RequestedStageError,
+        )
+
+        auto = self._auto_inpainter()
+        auto._ensure_propainter = unittest.mock.Mock(
+            side_effect=RequestedStageError(
+                stage="inpaint",
+                requested_implementation="propainter",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="synthetic constructor failure",
+                recovery_hint="repair ProPainter",
+                fallback_chain=[{
+                    "implementation": "propainter",
+                    "outcome": "load_failed",
+                    "failureClass": FAILURE_INITIALIZATION,
+                    "reason": "synthetic constructor failure",
+                }],
+            )
+        )
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        mask = np.full((8, 8), 255, dtype=np.uint8)
+
+        with self.assertRaises(RequestedStageError) as raised:
+            auto.inpaint([frame], [mask])
+
+        error = raised.exception
+        self.assertEqual(error.requested_implementation, "auto")
+        self.assertEqual(error.actual_implementation, "propainter")
+        self.assertEqual(error.failure_class, FAILURE_INITIALIZATION)
+        self.assertEqual(error.fallback_chain[-1]["implementation"], "propainter")
+        self.assertEqual(error.fallback_chain[-1]["outcome"], "load_failed")
+        self.assertEqual(error.recovery_hint, "repair ProPainter")
+
 
 class TensorrtCompileTests(unittest.TestCase):
     """RM-70: cache helper must produce a deterministic path and
@@ -119,22 +179,24 @@ class TensorrtCompileTests(unittest.TestCase):
 
 
 class SeedVr2AdapterTests(unittest.TestCase):
-    """RM-77: SeedVR2 wrapper must return None when neither the pip
-    package nor VSR_SEEDVR2_CMD is set."""
+    """RM-77: an explicit SeedVR2 request must fail when unavailable."""
 
-    def test_returns_none_without_deps(self):
+    def test_fails_without_deps(self):
         os.environ.pop("VSR_SEEDVR2_CMD", None)
+        from backend.execution_provenance import RequestedStageError
         from backend.post_restore import seedvr2_restore
         with tempfile.TemporaryDirectory() as tmpdir:
             src = Path(tmpdir) / "in.mp4"
             src.write_bytes(b"\x00" * 16)
             dst = Path(tmpdir) / "out.mp4"
-            self.assertIsNone(seedvr2_restore(str(src), str(dst)))
+            with self.assertRaises(RequestedStageError) as raised:
+                seedvr2_restore(str(src), str(dst))
+        self.assertEqual(raised.exception.stage, "restoration")
+        self.assertTrue(raised.exception.recovery_hint)
 
 
 class SegmentationAdapterTests(unittest.TestCase):
-    """RM-66/67/68/69: every adapter must return the input unchanged
-    (or None) when its optional dep is absent."""
+    """RM-66/67/68/69: explicit refiners fail instead of claiming a no-op."""
 
     def setUp(self):
         self._saved = {k: os.environ.pop(k, None) for k in (
@@ -151,21 +213,38 @@ class SegmentationAdapterTests(unittest.TestCase):
             if v is not None:
                 os.environ[k] = v
 
-    def test_sam2_refine_returns_base_mask(self):
+    def test_sam2_refine_fails_when_unavailable(self):
         import numpy as _np
+        from backend.execution_provenance import RequestedStageError
         from backend.segmentation import refine_mask_with_sam2
         frame = _np.zeros((32, 32, 3), dtype=_np.uint8)
         mask = _np.zeros((32, 32), dtype=_np.uint8)
         mask[10:20, 10:20] = 255
-        out = refine_mask_with_sam2(frame, [(10, 10, 20, 20)], mask)
-        _np.testing.assert_array_equal(out, mask)
+        with self.assertRaises(RequestedStageError) as raised:
+            refine_mask_with_sam2(frame, [(10, 10, 20, 20)], mask)
+        self.assertEqual(raised.exception.requested_implementation, "sam2")
 
-    def test_sam3_returns_none_without_dep(self):
+    def test_sam3_missing_dependency_fails_closed(self):
         import numpy as _np
-        from backend.segmentation import segment_text_with_sam3
-        self.assertIsNone(segment_text_with_sam3(_np.zeros((32, 32, 3), dtype=_np.uint8)))
+        from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
 
-    def test_matte_returns_none_without_dep(self):
+        saved = dict(_seg._SAM3_STATE)
+        try:
+            _seg._SAM3_STATE.update({
+                "probed": False, "predictor": None, "load_error": None,
+            })
+            with self.assertRaises(RequestedStageError) as raised:
+                _seg.segment_text_with_sam3(
+                    _np.zeros((32, 32, 3), dtype=_np.uint8)
+                )
+            self.assertEqual(raised.exception.failure_class, "dependency_missing")
+            self.assertTrue(raised.exception.recovery_hint)
+        finally:
+            _seg._SAM3_STATE.clear()
+            _seg._SAM3_STATE.update(saved)
+
+    def test_empty_matte_hint_is_not_applicable(self):
         import numpy as _np
         from backend.segmentation import matte_frame
         self.assertIsNone(matte_frame(
@@ -173,36 +252,101 @@ class SegmentationAdapterTests(unittest.TestCase):
             _np.zeros((32, 32), dtype=_np.uint8),
         ))
 
-    def test_cotracker_returns_none_without_dep(self):
+    def test_cotracker_missing_dependency_fails_closed(self):
         import numpy as _np
-        from backend.segmentation import track_points
+        from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
+
         frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
-        self.assertIsNone(track_points(frames, [(4, 4)]))
+        saved = dict(_seg._COTRACKER_STATE)
+        try:
+            _seg._COTRACKER_STATE.update({
+                "probed": False, "model": None, "load_error": None,
+            })
+            with self.assertRaises(RequestedStageError) as raised:
+                _seg.track_points(frames, [(4, 4)])
+            self.assertEqual(raised.exception.failure_class, "dependency_missing")
+            self.assertTrue(raised.exception.recovery_hint)
+        finally:
+            _seg._COTRACKER_STATE.clear()
+            _seg._COTRACKER_STATE.update(saved)
 
     def test_cotracker_refuses_torch_hub_without_pinned_source(self):
         import numpy as _np
         from unittest import mock
         from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
 
         fake_torch = types.ModuleType("torch")
         fake_torch.hub = SimpleNamespace(load=mock.Mock())
         saved = dict(_seg._COTRACKER_STATE)
         try:
-            _seg._COTRACKER_STATE.update({"probed": False, "model": None})
+            _seg._COTRACKER_STATE.update({
+                "probed": False, "model": None, "load_error": None,
+            })
             os.environ["VSR_COTRACKER"] = "1"
             os.environ.pop("VSR_COTRACKER_REPO", None)
             os.environ.pop("VSR_COTRACKER_REF", None)
             frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
             with mock.patch.dict(sys.modules, {"torch": fake_torch}):
-                self.assertIsNone(_seg.track_points(frames, [(4, 4)]))
+                with self.assertRaises(RequestedStageError) as raised:
+                    _seg.track_points(frames, [(4, 4)])
+            self.assertEqual(raised.exception.failure_class, "policy_blocked")
+            self.assertTrue(raised.exception.recovery_hint)
             fake_torch.hub.load.assert_not_called()
         finally:
             _seg._COTRACKER_STATE.clear()
             _seg._COTRACKER_STATE.update(saved)
 
-    def test_sam2_inference_error_returns_base_mask(self):
+    def test_cotracker_repeats_cached_invalid_mode_classification(self):
+        import numpy as _np
+        from unittest import mock
+        from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
+
+        fake_torch = types.ModuleType("torch")
+        fake_torch.hub = SimpleNamespace(load=mock.Mock())
+        approved_source = SimpleNamespace(
+            allowed=True,
+            source_type="local",
+            source="C:/approved/cotracker",
+        )
+        frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
+        saved = dict(_seg._COTRACKER_STATE)
+        try:
+            _seg._COTRACKER_STATE.update({
+                "probed": False, "model": None, "load_error": None,
+            })
+            os.environ["VSR_COTRACKER"] = "1"
+            os.environ["VSR_COTRACKER_MODE"] = "unsupported"
+            with (
+                mock.patch.object(
+                    _seg,
+                    "resolve_remote_model_source",
+                    return_value=approved_source,
+                ),
+                mock.patch.dict(sys.modules, {"torch": fake_torch}),
+            ):
+                errors = []
+                for _ in range(2):
+                    with self.assertRaises(RequestedStageError) as raised:
+                        _seg.track_points(frames, [(4, 4)])
+                    errors.append(raised.exception)
+
+            for error in errors:
+                self.assertEqual(error.failure_class, "policy_blocked")
+                self.assertEqual(error.requested_implementation, "cotracker3")
+                self.assertIn("VSR_COTRACKER_MODE", error.recovery_hint)
+            self.assertEqual(errors[0].detail, errors[1].detail)
+            fake_torch.hub.load.assert_not_called()
+        finally:
+            _seg._COTRACKER_STATE.clear()
+            _seg._COTRACKER_STATE.update(saved)
+
+    def test_sam2_inference_error_fails_closed(self):
         import numpy as _np
         from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
 
         class BrokenPredictor:
             def set_image(self, rgb):
@@ -217,15 +361,20 @@ class SegmentationAdapterTests(unittest.TestCase):
             frame = _np.zeros((32, 32, 3), dtype=_np.uint8)
             mask = _np.zeros((32, 32), dtype=_np.uint8)
             mask[10:20, 10:20] = 255
-            out = _seg.refine_mask_with_sam2(frame, [(10, 10, 20, 20)], mask)
-            _np.testing.assert_array_equal(out, mask)
+            with self.assertRaises(RequestedStageError) as raised:
+                _seg.refine_mask_with_sam2(
+                    frame, [(10, 10, 20, 20)], mask
+                )
+            self.assertEqual(raised.exception.stage, "sam2")
+            self.assertEqual(raised.exception.failure_class, "runtime_failed")
         finally:
             _seg._SAM2_STATE.clear()
             _seg._SAM2_STATE.update(saved)
 
-    def test_sam3_inference_error_returns_none(self):
+    def test_sam3_inference_error_fails_closed(self):
         import numpy as _np
         from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
 
         class BrokenPredictor:
             def segment(self, frame, prompt):
@@ -234,16 +383,21 @@ class SegmentationAdapterTests(unittest.TestCase):
         saved = dict(_seg._SAM3_STATE)
         try:
             _seg._SAM3_STATE.update({"probed": True, "predictor": BrokenPredictor()})
-            self.assertIsNone(_seg.segment_text_with_sam3(
-                _np.zeros((32, 32, 3), dtype=_np.uint8)
-            ))
+            with self.assertRaises(RequestedStageError) as raised:
+                _seg.segment_text_with_sam3(
+                    _np.zeros((32, 32, 3), dtype=_np.uint8)
+                )
+            self.assertEqual(raised.exception.stage, "sam3")
+            self.assertEqual(raised.exception.failure_class, "runtime_failed")
+            self.assertEqual(raised.exception.provider, "BrokenPredictor")
         finally:
             _seg._SAM3_STATE.clear()
             _seg._SAM3_STATE.update(saved)
 
-    def test_matanyone_inference_error_returns_none(self):
+    def test_matanyone_inference_error_fails_closed(self):
         import numpy as _np
         from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
 
         class BrokenModel:
             def matte(self, frame, hint_mask):
@@ -252,18 +406,24 @@ class SegmentationAdapterTests(unittest.TestCase):
         saved = dict(_seg._MATANYONE_STATE)
         try:
             _seg._MATANYONE_STATE.update({"probed": True, "model": BrokenModel()})
-            self.assertIsNone(_seg.matte_frame(
-                _np.zeros((32, 32, 3), dtype=_np.uint8),
-                _np.zeros((32, 32), dtype=_np.uint8),
-            ))
+            hint = _np.zeros((32, 32), dtype=_np.uint8)
+            hint[8:24, 8:24] = 255
+            with self.assertRaises(RequestedStageError) as raised:
+                _seg.matte_frame(
+                    _np.zeros((32, 32, 3), dtype=_np.uint8), hint
+                )
+            self.assertEqual(raised.exception.stage, "matanyone")
+            self.assertEqual(raised.exception.failure_class, "runtime_failed")
+            self.assertEqual(raised.exception.provider, "BrokenModel")
         finally:
             _seg._MATANYONE_STATE.clear()
             _seg._MATANYONE_STATE.update(saved)
 
-    def test_cotracker_inference_error_returns_none(self):
+    def test_cotracker_inference_error_fails_closed(self):
         import numpy as _np
         from unittest import mock
         from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
 
         class FakeTensor:
             def permute(self, *args):
@@ -273,6 +433,9 @@ class SegmentationAdapterTests(unittest.TestCase):
                 return self
 
             def float(self):
+                return self
+
+            def to(self, device):
                 return self
 
         class BrokenModel:
@@ -289,17 +452,18 @@ class SegmentationAdapterTests(unittest.TestCase):
             _seg._COTRACKER_STATE.update({"probed": True, "model": BrokenModel()})
             frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
             with mock.patch.dict(sys.modules, {"torch": fake_torch}):
-                self.assertIsNone(_seg.track_points(frames, [(4, 4)]))
+                with self.assertRaises(RequestedStageError) as raised:
+                    _seg.track_points(frames, [(4, 4)])
+            self.assertEqual(raised.exception.stage, "cotracker")
+            self.assertEqual(raised.exception.failure_class, "runtime_failed")
+            self.assertEqual(raised.exception.provider, "BrokenModel")
         finally:
             _seg._COTRACKER_STATE.clear()
             _seg._COTRACKER_STATE.update(saved)
 
 
 class DiffusionInpainterScaffoldTests(unittest.TestCase):
-    """RM-59/60/61/62/63/64/65: each scaffolded diffusion backend must
-    fall back to TBE when its optional dep is missing rather than
-    crash. The default registry never sees them unless the user has
-    opted in via env vars."""
+    """RM-59/60/61/62/63/64/65: named adapters fail truthfully."""
 
     def setUp(self):
         self._saved = {k: os.environ.pop(k, None) for k in (
@@ -330,7 +494,8 @@ class DiffusionInpainterScaffoldTests(unittest.TestCase):
         finally:
             _registry.unregister("diffueraser")
 
-    def test_scaffold_falls_back_to_tbe(self):
+    def test_scaffold_fails_when_model_is_missing(self):
+        from backend.execution_provenance import RequestedStageError
         from backend.inpainters_diffusion import _DiffuEraserBackend
         cfg = processor.normalize_processing_config(
             processor.ProcessingConfig(tbe_enable=True)
@@ -340,12 +505,12 @@ class DiffusionInpainterScaffoldTests(unittest.TestCase):
         frames = [_np.full((16, 16, 3), 60, dtype=_np.uint8) for _ in range(3)]
         masks = [_np.zeros((16, 16), dtype=_np.uint8) for _ in range(3)]
         masks[1][4:8, 4:8] = 255
-        out = b.inpaint(frames, masks)
-        self.assertEqual(len(out), 3)
-        for f in out:
-            self.assertEqual(f.shape, (16, 16, 3))
+        with self.assertRaises(RequestedStageError) as raised:
+            b.inpaint(frames, masks)
+        self.assertEqual(raised.exception.requested_implementation, "diffueraser")
 
-    def test_scaffold_falls_back_when_loaded_model_raises(self):
+    def test_scaffold_fails_when_loaded_model_raises(self):
+        from backend.execution_provenance import RequestedStageError
         from backend.inpainters_diffusion import _DiffusionBackendBase
 
         class BrokenBackend(_DiffusionBackendBase):
@@ -365,10 +530,60 @@ class DiffusionInpainterScaffoldTests(unittest.TestCase):
         frames = [_np.full((16, 16, 3), 60, dtype=_np.uint8) for _ in range(2)]
         masks = [_np.zeros((16, 16), dtype=_np.uint8) for _ in range(2)]
         masks[0][4:8, 4:8] = 255
-        out = backend.inpaint(frames, masks)
-        self.assertEqual(len(out), 2)
-        for frame in out:
-            self.assertEqual(frame.shape, (16, 16, 3))
+        with self.assertRaises(RequestedStageError) as raised:
+            backend.inpaint(frames, masks)
+        self.assertEqual(raised.exception.failure_class, "runtime_failed")
+
+    def test_scaffold_classifies_model_initialization_failure(self):
+        from backend.execution_provenance import RequestedStageError
+        from backend.inpainters_diffusion import _DiffusionBackendBase
+
+        class BrokenBackend(_DiffusionBackendBase):
+            MODE_NAME = "broken-load"
+            REPO_HINT = "Repair the synthetic adapter."
+
+            def _load(self):
+                raise RuntimeError("constructor failed")
+
+        cfg = processor.normalize_processing_config(
+            processor.ProcessingConfig(tbe_enable=False)
+        )
+        backend = BrokenBackend(device="cpu", config=cfg)
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        mask = np.full((8, 8), 255, dtype=np.uint8)
+
+        with self.assertRaises(RequestedStageError) as raised:
+            backend.inpaint([frame], [mask])
+
+        self.assertEqual(raised.exception.failure_class, "initialization_failed")
+        self.assertEqual(raised.exception.requested_implementation, "broken-load")
+        self.assertEqual(raised.exception.recovery_hint, BrokenBackend.REPO_HINT)
+        self.assertIsInstance(raised.exception.cause, RuntimeError)
+
+    def test_scaffold_reports_the_loaded_provider(self):
+        from backend.inpainters_diffusion import _DiffusionBackendBase
+
+        class SyntheticProvider:
+            pass
+
+        class LoadedBackend(_DiffusionBackendBase):
+            MODE_NAME = "loaded"
+
+            def _load(self):
+                return SyntheticProvider()
+
+            def _run_model(self, frames, masks):
+                return [frame.copy() for frame in frames]
+
+        backend = LoadedBackend(
+            device="cpu", config=processor.ProcessingConfig()
+        )
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        mask = np.zeros((8, 8), dtype=np.uint8)
+
+        backend.inpaint([frame], [mask])
+
+        self.assertTrue(backend.backend_name.endswith(".SyntheticProvider"))
 
 
 class DecodeAccelTests(unittest.TestCase):
@@ -482,6 +697,103 @@ class RifeFastModePipelineTests(unittest.TestCase):
     @staticmethod
     def _masks(count):
         return [np.zeros((8, 8), dtype=np.uint8) for _ in range(count)]
+
+    def test_untyped_inpainter_failure_is_classified_at_the_boundary(self):
+        from backend.execution_provenance import RequestedStageError
+
+        class BrokenInpainter:
+            backend_name = "Synthetic provider"
+            _vsr_registered_implementation = "sttn"
+            _vsr_recovery_hint = "Repair the synthetic provider."
+
+            def inpaint(self, frames, masks):
+                raise RuntimeError("synthetic inference failure")
+
+        remover = self._remover(stride=0)
+        remover.inpainter = BrokenInpainter()
+
+        with self.assertRaises(RequestedStageError) as raised:
+            remover._execute_inpainter(self._frames(1), self._masks(1))
+
+        error = raised.exception
+        self.assertEqual(error.failure_class, "runtime_failed")
+        self.assertEqual(error.actual_implementation, "sttn")
+        self.assertEqual(error.provider, BrokenInpainter.backend_name)
+        self.assertEqual(error.recovery_hint, BrokenInpainter._vsr_recovery_hint)
+
+    def test_broken_provider_identity_cannot_turn_execution_into_success(self):
+        from backend.execution_provenance import RequestedStageError
+        from backend.inpainters._common import BaseInpainter
+
+        class BrokenIdentityInpainter(BaseInpainter):
+            _vsr_registered_implementation = "sttn"
+
+            @property
+            def backend_name(self):
+                raise RuntimeError("synthetic identity failure")
+
+            def inpaint(self, frames, masks):
+                return [frame.copy() for frame in frames]
+
+        remover = self._remover(stride=0)
+        remover.inpainter = BrokenIdentityInpainter()
+
+        with self.assertRaises(RequestedStageError) as raised:
+            remover._execute_inpainter(self._frames(1), self._masks(1))
+
+        error = raised.exception
+        self.assertEqual(error.failure_class, "runtime_failed")
+        self.assertEqual(error.actual_implementation, "sttn")
+        self.assertEqual(error.provider, "BrokenIdentityInpainter")
+        self.assertIn("identity failure", error.detail)
+
+    def test_malformed_auto_output_reports_the_route_that_executed(self):
+        from backend.execution_provenance import RequestedStageError
+
+        class MalformedAutoRoute:
+            backend_name = "AUTO scene router"
+            _vsr_registered_implementation = "auto"
+
+            def inpaint(self, frames, masks):
+                return ["not a frame" for _frame in frames]
+
+            def execution_identity(self):
+                return {
+                    "implementation": "sttn",
+                    "provider": "TBE",
+                    "effectiveDevice": "cpu",
+                    "actualExecutions": [{
+                        "implementation": "sttn",
+                        "provider": "TBE",
+                        "effectiveDevice": "cpu",
+                        "executionCount": 1,
+                    }],
+                    "fallbackChain": [{
+                        "implementation": "sttn",
+                        "outcome": "executed",
+                        "provider": "TBE",
+                    }],
+                }
+
+        remover = self._remover(stride=0)
+        remover.config = processor.ProcessingConfig(
+            mode=processor.InpaintMode.AUTO,
+            device="cuda:0",
+        )
+        remover.inpainter = MalformedAutoRoute()
+        frames = self._frames(1)
+        masks = self._masks(1)
+        result = remover._execute_inpainter(frames, masks)
+
+        with self.assertRaises(RequestedStageError) as raised:
+            remover._validate_inpaint_results(frames, result)
+
+        error = raised.exception
+        self.assertEqual(error.requested_implementation, "auto")
+        self.assertEqual(error.actual_implementation, "sttn")
+        self.assertEqual(error.provider, "TBE")
+        self.assertEqual(error.failure_class, "output_invalid")
+        self.assertEqual(error.fallback_chain[-1]["implementation"], "sttn")
 
     def test_config_clamps_rife_stride(self):
         cfg = processor.normalize_processing_config(
@@ -725,6 +1037,38 @@ class VlmOcrAdapterTests(unittest.TestCase):
             [(30, 10, 40, 20), (2, 3, 20, 30), (4, 5, 12, 17)],
         )
 
+    def test_paddleocr_vl_staging_failure_is_not_a_no_detection_result(self):
+        from unittest import mock
+        import numpy as _np
+        from backend.ocr_vlm import _PaddleOcrVlLlamaCppDetector
+
+        detector = _PaddleOcrVlLlamaCppDetector(env={})
+        detector._model = object()
+
+        with mock.patch("backend.ocr_vlm.validate_vlm_server_endpoint"), \
+                mock.patch("backend.ocr_vlm.cv2.imwrite", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "could not stage"):
+                detector._extract_boxes(
+                    _np.zeros((8, 8, 3), dtype=_np.uint8), 0.5
+                )
+
+    def test_manga_detector_runtime_failure_is_not_a_no_detection_result(self):
+        import numpy as _np
+        from backend.ocr_vlm import _MangaOcrDetector
+
+        class BrokenComicDetector:
+            @staticmethod
+            def predict_one(_frame):
+                raise RuntimeError("synthetic comic detector failure")
+
+        detector = _MangaOcrDetector()
+        detector._model = (object(), BrokenComicDetector())
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic comic"):
+            detector._extract_boxes(
+                _np.zeros((8, 8, 3), dtype=_np.uint8), 0.5
+            )
+
 
 class PreprocessAdaptersTests(unittest.TestCase):
     """RM-33 / RM-21: pre-detect denoise + TransNetV2 scene-cut adapter
@@ -748,8 +1092,7 @@ class PreprocessAdaptersTests(unittest.TestCase):
 
 class OnnxInpaintersTests(unittest.TestCase):
     """RM-25 / RM-26: ONNX backends must register only when their env
-    vars are set, and the inpainter must fall back to cv2 when the
-    ONNX session is unavailable."""
+    vars are set, and explicit ONNX requests fail when unavailable."""
 
     def setUp(self):
         self._saved = {
@@ -770,18 +1113,13 @@ class OnnxInpaintersTests(unittest.TestCase):
         from backend import inpainters_onnx as _o
         _o.maybe_register()
 
-    def test_inpainter_without_session_falls_back(self):
-        import numpy as _np
+    def test_inpainter_without_session_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
         from backend.inpainters_onnx import LamaOnnxInpainter
         cfg = processor.ProcessingConfig()
-        inp = LamaOnnxInpainter(device="cpu", config=cfg)
-        self.assertIsNone(inp._session)
-        frame = _np.full((32, 32, 3), 100, dtype=_np.uint8)
-        mask = _np.zeros((32, 32), dtype=_np.uint8)
-        mask[10:20, 10:20] = 255
-        out = inp.inpaint([frame], [mask])
-        self.assertEqual(len(out), 1)
-        self.assertEqual(out[0].shape, frame.shape)
+        with self.assertRaises(RequestedStageError) as raised:
+            LamaOnnxInpainter(device="cpu", config=cfg)
+        self.assertEqual(raised.exception.failure_class, "dependency_missing")
 
     def test_no_register_when_env_missing(self):
         from backend.inpainters_onnx import maybe_register
@@ -826,8 +1164,44 @@ class InpainterRegistryTests(unittest.TestCase):
         self.assertTrue(inpainter_registry.unregister("test-plugin"))
         self.assertFalse(inpainter_registry.unregister("test-plugin"))
 
+    def test_registration_metadata_tags_the_constructed_implementation(self):
+        from backend import inpainter_registry
+        from backend.device_provider import RuntimeDeviceProvider
+
+        sentinel = SimpleNamespace(backend_name="Vendor provider")
+        inpainter_registry.register(
+            "test-plugin",
+            lambda device, config: sentinel,
+            implementation_id="vendor-model",
+            recovery_hint="Repair the vendor model.",
+        )
+        try:
+            spec = inpainter_registry.resolve_spec("test-plugin")
+            built = RuntimeDeviceProvider("cpu").create_inpainter(
+                "test-plugin", "cpu", object()
+            )
+            self.assertEqual(spec.implementation_id, "vendor-model")
+            self.assertEqual(
+                built._vsr_registered_implementation, "vendor-model"
+            )
+            self.assertEqual(
+                built._vsr_recovery_hint, "Repair the vendor model."
+            )
+        finally:
+            inpainter_registry.unregister("test-plugin")
+
 
 class ExternalInpainterCommandTests(unittest.TestCase):
+    @staticmethod
+    def _inpainter(external_mod):
+        inpainter = external_mod.ExternalInpainter.__new__(
+            external_mod.ExternalInpainter
+        )
+        inpainter._cmd = ["fake-inpainter"]
+        inpainter._timeout = 60
+        inpainter._config = None
+        return inpainter
+
     def test_split_external_command_preserves_quoted_windows_path(self):
         from backend.inpainters.external import _split_external_command
 
@@ -864,11 +1238,7 @@ class ExternalInpainterCommandTests(unittest.TestCase):
             cv2.imwrite(os.path.join(out_dir, "000000.png"), filled)
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-        inpainter = external_mod.ExternalInpainter.__new__(
-            external_mod.ExternalInpainter)
-        inpainter._cmd = ["fake-inpainter"]
-        inpainter._timeout = 60
-        inpainter._config = None
+        inpainter = self._inpainter(external_mod)
 
         with unittest.mock.patch.object(external_mod, "run_process", fake_run):
             result = inpainter.inpaint([frame], [mask])
@@ -877,6 +1247,68 @@ class ExternalInpainterCommandTests(unittest.TestCase):
         # The fill (200) must dominate at the mask center, proving the
         # external output is not discarded in favor of the source frame.
         self.assertGreater(int(center.mean()), 150)
+
+    def test_external_timeout_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
+        from backend.inpainters import external as external_mod
+
+        frame = np.zeros((16, 16, 3), dtype=np.uint8)
+        mask = np.full((16, 16), 255, dtype=np.uint8)
+        inpainter = self._inpainter(external_mod)
+        with unittest.mock.patch.object(
+            external_mod,
+            "run_process",
+            side_effect=subprocess.TimeoutExpired("fake-inpainter", 60),
+        ):
+            with self.assertRaises(RequestedStageError) as raised:
+                inpainter.inpaint([frame], [mask])
+        self.assertEqual(raised.exception.failure_class, "runtime_failed")
+        self.assertTrue(raised.exception.retriable)
+        self.assertTrue(raised.exception.recovery_hint)
+
+    def test_external_nonzero_exit_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
+        from backend.inpainters import external as external_mod
+
+        frame = np.zeros((16, 16, 3), dtype=np.uint8)
+        mask = np.full((16, 16), 255, dtype=np.uint8)
+        inpainter = self._inpainter(external_mod)
+        completed = SimpleNamespace(returncode=9, stdout="", stderr="bad model")
+        with unittest.mock.patch.object(
+            external_mod, "run_process", return_value=completed
+        ):
+            with self.assertRaises(RequestedStageError) as raised:
+                inpainter.inpaint([frame], [mask])
+        self.assertEqual(raised.exception.failure_class, "runtime_failed")
+        self.assertIn("bad model", raised.exception.detail)
+
+    def test_external_missing_output_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
+        from backend.inpainters import external as external_mod
+
+        frame = np.zeros((16, 16, 3), dtype=np.uint8)
+        mask = np.full((16, 16), 255, dtype=np.uint8)
+        inpainter = self._inpainter(external_mod)
+        completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+        with unittest.mock.patch.object(
+            external_mod, "run_process", return_value=completed
+        ):
+            with self.assertRaises(RequestedStageError) as raised:
+                inpainter.inpaint([frame], [mask])
+        self.assertEqual(raised.exception.failure_class, "output_invalid")
+        self.assertTrue(raised.exception.recovery_hint)
+
+    def test_external_rejects_a_truncated_mask_batch_before_launch(self):
+        from backend.execution_provenance import RequestedStageError
+        from backend.inpainters import external as external_mod
+
+        frame = np.zeros((16, 16, 3), dtype=np.uint8)
+        inpainter = self._inpainter(external_mod)
+        with unittest.mock.patch.object(external_mod, "run_process") as run:
+            with self.assertRaises(RequestedStageError) as raised:
+                inpainter.inpaint([frame], [])
+        self.assertEqual(raised.exception.failure_class, "output_invalid")
+        run.assert_not_called()
 
 
 class D3D12AccelerationTests(unittest.TestCase):

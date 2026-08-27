@@ -1420,7 +1420,7 @@ class GuiSmokeTests(unittest.TestCase):
         )
 
         self.assertEqual(len(paths), 2)
-        self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
+        self.assertEqual(payload["schema"], "vsr.batch_summary.v2")
         self.assertEqual(payload["kind"], "gui-batch")
         self.assertEqual(payload["counts"], {"hardcoded-processed": 1})
         self.assertEqual(payload["files"][0]["input_name"], source.name)

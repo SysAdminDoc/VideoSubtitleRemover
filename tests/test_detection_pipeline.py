@@ -374,6 +374,82 @@ class DetectionCascadeTests(unittest.TestCase):
         boxes = detector.detect(frame, threshold=0.3)
         self.assertIsInstance(boxes, list)
 
+    def test_detection_only_text_call_executes_selected_engine(self):
+        from backend.detection import SubtitleDetector
+
+        detector = SubtitleDetector.__new__(SubtitleDetector)
+        detector.device = "cpu"
+        detector.lang = "en"
+        detector.vertical = False
+        detector.engine = "opencv"
+        detector._requested_engine = "opencv"
+        detector._actual_implementation = "opencv"
+        detector._engine_name = "OpenCV fallback"
+        detector._provider_name = "cv2"
+        detector._effective_device = "cpu"
+        detector._provenance_reason = ""
+        detector._fallback_chain = []
+        detector._execution_counts = {}
+        detector._rapid_model = None
+        detector._paddle_model = None
+        detector._surya_det = None
+        detector._easyocr_reader = None
+        detector._vlm_detector = None
+        detector._fallback_detection = mock.Mock(return_value=[])
+        frame = np.zeros((32, 64, 3), dtype=np.uint8)
+
+        output = detector.detect_with_text(frame)
+
+        self.assertEqual(output, [])
+        detector._fallback_detection.assert_called_once_with(frame)
+        stage = detector.execution_provenance().to_dict()
+        self.assertEqual(stage["status"], "succeeded")
+        self.assertEqual(stage["actualExecutions"][0]["executionCount"], 1)
+
+    def test_auto_text_runtime_fallback_executes_before_recording_opencv(self):
+        from backend.detection import SubtitleDetector
+
+        detector = SubtitleDetector.__new__(SubtitleDetector)
+        detector.device = "cpu"
+        detector.lang = "en"
+        detector.vertical = False
+        detector.engine = "auto"
+        detector._requested_engine = "auto"
+        detector._actual_implementation = "rapidocr"
+        detector._engine_name = "RapidOCR"
+        detector._provider_name = "CPUExecutionProvider"
+        detector._effective_device = "cpu"
+        detector._provenance_reason = ""
+        detector._fallback_chain = []
+        detector._execution_counts = {}
+        detector._rapid_model = mock.Mock(
+            side_effect=RuntimeError("synthetic RapidOCR failure")
+        )
+        detector._paddle_model = None
+        detector._surya_det = None
+        detector._easyocr_reader = None
+        detector._vlm_detector = None
+        detector._fallback_detection = mock.Mock(return_value=[])
+        frame = np.zeros((32, 64, 3), dtype=np.uint8)
+
+        output = detector.detect_with_text(frame)
+
+        self.assertEqual(output, [])
+        detector._fallback_detection.assert_called_once_with(frame)
+        stage = detector.execution_provenance().to_dict()
+        self.assertEqual(stage["actualImplementation"], "opencv")
+        self.assertEqual(stage["actualExecutions"], [{
+            "implementation": "opencv",
+            "provider": "cv2",
+            "effectiveDevice": "cpu",
+            "executionCount": 1,
+        }])
+        self.assertEqual(
+            [step["implementation"] for step in stage["fallbackChain"]],
+            ["rapidocr", "opencv"],
+        )
+        self.assertTrue(stage["chainFellBack"])
+
 
 class VerticalTextRotationTests(unittest.TestCase):
     """Verify that 90-CCW rotation coordinate mapping is correct."""
@@ -844,7 +920,9 @@ class ExplicitVlmAndSuryaEngineTests(unittest.TestCase):
         self.assertEqual(built, [("florence2", "cpu")])
         self.assertEqual(detector._engine_name, "VLM (florence2)")
 
-    def test_an_unloadable_vlm_engine_falls_back_to_the_cascade(self):
+    def test_an_unloadable_explicit_vlm_engine_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
+
         vlm_module = types.ModuleType("backend.ocr_vlm")
         vlm_module.build_named_vlm_detector = lambda name, device: None
         vlm_module.maybe_build_vlm_detector = lambda device, lang: None
@@ -853,15 +931,24 @@ class ExplicitVlmAndSuryaEngineTests(unittest.TestCase):
                     sys.modules, {"backend.ocr_vlm": vlm_module}):
                 with mock.patch.object(
                         detection, "_surya_allowed", return_value=False):
-                    detector = detection.SubtitleDetector(
-                        device="cpu", lang="en",
-                        engine="vlm-paddleocr-vl-llama")
+                    with self.assertRaises(RequestedStageError) as raised:
+                        detection.SubtitleDetector(
+                            device="cpu", lang="en",
+                            engine="vlm-paddleocr-vl-llama")
 
-        # It must land on a real cascade engine, not a dead VLM handle.
-        self.assertIsNone(detector._vlm_detector)
-        self.assertEqual(detector.engine, "auto")
+        self.assertEqual(raised.exception.stage, "ocr")
+        self.assertEqual(
+            raised.exception.requested_implementation,
+            "vlm-paddleocr-vl-llama",
+        )
+        self.assertTrue(raised.exception.recovery_hint)
 
-    def test_surya_without_the_gpl_opt_in_falls_back(self):
+    def test_surya_without_the_gpl_opt_in_fails_closed(self):
+        from backend.execution_provenance import (
+            FAILURE_POLICY_BLOCKED,
+            RequestedStageError,
+        )
+
         with _fresh_detection_module() as detection:
             with mock.patch.dict(
                     sys.modules,
@@ -870,11 +957,12 @@ class ExplicitVlmAndSuryaEngineTests(unittest.TestCase):
                     lambda device, lang: None)
                 with mock.patch.object(
                         detection, "_surya_allowed", return_value=False):
-                    detector = detection.SubtitleDetector(
-                        device="cpu", lang="en", engine="surya")
+                    with self.assertRaises(RequestedStageError) as raised:
+                        detection.SubtitleDetector(
+                            device="cpu", lang="en", engine="surya")
 
-        self.assertEqual(detector.engine, "auto")
-        self.assertIsNone(detector._surya_det)
+        self.assertEqual(raised.exception.failure_class, FAILURE_POLICY_BLOCKED)
+        self.assertTrue(raised.exception.recovery_hint)
 
     def test_surya_with_the_opt_in_loads_when_selected_directly(self):
         class FakePredictor:
@@ -899,6 +987,114 @@ class ExplicitVlmAndSuryaEngineTests(unittest.TestCase):
 
         self.assertEqual(detector._engine_name, "Surya")
         self.assertIsInstance(detector._surya_det, FakePredictor)
+
+
+class ExplicitRuntimeFailureTests(unittest.TestCase):
+    @staticmethod
+    def _explicit_vlm_detector(vlm):
+        from backend import detection
+
+        detector = detection.SubtitleDetector.__new__(detection.SubtitleDetector)
+        detector.device = "cpu"
+        detector.lang = "en"
+        detector.vertical = False
+        detector.engine = "vlm-broken"
+        detector._requested_engine = "vlm-broken"
+        detector._actual_implementation = "vlm-broken"
+        detector._engine_name = "VLM (broken)"
+        detector._provider_name = "cpu"
+        detector._effective_device = "cpu"
+        detector._provenance_reason = ""
+        detector._fallback_chain = []
+        detector._execution_counts = {}
+        detector._vlm_detector = vlm
+        detector._rapid_model = None
+        detector._paddle_model = None
+        detector._surya_det = None
+        detector._easyocr_reader = None
+        return detector
+
+    def test_explicit_vlm_runtime_failure_is_classified(self):
+        from backend.execution_provenance import (
+            FAILURE_RUNTIME,
+            RequestedStageError,
+        )
+        from backend.ocr_vlm import _BaseVlmDetector
+
+        class BrokenVlm(_BaseVlmDetector):
+            name = "broken"
+            provider = "cpu"
+
+            def _load(self):
+                return object()
+
+            def _extract_boxes(self, frame, threshold):
+                raise RuntimeError("synthetic VLM inference failure")
+
+        detector = self._explicit_vlm_detector(BrokenVlm())
+
+        with self.assertRaises(RequestedStageError) as raised:
+            detector.detect(np.zeros((16, 16, 3), dtype=np.uint8))
+
+        error = raised.exception
+        self.assertEqual(error.requested_implementation, "vlm-broken")
+        self.assertEqual(error.actual_implementation, "vlm-broken")
+        self.assertEqual(error.provider, "cpu")
+        self.assertEqual(error.failure_class, FAILURE_RUNTIME)
+        self.assertTrue(error.recovery_hint)
+        self.assertEqual(detector._execution_counts, {})
+
+    def test_explicit_vlm_policy_failure_preserves_classification(self):
+        from backend.execution_provenance import (
+            FAILURE_POLICY_BLOCKED,
+            RequestedStageError,
+        )
+        from backend.ocr_vlm import VlmEndpointPolicyError
+
+        class PolicyBlockedVlm:
+            def detect(self, frame, threshold):
+                raise VlmEndpointPolicyError("synthetic endpoint policy block")
+
+        detector = self._explicit_vlm_detector(PolicyBlockedVlm())
+
+        with self.assertRaises(RequestedStageError) as raised:
+            detector.detect(np.zeros((16, 16, 3), dtype=np.uint8))
+
+        error = raised.exception
+        self.assertEqual(error.failure_class, FAILURE_POLICY_BLOCKED)
+        self.assertEqual(error.actual_implementation, "")
+        self.assertEqual(error.provider, "cpu")
+        self.assertEqual(
+            error.fallback_chain[-1]["implementation"], "vlm-broken"
+        )
+        self.assertEqual(error.fallback_chain[-1]["failureClass"],
+                         FAILURE_POLICY_BLOCKED)
+        self.assertEqual(detector._execution_counts, {})
+
+    def test_opencv_runtime_failure_is_classified(self):
+        from backend import detection
+        from backend.execution_provenance import (
+            FAILURE_RUNTIME,
+            RequestedStageError,
+        )
+
+        detector = detection.SubtitleDetector(
+            device="cpu", lang="en", engine="opencv"
+        )
+        detector._fallback_detection = mock.Mock(
+            side_effect=ValueError("synthetic OpenCV failure")
+        )
+
+        with self.assertRaises(RequestedStageError) as raised:
+            detector.detect(np.zeros((16, 16, 3), dtype=np.uint8))
+
+        error = raised.exception
+        self.assertEqual(error.requested_implementation, "opencv")
+        self.assertEqual(error.actual_implementation, "opencv")
+        self.assertEqual(error.provider, "cv2")
+        self.assertEqual(error.failure_class, FAILURE_RUNTIME)
+        self.assertEqual(error.fallback_chain[-1]["outcome"], "runtime_failed")
+        self.assertTrue(error.recovery_hint)
 
 
 if __name__ == "__main__":

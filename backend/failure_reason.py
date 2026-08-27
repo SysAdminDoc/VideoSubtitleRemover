@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.execution_provenance import RequestedStageError
+
 
 REASON_NONE = ""
 REASON_NO_SPACE = "no_space"
@@ -21,6 +23,7 @@ REASON_WRITER_FAILED = "writer_failed"
 REASON_OUTPUT_EMPTY = "output_empty"
 REASON_FFMPEG_FAILED = "ffmpeg_failed"
 REASON_MODEL_MISSING = "model_missing"
+REASON_REQUESTED_STAGE_FAILED = "requested_stage_failed"
 REASON_DECODE_FAILED = "decode_failed"
 REASON_INPUT_MISSING = "input_missing"
 REASON_PERMISSION_DENIED = "permission_denied"
@@ -37,6 +40,7 @@ FAILURE_REASONS = (
     REASON_OUTPUT_EMPTY,
     REASON_FFMPEG_FAILED,
     REASON_MODEL_MISSING,
+    REASON_REQUESTED_STAGE_FAILED,
     REASON_DECODE_FAILED,
     REASON_INPUT_MISSING,
     REASON_PERMISSION_DENIED,
@@ -56,6 +60,7 @@ FAILURE_REASON_LABELS = {
     REASON_OUTPUT_EMPTY: "Output was empty",
     REASON_FFMPEG_FAILED: "FFmpeg failed",
     REASON_MODEL_MISSING: "Model or engine unavailable",
+    REASON_REQUESTED_STAGE_FAILED: "Requested processing stage failed",
     REASON_DECODE_FAILED: "Source could not be decoded",
     REASON_INPUT_MISSING: "Source file missing",
     REASON_PERMISSION_DENIED: "Permission denied",
@@ -170,6 +175,20 @@ def classify_failure_reason(
     if code.startswith("frozen_matte"):
         return REASON_FROZEN_MATTE
     if exc is not None:
+        if isinstance(exc, RequestedStageError):
+            cause = getattr(exc, "cause", None)
+            if isinstance(cause, BaseException):
+                cause_reason = classify_failure_reason(exc=cause)
+                if cause_reason not in {REASON_UNKNOWN, REASON_NONE}:
+                    return cause_reason
+            failure_class = str(getattr(exc, "failure_class", "") or "")
+            if failure_class in {
+                "dependency_missing",
+                "policy_blocked",
+                "initialization_failed",
+            }:
+                return REASON_MODEL_MISSING
+            return REASON_REQUESTED_STAGE_FAILED
         # errno 28 is ENOSPC on every platform Python supports.
         if getattr(exc, "errno", None) == 28:
             return REASON_NO_SPACE

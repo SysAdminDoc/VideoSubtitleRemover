@@ -4,6 +4,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Named OCR, inpainting, segmentation, tracking, and restoration requests now
+  fail with a classified reason and recovery guidance when they can't execute.
+  Only Auto may change implementations. Job provenance records the provider,
+  observed executions, and ordered fallback attempts without claiming that an
+  unavailable stage succeeded or returned valid unchanged output.
+
 ## [3.38.0] - 2026-08-22
 
 ### Changed

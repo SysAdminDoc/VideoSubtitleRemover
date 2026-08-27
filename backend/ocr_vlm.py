@@ -123,7 +123,7 @@ class _BaseVlmDetector:
             return self._extract_boxes(frame, threshold)
         except Exception as exc:
             logger.warning(f"{self.name} VLM detect failed: {exc}")
-            return []
+            raise
 
     def detect_with_geometry(
         self, frame: np.ndarray, threshold: float
@@ -137,7 +137,7 @@ class _BaseVlmDetector:
             return list(self._extract_geometry(frame, threshold))
         except Exception as exc:
             logger.warning(f"{self.name} VLM geometry detect failed: {exc}")
-            return []
+            raise
 
 
 class _Florence2Detector(_BaseVlmDetector):
@@ -399,6 +399,8 @@ def _normalise_vl_server_url(raw: str) -> str:
 
 class VlmEndpointPolicyError(ValueError):
     """Raised when a llama.cpp endpoint crosses the privacy boundary."""
+
+    failure_class = "policy_blocked"
 
 
 @dataclass(frozen=True)
@@ -886,12 +888,14 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
                 "PaddleOCR-VL frame request blocked by privacy policy: %s",
                 exc,
             )
-            return []
+            raise
         fd, path = tempfile.mkstemp(prefix="vsr_paddleocr_vl_", suffix=".png")
         os.close(fd)
         try:
             if not cv2.imwrite(path, frame):
-                return []
+                raise RuntimeError(
+                    "could not stage the PaddleOCR-VL inference frame"
+                )
             if hasattr(self._model, "predict"):
                 results = self._model.predict(path)
             else:
@@ -977,8 +981,8 @@ class _MangaOcrDetector(_BaseVlmDetector):
         try:
             polys = ctd.predict_one(frame)  # type: ignore[attr-defined]
         except Exception as exc:
-            logger.debug(f"comic-text-detector inference failed: {exc}")
-            return []
+            logger.warning(f"comic-text-detector inference failed: {exc}")
+            raise
         out: List[DetectionGeometry] = []
         for poly in polys:
             detection = DetectionGeometry.from_polygon(poly, frame.shape)

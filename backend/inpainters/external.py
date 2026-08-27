@@ -34,6 +34,12 @@ import cv2
 import numpy as np
 
 from backend.inpainters._common import BaseInpainter, _cv2_inpaint, apply_finishing
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_OUTPUT_INVALID,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
 from backend.safe_image import safe_imread
 from backend.subprocess_policy import run_process
 
@@ -164,20 +170,46 @@ class ExternalInpainter(BaseInpainter):
     """Adapter that delegates inpainting to an external subprocess."""
 
     def __init__(self, device: str = "cpu", config=None):
+        self.device = device
         self._cmd = _external_command()
         self._timeout = int(os.environ.get(
             "VSR_EXTERNAL_TIMEOUT", str(DEFAULT_TIMEOUT)))
         self._config = config
         if self._cmd is None:
-            raise RuntimeError(
-                "VSR_EXTERNAL_INPAINTER is not set or the command is "
-                "not found on PATH"
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail=(
+                    "VSR_EXTERNAL_INPAINTER is not set or its executable "
+                    "cannot be found"
+                ),
+                recovery_hint=(
+                    "Set VSR_EXTERNAL_INPAINTER to an executable that follows "
+                    "the documented frame contract, then retry."
+                ),
             )
+
+    @property
+    def backend_name(self) -> str:
+        return str(self._cmd[0]) if self._cmd else "external"
 
     def inpaint(self, frames: List[np.ndarray],
                 masks: List[np.ndarray]) -> List[np.ndarray]:
         if not frames:
             return []
+        if len(masks) != len(frames):
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                actual_implementation="external",
+                provider=self.backend_name,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail=(
+                    f"received {len(masks)} mask(s) for {len(frames)} frame(s)"
+                ),
+                recovery_hint="Provide one same-sized mask for every input frame.",
+            )
         work = tempfile.mkdtemp(prefix="vsr_ext_")
         try:
             return self._run(frames, masks, work)
@@ -195,8 +227,26 @@ class ExternalInpainter(BaseInpainter):
 
         for i, (frame, mask) in enumerate(zip(frames, masks)):
             name = f"{i:06d}.png"
-            cv2.imwrite(os.path.join(in_dir, name), frame)
-            cv2.imwrite(os.path.join(mask_dir, name), mask)
+            if not cv2.imwrite(os.path.join(in_dir, name), frame):
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation="external",
+                    actual_implementation="external",
+                    provider=self.backend_name,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail=f"could not stage input frame {i}",
+                    recovery_hint="Verify work-directory permissions, then retry.",
+                )
+            if not cv2.imwrite(os.path.join(mask_dir, name), mask):
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation="external",
+                    actual_implementation="external",
+                    provider=self.backend_name,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail=f"could not stage mask frame {i}",
+                    recovery_hint="Verify work-directory permissions, then retry.",
+                )
 
         cfg_str = "{}"
         if self._config is not None:
@@ -222,19 +272,64 @@ class ExternalInpainter(BaseInpainter):
                 text=True,
                 timeout=self._timeout,
             )
-        except subprocess.TimeoutExpired:
-            logger.error(
-                f"External inpainter timed out after {self._timeout}s")
-            return list(frames)
-        except FileNotFoundError:
-            logger.error(f"External inpainter not found: {cmd_parts[0]}")
-            return list(frames)
+        except subprocess.TimeoutExpired as exc:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                actual_implementation="external",
+                provider=self.backend_name,
+                failure_class=FAILURE_RUNTIME,
+                detail=f"external command timed out after {self._timeout}s",
+                recovery_hint=(
+                    "Increase VSR_EXTERNAL_TIMEOUT or repair the external "
+                    "adapter, then retry."
+                ),
+                cause=exc,
+                retriable=True,
+            ) from exc
+        except FileNotFoundError as exc:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                provider=self.backend_name,
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail=f"external command was not found: {cmd_parts[0]}",
+                recovery_hint=(
+                    "Repair VSR_EXTERNAL_INPAINTER or add its executable to PATH."
+                ),
+                cause=exc,
+            ) from exc
+        except OSError as exc:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                actual_implementation="external",
+                provider=self.backend_name,
+                failure_class=FAILURE_RUNTIME,
+                detail=f"external command could not run: {exc}",
+                recovery_hint=(
+                    "Verify the external adapter executable and permissions, "
+                    "then retry."
+                ),
+                cause=exc,
+            ) from exc
 
         if result.returncode != 0:
             stderr = (result.stderr or "")[:400]
-            logger.error(
-                f"External inpainter exit {result.returncode}: {stderr}")
-            return list(frames)
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                actual_implementation="external",
+                provider=self.backend_name,
+                failure_class=FAILURE_RUNTIME,
+                detail=(
+                    f"external command exited {result.returncode}: {stderr}"
+                ),
+                recovery_hint=(
+                    "Review the external adapter stderr and output contract, "
+                    "then retry."
+                ),
+            )
 
         originals = []
         filled = []
@@ -249,14 +344,22 @@ class ExternalInpainter(BaseInpainter):
                     filled.append(out_frame)
                     result_masks.append(mask)
                     continue
-            originals.append(frame)
-            filled.append(frame.copy())
-            result_masks.append(np.zeros_like(mask))
             missing_indices.append(i)
         if missing_indices:
-            logger.warning(
-                "External inpainter returned missing or malformed frame(s): %s",
-                missing_indices,
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="external",
+                actual_implementation="external",
+                provider=self.backend_name,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail=(
+                    "external command returned missing or malformed frame(s): "
+                    f"{missing_indices}"
+                ),
+                recovery_hint=(
+                    "Make the adapter write one same-sized PNG for every input "
+                    "frame, then retry."
+                ),
             )
         return apply_finishing(
             originals, filled, result_masks, self._config,

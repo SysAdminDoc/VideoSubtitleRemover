@@ -9,9 +9,9 @@ adapter here:
   optional dependency / weight file is missing.
 - Operates on a finished video file (the FFV1 intermediate or final
   output, depending on where the caller wires it in).
-- Returns the path to a new file on success, or the input path
-  unchanged when the optional dep is unavailable so the pipeline
-  always produces *some* output.
+- Returns the path to a validated new file on success. A requested
+  adapter that cannot run raises a classified error with recovery
+  guidance instead of silently retaining the old output.
 """
 
 from __future__ import annotations
@@ -26,6 +26,13 @@ from typing import Optional, Sequence
 
 
 from backend.import_safety import module_can_import
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_OUTPUT_MISSING,
+    FAILURE_POLICY_BLOCKED,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
 from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
@@ -47,14 +54,13 @@ def _sanitize_force_style(style: str) -> str:
 
 def realesrgan_upscale(input_path: str, output_path: str,
                        scale: int = 2,
-                       model_name: str = "RealESRGAN_x4plus") -> Optional[str]:
+                       model_name: str = "RealESRGAN_x4plus") -> str:
     """RM-78: 2x or 4x upscale via Real-ESRGAN.
 
-    Tries the `realesrgan-ncnn-vulkan` standalone binary first (the
-    most portable distribution -- one .exe, no Python deps). Falls
-    back to the `realesrgan` Python package when available. Returns
-    the output path on success, None on failure so the caller can
-    keep the original output.
+    Tries the `realesrgan-ncnn-vulkan` standalone binary. If it is not
+    available, the error reports whether the `realesrgan` Python package
+    is present. Returns the output path on success and raises
+    RequestedStageError when the requested pass cannot run.
     """
     if shutil.which("realesrgan-ncnn-vulkan"):
         try:
@@ -69,37 +75,59 @@ def realesrgan_upscale(input_path: str, output_path: str,
             if result.returncode == 0 and Path(output_path).is_file():
                 logger.info(f"Real-ESRGAN upscaled to {output_path}")
                 return output_path
-            logger.warning(
-                f"realesrgan-ncnn-vulkan exit {result.returncode}: "
-                f"{(result.stderr or '')[:400]}"
+            raise RequestedStageError(
+                stage="restoration",
+                requested_implementation="realesrgan",
+                actual_implementation="realesrgan",
+                provider="realesrgan-ncnn-vulkan",
+                failure_class=FAILURE_OUTPUT_MISSING,
+                detail=(
+                    f"realesrgan-ncnn-vulkan exited {result.returncode} "
+                    "without a valid output"
+                ),
+                recovery_hint=(
+                    "Verify the Real-ESRGAN binary and selected model, then "
+                    "retry or disable upscaling."
+                ),
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
-            logger.warning(f"realesrgan-ncnn-vulkan failed: {exc}")
-    if not module_can_import(
+            raise RequestedStageError(
+                stage="restoration",
+                requested_implementation="realesrgan",
+                actual_implementation="realesrgan",
+                provider="realesrgan-ncnn-vulkan",
+                failure_class=FAILURE_RUNTIME,
+                detail=type(exc).__name__,
+                recovery_hint=(
+                    "Verify the Real-ESRGAN binary can run, then retry or "
+                    "disable upscaling."
+                ),
+                cause=exc,
+                retriable=isinstance(exc, subprocess.TimeoutExpired),
+            ) from exc
+    python_present = module_can_import(
         "realesrgan",
         logger=logger,
-        failure_context="Real-ESRGAN Python fallback unavailable",
-    ):
-        logger.info(
-            "Neither realesrgan-ncnn-vulkan binary nor the realesrgan "
-            "python package was found; skipping upscale stage."
-        )
-        return None
-    # The Python package operates on PIL images; we shell out to ffmpeg
-    # to dump frames, upscale each, then re-mux. Avoiding that path here
-    # because the binary distribution is both faster and cheaper to
-    # ship. When the user installs the python package without the
-    # binary, log and skip rather than pull in another temp-dir dance.
-    logger.warning(
-        "realesrgan python package detected but the binary is preferred. "
-        "Install realesrgan-ncnn-vulkan from "
-        "https://github.com/xinntao/Real-ESRGAN/releases to enable upscale."
+        failure_context="Real-ESRGAN Python package probe failed",
     )
-    return None
+    raise RequestedStageError(
+        stage="restoration",
+        requested_implementation="realesrgan",
+        failure_class=FAILURE_DEPENDENCY_MISSING,
+        detail=(
+            "the Python package is installed but this video adapter requires "
+            "realesrgan-ncnn-vulkan"
+            if python_present else "realesrgan-ncnn-vulkan was not found on PATH"
+        ),
+        recovery_hint=(
+            "Install realesrgan-ncnn-vulkan from the upstream release and add "
+            "it to PATH, or disable upscaling."
+        )
+    )
 
 
 def seedvr2_restore(input_path: str, output_path: str,
-                     adapter: str = "seedvr2") -> Optional[str]:
+                     adapter: str = "seedvr2") -> str:
     """RM-77 SeedVR2 one-step video restoration.
 
     SeedVR2 ships as a 16B-param diffusion transformer with adversarial
@@ -109,7 +137,7 @@ def seedvr2_restore(input_path: str, output_path: str,
     set `VSR_SEEDVR2_CMD` to the CLI entrypoint or install a
     pip-published wrapper named `seedvr2`).
 
-    Returns the path on success, None on missing-dep / failure.
+    Returns the path on success or raises a classified stage error.
     """
     cmd_env = os.environ.get("VSR_SEEDVR2_CMD", "")
     if cmd_env:
@@ -120,37 +148,87 @@ def seedvr2_restore(input_path: str, output_path: str,
             if result.returncode == 0 and Path(output_path).is_file():
                 logger.info(f"SeedVR2 restoration complete via {cmd_env}")
                 return output_path
-            logger.warning(
-                f"VSR_SEEDVR2_CMD exit {result.returncode}: {(result.stderr or '')[:400]}"
+            raise RequestedStageError(
+                stage="restoration",
+                requested_implementation="seedvr2",
+                actual_implementation="seedvr2",
+                provider="VSR_SEEDVR2_CMD",
+                failure_class=FAILURE_OUTPUT_MISSING,
+                detail=(
+                    f"the configured SeedVR2 command exited {result.returncode} "
+                    "without a valid output"
+                ),
+                recovery_hint=(
+                    "Repair VSR_SEEDVR2_CMD, then retry or disable SeedVR2."
+                ),
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
-            logger.warning(f"VSR_SEEDVR2_CMD failed: {exc}")
+            raise RequestedStageError(
+                stage="restoration",
+                requested_implementation="seedvr2",
+                actual_implementation="seedvr2",
+                provider="VSR_SEEDVR2_CMD",
+                failure_class=FAILURE_RUNTIME,
+                detail=type(exc).__name__,
+                recovery_hint=(
+                    "Repair VSR_SEEDVR2_CMD, then retry or disable SeedVR2."
+                ),
+                cause=exc,
+                retriable=isinstance(exc, subprocess.TimeoutExpired),
+            ) from exc
     try:
         from seedvr2 import SeedVR2  # type: ignore
     except ImportError:
-        logger.info(
-            "SeedVR2 wrapper not importable; install via the upstream "
-            "IceClear/SeedVR2 project or set VSR_SEEDVR2_CMD to a CLI "
-            "entrypoint that accepts `-i INPUT -o OUTPUT`."
+        raise RequestedStageError(
+            stage="restoration",
+            requested_implementation="seedvr2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="no configured SeedVR2 command or importable wrapper was found",
+            recovery_hint=(
+                "Install the reviewed SeedVR2 wrapper or set "
+                "VSR_SEEDVR2_CMD, then retry or disable SeedVR2."
+            ),
         )
-        return None
     try:
         model = SeedVR2(adapter=adapter)
         produced = model.restore(input_path, output_path)
         if produced and Path(produced).is_file():
             return produced
     except Exception as exc:
-        logger.warning(f"SeedVR2 wrapper failed: {exc}")
-    return None
+        raise RequestedStageError(
+            stage="restoration",
+            requested_implementation="seedvr2",
+            actual_implementation="seedvr2",
+            provider="seedvr2.SeedVR2",
+            failure_class=FAILURE_RUNTIME,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the SeedVR2 wrapper and model files, then retry or "
+                "disable SeedVR2."
+            ),
+            cause=exc,
+        ) from exc
+    raise RequestedStageError(
+        stage="restoration",
+        requested_implementation="seedvr2",
+        actual_implementation="seedvr2",
+        provider="seedvr2.SeedVR2",
+        failure_class=FAILURE_OUTPUT_MISSING,
+        detail="the SeedVR2 wrapper returned no valid output",
+        recovery_hint=(
+            "Verify the SeedVR2 wrapper output contract, then retry or disable "
+            "SeedVR2."
+        ),
+    )
 
 
 def swinir_restore(input_path: str, output_path: str,
                     task: str = "classical_sr",
-                    scale: int = 2) -> Optional[str]:
+                    scale: int = 2) -> str:
     """RM-79: SwinIR restoration. Pairs with Real-ESRGAN as an
     alternative single-image-restoration backend. Prefers the
     `realsr-ncnn-vulkan` family of binaries (which ship a SwinIR
-    variant) when present on PATH; otherwise logs and returns None.
+    variant) when present on PATH; otherwise raises a classified error.
 
     SwinIR weights are large enough that we do NOT auto-download; the
     user is expected to install the binary distribution separately.
@@ -158,11 +236,16 @@ def swinir_restore(input_path: str, output_path: str,
     binaries = ("swinir-ncnn-vulkan", "realsr-ncnn-vulkan", "swinir")
     binary = next((b for b in binaries if shutil.which(b)), None)
     if binary is None:
-        logger.info(
-            "No SwinIR binary found on PATH (looked for "
-            f"{', '.join(binaries)}). Skipping restoration pass."
+        raise RequestedStageError(
+            stage="restoration",
+            requested_implementation="swinir",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="no supported SwinIR binary was found on PATH",
+            recovery_hint=(
+                "Install a reviewed SwinIR or RealSR NCNN binary and add it "
+                "to PATH, or disable SwinIR."
+            ),
         )
-        return None
     try:
         cmd = [binary, "-i", input_path, "-o", output_path, "-s", str(scale)]
         if "swinir" in binary and task:
@@ -171,12 +254,53 @@ def swinir_restore(input_path: str, output_path: str,
         if result.returncode == 0 and Path(output_path).is_file():
             logger.info(f"SwinIR restoration complete ({binary})")
             return output_path
-        logger.warning(
-            f"{binary} exit {result.returncode}: {(result.stderr or '')[:400]}"
+        raise RequestedStageError(
+            stage="restoration",
+            requested_implementation="swinir",
+            actual_implementation="swinir",
+            provider=binary,
+            failure_class=FAILURE_OUTPUT_MISSING,
+            detail=f"{binary} exited {result.returncode} without a valid output",
+            recovery_hint=(
+                "Verify the SwinIR binary and task settings, then retry or "
+                "disable SwinIR."
+            ),
         )
     except (subprocess.TimeoutExpired, OSError) as exc:
-        logger.warning(f"SwinIR pass failed: {exc}")
-    return None
+        raise RequestedStageError(
+            stage="restoration",
+            requested_implementation="swinir",
+            actual_implementation="swinir",
+            provider=binary,
+            failure_class=FAILURE_RUNTIME,
+            detail=type(exc).__name__,
+            recovery_hint=(
+                "Verify the SwinIR binary can run, then retry or disable "
+                "SwinIR."
+            ),
+            cause=exc,
+            retriable=isinstance(exc, subprocess.TimeoutExpired),
+        ) from exc
+
+
+def selected_restoration_provider(implementation: str) -> str:
+    """Return the provider selected by the same policy as the adapter."""
+    name = str(implementation or "").strip().lower()
+    if name == "realesrgan":
+        if shutil.which("realesrgan-ncnn-vulkan"):
+            return "realesrgan-ncnn-vulkan"
+        return ""
+    if name == "seedvr2":
+        return "VSR_SEEDVR2_CMD" if os.environ.get(
+            "VSR_SEEDVR2_CMD", "").strip() else "seedvr2.SeedVR2"
+    if name == "swinir":
+        return next(
+            (candidate for candidate in (
+                "swinir-ncnn-vulkan", "realsr-ncnn-vulkan", "swinir"
+            ) if shutil.which(candidate)),
+            "",
+        )
+    return ""
 
 
 _WM_POSITION_MAP = {
@@ -197,20 +321,40 @@ def burn_watermark(
     margin: int = 16,
     video_encode_args: Optional[Sequence[str]] = None,
     preserve_audio: bool = True,
-) -> Optional[str]:
+) -> str:
     """Burn a PNG watermark onto the output at a named corner position.
 
-    Uses ffmpeg overlay filter. Returns the produced path on success,
-    None when ffmpeg or the watermark image is missing.
+    Uses the FFmpeg overlay filter. Returns the produced path on success
+    or raises a classified stage error.
     """
     if shutil.which("ffmpeg") is None:
-        logger.info("ffmpeg not on PATH; cannot burn watermark")
-        return None
+        raise RequestedStageError(
+            stage="watermark",
+            requested_implementation="ffmpeg-overlay",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="FFmpeg was not found on PATH",
+            recovery_hint="Install the supported FFmpeg runtime or disable watermarking.",
+        )
     if not Path(watermark_path).is_file():
-        logger.warning(f"Watermark image not found: {watermark_path}")
-        return None
+        raise RequestedStageError(
+            stage="watermark",
+            requested_implementation="ffmpeg-overlay",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="the configured watermark image was not found",
+            recovery_hint="Select an existing watermark image or disable watermarking.",
+        )
     position = position.lower().strip()
-    overlay_tpl = _WM_POSITION_MAP.get(position, _WM_POSITION_MAP["bottom-right"])
+    if position not in _WM_POSITION_MAP:
+        raise RequestedStageError(
+            stage="watermark",
+            requested_implementation="ffmpeg-overlay",
+            failure_class=FAILURE_POLICY_BLOCKED,
+            detail=f"unsupported watermark position {position!r}",
+            recovery_hint=(
+                "Choose top-left, top-right, bottom-left, bottom-right, or center."
+            ),
+        )
+    overlay_tpl = _WM_POSITION_MAP[position]
     overlay_expr = overlay_tpl[0].format(margin=margin)
     filter_parts = []
     if 0.0 < opacity < 1.0:
@@ -236,13 +380,37 @@ def burn_watermark(
             logger.info(f"Watermark burned at {position}: {output_path}")
             return output_path
     except subprocess.CalledProcessError as exc:
-        logger.warning(
-            f"Watermark burn failed: "
-            f"{exc.stderr.decode('utf-8', 'replace')[:400]}"
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning("Watermark burn timed out")
-    return None
+        raise RequestedStageError(
+            stage="watermark",
+            requested_implementation="ffmpeg-overlay",
+            actual_implementation="ffmpeg-overlay",
+            provider="ffmpeg",
+            failure_class=FAILURE_RUNTIME,
+            detail=f"FFmpeg exited {exc.returncode}",
+            recovery_hint="Verify the watermark and output codec, then retry.",
+            cause=exc,
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RequestedStageError(
+            stage="watermark",
+            requested_implementation="ffmpeg-overlay",
+            actual_implementation="ffmpeg-overlay",
+            provider="ffmpeg",
+            failure_class=FAILURE_RUNTIME,
+            detail="FFmpeg timed out",
+            recovery_hint="Retry the watermark pass or disable watermarking.",
+            cause=exc,
+            retriable=True,
+        ) from exc
+    raise RequestedStageError(
+        stage="watermark",
+        requested_implementation="ffmpeg-overlay",
+        actual_implementation="ffmpeg-overlay",
+        provider="ffmpeg",
+        failure_class=FAILURE_OUTPUT_MISSING,
+        detail="FFmpeg returned without a watermark output",
+        recovery_hint="Verify the watermark and output codec, then retry.",
+    )
 
 
 def burn_subtitles(
@@ -252,20 +420,29 @@ def burn_subtitles(
     style_override: str = "",
     video_encode_args: Optional[Sequence[str]] = None,
     preserve_audio: bool = True,
-) -> Optional[str]:
+) -> str:
     """Re-burn a subtitle file (.srt, .vtt, or .ass) into the cleaned video.
 
     Uses ffmpeg's subtitles filter. An optional ASS style override string
     lets callers restyle the burned text (font, size, colour, position).
-    Returns the produced path on success, None when ffmpeg or the
-    subtitle file is missing.
+    Returns the produced path on success or raises a classified stage error.
     """
     if shutil.which("ffmpeg") is None:
-        logger.info("ffmpeg not on PATH; cannot burn subtitles")
-        return None
+        raise RequestedStageError(
+            stage="subtitle_burn",
+            requested_implementation="ffmpeg-subtitles",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="FFmpeg was not found on PATH",
+            recovery_hint="Install the supported FFmpeg runtime or disable subtitle burn.",
+        )
     if not Path(subtitle_path).is_file():
-        logger.warning(f"Subtitle file not found: {subtitle_path}")
-        return None
+        raise RequestedStageError(
+            stage="subtitle_burn",
+            requested_implementation="ffmpeg-subtitles",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="the configured subtitle file was not found",
+            recovery_hint="Select an existing subtitle file or disable subtitle burn.",
+        )
     # Escape the path for ffmpeg's filtergraph single-quoted value context.
     # Backslashes become forward slashes (valid on Windows for the subtitles
     # filter), ':' is escaped, and a literal single quote is emitted via the
@@ -280,9 +457,12 @@ def burn_subtitles(
     vf = f"subtitles='{sub_escaped}'"
     safe_style = _sanitize_force_style(style_override)
     if style_override and not safe_style:
-        logger.warning(
-            "Ignoring subtitle style override: it contains characters that are "
-            "not valid in an ASS force_style string."
+        raise RequestedStageError(
+            stage="subtitle_burn",
+            requested_implementation="ffmpeg-subtitles",
+            failure_class=FAILURE_POLICY_BLOCKED,
+            detail="the subtitle style contains unsafe force_style characters",
+            recovery_hint="Remove unsupported characters from the style override.",
         )
     if safe_style:
         vf += f":force_style='{safe_style}'"
@@ -302,13 +482,37 @@ def burn_subtitles(
             logger.info(f"Subtitles re-burned: {output_path}")
             return output_path
     except subprocess.CalledProcessError as exc:
-        logger.warning(
-            f"Subtitle burn failed: "
-            f"{exc.stderr.decode('utf-8', 'replace')[:400]}"
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning("Subtitle burn timed out")
-    return None
+        raise RequestedStageError(
+            stage="subtitle_burn",
+            requested_implementation="ffmpeg-subtitles",
+            actual_implementation="ffmpeg-subtitles",
+            provider="ffmpeg",
+            failure_class=FAILURE_RUNTIME,
+            detail=f"FFmpeg exited {exc.returncode}",
+            recovery_hint="Verify the subtitle file and output codec, then retry.",
+            cause=exc,
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RequestedStageError(
+            stage="subtitle_burn",
+            requested_implementation="ffmpeg-subtitles",
+            actual_implementation="ffmpeg-subtitles",
+            provider="ffmpeg",
+            failure_class=FAILURE_RUNTIME,
+            detail="FFmpeg timed out",
+            recovery_hint="Retry the subtitle burn or disable it.",
+            cause=exc,
+            retriable=True,
+        ) from exc
+    raise RequestedStageError(
+        stage="subtitle_burn",
+        requested_implementation="ffmpeg-subtitles",
+        actual_implementation="ffmpeg-subtitles",
+        provider="ffmpeg",
+        failure_class=FAILURE_OUTPUT_MISSING,
+        detail="FFmpeg returned without a subtitle-burn output",
+        recovery_hint="Verify the subtitle file and output codec, then retry.",
+    )
 
 
 def add_film_grain(
@@ -318,7 +522,7 @@ def add_film_grain(
     *,
     video_encode_args: Optional[Sequence[str]] = None,
     preserve_audio: bool = True,
-) -> Optional[str]:
+) -> str:
     """RM-80: cheap additive film grain.
 
     Two paths:
@@ -328,14 +532,25 @@ def add_film_grain(
     - For other codecs we use ffmpeg's `noise` filter to add per-channel
       uniform noise to every frame. `strength` is roughly the noise
       amplitude as a fraction of full-scale (0.04 ~= 10/255). Returns
-      the produced output path or None when ffmpeg is missing.
+      the validated output path or raises a classified stage error.
     """
     if shutil.which("ffmpeg") is None:
-        logger.info("ffmpeg not on PATH; cannot add film grain")
-        return None
+        raise RequestedStageError(
+            stage="film_grain",
+            requested_implementation="ffmpeg-noise",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="FFmpeg was not found on PATH",
+            recovery_hint="Install the supported FFmpeg runtime or disable film grain.",
+        )
     strength = float(strength)
     if not (0.0 < strength <= 0.5):
-        strength = 0.04
+        raise RequestedStageError(
+            stage="film_grain",
+            requested_implementation="ffmpeg-noise",
+            failure_class=FAILURE_POLICY_BLOCKED,
+            detail="film-grain strength must be greater than 0 and at most 0.5",
+            recovery_hint="Choose a film-grain strength between 0 and 0.5.",
+        )
     noise_level = max(1, int(round(strength * 255)))
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-nostats",
@@ -349,12 +564,37 @@ def add_film_grain(
     cmd += [output_path]
     try:
         run_process(cmd, check=True, capture_output=True, timeout=7200)
-        return output_path
+        if Path(output_path).is_file():
+            return output_path
     except subprocess.CalledProcessError as exc:
-        logger.warning(
-            f"Film-grain pass failed: {exc.stderr.decode('utf-8', 'replace')[:400]}"
-        )
-        return None
-    except subprocess.TimeoutExpired:
-        logger.warning("Film-grain pass timed out")
-        return None
+        raise RequestedStageError(
+            stage="film_grain",
+            requested_implementation="ffmpeg-noise",
+            actual_implementation="ffmpeg-noise",
+            provider="ffmpeg",
+            failure_class=FAILURE_RUNTIME,
+            detail=f"FFmpeg exited {exc.returncode}",
+            recovery_hint="Verify the output codec, then retry or disable film grain.",
+            cause=exc,
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RequestedStageError(
+            stage="film_grain",
+            requested_implementation="ffmpeg-noise",
+            actual_implementation="ffmpeg-noise",
+            provider="ffmpeg",
+            failure_class=FAILURE_RUNTIME,
+            detail="FFmpeg timed out",
+            recovery_hint="Retry the film-grain pass or disable it.",
+            cause=exc,
+            retriable=True,
+        ) from exc
+    raise RequestedStageError(
+        stage="film_grain",
+        requested_implementation="ffmpeg-noise",
+        actual_implementation="ffmpeg-noise",
+        provider="ffmpeg",
+        failure_class=FAILURE_OUTPUT_MISSING,
+        detail="FFmpeg returned without a film-grain output",
+        recovery_hint="Verify the output codec, then retry or disable film grain.",
+    )

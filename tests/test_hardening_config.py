@@ -346,6 +346,15 @@ class ConfigFuzzTests(unittest.TestCase):
             self.assertLessEqual(cfg.rife_fast_stride, 60)
             self.assertIsInstance(cfg.multi_audio_passthrough, bool)
 
+    def test_backend_rejects_an_unknown_named_ocr_engine(self):
+        cfg = processor.ProcessingConfig(detection_engine="rapidocr-typo")
+
+        with self.assertRaises(ValueError) as raised:
+            processor.normalize_processing_config(cfg)
+
+        self.assertIn("Unsupported OCR engine", str(raised.exception))
+        self.assertIn("rapidocr-typo", str(raised.exception))
+
 
 class GuiToBackendFieldWiringTests(unittest.TestCase):
     """Backend fields must round-trip through the GUI

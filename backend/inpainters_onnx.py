@@ -8,9 +8,8 @@ be run via `onnxruntime` (CPU or GPU). Each backend defined here:
 - Registers itself with the inpainter registry under the mode name
   the GUI/CLI uses (`"lama"` for LaMa-ONNX shadowing the default
   PyTorch LaMa, `"migan"` for MI-GAN).
-- Falls back to cv2.inpaint when the ONNX session can't be created
-  (missing weights, missing onnxruntime, etc.) so the user always
-  gets *some* result even on a half-broken install.
+- Fails with a classified, actionable error when the requested session cannot
+  load or execute. It never substitutes OpenCV pixels under an ONNX label.
 
 To enable LaMa-ONNX:
     pip install onnxruntime
@@ -39,14 +38,23 @@ from typing import List
 import cv2
 import numpy as np
 
-from backend.inpainters._common import _binarize_mask, apply_finishing
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
+from backend.inpainters._common import (
+    BaseInpainter,
+    _binarize_mask,
+    apply_finishing,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _maybe_session(model_path: str, providers=None, adapter_name: str = "lama-onnx"):
-    """Lazy-init an onnxruntime InferenceSession; returns None on any
-    failure so the caller falls back to cv2."""
+    """Lazy-init an ONNX Runtime session for a fail-closed caller."""
     try:
         import onnxruntime as ort  # type: ignore
     except ImportError:
@@ -151,12 +159,11 @@ def _ensure_multiple_of(value: int, multiple: int) -> int:
 
 
 
-class LamaOnnxInpainter:
+class LamaOnnxInpainter(BaseInpainter):
     """Run LaMa in ONNX Runtime. ~3-5x faster than the PyTorch
     simple-lama-inpainting path and runs without torch entirely.
 
-    Defers to cv2.inpaint per-frame when the ONNX session is
-    unavailable so the backend stays usable on partial installs.
+    Missing dependencies, invalid weights, and inference errors fail closed.
     """
 
     INPUT_NAME = "image"
@@ -165,7 +172,17 @@ class LamaOnnxInpainter:
     def __init__(self, device: str = "cpu", config=None):
         self.device = device
         self.config = config
-        model_path = os.environ.get("VSR_LAMA_ONNX", "")
+        model_path = os.environ.get("VSR_LAMA_ONNX", "").strip()
+        if not model_path or not Path(model_path).is_file():
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail="VSR_LAMA_ONNX does not name an existing model file",
+                recovery_hint=(
+                    "Set VSR_LAMA_ONNX to a reviewed LaMa ONNX model, then retry."
+                ),
+            )
         # RM-70: when TensorRT is enabled, prefer the cached engine via
         # the TensorrtExecutionProvider before falling back to CUDA/CPU.
         providers = []
@@ -183,17 +200,25 @@ class LamaOnnxInpainter:
         except Exception as exc:
             logger.debug(f"TensorRT path skipped: {exc}")
         providers += _providers_for_device(device)
-        self._session = (
-            _maybe_session(model_path, providers, "lama-onnx")
-            if model_path else None
-        )
+        self._session = _maybe_session(model_path, providers, "lama-onnx")
+        if self._session is None:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="the LaMa ONNX Runtime session could not be created",
+                recovery_hint=(
+                    "Verify the model, adapter manifest, and ONNX Runtime "
+                    "provider, then retry."
+                ),
+            )
 
     @property
     def backend_name(self) -> str:
-        """RM-147: report the provider that actually loaded, or the cv2 fallback."""
+        """Report the ONNX Runtime provider that actually loaded."""
         session = getattr(self, "_session", None)
         if session is None:
-            return "cv2"
+            return "unavailable"
         try:
             providers = list(session.get_providers())
         except Exception:
@@ -202,7 +227,13 @@ class LamaOnnxInpainter:
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self._session is None:
-            return _cv2_fallback(frames, masks, self.config)
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="the LaMa ONNX Runtime session is unavailable",
+                recovery_hint="Recreate the LaMa ONNX session, then retry.",
+            )
         results: List[np.ndarray] = []
         for frame, mask in zip(frames, masks):
             if mask.max() == 0:
@@ -211,8 +242,19 @@ class LamaOnnxInpainter:
             try:
                 results.append(self._inpaint_one(frame, mask))
             except Exception as exc:
-                logger.warning(f"LaMa-ONNX inference failed on frame, falling back: {exc}")
-                results.append(_cv2_inpaint_single(frame, mask))
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation="lama",
+                    actual_implementation="lama",
+                    provider=self.backend_name,
+                    failure_class=FAILURE_RUNTIME,
+                    detail=str(exc),
+                    recovery_hint=(
+                        "Verify the LaMa model inputs and ONNX Runtime provider, "
+                        "then retry."
+                    ),
+                    cause=exc,
+                ) from exc
         return _apply_feather_blend(frames, results, masks, self.config)
 
     def _inpaint_one(self, frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -240,28 +282,46 @@ class LamaOnnxInpainter:
         return bgr[:h, :w]
 
 
-class MiGanInpainter:
+class MiGanInpainter(BaseInpainter):
     """Run MI-GAN in ONNX Runtime. Single-frame, mobile-grade speed
     (~10 ms / 512x512 on a modern CPU per the ICCV 2023 paper).
-    Falls back to cv2 when the session can't initialise.
+    Missing dependencies, invalid weights, and inference errors fail closed.
     """
 
     def __init__(self, device: str = "cpu", config=None):
         self.device = device
         self.config = config
-        model_path = os.environ.get("VSR_MIGAN_ONNX", "")
+        model_path = os.environ.get("VSR_MIGAN_ONNX", "").strip()
+        if not model_path or not Path(model_path).is_file():
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="migan",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail="VSR_MIGAN_ONNX does not name an existing model file",
+                recovery_hint=(
+                    "Set VSR_MIGAN_ONNX to a reviewed MI-GAN model, then retry."
+                ),
+            )
         providers = _providers_for_device(device)
-        self._session = (
-            _maybe_session(model_path, providers, "migan-onnx")
-            if model_path else None
-        )
+        self._session = _maybe_session(model_path, providers, "migan-onnx")
+        if self._session is None:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="migan",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="the MI-GAN ONNX Runtime session could not be created",
+                recovery_hint=(
+                    "Verify the model, adapter manifest, and ONNX Runtime "
+                    "provider, then retry."
+                ),
+            )
 
     @property
     def backend_name(self) -> str:
-        """RM-147: report the provider that actually loaded, or the cv2 fallback."""
+        """Report the ONNX Runtime provider that actually loaded."""
         session = getattr(self, "_session", None)
         if session is None:
-            return "cv2"
+            return "unavailable"
         try:
             providers = list(session.get_providers())
         except Exception:
@@ -270,7 +330,13 @@ class MiGanInpainter:
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self._session is None:
-            return _cv2_fallback(frames, masks, self.config)
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="migan",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="the MI-GAN ONNX Runtime session is unavailable",
+                recovery_hint="Recreate the MI-GAN ONNX session, then retry.",
+            )
         results: List[np.ndarray] = []
         for frame, mask in zip(frames, masks):
             if mask.max() == 0:
@@ -279,8 +345,19 @@ class MiGanInpainter:
             try:
                 results.append(self._inpaint_one(frame, mask))
             except Exception as exc:
-                logger.warning(f"MI-GAN inference failed on frame, falling back: {exc}")
-                results.append(_cv2_inpaint_single(frame, mask))
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation="migan",
+                    actual_implementation="migan",
+                    provider=self.backend_name,
+                    failure_class=FAILURE_RUNTIME,
+                    detail=str(exc),
+                    recovery_hint=(
+                        "Verify the MI-GAN model inputs and ONNX Runtime "
+                        "provider, then retry."
+                    ),
+                    cause=exc,
+                ) from exc
         return _apply_feather_blend(frames, results, masks, self.config)
 
     def _inpaint_one(self, frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -310,21 +387,6 @@ class MiGanInpainter:
         return cv2.resize(bgr_out, (w, h), interpolation=cv2.INTER_LINEAR)
 
 
-def _cv2_fallback(frames, masks, config):
-    """Per-frame cv2.inpaint + feather blend, used when an ONNX session
-    isn't available."""
-    out: List[np.ndarray] = []
-    for f, m in zip(frames, masks):
-        out.append(_cv2_inpaint_single(f, m))
-    return _apply_feather_blend(frames, out, masks, config)
-
-
-def _cv2_inpaint_single(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    if mask.max() == 0:
-        return frame.copy()
-    return cv2.inpaint(frame, mask, 7, cv2.INPAINT_NS)
-
-
 def _apply_feather_blend(original, filled, masks, config):
     """Delegate to the shared post-inpaint finishing step so ONNX backends
     use identical edge-ring + feather boundary handling as every other
@@ -339,7 +401,14 @@ def maybe_register() -> List[str]:
     registered = []
     lama_path = os.environ.get("VSR_LAMA_ONNX", "").strip()
     if lama_path and Path(lama_path).is_file():
-        register("lama", lambda device, config: LamaOnnxInpainter(device, config))
+        register(
+            "lama",
+            lambda device, config: LamaOnnxInpainter(device, config),
+            implementation_id="lama",
+            recovery_hint=(
+                "Verify VSR_LAMA_ONNX and the ONNX Runtime provider, then retry."
+            ),
+        )
         registered.append("lama (ONNX)")
         logger.info("LaMa-ONNX backend registered, shadowing PyTorch LaMa")
     elif lama_path:
@@ -349,7 +418,14 @@ def maybe_register() -> List[str]:
             lama_path,
         )
     if os.environ.get("VSR_MIGAN_ONNX"):
-        register("migan", lambda device, config: MiGanInpainter(device, config))
+        register(
+            "migan",
+            lambda device, config: MiGanInpainter(device, config),
+            implementation_id="migan",
+            recovery_hint=(
+                "Verify VSR_MIGAN_ONNX and the ONNX Runtime provider, then retry."
+            ),
+        )
         registered.append("migan")
         logger.info("MI-GAN ONNX backend registered as mode 'migan'")
     return registered

@@ -4,7 +4,7 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from backend.config import ProcessingConfig
+from backend.config import InpaintMode, ProcessingConfig
 from backend.device_provider import InpainterUnavailableError, RuntimeDeviceProvider
 from backend.processor import SubtitleRemover
 
@@ -95,6 +95,17 @@ def test_runtime_provider_raises_actionable_error_for_unregistered_mode():
     assert excinfo.value.requested == "diffueraser"
 
 
+def test_unavailable_inpainter_keeps_typed_failure_classification():
+    from backend.failure_reason import (
+        REASON_MODEL_MISSING,
+        classify_failure_reason,
+    )
+
+    error = InpainterUnavailableError("does-not-exist", ["sttn"])
+
+    assert classify_failure_reason(exc=error) == REASON_MODEL_MISSING
+
+
 def test_unknown_inpaint_mode_string_raises_value_error():
     """Issue #7 companion: config-level coercion must also reject unknown
     model names instead of silently substituting STTN."""
@@ -143,20 +154,35 @@ def test_subtitle_remover_uses_injected_provider_for_selection_and_factory():
     )
 
 
-def test_oom_recovery_uses_injected_memory_hooks_without_gpu():
+def test_oom_recovery_retries_same_implementation_on_cpu():
     class AlwaysOom:
+        backend_name = "same-model-cuda"
+        _vsr_registered_implementation = "sttn"
+
         def inpaint(self, frames, masks):
             raise RuntimeError("synthetic provider OOM")
+
+    class CpuInpainter:
+        backend_name = "same-model-cpu"
+        _vsr_registered_implementation = "sttn"
+
+        def inpaint(self, frames, masks):
+            return [frame.copy() for frame in frames]
 
     class Provider:
         def __init__(self):
             self.freed = 0
+            self.created = []
 
         def is_oom_error(self, exc):
             return "provider OOM" in str(exc)
 
         def free_inference_memory(self):
             self.freed += 1
+
+        def create_inpainter(self, name, device, config):
+            self.created.append((name, device))
+            return CpuInpainter()
 
     remover = SubtitleRemover.__new__(SubtitleRemover)
     remover.config = ProcessingConfig(device="cpu")
@@ -169,6 +195,156 @@ def test_oom_recovery_uses_injected_memory_hooks_without_gpu():
 
     assert len(output) == 1
     assert remover.device_provider.freed == 1
+    assert remover.device_provider.created == [("sttn", "cpu")]
+    assert remover.inpainter.backend_name == "same-model-cpu"
+
+
+def test_each_successful_inpaint_call_records_its_actual_provider():
+    class Inpainter:
+        _vsr_registered_implementation = "sttn"
+
+        def __init__(self, provider):
+            self.backend_name = provider
+
+        def inpaint(self, frames, masks):
+            return [frame.copy() for frame in frames]
+
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = ProcessingConfig(device="cuda:0")
+    remover.inpainter = Inpainter("CUDAExecutionProvider")
+    frame = np.full((8, 8, 3), 120, np.uint8)
+    mask = np.zeros((8, 8), np.uint8)
+
+    remover._execute_inpainter([frame, frame], [mask, mask])
+    remover.config.device = "cpu"
+    remover.inpainter = Inpainter("CPUExecutionProvider")
+    remover._execute_inpainter([frame], [mask])
+
+    stage = remover.execution_provenance.to_dict()["stages"]["inpaint"]
+    executions = {
+        (item["provider"], item["effectiveDevice"]): item["executionCount"]
+        for item in stage["actualExecutions"]
+    }
+    assert executions == {
+        ("CUDAExecutionProvider", "cuda"): 2,
+        ("CPUExecutionProvider", "cpu"): 1,
+    }
+
+
+def test_cumulative_auto_identity_merges_deltas_across_provider_instances():
+    class AutoRoute:
+        _vsr_registered_implementation = "auto"
+
+        def __init__(self, implementation, provider, device):
+            self.implementation = implementation
+            self.backend_name = provider
+            self.device = device
+            self.count = 0
+
+        def inpaint(self, frames, masks):
+            self.count += len(frames)
+            return [frame.copy() for frame in frames]
+
+        def execution_identity(self):
+            return {
+                "implementation": self.implementation,
+                "provider": self.backend_name,
+                "effectiveDevice": self.device,
+                "actualExecutions": [{
+                    "implementation": self.implementation,
+                    "provider": self.backend_name,
+                    "effectiveDevice": self.device,
+                    "executionCount": self.count,
+                }],
+                "fallbackChain": [],
+            }
+
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = ProcessingConfig(mode=InpaintMode.AUTO, device="cuda:0")
+    frame = np.full((8, 8, 3), 120, np.uint8)
+    mask = np.zeros((8, 8), np.uint8)
+    remover.inpainter = AutoRoute(
+        "sttn", "CUDAExecutionProvider", "cuda:0"
+    )
+
+    remover._execute_inpainter([frame, frame], [mask, mask])
+    remover._sync_inpaint_provenance(2)
+    remover.config.device = "cpu"
+    remover.inpainter = AutoRoute(
+        "propainter", "CPUExecutionProvider", "cpu"
+    )
+    remover._execute_inpainter([frame], [mask])
+
+    stage = remover.execution_provenance.to_dict()["stages"]["inpaint"]
+    executions = {
+        item["implementation"]: item["executionCount"]
+        for item in stage["actualExecutions"]
+    }
+    assert executions == {"sttn": 2, "propainter": 1}
+    assert stage["actualImplementation"] == "mixed"
+
+
+def test_provenance_sync_supports_slotted_inpainter():
+    class SlottedInpainter:
+        __slots__ = ()
+        backend_name = "CPUExecutionProvider"
+        _vsr_registered_implementation = "sttn"
+
+        def inpaint(self, frames, masks):
+            return [frame.copy() for frame in frames]
+
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = ProcessingConfig(device="cpu")
+    remover.inpainter = SlottedInpainter()
+    frame = np.full((8, 8, 3), 120, np.uint8)
+    mask = np.zeros((8, 8), np.uint8)
+
+    output = remover._execute_inpainter([frame], [mask])
+
+    assert len(output) == 1
+    stage = remover.execution_provenance.to_dict()["stages"]["inpaint"]
+    assert stage["actualImplementation"] == "sttn"
+    assert stage["actualExecutions"][0]["executionCount"] == 1
+
+
+def test_auto_tbe_route_reports_cpu_under_a_cuda_request():
+    class AutoTbeRoute:
+        backend_name = "AUTO (TBE)"
+        _vsr_registered_implementation = "auto"
+
+        def inpaint(self, frames, masks):
+            return [frame.copy() for frame in frames]
+
+        def execution_identity(self):
+            return {
+                "implementation": "sttn",
+                "provider": "TBE",
+                "effectiveDevice": "cuda:0",
+                "actualExecutions": [{
+                    "implementation": "sttn",
+                    "provider": "TBE",
+                    "effectiveDevice": "cuda:0",
+                    "executionCount": 1,
+                }],
+                "fallbackChain": [],
+            }
+
+    remover = SubtitleRemover.__new__(SubtitleRemover)
+    remover.config = ProcessingConfig(
+        mode=InpaintMode.AUTO,
+        device="cuda:0",
+    )
+    remover._requested_device = "cuda:0"
+    remover.inpainter = AutoTbeRoute()
+    remover._refresh_execution_provenance()
+    frame = np.full((8, 8, 3), 120, np.uint8)
+    mask = np.zeros((8, 8), np.uint8)
+
+    remover._execute_inpainter([frame], [mask])
+
+    stage = remover.execution_provenance.to_dict()["stages"]["inpaint"]
+    assert stage["actualExecutions"][0]["effectiveDevice"] == "cpu"
+    assert stage["deviceFellBack"] is True
 
 
 def test_adaptive_vram_probe_and_shutdown_failures_leave_warnings(caplog):

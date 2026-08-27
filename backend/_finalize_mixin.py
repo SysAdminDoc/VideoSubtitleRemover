@@ -26,6 +26,12 @@ from backend.io import (
     _promote_temp_output,
 )
 from backend.hdr import hdr_repair_block_reason
+from backend.execution_provenance import (
+    FAILURE_OUTPUT_INVALID,
+    FAILURE_OUTPUT_MISSING,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -188,8 +194,8 @@ class _FinalizeMixin:
 
             # RM-78 / RM-80: optional post-restore passes (Real-ESRGAN
             # upscale, film-grain re-synthesis). Run after the main mux
-            # so the user-visible output is the post-processed file;
-            # each adapter degrades gracefully when its dep is missing.
+            # so the user-visible output is the post-processed file.
+            # Requested adapters fail closed when they cannot execute.
             self._run_post_restore_passes(final_output_path, temp_dir)
             if not use_frame_output:
                 self._validate_output_contract(final_output_path)
@@ -633,11 +639,7 @@ class _FinalizeMixin:
         return True
 
     def _run_post_restore_passes(self, output_path: str, temp_dir: str) -> None:
-        """RM-78 / RM-80: run optional post-restore passes against the
-        finalised output in place. Each adapter is a no-op when its
-        dep is missing; the original output is preserved on every
-        failure path so users always have a result.
-        """
+        """Run requested post-restore passes and fail if one cannot execute."""
         contract = getattr(self, "_output_contract", None)
 
         def post_path(stem: str) -> str:
@@ -645,73 +647,176 @@ class _FinalizeMixin:
                 return contract.temp_path(temp_dir, stem)
             return os.path.join(temp_dir, f"{stem}{Path(output_path).suffix or '.mp4'}")
 
-        if self.config.upscale_factor in (2, 3, 4):
-            try:
-                from backend.post_restore import realesrgan_upscale
-                upscaled = post_path("upscaled")
-                produced = realesrgan_upscale(
-                    output_path, upscaled,
-                    scale=int(self.config.upscale_factor),
+        def require_promoted(
+            produced: Optional[str],
+            *,
+            label: str,
+            stage: str,
+            implementation: str,
+            provider: str,
+        ) -> None:
+            if not produced or not Path(produced).is_file():
+                raise RequestedStageError(
+                    stage=stage,
+                    requested_implementation=implementation,
+                    actual_implementation=implementation,
+                    provider=provider,
+                    failure_class=FAILURE_OUTPUT_MISSING,
+                    detail=f"{label} returned no valid output",
+                    recovery_hint=(
+                        f"Verify the {label} adapter and output codec, then retry."
+                    ),
                 )
-                if produced and Path(produced).is_file():
-                    if self._promote_post_restore_result(
-                        produced, output_path, temp_dir, "realesrgan"
-                    ):
-                        logger.info(
-                            f"Real-ESRGAN x{self.config.upscale_factor} pass complete"
-                        )
+            if not self._promote_post_restore_result(
+                produced, output_path, temp_dir, label
+            ):
+                raise RequestedStageError(
+                    stage=stage,
+                    requested_implementation=implementation,
+                    actual_implementation=implementation,
+                    provider=provider,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail=f"{label} output violated the final output contract",
+                    recovery_hint=(
+                        f"Repair the {label} output settings, then retry."
+                    ),
+                )
+            self._record_stage_success(
+                stage,
+                implementation,
+                provider=provider,
+            )
+
+        def run_and_promote(
+            action,
+            *,
+            label: str,
+            stage: str,
+            implementation: str,
+            provider: str,
+        ) -> None:
+            try:
+                produced = action()
+                require_promoted(
+                    produced,
+                    label=label,
+                    stage=stage,
+                    implementation=implementation,
+                    provider=provider,
+                )
+            except RequestedStageError as exc:
+                if exc.stage == stage:
+                    raise
+                raise RequestedStageError(
+                    stage=stage,
+                    requested_implementation=(
+                        exc.requested_implementation or implementation
+                    ),
+                    actual_implementation=exc.actual_implementation,
+                    provider=exc.provider,
+                    failure_class=exc.failure_class,
+                    detail=exc.detail,
+                    recovery_hint=exc.recovery_hint,
+                    fallback_chain=list(exc.fallback_chain),
+                    selection_policy=exc.selection_policy,
+                    cause=exc.cause or exc,
+                    retriable=exc.retriable,
+                ) from exc
             except Exception as exc:
-                logger.warning(f"Real-ESRGAN pass failed: {exc}", exc_info=True)
+                raise RequestedStageError(
+                    stage=stage,
+                    requested_implementation=implementation,
+                    actual_implementation=implementation,
+                    provider=provider,
+                    failure_class=FAILURE_RUNTIME,
+                    detail=str(exc),
+                    recovery_hint=(
+                        f"Verify the {label} adapter and runtime, then retry."
+                    ),
+                    cause=exc,
+                ) from exc
+
+        if self.config.upscale_factor in (2, 3, 4):
+            from backend.post_restore import (
+                realesrgan_upscale,
+                selected_restoration_provider,
+            )
+            upscaled = post_path("upscaled")
+            run_and_promote(
+                lambda: realesrgan_upscale(
+                    output_path,
+                    upscaled,
+                    scale=int(self.config.upscale_factor),
+                ),
+                label="realesrgan",
+                stage="realesrgan",
+                implementation="realesrgan",
+                provider=selected_restoration_provider("realesrgan"),
+            )
+            logger.info(
+                f"Real-ESRGAN x{self.config.upscale_factor} pass complete"
+            )
         if self.config.swinir_restore:
-            try:
-                from backend.post_restore import swinir_restore
-                restored = post_path("swinir")
-                produced = swinir_restore(output_path, restored)
-                if produced and Path(produced).is_file():
-                    if self._promote_post_restore_result(
-                        produced, output_path, temp_dir, "swinir"
-                    ):
-                        logger.info("SwinIR restoration pass complete")
-            except Exception as exc:
-                logger.warning(f"SwinIR pass failed: {exc}", exc_info=True)
+            from backend.post_restore import (
+                selected_restoration_provider,
+                swinir_restore,
+            )
+            restored = post_path("swinir")
+            run_and_promote(
+                lambda: swinir_restore(output_path, restored),
+                label="swinir",
+                stage="swinir",
+                implementation="swinir",
+                provider=selected_restoration_provider("swinir"),
+            )
+            logger.info("SwinIR restoration pass complete")
         if self.config.seedvr2_restore:
-            try:
-                from backend.post_restore import seedvr2_restore
-                restored = post_path("seedvr2")
-                produced = seedvr2_restore(output_path, restored)
-                if produced and Path(produced).is_file():
-                    if self._promote_post_restore_result(
-                        produced, output_path, temp_dir, "seedvr2"
-                    ):
-                        logger.info("SeedVR2 restoration pass complete")
-            except Exception as exc:
-                logger.warning(f"SeedVR2 pass failed: {exc}", exc_info=True)
+            from backend.post_restore import (
+                seedvr2_restore,
+                selected_restoration_provider,
+            )
+            restored = post_path("seedvr2")
+            run_and_promote(
+                lambda: seedvr2_restore(output_path, restored),
+                label="seedvr2",
+                stage="seedvr2",
+                implementation="seedvr2",
+                provider=selected_restoration_provider("seedvr2"),
+            )
+            logger.info("SeedVR2 restoration pass complete")
         if self.config.film_grain_strength > 0.0:
             if self._uses_native_av1_film_grain():
+                self._record_stage_success(
+                    "film_grain",
+                    "svt-av1-native",
+                    provider="libsvtav1",
+                )
                 logger.info(
                     "SVT-AV1 native film grain was enabled during encode; "
                     "skipping additive post-encode grain pass."
                 )
             else:
-                try:
-                    from backend.post_restore import add_film_grain
-                    grain_out = post_path("grainy")
-                    produced = add_film_grain(
-                        output_path, grain_out,
+                from backend.post_restore import add_film_grain
+                grain_out = post_path("grainy")
+                run_and_promote(
+                    lambda: add_film_grain(
+                        output_path,
+                        grain_out,
                         strength=self.config.film_grain_strength,
-                        video_encode_args=self._get_encode_args(allow_d3d12=False),
+                        video_encode_args=self._get_encode_args(
+                            allow_d3d12=False
+                        ),
                         preserve_audio=self.config.preserve_audio,
-                    )
-                    if produced and Path(produced).is_file():
-                        if self._promote_post_restore_result(
-                            produced, output_path, temp_dir, "film-grain"
-                        ):
-                            logger.info(
-                                f"Film-grain pass complete "
-                                f"(strength={self.config.film_grain_strength:.3f})"
-                            )
-                except Exception as exc:
-                    logger.warning(f"Film-grain pass failed: {exc}", exc_info=True)
+                    ),
+                    label="film-grain",
+                    stage="film_grain",
+                    implementation="ffmpeg-noise",
+                    provider="ffmpeg",
+                )
+                logger.info(
+                    f"Film-grain pass complete "
+                    f"(strength={self.config.film_grain_strength:.3f})"
+                )
         translation_path = str(getattr(self, "_translation_burn_path", "") or "")
         subtitle_path = translation_path or self.config.restyle_subtitle
         if subtitle_path:
@@ -719,57 +824,58 @@ class _FinalizeMixin:
             try:
                 from backend.post_restore import burn_subtitles
                 restyle_out = post_path("restyled")
-                produced = burn_subtitles(
-                    output_path, restyle_out,
-                    subtitle_path=subtitle_path,
-                    style_override=(
-                        self.config.translation_style
-                        if translation_requested else self.config.restyle_style
-                    ),
-                    video_encode_args=self._get_encode_args(allow_d3d12=False),
-                    preserve_audio=self.config.preserve_audio,
-                )
-                promoted = False
-                if produced and Path(produced).is_file():
-                    promoted = self._promote_post_restore_result(
-                        produced,
+                run_and_promote(
+                    lambda: burn_subtitles(
                         output_path,
-                        temp_dir,
-                        "translation" if translation_requested else "restyle",
-                    )
-                    if promoted:
-                        logger.info(
-                            "%s subtitle burn pass complete",
-                            "Translated" if translation_requested else "Restyle",
-                        )
-                if translation_requested and not promoted:
-                    raise RuntimeError(
-                        "translated subtitle re-embedding produced no valid output")
+                        restyle_out,
+                        subtitle_path=subtitle_path,
+                        style_override=(
+                            self.config.translation_style
+                            if translation_requested
+                            else self.config.restyle_style
+                        ),
+                        video_encode_args=self._get_encode_args(
+                            allow_d3d12=False
+                        ),
+                        preserve_audio=self.config.preserve_audio,
+                    ),
+                    label=(
+                        "translation" if translation_requested else "restyle"
+                    ),
+                    stage="subtitle_burn",
+                    implementation="ffmpeg-subtitles",
+                    provider="ffmpeg",
+                )
+                logger.info(
+                    "%s subtitle burn pass complete",
+                    "Translated" if translation_requested else "Restyle",
+                )
                 if translation_requested:
                     self.last_translation["status"] = "embedded"
             except Exception as exc:
                 if translation_requested:
                     self.last_translation["status"] = "failed"
                     self.last_translation["error"] = str(exc)
-                    raise
-                logger.warning(f"Restyle pass failed: {exc}", exc_info=True)
+                raise
         if self.config.watermark_image:
-            try:
-                from backend.post_restore import burn_watermark
-                wm_out = post_path("watermarked")
-                produced = burn_watermark(
-                    output_path, wm_out,
+            from backend.post_restore import burn_watermark
+            wm_out = post_path("watermarked")
+            run_and_promote(
+                lambda: burn_watermark(
+                    output_path,
+                    wm_out,
                     watermark_path=self.config.watermark_image,
                     position=self.config.watermark_position,
                     opacity=self.config.watermark_opacity,
                     margin=self.config.watermark_margin,
-                    video_encode_args=self._get_encode_args(allow_d3d12=False),
+                    video_encode_args=self._get_encode_args(
+                        allow_d3d12=False
+                    ),
                     preserve_audio=self.config.preserve_audio,
-                )
-                if produced and Path(produced).is_file():
-                    if self._promote_post_restore_result(
-                        produced, output_path, temp_dir, "watermark"
-                    ):
-                        logger.info("Watermark burn pass complete")
-            except Exception as exc:
-                logger.warning(f"Watermark burn failed: {exc}", exc_info=True)
+                ),
+                label="watermark",
+                stage="watermark",
+                implementation="ffmpeg-overlay",
+                provider="ffmpeg",
+            )
+            logger.info("Watermark burn pass complete")

@@ -225,7 +225,7 @@ class BatchReportTests(unittest.TestCase):
             payload = json.loads(json_path.read_text(encoding="utf-8"))
             markdown = md_path.read_text(encoding="utf-8")
 
-        self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
+        self.assertEqual(payload["schema"], "vsr.batch_summary.v2")
         self.assertEqual(payload["counts"], {"review-needed": 1})
         self.assertEqual(payload["files"][0]["status"], "review-needed")
         self.assertIn("quality gate: manual-review", payload["files"][0]["message"])
@@ -269,10 +269,9 @@ class BatchReportTests(unittest.TestCase):
         self.assertIn("reasons", payload["files"][0]["quality_gate"])
         self.assertIsInstance(payload["files"][0]["quality_gate"]["reasons"], list)
         self.assertIn("degradedMetrics", payload["files"][0]["quality_gate"])
-        # RM-279 inserted a Reason column after Status; a review-needed row
-        # is not a failure, so its reason cell is empty.
+        # Non-failure rows leave both Reason and Failed stage empty.
         self.assertIn(
-            "| review-needed |  | clip.mkv | clip_no_sub.mkv |", markdown)
+            "| review-needed |  |  | clip.mkv | clip_no_sub.mkv |", markdown)
         self.assertIn("Output quality preflight notes", markdown)
         self.assertIn("Suggested safer output setting", markdown)
         self.assertIn("review (manual-review)", markdown)

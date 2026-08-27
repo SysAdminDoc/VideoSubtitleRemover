@@ -85,8 +85,12 @@ from backend.io import (
 )
 from backend.encoder import _detect_hw_encoder, probe_d3d12_encoder
 from backend.execution_provenance import (
+    FAILURE_OUTPUT_INVALID,
+    FAILURE_RUNTIME,
     ExecutionProvenance,
+    RequestedStageError,
     StageProvenance,
+    device_from_provider,
     normalize_device,
 )
 from backend.device_provider import DeviceProvider, RuntimeDeviceProvider
@@ -182,10 +186,8 @@ from backend.inpainters import (
     AutoInpainter,
     is_oom_error,
     free_inference_memory,
-    _cv2_inpaint,
     _feather_blend as _feather_blend,
     _edge_ring_color_correct as _edge_ring_color_correct,
-    apply_finishing,
     _expand_mask_by_color,
     _detect_scene_cuts,
     _detect_scene_cuts_pyscenedetect as _detect_scene_cuts_pyscenedetect,
@@ -1016,7 +1018,8 @@ class SubtitleRemover(
         self.__dict__["_execution_provenance"] = value
 
     def _refresh_execution_provenance(self) -> None:
-        """Record requested vs. effective device/engine/backend for this job."""
+        """Refresh initialized stages without erasing runtime observations."""
+        previous = self.__dict__.get("_execution_provenance")
         provenance = ExecutionProvenance(
             requested_device=getattr(self, "_requested_device", "")
             or self.config.device,
@@ -1024,9 +1027,18 @@ class SubtitleRemover(
             device_fallback_reason=getattr(self, "_device_fallback_reason", ""),
             inpaint_mode=self.config.mode.value,
         )
+        if previous is not None:
+            provenance.frames_processed = previous.frames_processed
+            provenance.processing_seconds = previous.processing_seconds
+            for name, stage in previous.stages.items():
+                provenance.set_stage(stage)
         detector = getattr(self, "detector", None)
         collect = getattr(detector, "execution_provenance", None)
-        if callable(collect):
+        old_ocr = provenance.stage("ocr")
+        if callable(collect) and (
+            old_ocr is None
+            or (not old_ocr.actual_executions and not old_ocr.failed)
+        ):
             try:
                 stage = collect()
                 # The detector is built after the device downgrade, so report
@@ -1037,39 +1049,22 @@ class SubtitleRemover(
                 logger.warning("OCR provenance probe failed", exc_info=True)
         inpainter = getattr(self, "inpainter", None)
         if inpainter is not None:
-            backend_name = ""
-            try:
-                backend_name = str(getattr(inpainter, "backend_name", "") or "")
-            except Exception:
-                logger.warning("Inpainter provenance probe failed", exc_info=True)
-            effective = self.config.device
-            reason = ""
-            lowered = backend_name.lower()
-            if "cv2" in lowered or "opencv" in lowered or "tbe" in lowered:
-                # These paths are CPU/OpenCV implementations regardless of the
-                # requested accelerator.
-                effective = "cpu"
-                if normalize_device(self.config.device) != "cpu":
-                    reason = (
-                        f"{backend_name} has no GPU implementation in this build"
-                    )
-            elif "cuda" in lowered:
-                effective = "cuda:0"
-            elif "dml" in lowered or "directml" in lowered:
-                effective = "directml"
-            elif "cpuexecutionprovider" in lowered:
-                effective = "cpu"
-                if normalize_device(self.config.device) != "cpu":
-                    reason = "ONNX Runtime loaded the CPU execution provider"
-            provenance.set_stage(StageProvenance(
-                stage="inpaint",
-                requested_device=provenance.requested_device,
-                effective_device=effective,
-                engine=self.config.mode.value,
-                backend=backend_name or type(inpainter).__name__,
-                provider=backend_name,
-                fallback_reason=reason,
-            ))
+            old_inpaint = provenance.stage("inpaint")
+            if old_inpaint is None or (
+                not old_inpaint.actual_executions and not old_inpaint.failed
+            ):
+                provenance.set_stage(StageProvenance(
+                    stage="inpaint",
+                    requested_device=provenance.requested_device,
+                    effective_device=self.config.device,
+                    engine=self.config.mode.value,
+                    backend=type(inpainter).__name__,
+                    requested_implementation=self.config.mode.value,
+                    selection_policy=(
+                        "auto" if self.config.mode.value == "auto" else "explicit"
+                    ),
+                    outcome="initialized",
+                ))
         # Any stage that fell back must carry a reason; inherit the job-level
         # device fallback when the stage itself did not record one.
         for stage in provenance.stages.values():
@@ -1079,11 +1074,366 @@ class SubtitleRemover(
                     or f"{stage.engine or stage.backend} ran on "
                         f"{normalize_device(stage.effective_device)}"
                 )
-        previous = getattr(self, "execution_provenance", None)
-        if previous is not None:
-            provenance.frames_processed = previous.frames_processed
-            provenance.processing_seconds = previous.processing_seconds
         self.execution_provenance = provenance
+
+    @staticmethod
+    def _provider_effective_device(provider: str, fallback: str) -> str:
+        text = str(provider or "").lower()
+        if any(token in text for token in ("cv2", "opencv", "tbe")):
+            return "cpu"
+        mapped = device_from_provider(provider)
+        if mapped != "unknown":
+            return mapped
+        normalized = normalize_device(fallback)
+        return normalized if normalized != "unknown" else str(fallback or "unknown")
+
+    @staticmethod
+    def _inpainter_provider_name(inpainter: object) -> str:
+        try:
+            return str(
+                getattr(inpainter, "backend_name", "")
+                or type(inpainter).__name__
+            )
+        except Exception:
+            return type(inpainter).__name__
+
+    def _sync_ocr_provenance(self) -> None:
+        detector = getattr(self, "detector", None)
+        collect = getattr(detector, "execution_provenance", None)
+        if not callable(collect):
+            return
+        stage = collect()
+        stage.requested_device = self.execution_provenance.requested_device
+        self.execution_provenance.set_stage(stage)
+
+    def _sync_inpaint_provenance(self, frame_count: int) -> None:
+        """Record the implementation observed after a successful inpaint call."""
+        inpainter = getattr(self, "inpainter", None)
+        if inpainter is None:
+            return
+        sync_states = self.__dict__.setdefault(
+            "_inpaint_provenance_sync_states", []
+        )
+        sync_state = next(
+            (
+                state for state in sync_states
+                if state.get("inpainter") is inpainter
+            ),
+            None,
+        )
+        if sync_state is None:
+            sync_state = {
+                "inpainter": inpainter,
+                "execution_counts": {},
+                "route_count": 0,
+            }
+            sync_states.append(sync_state)
+        collect = getattr(inpainter, "execution_identity", None)
+        identity = collect() if callable(collect) else {}
+        if not isinstance(identity, dict):
+            identity = {}
+        requested = self.config.mode.value
+        implementation = str(
+            identity.get("implementation")
+            or getattr(inpainter, "_vsr_registered_implementation", "")
+            or requested
+        )
+        provider = str(
+            identity.get("provider")
+            or self._inpainter_provider_name(inpainter)
+        )
+        effective = self._provider_effective_device(
+            provider,
+            str(identity.get("effectiveDevice") or self.config.device),
+        )
+        stage = self.execution_provenance.stage("inpaint")
+        if stage is None:
+            stage = StageProvenance(stage="inpaint")
+            self.execution_provenance.set_stage(stage)
+        stage.requested_device = self.execution_provenance.requested_device
+        stage.effective_device = effective
+        stage.engine = requested
+        stage.backend = provider
+        stage.provider = provider
+        stage.requested_implementation = requested
+        stage.selection_policy = "auto" if requested == "auto" else "explicit"
+        stage.outcome = "executed"
+        stage.failure_class = ""
+        stage.recovery_hint = ""
+        executions = identity.get("actualExecutions")
+        if isinstance(executions, list) and executions:
+            previous_counts = sync_state.get("execution_counts", {})
+            if not isinstance(previous_counts, dict):
+                previous_counts = {}
+            current_counts = {}
+            for item in executions:
+                if not isinstance(item, dict):
+                    continue
+                execution_implementation = str(
+                    item.get("implementation") or implementation
+                )
+                execution_provider = str(item.get("provider") or provider)
+                execution_device = self._provider_effective_device(
+                    execution_provider,
+                    str(item.get("effectiveDevice") or effective),
+                )
+                try:
+                    execution_count = max(
+                        0, int(item.get("executionCount") or 0)
+                    )
+                except (TypeError, ValueError):
+                    execution_count = 0
+                key = (
+                    execution_implementation,
+                    execution_provider,
+                    normalize_device(execution_device),
+                )
+                prior = max(0, int(previous_counts.get(key, 0) or 0))
+                delta = (
+                    execution_count - prior
+                    if execution_count >= prior else execution_count
+                )
+                if delta:
+                    stage.record_execution(
+                        execution_implementation,
+                        provider=execution_provider,
+                        effective_device=execution_device,
+                        count=delta,
+                    )
+                current_counts[key] = execution_count
+            sync_state["execution_counts"] = current_counts
+            stage.actual_implementation = stage.resolved_actual_implementation
+        else:
+            stage.record_execution(
+                implementation,
+                provider=provider,
+                effective_device=effective,
+                count=max(0, int(frame_count)),
+            )
+        chain = identity.get("fallbackChain")
+        if isinstance(chain, list) and chain:
+            try:
+                synced_route_count = max(
+                    0, int(sync_state.get("route_count", 0))
+                )
+            except (TypeError, ValueError):
+                synced_route_count = 0
+            if synced_route_count > len(chain):
+                synced_route_count = 0
+            for item in chain[synced_route_count:]:
+                if not isinstance(item, dict):
+                    continue
+                route = dict(item)
+                route["effectiveDevice"] = self._provider_effective_device(
+                    str(route.get("provider") or ""),
+                    str(route.get("effectiveDevice") or effective),
+                )
+                stage.fallback_chain.append(route)
+            sync_state["route_count"] = len(chain)
+        if stage.device_fell_back and not stage.fallback_reason:
+            stage.fallback_reason = (
+                getattr(self, "_device_fallback_reason", "")
+                or f"{provider} executed on {effective}"
+            )
+
+    def _record_stage_success(
+        self,
+        stage_name: str,
+        implementation: str,
+        *,
+        provider: str,
+        count: int = 1,
+    ) -> None:
+        effective = self._provider_effective_device(provider, self.config.device)
+        stage = self.execution_provenance.stage(stage_name)
+        if stage is None:
+            stage = self.execution_provenance.begin_stage(
+                stage_name,
+                requested_implementation=implementation,
+                requested_device=self.execution_provenance.requested_device,
+            )
+        self.execution_provenance.record_success(
+            stage_name,
+            implementation=implementation,
+            provider=provider,
+            effective_device=effective,
+            count=count,
+        )
+
+    def _record_requested_stage_failure(
+        self, error: RequestedStageError
+    ) -> None:
+        self.execution_provenance.record_failure(
+            error,
+            requested_device=self.execution_provenance.requested_device,
+            effective_device=self.config.device,
+        )
+        from backend.failure_reason import classify_failure_reason
+        self.last_error_message = str(error)
+        self.last_error_reason = classify_failure_reason(exc=error)
+
+    def _reset_job_execution_provenance(self) -> None:
+        detector = getattr(self, "detector", None)
+        if detector is not None:
+            detector._execution_counts = {}
+        inpainter = getattr(self, "inpainter", None)
+        if inpainter is not None:
+            for name, empty in (
+                ("_execution_counts", {}),
+                ("_route_chain", []),
+            ):
+                if hasattr(inpainter, name):
+                    setattr(inpainter, name, empty)
+        self.__dict__["_inpaint_provenance_sync_states"] = []
+        self.__dict__.pop("_execution_provenance", None)
+        self._refresh_execution_provenance()
+
+    def _validate_inpaint_results(
+        self,
+        frames: List[np.ndarray],
+        results: Any,
+    ) -> List[np.ndarray]:
+        requested, implementation, provider, chain = (
+            self._inpaint_failure_identity()
+        )
+
+        def invalid_output(
+            detail: str,
+            recovery_hint: str,
+        ) -> RequestedStageError:
+            return RequestedStageError(
+                stage="inpaint",
+                requested_implementation=requested,
+                actual_implementation=implementation,
+                provider=provider,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail=detail,
+                recovery_hint=recovery_hint,
+                fallback_chain=chain,
+                selection_policy=("auto" if requested == "auto" else "explicit"),
+            )
+
+        if not isinstance(results, (list, tuple)):
+            raise invalid_output(
+                "the inpainter returned a non-sequence result",
+                "Verify the selected inpainter output contract.",
+            )
+        if len(results) != len(frames):
+            raise invalid_output(
+                (
+                    f"the inpainter returned {len(results)} frame(s) for "
+                    f"{len(frames)} input frame(s)"
+                ),
+                "Verify the selected inpainter output contract.",
+            )
+        validated: List[np.ndarray] = []
+        for index, (source, candidate) in enumerate(zip(frames, results)):
+            if not isinstance(candidate, np.ndarray) or candidate.shape != source.shape:
+                raise invalid_output(
+                    f"inpainter frame {index} has an invalid shape or type",
+                    "Verify the selected inpainter output contract.",
+                )
+            if candidate.dtype != np.uint8:
+                raise invalid_output(
+                    f"inpainter frame {index} is not uint8",
+                    "Return uint8 BGR frames from the selected inpainter.",
+                )
+            validated.append(np.ascontiguousarray(candidate))
+        return validated
+
+    def _inpaint_failure_identity(self) -> tuple[str, str, str, list[dict]]:
+        """Return the last observed route without mistaking Auto for a model."""
+        inpainter = self.inpainter
+        collect = getattr(inpainter, "execution_identity", None)
+        try:
+            identity = collect() if callable(collect) else {}
+        except Exception:
+            identity = {}
+        if not isinstance(identity, dict):
+            identity = {}
+
+        requested = self.config.mode.value
+        try:
+            registered = getattr(
+                inpainter, "_vsr_registered_implementation", ""
+            )
+        except Exception:
+            registered = ""
+        implementation = str(
+            identity.get("implementation") or registered or requested
+        )
+        provider = str(
+            identity.get("provider")
+            or self._inpainter_provider_name(inpainter)
+        )
+        executions = identity.get("actualExecutions")
+        if isinstance(executions, list):
+            executed = []
+            for item in executions:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    count = int(item.get("executionCount") or 0)
+                except (TypeError, ValueError):
+                    count = 0
+                if count > 0:
+                    executed.append(item)
+            implementations = {
+                str(item.get("implementation") or "")
+                for item in executed
+                if str(item.get("implementation") or "")
+            }
+            providers = {
+                str(item.get("provider") or "")
+                for item in executed
+                if str(item.get("provider") or "")
+            }
+            if implementations:
+                implementation = (
+                    next(iter(implementations))
+                    if len(implementations) == 1 else "mixed"
+                )
+            if providers:
+                provider = next(iter(providers)) if len(providers) == 1 else "mixed"
+        chain = identity.get("fallbackChain")
+        return (
+            requested,
+            implementation,
+            provider,
+            list(chain) if isinstance(chain, list) else [],
+        )
+
+    def _execute_inpainter(
+        self,
+        frames: List[np.ndarray],
+        masks: List[np.ndarray],
+    ) -> Any:
+        """Run the selected inpainter and classify every runtime failure."""
+        try:
+            result = self.inpainter.inpaint(frames, masks)
+            self._sync_inpaint_provenance(len(frames))
+            return result
+        except RequestedStageError:
+            raise
+        except Exception as exc:
+            requested, implementation, provider, chain = (
+                self._inpaint_failure_identity()
+            )
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation=requested,
+                actual_implementation=implementation,
+                provider=provider,
+                failure_class=FAILURE_RUNTIME,
+                detail=str(exc),
+                recovery_hint=str(
+                    getattr(self.inpainter, "_vsr_recovery_hint", "")
+                    or "Verify the selected inpainter and provider, then retry."
+                ),
+                fallback_chain=chain,
+                selection_policy=("auto" if requested == "auto" else "explicit"),
+                cause=exc,
+            ) from exc
 
     def _empty_stage_timings(self) -> dict[str, float]:
         return {stage: 0.0 for stage in self._STAGE_TIMING_KEYS}
@@ -1126,6 +1476,7 @@ class SubtitleRemover(
 
     def _record_ocr_detection(self, boxes) -> None:
         self.last_detection_stats["frames_ocr"] += 1
+        self._sync_ocr_provenance()
         for raw_box in boxes or []:
             box = tuple(int(value) for value in raw_box[:4])
             if any(
@@ -1379,12 +1730,17 @@ class SubtitleRemover(
         # mask = less inpaint area = cleaner output. Skips when the
         # caller didn't pass `frame` (SAM 2 needs pixels).
         if frame is not None and mask_boxes and self.config.sam2_refine:
-            try:
-                from backend.segmentation import refine_mask_with_sam2
-                mask = refine_mask_with_sam2(
-                    frame, mask_boxes, mask, self.config.device)
-            except Exception as exc:
-                logger.debug(f"SAM 2 refinement skipped: {exc}")
+            from backend.segmentation import (
+                refine_mask_with_sam2,
+                selected_segmentation_provider,
+            )
+            mask = refine_mask_with_sam2(
+                frame, mask_boxes, mask, self.config.device)
+            self._record_stage_success(
+                "sam2",
+                "sam2",
+                provider=selected_segmentation_provider("sam2"),
+            )
 
         return mask
 
@@ -1505,12 +1861,20 @@ class SubtitleRemover(
             return masks
         if not frames or not masks:
             return masks
-        try:
-            from backend.segmentation import refine_masks_with_matanyone
-            return refine_masks_with_matanyone(frames, masks, self.config.device)
-        except Exception as exc:
-            logger.debug(f"MatAnyone 2 refinement skipped: {exc}")
-            return masks
+        from backend.segmentation import (
+            refine_masks_with_matanyone,
+            selected_segmentation_provider,
+        )
+        refined = refine_masks_with_matanyone(
+            frames, masks, self.config.device)
+        if any(np.any(mask > 0) for mask in masks):
+            self._record_stage_success(
+                "matanyone",
+                "matanyone2",
+                provider=selected_segmentation_provider("matanyone2"),
+                count=len(frames),
+            )
+        return refined
 
     def _propagate_masks_with_cotracker(self,
                                         frames: List[np.ndarray],
@@ -1519,16 +1883,28 @@ class SubtitleRemover(
             return masks
         if not frames or not masks:
             return masks
-        try:
-            from backend.segmentation import propagate_masks_with_cotracker
-            return propagate_masks_with_cotracker(
-                frames,
-                masks,
-                device=self.config.device,
+        from backend.segmentation import (
+            propagate_masks_with_cotracker,
+            selected_segmentation_provider,
+        )
+        requires_tracking = (
+            len(frames) >= 2
+            and any(np.any(mask > 0) for mask in masks)
+            and any(not np.any(mask > 0) for mask in masks)
+        )
+        propagated = propagate_masks_with_cotracker(
+            frames,
+            masks,
+            device=self.config.device,
+        )
+        if requires_tracking:
+            self._record_stage_success(
+                "cotracker",
+                "cotracker3",
+                provider=selected_segmentation_provider("cotracker3"),
+                count=len(frames),
             )
-        except Exception as exc:
-            logger.debug(f"CoTracker3 propagation skipped: {exc}")
-            return masks
+        return propagated
 
     # -----------------------------------------------------------------
     # SRT export
@@ -1538,6 +1914,7 @@ class SubtitleRemover(
         self.last_output_path = None
         self._reset_stage_timings()
         self._reset_detection_stats()
+        self._reset_job_execution_provenance()
         try:
             _ensure_output_parent(output_path)
             self._report_progress(0.1, "Loading image...")
@@ -1655,7 +2032,10 @@ class SubtitleRemover(
                 mask = self._apply_manual_mask_corrections(mask, 0.0, 0)
                 [mask] = self._refine_masks_with_matanyone([image], [mask])
             with self._time_stage("inpaint"):
-                [result] = self.inpainter.inpaint([image], [mask])
+                results = self._validate_inpaint_results(
+                    [image], self._execute_inpainter([image], [mask])
+                )
+                [result] = results
 
             self._report_progress(0.9, "Saving result...")
             ext = Path(output_path).suffix.lower()
@@ -1685,6 +2065,10 @@ class SubtitleRemover(
         except InterruptedError:
             logger.info("Image processing cancelled")
             raise
+        except RequestedStageError as e:
+            self._record_requested_stage_failure(e)
+            logger.error("Requested image stage failed: %s", e, exc_info=True)
+            return False
         except Exception as e:
             self.last_error_message = str(e)
             self.last_error_reason = "image_processing_error"
@@ -1924,23 +2308,23 @@ class SubtitleRemover(
                                          masks: List[np.ndarray]) -> List[np.ndarray]:
         stride = self._rife_fast_stride()
         if stride <= 1 or len(frames) < 3:
-            return self.inpainter.inpaint(frames, masks)
+            return self._execute_inpainter(frames, masks)
 
         key_indices = list(range(0, len(frames), stride))
         if key_indices[-1] != len(frames) - 1:
             key_indices.append(len(frames) - 1)
         if len(key_indices) >= len(frames):
-            return self.inpainter.inpaint(frames, masks)
+            return self._execute_inpainter(frames, masks)
 
         key_frames = [frames[i] for i in key_indices]
         key_masks = [masks[i] for i in key_indices]
-        key_results = self.inpainter.inpaint(key_frames, key_masks)
+        key_results = self._execute_inpainter(key_frames, key_masks)
         if len(key_results) != len(key_indices):
             logger.warning(
                 "RIFE fast mode disabled for batch: inpainter returned "
                 f"{len(key_results)} keyframes for {len(key_indices)} inputs"
             )
-            return self.inpainter.inpaint(frames, masks)
+            return self._execute_inpainter(frames, masks)
 
         results: List[Optional[np.ndarray]] = [None] * len(frames)
         for key_idx, cleaned in zip(key_indices, key_results):
@@ -1988,11 +2372,12 @@ class SubtitleRemover(
 
     def _inpaint_batch_resilient(self, frames: List[np.ndarray],
                                  masks: List[np.ndarray]) -> List[np.ndarray]:
-        """Inpaint a batch, recovering from GPU OOM by shrinking and retrying.
+        """Inpaint a batch, recovering from GPU OOM without changing models.
 
         On an out-of-memory failure the CUDA cache is cleared and the batch is
-        split in half and retried recursively down to a single frame; a frame
-        that still cannot run on the GPU falls back to CPU (OpenCV) inpainting.
+        split in half and retried recursively down to a single frame. A frame
+        that still cannot run on the GPU retries the same registered
+        implementation on CPU.
         The output list always has one frame per input, so a partial/corrupt
         write can never result from a recovered batch.
         """
@@ -2006,10 +2391,10 @@ class SubtitleRemover(
             self._free_inference_memory()
             if len(frames) <= 1:
                 logger.warning(
-                    "GPU out of memory on a single frame; using CPU inpainting "
-                    "fallback for this frame."
+                    "GPU out of memory on a single frame; retrying the same "
+                    "inpainting implementation on CPU."
                 )
-                return self._inpaint_cpu_fallback(frames, masks)
+                return self._retry_inpaint_on_cpu(frames, masks, exc)
             half = max(1, len(frames) // 2)
             logger.warning(
                 "GPU out of memory on a batch of %d frames; clearing cache and "
@@ -2019,14 +2404,89 @@ class SubtitleRemover(
             right = self._inpaint_batch_resilient(frames[half:], masks[half:])
             return left + right
 
-    def _inpaint_cpu_fallback(self, frames: List[np.ndarray],
-                              masks: List[np.ndarray]) -> List[np.ndarray]:
-        """Guaranteed-CPU inpaint of a (usually single-frame) batch."""
-        filled = [_cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
-                  for f, m in zip(frames, masks)]
-        finished = apply_finishing(frames, filled, masks, self.config)
-        return [self._valid_output_frame(r, f)
-                for r, f in zip(finished, frames)]
+    def _retry_inpaint_on_cpu(
+        self,
+        frames: List[np.ndarray],
+        masks: List[np.ndarray],
+        original_error: BaseException,
+    ) -> List[np.ndarray]:
+        requested = self.config.mode.value
+        previous = self.inpainter
+        previous_identity = str(
+            getattr(previous, "_vsr_registered_implementation", "")
+            or requested
+        )
+        try:
+            cpu_inpainter = self.device_provider.create_inpainter(
+                requested, "cpu", self.config
+            )
+            cpu_identity = str(
+                getattr(cpu_inpainter, "_vsr_registered_implementation", "")
+                or requested
+            )
+            if cpu_identity != previous_identity:
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation=requested,
+                    actual_implementation=cpu_identity,
+                    failure_class=FAILURE_RUNTIME,
+                    detail=(
+                        "CPU recovery resolved to a different implementation "
+                        f"({previous_identity} to {cpu_identity})"
+                    ),
+                    recovery_hint=(
+                        "Reduce the batch size or choose Auto before retrying."
+                    ),
+                )
+            self.inpainter = cpu_inpainter
+            self.config.device = "cpu"
+            self._device_fallback_reason = (
+                f"{previous_identity} exhausted GPU memory and retried on CPU"
+            )
+            self.execution_provenance.effective_device = "cpu"
+            self.execution_provenance.device_fallback_reason = (
+                self._device_fallback_reason
+            )
+            stage = self.execution_provenance.stage("inpaint")
+            if stage is not None:
+                stage.fallback_chain.extend([
+                    {
+                        "implementation": previous_identity,
+                        "outcome": "runtime_failed",
+                        "provider": str(
+                            self._inpainter_provider_name(previous)
+                        ),
+                        "effectiveDevice": stage.effective_device,
+                        "failureClass": FAILURE_RUNTIME,
+                        "reason": str(original_error),
+                    },
+                    {
+                        "implementation": cpu_identity,
+                        "outcome": "selected",
+                        "provider": str(
+                            self._inpainter_provider_name(cpu_inpainter)
+                        ),
+                        "effectiveDevice": "cpu",
+                        "reason": "same implementation CPU retry",
+                    },
+                ])
+            return self._inpaint_with_optional_rife_fast(frames, masks)
+        except RequestedStageError:
+            raise
+        except Exception as exc:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation=requested,
+                actual_implementation=previous_identity,
+                provider=self._inpainter_provider_name(previous),
+                failure_class=FAILURE_RUNTIME,
+                detail=f"GPU and same-implementation CPU retries failed: {exc}",
+                recovery_hint=(
+                    "Reduce the batch size, repair the selected provider, or "
+                    "choose Auto before retrying."
+                ),
+                cause=exc,
+            ) from exc
 
     def _decode_and_build_batch(self, ctx: _FrameLoopContext,
                                 state: _FrameLoopState) -> _FrameBatch:
@@ -2568,12 +3028,14 @@ class SubtitleRemover(
                     and not any(np.any(mask > 0) for mask in segment_masks)
                 ):
                     continue
-                results[segment_start:segment_end] = (
+                segment_frames = reference_frames[segment_start:segment_end]
+                segment_results = self._validate_inpaint_results(
+                    segment_frames,
                     self._inpaint_batch_resilient(
-                        reference_frames[segment_start:segment_end],
-                        segment_masks,
-                    )
+                        segment_frames, segment_masks
+                    ),
                 )
+                results[segment_start:segment_end] = segment_results
             return results
 
     def _write_batch(self, ctx: _FrameLoopContext,
@@ -2696,6 +3158,7 @@ class SubtitleRemover(
         self.last_pause_checkpoint_path = None
         self._reset_stage_timings()
         self._reset_detection_stats()
+        self._reset_job_execution_provenance()
         self._srt_entries = []
         self._ocr_fix_replacements = None
         self._quality_mask_bbox = None
@@ -3732,6 +4195,10 @@ class SubtitleRemover(
         except InterruptedError:
             logger.info("Video processing cancelled")
             raise
+        except RequestedStageError as e:
+            self._record_requested_stage_failure(e)
+            logger.error("Requested video stage failed: %s", e, exc_info=True)
+            return False
         except FrozenMatteError as e:
             # RM-153: the frozen matte no longer belongs to this job. Say
             # exactly what moved and ask for a re-freeze; painting approved

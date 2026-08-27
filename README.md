@@ -367,12 +367,13 @@ that run.
 The app automatically selects the best available engine. Advanced > Detection
 can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, Surya (GPL opt-in), EasyOCR
 (frozen; last release 2024-09-24), any of the four vision-language tiers, or
-the dependency-free OpenCV fallback for comparison and reproducible runs;
-unavailable pinned engines fall back safely instead of silently switching to
-another OCR model. The same selector is available as `--ocr-engine` on the
+the dependency-free OpenCV detector for comparison and reproducible runs.
+If a pinned engine can't load or execute, processing stops with a classified
+reason and repair instructions. Only Auto can continue with another OCR
+implementation. The same selector is available as `--ocr-engine` on the
 CLI, which accepts `auto`, `rapidocr`, `opencv-dnn`, `paddleocr`, `easyocr`,
 `opencv`, `surya`, `vlm-florence2`, `vlm-qwen25vl`, `vlm-paddleocr-vl`, and
-`vlm-paddleocr-vl-llama`:
+`vlm-paddleocr-vl-llama`.
 
 Advanced > Detection also offers **Only remove the selected language**. It is
 opt-in and requires recognized text from RapidOCR, PaddleOCR, or EasyOCR;
@@ -397,9 +398,9 @@ track plans remain valid.
 The vision-language tiers stay default-off and are picked the same way as
 every other engine: choose one in Advanced > Detection or pass
 `--ocr-engine vlm-florence2`, `vlm-qwen25vl`, `vlm-paddleocr-vl`, or
-`vlm-paddleocr-vl-llama`. Picking one explains what it needs, and a pick
-whose dependency is missing falls back to the automatic cascade with a
-warning rather than detecting nothing. The `VSR_VLM_OCR=florence2` /
+`vlm-paddleocr-vl-llama`. Picking one explains what it needs. A missing
+dependency or runtime failure stops that request with repair guidance. Select
+Auto when you want the automatic cascade. The `VSR_VLM_OCR=florence2` /
 `VSR_VLM_OCR=qwen25vl` / `VSR_VLM_OCR=paddleocr-vl` environment variables
 still work for scripted runs. For CPU/edge PaddleOCR-VL-1.5, start a local
 llama.cpp OpenAI-compatible server with the GGUF model, then set
@@ -411,6 +412,12 @@ the service receives full video frames as PNG images. URLs with credentials,
 unsupported schemes, and redirects that cross the approved boundary are
 blocked. `VSR_PADDLEOCR_VL_SKIP_SERVER_PROBE=1` skips only the health check;
 it never skips the endpoint policy or the DNS check before a frame request.
+
+Job reports and output sidecars record the requested implementation, the
+provider that actually ran, and every execution observed. Auto also records
+its ordered fallback chain. A requested inpainting, segmentation, tracking, or
+restoration stage that can't run is recorded with a failure class and recovery
+hint instead of being reported as successful unchanged output.
 
 On NVIDIA systems, setup installs `onnxruntime-gpu>=1.26.0,<1.27.0` for the
 tested CUDA 12.x ONNX Runtime path. ONNX Runtime 1.27 dropped CUDA 12 (its
@@ -1003,7 +1010,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--self-test` | Probe OCR engines, inpaint backends, GPU providers, and codecs, then print results and exit. | Off | - | Public |
 | `--inference-smoke` | Run a generated text image and masked frame through the OCR and inpaint backends to prove they actually execute (records provider/timing), then exit. No model downloads. Uses --gpu to pick the device. | Off | - | Public |
 | `--ocr-benchmark` | Benchmark the active OCR detector on synthetic ground-truth subtitle fixtures (recall, latency, and memory) and print JSON evidence, then exit. Use --gpu to pick the device. Gate any default-detector swap on the meets_floors verdict. | Off | - | Public |
-| `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. surya needs the GPL opt-in (VSR_ALLOW_GPL=1); vlm-* engines need their optional dependencies installed and fall back to auto when missing. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| easyocr \| opencv \| surya \| vlm-florence2 \| vlm-qwen25vl \| vlm-paddleocr-vl \| vlm-paddleocr-vl-llama | Public |
+| `--ocr-engine` | Select the OCR detector for processing or --ocr-benchmark; auto uses the best available engine. surya needs the GPL opt-in (VSR_ALLOW_GPL=1); vlm-* engines need their optional dependencies installed; a pinned engine fails with repair guidance when it cannot run. | auto | auto \| rapidocr \| opencv-dnn \| paddleocr \| easyocr \| opencv \| surya \| vlm-florence2 \| vlm-qwen25vl \| vlm-paddleocr-vl \| vlm-paddleocr-vl-llama | Public |
 | `--rapidocr-variant` | Select RapidOCR PP-OCR generation (v6 default, v5 fallback). | v6 | v6 \| v5 | Public |
 | `--paddleocr-variant` | Select PaddleOCR models: PP-OCRv5 mobile (default, smaller/faster) or server, or a PP-OCRv6 tier (tiny/small/medium) from paddleocr 3.7.0. | mobile | mobile \| server \| tiny \| small \| medium | Public |
 | `--ocr-compare-variants` | Benchmark RapidOCR PP-OCRv6 and PP-OCRv5 on the same fixtures. | Off | - | Public |

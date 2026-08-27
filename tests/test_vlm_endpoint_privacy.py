@@ -221,7 +221,8 @@ class VlmEndpointPrivacyTests(unittest.TestCase):
                 detector.env,
             )
             self.assertTrue(initial.loopback)
-            self.assertEqual(detector._extract_boxes(frame, 0.5), [])
+            with self.assertRaises(ocr_vlm.VlmEndpointPolicyError):
+                detector._extract_boxes(frame, 0.5)
 
         model.predict.assert_not_called()
 

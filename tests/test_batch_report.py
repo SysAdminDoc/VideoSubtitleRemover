@@ -123,7 +123,7 @@ class WriteBatchReportsTests(unittest.TestCase):
 
     def test_schema_counts_and_files(self):
         payload, md = self._write(redact_paths=True)
-        self.assertEqual(payload["schema"], "vsr.batch_summary.v1")
+        self.assertEqual(payload["schema"], "vsr.batch_summary.v2")
         self.assertEqual(payload["count"], 3)
         self.assertEqual(payload["counts"][br.STATUS_HARDCODED_PROCESSED], 1)
         self.assertEqual(payload["counts"][br.STATUS_FAILED], 1)
@@ -243,6 +243,57 @@ class FailureReasonTests(unittest.TestCase):
         )
         self.assertEqual(record["message"], curated)
         self.assertEqual(record["failure_reason"], fr.REASON_DECODE_FAILED)
+
+    def test_requested_stage_failure_fields_and_recovery_reach_the_report(self):
+        from backend.execution_provenance import (
+            ExecutionProvenance,
+            RequestedStageError,
+        )
+
+        error = RequestedStageError(
+            stage="inpaint",
+            requested_implementation="lama",
+            actual_implementation="lama",
+            provider="OpenCV DNN",
+            failure_class="runtime_failed",
+            detail="synthetic inference failure",
+            recovery_hint="Verify the LaMa model and retry.",
+        )
+        provenance = ExecutionProvenance(
+            requested_device="cpu", effective_device="cpu"
+        )
+        provenance.record_failure(error)
+        record = _record(
+            br.STATUS_PENDING, input_path="C:/private/in.mp4",
+            output_path="C:/private/out.mp4",
+        )
+        br.finish_batch_item(
+            record,
+            br.STATUS_FAILED,
+            message="Requested stage failed",
+            error=error,
+            execution_provenance=provenance.to_dict(),
+        )
+
+        self.assertEqual(record["failure_reason"], fr.REASON_REQUESTED_STAGE_FAILED)
+        self.assertEqual(record["failed_stage"], "inpaint")
+        self.assertEqual(record["failed_implementation"], "lama")
+        self.assertEqual(record["stage_failure_class"], "runtime_failed")
+        self.assertEqual(record["recovery_hint"], error.recovery_hint)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path, md_path = br.write_batch_reports(
+                Path(tmpdir),
+                [record],
+                kind="batch",
+                started_at=_dt.datetime.now(_dt.timezone.utc),
+            )
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            markdown = md_path.read_text(encoding="utf-8")
+        row = payload["files"][0]
+        self.assertNotIn("input", row)
+        self.assertNotIn("output", row)
+        self.assertEqual(row["failed_stage"], "inpaint")
+        self.assertIn(error.recovery_hint, markdown)
 
     def test_non_failures_carry_no_reason(self):
         record = _record(

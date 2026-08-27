@@ -1,12 +1,9 @@
-"""LaMa neural inpainter -- ONNX Runtime preferred, OpenCV 5 DNN second,
-opt-in simple-lama-inpainting (PyTorch) fallback, cv2 last resort.
+"""LaMa neural inpainter with truthful provider selection.
 
 Priority chain:
 1. ONNX Runtime   -- fastest, most flexible EP selection (CUDA/DirectML/CPU)
 2. OpenCV 5 DNN   -- no torch, no onnxruntime; uses opencv/inpainting_lama
 3. PyTorch         -- simple-lama-inpainting; optional opt-in dependency
-4. cv2.inpaint     -- always available
-
 The ONNX and DNN paths eliminate the torch.load CVE surface. The DNN path
 activates automatically when opencv-python >= 5.0 is installed and an
 inpainting_lama ONNX weight file is found.
@@ -23,10 +20,15 @@ import cv2
 import numpy as np
 
 from backend.import_safety import module_can_import as _module_can_import
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
 from backend.inpainters._common import (
     BaseInpainter,
     _binarize_mask,
-    _cv2_inpaint,
     apply_finishing,
     _temporal_smooth_inpainted,
 )
@@ -249,8 +251,7 @@ def _try_onnx_session(model_path: str, device: str):
 
 
 class LAMAInpainter(BaseInpainter):
-    """LaMa inpainter with four-tier backend priority:
-    ONNX Runtime > OpenCV 5 DNN > PyTorch > cv2.inpaint."""
+    """LaMa inpainter with ONNX, OpenCV DNN, and PyTorch providers."""
 
     INPUT_NAME = "image"
     MASK_NAME = "mask"
@@ -262,10 +263,11 @@ class LAMAInpainter(BaseInpainter):
         self._onnx_session = None
         self._dnn_net = None
         self._lama = None
-        self._backend_name = "cv2"
+        self._backend_name = "unavailable"
         self._load_model()
 
     def _load_model(self):
+        failed_provider = None
         onnx_path = _find_lama_onnx_weight()
         if onnx_path:
             session, provider = _try_onnx_session(onnx_path, self.device)
@@ -277,6 +279,7 @@ class LAMAInpainter(BaseInpainter):
                     provider, onnx_path,
                 )
                 return
+            failed_provider = "ONNX Runtime"
 
         if _opencv5_available():
             opencv_path = _find_opencv_lama_weight()
@@ -290,26 +293,51 @@ class LAMAInpainter(BaseInpainter):
                         opencv_path,
                     )
                     return
+                failed_provider = "OpenCV DNN"
 
         if not _pytorch_lama_allowed():
-            logger.warning(
-                "No ONNX/OpenCV LaMa backend is available. The PyTorch "
-                "simple-lama fallback is disabled by default because broken "
-                "native torch wheels can crash the process; set "
-                "VSR_ENABLE_PYTORCH_LAMA=1 to opt in."
+            if failed_provider is not None:
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation="lama",
+                    actual_implementation="lama",
+                    provider=failed_provider,
+                    failure_class=FAILURE_INITIALIZATION,
+                    detail=f"the reviewed {failed_provider} provider failed to load",
+                    recovery_hint=(
+                        "Verify the selected LaMa runtime and model artifact, then "
+                        "retry or enable a reviewed alternative LaMa provider."
+                    ),
+                )
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail=(
+                    "no reviewed ONNX or OpenCV DNN LaMa provider is available, "
+                    "and the PyTorch provider is not enabled"
+                ),
+                recovery_hint=(
+                    "Install a reviewed LaMa ONNX model, or set "
+                    "VSR_ENABLE_PYTORCH_LAMA=1 with simple-lama-inpainting."
+                ),
             )
-            return
 
         if not _module_can_import(
             "simple_lama_inpainting",
             logger=logger,
             failure_context="LaMa PyTorch fallback disabled",
         ):
-            logger.warning(
-                "No LaMa backend available (onnxruntime, OpenCV 5 DNN, or "
-                "simple-lama-inpainting). LAMA will use OpenCV fallback."
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail="simple-lama-inpainting failed its import safety probe",
+                recovery_hint=(
+                    "Repair the PyTorch LaMa installation or configure a "
+                    "reviewed ONNX model, then retry."
+                ),
             )
-            return
 
         try:
             from simple_lama_inpainting import SimpleLama
@@ -317,14 +345,39 @@ class LAMAInpainter(BaseInpainter):
             self._backend_name = "PyTorch (simple-lama-inpainting)"
             logger.info("LaMa PyTorch inpainting loaded (simple-lama-inpainting)")
             self._verify_pytorch_weights()
+        except RequestedStageError:
+            raise
         except (ImportError, OSError, RuntimeError) as exc:
-            logger.warning(
-                "simple-lama-inpainting import failed; LAMA will use OpenCV "
-                "fallback: %s",
-                exc,
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_INITIALIZATION,
+                detail=str(exc),
+                recovery_hint=(
+                    "Repair the selected LaMa model and PyTorch runtime, then retry."
+                ),
+                cause=exc,
+            ) from exc
+        except Exception as exc:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_INITIALIZATION,
+                detail=str(exc),
+                recovery_hint="Verify the selected LaMa model, then retry.",
+                cause=exc,
+            ) from exc
+        if self._lama is None:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="the LaMa weights failed verification",
+                recovery_hint=(
+                    "Replace the cached weights with a reviewed LaMa artifact, "
+                    "then retry."
+                ),
             )
-        except Exception as e:
-            logger.warning("LaMa model load failed: %s", e)
 
     def _verify_pytorch_weights(self):
         try:
@@ -351,7 +404,7 @@ class LAMAInpainter(BaseInpainter):
             _log_adapter(result)
             if not result.allowed:
                 self._lama = None
-                self._backend_name = "cv2"
+                self._backend_name = "unavailable"
                 logger.warning(
                     "LaMa neural inpainting disabled because cached "
                     "weights failed manifest verification."
@@ -362,6 +415,22 @@ class LAMAInpainter(BaseInpainter):
     @property
     def backend_name(self) -> str:
         return self._backend_name
+
+    def _runtime_error(
+        self, exc: BaseException, operation: str
+    ) -> RequestedStageError:
+        return RequestedStageError(
+            stage="inpaint",
+            requested_implementation="lama",
+            actual_implementation="lama",
+            provider=self.backend_name,
+            failure_class=FAILURE_RUNTIME,
+            detail=f"{operation}: {exc}",
+            recovery_hint=(
+                "Verify the selected LaMa provider and model inputs, then retry."
+            ),
+            cause=exc,
+        )
 
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         # Neural models treat the mask as a strict binary indicator; a soft
@@ -376,8 +445,13 @@ class LAMAInpainter(BaseInpainter):
         elif self._lama is not None:
             raw = self._inpaint_pytorch(frames, model_masks)
         else:
-            raw = [_cv2_inpaint(f, m, 7, cv2.INPAINT_NS)
-                   for f, m in zip(frames, model_masks)]
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation="lama",
+                failure_class=FAILURE_INITIALIZATION,
+                detail="no LaMa provider is loaded",
+                recovery_hint="Recreate the LaMa provider, then retry.",
+            )
         out = apply_finishing(frames, raw, masks, self.config)
         smooth = self.config.temporal_smooth_radius
         if smooth > 0 and len(out) > 1:
@@ -399,12 +473,17 @@ class LAMAInpainter(BaseInpainter):
                         frame, mask, tile_size, tile_overlap))
                     continue
                 except Exception as exc:
-                    logger.warning("Tiled LaMa-ONNX fell back to full-frame: %s", exc)
+                    logger.warning(
+                        "Tiled LaMa-ONNX fell back to full-frame: %s",
+                        exc,
+                        exc_info=True,
+                    )
             try:
                 results.append(self._inpaint_onnx_one(frame, mask))
             except Exception as exc:
-                logger.warning("LaMa-ONNX inference failed, falling back to cv2: %s", exc)
-                results.append(_cv2_inpaint(frame, mask, 7, cv2.INPAINT_NS))
+                raise self._runtime_error(
+                    exc, "LaMa ONNX inference failed"
+                ) from exc
         return results
 
     def _inpaint_onnx_one(self, frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -456,14 +535,7 @@ class LAMAInpainter(BaseInpainter):
                 if tile_mask.max() == 0:
                     continue
                 tile_frame = frame[ty1:ty2, tx1:tx2]
-                try:
-                    tile_out = self._inpaint_onnx_one(tile_frame, tile_mask)
-                except Exception:
-                    logger.warning(
-                        "LaMa-ONNX tile inference failed, falling back to cv2",
-                        exc_info=True,
-                    )
-                    tile_out = _cv2_inpaint(tile_frame, tile_mask, 7, cv2.INPAINT_NS)
+                tile_out = self._inpaint_onnx_one(tile_frame, tile_mask)
                 th, tw = tile_out.shape[:2]
                 wy = np.ones(th, dtype=np.float32)
                 wx = np.ones(tw, dtype=np.float32)
@@ -516,14 +588,16 @@ class LAMAInpainter(BaseInpainter):
                     continue
                 except Exception as exc:
                     logger.warning(
-                        "Tiled LaMa cv2.dnn fell back to full-frame: %s", exc)
+                        "Tiled LaMa cv2.dnn fell back to full-frame: %s",
+                        exc,
+                        exc_info=True,
+                    )
             try:
                 results.append(self._inpaint_cv2dnn_one(frame, mask))
             except Exception as exc:
-                logger.warning(
-                    "LaMa cv2.dnn inference failed, falling back to cv2: %s",
-                    exc)
-                results.append(_cv2_inpaint(frame, mask, 7, cv2.INPAINT_NS))
+                raise self._runtime_error(
+                    exc, "LaMa OpenCV DNN inference failed"
+                ) from exc
         return results
 
     def _inpaint_cv2dnn_one(self, frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -581,11 +655,7 @@ class LAMAInpainter(BaseInpainter):
                 if tile_mask.max() == 0:
                     continue
                 tile_frame = frame[ty1:ty2, tx1:tx2]
-                try:
-                    tile_out = self._inpaint_cv2dnn_one(tile_frame, tile_mask)
-                except Exception:
-                    tile_out = _cv2_inpaint(
-                        tile_frame, tile_mask, 7, cv2.INPAINT_NS)
+                tile_out = self._inpaint_cv2dnn_one(tile_frame, tile_mask)
                 th, tw = tile_out.shape[:2]
                 wy = np.ones(th, dtype=np.float32)
                 wx = np.ones(tw, dtype=np.float32)
@@ -671,12 +741,9 @@ class LAMAInpainter(BaseInpainter):
                     )
                 results.append(result_bgr)
             except Exception as e:
-                logger.warning(
-                    "LaMa inpaint failed for frame, falling back to cv2: %s",
-                    e,
-                    exc_info=True,
-                )
-                results.append(_cv2_inpaint(frame, mask, 7, cv2.INPAINT_NS))
+                raise self._runtime_error(
+                    e, "LaMa PyTorch inference failed"
+                ) from e
         return results
 
     def _inpaint_pytorch_tiled(self, frame: np.ndarray, mask: np.ndarray,
@@ -711,44 +778,37 @@ class LAMAInpainter(BaseInpainter):
                 tile_rgb = cv2.cvtColor(tile_frame, cv2.COLOR_BGR2RGB)
                 pil_tile = Image.fromarray(tile_rgb)
                 pil_mask = Image.fromarray(tile_mask)
-                try:
-                    pil_out = self._lama(pil_tile, pil_mask)
-                    tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
-                    tile_h, tile_w = tile_frame.shape[:2]
-                    tile_out = tile_out[:tile_h, :tile_w]
-                    if tile_out.shape[:2] != (tile_h, tile_w):
-                        raise ValueError(
-                            "LaMa tile output is smaller than the source tile"
-                        )
-
-                    th, tw = tile_out.shape[:2]
-                    wy = np.ones(th, dtype=np.float32)
-                    wx = np.ones(tw, dtype=np.float32)
-                    if overlap > 0:
-                        ramp = min(overlap, th // 2, tw // 2)
-                        if ramp > 0:
-                            taper = 0.5 - 0.5 * np.cos(
-                                np.linspace(
-                                    0.5 * np.pi / ramp,
-                                    np.pi - 0.5 * np.pi / ramp,
-                                    ramp,
-                                    dtype=np.float32,
-                                ))
-                            wy[:ramp] *= taper
-                            wy[-ramp:] *= taper[::-1]
-                            wx[:ramp] *= taper
-                            wx[-ramp:] *= taper[::-1]
-                    win = np.outer(wy, wx)
-                    color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32) * win[..., None]
-                    weight_acc[ty1:ty2, tx1:tx2] += win
-                except Exception:
-                    logger.warning(
-                        "LaMa PyTorch tile inference failed, falling back to cv2",
-                        exc_info=True,
+                pil_out = self._lama(pil_tile, pil_mask)
+                tile_out = cv2.cvtColor(np.array(pil_out), cv2.COLOR_RGB2BGR)
+                tile_h, tile_w = tile_frame.shape[:2]
+                tile_out = tile_out[:tile_h, :tile_w]
+                if tile_out.shape[:2] != (tile_h, tile_w):
+                    raise ValueError(
+                        "LaMa tile output is smaller than the source tile"
                     )
-                    tile_out = _cv2_inpaint(tile_frame, tile_mask, 7, cv2.INPAINT_NS)
-                    color_acc[ty1:ty2, tx1:tx2] += tile_out.astype(np.float32)
-                    weight_acc[ty1:ty2, tx1:tx2] += 1.0
+
+                th, tw = tile_out.shape[:2]
+                wy = np.ones(th, dtype=np.float32)
+                wx = np.ones(tw, dtype=np.float32)
+                if overlap > 0:
+                    ramp = min(overlap, th // 2, tw // 2)
+                    if ramp > 0:
+                        taper = 0.5 - 0.5 * np.cos(
+                            np.linspace(
+                                0.5 * np.pi / ramp,
+                                np.pi - 0.5 * np.pi / ramp,
+                                ramp,
+                                dtype=np.float32,
+                            ))
+                        wy[:ramp] *= taper
+                        wy[-ramp:] *= taper[::-1]
+                        wx[:ramp] *= taper
+                        wx[-ramp:] *= taper[::-1]
+                win = np.outer(wy, wx)
+                color_acc[ty1:ty2, tx1:tx2] += (
+                    tile_out.astype(np.float32) * win[..., None]
+                )
+                weight_acc[ty1:ty2, tx1:tx2] += win
                 tile_count += 1
         if tile_count > 0:
             blend_mask = weight_acc > 0

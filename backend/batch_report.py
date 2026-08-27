@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from backend.config_schema import CONFIG_SCHEMA_VERSION
+from backend.execution_provenance import RequestedStageError
 from backend.failure_reason import (
     FAILURE_REASON_LABELS,
     REASON_CANCELLED,
@@ -163,6 +164,10 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "status": STATUS_PENDING,
         "message": "",
         "failure_reason": REASON_NONE,
+        "failed_stage": "",
+        "failed_implementation": "",
+        "stage_failure_class": "",
+        "recovery_hint": "",
         "elapsed_seconds": None,
         "stage_timings": _empty_stage_timings(),
         "dominant_stage": None,
@@ -281,6 +286,43 @@ def _failure_reason_for(status: str, message: str,
         exc=error, reason=failure_reason, message=message)
 
 
+def _stage_failure_fields(
+    error: Optional[BaseException],
+    execution_provenance: Optional[dict],
+) -> dict:
+    if isinstance(error, RequestedStageError):
+        return {
+            "failed_stage": error.stage,
+            "failed_implementation": error.requested_implementation,
+            "stage_failure_class": error.failure_class,
+            "recovery_hint": error.recovery_hint,
+        }
+    stages = (
+        execution_provenance.get("stages")
+        if isinstance(execution_provenance, dict) else None
+    )
+    if isinstance(stages, dict):
+        for name, stage in reversed(list(stages.items())):
+            if not isinstance(stage, dict):
+                continue
+            if stage.get("status") != "failed" and not stage.get("failureClass"):
+                continue
+            return {
+                "failed_stage": str(name),
+                "failed_implementation": str(
+                    stage.get("requestedImplementation") or ""
+                ),
+                "stage_failure_class": str(stage.get("failureClass") or ""),
+                "recovery_hint": str(stage.get("recoveryHint") or ""),
+            }
+    return {
+        "failed_stage": "",
+        "failed_implementation": "",
+        "stage_failure_class": "",
+        "recovery_hint": "",
+    }
+
+
 def finish_batch_item(record: dict, status: str, *,
                       message: str = "",
                       elapsed_seconds: Optional[float] = None,
@@ -314,6 +356,10 @@ def finish_batch_item(record: dict, status: str, *,
     # RM-147: requested vs. effective device/engine/backend for this item.
     if isinstance(execution_provenance, dict):
         record["execution_provenance"] = dict(execution_provenance)
+    if status == STATUS_FAILED:
+        record.update(_stage_failure_fields(error, execution_provenance))
+    else:
+        record.update(_stage_failure_fields(None, None))
     if isinstance(output_contract, dict):
         record["output_contract"] = dict(output_contract)
     contract_record = record.get("output_contract")
@@ -372,7 +418,7 @@ def write_batch_reports(out_dir: Path, records: list[dict], *,
     stage_summary = summarize_stage_timings(records)
     detection_summary = summarize_detection_stats(records)
     payload = {
-        "schema": "vsr.batch_summary.v1",
+        "schema": "vsr.batch_summary.v2",
         "kind": kind,
         "started_at": _iso(started),
         "completed_at": _iso(completed),
@@ -643,8 +689,8 @@ def _markdown_summary(payload: dict) -> str:
         lines.append(f"- Failure reasons: {_escape_md(summary)}")
     lines.extend([
         "",
-        "| Status | Reason | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Color | Message |",
-        "|---|---|---|---|---|---:|---|---:|---:|---|---|---|---|",
+        "| Status | Reason | Failed stage | Input | Output | Planned | Duration | Codec | Subtitles | Elapsed | Preflight | Quality | Color | Message | Recovery |",
+        "|---|---|---|---|---|---|---:|---|---:|---:|---|---|---|---|---|",
     ])
     review_notes: List[str] = []
     preflight_notes: List[str] = []
@@ -656,6 +702,7 @@ def _markdown_summary(payload: dict) -> str:
             + " | ".join([
                 _escape_md(record.get("status", "")),
                 _escape_md(_failure_reason_label(record.get("failure_reason"))),
+                _escape_md(record.get("failed_stage", "")),
                 _escape_md(record.get("input_name", "")),
                 _escape_md(record.get("output_name", "")),
                 _escape_md(record.get("planned_result", "")),
@@ -667,6 +714,7 @@ def _markdown_summary(payload: dict) -> str:
                 _format_quality_gate(record.get("quality_gate")),
                 _format_color_preserved(record.get("color_preserved")),
                 _escape_md(record.get("message", "")),
+                _escape_md(record.get("recovery_hint", "")),
             ])
             + " |"
         )

@@ -1,12 +1,10 @@
-"""Tests for the OpenCV 5 DNN LaMa inpainting backend and fallback chain.
+"""Tests for the reviewed LaMa provider chain.
 
-Mocks cv2.__version__ and model discovery to verify that the four-tier
-priority chain (ONNX Runtime > OpenCV 5 DNN > PyTorch > cv2) activates
-the correct backend and degrades gracefully.
+Mocks cv2.__version__ and model discovery to verify that ONNX Runtime,
+OpenCV 5 DNN, and opt-in PyTorch activate correctly. An explicit LaMa
+request fails closed when none can execute.
 """
 
-import sys
-import types
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -52,7 +50,7 @@ class TestOpenCVVersionDetection(unittest.TestCase):
 
 class TestDnnPathActivation(unittest.TestCase):
     """Verify the cv2.dnn path activates when OpenCV >= 5.0 and a model
-    file is found, and that it falls back correctly otherwise."""
+    file is found, and that unavailable providers fail explicitly."""
 
     @patch("backend.inpainters.lama._find_lama_onnx_weight", return_value=None)
     @patch("backend.inpainters.lama._opencv5_available", return_value=True)
@@ -75,39 +73,51 @@ class TestDnnPathActivation(unittest.TestCase):
 
     @patch("backend.inpainters.lama._find_lama_onnx_weight", return_value=None)
     @patch("backend.inpainters.lama._opencv5_available", return_value=False)
-    def test_dnn_skipped_on_opencv4(self, mock_cv5, mock_onnx):
+    @patch("backend.inpainters.lama._pytorch_lama_allowed", return_value=False)
+    def test_dnn_unavailable_on_opencv4(self, mock_pytorch, mock_cv5, mock_onnx):
+        from backend.execution_provenance import RequestedStageError
         from backend.inpainters.lama import LAMAInpainter
-        inpainter = LAMAInpainter(device="cpu")
 
-        self.assertIsNone(inpainter._dnn_net)
-        # Falls through to PyTorch or cv2 depending on install
-        self.assertIn(
-            inpainter.backend_name,
-            ("cv2", "PyTorch (simple-lama-inpainting)")
-        )
+        with self.assertRaises(RequestedStageError) as caught:
+            LAMAInpainter(device="cpu")
+        self.assertEqual(caught.exception.stage, "inpaint")
+        self.assertEqual(caught.exception.requested_implementation, "lama")
+        self.assertEqual(caught.exception.failure_class, "dependency_missing")
+        self.assertTrue(caught.exception.recovery_hint)
 
     @patch("backend.inpainters.lama._find_lama_onnx_weight", return_value=None)
     @patch("backend.inpainters.lama._opencv5_available", return_value=True)
     @patch("backend.inpainters.lama._find_opencv_lama_weight",
            return_value=None)
-    def test_dnn_skipped_when_no_model(self, mock_find, mock_cv5, mock_onnx):
+    @patch("backend.inpainters.lama._pytorch_lama_allowed", return_value=False)
+    def test_dnn_missing_model_fails_closed(
+        self, mock_pytorch, mock_find, mock_cv5, mock_onnx
+    ):
+        from backend.execution_provenance import RequestedStageError
         from backend.inpainters.lama import LAMAInpainter
-        inpainter = LAMAInpainter(device="cpu")
 
-        self.assertIsNone(inpainter._dnn_net)
+        with self.assertRaises(RequestedStageError) as caught:
+            LAMAInpainter(device="cpu")
+        self.assertEqual(caught.exception.failure_class, "dependency_missing")
+        self.assertIn("LaMa", caught.exception.recovery_hint)
 
     @patch("backend.inpainters.lama._find_lama_onnx_weight", return_value=None)
     @patch("backend.inpainters.lama._opencv5_available", return_value=True)
     @patch("backend.inpainters.lama._find_opencv_lama_weight",
            return_value="/fake/model.onnx")
     @patch("backend.inpainters.lama._try_cv2dnn_net", return_value=None)
-    def test_dnn_skipped_when_net_load_fails(
-        self, mock_try, mock_find, mock_cv5, mock_onnx
+    @patch("backend.inpainters.lama._pytorch_lama_allowed", return_value=False)
+    def test_dnn_load_failure_is_classified(
+        self, mock_pytorch, mock_try, mock_find, mock_cv5, mock_onnx
     ):
+        from backend.execution_provenance import RequestedStageError
         from backend.inpainters.lama import LAMAInpainter
-        inpainter = LAMAInpainter(device="cpu")
 
-        self.assertIsNone(inpainter._dnn_net)
+        with self.assertRaises(RequestedStageError) as caught:
+            LAMAInpainter(device="cpu")
+        self.assertEqual(caught.exception.failure_class, "initialization_failed")
+        self.assertEqual(caught.exception.provider, "OpenCV DNN")
+        self.assertTrue(caught.exception.recovery_hint)
 
 
 class TestDnnInference(unittest.TestCase):
@@ -158,6 +168,21 @@ class TestDnnInference(unittest.TestCase):
         self.assertEqual(len(results), 3)
         for r in results:
             self.assertEqual(r.shape, (64, 64, 3))
+
+    def test_runtime_failure_is_classified_with_the_loaded_provider(self):
+        from backend.execution_provenance import RequestedStageError
+
+        inpainter = self._make_inpainter_with_mock_net()
+        inpainter._dnn_net.forward = MagicMock(
+            side_effect=RuntimeError("synthetic inference failure")
+        )
+
+        with self.assertRaises(RequestedStageError) as caught:
+            inpainter.inpaint([_make_frame()], [_make_mask()])
+
+        self.assertEqual(caught.exception.failure_class, "runtime_failed")
+        self.assertEqual(caught.exception.provider, "OpenCV DNN")
+        self.assertTrue(caught.exception.recovery_hint)
 
 
 class TestTryCv2DnnNet(unittest.TestCase):

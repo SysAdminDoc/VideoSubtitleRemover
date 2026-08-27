@@ -51,11 +51,25 @@ class BaseInpainter(ABC):
     def backend_name(self) -> str:
         """RM-147: which implementation actually ran, not the requested mode.
 
-        Subclasses that can degrade (LaMa -> ONNX / OpenCV DNN / cv2) override
-        this; the default reports the class name so every job records
-        something concrete.
+        Subclasses with multiple providers override this. The default reports
+        the class name so every successful job records something concrete.
         """
         return type(self).__name__
+
+    def execution_identity(self) -> dict:
+        """Return the implementation and provider observed after execution."""
+        implementation = str(
+            getattr(self, "_vsr_registered_implementation", "")
+            or getattr(self, "_vsr_requested_implementation", "")
+            or type(self).__name__
+        )
+        return {
+            "implementation": implementation,
+            "provider": self.backend_name,
+            "effectiveDevice": str(getattr(self, "device", "") or "unknown"),
+            "actualExecutions": [],
+            "fallbackChain": [],
+        }
 
 
 def _cv2_inpaint(frame: np.ndarray, mask: np.ndarray, radius: int = 5,

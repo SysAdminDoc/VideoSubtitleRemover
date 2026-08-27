@@ -23,8 +23,9 @@ input formats is the upstream project's concern):
   inpainter modes here.
 
 The registry mode names live alongside the four core inpainters from
-inpainter_registry. Each scaffold falls back to TBE + cv2 inpainting
-when the heavy model fails so the user always gets a result.
+inpainter_registry. These are explicit choices, so missing weights or a
+runtime failure stops with an actionable stage error instead of changing
+algorithms.
 """
 
 from __future__ import annotations
@@ -46,9 +47,13 @@ from backend.inpainter_registry import register
 from backend.config import ProcessingConfig
 from backend.inpainters import (
     BaseInpainter,
-    _cv2_inpaint,
-    _temporal_background_expose,
     apply_finishing,
+)
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    FAILURE_RUNTIME,
+    RequestedStageError,
 )
 from backend.safe_image import safe_imread
 from backend.subprocess_policy import run_process
@@ -91,42 +96,10 @@ def _env_enabled(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _fallback_to_tbe(config: ProcessingConfig,
-                     frames: List[np.ndarray],
-                     masks: List[np.ndarray]) -> List[np.ndarray]:
-    """Common fallback when a diffusion backend's heavy model is
-    unavailable. We delegate to the TBE primitive so the user still
-    gets a clean output."""
-    if config.tbe_enable and len(frames) > 1:
-        return _temporal_background_expose(
-            frames, masks,
-            min_coverage=max(2, config.tbe_min_coverage + 1),
-            use_median=True,
-            feather_px=config.mask_feather_px,
-            edge_ring_px=config.edge_ring_px,
-            flow_warp=config.tbe_flow_warp,
-            flow_estimator=getattr(config, "tbe_flow_estimator", "dis"),
-            global_motion_align=getattr(
-                config, "tbe_global_motion_align", True),
-            grain_strength=getattr(config, "film_grain_strength", 0.0),
-            scene_cut_split=config.tbe_scene_cut_split,
-            scene_cut_threshold=config.tbe_scene_cut_threshold,
-            scene_cut_use_pyscenedetect=config.tbe_scene_cut_use_pyscenedetect,
-            scene_cut_use_transnetv2=config.tbe_scene_cut_use_transnetv2,
-            translucency_enable=getattr(
-                config, "translucency_enable", True),
-        )
-    filled = [
-        _cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
-        for f, m in zip(frames, masks)
-    ]
-    return apply_finishing(frames, filled, masks, config)
-
-
 class _DiffusionBackendBase(BaseInpainter):
     """Common scaffolding -- subclasses set ``MODE_NAME``, ``REPO_HINT``,
-    and implement ``_run_model``. When the optional dep / weights are
-    missing we log once and route to the TBE primitive."""
+    and implement ``_run_model``. Explicit adapters fail closed when their
+    optional dependency, weights, or runtime is unavailable."""
 
     MODE_NAME = "diffusion"
     REPO_HINT = ""
@@ -136,7 +109,6 @@ class _DiffusionBackendBase(BaseInpainter):
         self.config = config
         self._loaded = False
         self._model = None
-        self._warned = False
 
     def _load(self):  # subclasses override
         return None
@@ -144,25 +116,97 @@ class _DiffusionBackendBase(BaseInpainter):
     def _run_model(self, frames, masks):  # subclasses override
         raise NotImplementedError
 
+    @property
+    def backend_name(self) -> str:
+        """Name the loaded package or command adapter that executes frames."""
+        model = self._model
+        if model is None:
+            return "unavailable"
+        if isinstance(model, dict):
+            module = model.get("module")
+            if module is not None:
+                return str(
+                    getattr(module, "__name__", "")
+                    or type(module).__name__
+                )
+        command = getattr(model, "_command", None)
+        if isinstance(command, (list, tuple)) and command:
+            return f"{type(model).__name__} ({command[0]})"
+        model_type = type(model)
+        return f"{model_type.__module__}.{model_type.__name__}"
+
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if not self._loaded:
-            self._model = self._load()
-            self._loaded = True
-            if self._model is None and not self._warned:
-                logger.info(
-                    f"{self.MODE_NAME} weights/deps unavailable; falling "
-                    f"back to TBE. {self.REPO_HINT}"
+            try:
+                self._model = self._load()
+            except RequestedStageError:
+                raise
+            except Exception as exc:
+                failure_class = (
+                    FAILURE_DEPENDENCY_MISSING
+                    if isinstance(exc, ImportError)
+                    else FAILURE_INITIALIZATION
                 )
-                self._warned = True
+                raise RequestedStageError(
+                    stage="inpaint",
+                    requested_implementation=self.MODE_NAME,
+                    failure_class=failure_class,
+                    detail=str(exc),
+                    recovery_hint=self.REPO_HINT or (
+                        "Verify the requested adapter installation and model "
+                        "files, then retry."
+                    ),
+                    fallback_chain=[{
+                        "implementation": self.MODE_NAME,
+                        "outcome": "load_failed",
+                        "failureClass": failure_class,
+                        "reason": str(exc),
+                    }],
+                    cause=exc,
+                ) from exc
+            else:
+                self._loaded = True
         if self._model is None:
-            return _fallback_to_tbe(self.config, frames, masks)
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation=self.MODE_NAME,
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail="required model weights or dependencies are unavailable",
+                recovery_hint=self.REPO_HINT or (
+                    "Install and enable the requested adapter, then retry."
+                ),
+                fallback_chain=[{
+                    "implementation": self.MODE_NAME,
+                    "outcome": "load_failed",
+                    "failureClass": FAILURE_DEPENDENCY_MISSING,
+                    "reason": "model weights or dependencies unavailable",
+                }],
+            )
         try:
             return self._run_model(frames, masks)
+        except RequestedStageError:
+            raise
         except Exception as exc:
-            logger.warning(
-                f"{self.MODE_NAME} inference failed ({exc}); falling back to TBE"
-            )
-            return _fallback_to_tbe(self.config, frames, masks)
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation=self.MODE_NAME,
+                actual_implementation=self.MODE_NAME,
+                provider=self.backend_name,
+                failure_class=FAILURE_RUNTIME,
+                detail=str(exc),
+                recovery_hint=(
+                    self.REPO_HINT
+                    or "Verify the adapter runtime and model files, then retry."
+                ),
+                fallback_chain=[{
+                    "implementation": self.MODE_NAME,
+                    "outcome": "runtime_failed",
+                    "provider": self.backend_name,
+                    "failureClass": FAILURE_RUNTIME,
+                    "reason": str(exc),
+                }],
+                cause=exc,
+            ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +232,7 @@ class _PropainterRealBackend(_DiffusionBackendBase):
         # ProPainter expects (T, H, W, 3) uint8 frames and (T, H, W)
         # bool masks at consistent dimensions. We adapt the call when
         # the package exposes a `propainter.inpaint(frames, masks)`
-        # entry; if not, fall back to TBE.
+        # entry. A missing entrypoint is a runtime contract failure.
         if not hasattr(self._model, "inpaint"):
             raise RuntimeError("propainter package missing top-level `inpaint`")
         frames_arr = np.stack(frames, axis=0)
@@ -1275,8 +1319,8 @@ class _VoidBackend(_DiffusionBackendBase):
         paths = _void_weight_paths()
         if not paths:
             logger.info(
-                "VOID enabled but no local weights were configured; falling "
-                "back to TBE. Set VSR_VOID_WEIGHTS or VSR_VOID_PASS1."
+                "VOID enabled but no local weights were configured. Set "
+                "VSR_VOID_WEIGHTS or VSR_VOID_PASS1."
             )
             return None
         try:

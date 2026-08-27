@@ -10,6 +10,15 @@ import numpy as np
 
 import cv2
 
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    FAILURE_OUTPUT_INVALID,
+    FAILURE_OUTPUT_MISSING,
+    FAILURE_POLICY_BLOCKED,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
 from backend.inpainters._common import BaseInpainter, _detect_scene_cuts
 from backend.inpainters.sttn import STTNInpainter
 from backend.inpainters.propainter import ProPainterInpainter
@@ -36,6 +45,8 @@ class AutoInpainter(BaseInpainter):
         self._sttn = STTNInpainter(device, self.config)
         self._propainter: Optional[ProPainterInpainter] = None
         self._sttn_streak: int = 0
+        self._execution_counts: dict[tuple[str, str], int] = {}
+        self._route_chain: list[dict] = []
 
     @property
     def backend_name(self) -> str:
@@ -47,6 +58,27 @@ class AutoInpainter(BaseInpainter):
         if self._propainter is None:
             self._propainter = ProPainterInpainter(self.device, self.config)
         return self._propainter
+
+    @staticmethod
+    def _provider_name(value: object, default: str) -> str:
+        try:
+            return str(getattr(value, "backend_name", "") or default)
+        except Exception:
+            return default
+
+    def _effective_device_for_provider(
+        self, provider: str, fallback: str = ""
+    ) -> str:
+        lowered = str(provider or "").lower()
+        if any(token in lowered for token in ("cv2", "opencv", "tbe")):
+            return "cpu"
+        if "cuda" in lowered or "tensorrt" in lowered:
+            return self.device if str(self.device).lower().startswith("cuda") else "cuda"
+        if "directml" in lowered or "dml" in lowered:
+            return "directml"
+        if "cpu" in lowered or "openvino" in lowered:
+            return "cpu"
+        return str(fallback or self.device)
 
     def _maybe_unload_propainter(self) -> None:
         if self._propainter is None:
@@ -126,7 +158,15 @@ class AutoInpainter(BaseInpainter):
             )
             self._sttn_streak += 1
             self._maybe_unload_propainter()
-            return self._sttn.inpaint(frames, masks)
+            provider = self._provider_name(self._sttn, "STTNInpainter")
+            try:
+                result = self._sttn.inpaint(frames, masks)
+            except Exception as exc:
+                raise self._route_failure(
+                    "sttn", provider, exc
+                ) from exc
+            self._record_route("sttn", provider, len(frames))
+            return result
         logger.debug(
             "AUTO scene %d: ProPainter path (exposure=%.2f, motion=%.3f)",
             scene_index,
@@ -134,7 +174,151 @@ class AutoInpainter(BaseInpainter):
             motion,
         )
         self._sttn_streak = 0
-        return self._ensure_propainter().inpaint(frames, masks)
+        try:
+            propainter = self._ensure_propainter()
+            result = propainter.inpaint(frames, masks)
+        except Exception as exc:
+            provider = (
+                str(exc.provider)
+                if isinstance(exc, RequestedStageError) and exc.provider
+                else self._provider_name(
+                    getattr(self, "_propainter", None),
+                    "ProPainterInpainter",
+                )
+            )
+            raise self._route_failure(
+                "propainter", provider, exc
+            ) from exc
+        provider = self._provider_name(
+            propainter, type(propainter).__name__
+        )
+        self._record_route(
+            "propainter",
+            provider,
+            len(frames),
+        )
+        return result
+
+    def _route_failure(
+        self,
+        implementation: str,
+        provider: str,
+        exc: BaseException,
+    ) -> RequestedStageError:
+        if isinstance(exc, RequestedStageError):
+            failure_class = exc.failure_class
+            detail = exc.detail or str(exc)
+            recovery_hint = exc.recovery_hint
+            retriable = exc.retriable
+        else:
+            failure_class = FAILURE_RUNTIME
+            detail = str(exc)
+            recovery_hint = (
+                "Verify the selected Auto route and provider, then retry."
+            )
+            retriable = False
+        outcome = {
+            FAILURE_DEPENDENCY_MISSING: "load_failed",
+            FAILURE_POLICY_BLOCKED: "load_failed",
+            FAILURE_INITIALIZATION: "load_failed",
+            FAILURE_RUNTIME: "runtime_failed",
+            FAILURE_OUTPUT_MISSING: "output_failed",
+            FAILURE_OUTPUT_INVALID: "output_failed",
+        }[failure_class]
+        nested_chain = (
+            list(exc.fallback_chain)
+            if isinstance(exc, RequestedStageError)
+            else []
+        )
+        if nested_chain:
+            failure_steps = []
+            for raw in nested_chain:
+                step = dict(raw)
+                step["implementation"] = str(
+                    step.get("implementation") or implementation
+                )
+                step["provider"] = str(step.get("provider") or provider)
+                step["effectiveDevice"] = self._effective_device_for_provider(
+                    step["provider"], str(step.get("effectiveDevice") or "")
+                )
+                failure_steps.append(step)
+        else:
+            failure_steps = [{
+                "implementation": implementation,
+                "outcome": outcome,
+                "provider": provider,
+                "effectiveDevice": self._effective_device_for_provider(provider),
+                "failureClass": failure_class,
+                "reason": detail,
+                "recoveryHint": recovery_hint,
+            }]
+        self._route_chain.extend(failure_steps)
+        return RequestedStageError(
+            stage="inpaint",
+            requested_implementation="auto",
+            actual_implementation=(
+                exc.actual_implementation
+                if isinstance(exc, RequestedStageError)
+                and exc.actual_implementation
+                else implementation
+            ),
+            provider=(
+                exc.provider
+                if isinstance(exc, RequestedStageError) and exc.provider
+                else provider
+            ),
+            failure_class=failure_class,
+            detail=detail,
+            recovery_hint=recovery_hint,
+            fallback_chain=list(self._route_chain),
+            selection_policy="auto",
+            cause=exc,
+            retriable=retriable,
+        )
+
+    def _record_route(
+        self, implementation: str, provider: str, frame_count: int
+    ) -> None:
+        key = (implementation, provider)
+        self._execution_counts[key] = (
+            self._execution_counts.get(key, 0) + max(0, int(frame_count))
+        )
+        self._route_chain.append({
+            "implementation": implementation,
+            "outcome": "executed",
+            "provider": provider,
+            "effectiveDevice": self._effective_device_for_provider(provider),
+            "failureClass": "",
+            "reason": "scene routing",
+            "recoveryHint": "",
+        })
+
+    def execution_identity(self) -> dict:
+        executions = [
+            {
+                "implementation": implementation,
+                "provider": provider,
+                "effectiveDevice": self._effective_device_for_provider(provider),
+                "executionCount": count,
+            }
+            for (implementation, provider), count
+            in sorted(self._execution_counts.items())
+        ]
+        implementations = {
+            item["implementation"] for item in executions
+        }
+        actual = (
+            "mixed" if len(implementations) > 1
+            else next(iter(implementations), "")
+        )
+        return {
+            "implementation": actual,
+            "provider": self.backend_name,
+            "effectiveDevice": self.device,
+            "actualExecutions": executions,
+            # Scene routing is an execution trace, not a failure fallback.
+            "fallbackChain": list(self._route_chain),
+        }
 
     def inpaint(
         self, frames: List[np.ndarray], masks: List[np.ndarray]

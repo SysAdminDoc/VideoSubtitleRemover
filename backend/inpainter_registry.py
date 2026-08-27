@@ -29,6 +29,7 @@ own dataclass definitions, so a backend file can safely
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -41,11 +42,26 @@ logger = logging.getLogger(__name__)
 _BuilderT = Callable[..., object]
 
 
+@dataclass(frozen=True)
+class InpainterRegistration:
+    name: str
+    builder: _BuilderT
+    implementation_id: str
+    recovery_hint: str = ""
+
+
 _REGISTRY: Dict[str, _BuilderT] = {}
+_SPECS: Dict[str, InpainterRegistration] = {}
 _ORDER: List[str] = []   # insertion order so listing returns a stable view
 
 
-def register(name: str, builder: _BuilderT) -> None:
+def register(
+    name: str,
+    builder: _BuilderT,
+    *,
+    implementation_id: str = "",
+    recovery_hint: str = "",
+) -> None:
     """Register a builder for a named inpainter mode.
 
     `name` is matched case-insensitively against `InpaintMode.value`
@@ -63,6 +79,12 @@ def register(name: str, builder: _BuilderT) -> None:
     else:
         _ORDER.append(key)
     _REGISTRY[key] = builder
+    _SPECS[key] = InpainterRegistration(
+        name=key,
+        builder=builder,
+        implementation_id=(implementation_id.strip().lower() or key),
+        recovery_hint=str(recovery_hint or ""),
+    )
 
 
 def resolve(name: str) -> _BuilderT:
@@ -72,6 +94,11 @@ def resolve(name: str) -> _BuilderT:
     substitute a different backend (issue #7: the old silent STTN
     fallback made every unregistered model produce STTN output)."""
     return _REGISTRY[name.strip().lower()]
+
+
+def resolve_spec(name: str) -> InpainterRegistration:
+    """Return stable identity metadata for one registered implementation."""
+    return _SPECS[name.strip().lower()]
 
 
 def is_registered(name: str) -> bool:
@@ -90,6 +117,7 @@ def unregister(name: str) -> bool:
     key = name.strip().lower()
     if key in _REGISTRY:
         del _REGISTRY[key]
+        _SPECS.pop(key, None)
         try:
             _ORDER.remove(key)
         except ValueError:
@@ -102,4 +130,5 @@ def clear() -> None:
     """Wipe the registry. Used by tests; production code should never
     call this."""
     _REGISTRY.clear()
+    _SPECS.clear()
     _ORDER.clear()

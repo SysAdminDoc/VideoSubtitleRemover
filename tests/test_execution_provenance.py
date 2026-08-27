@@ -10,8 +10,9 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from backend.execution_provenance import (
+from backend.execution_provenance import (  # noqa: E402
     ExecutionProvenance,
+    RequestedStageError,
     StageProvenance,
     device_from_provider,
     normalize_device,
@@ -65,6 +66,52 @@ class StageProvenanceTests(unittest.TestCase):
         self.assertFalse(stage.fell_back)
         self.assertEqual(stage.label(), "LAMA on CUDA")
 
+    def test_initialized_stage_is_not_reported_as_succeeded(self):
+        stage = StageProvenance(
+            stage="ocr",
+            requested_device="cpu",
+            effective_device="cpu",
+            engine="RapidOCR",
+            requested_implementation="rapidocr",
+            actual_implementation="rapidocr",
+            outcome="initialized",
+        )
+        payload = stage.to_dict()
+        self.assertEqual(payload["status"], "not_run")
+        self.assertEqual(payload["outcome"], "initialized")
+        self.assertEqual(stage.label(), "RapidOCR initialized, not run")
+
+    def test_auto_scene_routes_record_mixed_execution_without_false_fallback(self):
+        stage = StageProvenance(
+            stage="inpaint",
+            requested_device="cpu",
+            effective_device="cpu",
+            engine="Auto",
+            requested_implementation="auto",
+            selection_policy="auto",
+        )
+        stage.record_execution("sttn", provider="TBE", effective_device="cpu", count=4)
+        stage.record_execution(
+            "propainter", provider="TBE plus LaMa", effective_device="cpu", count=3
+        )
+        stage.fallback_chain = [
+            {"implementation": "sttn", "outcome": "executed", "reason": "scene routing"},
+            {
+                "implementation": "propainter",
+                "outcome": "executed",
+                "reason": "scene routing",
+            },
+        ]
+
+        payload = stage.to_dict()
+        self.assertEqual(payload["actualImplementation"], "mixed")
+        self.assertEqual(
+            [item["executionCount"] for item in payload["actualExecutions"]],
+            [4, 3],
+        )
+        self.assertFalse(payload["chainFellBack"])
+        self.assertFalse(payload["fellBack"])
+
 
 class ExecutionProvenanceTests(unittest.TestCase):
     def _cuda_request_that_ran_on_cpu(self):
@@ -97,6 +144,7 @@ class ExecutionProvenanceTests(unittest.TestCase):
 
     def test_payload_records_every_required_field(self):
         payload = self._cuda_request_that_ran_on_cpu().to_dict()
+        self.assertEqual(payload["schema"], "vsr.execution_provenance.v2")
         self.assertEqual(payload["requestedDevice"], "cuda")
         self.assertEqual(payload["inpaintMode"], "LAMA")
         self.assertTrue(payload["anyFallback"])
@@ -125,6 +173,120 @@ class ExecutionProvenanceTests(unittest.TestCase):
 
     def test_throughput_is_none_without_timing(self):
         self.assertIsNone(ExecutionProvenance().frames_per_second)
+
+    def test_failure_preserves_execution_and_deduplicates_route_prefix(self):
+        provenance = ExecutionProvenance(
+            requested_device="cpu", effective_device="cpu"
+        )
+        stage = provenance.begin_stage(
+            "ocr",
+            requested_implementation="auto",
+            selection_policy="auto",
+        )
+        selected = {
+            "implementation": "rapidocr",
+            "outcome": "selected",
+            "provider": "CPUExecutionProvider",
+        }
+        stage.fallback_chain = [selected]
+        provenance.record_success(
+            "ocr",
+            implementation="rapidocr",
+            provider="CPUExecutionProvider",
+            effective_device="cpu",
+            count=2,
+        )
+        error = RequestedStageError(
+            stage="ocr",
+            requested_implementation="auto",
+            actual_implementation="rapidocr",
+            provider="CPUExecutionProvider",
+            failure_class="runtime_failed",
+            detail="synthetic inference failure",
+            recovery_hint="Repair RapidOCR or select another OCR engine.",
+            fallback_chain=[
+                selected,
+                {
+                    "implementation": "rapidocr",
+                    "outcome": "runtime_failed",
+                    "provider": "CPUExecutionProvider",
+                    "failureClass": "runtime_failed",
+                    "reason": "synthetic inference failure",
+                },
+            ],
+        )
+
+        failed = provenance.record_failure(error)
+        payload = provenance.to_dict()
+        self.assertEqual(failed.selection_policy, "auto")
+        self.assertEqual(payload["stages"]["ocr"]["status"], "failed")
+        self.assertEqual(payload["stages"]["ocr"]["failureClass"], "runtime_failed")
+        self.assertEqual(len(payload["stages"]["ocr"]["fallbackChain"]), 2)
+        self.assertEqual(
+            payload["stages"]["ocr"]["actualExecutions"][0]["executionCount"],
+            2,
+        )
+        restored = ExecutionProvenance.from_dict(json.loads(json.dumps(payload)))
+        self.assertEqual(restored.to_dict(), payload)
+
+    def test_processor_records_a_requested_stage_failure_without_false_success(self):
+        from backend import processor
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(device="cpu")
+        remover.execution_provenance = ExecutionProvenance(
+            requested_device="cpu", effective_device="cpu"
+        )
+        error = RequestedStageError(
+            stage="inpaint",
+            requested_implementation="lama",
+            actual_implementation="lama",
+            provider="OpenCV DNN",
+            failure_class="runtime_failed",
+            detail="synthetic model failure",
+            recovery_hint="Verify the LaMa model and retry.",
+        )
+
+        remover._record_requested_stage_failure(error)
+
+        stage = remover.execution_provenance.to_dict()["stages"]["inpaint"]
+        self.assertEqual(stage["status"], "failed")
+        self.assertEqual(stage["provider"], "OpenCV DNN")
+        self.assertEqual(stage["recoveryHint"], error.recovery_hint)
+        self.assertEqual(remover.last_error_reason, "requested_stage_failed")
+
+    def test_refresh_does_not_overwrite_a_failed_ocr_stage(self):
+        from types import SimpleNamespace
+        from backend import processor
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(device="cpu")
+        remover.detector = SimpleNamespace(
+            execution_provenance=lambda: StageProvenance(
+                stage="ocr",
+                requested_implementation="rapidocr",
+                actual_implementation="rapidocr",
+                outcome="initialized",
+            )
+        )
+        remover.execution_provenance = ExecutionProvenance(
+            requested_device="cpu", effective_device="cpu"
+        )
+        remover.execution_provenance.record_failure(RequestedStageError(
+            stage="ocr",
+            requested_implementation="rapidocr",
+            actual_implementation="rapidocr",
+            provider="CPUExecutionProvider",
+            failure_class="runtime_failed",
+            detail="synthetic OCR failure",
+            recovery_hint="Repair RapidOCR.",
+        ))
+
+        remover._refresh_execution_provenance()
+
+        stage = remover.execution_provenance.to_dict()["stages"]["ocr"]
+        self.assertEqual(stage["status"], "failed")
+        self.assertEqual(stage["failureClass"], "runtime_failed")
 
 
 class DetectorProvenanceTests(unittest.TestCase):

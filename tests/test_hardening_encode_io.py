@@ -1246,11 +1246,10 @@ class HdrPipelineTests(unittest.TestCase):
 
 
 class PostRestoreTests(unittest.TestCase):
-    """RM-78 / RM-80: optional post-restore adapters must return None
-    when their dependency is missing. The pipeline never crashes on a
-    half-broken install."""
+    """RM-78 / RM-80 requested adapters fail with actionable errors."""
 
-    def test_realesrgan_skip_when_binary_missing(self):
+    def test_realesrgan_missing_binary_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
         from backend import post_restore as _pr
         import shutil as _shutil
         original = _shutil.which
@@ -1260,12 +1259,16 @@ class PostRestoreTests(unittest.TestCase):
                 src = Path(tmpdir) / "in.mp4"
                 src.write_bytes(b"\x00" * 16)  # placeholder
                 dst = str(Path(tmpdir) / "out.mp4")
-                result = _pr.realesrgan_upscale(str(src), dst, scale=2)
-            self.assertIsNone(result)
+                with self.assertRaises(RequestedStageError) as caught:
+                    _pr.realesrgan_upscale(str(src), dst, scale=2)
+            self.assertEqual(caught.exception.stage, "restoration")
+            self.assertEqual(caught.exception.failure_class, "dependency_missing")
+            self.assertTrue(caught.exception.recovery_hint)
         finally:
             _shutil.which = original
 
-    def test_film_grain_skip_when_ffmpeg_missing(self):
+    def test_film_grain_missing_ffmpeg_fails_closed(self):
+        from backend.execution_provenance import RequestedStageError
         from backend import post_restore as _pr
         import shutil as _shutil
         original = _shutil.which
@@ -1275,8 +1278,11 @@ class PostRestoreTests(unittest.TestCase):
                 src = Path(tmpdir) / "in.mp4"
                 src.write_bytes(b"\x00" * 16)
                 dst = str(Path(tmpdir) / "out.mp4")
-                result = _pr.add_film_grain(str(src), dst, strength=0.04)
-            self.assertIsNone(result)
+                with self.assertRaises(RequestedStageError) as caught:
+                    _pr.add_film_grain(str(src), dst, strength=0.04)
+            self.assertEqual(caught.exception.stage, "film_grain")
+            self.assertEqual(caught.exception.failure_class, "dependency_missing")
+            self.assertTrue(caught.exception.recovery_hint)
         finally:
             _shutil.which = original
 
@@ -1298,24 +1304,126 @@ class PostRestoreTests(unittest.TestCase):
                 remover._run_post_restore_passes(str(output), tmpdir)
             add_grain.assert_not_called()
 
+    def test_post_restore_wraps_untyped_adapter_failure(self):
+        from backend.execution_provenance import RequestedStageError
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(swinir_restore=True)
+        remover._output_contract = None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "out.mp4"
+            output.write_bytes(b"placeholder")
+            with unittest.mock.patch(
+                "backend.post_restore.swinir_restore",
+                side_effect=ValueError("synthetic adapter failure"),
+            ), unittest.mock.patch(
+                "backend.post_restore.selected_restoration_provider",
+                return_value="synthetic-swinir",
+            ):
+                with self.assertRaises(RequestedStageError) as raised:
+                    remover._run_post_restore_passes(str(output), tmpdir)
+
+        error = raised.exception
+        self.assertEqual(error.stage, "swinir")
+        self.assertEqual(error.requested_implementation, "swinir")
+        self.assertEqual(error.provider, "synthetic-swinir")
+        self.assertEqual(error.failure_class, "runtime_failed")
+
+    def test_missing_restoration_dependency_does_not_claim_a_provider(self):
+        from backend.execution_provenance import RequestedStageError
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(seedvr2_restore=True)
+        remover._output_contract = None
+        dependency_error = RequestedStageError(
+            stage="restoration",
+            requested_implementation="seedvr2",
+            failure_class="dependency_missing",
+            detail="synthetic missing package",
+            recovery_hint="Install SeedVR2.",
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "out.mp4"
+            output.write_bytes(b"placeholder")
+            with unittest.mock.patch(
+                "backend.post_restore.seedvr2_restore",
+                side_effect=dependency_error,
+            ), unittest.mock.patch(
+                "backend.post_restore.selected_restoration_provider",
+                return_value="seedvr2.SeedVR2",
+            ):
+                with self.assertRaises(RequestedStageError) as raised:
+                    remover._run_post_restore_passes(str(output), tmpdir)
+
+        self.assertEqual(raised.exception.stage, "seedvr2")
+        self.assertEqual(raised.exception.provider, "")
+
+    def test_multiple_restoration_passes_keep_separate_provenance(self):
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(
+            upscale_factor=2,
+            swinir_restore=True,
+        )
+        remover._output_contract = None
+
+        def produce(_source, target, **_kwargs):
+            Path(target).write_bytes(b"restored")
+            return target
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "out.mp4"
+            output.write_bytes(b"placeholder")
+            with unittest.mock.patch(
+                "backend.post_restore.realesrgan_upscale",
+                side_effect=produce,
+            ), unittest.mock.patch(
+                "backend.post_restore.swinir_restore",
+                side_effect=produce,
+            ), unittest.mock.patch(
+                "backend.post_restore.selected_restoration_provider",
+                side_effect=lambda name: f"{name}-provider",
+            ), unittest.mock.patch.object(
+                remover,
+                "_promote_post_restore_result",
+                return_value=True,
+            ):
+                remover._run_post_restore_passes(str(output), tmpdir)
+
+        stages = remover.execution_provenance.to_dict()["stages"]
+        self.assertEqual(stages["realesrgan"]["status"], "succeeded")
+        self.assertFalse(stages["realesrgan"]["fellBack"])
+        self.assertEqual(
+            stages["realesrgan"]["provider"], "realesrgan-provider"
+        )
+        self.assertEqual(stages["swinir"]["status"], "succeeded")
+        self.assertFalse(stages["swinir"]["fellBack"])
+        self.assertEqual(stages["swinir"]["provider"], "swinir-provider")
+
     def test_film_grain_uses_selected_encode_and_audio_contract(self):
         from backend import post_restore
 
         completed = SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
-        with unittest.mock.patch(
-            "backend.post_restore.shutil.which", return_value="ffmpeg"
-        ), unittest.mock.patch(
-            "backend.post_restore.run_process", return_value=completed
-        ) as run:
-            produced = post_restore.add_film_grain(
-                "source.mkv",
-                "grain.mkv",
-                video_encode_args=(
-                    "-c:v", "libx265", "-pix_fmt", "yuv420p10le"
-                ),
-                preserve_audio=False,
-            )
-        self.assertEqual(produced, "grain.mkv")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = str(Path(tmpdir) / "grain.mkv")
+
+            def fake_run(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"grain")
+                return completed
+
+            with unittest.mock.patch(
+                "backend.post_restore.shutil.which", return_value="ffmpeg"
+            ), unittest.mock.patch(
+                "backend.post_restore.run_process", side_effect=fake_run
+            ) as run:
+                produced = post_restore.add_film_grain(
+                    "source.mkv",
+                    output,
+                    video_encode_args=(
+                        "-c:v", "libx265", "-pix_fmt", "yuv420p10le"
+                    ),
+                    preserve_audio=False,
+                )
+        self.assertEqual(produced, output)
         command = run.call_args.args[0]
         self.assertIn("libx265", command)
         self.assertIn("yuv420p10le", command)

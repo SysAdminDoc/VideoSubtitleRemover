@@ -16,6 +16,10 @@ if str(_ROOT) not in sys.path:
 
 from backend import inpainter_registry
 from backend.config import ProcessingConfig, RegisteredMode, _coerce_backend_mode
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    RequestedStageError,
+)
 from backend.inpainters_diffusion import _VoidBackend, maybe_register
 
 
@@ -53,18 +57,21 @@ class VoidAdapterTests(unittest.TestCase):
         self.assertIsInstance(mode, RegisteredMode)
         self.assertEqual(mode.value, "void")
 
-    def test_void_falls_back_when_weights_are_absent(self):
+    def test_void_fails_closed_when_weights_are_absent(self):
         cfg = ProcessingConfig(tbe_enable=True)
         backend = _VoidBackend(device="cpu", config=cfg)
         frames = [np.full((16, 16, 3), 60, dtype=np.uint8) for _ in range(3)]
         masks = [np.zeros((16, 16), dtype=np.uint8) for _ in range(3)]
         masks[1][4:8, 4:8] = 255
 
-        out = backend.inpaint(frames, masks)
+        with self.assertRaises(RequestedStageError) as caught:
+            backend.inpaint(frames, masks)
 
-        self.assertEqual(len(out), 3)
-        for frame in out:
-            self.assertEqual(frame.shape, (16, 16, 3))
+        error = caught.exception
+        self.assertEqual(error.stage, "inpaint")
+        self.assertEqual(error.requested_implementation, "void")
+        self.assertEqual(error.failure_class, FAILURE_DEPENDENCY_MISSING)
+        self.assertIn("VSR_VOID_WEIGHTS", error.recovery_hint)
 
     def test_void_manifest_rejects_unverified_weights_before_import(self):
         with tempfile.TemporaryDirectory() as tmpdir:

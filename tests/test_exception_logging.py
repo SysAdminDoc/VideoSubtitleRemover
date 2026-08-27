@@ -60,11 +60,10 @@ class ProcessingExceptionLoggingTests(unittest.TestCase):
                 "ProPainter LaMa residual refinement failed",
             ),
             "backend/inpainters/lama.py": (
-                "LaMa-ONNX tile inference failed",
+                "Tiled LaMa-ONNX fell back to full-frame",
+                "Tiled LaMa cv2.dnn fell back to full-frame",
                 "Batched LaMa fell back to per-frame",
                 "Tiled LaMa fell back to full-frame",
-                "LaMa inpaint failed for frame",
-                "LaMa PyTorch tile inference failed",
             ),
         }
         for path, phrases in targets.items():

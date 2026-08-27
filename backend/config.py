@@ -677,7 +677,10 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
         "surya", "vlm-florence2", "vlm-qwen25vl", "vlm-paddleocr-vl",
         "vlm-paddleocr-vl-llama"
     }:
-        config.detection_engine = "auto"
+        raise ValueError(
+            f"Unsupported OCR engine: {config.detection_engine!r}. "
+            "Choose a named engine or Auto."
+        )
     config.rapidocr_variant = _coerce_text(
         getattr(config, "rapidocr_variant", "v6"), "v6", 16).lower()
     if config.rapidocr_variant in {"5", "pp-ocrv5", "ppocrv5"}:

@@ -5,13 +5,18 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional, Protocol
 
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    RequestedStageError,
+)
 from backend.onnxruntime_cuda import TENSORRT_RTX_PROVIDER
 
 
 logger = logging.getLogger(__name__)
 
 
-class InpainterUnavailableError(RuntimeError):
+class InpainterUnavailableError(RequestedStageError):
     """Raised when the requested inpainting model has no registered
     backend.
 
@@ -29,12 +34,18 @@ class InpainterUnavailableError(RuntimeError):
         self.registered = registered
         available = ", ".join(sorted(registered)) if registered else "(none)"
         super().__init__(
-            "No inpainting backend is registered for %r. Registered "
-            "backends: %s. Opt-in backends (LaMa-ONNX, MI-GAN, diffusion, "
-            "external) register only when their enable environment "
-            "variable is set and their optional dependencies import "
-            "cleanly -- check the log for '<name> did not load' messages."
-            % (requested, available)
+            stage="inpaint",
+            requested_implementation=requested,
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail=(
+                "No inpainting backend is registered. Registered backends: "
+                f"{available}"
+            ),
+            recovery_hint=(
+                "Enable the requested adapter and install its reviewed "
+                "dependencies, then retry. Check the log for adapter load "
+                "failures."
+            ),
         )
 
 
@@ -179,15 +190,60 @@ class RuntimeDeviceProvider:
         return inpainter_registry.resolve(name)
 
     def create_inpainter(self, name: str, device: str, config: Any) -> object:
+        implementation_id = name.strip().lower()
+        recovery_hint = ""
         try:
-            builder = self._resolve(name)
+            if self._resolver is None:
+                from backend import inpainter_registry
+                spec = inpainter_registry.resolve_spec(name)
+                builder = spec.builder
+                implementation_id = spec.implementation_id
+                recovery_hint = spec.recovery_hint
+            else:
+                builder = self._resolve(name)
         except KeyError:
             from backend import inpainter_registry
             raise InpainterUnavailableError(
                 name,
                 [mode for mode, _ in inpainter_registry.list_modes()],
             ) from None
-        return builder(device, config)
+        try:
+            inpainter = builder(device, config)
+        except RequestedStageError:
+            raise
+        except Exception as exc:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation=name,
+                failure_class=FAILURE_INITIALIZATION,
+                detail=str(exc),
+                recovery_hint=(
+                    recovery_hint
+                    or "Verify the selected model files and optional runtime, "
+                    "then retry or select Auto."
+                ),
+                cause=exc,
+            ) from exc
+        if inpainter is None:
+            raise RequestedStageError(
+                stage="inpaint",
+                requested_implementation=name,
+                failure_class=FAILURE_INITIALIZATION,
+                detail="the registered builder returned no implementation",
+                recovery_hint=(
+                    recovery_hint
+                    or "Verify the selected adapter installation, then retry "
+                    "or select Auto."
+                ),
+            )
+        try:
+            setattr(inpainter, "_vsr_requested_implementation", name)
+            setattr(inpainter, "_vsr_registered_implementation", implementation_id)
+            setattr(inpainter, "_vsr_recovery_hint", recovery_hint)
+        except Exception:
+            logger.debug(
+                "Inpainter %s does not accept execution identity metadata", name)
+        return inpainter
 
     @staticmethod
     def is_oom_error(exc: BaseException) -> bool:

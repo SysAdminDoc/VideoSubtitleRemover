@@ -16,9 +16,10 @@ RM-69 CoTracker3 -- point tracking helper; lighter than SAM 2 memory.
 Useful for confirming a karaoke caret stays on the same line across a
 clip without engaging SAM's memory-propagation cost.
 
-Each adapter imports lazily and returns the input mask unchanged when
-its dep is unavailable so the pipeline stays correct. Mask refinement
-runs AFTER the OCR cascade and BEFORE _create_mask widens the boxes.
+Each adapter imports lazily. A requested adapter that cannot execute
+raises a classified error instead of reporting unchanged input as a
+successful refinement. Mask refinement runs AFTER the OCR cascade and
+BEFORE _create_mask widens the boxes.
 """
 
 from __future__ import annotations
@@ -31,6 +32,15 @@ from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
+
+from backend.execution_provenance import (
+    FAILURE_DEPENDENCY_MISSING,
+    FAILURE_INITIALIZATION,
+    FAILURE_OUTPUT_INVALID,
+    FAILURE_POLICY_BLOCKED,
+    FAILURE_RUNTIME,
+    RequestedStageError,
+)
 
 from backend.remote_model_policy import resolve_remote_model_source
 from backend.safe_image import safe_imread
@@ -186,7 +196,7 @@ def _env_set(name: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-_SAM2_STATE: dict = {"probed": False, "predictor": None}
+_SAM2_STATE: dict = {"probed": False, "predictor": None, "load_error": None}
 
 
 def _clip_box(box: Tuple[int, int, int, int],
@@ -220,6 +230,7 @@ def _maybe_load_sam2(device: str):
     if _SAM2_STATE["probed"]:
         return _SAM2_STATE["predictor"]
     _SAM2_STATE["probed"] = True
+    _SAM2_STATE["load_error"] = None
     weight_path = os.environ.get("VSR_SAM2_CHECKPOINT", "")
     config_path = os.environ.get("VSR_SAM2_CONFIG", "")
     if not weight_path:
@@ -227,14 +238,35 @@ def _maybe_load_sam2(device: str):
             "SAM 2 refinement opt-in: set VSR_SAM2_CHECKPOINT (and "
             "VSR_SAM2_CONFIG) to enable. See facebookresearch/sam2."
         )
+        _SAM2_STATE["load_error"] = RequestedStageError(
+            stage="sam2",
+            requested_implementation="sam2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="VSR_SAM2_CHECKPOINT is not configured",
+            recovery_hint=(
+                "Install SAM 2 and set VSR_SAM2_CHECKPOINT plus "
+                "VSR_SAM2_CONFIG, then retry or disable SAM 2 refinement."
+            ),
+        )
         return None
     try:
         from sam2.build_sam import build_sam2  # type: ignore
         from sam2.sam2_image_predictor import SAM2ImagePredictor  # type: ignore
-    except ImportError:
+    except ImportError as exc:
         logger.info(
             "sam2 package not importable; install via "
             "`pip install git+https://github.com/facebookresearch/sam2`."
+        )
+        _SAM2_STATE["load_error"] = RequestedStageError(
+            stage="sam2",
+            requested_implementation="sam2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail=str(exc),
+            recovery_hint=(
+                "Install SAM 2 and its reviewed checkpoint, then retry or "
+                "disable SAM 2 refinement."
+            ),
+            cause=exc,
         )
         return None
     try:
@@ -244,6 +276,19 @@ def _maybe_load_sam2(device: str):
         return predictor
     except Exception as exc:
         logger.warning(f"SAM 2 load failed: {exc}")
+        _SAM2_STATE["load_error"] = RequestedStageError(
+            stage="sam2",
+            requested_implementation="sam2",
+            actual_implementation="sam2",
+            provider="sam2",
+            failure_class=FAILURE_INITIALIZATION,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the SAM 2 checkpoint and runtime compatibility, then "
+                "retry or disable SAM 2 refinement."
+            ),
+            cause=exc,
+        )
         return None
 
 
@@ -260,7 +305,19 @@ def refine_mask_with_sam2(frame: np.ndarray,
         return base_mask
     predictor = _maybe_load_sam2(device)
     if predictor is None:
-        return base_mask
+        load_error = _SAM2_STATE.get("load_error")
+        if isinstance(load_error, RequestedStageError):
+            raise load_error
+        raise RequestedStageError(
+            stage="sam2",
+            requested_implementation="sam2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="SAM 2 checkpoint, configuration, or package is unavailable",
+            recovery_hint=(
+                "Install SAM 2 and set VSR_SAM2_CHECKPOINT plus "
+                "VSR_SAM2_CONFIG, then retry or disable SAM 2 refinement."
+            ),
+        )
     try:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         predictor.set_image(rgb)
@@ -305,8 +362,18 @@ def refine_mask_with_sam2(frame: np.ndarray,
             refined = np.maximum(refined, sam_mask)
         return refined
     except Exception as exc:
-        logger.warning(f"SAM 2 inference failed: {exc}")
-        return base_mask
+        raise RequestedStageError(
+            stage="sam2",
+            requested_implementation="sam2",
+            actual_implementation="sam2",
+            provider=type(predictor).__name__,
+            failure_class=FAILURE_RUNTIME,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the SAM 2 checkpoint and runtime compatibility, then "
+                "retry or disable SAM 2 refinement."
+            ),
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -314,21 +381,37 @@ def refine_mask_with_sam2(frame: np.ndarray,
 # ---------------------------------------------------------------------------
 
 
-_SAM3_STATE: dict = {"probed": False, "predictor": None}
+_SAM3_STATE: dict = {"probed": False, "predictor": None, "load_error": None}
 
 
 def _maybe_load_sam3():
     if _SAM3_STATE["probed"]:
         return _SAM3_STATE["predictor"]
     _SAM3_STATE["probed"] = True
+    _SAM3_STATE["load_error"] = None
     if not _env_set("VSR_SAM3"):
+        _SAM3_STATE["load_error"] = RequestedStageError(
+            stage="sam3",
+            requested_implementation="sam3",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="VSR_SAM3 is not enabled",
+            recovery_hint="Install and enable SAM 3, then retry.",
+        )
         return None
     try:
         from sam3 import SAM3Predictor  # type: ignore
-    except ImportError:
+    except ImportError as exc:
         logger.info(
             "sam3 package not importable; install via "
             "`pip install git+https://github.com/facebookresearch/sam3`."
+        )
+        _SAM3_STATE["load_error"] = RequestedStageError(
+            stage="sam3",
+            requested_implementation="sam3",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail=str(exc),
+            recovery_hint="Install and enable SAM 3, then retry.",
+            cause=exc,
         )
         return None
     try:
@@ -337,21 +420,61 @@ def _maybe_load_sam3():
         return predictor
     except Exception as exc:
         logger.warning(f"SAM 3 load failed: {exc}")
+        _SAM3_STATE["load_error"] = RequestedStageError(
+            stage="sam3",
+            requested_implementation="sam3",
+            actual_implementation="sam3",
+            provider="sam3",
+            failure_class=FAILURE_INITIALIZATION,
+            detail=str(exc),
+            recovery_hint="Verify the SAM 3 model and runtime, then retry.",
+            cause=exc,
+        )
         return None
 
 
 def segment_text_with_sam3(frame: np.ndarray) -> Optional[np.ndarray]:
     """RM-67: ask SAM 3 "segment all burned-in text in this frame".
-    Returns a single uint8 mask or None when the dep is missing."""
+    Returns a single uint8 mask or raises a classified stage error."""
     predictor = _maybe_load_sam3()
     if predictor is None:
-        return None
+        load_error = _SAM3_STATE.get("load_error")
+        if isinstance(load_error, RequestedStageError):
+            raise load_error
+        raise RequestedStageError(
+            stage="sam3",
+            requested_implementation="sam3",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="SAM 3 is unavailable",
+            recovery_hint="Install and enable SAM 3, then retry.",
+        )
     try:
         mask = predictor.segment(frame, prompt="burned-in subtitle text")
-        return (np.asarray(mask) > 0).astype(np.uint8) * 255
+        result = (np.asarray(mask) > 0).astype(np.uint8) * 255
+        if result.shape != frame.shape[:2]:
+            raise RequestedStageError(
+                stage="sam3",
+                requested_implementation="sam3",
+                actual_implementation="sam3",
+                provider=type(predictor).__name__,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail="SAM 3 returned a mask with invalid dimensions",
+                recovery_hint="Verify the SAM 3 adapter version, then retry.",
+            )
+        return result
     except Exception as exc:
-        logger.warning(f"SAM 3 inference failed: {exc}")
-        return None
+        if isinstance(exc, RequestedStageError):
+            raise
+        raise RequestedStageError(
+            stage="sam3",
+            requested_implementation="sam3",
+            actual_implementation="sam3",
+            provider=type(predictor).__name__,
+            failure_class=FAILURE_RUNTIME,
+            detail=str(exc),
+            recovery_hint="Verify the SAM 3 model and runtime, then retry.",
+            cause=exc,
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -359,7 +482,7 @@ def segment_text_with_sam3(frame: np.ndarray) -> Optional[np.ndarray]:
 # ---------------------------------------------------------------------------
 
 
-_MATANYONE_STATE: dict = {"probed": False, "model": None}
+_MATANYONE_STATE: dict = {"probed": False, "model": None, "load_error": None}
 _MATANYONE_MODEL_ID = "PeiqingYang/MatAnyone2"
 
 
@@ -462,6 +585,29 @@ def _normalize_alpha_matte(alpha, frame_shape) -> Optional[np.ndarray]:
     return arr if int(arr.max()) > 0 else None
 
 
+def _is_explicit_empty_alpha(alpha) -> bool:
+    """Return whether an adapter explicitly emitted a valid all-zero matte."""
+    alpha = _unwrap_alpha_payload(alpha)
+    if alpha is None:
+        return False
+    try:
+        arr = np.asarray(alpha)
+    except Exception:
+        return False
+    if arr.size == 0:
+        return False
+    if arr.ndim == 4:
+        arr = arr[0]
+    if arr.ndim == 3 and arr.shape[2] not in (1, 3, 4):
+        return False
+    if arr.ndim not in (2, 3):
+        return False
+    try:
+        return not bool(np.any(np.nan_to_num(arr)))
+    except (TypeError, ValueError):
+        return False
+
+
 def _normalize_alpha_sequence(value,
                               frames: List[np.ndarray],
                               masks: List[np.ndarray]) -> Optional[List[np.ndarray]]:
@@ -481,10 +627,14 @@ def _normalize_alpha_sequence(value,
     out: List[np.ndarray] = []
     for alpha, frame, hint in zip(value, frames, masks):
         normalized = _normalize_alpha_matte(alpha, frame.shape)
-        if normalized is None or int(np.asarray(hint).max()) == 0:
+        if int(np.asarray(hint).max()) == 0:
+            out.append(np.asarray(hint).astype(np.uint8))
+        elif normalized is not None:
+            out.append(normalized)
+        elif _is_explicit_empty_alpha(alpha):
             out.append(np.asarray(hint).astype(np.uint8))
         else:
-            out.append(normalized)
+            return None
     return out
 
 
@@ -708,17 +858,62 @@ def _maybe_load_matanyone(device: str = "cpu"):
     if _MATANYONE_STATE["probed"]:
         return _MATANYONE_STATE["model"]
     _MATANYONE_STATE["probed"] = True
+    _MATANYONE_STATE["load_error"] = None
     if not _env_set("VSR_MATANYONE"):
+        _MATANYONE_STATE["load_error"] = RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="VSR_MATANYONE is not enabled",
+            recovery_hint=(
+                "Enable VSR_MATANYONE with an approved MatAnyone 2 source and "
+                "checkpoint, then retry or disable MatAnyone refinement."
+            ),
+        )
         return None
     source = resolve_remote_model_source("matanyone")
     if not source.allowed:
         logger.warning("MatAnyone 2 disabled: %s", source.reason)
+        _MATANYONE_STATE["load_error"] = RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            failure_class=FAILURE_POLICY_BLOCKED,
+            detail=str(source.reason),
+            recovery_hint=(
+                "Configure an approved pinned MatAnyone 2 source, then retry "
+                "or disable MatAnyone refinement."
+            ),
+        )
         return None
     if source.source_type == "local" and source.source:
         if not _verify_matanyone_path(source.source):
+            _MATANYONE_STATE["load_error"] = RequestedStageError(
+                stage="matanyone",
+                requested_implementation="matanyone2",
+                failure_class=FAILURE_POLICY_BLOCKED,
+                detail="the MatAnyone 2 checkpoint failed verification",
+                recovery_hint=(
+                    "Use an approved MatAnyone 2 checkpoint, then retry or "
+                    "disable MatAnyone refinement."
+                ),
+            )
             return None
     try:
         from matanyone2 import InferenceCore, MatAnyone2  # type: ignore
+    except ImportError as exc:
+        _MATANYONE_STATE["load_error"] = RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail=str(exc),
+            recovery_hint=(
+                "Install MatAnyone 2 from the approved source, then retry or "
+                "disable MatAnyone refinement."
+            ),
+            cause=exc,
+        )
+        return None
+    try:
         model_id = os.environ.get("VSR_MATANYONE_MODEL_ID", "").strip()
         if not model_id:
             model_id = source.source if source.source_type == "local" else _MATANYONE_MODEL_ID
@@ -732,20 +927,20 @@ def _maybe_load_matanyone(device: str = "cpu"):
         _MATANYONE_STATE["model"] = wrapped
         return wrapped
     except Exception as exc:
-        logger.debug(f"MatAnyone 2 package load failed: {exc}")
-    try:
-        from matanyone import MatAnyone  # type: ignore
-        kwargs = {"device": device}
-        if source.source_type == "local" and source.source:
-            kwargs["checkpoint"] = source.source
-        try:
-            model = MatAnyone(**kwargs)
-        except TypeError:
-            model = MatAnyone()
-        _MATANYONE_STATE["model"] = model
-        return model
-    except Exception as exc:
         logger.warning(f"MatAnyone 2 load failed: {exc}")
+        _MATANYONE_STATE["load_error"] = RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            actual_implementation="matanyone2",
+            provider="matanyone2",
+            failure_class=FAILURE_INITIALIZATION,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the MatAnyone 2 adapter and checkpoint, then retry or "
+                "disable MatAnyone refinement."
+            ),
+            cause=exc,
+        )
         return None
 
 
@@ -754,18 +949,50 @@ def matte_frame(frame: np.ndarray,
                 device: str = "cpu") -> Optional[np.ndarray]:
     """RM-68: produce a soft alpha matte for the hinted region. Useful
     for thin moving subtitle lines that OCR + SAM both struggle with.
-    Returns the alpha matte as uint8 or None on missing dep / error."""
+    Returns the alpha matte as uint8 or raises when the requested adapter fails."""
     if int(np.asarray(hint_mask).max()) == 0:
         return None
     model = _maybe_load_matanyone(device)
     if model is None:
-        return None
+        load_error = _MATANYONE_STATE.get("load_error")
+        if isinstance(load_error, RequestedStageError):
+            raise load_error
+        raise RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="MatAnyone 2 is unavailable",
+            recovery_hint="Install and enable MatAnyone 2, then retry.",
+        )
     try:
         alpha = model.matte(frame, hint_mask)
-        return _normalize_alpha_matte(alpha, frame.shape)
+        normalized = _normalize_alpha_matte(alpha, frame.shape)
+        if normalized is None:
+            raise RequestedStageError(
+                stage="matanyone",
+                requested_implementation="matanyone2",
+                actual_implementation="matanyone2",
+                provider=type(model).__name__,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail="MatAnyone 2 returned no valid alpha matte",
+                recovery_hint="Verify the MatAnyone 2 adapter version, then retry.",
+            )
+        return normalized
     except Exception as exc:
-        logger.warning(f"MatAnyone inference failed: {exc}")
-        return None
+        if isinstance(exc, RequestedStageError):
+            raise
+        raise RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            actual_implementation="matanyone2",
+            provider=type(model).__name__,
+            failure_class=FAILURE_RUNTIME,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the MatAnyone 2 adapter and checkpoint, then retry."
+            ),
+            cause=exc,
+        ) from exc
 
 
 def refine_masks_with_matanyone(frames: List[np.ndarray],
@@ -787,7 +1014,19 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
         return original
     model = _maybe_load_matanyone(device)
     if model is None:
-        return original
+        load_error = _MATANYONE_STATE.get("load_error")
+        if isinstance(load_error, RequestedStageError):
+            raise load_error
+        raise RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="MatAnyone 2 package or approved checkpoint is unavailable",
+            recovery_hint=(
+                "Enable VSR_MATANYONE with an approved MatAnyone 2 source and "
+                "checkpoint, then retry or disable MatAnyone refinement."
+            ),
+        )
     try:
         if hasattr(model, "matte_frames"):
             refined = _normalize_alpha_sequence(
@@ -796,24 +1035,45 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
                 original,
             )
         else:
-            refined = [
-                _normalize_alpha_matte(model.matte(frame, mask), frame.shape)
-                if int(mask.max()) > 0 else None
+            raw_refined = [
+                model.matte(frame, mask) if int(mask.max()) > 0 else None
                 for frame, mask in zip(frames, original)
             ]
-            refined = [
-                mask if alpha is None else alpha
-                for alpha, mask in zip(refined, original)
-            ]
+            refined = _normalize_alpha_sequence(
+                raw_refined, frames, original
+            )
         if refined is None:
-            return original
+            raise RequestedStageError(
+                stage="matanyone",
+                requested_implementation="matanyone2",
+                actual_implementation="matanyone2",
+                provider=type(model).__name__,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail="MatAnyone 2 returned no valid alpha sequence",
+                recovery_hint=(
+                    "Verify the MatAnyone 2 adapter API and checkpoint, then "
+                    "retry or disable MatAnyone refinement."
+                ),
+            )
         out: List[np.ndarray] = []
         for source, refined_mask in zip(original, refined):
             out.append(source if int(source.max()) == 0 else refined_mask)
         return out
     except Exception as exc:
-        logger.warning(f"MatAnyone sequence refinement failed: {exc}")
-        return original
+        if isinstance(exc, RequestedStageError):
+            raise
+        raise RequestedStageError(
+            stage="matanyone",
+            requested_implementation="matanyone2",
+            actual_implementation="matanyone2",
+            provider=type(model).__name__,
+            failure_class=FAILURE_RUNTIME,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the MatAnyone 2 adapter API and checkpoint, then "
+                "retry or disable MatAnyone refinement."
+            ),
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -821,7 +1081,7 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
 # ---------------------------------------------------------------------------
 
 
-_COTRACKER_STATE: dict = {"probed": False, "model": None}
+_COTRACKER_STATE: dict = {"probed": False, "model": None, "load_error": None}
 
 
 def _tensor_to_numpy(value):
@@ -839,15 +1099,25 @@ def _tensor_to_numpy(value):
     return np.asarray(value)
 
 
-def _to_device(value, device: str):
+def _to_device(value, device: str, *, strict: bool = False):
     try:
         return value.to(device)
     except Exception:
+        if strict:
+            raise
         return value
 
 
 def _cotracker_entrypoint() -> str:
     mode = os.environ.get("VSR_COTRACKER_MODE", "offline").strip().lower()
+    if mode not in {"offline", "online"}:
+        raise RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            failure_class=FAILURE_POLICY_BLOCKED,
+            detail=f"unsupported CoTracker mode {mode!r}",
+            recovery_hint="Set VSR_COTRACKER_MODE to 'offline' or 'online'.",
+        )
     return "cotracker3_online" if mode == "online" else "cotracker3_offline"
 
 
@@ -855,14 +1125,46 @@ def _maybe_load_cotracker(device: str = "cpu"):
     if _COTRACKER_STATE["probed"]:
         return _COTRACKER_STATE["model"]
     _COTRACKER_STATE["probed"] = True
+    _COTRACKER_STATE["load_error"] = None
     if not _env_set("VSR_COTRACKER"):
+        _COTRACKER_STATE["load_error"] = RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            failure_class=FAILURE_DEPENDENCY_MISSING,
+            detail="VSR_COTRACKER is not enabled",
+            recovery_hint=(
+                "Enable VSR_COTRACKER with an approved pinned source, then "
+                "retry or disable CoTracker propagation."
+            ),
+        )
         return None
     try:
         source = resolve_remote_model_source("cotracker3")
         if not source.allowed:
             logger.warning("CoTracker3 disabled: %s", source.reason)
+            _COTRACKER_STATE["load_error"] = RequestedStageError(
+                stage="cotracker",
+                requested_implementation="cotracker3",
+                failure_class=FAILURE_POLICY_BLOCKED,
+                detail=str(source.reason),
+                recovery_hint=(
+                    "Configure an approved pinned CoTracker3 source, then "
+                    "retry or disable CoTracker propagation."
+                ),
+            )
             return None
-        import torch  # type: ignore
+        try:
+            import torch  # type: ignore
+        except ImportError as exc:
+            _COTRACKER_STATE["load_error"] = RequestedStageError(
+                stage="cotracker",
+                requested_implementation="cotracker3",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail=str(exc),
+                recovery_hint="Install the approved CoTracker3 runtime, then retry.",
+                cause=exc,
+            )
+            return None
         entrypoint = _cotracker_entrypoint()
         if source.source_type == "local":
             model = torch.hub.load(
@@ -883,8 +1185,23 @@ def _maybe_load_cotracker(device: str = "cpu"):
             model.eval()
         _COTRACKER_STATE["model"] = model
         return model
+    except RequestedStageError as exc:
+        _COTRACKER_STATE["load_error"] = exc
+        raise
     except Exception as exc:
         logger.warning(f"CoTracker3 load failed: {exc}")
+        _COTRACKER_STATE["load_error"] = RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            actual_implementation="cotracker3",
+            provider="cotracker3",
+            failure_class=FAILURE_INITIALIZATION,
+            detail=str(exc),
+            recovery_hint=(
+                "Verify the CoTracker3 source, model, and runtime, then retry."
+            ),
+            cause=exc,
+        )
         return None
 
 
@@ -910,6 +1227,7 @@ def track_points_with_visibility(
     *,
     device: str = "cpu",
     query_frame: int = 0,
+    strict: bool = False,
 ) -> Optional[Tuple[List[List[Tuple[int, int]]], List[List[float]]]]:
     """Track points and return `(tracks, visibility)` per frame.
 
@@ -923,21 +1241,47 @@ def track_points_with_visibility(
         return None
     model = _maybe_load_cotracker(device)
     if model is None:
+        if strict:
+            load_error = _COTRACKER_STATE.get("load_error")
+            if isinstance(load_error, RequestedStageError):
+                raise load_error
+            raise RequestedStageError(
+                stage="cotracker",
+                requested_implementation="cotracker3",
+                failure_class=FAILURE_DEPENDENCY_MISSING,
+                detail="CoTracker3 package or approved model source is unavailable",
+                recovery_hint=(
+                    "Enable VSR_COTRACKER with an approved pinned source, "
+                    "then retry or disable CoTracker propagation."
+                ),
+            )
         return None
     try:
         import torch  # type: ignore
 
         video_np = _prepare_cotracker_video(frames)
         if video_np is None:
+            if strict:
+                raise RequestedStageError(
+                    stage="cotracker",
+                    requested_implementation="cotracker3",
+                    actual_implementation="cotracker3",
+                    provider=type(model).__name__,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail="input frames could not be normalized for CoTracker3",
+                    recovery_hint=(
+                        "Use supported image frames or disable CoTracker propagation."
+                    ),
+                )
             return None
         video = torch.from_numpy(video_np).permute(0, 3, 1, 2).unsqueeze(0).float()
-        video = _to_device(video, device)
+        video = _to_device(video, device, strict=strict)
         query_idx = max(0, min(len(frames) - 1, int(query_frame)))
         query = torch.tensor(
             [[query_idx, float(x), float(y)] for (x, y) in points],
             dtype=torch.float32,
         ).unsqueeze(0)
-        query = _to_device(query, device)
+        query = _to_device(query, device, strict=strict)
         result = None
         for kwargs in (
             {"queries": query, "backward_tracking": True},
@@ -949,18 +1293,70 @@ def track_points_with_visibility(
             except TypeError:
                 continue
         if result is None:
+            if strict:
+                raise RequestedStageError(
+                    stage="cotracker",
+                    requested_implementation="cotracker3",
+                    actual_implementation="cotracker3",
+                    provider=type(model).__name__,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail="CoTracker3 returned no track result",
+                    recovery_hint=(
+                        "Verify the CoTracker3 adapter version, then retry or "
+                        "disable CoTracker propagation."
+                    ),
+                )
             return None
         pred_tracks, pred_visibility = result
         tracks_np = _tensor_to_numpy(pred_tracks)
         vis_np = _tensor_to_numpy(pred_visibility)
         if tracks_np is None:
+            if strict:
+                raise RequestedStageError(
+                    stage="cotracker",
+                    requested_implementation="cotracker3",
+                    actual_implementation="cotracker3",
+                    provider=type(model).__name__,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail="CoTracker3 returned no coordinate tensor",
+                    recovery_hint=(
+                        "Verify the CoTracker3 adapter version, then retry or "
+                        "disable CoTracker propagation."
+                    ),
+                )
             return None
         if tracks_np.ndim == 3:
             tracks_np = tracks_np[None, ...]
         if tracks_np.ndim != 4 or tracks_np.shape[-1] < 2:
+            if strict:
+                raise RequestedStageError(
+                    stage="cotracker",
+                    requested_implementation="cotracker3",
+                    actual_implementation="cotracker3",
+                    provider=type(model).__name__,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail="CoTracker3 returned a malformed coordinate tensor",
+                    recovery_hint=(
+                        "Verify the CoTracker3 adapter version, then retry or "
+                        "disable CoTracker propagation."
+                    ),
+                )
             return None
         tracks_np = tracks_np[0]
         if tracks_np.shape[0] != len(frames):
+            if strict:
+                raise RequestedStageError(
+                    stage="cotracker",
+                    requested_implementation="cotracker3",
+                    actual_implementation="cotracker3",
+                    provider=type(model).__name__,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail="CoTracker3 returned a different frame count",
+                    recovery_hint=(
+                        "Verify the CoTracker3 adapter version, then retry or "
+                        "disable CoTracker propagation."
+                    ),
+                )
             return None
         if vis_np is None:
             vis_np = np.ones(tracks_np.shape[:2], dtype=np.float32)
@@ -989,6 +1385,21 @@ def track_points_with_visibility(
             out_vis.append(frame_vis)
         return out_tracks, out_vis
     except Exception as exc:
+        if isinstance(exc, RequestedStageError):
+            raise
+        if strict:
+            raise RequestedStageError(
+                stage="cotracker",
+                requested_implementation="cotracker3",
+                actual_implementation="cotracker3",
+                provider=type(model).__name__,
+                failure_class=FAILURE_RUNTIME,
+                detail=str(exc),
+                recovery_hint=(
+                    "Verify the CoTracker3 model and Torch runtime, then retry "
+                    "or disable CoTracker propagation."
+                ),
+            ) from exc
         logger.warning(f"CoTracker3 inference failed: {exc}")
         return None
 
@@ -999,14 +1410,14 @@ def track_points(frames: List[np.ndarray],
                   device: str = "cpu",
                   query_frame: int = 0) -> Optional[List[List[Tuple[int, int]]]]:
     """RM-69: track the named pixel points across the frame list.
-    Returns one (T, len(points)) coord list, or None when CoTracker3
-    is unavailable. Used by callers that need to confirm a karaoke
-    caret stays on the same line across a clip."""
+    Returns one (T, len(points)) coordinate list. A requested CoTracker3
+    execution fails with a classified error when it cannot run."""
     result = track_points_with_visibility(
         frames,
         points,
         device=device,
         query_frame=query_frame,
+        strict=True,
     )
     if result is None:
         return None
@@ -1071,21 +1482,55 @@ def propagate_masks_with_cotracker(
     anchor_mask = original[anchor_idx]
     points = _sample_mask_points(anchor_mask)
     if not points:
-        return original
+        raise RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            failure_class=FAILURE_OUTPUT_INVALID,
+            detail="the positive anchor mask produced no tracking points",
+            recovery_hint=(
+                "Use a larger valid mask or disable CoTracker propagation."
+            ),
+        )
     result = track_points_with_visibility(
         frames,
         points,
         device=device,
         query_frame=anchor_idx,
+        strict=True,
     )
     if result is None:
-        return original
+        raise RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            failure_class=FAILURE_OUTPUT_INVALID,
+            detail="CoTracker3 returned no usable tracks",
+            recovery_hint=(
+                "Verify the CoTracker3 adapter and model, then retry or disable "
+                "CoTracker propagation."
+            ),
+        )
     tracks, visibility = result
     if len(tracks) != frame_count:
-        return original
+        raise RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            actual_implementation="cotracker3",
+            provider=selected_segmentation_provider("cotracker3"),
+            failure_class=FAILURE_OUTPUT_INVALID,
+            detail="CoTracker3 returned the wrong number of frame tracks",
+            recovery_hint="Verify the CoTracker3 adapter version, then retry.",
+        )
     base_points = np.asarray(tracks[anchor_idx], dtype=np.float32)
     if base_points.shape[0] != len(points):
-        return original
+        raise RequestedStageError(
+            stage="cotracker",
+            requested_implementation="cotracker3",
+            actual_implementation="cotracker3",
+            provider=selected_segmentation_provider("cotracker3"),
+            failure_class=FAILURE_OUTPUT_INVALID,
+            detail="CoTracker3 returned the wrong number of tracked points",
+            recovery_hint="Verify the CoTracker3 adapter version, then retry.",
+        )
 
     out = list(original)
     height, width = frames[0].shape[:2]
@@ -1109,3 +1554,22 @@ def propagate_masks_with_cotracker(
         if int(shifted.max()) > 0:
             out[idx] = shifted
     return out
+
+
+def selected_segmentation_provider(implementation: str) -> str:
+    """Return the concrete cached provider for an executed optional stage."""
+    key = str(implementation or "").strip().lower()
+    state = {
+        "sam2": _SAM2_STATE,
+        "matanyone2": _MATANYONE_STATE,
+        "cotracker3": _COTRACKER_STATE,
+    }.get(key)
+    if not isinstance(state, dict):
+        return key or "unknown"
+    model = state.get("predictor")
+    if model is None:
+        model = state.get("model")
+    if model is None:
+        return key or "unknown"
+    model_type = type(model)
+    return f"{model_type.__module__}.{model_type.__name__}"
