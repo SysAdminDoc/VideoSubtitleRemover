@@ -185,7 +185,7 @@ class CliBatchReportTests(unittest.TestCase):
             _probe_subtitle_streams=mock.Mock(return_value=[]),
         )
 
-    def test_pattern_skip_existing_writes_report_without_alt_processing(self):
+    def test_pattern_any_policy_skips_without_relabeling_existing_output(self):
         from unittest import mock
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -195,7 +195,11 @@ class CliBatchReportTests(unittest.TestCase):
             ckpt = work / "ckpt"
             src.write_bytes(b"video")
             out_dir.mkdir()
-            (out_dir / "clip_no_sub.mp4").write_bytes(b"done")
+            output = out_dir / "clip_no_sub.mp4"
+            output.write_bytes(b"done")
+            sidecar = Path(str(output) + ".vsr.json")
+            legacy_evidence = '{"schema":"vsr.output_sidecar.v2"}'
+            sidecar.write_text(legacy_evidence, encoding="utf-8")
             fake_remover = SimpleNamespace(
                 config=processor.ProcessingConfig(),
                 process_video=mock.Mock(return_value=True),
@@ -208,14 +212,201 @@ class CliBatchReportTests(unittest.TestCase):
                         "--out-dir", str(out_dir),
                         "--checkpoint-dir", str(ckpt),
                         "--skip-existing",
+                        "--skip-existing-policy", "any",
                     ])
             payload = json.loads((out_dir / "vsr-batch-summary.json").read_text(encoding="utf-8"))
+            markdown = (out_dir / "vsr-batch-summary.md").read_text(
+                encoding="utf-8")
+            preserved_evidence = sidecar.read_text(encoding="utf-8")
 
         self.assertEqual(code, 0, stderr)
         fake_remover.process_video.assert_not_called()
-        self.assertIn("[skip] clip.mp4 (output exists)", stdout)
+        self.assertIn("legacy any policy", stdout)
         self.assertEqual(payload["files"][0]["status"], "skipped-existing")
         self.assertEqual(payload["files"][0]["output_name"], "clip_no_sub.mp4")
+        self.assertEqual(
+            payload["files"][0]["skip_existing"]["policy"], "any")
+        self.assertEqual(
+            payload["files"][0]["skip_existing"]["reason_code"],
+            "legacy-any",
+        )
+        self.assertIn("policy any", markdown)
+        self.assertIn("without identity verification", markdown)
+        self.assertEqual(preserved_evidence, legacy_evidence)
+
+    def test_pattern_verified_policy_reprocesses_old_sidecar_without_relabeling(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            src = work / "clip.mp4"
+            out_dir = work / "out"
+            ckpt = work / "ckpt"
+            src.write_bytes(b"video")
+            out_dir.mkdir()
+            output = out_dir / "clip_no_sub.mp4"
+            output.write_bytes(b"stale output")
+            sidecar = Path(str(output) + ".vsr.json")
+            old_evidence = '{"schema":"vsr.output_sidecar.v2"}'
+            sidecar.write_text(old_evidence, encoding="utf-8")
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--pattern", str(work / "*.mp4"),
+                        "--out-dir", str(out_dir),
+                        "--checkpoint-dir", str(ckpt),
+                        "--skip-existing",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(
+                    encoding="utf-8")
+            )
+            preserved_evidence = sidecar.read_text(encoding="utf-8")
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_called_once()
+        self.assertIn("[reprocess] clip.mp4", stdout)
+        self.assertEqual(
+            payload["files"][0]["skip_existing"]["reason_code"],
+            "sidecar-schema-mismatch",
+        )
+        self.assertEqual(
+            payload["files"][0]["planned_result"], "hardcoded-processed")
+        self.assertEqual(preserved_evidence, old_evidence)
+
+    def test_pattern_verified_policy_skips_an_exact_completed_identity(self):
+        from unittest import mock
+        from backend import batch_report as _br
+
+        calls = []
+
+        class SidecarRemover:
+            def __init__(self, config):
+                self.config = config
+                self.last_output_path = None
+
+            def process_video(self, input_path, output_path, **_kwargs):
+                calls.append(Path(input_path).name)
+                Path(output_path).write_bytes(b"verified output")
+                _br.write_output_sidecar(
+                    input_path=input_path,
+                    output_path=output_path,
+                    config=self.config,
+                    identity_config=self.output_identity_config,
+                    status="processed",
+                )
+                return True
+
+            process_image = process_video
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "clip.mp4"
+            out_dir = work / "out"
+            checkpoint_dir = work / "checkpoints"
+            source.write_bytes(b"source")
+            out_dir.mkdir()
+            common = [
+                "--pattern", str(work / "*.mp4"),
+                "--out-dir", str(out_dir),
+                "--checkpoint-dir", str(checkpoint_dir),
+            ]
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover", SidecarRemover,
+                ):
+                    first_code, _first_stdout, first_stderr = self._run_cli(
+                        common)
+                    sidecar = out_dir / "clip_no_sub.mp4.vsr.json"
+                    first_evidence = sidecar.read_bytes()
+                    second_code, stdout, second_stderr = self._run_cli([
+                        *common,
+                        "--skip-existing",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(
+                    encoding="utf-8")
+            )
+            second_evidence = sidecar.read_bytes()
+
+        self.assertEqual(first_code, 0, first_stderr)
+        self.assertEqual(second_code, 0, second_stderr)
+        self.assertEqual(calls, ["clip.mp4"])
+        self.assertIn("verified output identity", stdout)
+        self.assertEqual(
+            payload["files"][0]["skip_existing"]["reason_code"],
+            "identity-match",
+        )
+        self.assertEqual(first_evidence, second_evidence)
+
+    def test_single_file_skip_policy_defaults_to_verified(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "clip.mp4"
+            output = work / "clean.mp4"
+            source.write_bytes(b"source")
+            output.write_bytes(b"stale")
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--input", str(source),
+                        "--output", str(output),
+                        "--skip-existing",
+                        "--no-resume",
+                    ])
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_called_once()
+        self.assertIn("[reprocess] clip.mp4", stdout)
+
+    def test_single_file_any_policy_keeps_legacy_existence_skip(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = work / "clip.mp4"
+            output = work / "clean.mp4"
+            source.write_bytes(b"source")
+            output.write_bytes(b"existing")
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--input", str(source),
+                        "--output", str(output),
+                        "--skip-existing",
+                        "--skip-existing-policy", "any",
+                        "--no-resume",
+                    ])
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_not_called()
+        self.assertIn("legacy any policy", stdout)
 
     def test_pattern_success_writes_processed_report(self):
         from unittest import mock
@@ -534,6 +725,148 @@ class CliWatchFolderTests(unittest.TestCase):
         self.assertEqual(payload["counts"], {"hardcoded-processed": 2})
         self.assertIn("[watch] drain complete: 2/2 succeeded", stdout)
 
+    def test_watch_reprocesses_existing_output_without_verified_sidecar(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            watch_dir = work / "incoming"
+            out_dir = work / "out"
+            watch_dir.mkdir()
+            out_dir.mkdir()
+            (watch_dir / "clip.mp4").write_bytes(b"source")
+            (out_dir / "clip_no_sub.mp4").write_bytes(b"stale")
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--watch", str(watch_dir),
+                        "--watch-once",
+                        "--watch-stable-seconds", "0",
+                        "--out-dir", str(out_dir),
+                        "--no-resume",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(
+                    encoding="utf-8")
+            )
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_called_once()
+        self.assertIn("[reprocess] clip.mp4", stdout)
+        self.assertEqual(
+            payload["files"][0]["skip_existing"]["reason_code"],
+            "sidecar-missing",
+        )
+
+    def test_watch_any_policy_skips_without_creating_sidecar(self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            watch_dir = work / "incoming"
+            out_dir = work / "out"
+            watch_dir.mkdir()
+            out_dir.mkdir()
+            (watch_dir / "clip.mp4").write_bytes(b"source")
+            output = out_dir / "clip_no_sub.mp4"
+            output.write_bytes(b"existing")
+            fake_remover = SimpleNamespace(
+                config=processor.ProcessingConfig(),
+                process_video=mock.Mock(return_value=True),
+                process_image=mock.Mock(return_value=True),
+            )
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover",
+                    return_value=fake_remover,
+                ):
+                    code, stdout, stderr = self._run_cli([
+                        "--watch", str(watch_dir),
+                        "--watch-once",
+                        "--watch-stable-seconds", "0",
+                        "--out-dir", str(out_dir),
+                        "--skip-existing-policy", "any",
+                        "--no-resume",
+                    ])
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(
+                    encoding="utf-8")
+            )
+
+        self.assertEqual(code, 0, stderr)
+        fake_remover.process_video.assert_not_called()
+        self.assertIn("legacy any policy", stdout)
+        self.assertFalse(Path(str(output) + ".vsr.json").exists())
+        self.assertEqual(payload["files"][0]["status"], "skipped-existing")
+        self.assertEqual(
+            payload["files"][0]["skip_existing"]["policy"], "any")
+
+    def test_watch_skips_only_after_exact_identity_verification(self):
+        from unittest import mock
+        from backend import batch_report as _br
+
+        calls = []
+
+        class SidecarRemover:
+            def __init__(self, config):
+                self.config = config
+                self.last_output_path = None
+
+            def process_video(self, input_path, output_path, **_kwargs):
+                calls.append(Path(input_path).name)
+                Path(output_path).write_bytes(b"verified output")
+                _br.write_output_sidecar(
+                    input_path=input_path,
+                    output_path=output_path,
+                    config=self.config,
+                    identity_config=self.output_identity_config,
+                    status="processed",
+                )
+                return True
+
+            process_image = process_video
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            watch_dir = work / "incoming"
+            out_dir = work / "out"
+            watch_dir.mkdir()
+            (watch_dir / "clip.mp4").write_bytes(b"source")
+            common = [
+                "--watch", str(watch_dir),
+                "--watch-once",
+                "--watch-stable-seconds", "0",
+                "--watch-interval", "0.1",
+                "--out-dir", str(out_dir),
+                "--no-resume",
+            ]
+            with self._patch_preflight_probes():
+                with mock.patch(
+                    "backend.processor.SubtitleRemover", SidecarRemover,
+                ):
+                    first_code, _stdout, first_stderr = self._run_cli(common)
+                    second_code, stdout, second_stderr = self._run_cli(common)
+            payload = json.loads(
+                (out_dir / "vsr-batch-summary.json").read_text(
+                    encoding="utf-8")
+            )
+
+        self.assertEqual(first_code, 0, first_stderr)
+        self.assertEqual(second_code, 0, second_stderr)
+        self.assertEqual(calls, ["clip.mp4"])
+        self.assertIn("verified output identity", stdout)
+        self.assertEqual(payload["files"][0]["status"], "skipped-existing")
+        self.assertTrue(
+            payload["files"][0]["skip_existing"]["identity_verified"])
+
     def test_watch_failure_is_recorded_and_later_files_still_run(self):
         from unittest import mock
 
@@ -756,6 +1089,35 @@ class ExecutedSurfaceTests(unittest.TestCase):
             payload = json.loads(summary.read_text(encoding="utf-8"))
         self.assertEqual(payload["count"], 1)
         self.assertEqual(payload["counts"].get("hardcoded-processed"), 1)
+
+    def test_real_cli_verified_skip_preserves_output_and_sidecar_bytes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            work = Path(tmpdir)
+            source = self._write_clip(work / "clip.mp4")
+            output = work / "clean.mp4"
+            args = [
+                "--input", str(source),
+                "--output", str(output),
+                "--mode", "sttn",
+                "--gpu", "-1",
+                "--no-audio",
+                "--end", "0.4",
+                "--no-resume",
+            ]
+            first = self._run_real_cli(args)
+            sidecar = Path(str(output) + ".vsr.json")
+            first_output = output.read_bytes()
+            first_evidence = sidecar.read_bytes()
+
+            second = self._run_real_cli([*args, "--skip-existing"])
+            second_output = output.read_bytes()
+            second_evidence = sidecar.read_bytes()
+
+        self.assertEqual(first.returncode, 0, first.stderr or first.stdout)
+        self.assertEqual(second.returncode, 0, second.stderr or second.stdout)
+        self.assertIn("verified output identity", second.stdout)
+        self.assertEqual(first_output, second_output)
+        self.assertEqual(first_evidence, second_evidence)
 
     def test_the_nle_sidecar_round_trips_through_nle_input(self):
         with tempfile.TemporaryDirectory() as tmpdir:

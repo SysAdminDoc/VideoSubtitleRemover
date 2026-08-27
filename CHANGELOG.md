@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Skip-existing now verifies a v3 output sidecar before accepting prior work.
+  Source SHA-256, normalized processing settings, output path, byte size, and
+  output SHA-256 must all match. Missing, older, changed, or truncated evidence
+  is reprocessed without rewriting the old sidecar, and incomplete outputs do
+  not receive trusted sidecars. The explicit `any` policy keeps existence-only
+  behavior and records that the output was not verified.
 - SRT export now reuses text and confidence from tracked OCR detections instead
   of running recognition across the full frame a second time. Conservative
   Unicode-aware consensus absorbs low-confidence character jitter without

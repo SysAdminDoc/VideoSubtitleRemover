@@ -113,9 +113,28 @@ def file_stability_signature(path: str | Path) -> tuple[int, int]:
 
 
 def config_fingerprint(config: Any) -> str:
+    return config_identity_sha256(config)[:24]
+
+
+def normalized_config_snapshot(config: Any) -> dict[str, Any]:
+    """Return the deterministic processing payload used for identity checks."""
+    if dataclasses.is_dataclass(config):
+        from backend.config_schema import serialize_backend_config
+
+        payload = _jsonable_config(serialize_backend_config(config))
+        if isinstance(payload, dict):
+            return payload
+        return {"value": payload}
     payload = _jsonable_config(config)
+    if isinstance(payload, dict):
+        return payload
+    return {"value": payload}
+
+
+def config_identity_sha256(config: Any) -> str:
+    payload = normalized_config_snapshot(config)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:24]
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def load_pause_checkpoint(
@@ -361,7 +380,14 @@ def _jsonable_config(value: Any) -> Any:
         return str(value)
     if isinstance(value, dict):
         return {str(k): _jsonable_config(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, set):
+        normalized = [_jsonable_config(v) for v in value]
+        return sorted(
+            normalized,
+            key=lambda item: json.dumps(
+                item, sort_keys=True, separators=(",", ":")),
+        )
+    if isinstance(value, (list, tuple)):
         return [_jsonable_config(v) for v in value]
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value

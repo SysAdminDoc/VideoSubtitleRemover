@@ -80,6 +80,179 @@ class PlannedStatusTests(unittest.TestCase):
         )
 
 
+class SkipExistingIdentityTests(unittest.TestCase):
+    def _fixture(self, root: Path):
+        from backend.config import ProcessingConfig
+
+        source = root / "source.mp4"
+        output = root / "output.mp4"
+        source.write_bytes(b"source-version-one")
+        output.write_bytes(b"clean-output-one")
+        config = ProcessingConfig(detection_lang="en", output_quality=20)
+        sidecar = br.write_output_sidecar(
+            input_path=str(source),
+            output_path=str(output),
+            config=config,
+            status="processed",
+        )
+        self.assertIsNotNone(sidecar)
+        return source, output, config, sidecar
+
+    def test_verified_policy_accepts_only_an_exact_v3_identity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source, output, config, sidecar = self._fixture(Path(tmpdir))
+            decision = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+
+        self.assertEqual(decision["action"], "skip")
+        self.assertTrue(decision["identity_verified"])
+        self.assertEqual(decision["reason_code"], "identity-match")
+        self.assertEqual(payload["schema"], "vsr.output_sidecar.v3")
+        self.assertEqual(len(payload["output"]["sha256"]), 64)
+        self.assertTrue(payload["output"]["path"])
+        self.assertEqual(
+            len(payload["configIdentity"]["sha256"]), 64)
+
+    def test_verified_policy_rejects_missing_unreadable_and_old_sidecars(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source, output, config, sidecar = self._fixture(root)
+
+            sidecar.unlink()
+            missing = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+            sidecar.write_text("{broken", encoding="utf-8")
+            unreadable = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+            sidecar.write_text(json.dumps({
+                "schema": "vsr.output_sidecar.v2",
+            }), encoding="utf-8")
+            old_schema = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+        self.assertEqual(missing["reason_code"], "sidecar-missing")
+        self.assertEqual(unreadable["reason_code"], "sidecar-unreadable")
+        self.assertEqual(old_schema["reason_code"], "sidecar-schema-mismatch")
+        self.assertTrue(all(
+            item["action"] == "reprocess"
+            for item in (missing, unreadable, old_schema)
+        ))
+
+    def test_verified_policy_rejects_source_and_config_changes(self):
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source, output, config, _sidecar = self._fixture(Path(tmpdir))
+            source.write_bytes(b"source-version-two")
+            source_changed = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+            source.write_bytes(b"source-version-one")
+            config_changed = br.evaluate_skip_existing(
+                str(source),
+                str(output),
+                ProcessingConfig(detection_lang="ja", output_quality=20),
+                policy="verified",
+            )
+
+        self.assertEqual(
+            source_changed["reason_code"], "source-sha256-mismatch")
+        self.assertEqual(config_changed["reason_code"], "config-mismatch")
+        self.assertEqual(source_changed["action"], "reprocess")
+        self.assertEqual(config_changed["action"], "reprocess")
+
+    def test_verified_policy_rejects_truncated_and_same_size_tampered_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source, output, config, _sidecar = self._fixture(Path(tmpdir))
+            output.write_bytes(b"short")
+            truncated = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+            output.write_bytes(b"clean-output-two")
+            tampered = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+        self.assertEqual(truncated["reason_code"], "output-size-mismatch")
+        self.assertEqual(tampered["reason_code"], "output-sha256-mismatch")
+        self.assertEqual(truncated["action"], "reprocess")
+        self.assertEqual(tampered["action"], "reprocess")
+
+    def test_verified_policy_rejects_output_path_and_config_digest_tampering(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source, output, config, sidecar = self._fixture(Path(tmpdir))
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            payload["output"]["path"] = str(Path(tmpdir) / "other.mp4")
+            sidecar.write_text(json.dumps(payload), encoding="utf-8")
+            wrong_path = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+            payload["output"]["path"] = str(output.resolve()).casefold()
+            payload["configIdentity"]["sha256"] = "0" * 64
+            sidecar.write_text(json.dumps(payload), encoding="utf-8")
+            bad_config_digest = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+        self.assertEqual(wrong_path["reason_code"], "output-path-mismatch")
+        self.assertEqual(
+            bad_config_digest["reason_code"], "config-digest-mismatch")
+
+    def test_any_policy_is_explicitly_unverified_and_needs_only_the_path(self):
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "source.mp4"
+            output = root / "output.mp4"
+            source.write_bytes(b"source")
+            output.write_bytes(b"unverified output")
+            decision = br.evaluate_skip_existing(
+                str(source),
+                str(output),
+                ProcessingConfig(),
+                policy="any",
+            )
+
+        self.assertEqual(decision["action"], "skip")
+        self.assertEqual(decision["reason_code"], "legacy-any")
+        self.assertFalse(decision["identity_verified"])
+
+    def test_directory_sources_and_outputs_use_deterministic_manifest_hashes(self):
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "frames"
+            output = root / "cleaned"
+            source.mkdir()
+            output.mkdir()
+            (source / "000001.png").write_bytes(b"source frame")
+            (output / "000001.png").write_bytes(b"clean frame")
+            config = ProcessingConfig(output_frames=True)
+            sidecar = br.write_output_sidecar(
+                input_path=str(source),
+                output_path=str(output),
+                config=config,
+                status="processed",
+            )
+            exact = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+
+            (output / "000001.png").write_bytes(b"other frame")
+            changed = br.evaluate_skip_existing(
+                str(source), str(output), config, policy="verified")
+
+        self.assertEqual(exact["reason_code"], "identity-match")
+        self.assertEqual(
+            payload["source"]["digestScheme"],
+            "vsr.directory-sha256.v1",
+        )
+        self.assertEqual(changed["reason_code"], "output-sha256-mismatch")
+
+
 class FinishBatchItemTests(unittest.TestCase):
     def test_sets_status_message_and_rounds_elapsed(self):
         rec: dict = {"status": br.STATUS_PENDING}

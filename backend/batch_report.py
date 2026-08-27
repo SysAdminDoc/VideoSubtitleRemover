@@ -46,6 +46,10 @@ from backend.quality_gate import (
     quality_gate_unknown,
 )
 from backend.matte_interchange import mask_interchange_paths
+from backend.resume_checkpoint import (
+    config_identity_sha256,
+    normalized_config_snapshot,
+)
 
 
 # Error classes/markers that are worth an automatic retry (transient hardware
@@ -132,6 +136,8 @@ def choose_batch_output_path(source_path: str, out_dir: Path, suffix: str,
 
 def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
                            skip_existing: bool = False,
+                           skip_existing_policy: str = "verified",
+                           identity_config: Any = None,
                            checkpoint_done: bool = False,
                            soft_action: Optional[str] = None) -> dict:
     input_file = Path(input_path)
@@ -140,9 +146,27 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
     codec_name, width, height, frame_rate = _parse_codec_line(codec_line)
     duration = _probe_duration_seconds(str(input_file)) if input_file.exists() else 0.0
     streams = _probe_subtitle_streams(str(input_file)) if input_file.exists() else []
+    skip_evidence = (
+        evaluate_skip_existing(
+            input_path,
+            output_path,
+            identity_config if identity_config is not None else config,
+            policy=skip_existing_policy,
+        )
+        if skip_existing
+        else {
+            "requested": False,
+            "policy": "off",
+            "action": "not-requested",
+            "reason_code": "not-requested",
+            "message": "Skip-existing was not requested.",
+            "output_exists": output_file.exists(),
+            "identity_verified": False,
+        }
+    )
     planned_result = planned_batch_status(
         output_exists=output_file.exists(),
-        skip_existing=skip_existing,
+        skip_existing=skip_evidence["action"] == "skip",
         checkpoint_done=checkpoint_done,
         soft_action=soft_action,
     )
@@ -160,6 +184,7 @@ def make_batch_item_record(input_path: str, output_path: str, *, config: Any,
         "output_name": output_file.name,
         "output_exists": output_file.exists(),
         "output_parent_free_bytes": _free_bytes(output_file.parent),
+        "skip_existing": skip_evidence,
         "planned_result": planned_result,
         "status": STATUS_PENDING,
         "message": "",
@@ -696,6 +721,7 @@ def _markdown_summary(payload: dict) -> str:
     preflight_notes: List[str] = []
     stage_notes: List[str] = []
     detection_notes: List[str] = []
+    skip_notes: List[str] = []
     for record in payload.get("files", []):
         lines.append(
             "| "
@@ -761,6 +787,19 @@ def _markdown_summary(payload: dict) -> str:
                 f"- **{_escape_md(record.get('input_name', '?'))}**: "
                 + _escape_md(note)
             )
+        skip_evidence = record.get("skip_existing")
+        if (
+            isinstance(skip_evidence, dict)
+            and skip_evidence.get("requested")
+        ):
+            skip_notes.append(
+                f"- **{_escape_md(record.get('input_name', '?'))}**: "
+                + _escape_md(
+                    f"policy {skip_evidence.get('policy', '')}; "
+                    f"decision {skip_evidence.get('action', '')}; "
+                    f"{skip_evidence.get('message', '')}"
+                )
+            )
     if isinstance(stage_summary, dict):
         totals = _format_stage_timings(stage_summary.get("stage_totals"))
         if totals:
@@ -778,6 +817,11 @@ def _markdown_summary(payload: dict) -> str:
         lines.append("### Detection efficiency")
         lines.append("")
         lines.extend(detection_notes)
+    if skip_notes:
+        lines.append("")
+        lines.append("### Skip-existing evidence")
+        lines.append("")
+        lines.extend(skip_notes)
     if preflight_notes:
         lines.append("")
         lines.append("### Output quality preflight notes")
@@ -909,7 +953,11 @@ def _format_color_preserved(value: Any) -> str:
 
 _sidecar_logger = logging.getLogger(__name__ + ".sidecar")
 
-SIDECAR_SCHEMA = "vsr.output_sidecar.v2"
+SIDECAR_SCHEMA = "vsr.output_sidecar.v3"
+CONFIG_IDENTITY_SCHEMA = "vsr.processing_config_identity.v1"
+SKIP_EXISTING_POLICIES = ("verified", "any")
+_MAX_SIDECAR_BYTES = 4 * 1024 * 1024
+_TRUSTED_OUTPUT_STATUSES = {"processed", "soft-subtitle-remuxed"}
 
 
 def _sha256_file(path: Path) -> str:
@@ -930,9 +978,308 @@ def _sha256_file(path: Path) -> str:
 
 def _config_snapshot(config: Any) -> dict:
     """Serialize processing config to a reproducibility-safe dict."""
-    from backend.config_schema import serialize_backend_config
+    return normalized_config_snapshot(config)
 
-    return serialize_backend_config(config)
+
+def _path_identity(path: Path) -> Optional[dict]:
+    """Hash a file or a deterministic manifest for a directory tree."""
+    try:
+        if path.is_file():
+            before = path.stat()
+            digest = _sha256_file(path)
+            after = path.stat()
+            if not digest or (
+                before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+            ):
+                return None
+            return {
+                "kind": "file",
+                "bytes": int(after.st_size),
+                "sha256": digest,
+                "digestScheme": "sha256",
+            }
+        if not path.is_dir():
+            return None
+        entries = sorted(
+            (item for item in path.rglob("*") if item.is_file()),
+            key=lambda item: item.relative_to(path).as_posix().casefold(),
+        )
+        entry_names = tuple(
+            item.relative_to(path).as_posix() for item in entries)
+        digest = hashlib.sha256(b"vsr.directory-sha256.v1\0")
+        total_bytes = 0
+        for entry in entries:
+            before = entry.stat()
+            file_digest = _sha256_file(entry)
+            after = entry.stat()
+            if not file_digest or (
+                before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+            ):
+                return None
+            relative = entry.relative_to(path).as_posix().encode("utf-8")
+            digest.update(len(relative).to_bytes(8, "big"))
+            digest.update(relative)
+            digest.update(int(after.st_size).to_bytes(8, "big"))
+            digest.update(bytes.fromhex(file_digest))
+            total_bytes += int(after.st_size)
+        final_names = tuple(
+            item.relative_to(path).as_posix()
+            for item in sorted(
+                (candidate for candidate in path.rglob("*")
+                 if candidate.is_file()),
+                key=lambda candidate: (
+                    candidate.relative_to(path).as_posix().casefold()),
+            )
+        )
+        if final_names != entry_names:
+            return None
+        return {
+            "kind": "directory",
+            "bytes": total_bytes,
+            "sha256": digest.hexdigest(),
+            "digestScheme": "vsr.directory-sha256.v1",
+        }
+    except OSError:
+        return None
+
+
+def _skip_decision(
+    policy: str,
+    action: str,
+    reason_code: str,
+    message: str,
+    *,
+    output_exists: bool,
+    verified: bool = False,
+) -> dict:
+    return {
+        "requested": True,
+        "policy": policy,
+        "action": action,
+        "reason_code": reason_code,
+        "message": message,
+        "output_exists": output_exists,
+        "identity_verified": verified,
+    }
+
+
+def _reprocess_decision(policy: str, code: str, message: str) -> dict:
+    return _skip_decision(
+        policy,
+        "reprocess",
+        code,
+        message,
+        output_exists=True,
+    )
+
+
+def _valid_sha256(value: Any) -> bool:
+    text = str(value or "")
+    return len(text) == 64 and all(char in "0123456789abcdef" for char in text)
+
+
+def evaluate_skip_existing(
+    input_path: str,
+    output_path: str,
+    config: Any,
+    *,
+    policy: str = "verified",
+) -> dict:
+    """Decide whether an existing output has enough identity evidence to skip."""
+    selected_policy = str(policy or "verified").strip().lower()
+    if selected_policy not in SKIP_EXISTING_POLICIES:
+        raise ValueError(
+            "skip-existing policy must be one of: "
+            + ", ".join(SKIP_EXISTING_POLICIES)
+        )
+    source = Path(input_path)
+    output = Path(output_path)
+    if not output.exists():
+        return _skip_decision(
+            selected_policy,
+            "process",
+            "output-missing",
+            "The output path does not exist.",
+            output_exists=False,
+        )
+    if selected_policy == "any":
+        return _skip_decision(
+            selected_policy,
+            "skip",
+            "legacy-any",
+            "Legacy any policy accepted the path without identity verification.",
+            output_exists=True,
+        )
+    if not output.is_file() and not output.is_dir():
+        return _reprocess_decision(
+            selected_policy,
+            "output-not-regular",
+            "The output path is not a regular file or directory.",
+        )
+
+    sidecar_path = Path(str(output) + ".vsr.json")
+    if not sidecar_path.is_file():
+        return _reprocess_decision(
+            selected_policy,
+            "sidecar-missing",
+            "The versioned output sidecar is missing.",
+        )
+    try:
+        if sidecar_path.stat().st_size > _MAX_SIDECAR_BYTES:
+            raise ValueError("sidecar exceeds the 4 MiB limit")
+        payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+        return _reprocess_decision(
+            selected_policy,
+            "sidecar-unreadable",
+            "The output sidecar cannot be read as bounded UTF-8 JSON.",
+        )
+    if not isinstance(payload, dict):
+        return _reprocess_decision(
+            selected_policy,
+            "sidecar-unreadable",
+            "The output sidecar is not a JSON object.",
+        )
+    if payload.get("schema") != SIDECAR_SCHEMA:
+        return _reprocess_decision(
+            selected_policy,
+            "sidecar-schema-mismatch",
+            f"Verified skipping requires sidecar schema {SIDECAR_SCHEMA}.",
+        )
+    if str(payload.get("status") or "") not in _TRUSTED_OUTPUT_STATUSES:
+        return _reprocess_decision(
+            selected_policy,
+            "sidecar-status-untrusted",
+            "The sidecar does not record a completed output.",
+        )
+
+    stored_output = payload.get("output")
+    if not isinstance(stored_output, dict):
+        return _reprocess_decision(
+            selected_policy,
+            "output-identity-missing",
+            "The sidecar has no output identity.",
+        )
+    stored_path = str(stored_output.get("path") or "")
+    if not stored_path or _path_key(stored_path) != _path_key(output):
+        return _reprocess_decision(
+            selected_policy,
+            "output-path-mismatch",
+            "The sidecar output path does not match this output.",
+        )
+
+    stored_config = payload.get("configIdentity")
+    if (
+        not isinstance(stored_config, dict)
+        or stored_config.get("schema") != CONFIG_IDENTITY_SCHEMA
+        or not isinstance(stored_config.get("normalized"), dict)
+    ):
+        return _reprocess_decision(
+            selected_policy,
+            "config-identity-missing",
+            "The sidecar has no normalized processing configuration.",
+        )
+    stored_normalized = stored_config["normalized"]
+    stored_config_digest = str(stored_config.get("sha256") or "")
+    if (
+        not _valid_sha256(stored_config_digest)
+        or config_identity_sha256(stored_normalized) != stored_config_digest
+    ):
+        return _reprocess_decision(
+            selected_policy,
+            "config-digest-mismatch",
+            "The sidecar processing configuration digest is invalid.",
+        )
+    current_config = _config_snapshot(config)
+    if (
+        stored_normalized != current_config
+        or stored_config_digest != config_identity_sha256(current_config)
+    ):
+        return _reprocess_decision(
+            selected_policy,
+            "config-mismatch",
+            "The normalized processing configuration changed.",
+        )
+
+    stored_source = payload.get("source")
+    if not isinstance(stored_source, dict):
+        return _reprocess_decision(
+            selected_policy,
+            "source-identity-missing",
+            "The sidecar has no source identity.",
+        )
+    for label, stored in (("source", stored_source), ("output", stored_output)):
+        if (
+            stored.get("kind") not in {"file", "directory"}
+            or not _valid_sha256(stored.get("sha256"))
+        ):
+            return _reprocess_decision(
+                selected_policy,
+                f"{label}-identity-missing",
+                f"The sidecar has no complete {label} identity.",
+            )
+
+    source_identity = _path_identity(source)
+    if source_identity is None:
+        return _reprocess_decision(
+            selected_policy,
+            "source-unreadable",
+            "The source identity could not be read safely.",
+        )
+    if source_identity["kind"] != stored_source.get("kind"):
+        return _reprocess_decision(
+            selected_policy,
+            "source-kind-mismatch",
+            "The source changed between a file and a directory.",
+        )
+    if source_identity["bytes"] != stored_source.get("bytes"):
+        return _reprocess_decision(
+            selected_policy,
+            "source-size-mismatch",
+            "The source byte size changed.",
+        )
+    if source_identity["sha256"] != stored_source.get("sha256"):
+        return _reprocess_decision(
+            selected_policy,
+            "source-sha256-mismatch",
+            "The source SHA-256 changed.",
+        )
+
+    output_identity = _path_identity(output)
+    if output_identity is None:
+        return _reprocess_decision(
+            selected_policy,
+            "output-unreadable",
+            "The output identity could not be read safely.",
+        )
+    if output_identity["kind"] != stored_output.get("kind"):
+        return _reprocess_decision(
+            selected_policy,
+            "output-kind-mismatch",
+            "The output changed between a file and a directory.",
+        )
+    if output_identity["bytes"] != stored_output.get("bytes"):
+        return _reprocess_decision(
+            selected_policy,
+            "output-size-mismatch",
+            "The output byte size changed.",
+        )
+    if output_identity["sha256"] != stored_output.get("sha256"):
+        return _reprocess_decision(
+            selected_policy,
+            "output-sha256-mismatch",
+            "The output SHA-256 changed.",
+        )
+    return _skip_decision(
+        selected_policy,
+        "skip",
+        "identity-match",
+        "Source, configuration, output path, byte size, and output SHA-256 match.",
+        output_exists=True,
+        verified=True,
+    )
 
 
 def _ocr_engine_from_provenance(execution_provenance: Any) -> str:
@@ -955,6 +1302,7 @@ def build_output_sidecar(
     output_path: str,
     config: Any,
     status: str,
+    identity_config: Any = None,
     elapsed_seconds: Optional[float] = None,
     stage_timings: Optional[dict] = None,
     detection_stats: Optional[dict] = None,
@@ -977,21 +1325,21 @@ def build_output_sidecar(
     output_file = Path(output_path)
     now = _dt.datetime.now(_dt.timezone.utc)
 
-    source_fingerprint = ""
-    source_bytes = 0
-    if input_file.is_file():
-        try:
-            source_bytes = int(input_file.stat().st_size)
-            source_fingerprint = _sha256_file(input_file)
-        except OSError:
-            pass
-
-    output_bytes = 0
-    if output_file.is_file():
-        try:
-            output_bytes = int(output_file.stat().st_size)
-        except OSError:
-            pass
+    source_identity = _path_identity(input_file) or {
+        "kind": "missing",
+        "bytes": 0,
+        "sha256": "",
+        "digestScheme": "",
+    }
+    output_identity = _path_identity(output_file) or {
+        "kind": "missing",
+        "bytes": 0,
+        "sha256": "",
+        "digestScheme": "",
+    }
+    effective_config = _config_snapshot(config)
+    normalized_identity_config = _config_snapshot(
+        config if identity_config is None else identity_config)
 
     payload = {
         "schema": SIDECAR_SCHEMA,
@@ -1000,14 +1348,19 @@ def build_output_sidecar(
         "appVersion": app_version,
         "source": {
             "name": input_file.name,
-            "bytes": source_bytes,
-            "sha256": source_fingerprint,
+            **source_identity,
         },
         "output": {
             "name": output_file.name,
-            "bytes": output_bytes,
+            "path": _path_key(output_file),
+            **output_identity,
         },
-        "config": _config_snapshot(config),
+        "config": effective_config,
+        "configIdentity": {
+            "schema": CONFIG_IDENTITY_SCHEMA,
+            "sha256": config_identity_sha256(normalized_identity_config),
+            "normalized": normalized_identity_config,
+        },
         "engine": (
             _ocr_engine_from_provenance(execution_provenance) or "unrecorded"
         ),
@@ -1052,6 +1405,7 @@ def write_output_sidecar(
     output_path: str,
     config: Any,
     status: str,
+    identity_config: Any = None,
     elapsed_seconds: Optional[float] = None,
     stage_timings: Optional[dict] = None,
     detection_stats: Optional[dict] = None,
@@ -1075,6 +1429,7 @@ def write_output_sidecar(
             input_path=input_path,
             output_path=output_path,
             config=config,
+            identity_config=identity_config,
             status=status,
             elapsed_seconds=elapsed_seconds,
             stage_timings=stage_timings,
@@ -1093,7 +1448,19 @@ def write_output_sidecar(
             checkpoint_resumed=checkpoint_resumed,
             app_version=app_version,
         )
-        sidecar_path = Path(output_path + ".vsr.json")
+        for label in ("source", "output"):
+            identity = payload.get(label)
+            if (
+                not isinstance(identity, dict)
+                or identity.get("kind") not in {"file", "directory"}
+                or not _valid_sha256(identity.get("sha256"))
+            ):
+                _sidecar_logger.warning(
+                    "Sidecar write refused: %s identity is incomplete",
+                    label,
+                )
+                return None
+        sidecar_path = Path(str(output_path) + ".vsr.json")
         _write_text_atomic(
             sidecar_path,
             json.dumps(payload, indent=2, sort_keys=True) + "\n",

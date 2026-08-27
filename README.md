@@ -686,6 +686,13 @@ The output reproducibility sidecar records the imported artifact's current
 SHA-256, whether it differs from the exported hash, and the deterministic mask
 composition order. **Review mask** shows that composed result before a run.
 
+`--skip-existing` checks the v3 sidecar before trusting an output. The source
+SHA-256, normalized settings, output path, byte size, and output SHA-256 must
+all match. An older sidecar, missing evidence, or changed bytes causes a normal
+reprocess and leaves the old evidence untouched until that run succeeds. Use
+`--skip-existing-policy any` only when you need the old existence-only rule;
+batch reports label that choice as unverified.
+
 ### WebVTT translation
 
 `--translation-source-srt` and `--translated-srt` accept `.vtt` as well as
@@ -867,7 +874,8 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--nle-input` | Parse an EDL/FCPXML to extract time segments for processing. | - | - | Public |
 | `--input-fps` | FPS for directory-of-images input. | 24.0 | 1..240 | Public |
 | `--output-frames` | Write cleaned frames as individual PNGs instead of a video. | Off | - | Public |
-| `--skip-existing` | Skip inputs whose output path already exists. | Off | - | Public |
+| `--skip-existing` | Skip only outputs whose identity sidecar matches. | Off | - | Public |
+| `--skip-existing-policy` | Identity policy for --skip-existing and watch outputs. Use 'any' only for legacy existence-only behavior. | verified | verified \| any | Public |
 
 #### Removal, detection, and masks
 

@@ -27,6 +27,7 @@ from backend.resume_checkpoint import (
     _checkpoint_mark_done,
     _default_checkpoint_dir,
     file_stability_signature,
+    normalized_config_snapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ _path_key = None
 _probe_subtitle_streams = None
 _write_text_atomic = None
 write_output_sidecar = None
+evaluate_skip_existing = None
 SoftSubtitleAction = None
 remux_soft_subtitles = None
 
@@ -51,6 +53,7 @@ _CLI_CATEGORY_OPTIONS = (
             "--config-schema-version", "--set", "--preset", "--list-presets",
             "--checkpoint-dir", "--work-dir", "--no-resume", "--start", "--end",
             "--input-fps", "--output-frames", "--nle-input", "--skip-existing",
+            "--skip-existing-policy",
             "--watch", "--watch-interval", "--watch-stable-seconds", "--watch-once",
         ),
     ),
@@ -264,7 +267,7 @@ def _load_runtime_helpers() -> None:
     global STATUS_HARDCODED_PROCESSED, STATUS_PENDING
     global STATUS_PAUSED, STATUS_REVIEW_NEEDED, STATUS_SKIPPED_EXISTING
     global STATUS_SOFT_REMUXED
-    global choose_batch_output_path, finish_batch_item
+    global choose_batch_output_path, evaluate_skip_existing, finish_batch_item
     global make_batch_item_record, write_batch_reports, write_output_sidecar
     global _path_key, _probe_subtitle_streams, _write_text_atomic
     global SoftSubtitleAction, remux_soft_subtitles
@@ -283,6 +286,7 @@ def _load_runtime_helpers() -> None:
         STATUS_SKIPPED_EXISTING,
         STATUS_SOFT_REMUXED,
         choose_batch_output_path,
+        evaluate_skip_existing,
         finish_batch_item,
         make_batch_item_record,
         write_batch_reports,
@@ -1045,7 +1049,16 @@ def _build_parser(mode_choices):
     parser.add_argument("--prefetch-queue", type=int, default=0, metavar="N",
                        help="Bounded prefetch queue size in frames.")
     parser.add_argument("--skip-existing", action="store_true",
-                       help="Skip inputs whose output path already exists.")
+                       help="Skip only outputs whose identity sidecar matches.")
+    parser.add_argument(
+        "--skip-existing-policy",
+        choices=("verified", "any"),
+        default="verified",
+        help=(
+            "Identity policy for --skip-existing and watch outputs. "
+            "Use 'any' only for legacy existence-only behavior."
+        ),
+    )
     parser.add_argument("--soft-subtitle-dry-run", action="store_true",
                        help="Print embedded subtitle tracks and planned action, then exit.")
     parser.add_argument("--soft-subtitle-plan-json", metavar="PATH",
@@ -1901,6 +1914,20 @@ def _apply_cli_config_overlays(args, parser, config):
     return config, ffmpeg_ready
 
 
+def _print_existing_output_decision(input_name: str, decision: dict) -> None:
+    if not isinstance(decision, dict) or not decision.get("requested"):
+        return
+    action = decision.get("action")
+    if action == "skip":
+        if decision.get("reason_code") == "legacy-any":
+            detail = "legacy any policy; identity not verified"
+        else:
+            detail = "verified output identity"
+        print(f"[skip] {input_name} ({detail})")
+    elif decision.get("output_exists"):
+        print(f"[reprocess] {input_name} ({decision.get('message', '')})")
+
+
 def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
     if args.soft_subtitle_dry_run:
         planned = (
@@ -1928,6 +1955,13 @@ def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
         sys.exit(0)
 
     if soft_action is not None:
+        soft_identity_config = {
+            "mode": "soft-subtitles",
+            "device": "cpu",
+            "output_codec": "copy",
+            "output_quality": config.output_quality,
+            "soft_action": soft_action.value,
+        }
         if args.pattern:
             from glob import glob
             inputs = sorted(glob(args.pattern, recursive=True))
@@ -1957,25 +1991,24 @@ def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
                     record = make_batch_item_record(
                         inp,
                         str(outp),
-                        config={
-                            "mode": "soft-subtitles",
-                            "device": "cpu",
-                            "output_codec": "copy",
-                            "output_quality": config.output_quality,
-                        },
+                        config=soft_identity_config,
                         skip_existing=args.skip_existing,
+                        skip_existing_policy=args.skip_existing_policy,
                         soft_action=soft_action.value,
                     )
                     records.append(record)
                     print(f"\n[soft-subtitles] ({i}/{len(inputs)}) {src.name}")
                     if record["planned_result"] == STATUS_SKIPPED_EXISTING:
-                        print(f"[skip] {src.name} (output exists)")
+                        _print_existing_output_decision(
+                            src.name, record["skip_existing"])
                         finish_batch_item(
                             record,
                             STATUS_SKIPPED_EXISTING,
-                            message="Output already exists",
+                            message=record["skip_existing"]["message"],
                         )
                         continue
+                    _print_existing_output_decision(
+                        src.name, record["skip_existing"])
                     started = time.monotonic()
                     try:
                         _run_soft_subtitle_only(inp, str(outp), soft_action)
@@ -1989,7 +2022,8 @@ def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
                         )
                         write_output_sidecar(
                             input_path=inp, output_path=str(outp),
-                            config=config, status="soft-subtitle-remuxed",
+                            config=soft_identity_config,
+                            status="soft-subtitle-remuxed",
                             elapsed_seconds=elapsed,
                             stage_timings={"mux": elapsed},
                             app_version=_app_version(),
@@ -2020,10 +2054,29 @@ def _run_soft_subtitle_modes(args, parser, config, soft_action) -> bool:
             failures = sum(1 for record in records if record.get("status") == STATUS_FAILED)
             sys.exit(0 if failures == 0 else 1)
         try:
-            if args.skip_existing and Path(args.output).exists():
-                print(f"[skip] {Path(args.input).name} (output exists)")
-                sys.exit(0)
+            if args.skip_existing:
+                decision = evaluate_skip_existing(
+                    args.input,
+                    args.output,
+                    soft_identity_config,
+                    policy=args.skip_existing_policy,
+                )
+                _print_existing_output_decision(
+                    Path(args.input).name, decision)
+                if decision["action"] == "skip":
+                    sys.exit(0)
+            started = time.monotonic()
             _run_soft_subtitle_only(args.input, args.output, soft_action)
+            elapsed = time.monotonic() - started
+            write_output_sidecar(
+                input_path=args.input,
+                output_path=args.output,
+                config=soft_identity_config,
+                status="soft-subtitle-remuxed",
+                elapsed_seconds=elapsed,
+                stage_timings={"mux": elapsed},
+                app_version=_app_version(),
+            )
             sys.exit(0)
         except KeyboardInterrupt:
             print("\n[soft-subtitles] Interrupted by user.")
@@ -2039,6 +2092,8 @@ def _run_processing(
     ffmpeg_ready, video_exts,
 ):
     remover = SubtitleRemover(config)
+    identity_config = normalized_config_snapshot(config)
+    remover.output_identity_config = identity_config
     remover.on_progress = lambda p, m: print(f"[{int(p*100):3d}%] {m}")
 
     if getattr(args, "dry_run", False):
@@ -2096,14 +2151,44 @@ def _run_processing(
         if config.subtitle_region_keyframes else None
     )
 
-    def _process_one(inp: str, outp: str) -> bool:
-        if args.skip_existing and Path(outp).exists():
-            print(f"[skip] {Path(inp).name} (output exists)")
+    def _verified_checkpoint_done(inp: str, outp: str, key: str) -> bool:
+        if args.no_resume or not _checkpoint_is_done(ckpt_dir, key, outp):
+            return False
+        decision = evaluate_skip_existing(
+            inp,
+            outp,
+            identity_config,
+            policy="verified",
+        )
+        if decision["action"] == "skip":
             return True
-        key = _checkpoint_key(inp, outp, config)
-        if not args.no_resume and _checkpoint_is_done(ckpt_dir, key, outp):
-            print(f"[skip] {Path(inp).name} (checkpoint)")
-            return True
+        print(
+            f"[resume] {Path(inp).name}: completed checkpoint ignored; "
+            f"{decision['message']}"
+        )
+        return False
+
+    def _process_one(
+        inp: str,
+        outp: str,
+        *,
+        preflight_done: bool = False,
+    ) -> bool:
+        key = _checkpoint_key(inp, outp, identity_config)
+        if not preflight_done:
+            if args.skip_existing:
+                decision = evaluate_skip_existing(
+                    inp,
+                    outp,
+                    identity_config,
+                    policy=args.skip_existing_policy,
+                )
+                _print_existing_output_decision(Path(inp).name, decision)
+                if decision["action"] == "skip":
+                    return True
+            if _verified_checkpoint_done(inp, outp, key):
+                print(f"[skip] {Path(inp).name} (verified checkpoint output)")
+                return True
         _apply_auto_band_override(
             remover,
             inp,
@@ -2163,7 +2248,7 @@ def _run_processing(
         while True:
             raised_error = False
             try:
-                ok = _process_one(inp, outp)
+                ok = _process_one(inp, outp, preflight_done=True)
             except ProcessingPaused:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -2252,36 +2337,25 @@ def _run_processing(
             _reset_item_failure_state(remover)
             planned = record["planned_result"]
             if planned == STATUS_SKIPPED_EXISTING:
-                print(f"[skip] {src.name} (output exists)")
+                _print_existing_output_decision(
+                    src.name, record["skip_existing"])
                 finish_batch_item(
                     record,
                     STATUS_SKIPPED_EXISTING,
-                    message="Output already exists",
-                )
-                write_output_sidecar(
-                    input_path=inp,
-                    output_path=str(outp),
-                    config=config,
-                    status="skipped-existing",
-                    app_version=_app_version(),
+                    message=record["skip_existing"]["message"],
                 )
                 return True, False
             if planned == STATUS_CHECKPOINT_DONE:
-                print(f"[skip] {src.name} (checkpoint)")
+                print(f"[skip] {src.name} (verified checkpoint output)")
                 finish_batch_item(
                     record,
                     STATUS_CHECKPOINT_DONE,
-                    message="Checkpoint already complete",
-                )
-                write_output_sidecar(
-                    input_path=inp,
-                    output_path=str(outp),
-                    config=config,
-                    status="checkpoint-done",
-                    checkpoint_resumed=True,
-                    app_version=_app_version(),
+                    message="Checkpoint and output identity are complete",
                 )
                 return True, False
+
+            _print_existing_output_decision(
+                src.name, record["skip_existing"])
 
             started = time.monotonic()
             try:
@@ -2369,16 +2443,17 @@ def _run_processing(
                         skip_existing=not collision,
                     )
                     reserved_outputs.add(_path_key(outp))
-                    key = _checkpoint_key(str(path), str(outp), config)
-                    checkpoint_done = (
-                        not args.no_resume
-                        and _checkpoint_is_done(ckpt_dir, key, str(outp))
-                    )
+                    key = _checkpoint_key(
+                        str(path), str(outp), identity_config)
+                    checkpoint_done = _verified_checkpoint_done(
+                        str(path), str(outp), key)
                     record = make_batch_item_record(
                         str(path),
                         str(outp),
                         config=config,
                         skip_existing=True,
+                        skip_existing_policy=args.skip_existing_policy,
+                        identity_config=identity_config,
                         checkpoint_done=checkpoint_done,
                     )
                     records.append(record)
@@ -2478,16 +2553,16 @@ def _run_processing(
                     skip_existing=args.skip_existing,
                 )
                 reserved_outputs.add(_path_key(outp))
-                key = _checkpoint_key(inp, str(outp), config)
-                checkpoint_done = (
-                    not args.no_resume
-                    and _checkpoint_is_done(ckpt_dir, key, str(outp))
-                )
+                key = _checkpoint_key(inp, str(outp), identity_config)
+                checkpoint_done = _verified_checkpoint_done(
+                    inp, str(outp), key)
                 record = make_batch_item_record(
                     inp,
                     str(outp),
                     config=config,
                     skip_existing=args.skip_existing,
+                    skip_existing_policy=args.skip_existing_policy,
+                    identity_config=identity_config,
                     checkpoint_done=checkpoint_done,
                 )
                 records.append(record)
@@ -2497,32 +2572,24 @@ def _run_processing(
                 print(f"\n[batch] ({i}/{len(inputs)}) {src.name}")
                 _reset_item_failure_state(remover)
                 if record["planned_result"] == STATUS_SKIPPED_EXISTING:
-                    print(f"[skip] {src.name} (output exists)")
+                    _print_existing_output_decision(
+                        src.name, record["skip_existing"])
                     finish_batch_item(
                         record,
                         STATUS_SKIPPED_EXISTING,
-                        message="Output already exists",
-                    )
-                    write_output_sidecar(
-                        input_path=inp, output_path=str(outp),
-                        config=config, status="skipped-existing",
-                        app_version=_app_version(),
+                        message=record["skip_existing"]["message"],
                     )
                     continue
                 if record["planned_result"] == STATUS_CHECKPOINT_DONE:
-                    print(f"[skip] {src.name} (checkpoint)")
+                    print(f"[skip] {src.name} (verified checkpoint output)")
                     finish_batch_item(
                         record,
                         STATUS_CHECKPOINT_DONE,
-                        message="Checkpoint already complete",
-                    )
-                    write_output_sidecar(
-                        input_path=inp, output_path=str(outp),
-                        config=config, status="checkpoint-done",
-                        checkpoint_resumed=True,
-                        app_version=_app_version(),
+                        message="Checkpoint and output identity are complete",
                     )
                     continue
+                _print_existing_output_decision(
+                    src.name, record["skip_existing"])
                 started = time.monotonic()
                 try:
                     ok = _process_one_with_retry(inp, str(outp), record)
@@ -2660,6 +2727,8 @@ def _run_processing(
         for idx, (seg_start, seg_end) in enumerate(segments, 1):
             config.time_start = seg_start
             config.time_end = seg_end
+            identity_config = normalized_config_snapshot(config)
+            remover.output_identity_config = identity_config
             if len(segments) == 1:
                 seg_out = str(out_base)
             else:

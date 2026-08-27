@@ -1768,6 +1768,12 @@ class OutputSidecarTests(unittest.TestCase):
         self.assertGreater(sidecar["source"]["bytes"], 0)
         self.assertEqual(len(sidecar["source"]["sha256"]), 64)
         self.assertEqual(sidecar["output"]["name"], "output.mp4")
+        self.assertEqual(len(sidecar["output"]["sha256"]), 64)
+        self.assertEqual(
+            sidecar["output"]["path"], str(Path(out).resolve()).casefold())
+        self.assertEqual(
+            sidecar["configIdentity"]["normalized"], sidecar["config"])
+        self.assertEqual(len(sidecar["configIdentity"]["sha256"]), 64)
         self.assertEqual(sidecar["config"]["detection_lang"], "en")
         self.assertEqual(sidecar["config"]["output_quality"], 20)
         self.assertIn("engine", sidecar)
@@ -1838,6 +1844,24 @@ class OutputSidecarTests(unittest.TestCase):
             self.assertEqual(result.name, "output.mp4.vsr.json")
             payload = json.loads(result.read_text(encoding="utf-8"))
             self.assertEqual(payload["schema"], SIDECAR_SCHEMA)
+
+    def test_write_output_sidecar_refuses_missing_completed_output(self):
+        from backend.batch_report import write_output_sidecar
+        from backend.config import ProcessingConfig
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "input.mp4"
+            output = Path(tmpdir) / "missing.mp4"
+            source.write_bytes(b"source")
+            result = write_output_sidecar(
+                input_path=str(source),
+                output_path=str(output),
+                config=ProcessingConfig(),
+                status="processed",
+            )
+
+        self.assertIsNone(result)
+        self.assertFalse(Path(str(output) + ".vsr.json").exists())
 
     def test_sidecar_omits_optional_fields_when_not_provided(self):
         from backend.batch_report import build_output_sidecar

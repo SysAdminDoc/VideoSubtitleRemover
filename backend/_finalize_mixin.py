@@ -374,6 +374,8 @@ class _FinalizeMixin:
                 output_path=output_path,
                 config=self.config,
                 status="processed",
+                identity_config=getattr(
+                    self, "output_identity_config", None),
                 stage_timings=self.last_stage_timings,
                 detection_stats=getattr(self, "last_detection_stats", None),
                 quality_report=quality_report,
