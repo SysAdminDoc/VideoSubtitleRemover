@@ -12,7 +12,9 @@ import argparse
 import hashlib
 import json
 import shutil
+import sys
 import tempfile
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 from urllib.parse import urlparse
@@ -21,6 +23,7 @@ import cv2
 import numpy as np
 
 from backend import processor
+from backend.dependency_profiles import profile_required_packages
 
 
 REFERENCE_CORPUS_SCHEMA = "vsr.reference_corpus.v1"
@@ -76,6 +79,39 @@ REAL_SOURCE_REQUIRED_FIELDS = {
 
 class ReferenceCorpusError(ValueError):
     """Raised when the reference corpus cannot be evaluated."""
+
+
+def reference_runtime_contract() -> dict:
+    """Return the exact reviewed runtime required by pixel-hash baselines."""
+    required = {
+        item["name"]: item["expectedVersion"]
+        for item in profile_required_packages("cpu")
+    }
+    packages = {}
+    failures = []
+    for name in ("numpy", "opencv-python"):
+        expected = str(required.get(name) or "")
+        try:
+            actual = package_version(name)
+        except PackageNotFoundError:
+            actual = "missing"
+        matches = bool(expected and actual == expected)
+        packages[name] = {
+            "expectedVersion": expected,
+            "actualVersion": actual,
+            "matches": matches,
+        }
+        if not matches:
+            failures.append(
+                f"{name} expected {expected or 'an exact reviewed version'}, "
+                f"found {actual}"
+            )
+    return {
+        "profile": "cpu",
+        "packages": packages,
+        "passed": not failures,
+        "failures": failures,
+    }
 
 
 def sha256_file(path: Path | str) -> str:
@@ -403,6 +439,13 @@ def run_reference_corpus(
     clips_dir: Path | str | None = None,
     output_dir: Path | str | None = None,
 ) -> dict:
+    runtime = reference_runtime_contract()
+    if not runtime["passed"]:
+        raise ReferenceCorpusError(
+            "reference corpus requires the reviewed CPU dependency profile: "
+            + "; ".join(runtime["failures"])
+            + ". Run setup.py --repair --profile cpu."
+        )
     entries = reference_manifest_entries(manifest_path, clips_dir)
     if not entries:
         raise ReferenceCorpusError("reference corpus has no core_reference clips")
@@ -428,6 +471,7 @@ def run_reference_corpus(
     return {
         "schema": REFERENCE_CORPUS_SCHEMA,
         "manifest": str(Path(manifest_path)),
+        "runtime": runtime,
         "clipCount": len(results),
         "passed": not failures,
         "failures": failures,
@@ -529,20 +573,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
              "use after an intentional change to inpainting output",
     )
     args = parser.parse_args(argv)
-    if args.bless:
-        blessed = bless_reference_corpus(
+    try:
+        if args.bless:
+            blessed = bless_reference_corpus(
+                args.manifest,
+                clips_dir=args.clips_dir or None,
+                output_dir=args.output_dir or None,
+            )
+            changed = blessed["changed"]
+            print(
+                f"Blessed {len(changed)} clip(s): "
+                f"{', '.join(changed) or 'none'}"
+            )
+            return 0
+        result = run_reference_corpus(
             args.manifest,
             clips_dir=args.clips_dir or None,
             output_dir=args.output_dir or None,
         )
-        changed = blessed["changed"]
-        print(f"Blessed {len(changed)} clip(s): {', '.join(changed) or 'none'}")
-        return 0
-    result = run_reference_corpus(
-        args.manifest,
-        clips_dir=args.clips_dir or None,
-        output_dir=args.output_dir or None,
-    )
+    except ReferenceCorpusError as exc:
+        print(f"Reference corpus unavailable: {exc}", file=sys.stderr)
+        return 2
     payload = json.dumps(result, indent=2, sort_keys=True)
     if args.json:
         print(payload)

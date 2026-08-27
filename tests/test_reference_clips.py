@@ -50,6 +50,7 @@ from backend.reference_corpus import (
     REFERENCE_CORPUS_CATEGORY,
     ReferenceCorpusError,
     reference_manifest_entries,
+    reference_runtime_contract,
     run_reference_corpus,
 )
 
@@ -872,6 +873,12 @@ class RealClipManifestTests(unittest.TestCase):
 
     @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
     def test_committed_reference_corpus_matches_baselines(self):
+        runtime = reference_runtime_contract()
+        if not runtime["passed"]:
+            self.skipTest(
+                "reference corpus requires the reviewed CPU profile: "
+                + "; ".join(runtime["failures"])
+            )
         with tempfile.TemporaryDirectory() as tmpdir:
             result = run_reference_corpus(
                 self.MANIFEST,
@@ -884,6 +891,43 @@ class RealClipManifestTests(unittest.TestCase):
             self.assertTrue(clip["outputFrames"]["sha256"])
             self.assertGreaterEqual(clip["metrics"]["psnr"], 0.0)
             self.assertGreaterEqual(clip["metrics"]["ssim"], 0.0)
+
+    def test_reference_runtime_contract_uses_exact_reviewed_packages(self):
+        expected = {
+            "numpy": "2.4.6",
+            "opencv-python": "5.0.0.93",
+        }
+        with mock.patch(
+            "backend.reference_corpus.package_version",
+            side_effect=lambda name: expected[name],
+        ):
+            runtime = reference_runtime_contract()
+
+        self.assertTrue(runtime["passed"])
+        self.assertEqual(runtime["profile"], "cpu")
+        for name, version in expected.items():
+            self.assertEqual(
+                runtime["packages"][name]["expectedVersion"], version)
+            self.assertEqual(
+                runtime["packages"][name]["actualVersion"], version)
+
+    def test_reference_runtime_contract_reports_version_drift(self):
+        installed = {
+            "numpy": "2.0.2",
+            "opencv-python": "4.14.0.94",
+        }
+        with mock.patch(
+            "backend.reference_corpus.package_version",
+            side_effect=lambda name: installed[name],
+        ):
+            runtime = reference_runtime_contract()
+
+        self.assertFalse(runtime["passed"])
+        self.assertIn("numpy expected 2.4.6, found 2.0.2", runtime["failures"])
+        self.assertIn(
+            "opencv-python expected 5.0.0.93, found 4.14.0.94",
+            runtime["failures"],
+        )
 
     def test_no_unmanifested_clips_in_directory(self):
         import json

@@ -249,7 +249,7 @@ class LayoutBuildMixin:
         self._header_title_label = tk.Label(
             left,
             text=full_title,
-            font=f(Theme.F_HEADING, "bold"),
+            font=f(Theme.F_DISPLAY, "bold"),
             bg=Theme.BG_DARK,
             fg=Theme.TEXT_PRIMARY,
         )

@@ -5,7 +5,7 @@ module it touches, and points new contributors at the right file for a
 given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 [CHANGELOG.md](../CHANGELOG.md).
 
-> Concrete and up to date as of the v3.38.0 pass.
+> Concrete and up to date as of the v3.39.0 pass.
 > Keep this in sync when modules move.
 
 ---
@@ -17,13 +17,13 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 ```
 .
 |-- VideoSubtitleRemover.py     # Entry point (thin launcher -> gui.app).
-|-- setup.py                    # First-run venv bootstrap and dependency profiles.
+|-- setup.py                    # Validated venv bootstrap with atomic setup reports.
 |-- build_exe.bat               # Local PyInstaller build, evidence, release staging.
 |-- requirements.txt            # Pinned and advisory dependency floors.
 |-- dependency_profiles.json    # Reviewed CPU/NVIDIA/DirectML profile manifest.
-|-- Run_VSR_Pro.bat             # Windows launcher.
-|-- Run_VSR_Pro_Debug.bat       # Windows launcher with a visible console.
-|-- Run_VSR_Pro.ps1             # PowerShell launcher.
+|-- Run_VSR_Pro.bat             # Windows launcher with profile verification and repair.
+|-- Run_VSR_Pro_Debug.bat       # Visible-console launcher with profile repair.
+|-- Run_VSR_Pro.ps1             # PowerShell launcher with profile verification and repair.
 |-- gui/
 |   |-- __init__.py                   # GUI subpackage re-exports.
 |   |-- app.py                        # Tk shell, shared state, queue model, settings.
@@ -56,9 +56,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- _encode_mixin.py            # Encode / mux / audio stages of the processor.
 |   |-- _finalize_mixin.py          # Finalize, output contract, post-restore, sidecar.
 |   |-- _quality_mixin.py           # Quality-report stages of the processor.
-|   |-- _srt_mixin.py               # SRT export and clean-reference export stages.
+|   |-- _srt_mixin.py               # Tracked OCR consensus and SRT export stages.
 |   |-- a11y.py                     # Accessibility metadata helpers.
-|   |-- adapter_manifest.py         # Optional model provenance and hash policy.
+|   |-- adapter_manifest.py         # Optional model pins, artifact hashes, provenance records.
 |   |-- atomic_replace.py           # Journalled multi-file replacement and recovery.
 |   |-- batch_report.py             # JSON + Markdown batch summary and output sidecars.
 |   |-- cache_inventory.py          # Cache info/clean and portable model-cache bundles.
@@ -69,12 +69,12 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- crash_reporter.py           # Opt-in crash reporter (allowlisted minimal events).
 |   |-- decode_accel.py             # Hardware decode hints (D3D11/VAAPI/MFX/PyNv).
 |   |-- dependency_caps.py          # Dependency ceilings and execution-provider lanes.
-|   |-- dependency_profiles.py      # Reviewed CPU/NVIDIA/DirectML dependency locks.
+|   |-- dependency_profiles.py      # Locked profiles plus package, import, pip, and provider verification.
 |   |-- detection.py                # OCR cascade, selectable engines, execution provenance.
-|   |-- detection_geometry.py       # Normalized OCR boxes and polygon geometry.
+|   |-- detection_geometry.py       # OCR boxes, polygons, text, confidence, track IDs.
 |   |-- device_provider.py          # Device strategy and inpainter construction.
 |   |-- encoder.py                  # Output codec probing and HW encoder selection.
-|   |-- execution_provenance.py     # Requested vs. effective device/engine record.
+|   |-- execution_provenance.py     # Execution and loaded-model identity record.
 |   |-- failure_reason.py           # Closed-set failure classification for rows and reports.
 |   |-- ffmpeg_profiles.py          # FFmpeg capability profiles and security probe.
 |   |-- frozen_matte.py             # Freeze an approved matte as a reusable input.
@@ -91,7 +91,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- mask_corrections.py         # Ordered add/subtract mask corrections.
 |   |-- mask_free_benchmark.py      # Mask-free removal benchmark harness.
 |   |-- matte_interchange.py        # Lossless matte export / import / compose.
-|   |-- model_downloads.py          # First-run model download guidance.
+|   |-- model_downloads.py          # First-run guidance and outbound-model inventory.
 |   |-- model_hashes.py             # Vendored SHA-256 hashes and chunked verifier.
 |   |-- nle_sidecar.py              # EDL / FCPXML sidecar export.
 |   |-- ocr_benchmark.py            # OCR engine recall / precision benchmark.
@@ -111,7 +111,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- proxy_workflow.py           # Proxy-encode workflow for large files.
 |   |-- quality.py                  # PSNR / SSIM / VMAF and temporal metrics.
 |   |-- quality_gate.py             # Graduated quality gate with a remediation ladder.
-|   |-- reference_corpus.py         # Synthetic reference-clip regression harness.
+|   |-- reference_corpus.py         # Exact-profile reference-clip regression harness.
 |   |-- reference_fill.py           # Clean-plate reference fill.
 |   |-- region_editing.py           # Region geometry edit / undo primitives.
 |   |-- region_keyframes.py         # Interpolated moving-region keyframe tracks.
@@ -130,7 +130,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- temporal_profile.py         # Mask-aware temporal regression metrics and fixtures.
 |   |-- tensorrt_compile.py         # Optional TensorRT engine compilation.
 |   |-- track_plan.py               # Reviewable pre-run text track plans.
-|   |-- tracking.py                 # Kalman tracking, pHash reuse, karaoke grouping.
+|   |-- tracking.py                 # Stable OCR identities, pHash reuse, karaoke grouping.
 |   |-- update_check.py             # Startup version check (opt-in).
 |   |-- vapoursynth_bridge.py       # VapourSynth bridge (opt-in).
 |   |-- webvtt.py                   # Loss-aware WebVTT parse / translate / serialize.
@@ -170,7 +170,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
   report preparation, and completion notifications.
 - **`gui/preview_controller.py`** owns preview placeholders, the selected-time
   timeline, proxy scene planning, live frames, mask review, A/B compare,
-  test-cleanup previews, and preview zoom. The
+  test-cleanup previews, and preview zoom. Manual-only mask previews rasterize
+  the saved shapes without constructing or running an OCR detector. The
   region editor lives in `gui/region_controller.py` and mask correction in
   `gui/mask_correction_controller.py`; both build into a scrollable dialog
   body from `gui/dialog_layout.py` so they reflow at high text scale.
@@ -190,8 +191,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
   `InpaintMode` enum, coercers, and `normalize_processing_config`.
   Inpainters import `backend.config` directly.
 - **`backend/detection_geometry.py`** owns the normalized OCR record. It keeps
-  the legacy bounding box beside optional polygon vertices, clips and remaps
-  them for the current frame, and rasterizes each shape with local expansion.
+  the legacy bounding box beside optional polygon vertices, recognized text,
+  confidence, and a stable tracker ID. It clips and remaps geometry for the
+  current frame, then rasterizes each shape with local expansion.
 - **`backend/processor.py`** preserves the legacy public import surface
   and delegates `python -m backend.processor` to `backend.cli.main`.
 - **`backend/detection.py`**, **`backend/tracking.py`**,
@@ -204,6 +206,15 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
   allowed to live.
 - **`backend/model_hashes.py`** owns vendored weight hashes and the
   chunked SHA-256 verifier.
+- **`backend/adapter_manifest.py`** owns the immutable VACE repository and
+  commit allowlist, required artifact hashes, directory verification, and the
+  durable model provenance record. Verification finishes before model import.
+- **`backend/model_downloads.py`** owns the complete inventory of optional
+  runtime model fetches used by first-run guidance, backend status, and support
+  bundles.
+- **`backend/execution_provenance.py`** carries a loaded model's repository,
+  commit, file hashes, cache path, and unsafe-override state into output
+  sidecars and batch evidence.
 - **`backend/language_support.py`** owns the distinction between the
   GUI's selectable OCR language codes and broader OCR engine language
   capacity reported in support/backend status.
@@ -222,7 +233,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 3. **Backend constructor.**
    `backend.processor.SubtitleRemover.__init__`:
    - Normalises the config via `normalize_processing_config`.
-   - Builds the OCR `SubtitleDetector` (cascade resolution).
+   - Builds the OCR `SubtitleDetector`. Auto resolves a cascade, while a named
+     engine must load without changing implementations.
    - Picks the inpainter (`STTNInpainter` /
      `LAMAInpainter` / `ProPainterInpainter` / `AutoInpainter`).
    - Probes the matching HW encoder family for `output_codec`.
@@ -231,9 +243,10 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    - ffprobe `idet` -> `ffmpeg yadif` deinterlace when auto-detected.
    - ffprobe keyframe enumeration when `keyframe_detection`.
    - ffprobe timing fields are retained as integer PTS and duration ticks with
-     the stream's rational time base. Missing, repeated, and non-monotonic PTS
-     are repaired with warning records, while edit-list starts stay available
-     for validation.
+     the stream's rational time base. FFmpeg 9 `duration` fields are primary;
+     packet-duration names are legacy fallbacks. Missing, repeated, and
+     non-monotonic PTS are repaired with warning records, while edit-list starts
+     stay available for validation.
 5. **Decode.** `_open_capture` either opens a `cv2.VideoCapture` (with
    optional `decode_hw_accel`) or a `_FrameSequenceCapture` for an
    image-directory input. When `prefetch_decode` is on, the cap is
@@ -245,16 +258,27 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    remains attached to the batch for final repair. If the native reader cannot
    provide that surface, processing stops rather than falling back to BGR8.
 6. **Per-frame detect.** Inside the main loop:
+   - Manual region is an engine-independent branch before OCR. When
+     `sttn_skip_detection` is true, a configured fixed, timed, or moving region
+     is rasterized as the complete mask and passed unchanged to the selected
+     Auto, STTN, LaMa, or ProPainter implementation. A missing region stops the
+     run instead of silently falling back to detection. Automatic mode keeps
+     saved fixed regions and adds them to OCR detections.
    - `pHash` skip + keyframe gating short-circuit when content is
      unchanged.
    - `SubtitleDetector.detect_with_geometry(frame)` calls the active engine
      (RapidOCR / PaddleOCR / Surya / EasyOCR / OpenCV) and keeps polygon
      vertices beside the compatibility boxes. `detect(frame)` remains the
      rectangle API for older callers.
-   - `_group_horizontal_line` fuses karaoke syllables.
+   - `_group_horizontal_geometry` fuses karaoke syllables while keeping their
+     recognized text and confidence.
    - `SubtitleTracker.update_with_geometry` smooths boxes and remaps polygon
-     vertices with the tracked translation and scale. `update` remains the
-     rectangle API.
+     vertices with the tracked translation and scale. Text and confidence stay
+     attached to a stable ID. `update` remains the rectangle API.
+   - SRT export consumes those tracked observations directly. A conservative
+     grapheme-aware consensus picks cue text, while engines without recognized
+     text use the compatibility fallback. The writer keeps exact source frame
+     timestamps for CFR and VFR input.
    - `categorize` filters chyron vs subtitle when either
      `remove_chyrons` / `remove_subtitles` is off.
    - `_create_mask` produces the binary mask (with dilation). Polygon records
@@ -267,9 +291,9 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    is passed to the inpainter chosen above:
    - `STTNInpainter`: `_temporal_background_expose` reconstructs the
      true background from temporally-exposed neighbours.
-   - `LAMAInpainter`: ONNX Runtime > OpenCV 5 DNN > PyTorch
-     (`simple-lama-inpainting`, only when `VSR_ENABLE_PYTORCH_LAMA=1`)
-     > cv2.inpaint four-tier chain.
+   - `LAMAInpainter`: the registered LaMa implementation uses ONNX Runtime,
+     OpenCV 5 DNN, or the explicit `simple-lama-inpainting` PyTorch opt-in. If
+     none can run, the named request fails instead of substituting cv2 pixels.
    - `ProPainterInpainter`: TBE with a higher coverage bar + LaMa
      residual blend (MIT-licensed hybrid, not the ICCV 2023 model).
    - `AutoInpainter`: per-batch routing on the exposure score;
@@ -280,10 +304,18 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
    linear light, lifts the proxy result with high-bit boundary detail, and
    reapplies the source PQ or HLG transfer function. Outside-mask pixels stay
    byte-identical to the decoded source surface.
+   `backend.execution_provenance` records requested and actual implementations,
+   providers, execution counts, and failure classes. Only Auto may cross an
+   implementation boundary, and its ordered attempts remain in the fallback
+   chain. Named OCR, inpaint, segmentation, tracking, and restoration stages
+   stop with a recovery hint when load, runtime, or output validation fails.
 8. **Intermediate write.** `_LosslessIntermediateWriter` pipes raw
    BGR frames through `ffmpeg -c:v ffv1` so the final encode is the
    only lossy step. Falls back to legacy `mp4v` when ffmpeg is
-   absent.
+   absent. Variable-rate frame sequences are first stream-copied into a
+   lossless PNG-in-MOV timing carrier. Its packet durations come from adjacent
+   integer PTS values, with the probed source duration retained for the final
+   frame, before the requested codec sees the frames.
 9. **Mux + finalise.** `_merge_audio` re-encodes the FFV1 temp into
    the user-visible H.264 / H.265 / AV1 / VVC (H.266) output (HW
    encoder when available, software fallback per `output_codec`).
@@ -322,7 +354,12 @@ no such mapping and is reported as `unmapped` without a vulnerability claim.
 11. **Batch report.** `backend/batch_report.py` writes
     `vsr-batch-summary.json` and `vsr-batch-summary.md` with
     per-item status, codec/duration data, quality gate results,
-    and remediation suggestions.
+    remediation suggestions, failed stage identity, and recovery guidance.
+    Completed outputs also receive a v3 sidecar with full source and output
+    hashes, normalized processing settings, canonical output path, and byte
+    counts. Skip-existing and completed-checkpoint decisions require every
+    identity field to match. The legacy `any` policy is explicit and appears
+    as unverified evidence in both report formats.
 12. **Progress, preview, cancel.** During every batch:
     - `on_progress(progress, message)` ticks the GUI progress bar
       and Windows taskbar.

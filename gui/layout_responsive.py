@@ -284,6 +284,24 @@ class ResponsiveLayoutMixin:
         )
         for button in buttons:
             button.pack_forget()
+            button.grid_forget()
+        for column in range(2):
+            row.columnconfigure(column, weight=0)
+        if compact and self._text_scale_percent >= 150:
+            row.columnconfigure(0, weight=1)
+            row.columnconfigure(1, weight=1)
+            self.preview_region_btn.grid(
+                row=0, column=0, sticky="ew",
+                padx=(0, Theme.S_XS), pady=(0, Theme.S_XS),
+            )
+            self.preview_mask_btn.grid(
+                row=0, column=1, sticky="ew",
+                padx=(Theme.S_XS, 0), pady=(0, Theme.S_XS),
+            )
+            self.preview_inpaint_btn.grid(
+                row=1, column=0, columnspan=2, sticky="ew",
+            )
+            return
         self.preview_region_btn.pack(side="left")
         self.preview_mask_btn.pack(side="left", padx=(Theme.S_SM, 0))
         self.preview_inpaint_btn.pack(side="left", padx=(Theme.S_SM, 0))

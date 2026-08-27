@@ -4,6 +4,26 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.39.0] - 2026-08-27
+
+### Changed
+
+- The main workspace now gives the preview most of the window, keeps the common
+  review tools visible, and uses a full-width queue without an empty spacer.
+  Opening a settings category keeps the selected controls near the top while
+  the video and timeline remain visible.
+- Small clips now scale up to the available preview surface. The frame is fitted
+  again after the timeline or settings panel changes the layout, which prevents
+  stale dimensions from cropping the video.
+- Track review now uses explicit removal language, a live selection count, and
+  Remove all or Keep all controls. Region editing groups its optional timing and
+  motion tools, while mask correction gives preparation and ready states a clear
+  status surface.
+- Help stays neutral while startup checks are running. Completion summaries use
+  reader-facing stage names, hide empty failure cards, and keep the useful output
+  action prominent. Default and high-contrast surfaces were checked with the
+  bundled test video on an isolated Windows desktop.
+
 ### Security
 
 - VACE auto-fetch now uses the allowlisted
@@ -21,6 +41,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Reference-corpus baselines now require the exact reviewed CPU profile before
+  processing. Two clean OpenCV 5.0.0.93 and NumPy 2.4.6 runs produced identical
+  hashes for every fixture. An older global OpenCV 4.14 installation was the
+  source of the three apparent hash reversions, and the runner now reports that
+  package mismatch with the profile repair command instead of implying random
+  output drift.
 - Setup now installs one named, locked CPU, NVIDIA, or DirectML profile and
   refuses to report success after any partial failure. It prints the profile's
   exact packages and capabilities, writes an atomic setup report, and exits

@@ -6,12 +6,12 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.38.0-22c55e)
+![Version](https://img.shields.io/badge/version-3.39.0-22c55e)
 ![Platform](https://img.shields.io/badge/platform-Windows-60a5fa)
 ![License](https://img.shields.io/badge/license-MIT-4ade80)
 ![Python](https://img.shields.io/badge/python-3.11--3.13%20CUDA-blue)
 
-**Professional AI-powered tool for removing hard-coded subtitles from videos and images**
+**Remove hard-coded subtitles locally with frame-aware cleanup and review tools**
 
 [Features](#features) | [Installation](#installation) | [Usage](#usage) | [Configuration](#configuration) | [CLI](#cli-usage) | [Troubleshooting](#troubleshooting)
 
@@ -21,7 +21,7 @@
 
 ## Overview
 
-Video Subtitle Remover Pro uses real AI neural networks to remove hard-coded subtitles and text watermarks from videos and images. Unlike simple blur or crop methods, it intelligently fills in removed areas with content that matches the surrounding video.
+Video Subtitle Remover Pro finds hard-coded subtitles and text watermarks, then rebuilds the covered pixels from surrounding frames or local inpainting models. It preserves the full frame instead of hiding text with a blur or crop.
 
 All media processing is local. No account, subscription, or upload is required:
 your video, images, masks, OCR text, and outputs stay on this computer. The
@@ -37,7 +37,23 @@ reporting is disabled unless both `VSR_GLITCHTIP_DSN` and
 `VSR_CRASH_REPORTS=1` are set. Unset either variable, or set
 `VSR_CRASH_REPORTS=0`, to disable it.
 
-Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover), enhanced with a professional interface, real LaMa inpainting, multi-engine detection, and a 52-code language picker backed by broader OCR engine coverage.
+This project builds on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover). It adds a desktop review workflow, local LaMa inpainting, multiple detection engines, and a 52-code language picker backed by broader OCR engine coverage.
+
+## Interface
+
+The main workspace keeps the current frame, common review actions, cleanup settings, and processing queue in one view. Detailed controls stay available without covering the video.
+
+![Video Subtitle Remover Pro workspace with a test video loaded](assets/screenshots/02-main-media.png)
+
+Track selection says exactly what will be removed. Region and mask tools keep the media large while the controls stay grouped beside it.
+
+| Track review | Mask correction |
+|---|---|
+| ![Track review with explicit removal selection](assets/screenshots/08-track-review.png) | ![Mask correction workspace](assets/screenshots/07-mask-editor.png) |
+
+| Region editor | Help and diagnostics |
+|---|---|
+| ![Subtitle region editor](assets/screenshots/06-region-editor.png) | ![Help and diagnostics window](assets/screenshots/05-help.png) |
 
 ## Features
 
@@ -249,14 +265,18 @@ device.
 ### Validation
 
 ```powershell
-python -m pip install ruff==0.15.20
-python -m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache
-python scripts/generate_cli_reference.py
-python scripts/i18n_catalogs.py check
-python -m unittest discover -s tests -v
-python -m backend.reference_corpus --json
-python tools/local_smoke.py
+venv\Scripts\python.exe -m pip install ruff==0.15.20
+venv\Scripts\python.exe -m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache
+venv\Scripts\python.exe scripts/generate_cli_reference.py
+venv\Scripts\python.exe scripts/i18n_catalogs.py check
+venv\Scripts\python.exe -m pytest tests -q
+venv\Scripts\python.exe -m backend.reference_corpus --json
+venv\Scripts\python.exe tools/local_smoke.py
 ```
+
+Use the project environment for the reference corpus. Its decoded-pixel hashes
+are tied to the reviewed NumPy 2.4.6 and OpenCV 5.0.0.93 profile. The runner
+stops with a repair command when another Python environment is active.
 
 `build_exe.bat` is the fail-closed local release command. It runs the Ruff
 source-hygiene gate and complete unit suite, builds the PyInstaller folder,

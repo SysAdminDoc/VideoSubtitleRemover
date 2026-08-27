@@ -110,7 +110,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/proxy_workflow.py": "Proxy-encode workflow for large files.",
     "backend/quality.py": "PSNR / SSIM / VMAF and temporal metrics.",
     "backend/quality_gate.py": "Graduated quality gate with a remediation ladder.",
-    "backend/reference_corpus.py": "Synthetic reference-clip regression harness.",
+    "backend/reference_corpus.py": "Exact-profile reference-clip regression harness.",
     "backend/reference_fill.py": "Clean-plate reference fill.",
     "backend/region_editing.py": "Region geometry edit / undo primitives.",
     "backend/region_keyframes.py": "Interpolated moving-region keyframe tracks.",
