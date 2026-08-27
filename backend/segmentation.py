@@ -1058,6 +1058,27 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
         out: List[np.ndarray] = []
         for source, refined_mask in zip(original, refined):
             out.append(source if int(source.max()) == 0 else refined_mask)
+        active_pairs = [
+            (source, refined_mask)
+            for source, refined_mask in zip(original, out)
+            if int(source.max()) > 0
+        ]
+        if active_pairs and all(
+            np.array_equal(source, refined_mask)
+            for source, refined_mask in active_pairs
+        ):
+            raise RequestedStageError(
+                stage="matanyone",
+                requested_implementation="matanyone2",
+                actual_implementation="matanyone2",
+                provider=type(model).__name__,
+                failure_class=FAILURE_OUTPUT_INVALID,
+                detail="MatAnyone 2 returned an unchanged alpha sequence",
+                recovery_hint=(
+                    "Verify the MatAnyone 2 adapter and checkpoint, then retry "
+                    "or disable MatAnyone refinement."
+                ),
+            )
         return out
     except Exception as exc:
         if isinstance(exc, RequestedStageError):
@@ -1359,6 +1380,19 @@ def track_points_with_visibility(
                 )
             return None
         if vis_np is None:
+            if strict:
+                raise RequestedStageError(
+                    stage="cotracker",
+                    requested_implementation="cotracker3",
+                    actual_implementation="cotracker3",
+                    provider=type(model).__name__,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail="CoTracker3 returned no visibility tensor",
+                    recovery_hint=(
+                        "Verify the CoTracker3 adapter version, then retry or "
+                        "disable CoTracker propagation."
+                    ),
+                )
             vis_np = np.ones(tracks_np.shape[:2], dtype=np.float32)
         else:
             if vis_np.ndim == 4 and vis_np.shape[-1] == 1:
@@ -1366,6 +1400,19 @@ def track_points_with_visibility(
             if vis_np.ndim == 3:
                 vis_np = vis_np[0]
             if vis_np.shape != tracks_np.shape[:2]:
+                if strict:
+                    raise RequestedStageError(
+                        stage="cotracker",
+                        requested_implementation="cotracker3",
+                        actual_implementation="cotracker3",
+                        provider=type(model).__name__,
+                        failure_class=FAILURE_OUTPUT_INVALID,
+                        detail="CoTracker3 returned a malformed visibility tensor",
+                        recovery_hint=(
+                            "Verify the CoTracker3 adapter version, then retry "
+                            "or disable CoTracker propagation."
+                        ),
+                    )
                 vis_np = np.ones(tracks_np.shape[:2], dtype=np.float32)
         out_tracks: List[List[Tuple[int, int]]] = []
         out_vis: List[List[float]] = []

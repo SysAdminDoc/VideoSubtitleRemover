@@ -224,6 +224,30 @@ class MatAnyoneRefinementTests(unittest.TestCase):
         self.assertEqual(raised.exception.failure_class, "output_invalid")
         self.assertTrue(raised.exception.recovery_hint)
 
+    def test_unchanged_matanyone_alpha_fails_instead_of_claiming_refinement(self):
+        from backend import segmentation as seg
+        from backend.execution_provenance import RequestedStageError
+
+        class NoOpModel:
+            def matte_frames(self, frames, masks):
+                return [mask.copy() for mask in masks]
+
+        saved = dict(seg._MATANYONE_STATE)
+        try:
+            seg._MATANYONE_STATE.update({"probed": True, "model": NoOpModel()})
+            frame = np.zeros((16, 16, 3), dtype=np.uint8)
+            mask = np.zeros((16, 16), dtype=np.uint8)
+            mask[2:14, 2:14] = 255
+
+            with self.assertRaises(RequestedStageError) as raised:
+                seg.refine_masks_with_matanyone([frame], [mask])
+        finally:
+            seg._MATANYONE_STATE.clear()
+            seg._MATANYONE_STATE.update(saved)
+
+        self.assertEqual(raised.exception.failure_class, "output_invalid")
+        self.assertIn("unchanged", raised.exception.detail)
+
 
 class CoTrackerPropagationTests(unittest.TestCase):
     def test_propagates_empty_masks_from_anchor_translation(self):

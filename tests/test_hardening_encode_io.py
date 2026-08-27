@@ -67,8 +67,13 @@ class MediaInputFailureTests(unittest.TestCase):
                 return []
 
         class FakeInpainter:
-            def inpaint(self, frames, _masks):
-                return frames
+            def inpaint(self, frames, masks):
+                output = []
+                for frame, mask in zip(frames, masks):
+                    cleaned = frame.copy()
+                    cleaned[np.asarray(mask) != 0] = 0
+                    output.append(cleaned)
+                return output
 
         remover.detector = FakeDetector()
         remover.inpainter = FakeInpainter()
@@ -233,8 +238,13 @@ class MediaInputFailureTests(unittest.TestCase):
                 return [(4, 4, 28, 18)]
 
         class FakeInpainter:
-            def inpaint(self, frames, _masks):
-                return frames
+            def inpaint(self, frames, masks):
+                output = []
+                for frame, mask in zip(frames, masks):
+                    cleaned = frame.copy()
+                    cleaned[np.asarray(mask) != 0] = 0
+                    output.append(cleaned)
+                return output
 
         with tempfile.TemporaryDirectory() as tmpdir:
             work = Path(tmpdir)
@@ -279,7 +289,9 @@ class MediaInputFailureTests(unittest.TestCase):
 
             def inpaint(self, frames, masks):
                 self.mask = masks[0].copy()
-                return frames
+                cleaned = frames[0].copy()
+                cleaned[np.asarray(masks[0]) != 0] = 0
+                return [cleaned]
 
         fixed = (2, 25, 10, 33)
         for manual_only in (False, True):
@@ -331,7 +343,9 @@ class MediaInputFailureTests(unittest.TestCase):
 
             def inpaint(self, frames, masks):
                 self.mask = masks[0].copy()
-                return frames
+                cleaned = frames[0].copy()
+                cleaned[np.asarray(masks[0]) != 0] = 0
+                return [cleaned]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             work = Path(tmpdir)
@@ -1410,6 +1424,35 @@ class PostRestoreTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.stage, "seedvr2")
         self.assertEqual(raised.exception.provider, "")
+
+    def test_unchanged_seedvr2_output_fails_before_provenance(self):
+        from backend.execution_provenance import RequestedStageError
+
+        remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
+        remover.config = processor.ProcessingConfig(seedvr2_restore=True)
+        remover._output_contract = None
+
+        def copy_source(source, target):
+            Path(target).write_bytes(Path(source).read_bytes())
+            return target
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = Path(tmpdir) / "out.mp4"
+            output.write_bytes(b"unchanged media")
+            with unittest.mock.patch(
+                "backend.post_restore.seedvr2_restore",
+                side_effect=copy_source,
+            ), unittest.mock.patch(
+                "backend.post_restore.selected_restoration_provider",
+                return_value="seedvr2.Synthetic",
+            ):
+                with self.assertRaises(RequestedStageError) as raised:
+                    remover._run_post_restore_passes(str(output), tmpdir)
+
+        self.assertEqual(raised.exception.stage, "seedvr2")
+        self.assertEqual(raised.exception.failure_class, "output_invalid")
+        stage = remover.execution_provenance.stage("seedvr2")
+        self.assertTrue(stage is None or not stage.actual_executions)
 
     def test_multiple_restoration_passes_keep_separate_provenance(self):
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)

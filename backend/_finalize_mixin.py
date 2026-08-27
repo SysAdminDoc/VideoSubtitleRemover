@@ -6,6 +6,7 @@ self access while living in a dedicated file.
 
 from __future__ import annotations
 
+import filecmp
 import logging
 import os
 from pathlib import Path
@@ -665,6 +666,22 @@ class _FinalizeMixin:
                     detail=f"{label} returned no valid output",
                     recovery_hint=(
                         f"Verify the {label} adapter and output codec, then retry."
+                    ),
+                )
+            if (
+                _path_key(produced) != _path_key(output_path)
+                and Path(output_path).is_file()
+                and filecmp.cmp(produced, output_path, shallow=False)
+            ):
+                raise RequestedStageError(
+                    stage=stage,
+                    requested_implementation=implementation,
+                    actual_implementation=implementation,
+                    provider=provider,
+                    failure_class=FAILURE_OUTPUT_INVALID,
+                    detail=f"{label} returned byte-identical output",
+                    recovery_hint=(
+                        f"Verify the {label} model and adapter, then retry."
                     ),
                 )
             if not self._promote_post_restore_result(

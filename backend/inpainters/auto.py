@@ -315,6 +315,7 @@ class AutoInpainter(BaseInpainter):
             "implementation": actual,
             "provider": self.backend_name,
             "effectiveDevice": self.device,
+            "executionContract": "vsr-inpaint-v1",
             "actualExecutions": executions,
             # Scene routing is an execution trace, not a failure fallback.
             "fallbackChain": list(self._route_chain),

@@ -930,6 +930,15 @@ class EndToEndPipelineTests(unittest.TestCase):
         return out
 
     def _stub_remover(self, cfg: processor.ProcessingConfig, inpainter):
+        if not callable(getattr(inpainter, "execution_identity", None)):
+            inpainter.execution_identity = lambda: {
+                "implementation": cfg.mode.value,
+                "provider": type(inpainter).__name__,
+                "effectiveDevice": cfg.device,
+                "executionContract": "vsr-inpaint-v1",
+                "actualExecutions": [],
+                "fallbackChain": [],
+            }
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover.config = cfg
         remover.detector = processor.SubtitleDetector.__new__(
@@ -1580,27 +1589,8 @@ class EndToEndPipelineTests(unittest.TestCase):
                     use_hw_encode=False,
                 )
             )
-            remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
-            remover.config = cfg
-            remover.detector = processor.SubtitleDetector.__new__(
-                processor.SubtitleDetector
-            )
-            remover.detector.device = "cpu"
-            remover.detector.lang = "en"
-            remover.detector._engine_name = "skip"
-            remover.detector._rapid_model = None
-            remover.detector._paddle_model = None
-            remover.detector._surya_det = None
-            remover.detector._easyocr_reader = None
             recorder = RecordingInpainter()
-            remover.inpainter = recorder
-            remover.on_progress = None
-            remover.on_preview_frame = None
-            remover.live_preview_stride = 6
-            remover._hw_encoder = None
-            remover._srt_entries = []
-            remover.last_quality_report = None
-            remover._quality_mask_bbox = None
+            remover = self._stub_remover(cfg, recorder)
 
             ok = remover.process_video(str(src), str(output))
 

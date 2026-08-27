@@ -461,6 +461,78 @@ class SegmentationAdapterTests(unittest.TestCase):
             _seg._COTRACKER_STATE.clear()
             _seg._COTRACKER_STATE.update(saved)
 
+    def test_cotracker_invalid_visibility_fails_closed(self):
+        import numpy as _np
+        from unittest import mock
+        from backend import segmentation as _seg
+        from backend.execution_provenance import RequestedStageError
+
+        class FakeTensor:
+            def __init__(self, value):
+                self.value = _np.asarray(value)
+
+            def permute(self, *args):
+                return self
+
+            def unsqueeze(self, *args):
+                return self
+
+            def float(self):
+                return self
+
+            def to(self, device):
+                return self
+
+            def detach(self):
+                return self
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return self.value
+
+        class VisibilityModel:
+            def __init__(self, visibility):
+                self.visibility = visibility
+
+            def __call__(self, *args, **kwargs):
+                tracks = _np.zeros((1, 3, 1, 2), dtype=_np.float32)
+                return FakeTensor(tracks), self.visibility
+
+        fake_torch = SimpleNamespace(
+            float32=object(),
+            from_numpy=lambda value: FakeTensor(value),
+            tensor=lambda value, dtype=None: FakeTensor(value),
+        )
+        saved = dict(_seg._COTRACKER_STATE)
+        try:
+            frames = [_np.zeros((16, 16, 3), dtype=_np.uint8) for _ in range(3)]
+            invalid_values = (
+                None,
+                FakeTensor(_np.ones((1, 3, 2), dtype=_np.float32)),
+            )
+            with mock.patch.dict(sys.modules, {"torch": fake_torch}):
+                for visibility in invalid_values:
+                    with self.subTest(visibility=visibility is not None):
+                        _seg._COTRACKER_STATE.update({
+                            "probed": True,
+                            "model": VisibilityModel(visibility),
+                        })
+                        with self.assertRaises(RequestedStageError) as raised:
+                            _seg.track_points_with_visibility(
+                                frames,
+                                [(4, 4)],
+                                strict=True,
+                            )
+                        self.assertEqual(
+                            raised.exception.failure_class,
+                            "output_invalid",
+                        )
+        finally:
+            _seg._COTRACKER_STATE.clear()
+            _seg._COTRACKER_STATE.update(saved)
+
 
 class DiffusionInpainterScaffoldTests(unittest.TestCase):
     """RM-59/60/61/62/63/64/65: named adapters fail truthfully."""
@@ -783,10 +855,9 @@ class RifeFastModePipelineTests(unittest.TestCase):
         remover.inpainter = MalformedAutoRoute()
         frames = self._frames(1)
         masks = self._masks(1)
-        result = remover._execute_inpainter(frames, masks)
 
         with self.assertRaises(RequestedStageError) as raised:
-            remover._validate_inpaint_results(frames, result)
+            remover._execute_inpainter(frames, masks)
 
         error = raised.exception
         self.assertEqual(error.requested_implementation, "auto")
@@ -794,6 +865,65 @@ class RifeFastModePipelineTests(unittest.TestCase):
         self.assertEqual(error.provider, "TBE")
         self.assertEqual(error.failure_class, "output_invalid")
         self.assertEqual(error.fallback_chain[-1]["implementation"], "sttn")
+        stage = remover.execution_provenance.stage("inpaint")
+        self.assertTrue(stage is None or not stage.actual_executions)
+
+    def test_named_inpainter_no_op_inside_mask_fails_before_provenance(self):
+        from backend.execution_provenance import RequestedStageError
+
+        class NoOpInpainter:
+            backend_name = "Synthetic LaMa"
+            _vsr_registered_implementation = "lama"
+
+            def inpaint(self, frames, masks):
+                return [frame.copy() for frame in frames]
+
+        remover = self._remover(stride=0)
+        remover.config = processor.ProcessingConfig(
+            mode=processor.InpaintMode.LAMA,
+            device="cpu",
+        )
+        remover.inpainter = NoOpInpainter()
+        frame = np.full((8, 8, 3), 120, dtype=np.uint8)
+        mask = np.zeros((8, 8), dtype=np.uint8)
+        mask[2:6, 2:6] = 255
+
+        with self.assertRaises(RequestedStageError) as raised:
+            remover._execute_inpainter([frame], [mask])
+
+        self.assertEqual(raised.exception.failure_class, "output_invalid")
+        stage = remover.execution_provenance.stage("inpaint")
+        self.assertTrue(stage is None or not stage.actual_executions)
+
+    def test_contract_aware_inpainter_can_confirm_uniform_output(self):
+        class ContractAwareInpainter:
+            backend_name = "Synthetic TBE"
+            _vsr_registered_implementation = "sttn"
+
+            def inpaint(self, frames, masks):
+                return [frame.copy() for frame in frames]
+
+            def execution_identity(self):
+                return {
+                    "implementation": "sttn",
+                    "provider": "Synthetic TBE",
+                    "effectiveDevice": "cpu",
+                    "executionContract": "vsr-inpaint-v1",
+                    "actualExecutions": [],
+                    "fallbackChain": [],
+                }
+
+        remover = self._remover(stride=0)
+        remover.inpainter = ContractAwareInpainter()
+        frame = np.full((8, 8, 3), 120, dtype=np.uint8)
+        mask = np.zeros((8, 8), dtype=np.uint8)
+        mask[2:6, 2:6] = 255
+
+        output = remover._execute_inpainter([frame], [mask])
+
+        self.assertTrue(np.array_equal(output[0], frame))
+        stage = remover.execution_provenance.stage("inpaint")
+        self.assertEqual(stage.actual_executions[0]["executionCount"], 1)
 
     def test_config_clamps_rife_stride(self):
         cfg = processor.normalize_processing_config(

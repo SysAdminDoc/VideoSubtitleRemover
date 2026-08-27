@@ -393,6 +393,15 @@ class ProcessorBypassTests(unittest.TestCase):
 
     @staticmethod
     def _stub_remover(config, inpainter):
+        if not callable(getattr(inpainter, "execution_identity", None)):
+            inpainter.execution_identity = lambda: {
+                "implementation": config.mode.value,
+                "provider": type(inpainter).__name__,
+                "effectiveDevice": config.device,
+                "executionContract": "vsr-inpaint-v1",
+                "actualExecutions": [],
+                "fallbackChain": [],
+            }
         remover = processor.SubtitleRemover.__new__(processor.SubtitleRemover)
         remover.config = processor.normalize_processing_config(config)
         remover.detector = processor.SubtitleDetector.__new__(

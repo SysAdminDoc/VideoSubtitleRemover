@@ -1295,8 +1295,9 @@ class SubtitleRemover(
         self,
         frames: List[np.ndarray],
         results: Any,
+        masks: Optional[List[np.ndarray]] = None,
     ) -> List[np.ndarray]:
-        requested, implementation, provider, chain = (
+        requested, implementation, provider, chain, execution_contract = (
             self._inpaint_failure_identity()
         )
 
@@ -1342,9 +1343,40 @@ class SubtitleRemover(
                     "Return uint8 BGR frames from the selected inpainter.",
                 )
             validated.append(np.ascontiguousarray(candidate))
+        if masks is not None:
+            active_masks = 0
+            changed_masked_pixels = False
+            for source, candidate, mask in zip(frames, validated, masks):
+                mask_array = np.asarray(mask)
+                if mask_array.ndim == 3:
+                    active = np.any(mask_array != 0, axis=2)
+                elif mask_array.ndim == 2:
+                    active = mask_array != 0
+                else:
+                    continue
+                if active.shape != source.shape[:2] or not np.any(active):
+                    continue
+                active_masks += 1
+                if np.any(candidate[active] != source[active]):
+                    changed_masked_pixels = True
+                    break
+            if (
+                active_masks
+                and not changed_masked_pixels
+                and execution_contract != "vsr-inpaint-v1"
+            ):
+                raise invalid_output(
+                    "the inpainter left every active masked pixel unchanged",
+                    (
+                        "Verify the selected inpainter model and checkpoint, "
+                        "then retry."
+                    ),
+                )
         return validated
 
-    def _inpaint_failure_identity(self) -> tuple[str, str, str, list[dict]]:
+    def _inpaint_failure_identity(
+        self,
+    ) -> tuple[str, str, str, list[dict], str]:
         """Return the last observed route without mistaking Auto for a model."""
         inpainter = self.inpainter
         collect = getattr(inpainter, "execution_identity", None)
@@ -1404,6 +1436,7 @@ class SubtitleRemover(
             implementation,
             provider,
             list(chain) if isinstance(chain, list) else [],
+            str(identity.get("executionContract") or ""),
         )
 
     def _execute_inpainter(
@@ -1414,12 +1447,13 @@ class SubtitleRemover(
         """Run the selected inpainter and classify every runtime failure."""
         try:
             result = self.inpainter.inpaint(frames, masks)
+            result = self._validate_inpaint_results(frames, result, masks)
             self._sync_inpaint_provenance(len(frames))
             return result
         except RequestedStageError:
             raise
         except Exception as exc:
-            requested, implementation, provider, chain = (
+            requested, implementation, provider, chain, _execution_contract = (
                 self._inpaint_failure_identity()
             )
             raise RequestedStageError(

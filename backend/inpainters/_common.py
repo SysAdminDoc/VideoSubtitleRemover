@@ -67,6 +67,7 @@ class BaseInpainter(ABC):
             "implementation": implementation,
             "provider": self.backend_name,
             "effectiveDevice": str(getattr(self, "device", "") or "unknown"),
+            "executionContract": "vsr-inpaint-v1",
             "actualExecutions": [],
             "fallbackChain": [],
         }
