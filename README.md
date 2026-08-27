@@ -42,6 +42,7 @@ Based on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-s
 - **Multi-Engine Detection:** RapidOCR PP-OCRv6 (with PP-OCRv5 fallback comparison) through OpenCV 5 DNN, ONNX Runtime, or OpenVINO > PaddleOCR > Surya (GPL opt-in) > EasyOCR (frozen; last release 2024-09-24) > threshold fallback (automatic)
 - **Polygon-Aware OCR Masks:** OCR quadrilaterals stay attached to their legacy boxes through tracking, saved track plans, masks, and preview overlays, so rotated text doesn't widen removal to its full axis-aligned bounds
 - **Lossless Pipeline:** FFV1 lossless intermediate (only the final encode is lossy) for noticeably cleaner outputs than the legacy mp4v intermediate
+- **Exact Variable-Frame-Rate Timing:** FFmpeg 9 frame durations and integer PTS survive the final codec and audio mux, including an irregular last frame; older packet-duration fields remain a compatibility fallback
 - **Modern Codec Output:** Pick H.264 / H.265 / AV1 / VVC (H.266) from a dropdown; NVENC/QSV/AMF where available, libx265 / libsvtav1 software fallback, mask-aware film-grain restoration plus native SVT-AV1 film grain, and VVC when FFmpeg exposes `libvvenc`
 - **Opt-in FFmpeg D3D12 Path:** FFmpeg 8.1+ can upload and scale frames with D3D12 and encode H.264/H.265 only after a byte-valid driver smoke; advertised-but-broken codecs and runtime failures fall back through NVENC/QSV/AMF and software
 - **Precise Multi-region Masks:** Draw or select multiple rectangle/polygon regions, enter exact source-pixel coordinates and start/end seconds or frames, nudge with arrows, resize with Ctrl+arrows, and undo or redo edits
@@ -677,7 +678,7 @@ python -m backend.processor -i input.mp4 -o revised.mp4 --import-mask cleaned.ma
 Edit the referenced artifact while keeping the manifest beside it, then import
 in `replace`, `add`, or `subtract` mode. VSR validates every frame, dimension,
 frame count, timestamp, duration, and timing mode before processing begins.
-VFR manifests retain integer PTS and duration ticks with the source rational time base, including edit-list starts. Checkpoints, frozen mattes, track plans, audio trimming, SRT, EDL, and FCPXML use the same exact clock.
+VFR manifests retain integer PTS and duration ticks with the source rational time base, including edit-list starts. FFmpeg 9's `duration` fields supply the authoritative final-frame length; older `pkt_duration` names are fallbacks. A lossless PNG timing carrier keeps that clock through the final codec and audio mux. Checkpoints, frozen mattes, track plans, audio trimming, SRT, EDL, and FCPXML use the same exact clock.
 The output reproducibility sidecar records the imported artifact's current
 SHA-256, whether it differs from the exported hash, and the deterministic mask
 composition order. **Review mask** shows that composed result before a run.

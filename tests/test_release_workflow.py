@@ -202,7 +202,7 @@ class ReleaseVerificationTests(unittest.TestCase):
             mock.patch(
                 "backend.release_verification._ffmpeg_subprocess_smoke",
                 return_value={
-                    "schema": "vsr.ffmpeg_subprocess_smoke.v1",
+                    "schema": "vsr.ffmpeg_subprocess_smoke.v2",
                     "ran": True,
                     "passed": True,
                     "ffmpegPath": "/usr/bin/ffmpeg",
@@ -210,7 +210,19 @@ class ReleaseVerificationTests(unittest.TestCase):
                     "ffmpegAvailable": True,
                     "ffprobeAvailable": True,
                     "generate": {"ran": True, "passed": True, "error": ""},
-                    "probe": {"ran": True, "passed": True, "error": "", "codec": "rawvideo", "width": 32, "height": 32, "frames": 1},
+                    "probe": {
+                        "ran": True,
+                        "passed": True,
+                        "error": "",
+                        "codec": "rawvideo",
+                        "width": 32,
+                        "height": 32,
+                        "frames": 2,
+                        "frameDurationField": "duration",
+                        "frameDurationTicks": [1, 1],
+                        "frameDurationTimes": ["0.5", "0.5"],
+                        "legacyPacketDurationPresent": False,
+                    },
                     "transcode": {"ran": True, "passed": True, "error": ""},
                     "env": {"PATH": "/usr/bin", "frozen": False},
                     "error": "",
@@ -480,7 +492,7 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertFalse(evidence["releaseTools"]["referenceCorpus"]["ran"])
         self.assertEqual(
             evidence["releaseTools"]["ffmpegSubprocessSmoke"]["schema"],
-            "vsr.ffmpeg_subprocess_smoke.v1",
+            "vsr.ffmpeg_subprocess_smoke.v2",
         )
         self.assertTrue(evidence["releaseTools"]["ffmpegSubprocessSmoke"]["passed"])
         self.assertTrue(evidence["releaseTools"]["dependencyProfile"]["valid"])
@@ -975,6 +987,9 @@ class ReleaseVerificationTests(unittest.TestCase):
         self.assertTrue(smoke["probe"]["passed"])
         self.assertEqual(smoke["probe"]["width"], 32)
         self.assertEqual(smoke["probe"]["height"], 32)
+        self.assertEqual(smoke["probe"]["frameDurationField"], "duration")
+        self.assertTrue(smoke["probe"]["frameDurationTicks"])
+        self.assertFalse(smoke["probe"]["legacyPacketDurationPresent"])
         self.assertTrue(smoke["transcode"]["passed"])
 
     def test_ffmpeg_subprocess_smoke_fails_without_ffmpeg(self):

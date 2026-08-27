@@ -33,16 +33,23 @@ def test_probe_keeps_1001_timeline_as_integer_ticks():
         }],
     })
     frames = (
-        "30000,1001,0.5,0.0166833333333333\n"
-        "31001,1001,0.5166833333333333,0.0166833333333333\n"
-        "33003,1001,0.55005,0.0166833333333333\n"
+        "best_effort_timestamp=30000|duration=1001|"
+        "best_effort_timestamp_time=0.5|duration_time=0.0166833333333333|"
+        "pkt_duration=77|pkt_duration_time=0.0012833333333333\n"
+        "best_effort_timestamp=31001|duration=1001|"
+        "best_effort_timestamp_time=0.5166833333333333|"
+        "duration_time=0.0166833333333333|pkt_duration=77|"
+        "pkt_duration_time=0.0012833333333333\n"
+        "best_effort_timestamp=33003|duration=1001|"
+        "best_effort_timestamp_time=0.55005|"
+        "duration_time=0.0166833333333333|pkt_duration=77|"
+        "pkt_duration_time=0.0012833333333333\n"
+    )
+    runner = mock.Mock(
+        side_effect=[_probe_result(stream), _probe_result(frames)]
     )
     with mock.patch.object(io.shutil, "which", return_value="ffprobe"), \
-            mock.patch.object(
-                io,
-                "run_process",
-                side_effect=[_probe_result(stream), _probe_result(frames)],
-            ):
+            mock.patch.object(io, "run_process", runner):
         timing = io._probe_video_frame_timing("clip.mkv", timeout=30.0)
 
     assert timing is not None
@@ -53,6 +60,82 @@ def test_probe_keeps_1001_timeline_as_integer_ticks():
     assert timing.stream_start_ticks == 30000
     assert timing.total_duration_ticks == 4004
     assert abs(timing.duration - (4004 / 60000)) < 1e-15
+    frame_command = runner.call_args_list[1].args[0]
+    entries = frame_command[frame_command.index("-show_entries") + 1]
+    assert "duration" in entries
+    assert "duration_time" in entries
+    assert "pkt_duration" in entries
+    assert "pkt_duration_time" in entries
+
+
+def test_probe_prefers_ffmpeg9_duration_fields_over_packet_fallbacks():
+    stream = json.dumps({
+        "streams": [{
+            "avg_frame_rate": "25/1",
+            "r_frame_rate": "25/1",
+            "time_base": "1/1000",
+            "start_time": "0",
+            "duration": "0.205",
+        }],
+    })
+    frames = (
+        "best_effort_timestamp=0|duration=40|"
+        "best_effort_timestamp_time=0|duration_time=0.040|"
+        "pkt_duration=900|pkt_duration_time=0.900\n"
+        "best_effort_timestamp=40|duration=40|"
+        "best_effort_timestamp_time=0.040|duration_time=0.040|"
+        "pkt_duration=900|pkt_duration_time=0.900\n"
+        "best_effort_timestamp=80|duration=N/A|"
+        "best_effort_timestamp_time=0.080|duration_time=0.125|"
+        "pkt_duration=40|pkt_duration_time=0.040\n"
+    )
+    with mock.patch.object(io.shutil, "which", return_value="ffprobe"), \
+            mock.patch.object(
+                io,
+                "run_process",
+                side_effect=[_probe_result(stream), _probe_result(frames)],
+            ):
+        timing = io._probe_video_frame_timing("ffmpeg9.mkv", timeout=30.0)
+
+    assert timing is not None
+    assert timing.timestamp_ticks == [0, 40, 80]
+    assert timing.duration_ticks == [40, 40, 125]
+    assert timing.total_duration_ticks == 205
+
+
+def test_probe_keeps_authoritative_long_final_frame_duration():
+    stream = json.dumps({
+        "streams": [{
+            "avg_frame_rate": "25/1",
+            "r_frame_rate": "25/1",
+            "time_base": "1/1000",
+            "start_time": "0",
+            "duration": "1.080",
+        }],
+    })
+    frames = (
+        "best_effort_timestamp=0|duration=40|"
+        "best_effort_timestamp_time=0|duration_time=0.040\n"
+        "best_effort_timestamp=40|duration=40|"
+        "best_effort_timestamp_time=0.040|duration_time=0.040\n"
+        "best_effort_timestamp=80|duration=1000|"
+        "best_effort_timestamp_time=0.080|duration_time=1.000\n"
+    )
+    with mock.patch.object(io.shutil, "which", return_value="ffprobe"), \
+            mock.patch.object(
+                io,
+                "run_process",
+                side_effect=[_probe_result(stream), _probe_result(frames)],
+            ):
+        timing = io._probe_video_frame_timing("long-tail.mkv", timeout=30.0)
+
+    assert timing is not None
+    assert timing.duration_ticks == [40, 40, 1000]
+    assert timing.total_duration_ticks == 1080
+    assert not any(
+        item["kind"] in {"missing_duration", "repaired_duration"}
+        for item in timing.anomalies
+    )
 
 
 def test_probe_logs_and_repairs_missing_repeated_and_non_monotonic_pts(caplog):

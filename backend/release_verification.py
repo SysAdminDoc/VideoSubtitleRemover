@@ -922,7 +922,7 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
     Records command, path, env, return code, and output so release
     evidence proves the packaged app can safely launch external tools.
     """
-    schema = "vsr.ffmpeg_subprocess_smoke.v1"
+    schema = "vsr.ffmpeg_subprocess_smoke.v2"
     ffmpeg_path = shutil.which("ffmpeg") or ""
     ffprobe_path = shutil.which("ffprobe") or ""
     payload = {
@@ -934,7 +934,19 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
         "ffmpegAvailable": bool(ffmpeg_path),
         "ffprobeAvailable": bool(ffprobe_path),
         "generate": {"ran": False, "passed": False, "error": ""},
-        "probe": {"ran": False, "passed": False, "error": "", "codec": "", "width": None, "height": None, "frames": None},
+        "probe": {
+            "ran": False,
+            "passed": False,
+            "error": "",
+            "codec": "",
+            "width": None,
+            "height": None,
+            "frames": None,
+            "frameDurationField": "",
+            "frameDurationTicks": [],
+            "frameDurationTimes": [],
+            "legacyPacketDurationPresent": False,
+        },
         "transcode": {"ran": False, "passed": False, "error": ""},
         "env": {
             "PATH": os.environ.get("PATH", "")[:2000],
@@ -954,7 +966,7 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
 
         gen_cmd = [
             ffmpeg_path, "-y", "-hide_banner", "-loglevel", "error",
-            "-f", "lavfi", "-i", "color=c=black:s=32x32:r=2:d=0.5",
+            "-f", "lavfi", "-i", "color=c=black:s=32x32:r=2:d=1",
             "-c:v", "rawvideo", "-pix_fmt", "bgr24",
             fixture,
         ]
@@ -973,7 +985,10 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
 
         probe_cmd = [
             ffprobe_path, "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=codec_name,width,height,nb_frames",
+            "-show_frames", "-show_entries",
+            "stream=codec_name,width,height,nb_frames:"
+            "frame=best_effort_timestamp,duration,duration_time,"
+            "pkt_duration,pkt_duration_time",
             "-of", "json", fixture,
         ]
         probe_proc = run_process(
@@ -996,12 +1011,48 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
             payload["probe"]["height"] = stream.get("height")
             nb = stream.get("nb_frames")
             payload["probe"]["frames"] = int(nb) if nb and str(nb).isdigit() else None
+            frames = [
+                frame for frame in (probe_data.get("frames") or [])
+                if isinstance(frame, dict)
+            ]
+            duration_ticks = [
+                int(str(frame["duration"]))
+                for frame in frames
+                if str(frame.get("duration") or "").lstrip("-").isdigit()
+                and int(str(frame["duration"])) > 0
+            ]
+            duration_times = [
+                str(frame.get("duration_time") or "")
+                for frame in frames
+                if str(frame.get("duration_time") or "") not in {"", "N/A"}
+            ]
+            payload["probe"]["frameDurationTicks"] = duration_ticks
+            payload["probe"]["frameDurationTimes"] = duration_times
+            payload["probe"]["legacyPacketDurationPresent"] = any(
+                frame.get("pkt_duration") not in (None, "", "N/A")
+                or frame.get("pkt_duration_time") not in (None, "", "N/A")
+                for frame in frames
+            )
+            if frames and len(duration_ticks) == len(frames):
+                payload["probe"]["frameDurationField"] = "duration"
         except (json.JSONDecodeError, IndexError, TypeError) as exc:
             payload["probe"]["error"] = str(exc)
             payload["error"] = "ffprobe returned invalid JSON"
             payload["ran"] = True
             return payload
-        payload["probe"]["passed"] = True
+        payload["probe"]["passed"] = bool(
+            payload["probe"]["codec"]
+            and payload["probe"]["width"]
+            and payload["probe"]["height"]
+            and payload["probe"]["frameDurationField"] == "duration"
+        )
+        if not payload["probe"]["passed"]:
+            payload["probe"]["error"] = (
+                "ffprobe did not expose authoritative frame duration fields"
+            )
+            payload["error"] = payload["probe"]["error"]
+            payload["ran"] = True
+            return payload
 
         tc_cmd = [
             ffmpeg_path, "-y", "-hide_banner", "-loglevel", "error",

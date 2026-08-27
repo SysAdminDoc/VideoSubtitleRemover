@@ -1089,33 +1089,31 @@ class EndToEndPipelineTests(unittest.TestCase):
                 return frames
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            from PIL import Image
+
             tmp = Path(tmpdir)
-            frame_dir = tmp / "source-frames"
-            frame_dir.mkdir()
             durations = [0.033, 0.067, 0.041, 0.109, 0.052, 0.074, 0.038, 0.096]
-            concat_lines = ["ffconcat version 1.0"]
-            for index, duration in enumerate(durations):
-                frame = np.full(
+            frames = [
+                Image.fromarray(np.full(
                     (48, 64, 3),
                     (index * 27) % 255,
                     dtype=np.uint8,
-                )
-                frame_path = frame_dir / f"frame_{index:06d}.png"
-                self.assertTrue(processor.cv2.imwrite(str(frame_path), frame))
-                concat_lines.extend([
-                    f"file frame_{index:06d}.png",
-                    "option framerate 1000",
-                    f"duration {duration:.9f}",
-                ])
-            concat_lines.append(f"file frame_{len(durations) - 1:06d}.png")
-            concat_lines.append("option framerate 1000")
-            concat_path = frame_dir / "source.ffconcat"
-            concat_path.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
+                ))
+                for index in range(len(durations))
+            ]
+            animated_source = tmp / "timing-fixture.apng"
+            frames[0].save(
+                animated_source,
+                save_all=True,
+                append_images=frames[1:],
+                duration=[int(round(value * 1000)) for value in durations],
+                loop=0,
+            )
             silent = tmp / "silent-vfr.mkv"
             subprocess.run([
                 "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                "-f", "concat", "-safe", "0", "-i", str(concat_path),
-                "-fps_mode:v", "vfr", "-frames:v", str(len(durations)),
+                "-i", str(animated_source), "-map", "0:v:0",
+                "-fps_mode:v", "passthrough", "-enc_time_base:v", "1:1000",
                 "-c:v", "ffv1", str(silent),
             ], check=True, timeout=30)
             source = tmp / "source-vfr.mkv"
@@ -1128,9 +1126,31 @@ class EndToEndPipelineTests(unittest.TestCase):
                 "-c:a", "pcm_s16le", "-shortest", str(source),
             ], check=True, timeout=30)
 
+            def authoritative_frame_durations(path: Path):
+                result = subprocess.run([
+                    "ffprobe", "-v", "error", "-select_streams", "v:0",
+                    "-show_frames", "-show_entries",
+                    "frame=best_effort_timestamp,duration,duration_time,"
+                    "pkt_duration,pkt_duration_time",
+                    "-of", "json", str(path),
+                ], capture_output=True, text=True, check=True, timeout=30)
+                rows = json.loads(result.stdout).get("frames") or []
+                self.assertTrue(rows)
+                self.assertTrue(all("duration" in row for row in rows))
+                return rows
+
+            source_duration_rows = authoritative_frame_durations(source)
+            source_tail_ticks = int(source_duration_rows[-1]["duration"])
+            source_tail_seconds = float(
+                source_duration_rows[-1]["duration_time"])
+            self.assertAlmostEqual(
+                source_tail_seconds, durations[-1], delta=0.002)
+
             source_timing = processor._probe_video_frame_timing(str(source))
             self.assertIsNotNone(source_timing)
             self.assertTrue(source_timing.is_vfr)
+            self.assertEqual(
+                source_timing.duration_ticks[-1], source_tail_ticks)
             output = tmp / "cleaned-vfr.mkv"
             cfg = processor.normalize_processing_config(
                 processor.ProcessingConfig(
@@ -1158,6 +1178,11 @@ class EndToEndPipelineTests(unittest.TestCase):
             output_timing = processor._probe_video_frame_timing(str(output))
             self.assertIsNotNone(output_timing)
             self.assertTrue(output_timing.is_vfr)
+            output_duration_rows = authoritative_frame_durations(output)
+            self.assertEqual(
+                output_timing.duration_ticks[-1],
+                int(output_duration_rows[-1]["duration"]),
+            )
             self.assertEqual(output_timing.frame_count, source_timing.frame_count)
             tick = max(
                 source_timing.time_base,
@@ -1170,6 +1195,13 @@ class EndToEndPipelineTests(unittest.TestCase):
                 self.assertLessEqual(abs(expected - actual), tick + 1e-6)
             self.assertLessEqual(
                 abs(source_timing.duration - output_timing.duration),
+                tick + 1e-6,
+            )
+            self.assertLessEqual(
+                abs(
+                    source_tail_seconds
+                    - float(output_duration_rows[-1]["duration_time"])
+                ),
                 tick + 1e-6,
             )
             self.assertEqual(remover.last_timing_report["mode"], "vfr")

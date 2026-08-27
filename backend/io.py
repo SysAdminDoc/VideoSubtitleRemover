@@ -856,10 +856,12 @@ def _parse_ffmpeg_ratio(value, default: float = 0.0) -> float:
 def _parse_frame_timing_csv(text: str) -> List[dict]:
     """Turn `-of csv=p=0` frame rows into the dicts the parser below expects.
 
-    The first two columns are integer stream ticks. The final two columns are
-    compatibility fallbacks for ffprobe builds that cannot expose the integer
-    fields. ffprobe writes ``N/A`` for unknown values, which the caller keeps
-    as an explicit timing anomaly instead of silently switching clocks.
+    Named compact rows are the production format because ffprobe does not
+    guarantee that ``-show_entries`` preserves request order. Positional rows
+    remain accepted for old tests and callers: six columns use the FFmpeg 9
+    duration fields followed by packet-duration fallbacks, while four or fewer
+    retain the historical packet-duration layout. ffprobe writes ``N/A`` for
+    unknown values, which the caller keeps as an explicit timing anomaly.
     """
     frames: List[dict] = []
     for line in text.splitlines():
@@ -878,11 +880,21 @@ def _parse_frame_timing_csv(text: str) -> List[dict]:
             continue
         record = {
             "best_effort_timestamp": parts[0] if parts else "",
+            "duration": "",
             "pkt_duration": "",
             "best_effort_timestamp_time": "",
+            "duration_time": "",
             "pkt_duration_time": "",
         }
-        if len(parts) >= 4:
+        if len(parts) >= 6:
+            record.update({
+                "duration": parts[1],
+                "best_effort_timestamp_time": parts[2],
+                "duration_time": parts[3],
+                "pkt_duration": parts[4],
+                "pkt_duration_time": parts[5],
+            })
+        elif len(parts) >= 4:
             record.update({
                 "pkt_duration": parts[1],
                 "best_effort_timestamp_time": parts[2],
@@ -950,8 +962,9 @@ def _probe_video_frame_timing(
         "ffprobe", "-v", "error", "-select_streams", "v:0",
         "-show_frames",
         "-show_entries",
-        "frame=best_effort_timestamp,pkt_duration,"
-        "best_effort_timestamp_time,pkt_duration_time",
+        "frame=best_effort_timestamp,duration,"
+        "best_effort_timestamp_time,duration_time,"
+        "pkt_duration,pkt_duration_time",
         "-of", "compact=p=0:nk=0:s=|", str(path),
     ]
     try:
@@ -1056,6 +1069,7 @@ def _probe_video_frame_timing(
 
     raw_timestamps: List[int] = []
     packet_durations: List[int] = []
+    authoritative_durations: List[bool] = []
     previous: Optional[int] = None
     for frame_index, frame in enumerate(payload.get("frames") or []):
         if not isinstance(frame, dict):
@@ -1099,20 +1113,37 @@ def _probe_video_frame_timing(
             timestamp = previous + fallback_tick
             record_anomaly(frame_index, "repaired_timestamp", raw_timestamp, timestamp)
 
-        raw_duration = frame.get("pkt_duration")
+        raw_duration = frame.get("duration")
         duration: Optional[int] = None
+        duration_is_authoritative = False
         duration_fraction = optional_fraction(raw_duration)
         if duration_fraction is not None and duration_fraction > 0:
-            duration = int(duration_fraction)
+            duration = _round_fraction_to_int(duration_fraction)
+            duration_is_authoritative = True
         if duration is None or duration <= 0:
-            duration_time = optional_fraction(frame.get("pkt_duration_time"))
+            duration_time = optional_fraction(frame.get("duration_time"))
             if duration_time is not None and duration_time > 0:
                 duration = _round_fraction_to_int(
                     duration_time * time_base_den / time_base_num)
+                duration_is_authoritative = True
+        # FFmpeg 8 and older exposed packet-duration names in frame sections.
+        # Keep those only as compatibility fallbacks; FFmpeg 9's AVFrame
+        # duration is the authoritative value and must win when both exist.
+        if duration is None or duration <= 0:
+            legacy_duration = optional_fraction(frame.get("pkt_duration"))
+            if legacy_duration is not None and legacy_duration > 0:
+                duration = _round_fraction_to_int(legacy_duration)
+        if duration is None or duration <= 0:
+            legacy_duration_time = optional_fraction(
+                frame.get("pkt_duration_time"))
+            if legacy_duration_time is not None and legacy_duration_time > 0:
+                duration = _round_fraction_to_int(
+                    legacy_duration_time * time_base_den / time_base_num)
         if duration is None or duration <= 0:
             duration = 0
         raw_timestamps.append(int(timestamp))
         packet_durations.append(int(duration))
+        authoritative_durations.append(duration_is_authoritative)
         previous = int(timestamp)
 
     if len(raw_timestamps) < 2:
@@ -1140,11 +1171,18 @@ def _probe_video_frame_timing(
         durations.append(int(delta))
 
     last_duration = packet_durations[-1]
+    last_duration_is_authoritative = authoritative_durations[-1]
     if last_duration <= 0 and stream_duration > 0:
         stream_end_ticks = stream_start_ticks + _round_fraction_to_int(
             stream_duration * time_base_den / time_base_num)
         last_duration = stream_end_ticks - raw_timestamps[-1]
-    if last_duration <= 0 or last_duration > max(typical_tick * 10, 1):
+    if (
+        last_duration <= 0
+        or (
+            not last_duration_is_authoritative
+            and last_duration > max(typical_tick * 10, 1)
+        )
+    ):
         record_anomaly(len(raw_timestamps) - 1, "missing_duration", None,
                        typical_tick)
         last_duration = typical_tick

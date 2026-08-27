@@ -329,6 +329,7 @@ class _EncodeMixin:
             raise ValueError(f"No checkpoint frames found in {frame_dir}")
         temp_output = self._allocate_work_output(output)
         concat_path: Optional[Path] = None
+        timing_carrier: Optional[Path] = None
         try:
             _ensure_output_parent(output)
             frame_total = len(list(frame_dir.glob("frame_*.png")))
@@ -389,12 +390,41 @@ class _EncodeMixin:
                         f"duration {_fraction_to_decimal(duration, 15)}")
                 _write_text_atomic(
                     concat_path, "\n".join(concat_lines) + "\n")
+                # Concat duration directives advance the next PTS but do not
+                # change the current image packet's duration. Establish every
+                # duration in packet order before a B-frame codec can reorder
+                # packets, then feed that lossless timing carrier to the final
+                # encoder.
+                tail_duration_ticks = max(
+                    1,
+                    int(round(float(
+                        normalized_duration_fractions[-1] * concat_rate))),
+                )
+                timing_carrier = self._allocate_work_output(
+                    str(Path(output).with_suffix(".timing.mov")))
+                carrier_cmd = [
+                    'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                    '-nostats',
+                    '-f', 'concat', '-safe', '0',
+                    '-i', str(concat_path),
+                    '-map', '0:v:0', '-c:v', 'copy',
+                    '-bsf:v', (
+                        f'setts=time_base=1/{concat_rate}:prescale=1:'
+                        'duration=if('
+                        f'eq(N\\,{frame_total - 1})\\,'
+                        f'{tail_duration_ticks}\\,NEXT_PTS-PTS)'
+                    ),
+                    '-video_track_timescale', str(concat_rate),
+                    '-an', str(timing_carrier),
+                ]
+                carrier_timeout = _ffmpeg_subprocess_timeout(max(
+                    1.0, sum(normalized_durations)))
+                self._run_checked_ffmpeg(carrier_cmd, carrier_timeout)
                 cmd = [
                     'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
                     '-nostats',
                 ] + self._d3d12_device_args() + [
-                    '-f', 'concat', '-safe', '0',
-                    '-i', str(concat_path),
+                    '-i', str(timing_carrier),
                 ]
             else:
                 normalized_durations = []
@@ -408,7 +438,7 @@ class _EncodeMixin:
             cmd += self._get_encode_args()
             if use_vfr:
                 cmd += [
-                    '-fps_mode:v', 'vfr',
+                    '-fps_mode:v', 'passthrough',
                     '-enc_time_base:v', 'demux',
                 ]
             cmd += ['-an', str(temp_output)]
@@ -477,6 +507,7 @@ class _EncodeMixin:
         finally:
             _cleanup_temp_output(temp_output)
             _cleanup_temp_output(concat_path)
+            _cleanup_temp_output(timing_carrier)
 
     def _reencode_or_copy(self, source: str, output: str) -> str:
         """Re-encode with preferred encoder, or salvage the intermediate
