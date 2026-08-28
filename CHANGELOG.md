@@ -4,8 +4,23 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The NVIDIA lane moves to the CUDA 13 channel: torch 2.13.0 and
+  torchvision 0.28.0 from the `cu130` index, with onnxruntime-gpu 1.29.0.
+  The `cu128` index stops at torch 2.11.0, which left the NVIDIA profile
+  frozen two minors behind CPU and DirectML and inside an advisory both of
+  those had already left. Verified on an RTX 4070 SUPER: `verify --profile
+  nvidia` passes and the inference smoke really runs on
+  `CUDAExecutionProvider`.
+
 ### Fixed
 
+- The provider smoke no longer reports a false CUDA fallback. ONNX
+  Runtime's CUDA provider DLL needs the CUDA runtime that ships inside the
+  PyTorch wheel, and the inpainters already preload it before every CUDA
+  session while the smoke did not, so the smoke saw a fallback the product
+  never hits. It now takes the same path and records the preload outcome.
 - The reference corpus now runs the shipping quality gate. It used to
   check a frame hash plus PSNR and SSIM floors blessed from its own last
   run, so it reported all ten clips as passing while eight of them sat

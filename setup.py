@@ -36,24 +36,25 @@ PIP_INSTALL_TIMEOUT_SECONDS = 1800
 MINIMUM_PYTHON = (3, 11)
 DIRECTML_PACKAGE_VERSION = "1.24.4"
 DIRECTML_PACKAGE_SPEC = f"onnxruntime-directml=={DIRECTML_PACKAGE_VERSION}"
-# ONNX Runtime GPU wheels: 1.27.0 (2026-06-15) dropped CUDA 12 and switched the
-# default onnxruntime-gpu PyPI wheel to CUDA 13 only. Cap below 1.27.0 so a fresh
-# install on a CUDA 12 host (the common case) keeps a working CUDAExecutionProvider
-# instead of pulling a CUDA-13-only wheel that fails at inference. CUDA 13 users
-# install the cuda13 wheel manually (see the on-screen note in install_dependencies).
+# ONNX Runtime GPU wheels: from 1.27.0 (2026-06-15) the default
+# onnxruntime-gpu PyPI wheel is the CUDA 13 build. RM-319 confirmed that by
+# running 1.29.0 on a CUDA-13-less host, where it fails to load
+# cublasLt64_13.dll and silently drops to CPU. The reviewed NVIDIA lane
+# installs torch from the cu130 index, which supplies that runtime, so this
+# floor moves to 1.27.0. CUDA 12 hosts install onnxruntime-gpu 1.26.x and
+# cu128 torch manually (see the on-screen note in install_dependencies).
 # Ref: github.com/microsoft/onnxruntime/releases/tag/v1.27.0
-ONNXRUNTIME_GPU_MIN = "1.26.0"
-ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.27.0"
+ONNXRUNTIME_GPU_MIN = "1.27.0"
+ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.30.0"
 ONNXRUNTIME_GPU_SPEC = (
     f"onnxruntime-gpu>={ONNXRUNTIME_GPU_MIN},<{ONNXRUNTIME_GPU_MAX_EXCLUSIVE}"
 )
-# The CPU lane is not bound by the CUDA 12 ceiling -- ONNX Runtime keeps
-# shipping CPU fixes on 1.27/1.28 while the CUDA 12 build stopped at 1.26.x.
-# Its floor is the security floor, not the GPU recommendation.
+# The CPU lane carries its own floor, which is the security floor rather
+# than the GPU recommendation.
 ONNXRUNTIME_CPU_MIN = "1.26.0"
 ONNXRUNTIME_CPU_SPEC = f"onnxruntime>={ONNXRUNTIME_CPU_MIN}"
-TORCH_MINIMUM = "2.11.0"
-TORCHVISION_MINIMUM = "0.26.0"
+TORCH_MINIMUM = "2.13.0"
+TORCHVISION_MINIMUM = "0.28.0"
 TORCH_SPEC = f"torch>={TORCH_MINIMUM}"
 TORCHVISION_SPEC = f"torchvision>={TORCHVISION_MINIMUM}"
 SETUP_PROGRESS_ENV = "VSR_SETUP_PROGRESS_FILE"
@@ -488,11 +489,12 @@ def detect_gpu():
             gpu_info["nvidia"] = True
             gpu_info["name"] = result.stdout.strip().split('\n')[0]
 
-            # Blackwell (RTX 50-series, sm_120) needs CUDA 12.8 + torch 2.7+.
+            # Blackwell (RTX 50-series, sm_120) needs CUDA 12.8 or newer.
             # cu118/cu121 wheels carry no Blackwell kernels, so they error
             # ("no kernel image is available for execution on the device")
-            # or silently fall back to CPU. Detect by name so the installer
-            # can route these cards to the cu128 wheel index.
+            # or silently fall back to CPU. The reviewed lane is cu130,
+            # which carries them; the flag stays because PaddlePaddle still
+            # needs a separate index decision for these cards.
             name_lower = gpu_info["name"].lower()
             if any(model in name_lower for model in
                    (" 5050", " 5060", " 5070", " 5080", " 5090",
@@ -657,24 +659,19 @@ def install_pytorch(gpu_info):
                 *_profile_constraint_args(gpu_info),
                 '--index-url', 'https://download.pytorch.org/whl/cpu'
             ], "installing CPU PyTorch")
-        elif gpu_info["nvidia"] and gpu_info["blackwell"]:
-            # Blackwell (RTX 50-series, sm_120) requires CUDA 12.8 wheels.
-            # The cu128 index also carries the current torch security floor.
-            print(f"  Installing PyTorch with CUDA 12.8 (Blackwell) support...")
-            _run_pip_install([
-                pip, 'install',
-                TORCH_SPEC, TORCHVISION_SPEC,
-                *profile_args,
-                '--index-url', 'https://download.pytorch.org/whl/cu128'
-            ], "installing CUDA 12.8 PyTorch")
         elif gpu_info["nvidia"]:
-            print(f"  Installing PyTorch with CUDA 12.8 support...")
+            # RM-319: the reviewed NVIDIA lane is CUDA 13. cu130 carries
+            # Blackwell (sm_120) kernels like cu128 did, and unlike cu128 it
+            # still publishes the current torch, so both card generations take
+            # the same index. It also supplies the CUDA 13 runtime that the
+            # default onnxruntime-gpu wheel loads.
+            print(f"  Installing PyTorch with CUDA 13.0 support...")
             _run_pip_install([
                 pip, 'install',
                 TORCH_SPEC, TORCHVISION_SPEC,
                 *profile_args,
-                '--index-url', 'https://download.pytorch.org/whl/cu128'
-            ], "installing CUDA 12.8 PyTorch")
+                '--index-url', 'https://download.pytorch.org/whl/cu130'
+            ], "installing CUDA 13.0 PyTorch")
         elif gpu_info["amd"] or gpu_info["intel"]:
             print(f"  Installing PyTorch CPU runtime for AMD/Intel fallback paths...")
             print(f"  DirectML acceleration is provided by ONNX Runtime, not torch-directml.")
@@ -787,9 +784,11 @@ def install_dependencies(gpu_info=None):
             print(f"  [OK] ONNX Runtime DirectML installed")
         elif gpu_info and gpu_info.get("nvidia") and not gpu_info.get("cuda_disabled_by_python"):
             print("  Installing ONNX Runtime CUDA provider...")
-            print(f"  Installing {ONNXRUNTIME_GPU_SPEC} (CUDA 12.x line).")
-            print("  ONNX Runtime 1.27+ is CUDA 13 only; on a CUDA 13 host install")
-            print("  the cuda13 wheel manually per onnxruntime.ai/docs/install.")
+            print(f"  Installing {ONNXRUNTIME_GPU_SPEC} (CUDA 13 line).")
+            print("  This needs the CUDA 13 runtime, which the cu130 PyTorch")
+            print("  wheel installed above supplies. On a host that must stay")
+            print("  on CUDA 12, install onnxruntime-gpu 1.26.x and cu128 torch")
+            print("  manually per onnxruntime.ai/docs/install.")
             _run_pip_install(
                 [pip, 'install', ONNXRUNTIME_GPU_SPEC, *profile_args],
                 "installing ONNX Runtime CUDA",

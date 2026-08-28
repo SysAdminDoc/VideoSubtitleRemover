@@ -404,6 +404,7 @@ def run_profile_provider_smoke(
         "passed": None,
         "fellBack": None,
         "error": "",
+        "cudaPreload": None,
     }
     module = ort_module
     if module is None:
@@ -418,6 +419,17 @@ def run_profile_provider_smoke(
         result["error"] = f"provider enumeration failed: {exc}"
         return result
     result["availableProviders"] = available
+    # RM-319: the CUDA lane's runtime DLLs ship inside the torch cu130 wheel
+    # rather than on the system path, so ONNX Runtime cannot load
+    # onnxruntime_providers_cuda.dll until they are preloaded. The inpainters
+    # already do this before every CUDA session; the smoke has to take the
+    # same path or it reports a fallback the product would never hit.
+    from backend.onnxruntime_cuda import (
+        preload_onnxruntime_cuda_dlls_if_needed,
+    )
+
+    result["cudaPreload"] = preload_onnxruntime_cuda_dlls_if_needed(
+        module, [provider])
     if provider not in available:
         result["ran"] = True
         result["passed"] = False

@@ -57,7 +57,7 @@ class DependencyProfileTests(unittest.TestCase):
         self.assertIn("onnxruntime==1.29.0", (
             dependency_profiles.profile_constraint_path("cpu").read_text(
                 encoding="utf-8")))
-        self.assertIn("onnxruntime-gpu==1.26.0", (
+        self.assertIn("onnxruntime-gpu==1.29.0", (
             dependency_profiles.profile_constraint_path("nvidia").read_text(
                 encoding="utf-8")))
         self.assertIn("onnxruntime-directml==1.24.4", (
@@ -65,7 +65,7 @@ class DependencyProfileTests(unittest.TestCase):
                 encoding="utf-8")))
         expected_torch = {
             "cpu": ("2.13.0", "0.28.0"),
-            "nvidia": ("2.11.0", "0.26.0"),
+            "nvidia": ("2.13.0", "0.28.0"),
             "directml": ("2.13.0", "0.28.0"),
         }
         for name, (torch, torchvision) in expected_torch.items():
@@ -80,8 +80,14 @@ class DependencyProfileTests(unittest.TestCase):
                     encoding="utf-8"),
             )
 
-    def test_nvidia_lock_is_installable_under_the_setup_cuda12_constraint(self):
-        """RM-140: setup.py and the generated lock must agree on CUDA 12."""
+    def test_nvidia_lock_is_installable_under_the_setup_cuda_constraint(self):
+        """RM-140/RM-319: setup.py and the lock must agree on the NVIDIA lane.
+
+        The lane is CUDA 13 from RM-319 on, because the default
+        onnxruntime-gpu wheel has been the CUDA 13 build since 1.27.0 and
+        the cu128 torch index cannot reach a torch outside
+        GHSA-rrmf-rvhw-rf47.
+        """
         setup = (ROOT / "setup.py").read_text(encoding="utf-8")
         self.assertIn(
             f'ONNXRUNTIME_GPU_MIN = "{dependency_caps.ONNXRUNTIME_GPU_RECOMMENDED_MIN}"',
@@ -100,18 +106,18 @@ class DependencyProfileTests(unittest.TestCase):
             if line.startswith("onnxruntime-gpu==")
         ]
         self.assertEqual(len(pinned), 1)
-        lane = dependency_caps.provider_lane("cuda12")
+        lane = dependency_caps.provider_lane("cuda13")
         self.assertTrue(dependency_caps.version_in_lane(pinned[0], lane))
 
     def test_out_of_range_exact_lock_is_rejected(self):
         manifest = json.loads(
             dependency_profiles.MANIFEST_PATH.read_text(encoding="utf-8"))
         manifest["profiles"]["nvidia"]["constraints"] = [
-            item.replace("onnxruntime-gpu==1.26.0", "onnxruntime-gpu==1.27.0")
+            item.replace("onnxruntime-gpu==1.29.0", "onnxruntime-gpu==1.26.0")
             for item in manifest["profiles"]["nvidia"]["constraints"]
         ]
         problems = dependency_profiles.constraint_range_problems(manifest)
-        self.assertTrue(any("onnxruntime-gpu==1.27.0" in item for item in problems))
+        self.assertTrue(any("onnxruntime-gpu==1.26.0" in item for item in problems))
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "dependency_profiles.json"
             path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -133,7 +139,7 @@ class DependencyProfileTests(unittest.TestCase):
     def test_provider_lanes_report_separate_tested_and_security_state(self):
         status = dependency_caps.collect_provider_lane_status({
             "onnxruntime": "1.28.0",
-            "onnxruntime-gpu": "1.26.0",
+            "onnxruntime-gpu": "1.29.0",
             "onnxruntime-directml": "1.24.4",
             "protobuf": "6.33.6",
         })
@@ -143,8 +149,8 @@ class DependencyProfileTests(unittest.TestCase):
                 "cpu", "cuda12", "cuda13", "tensorrt-rtx", "directml",
             })
         self.assertTrue(lanes["cpu"]["tested"])
-        self.assertTrue(lanes["cuda12"]["tested"])
-        self.assertFalse(lanes["cuda13"]["tested"])
+        self.assertTrue(lanes["cuda13"]["tested"])
+        self.assertFalse(lanes["cuda12"]["tested"])
         self.assertFalse(lanes["tensorrt-rtx"]["tested"])
         self.assertEqual(
             lanes["tensorrt-rtx"]["provider"],
@@ -154,10 +160,11 @@ class DependencyProfileTests(unittest.TestCase):
         self.assertEqual(lanes["tensorrt-rtx"]["securityState"], "ok")
         self.assertTrue(lanes["directml"]["tested"])
         self.assertEqual(lanes["cpu"]["securityState"], "ok")
-        self.assertEqual(lanes["cuda12"]["securityState"], "ok")
-        # The CUDA 12 pin is outside the CUDA 13 lane and vice versa.
-        self.assertEqual(lanes["cuda13"]["securityState"], "below-floor")
-        self.assertEqual(lanes["cuda13"]["profile"], "")
+        self.assertEqual(lanes["cuda13"]["securityState"], "ok")
+        # The installed CUDA 13 wheel sits outside the legacy CUDA 12 lane.
+        self.assertEqual(lanes["cuda12"]["securityState"], "outside-lane")
+        self.assertEqual(lanes["cuda12"]["profile"], "")
+        self.assertEqual(lanes["cuda13"]["profile"], "nvidia")
         self.assertIs(status["protobuf"]["satisfied"], True)
 
     def test_protobuf_below_floor_is_a_blocking_advisory(self):

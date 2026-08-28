@@ -2,8 +2,8 @@
 #   python -m backend.dependency_profiles update
 # Profile: nvidia
 # Provider: CUDAExecutionProvider
-# Reviewed: 2026-08-20
-# Manifest-SHA256: 1916c5fbcec67f8f70eea1858b1119c238947951a7588dc93f268553bb8c935f
+# Reviewed: 2026-08-27
+# Manifest-SHA256: 89a0b297fdc2b9795abf1f3b35c8060c3278fd1483a2a1fac3f880e485b4f64d
 #
 # Universal artifacts reviewed with a stable SHA-256:
 #   easyocr==1.7.2 sha256=5be12f9b0e595d443c9c3d10b0542074b50f0ec2d98b141a109cd961fd1c177c
@@ -21,7 +21,7 @@ rapidocr==3.9.2
 paddleocr==3.7.0
 easyocr==1.7.2
 simple-lama-inpainting==0.1.2
-onnxruntime-gpu==1.26.0
-torch==2.11.0
-torchvision==0.26.0
+onnxruntime-gpu==1.29.0
+torch==2.13.0
+torchvision==0.28.0
 paddlepaddle-gpu==3.0.0

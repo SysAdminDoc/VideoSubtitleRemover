@@ -40,11 +40,13 @@ RAPIDOCR_ENGINE_PACKAGES = (
 )
 
 ONNXRUNTIME_PROVIDER_STATUS_SCHEMA = "vsr.onnxruntime_providers.v1"
-ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.26.0"
-# ONNX Runtime 1.27.0 dropped CUDA 12 (its default GPU wheel is now CUDA 13
-# only), so the CUDA 12 recommendation caps below 1.27.0. CUDA 13 hosts install
-# the cuda13 wheel manually. Ref: github.com/microsoft/onnxruntime/releases.
-ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.27.0"
+ONNXRUNTIME_GPU_RECOMMENDED_MIN = "1.27.0"
+# RM-319: the reviewed NVIDIA lane is CUDA 13. onnxruntime-gpu 1.27.0 was the
+# first release whose default PyPI wheel is the CUDA 13 build, confirmed by
+# running 1.29.0: it loads cublasLt64_13.dll and refuses to create
+# CUDAExecutionProvider without a CUDA 13 runtime. CUDA 12 hosts install the
+# 1.26.x wheel manually. Ref: github.com/microsoft/onnxruntime/releases.
+ONNXRUNTIME_GPU_MAX_EXCLUSIVE = "1.30.0"
 ONNXRUNTIME_GPU_RECOMMENDED_SPEC = (
     f"onnxruntime-gpu>={ONNXRUNTIME_GPU_RECOMMENDED_MIN},"
     f"<{ONNXRUNTIME_GPU_MAX_EXCLUSIVE}"
@@ -79,13 +81,16 @@ ONNXRUNTIME_PACKAGES = (
 # 1.29 security fixes (TensorRT engine-refit path traversal, missing
 # rank/shape validation across pooling/LSTM/QLinearConv/GridSample, DML
 # constant-tensor byte-size validation, packed sub-byte over-copy in
-# OrtApi::GetValue). The CUDA 12 lane stays on 1.26.x: 1.29 does publish a
-# CUDA 12.8 Windows build, but which CUDA the default PyPI onnxruntime-gpu
-# wheel targets is not verifiable from wheel metadata alone, so the reviewed
-# lane keeps the last wheel this project confirmed as CUDA 12.
+# OrtApi::GetValue).
+# 2026-08-27 (RM-319): the reviewed NVIDIA lane moves to CUDA 13 and 1.29.0
+# with it. The wheel metadata still does not say which CUDA the default
+# onnxruntime-gpu build targets, so it was measured instead: 1.29.0 depends
+# on cublasLt64_13.dll, and on an RTX 4070 SUPER with torch 2.13.0+cu130
+# supplying the CUDA 13 runtime it really executes on CUDAExecutionProvider.
+# The CUDA 12 lane is kept as a manual lane at its last confirmed 1.26.x.
 ONNXRUNTIME_CPU_TESTED_VERSION = "1.29.0"
 ONNXRUNTIME_CUDA12_TESTED_VERSION = "1.26.0"
-ONNXRUNTIME_CUDA13_TESTED_VERSION = "1.28.0"
+ONNXRUNTIME_CUDA13_TESTED_VERSION = "1.29.0"
 ONNXRUNTIME_CUDA13_MIN = "1.27.0"
 ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE = "1.30.0"
 ONNXRUNTIME_CPU_MAX_EXCLUSIVE = "1.30.0"
@@ -144,36 +149,39 @@ PROVIDER_LANES: Tuple[ProviderLane, ...] = (
         source=ONNXRUNTIME_SECURITY_SOURCE,
     ),
     ProviderLane(
-        key="cuda12",
-        label="NVIDIA CUDA 12",
-        profile="nvidia",
-        provider="CUDAExecutionProvider",
-        package="onnxruntime-gpu",
-        minimum=ONNXRUNTIME_GPU_RECOMMENDED_MIN,
-        maximum_exclusive=ONNXRUNTIME_GPU_MAX_EXCLUSIVE,
-        tested_version=ONNXRUNTIME_CUDA12_TESTED_VERSION,
-        security_floor=ONNXRUNTIME_SECURITY_MIN,
-        tested=True,
-        install_note=(
-            "Default NVIDIA lane. onnxruntime-gpu 1.27+ is CUDA 13 only, so "
-            "this lane stays on the 1.26.x CUDA 12 build."
-        ),
-        source=ONNXRUNTIME_CUDA_MATRIX_SOURCE,
-    ),
-    ProviderLane(
         key="cuda13",
         label="NVIDIA CUDA 13",
-        profile="",
+        profile="nvidia",
         provider="CUDAExecutionProvider",
         package="onnxruntime-gpu",
         minimum=ONNXRUNTIME_CUDA13_MIN,
         maximum_exclusive=ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE,
         tested_version=ONNXRUNTIME_CUDA13_TESTED_VERSION,
         security_floor=ONNXRUNTIME_CUDA13_MIN,
+        tested=True,
+        install_note=(
+            "Default NVIDIA lane. The default onnxruntime-gpu wheel is the "
+            "CUDA 13 build from 1.27.0 on; torch 2.13.0+cu130 supplies the "
+            "CUDA 13 runtime it loads."
+        ),
+        source=ONNXRUNTIME_CUDA_MATRIX_SOURCE,
+    ),
+    ProviderLane(
+        key="cuda12",
+        label="NVIDIA CUDA 12",
+        profile="",
+        provider="CUDAExecutionProvider",
+        package="onnxruntime-gpu",
+        minimum=ONNXRUNTIME_GPU_STABLE_CUDA12_MIN,
+        maximum_exclusive=ONNXRUNTIME_CUDA13_MIN,
+        tested_version=ONNXRUNTIME_CUDA12_TESTED_VERSION,
+        security_floor=ONNXRUNTIME_SECURITY_MIN,
         tested=False,
         install_note=(
-            "Manual lane: install the cuda13 onnxruntime-gpu wheel per "
-            "onnxruntime.ai. Not covered by the reviewed profile locks."
+            "Manual legacy lane for hosts without a CUDA 13 driver: install "
+            "onnxruntime-gpu 1.26.x and torch from the cu128 index. That "
+            "torch line stops at 2.11.0, which is inside "
+            "GHSA-rrmf-rvhw-rf47, so it is not a reviewed profile."
         ),
         source=ONNXRUNTIME_CUDA_MATRIX_SOURCE,
     ),
@@ -1049,8 +1057,10 @@ def enforce_ocr_dependency_caps() -> None:
 
 DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
 PILLOW_MINIMUM_VERSION = "12.3.0"
-TORCH_MINIMUM_VERSION = "2.11.0"
-TORCHVISION_MINIMUM_VERSION = "0.26.0"
+# RM-319: every reviewed profile now reaches torch 2.13.0, which is the
+# first release outside GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1).
+TORCH_MINIMUM_VERSION = "2.13.0"
+TORCHVISION_MINIMUM_VERSION = "0.28.0"
 FROZEN_OPTIONAL_DEPENDENCIES: Mapping[str, Mapping[str, str]] = {
     "easyocr": {
         "reviewed_version": "1.7.2",

@@ -171,8 +171,8 @@ python -m venv venv
 $profile = "cpu"
 
 # Install PyTorch. Python 3.12 or 3.13 is recommended for NVIDIA CUDA.
-$torchIndex = if ($profile -eq "nvidia") { "https://download.pytorch.org/whl/cu128" } else { "https://download.pytorch.org/whl/cpu" }
-pip install "torch>=2.11.0" "torchvision>=0.26.0" --constraint "dependency_profiles/$profile.txt" --index-url $torchIndex
+$torchIndex = if ($profile -eq "nvidia") { "https://download.pytorch.org/whl/cu130" } else { "https://download.pytorch.org/whl/cpu" }
+pip install "torch>=2.13.0" "torchvision>=0.28.0" --constraint "dependency_profiles/$profile.txt" --index-url $torchIndex
 
 # Install dependencies
 pip install -r requirements.txt --constraint "dependency_profiles/$profile.txt"
@@ -490,8 +490,8 @@ for the current installation and deprecation status.
 | Provider lane | Execution provider | Profile / test state |
 |---------------|--------------------|----------------------|
 | CPU | `CPUExecutionProvider` | CPU profile; tested |
-| CUDA 12 | `CUDAExecutionProvider` | NVIDIA profile; tested at 1.26.x |
-| CUDA 13 | `CUDAExecutionProvider` | Manual lane; untested |
+| CUDA 13 | `CUDAExecutionProvider` | NVIDIA profile; tested at 1.29.0 on an RTX 4070 SUPER |
+| CUDA 12 | `CUDAExecutionProvider` | Manual legacy lane; untested; torch stops at 2.11.0 there |
 | DirectML | `DmlExecutionProvider` | DirectML profile; tested at 1.24.4 |
 | TensorRT-RTX | `NvTensorRTRTXExecutionProvider` | Manual lane; untested; no live benchmark |
 
@@ -1365,22 +1365,25 @@ template, PO keys, pseudo-locale, or compiled catalogs drift.
 <summary><b>RTX 50-series (Blackwell): "no kernel image is available" or CPU-only</b></summary>
 
 RTX 50-series cards (5070 / 5080 / 5090, compute capability sm_120) need
-**CUDA 12.8** wheels, i.e. **PyTorch 2.7 or newer** from the `cu128` index.
-The older `cu118` / `cu121` builds contain no Blackwell kernels and will
-either raise `no kernel image is available for execution on the device`
-or silently fall back to CPU.
+**CUDA 12.8 or newer** wheels. The older `cu118` / `cu121` builds
+contain no Blackwell kernels and will either raise `no kernel
+image is available for execution on the device` or silently
+fall back to CPU.
 
-`Run_VSR_Pro.bat` / `setup.py` now auto-detect 50-series cards and install
-the `cu128` build. To fix an existing environment manually:
+The reviewed NVIDIA lane is `cu130`, which carries those kernels
+and is the only index still publishing a current PyTorch. To fix an
+existing environment manually:
 
 ```powershell
 .\venv\Scripts\activate
 pip uninstall -y torch torchvision
-pip install "torch==2.11.0" "torchvision==0.26.0" --index-url https://download.pytorch.org/whl/cu128
+pip install "torch==2.13.0" "torchvision==0.28.0" --index-url https://download.pytorch.org/whl/cu130
 ```
 
-The reviewed NVIDIA CUDA 12.8 lane uses torch 2.11.0/torchvision 0.26.0;
-CPU and DirectML use the current 2.13.0/0.28.0 pair. If
+Every reviewed profile now uses torch 2.13.0 / torchvision
+0.28.0. The `cu130` wheel also carries the CUDA 13 runtime
+that `onnxruntime-gpu` 1.27 and newer load, so installing it is what
+makes `CUDAExecutionProvider` work rather than silently dropping to CPU. If
 PaddleOCR fails to load on Blackwell, detection automatically falls back
 to RapidOCR (ONNX Runtime), which is GPU-generation agnostic.
 
