@@ -57,6 +57,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- _clean_ref_mixin.py         # Clean-reference plate handling.
 |   |-- _encode_mixin.py            # Encode / mux / audio stages of the processor.
 |   |-- _finalize_mixin.py          # Finalize, output contract, post-restore, sidecar.
+|   |-- _frame_loop_mixin.py        # Per-batch stages of the frame loop.
+|   |-- _frame_loop_types.py        # Frame-loop window, context, and batch carrier.
 |   |-- _quality_mixin.py           # Quality-report stages of the processor.
 |   |-- _srt_mixin.py               # Tracked OCR consensus and SRT export stages.
 |   |-- a11y.py                     # Accessibility metadata helpers.

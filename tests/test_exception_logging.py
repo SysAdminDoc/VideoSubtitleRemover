@@ -18,14 +18,15 @@ def _assert_exc_info(testcase: unittest.TestCase, text: str, phrase: str):
 
 class ProcessingExceptionLoggingTests(unittest.TestCase):
     def test_processor_processing_fallbacks_keep_tracebacks(self):
-        text = (
-            _read("backend/processor.py")
-            + _read("backend/_encode_mixin.py")
-            + _read("backend/_quality_mixin.py")
-            + _read("backend/_finalize_mixin.py")
-            + _read("backend/_srt_mixin.py")
-            + _read("backend/_clean_ref_mixin.py")
-        )
+        # RM-349: this was a hand-written list of the processor's files, so
+        # moving the frame loop into its own mixin took "Detection denoise
+        # fell back" out of scope without failing anything. The processor is
+        # `processor.py` plus every `_*_mixin.py` beside it; deriving the
+        # list means the next split cannot quietly drop coverage either.
+        sources = sorted((ROOT / "backend").glob("_*_mixin.py"))
+        self.assertGreaterEqual(len(sources), 6, [p.name for p in sources])
+        text = _read("backend/processor.py") + "".join(
+            path.read_text(encoding="utf-8") for path in sources)
         for phrase in (
             "RapidOCR SRT extraction failed",
             "PaddleOCR SRT extraction failed",

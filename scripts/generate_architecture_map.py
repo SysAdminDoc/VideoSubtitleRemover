@@ -76,6 +76,8 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/device_provider.py": "Device strategy and inpainter construction.",
     "backend/encoder.py": "Output codec probing and HW encoder selection.",
     "backend/execution_provenance.py": "Execution and loaded-model identity record.",
+    "backend/_frame_loop_mixin.py": "Per-batch stages of the frame loop.",
+    "backend/_frame_loop_types.py": "Frame-loop window, context, and batch carrier.",
     "backend/failure_reason.py": "Closed-set failure classification for rows and reports.",
     "backend/ffmpeg_profiles.py": "FFmpeg capability profiles and security probe.",
     "backend/hdr.py": "Color metadata preservation and HDR handling.",
