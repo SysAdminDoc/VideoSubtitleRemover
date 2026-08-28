@@ -225,6 +225,7 @@ def test_opencv_ffmpeg_without_advisory_mapping_is_not_called_vulnerable():
             "  avutil: YES (59.39.100)\n"
         ),
         opencv_version="5.0.0",
+        advisory_rules=(),
         wheel_status={
             "provenance": {
                 "schema": "vsr.opencv_wheel_provenance.v1",
@@ -241,6 +242,26 @@ def test_opencv_ffmpeg_without_advisory_mapping_is_not_called_vulnerable():
     assert status["blocking"] is False
     assert status["wheel"]["distribution"] == "opencv-python"
     assert status["provenance"]["advisoryRules"] == []
+
+
+def test_opencv_ffmpeg_default_rules_classify_the_shipping_wheel():
+    """RM-320: the default mapping is no longer empty, and it fires."""
+    from backend.security_checks import opencv_ffmpeg_status
+
+    status = opencv_ffmpeg_status(
+        build_info=(
+            "FFMPEG: YES (prebuilt binaries)\n"
+            "  avcodec: YES (61.19.100)\n"
+            "  avformat: YES (61.7.100)\n"
+            "  avutil: YES (59.39.100)\n"
+        ),
+        opencv_version="5.0.0",
+    )
+
+    assert status["classification"] == "vulnerable"
+    assert status["vulnerable"] is True
+    assert status["embeddedRelease"]["release"] == "7.1"
+    assert status["provenance"]["advisoryRules"]
 
 
 def test_opencv_ffmpeg_cited_affected_rule_fails_closed():

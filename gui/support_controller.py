@@ -46,6 +46,31 @@ class SupportControllerHost(Protocol):
         ...
 
 
+
+def _opencv_embedded_ffmpeg_facts() -> dict:
+    """Summarise OpenCV's bundled FFmpeg for the support bundle."""
+    try:
+        from backend.security_checks import (
+            OPENCV_FFMPEG_ACKNOWLEDGEMENT,
+            opencv_ffmpeg_status,
+        )
+
+        status = opencv_ffmpeg_status()
+    except Exception as exc:
+        return {"error": str(exc)[:300]}
+    identity = status.get("embeddedRelease") or {}
+    return {
+        "release": identity.get("release", ""),
+        "branch": identity.get("branch", ""),
+        "abi": identity.get("abi", {}),
+        "belowFloor": identity.get("belowFloor"),
+        "securityFloor": status.get("securityFloor", ""),
+        "classification": status.get("classification", ""),
+        "warning": status.get("warning", ""),
+        "acknowledgement": dict(OPENCV_FFMPEG_ACKNOWLEDGEMENT),
+    }
+
+
 class SupportControllerMixin:
     """Focused controller methods mixed into VideoSubtitleRemoverApp."""
 
@@ -251,6 +276,11 @@ class SupportControllerMixin:
                     "advisories", "reason",
                 }
             },
+            # RM-320: OpenCV's wheel embeds its own FFmpeg, which is a
+            # different build from the external binary above. A support
+            # bundle that reports only one of them hides half the decode
+            # surface.
+            "opencv_embedded_ffmpeg": _opencv_embedded_ffmpeg_facts(),
             "detection_engines": self.ai_engines.get("detection", []),
             "inpainting_engines": self.ai_engines.get("inpainting", []),
             "gpu_count": len(self.gpus),

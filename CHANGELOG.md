@@ -6,6 +6,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- The FFmpeg that ships inside the OpenCV wheel is now classified against
+  the same 9.0.1 floor the external binary has to meet. It was left
+  permanently unclassified because OpenCV prints library ABI numbers
+  rather than an FFmpeg version; those ABI numbers do identify the
+  release, and the wheel turns out to carry FFmpeg 7.1, which predates
+  the entire 2026 advisory batch. Release evidence and the support bundle
+  now record the identified release, the ABI numbers behind the verdict,
+  and the advisories it is exposed to. Shipping on that wheel is an
+  explicit dated decision scoped to exactly that release: a wheel that
+  moves to any other pre-9.0 build fails release verification.
 - Startup no longer reports "FFmpeg ready" for a build that will stop the
   run. It was reading a bare exit code, so an FFmpeg below the enforced
   9.0.1 security floor showed a green state at launch and then failed at

@@ -60,6 +60,8 @@ from backend.security_checks import (
     ffmpeg_security_affected_range,
     ffmpeg_security_eol_branch_str,
     libpng_fixed_version_str,
+    OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE,
+    OPENCV_FFMPEG_ACKNOWLEDGEMENT,
     opencv_ffmpeg_status,
     opencv_libpng_status,
 )
@@ -1713,6 +1715,8 @@ def build_release_evidence(
             "ffmpegProfiles": collect_ffmpeg_capability_profiles(),
             "opencvWheels": opencv_wheels,
             "opencvFfmpeg": opencv_ffmpeg,
+            "opencvFfmpegAcknowledgement": dict(
+                OPENCV_FFMPEG_ACKNOWLEDGEMENT),
             "opencvDnnOcr": opencv_dnn_ocr,
             "opencvDnnEngines": opencv_dnn_engines,
             "onnxRuntimeProviders": onnxruntime_providers,
@@ -1838,7 +1842,8 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
         "opencvFfmpeg", {}
     )
     if (not isinstance(opencv_ffmpeg, Mapping)
-            or not opencv_ffmpeg.get("passed")):
+            or not opencv_ffmpeg.get("available")
+            or opencv_ffmpeg.get("error")):
         detail = ""
         if isinstance(opencv_ffmpeg, Mapping):
             detail = str(opencv_ffmpeg.get("error") or "")
@@ -1846,14 +1851,28 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
             f": {detail}" if detail else ""
         )
     elif opencv_ffmpeg.get("blocking"):
-        advisories = ", ".join(
-            str(item.get("id"))
-            for item in opencv_ffmpeg.get("advisories", [])
-            if isinstance(item, Mapping)
+        identity = opencv_ffmpeg.get("embeddedRelease")
+        identified = (
+            str(identity.get("release") or "")
+            if isinstance(identity, Mapping) else ""
         )
-        yield "OpenCV embedded FFmpeg advisory matched" + (
-            f": {advisories}" if advisories else ""
-        )
+        # RM-320: the embedded decoder really is below the floor, and the
+        # wheel is not ours to rebuild. Shipping anyway is an explicit,
+        # dated decision recorded in OPENCV_FFMPEG_ACKNOWLEDGEMENT, and it
+        # covers only the exact release that decision was made about.
+        if identified != OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE:
+            advisories = ", ".join(
+                str(item.get("id"))
+                for item in opencv_ffmpeg.get("advisories", [])
+                if isinstance(item, Mapping)
+            )
+            yield (
+                "OpenCV embedded FFmpeg is below the "
+                f"{opencv_ffmpeg.get('securityFloor', '')} floor and its "
+                f"release ({identified or 'unidentified'}) is not the "
+                f"acknowledged {OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE}"
+                + (f": {advisories}" if advisories else "")
+            )
     ffsmoke = evidence.get("releaseTools", {}).get("ffmpegSubprocessSmoke", {})
     if (isinstance(ffsmoke, Mapping)
             and ffsmoke.get("ran") and not ffsmoke.get("passed")):

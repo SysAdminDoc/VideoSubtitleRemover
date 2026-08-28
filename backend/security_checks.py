@@ -308,19 +308,129 @@ def opencv_libpng_status() -> dict:
     }
 
 
-# OpenCV's Python wheel carries its own FFmpeg libraries. The ABI numbers are
-# useful inventory facts, but they are not FFmpeg release numbers and must not
-# be classified against the external FFmpeg floor without an advisory that
-# maps a specific embedded build to an affected range. Keep this mapping empty
-# until an advisory supplies that evidence. A missing mapping is recorded as
-# unclassified, not silently treated as vulnerable or safe.
+# OpenCV's Python wheel carries its own FFmpeg libraries and never prints an
+# FFmpeg tag, only library ABI versions. RM-320: those ABI numbers do identify
+# the release branch the wheel was built from, because libavutil, libavcodec,
+# and libavformat all step together at an FFmpeg major release. That mapping
+# is what lets the embedded decoder be classified against the same floor the
+# external binary must meet, instead of being left permanently unclassified.
 OPENCV_FFMPEG_STATUS_SCHEMA = "vsr.opencv_ffmpeg.v1"
 OPENCV_FFMPEG_PROVENANCE_SOURCE = (
     "https://github.com/opencv/opencv/releases/tag/5.0.0"
 )
 OPENCV_FFMPEG_WHEEL_SOURCE = "https://github.com/opencv/opencv-python"
 OPENCV_FFMPEG_REQUIRED_LIBRARIES = ("avcodec", "avformat", "avutil")
-OPENCV_FFMPEG_ADVISORY_RULES: Tuple[Mapping[str, object], ...] = ()
+
+# Measured, not inferred. Each entry is an (avutil, avcodec, avformat) ABI
+# triple read from a build whose FFmpeg release is known:
+#   9.0.1  -- `ffmpeg -version` on the reviewed external binary, 2026-08-27
+#   7.1    -- opencv-python 5.0.0.93's bundled
+#             opencv_videoio_ffmpeg500_64.dll, which OpenCV pins at n7.1
+# ABI numbers cannot separate 9.0.0 from 9.0.1, so a triple on the 9.0 branch
+# is reported as meeting the floor branch rather than as a specific release.
+OPENCV_FFMPEG_ABI_RELEASES: Mapping[Tuple[Tuple[int, ...], ...], str] = {
+    ((61, 1, 101), (63, 1, 101), (63, 1, 101)): "9.0.1",
+    ((59, 39, 100), (61, 19, 100), (61, 7, 100)): "7.1",
+}
+# The major of each library on the enforced floor's branch. Anything below
+# these majors predates FFmpeg 9.0 and therefore the whole advisory set the
+# external floor exists for.
+OPENCV_FFMPEG_FLOOR_ABI_MAJORS: Mapping[str, int] = {
+    "avutil": 61,
+    "avcodec": 63,
+    "avformat": 63,
+}
+OPENCV_FFMPEG_ABI_BRANCHES: Mapping[Tuple[int, int, int], str] = {
+    (61, 63, 63): "9.0",
+    (59, 61, 61): "7.1",
+}
+# RM-320: the embedded runtime is now classified against the same floor as the
+# external binary. Each rule fires when a component's ABI predates the floor
+# branch, which is the condition that puts the build outside every advisory in
+# FFMPEG_SECURITY_ADVISORY_IDS.
+OPENCV_FFMPEG_ADVISORY_RULES: Tuple[Mapping[str, object], ...] = (
+    {
+        "id": "VSR-OPENCV-FFMPEG-FLOOR",
+        "component": "avcodec",
+        "affectedBefore": "63.0.0",
+        "affected": "libavcodec below 63, i.e. an FFmpeg branch before 9.0",
+        "fixedIn": "libavcodec 63 (FFmpeg 9.0)",
+        "advisories": list(FFMPEG_SECURITY_ADVISORY_IDS),
+        "source": FFMPEG_SECURITY_ADVISORY_URL,
+    },
+    {
+        "id": "VSR-OPENCV-FFMPEG-FLOOR",
+        "component": "avformat",
+        "affectedBefore": "63.0.0",
+        "affected": "libavformat below 63, i.e. an FFmpeg branch before 9.0",
+        "fixedIn": "libavformat 63 (FFmpeg 9.0)",
+        "advisories": list(FFMPEG_SECURITY_ADVISORY_IDS),
+        "source": FFMPEG_SECURITY_ADVISORY_URL,
+    },
+)
+
+
+# RM-320: the embedded runtime is genuinely below the floor and the fix is
+# not ours to make -- opencv-python decides which FFmpeg its wheel carries.
+# Shipping anyway is therefore a decision, recorded here with a date, the
+# exact release it applies to, and the residual exposure. Release
+# verification refuses to downgrade the block unless the identified release
+# matches this entry exactly, so a wheel that moves to a different old branch
+# fails until somebody looks at it again.
+OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE = "7.1"
+OPENCV_FFMPEG_ACKNOWLEDGEMENT: Mapping[str, str] = {
+    "recorded": "2026-08-28",
+    "release": OPENCV_FFMPEG_ACKNOWLEDGED_RELEASE,
+    "wheel": "opencv-python==5.0.0.93",
+    "reason": (
+        "opencv-python pins its own FFmpeg at n7.1 and publishes no wheel "
+        "built against the 9.0 branch, so this cannot be fixed by pinning. "
+        "Every decode the product performs on user-supplied media is being "
+        "moved onto the external FFmpeg binary, which does meet the floor; "
+        "until that is finished the embedded decoder remains reachable from "
+        "the preview, region-selection, and mask-correction paths."
+    ),
+    "residualExposure": (
+        "cv2.VideoCapture calls that still open user-supplied media"
+    ),
+    "tracking": "ROADMAP.md RM-348",
+}
+
+
+def opencv_ffmpeg_release_from_abi(libraries: Optional[Mapping[str, object]]) -> dict:
+    """Name the FFmpeg release or branch behind an embedded ABI triple."""
+    payload = {
+        "release": "",
+        "branch": "",
+        "identified": False,
+        "abi": {},
+        "belowFloor": None,
+    }
+    if not isinstance(libraries, Mapping):
+        return payload
+    triple = []
+    majors = []
+    for name in ("avutil", "avcodec", "avformat"):
+        entry = libraries.get(name)
+        parts = tuple(
+            (entry or {}).get("versionTuple") or ()
+        ) if isinstance(entry, Mapping) else ()
+        if len(parts) < 3:
+            return payload
+        triple.append(tuple(int(part) for part in parts[:3]))
+        majors.append(int(parts[0]))
+        payload["abi"][name] = ".".join(str(part) for part in parts[:3])
+    exact = OPENCV_FFMPEG_ABI_RELEASES.get(tuple(triple))
+    branch = OPENCV_FFMPEG_ABI_BRANCHES.get(tuple(majors), "")
+    payload["release"] = exact or ""
+    payload["branch"] = branch
+    payload["identified"] = bool(exact or branch)
+    payload["belowFloor"] = any(
+        major < OPENCV_FFMPEG_FLOOR_ABI_MAJORS[name]
+        for name, major in zip(
+            ("avutil", "avcodec", "avformat"), majors, strict=True)
+    )
+    return payload
 _OPENCV_FFMPEG_LINE_RE = re.compile(
     r"^\s*(avcodec|avformat|avutil):\s+(YES|NO)"
     r"(?:\s+\(([^)]*)\))?\s*$",
@@ -426,7 +536,13 @@ def opencv_ffmpeg_status(
             "a cited advisory rule that maps a component ABI to an affected "
             "range."
         ),
-        "advisoryRules": [dict(item) for item in (advisory_rules or OPENCV_FFMPEG_ADVISORY_RULES)],
+        "advisoryRules": [
+            dict(item)
+            for item in (
+                advisory_rules if advisory_rules is not None
+                else OPENCV_FFMPEG_ADVISORY_RULES
+            )
+        ],
     }
     payload = {
         "schema": OPENCV_FFMPEG_STATUS_SCHEMA,
@@ -442,6 +558,11 @@ def opencv_ffmpeg_status(
         "avutil": {"available": False, "version": None, "versionTuple": []},
         "libraries": {},
         "provenance": provenance,
+        "embeddedRelease": {
+            "release": "", "branch": "", "identified": False,
+            "abi": {}, "belowFloor": None,
+        },
+        "securityFloor": ffmpeg_security_floor_str(),
         "classification": "unknown",
         "vulnerable": None,
         "blocking": False,
@@ -463,6 +584,8 @@ def opencv_ffmpeg_status(
         return payload
 
     payload["available"] = True
+    payload["embeddedRelease"] = opencv_ffmpeg_release_from_abi(
+        parsed["libraries"])
     payload["ffmpeg"] = {
         "enabled": parsed["ffmpegEnabled"],
         "build": parsed["ffmpegBuild"],
@@ -493,27 +616,40 @@ def opencv_ffmpeg_status(
             continue
         observed = tuple(payload["libraries"][component]["versionTuple"])
         if observed < affected_before:
+            named = rule.get("advisories")
             matches.append({
                 "id": advisory_id,
                 "component": component,
                 "version": payload["libraries"][component]["version"],
                 "affected": str(rule.get("affected") or f"<{rule.get('affectedBefore')}"),
                 "fixedIn": str(rule.get("fixedIn") or rule.get("affectedBefore")),
+                "advisories": list(named) if isinstance(named, Sequence)
+                and not isinstance(named, (str, bytes)) else [],
                 "source": source,
             })
     provenance["invalidRules"] = invalid_rules
     payload["advisories"] = matches
     if matches:
+        identity = payload["embeddedRelease"]
+        named = (
+            identity.get("release")
+            or (f"{identity.get('branch')} branch" if identity.get("branch")
+                else "an unidentified release")
+        )
         payload["classification"] = "vulnerable"
         payload["vulnerable"] = True
         payload["blocking"] = True
         payload["warning"] = (
-            "OpenCV's embedded FFmpeg matches a cited advisory mapping; "
-            "upgrade the wheel before release."
+            f"OpenCV's wheel embeds FFmpeg {named} "
+            f"(libavcodec {payload['avcodec']['version']}, "
+            f"libavformat {payload['avformat']['version']}), which is below "
+            f"the {payload['securityFloor']} floor enforced on the external "
+            "binary. Keep untrusted media off cv2.VideoCapture."
         )
     elif rules and not invalid_rules:
         payload["classification"] = "safe"
         payload["vulnerable"] = False
+        payload["warning"] = ""
     else:
         payload["classification"] = "unmapped"
         payload["warning"] = (
