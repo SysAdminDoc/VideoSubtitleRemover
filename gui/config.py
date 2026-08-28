@@ -1128,6 +1128,54 @@ def _corrupt_settings_notice(settings_file: Path) -> str:
     )
 
 
+# RM-341: a reset has to restore processing defaults without throwing away
+# the things a user set up separately. Presets are their own library, the
+# output location is a place on disk they chose, the queue is work in
+# progress, and the interface preferences are not part of "the cleanup
+# settings went wrong".
+RESET_PRESERVED_FIELDS = (
+    "onboarding_seen",
+    "high_contrast",
+    "text_scale_percent",
+    "ui_locale",
+    "rtl_layout",
+    "update_check_enabled",
+    "work_directory",
+    "subtitle_area",
+    "subtitle_areas",
+    "subtitle_region_spans",
+    "subtitle_region_keyframes",
+)
+
+
+def processing_defaults(current: ProcessingConfig) -> ProcessingConfig:
+    """Return `current` with every processing field back at its default.
+
+    The preserved fields above keep their current value, so a reset fixes a
+    broken cleanup configuration without undoing the user's interface
+    choices, their saved region, or where their output goes.
+    """
+    fresh = ProcessingConfig()
+    for name in RESET_PRESERVED_FIELDS:
+        if hasattr(current, name) and hasattr(fresh, name):
+            setattr(fresh, name, getattr(current, name))
+    return fresh.normalized() if hasattr(fresh, "normalized") else fresh
+
+
+def reset_summary(current: ProcessingConfig) -> list:
+    """Name every field a reset would change, for the confirmation."""
+    fresh = processing_defaults(current)
+    changed = []
+    for name in sorted(vars(fresh)):
+        if name.startswith("_") or name in RESET_PRESERVED_FIELDS:
+            continue
+        before = getattr(current, name, None)
+        after = getattr(fresh, name, None)
+        if before != after:
+            changed.append(name)
+    return changed
+
+
 def load_settings() -> ProcessingConfig:
     global _settings_read_only_version
     _settings_read_only_version = None

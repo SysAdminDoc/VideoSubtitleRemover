@@ -861,6 +861,12 @@ class SupportControllerMixin:
             lambda btn=model_cache_btn: self._open_model_cache_menu(btn)
         )
         model_cache_btn.pack(side="left", padx=(Theme.S_SM, 0))
+        # RM-341: onboarding_seen was set as the dialog was built and
+        # nothing ever cleared it, so a user who dismissed the walkthrough
+        # could never see it again.
+        ModernButton(support_actions, text=tr("Show walkthrough"), width=150,
+                     command=self.replay_onboarding, style="ghost",
+                     size="md").pack(side="left", padx=(Theme.S_SM, 0))
         ModernButton(support_actions, text=tr("FFmpeg commands"), width=142,
                      command=self._show_ffmpeg_commands, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))

@@ -772,7 +772,10 @@ class QueueConcurrencyTests(unittest.TestCase):
                     item_id = work.get(timeout=10)
                     if item_id is stop:
                         return
-                    item, result = app._try_dequeue_queue_item(str(item_id))
+                    # RM-341: the dequeue reports the position too, so
+                    # an undo can put the item back where it was.
+                    item, result, _position = (
+                        app._try_dequeue_queue_item(str(item_id)))
                     if result != "removed" or item is None:
                         raise AssertionError(
                             f"dequeue {item_id} returned {result}")

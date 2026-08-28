@@ -212,3 +212,13 @@ class OnboardingMixin:
         # persists the flag so a background-scheduled dialog cannot write
         # unrelated in-progress settings before the user dismisses it.
         self.config.onboarding_seen = True
+
+    def replay_onboarding(self):
+        """RM-341: show the welcome flow again on request.
+
+        `onboarding_seen` was set as the dialog was built and nothing ever
+        cleared it, so a user who dismissed the walkthrough could never see
+        it again. Help offers this.
+        """
+        self._onboarding_scheduled = False
+        self._show_onboarding()

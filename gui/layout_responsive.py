@@ -342,6 +342,7 @@ class ResponsiveLayoutMixin:
             self.start_btn, self.queue_add_btn, self.open_output_btn, self.retry_btn,
             self.repeat_btn, self.clear_btn, self._queue_more_btn,
             self.queue_remove_btn, self.queue_clear_completed_btn,
+            self.queue_undo_btn,
             self.queue_move_up_btn, self.queue_move_down_btn,
         ):
             button.pack_forget()
@@ -426,6 +427,8 @@ class ResponsiveLayoutMixin:
              self.queue_remove_btn.enabled),
             (tr("Clear completed"), self._clear_completed_queue_items,
              self.queue_clear_completed_btn.enabled),
+            (tr("Undo removal"), self._undo_queue_removal,
+             self.queue_undo_btn.enabled),
             (tr("Move up"), lambda: self._move_selected_queue_item(-1),
              self.queue_move_up_btn.enabled),
             (tr("Move down"), lambda: self._move_selected_queue_item(1),

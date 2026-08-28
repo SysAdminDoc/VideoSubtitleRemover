@@ -578,6 +578,17 @@ class LayoutBuildMixin:
         Tooltip(export_settings_btn, tr(
             "Write a copy of the current settings this version can open."))
 
+        # RM-341: 140 settings and no way back from a bad combination.
+        self.reset_settings_btn = ModernButton(
+            preset_actions, text=tr("Reset settings"),
+            command=self._reset_processing_settings,
+            size="sm", style="ghost",
+        )
+        self.reset_settings_btn.pack(side="left", padx=(Theme.S_XS, 0))
+        Tooltip(self.reset_settings_btn, tr(
+            "Restore the cleanup settings to their defaults. Presets, output "
+            "location, saved region and queue are not affected."))
+
         # Algorithm -- segmented picker replaces the Combobox for speed + clarity
         self._legacy_mode_label = tk.Label(
             profile_panel, text=tr("Algorithm"), font=f(Theme.F_BODY_SM),
@@ -2442,6 +2453,18 @@ class LayoutBuildMixin:
             style="toolbar",
             size="sm",
         )
+        # RM-341: removing an item or clearing completed items discarded
+        # work with a toast and no way back.
+        self.queue_undo_btn = ModernButton(
+            btn_frame,
+            text=tr("Undo"),
+            accessible_label=N_("Undo the last queue removal"),
+            width=76,
+            command=self._undo_queue_removal,
+            style="toolbar",
+            size="sm",
+        )
+        self.queue_undo_btn.set_enabled(False)
         self.queue_move_up_btn = ModernButton(
             btn_frame,
             text=tr("Up"),
@@ -2465,6 +2488,11 @@ class LayoutBuildMixin:
             for _index in range(3)
         )
         Tooltip(self.queue_remove_btn, tr("Remove the selected item from the queue."))
+        Tooltip(
+            self.queue_undo_btn,
+            tr("Put back the items removed by the last Remove or Clear "
+               "completed."),
+        )
         Tooltip(
             self.queue_clear_completed_btn,
             tr("Remove completed items without deleting their output files."),

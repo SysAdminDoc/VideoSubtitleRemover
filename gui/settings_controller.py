@@ -31,6 +31,7 @@ from gui.theme import Theme, f
 from gui.widgets import (
     ModernButton,
     ModernSlider,
+    show_confirm,
 )
 
 logger = logging.getLogger(__name__)
@@ -249,18 +250,12 @@ class AdvancedSettingsControllerMixin:
             if var is not None:
                 var.set(getattr(self.config, field))
 
-    def _on_preset_applied(self, event=None):
-        """Apply the chosen preset to the live config and refresh the UI."""
-        name = self.preset_var.get()
-        if name == "(custom)":
-            return
-        if not apply_preset(self.config, name):
-            self._update_status(
-                tr("Preset '{name}' not found").format(name=name), "warning")
-            return
-        # Reflect preset changes in the mode picker + toggle vars that back
-        # the detection / quality / output cards. The dataclass carries the
-        # authoritative state; just push it out to every widget we track.
+    def _push_config_to_widgets(self):
+        """Push the whole live config out to every widget.
+
+        RM-341: the preset path already did this inline. A reset
+        needs the same, and two copies of it would drift.
+        """
         self.mode_var.set(self.config.mode.value)
         try:
             self.mode_picker.set(self.config.mode.value)
@@ -289,6 +284,20 @@ class AdvancedSettingsControllerMixin:
                 Path(self.config.mask_import_path).name
                 if self.config.mask_import_path else tr("No imported matte"))
         self._on_mode_changed()
+
+    def _on_preset_applied(self, event=None):
+        """Apply the chosen preset to the live config and refresh the UI."""
+        name = self.preset_var.get()
+        if name == "(custom)":
+            return
+        if not apply_preset(self.config, name):
+            self._update_status(
+                tr("Preset '{name}' not found").format(name=name), "warning")
+            return
+        # Reflect preset changes in the mode picker + toggle vars that back
+        # the detection / quality / output cards. The dataclass carries the
+        # authoritative state; just push it out to every widget we track.
+        self._push_config_to_widgets()
         save_settings(self.config)
         self._update_status(
             tr("Applied preset '{name}'").format(name=name), "success")
@@ -833,6 +842,54 @@ class AdvancedSettingsControllerMixin:
         save_settings(self.config)
         self._update_status(
             N_("Work directory reset to the system temporary location"),
+            "info",
+            toast=True,
+        )
+
+    def _reset_processing_settings(self):
+        """RM-341: put the cleanup settings back to their defaults.
+
+        140 settings and no way back from a bad combination. This names what
+        it will change before acting, and deliberately leaves presets, the
+        output location, the saved region, the queue and the interface
+        preferences alone: those are separate things the user set up, not
+        part of "the cleanup settings went wrong".
+        """
+        from gui.config import processing_defaults, reset_summary
+
+        if self.is_processing:
+            self._update_status(
+                N_("Wait for the active batch to finish before resetting"),
+                "warning",
+            )
+            return
+        changed = reset_summary(self.config)
+        if not changed:
+            self._update_status(
+                N_("Cleanup settings are already at their defaults"))
+            return
+        preview = ", ".join(changed[:6])
+        if len(changed) > 6:
+            preview += tr(" and {count} more").format(count=len(changed) - 6)
+        if not show_confirm(
+            self.root,
+            tr("Reset cleanup settings?"),
+            tr(
+                "This restores {count} setting(s) to their defaults."
+            ).format(count=len(changed)),
+            detail=tr(
+                "Changing: {preview}. Your presets, output location, saved "
+                "region and queue are not affected."
+            ).format(preview=preview),
+            confirm_label=tr("Reset"),
+        ):
+            return
+        self.config = processing_defaults(self.config)
+        self._push_config_to_widgets()
+        save_settings(self.config)
+        self._update_status(
+            tr("Reset {count} cleanup setting(s) to their defaults")
+            .format(count=len(changed)),
             "info",
             toast=True,
         )

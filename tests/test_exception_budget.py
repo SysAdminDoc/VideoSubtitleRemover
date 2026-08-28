@@ -26,7 +26,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # something from the user.
 BUDGET = {
     "BLE001": 537,
-    "S110": 127,
+    # RM-338 narrowed one; lowered on purpose, never raised.
+    "S110": 126,
 }
 
 # These have no budget: the count is zero and must stay there.

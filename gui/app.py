@@ -2279,25 +2279,34 @@ class VideoSubtitleRemoverApp(
 
     def _try_dequeue_queue_item(
         self, item_id: str,
-    ) -> tuple[Optional[QueueItem], str]:
-        """Atomically remove an inactive item, returning its decision state."""
+    ) -> tuple[Optional[QueueItem], str, int]:
+        """Atomically remove an inactive item, returning its decision state.
+
+        RM-341: the position comes back too, so an undo can put the item
+        where it was rather than at the end of the queue.
+        """
         with self.queue_lock:
-            item = next((i for i in self.queue if i.id == item_id), None)
-            if item is None:
-                return None, "missing"
+            position = next(
+                (index for index, i in enumerate(self.queue)
+                 if i.id == item_id),
+                -1,
+            )
+            if position < 0:
+                return None, "missing", -1
+            item = self.queue[position]
             if item.status in (
                 ProcessingStatus.LOADING,
                 ProcessingStatus.DETECTING,
                 ProcessingStatus.PROCESSING,
                 ProcessingStatus.MERGING,
             ):
-                return item, "busy"
+                return item, "busy", position
             self.queue = [i for i in self.queue if i.id != item_id]
-            return item, "removed"
+            return item, "removed", position
 
     def _remove_from_queue(self, item_id: str):
         """Remove an item from the queue."""
-        item, result = self._try_dequeue_queue_item(item_id)
+        item, result, position = self._try_dequeue_queue_item(item_id)
         if result == "busy":
             self._update_status(
                 N_("Wait for the active item to finish before removing it"),
@@ -2308,9 +2317,12 @@ class VideoSubtitleRemoverApp(
             self._selected_queue_item_id = None
         self._update_queue_display()
         if item:
+            # RM-341: removal discarded the item with a toast and no way
+            # back. Remember it for the rest of the session.
+            self._record_queue_undo([(item, position)], tr("removal"))
             self._update_status(
-                tr("Removed {name} from the queue").format(
-                    name=Path(item.file_path).name))
+                tr("Removed {name} from the queue. Undo is in the queue "
+                   "toolbar.").format(name=Path(item.file_path).name))
         save_queue_state(self.queue)
 
     def _remove_selected_queue_item(self):
@@ -2330,13 +2342,16 @@ class VideoSubtitleRemoverApp(
             )
             return
         with self.queue_lock:
-            completed_ids = {
-                item.id for item in self.queue
+            removed = [
+                (item, index) for index, item in enumerate(self.queue)
                 if item.status == ProcessingStatus.COMPLETE
-            }
+            ]
+            completed_ids = {item.id for item, _index in removed}
             self.queue = [
                 item for item in self.queue if item.id not in completed_ids
             ]
+        if removed:
+            self._record_queue_undo(removed, tr("clearing completed items"))
         if not completed_ids:
             self._update_status(N_("No completed items to clear"))
             return
@@ -2349,9 +2364,72 @@ class VideoSubtitleRemoverApp(
             clear_queue_state()
         count = len(completed_ids)
         self._update_status(
-            ntr("Cleared {count} completed item",
-                "Cleared {count} completed items",
+            ntr("Cleared {count} completed item. Undo is in the queue toolbar.",
+                "Cleared {count} completed items. Undo is in the queue toolbar.",
                 count).format(count=count))
+
+    def _record_queue_undo(self, entries, what: str) -> None:
+        """Remember one queue removal so it can be put back.
+
+        RM-341: a single step, for the rest of the session. Deliberately not
+        a stack: the acceptance is a way back from the last mistake, and a
+        deep history of queue edits would be its own feature with its own
+        confusions.
+        """
+        self._queue_undo = {
+            "entries": [(item, int(index)) for item, index in entries],
+            "what": str(what),
+        }
+        self._refresh_queue_undo_control()
+
+    def _refresh_queue_undo_control(self) -> None:
+        button = getattr(self, "queue_undo_btn", None)
+        if button is None:
+            return
+        undo = getattr(self, "_queue_undo", None)
+        try:
+            button.set_enabled(bool(undo) and not self.is_processing)
+        except tk.TclError:
+            logger.debug("Queue undo control refresh failed", exc_info=True)
+
+    def _undo_queue_removal(self) -> None:
+        """Put the last removed queue item(s) back where they were."""
+        undo = getattr(self, "_queue_undo", None)
+        if not undo or not undo.get("entries"):
+            self._update_status(N_("There is nothing to undo"), "warning")
+            return
+        if self.is_processing or self._has_active_processing_thread():
+            self._update_status(
+                N_("Wait for the active batch to finish before undoing"),
+                "warning",
+            )
+            return
+        restored = 0
+        with self.queue_lock:
+            existing = {item.id for item in self.queue}
+            for item, index in sorted(undo["entries"], key=lambda e: e[1]):
+                if item.id in existing:
+                    continue
+                # The queue may have changed since; clamp rather than fail.
+                position = max(0, min(len(self.queue), index))
+                self.queue.insert(position, item)
+                existing.add(item.id)
+                restored += 1
+        self._queue_undo = None
+        self._refresh_queue_undo_control()
+        self._update_queue_display()
+        if self.queue:
+            save_queue_state(self.queue)
+        if restored:
+            self._update_status(
+                ntr("Restored {count} queue item",
+                    "Restored {count} queue items",
+                    restored).format(count=restored),
+                "success",
+            )
+        else:
+            self._update_status(
+                N_("Those queue items are already back"), "info")
 
     def _move_selected_queue_item(self, direction: int):
         """Move the selected inactive queue item one position."""
