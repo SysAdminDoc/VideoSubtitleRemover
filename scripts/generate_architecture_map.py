@@ -92,6 +92,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/frozen_matte.py": "Freeze an approved matte as a reusable input.",
     "backend/webvtt.py": "Loss-aware WebVTT parse / translate / serialize.",
     "backend/matte_interchange.py": "Lossless matte export / import / compose.",
+    "backend/model_file_format.py": "Identifies a model file from its bytes, never its name.",
     "backend/model_downloads.py": "First-run guidance and outbound-model inventory.",
     "backend/model_hashes.py": "Vendored SHA-256 hashes and chunked verifier.",
     "backend/nle_sidecar.py": "EDL / FCPXML sidecar export.",

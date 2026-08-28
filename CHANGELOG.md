@@ -6,6 +6,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- The optional model download now has a declared, enforced floor. It
+  imported its client with no version required anywhere, in a project
+  that pins and cites a floor for every other security-relevant
+  dependency, and that client writes files to disk under names the
+  remote supplies. The fetch refuses to run against a version below the
+  floor and says which advisories the floor covers.
+- A downloaded model file is identified by its contents rather than its
+  name, so a file whose name claims one format and whose bytes are
+  another is recognised for what it is.
+- The dependency review date is checked. It was recorded and never read,
+  so a review could go stale indefinitely without anyone noticing. It is
+  now reported in release evidence and warned about when it ages past
+  the stated interval.
 - The app no longer tells you to drag files into a window that cannot
   accept them. Drag-and-drop needs an optional package no shipped build
   carries, so the README and the welcome flow now describe what actually

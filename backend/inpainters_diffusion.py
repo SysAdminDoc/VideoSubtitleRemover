@@ -508,6 +508,15 @@ def _resolve_vace_checkpoint(
             "`huggingface-hub` or set VSR_VACE_CKPT_DIR to a local snapshot."
         )
         return None, None
+    # RM-336: the client writes files to disk from a name the remote
+    # chooses, and versions below the floor accepted absolute, UNC and
+    # traversal names. Refuse rather than fetch through a known-bad client.
+    from backend.dependency_caps import huggingface_hub_floor_problem
+
+    problem = huggingface_hub_floor_problem()
+    if problem:
+        logger.warning("VACE auto-fetch refused: %s", problem)
+        return None, None
     try:
         local_dir.mkdir(parents=True, exist_ok=True)
         snapshot = snapshot_download(

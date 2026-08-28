@@ -1058,6 +1058,35 @@ def check_ocr_dependency_caps(
     return problems
 
 
+def huggingface_hub_floor_problem() -> str:
+    """Return why the installed model-download client is unacceptable.
+
+    Empty string when it meets the floor. RM-336: this client writes files
+    to disk under names the remote supplies, so an old one is a path
+    traversal waiting to happen rather than a version-hygiene nicety.
+    """
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+    except ImportError:  # pragma: no cover - stdlib since 3.8
+        return ""
+    try:
+        installed = version("huggingface-hub")
+    except PackageNotFoundError:
+        return ""
+    except Exception:  # pragma: no cover - metadata backend specific
+        return ""
+    if _version_gte(installed, HUGGINGFACE_HUB_MINIMUM_VERSION):
+        return ""
+    return (
+        f"huggingface_hub {installed} is below the required "
+        f"{HUGGINGFACE_HUB_MINIMUM_VERSION}, which fixes "
+        f"{', '.join(HUGGINGFACE_HUB_ADVISORY_IDS)}. Upgrade with "
+        f"`pip install \"huggingface-hub>={HUGGINGFACE_HUB_MINIMUM_VERSION}\"` "
+        f"or point VSR_VACE_CKPT_DIR at a local snapshot. See "
+        f"{HUGGINGFACE_HUB_ADVISORY_SOURCE}"
+    )
+
+
 def enforce_ocr_dependency_caps() -> None:
     problems = check_ocr_dependency_caps()
     if problems:
@@ -1069,6 +1098,20 @@ DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
 PILLOW_MINIMUM_VERSION = "12.3.0"
 # RM-319: every reviewed profile now reaches torch 2.13.0, which is the
 # first release outside GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1).
+# RM-336: the opt-in model fetch imports huggingface_hub, in a project
+# that pins and cites a floor for every other security-relevant dependency,
+# and that client shipped two Windows-relevant fixes this year:
+#   1.26.0 (2026-07-30) fixed CVE-2026-15717, an absolute, UNC and traversal
+#   filename bypass on local_dir and cache paths that could write outside
+#   the target and leak a NetNTLMv2 hash on Windows.
+#   1.29.0 (2026-08-27) fixed a shard named exactly ".safetensors" being
+#   routed to torch.load(weights_only=False), because Path.suffix is empty
+#   for a name that is nothing but an extension.
+HUGGINGFACE_HUB_MINIMUM_VERSION = "1.29.0"
+HUGGINGFACE_HUB_ADVISORY_IDS = ("CVE-2026-15717", "HF-HUB-1.29.0-SAFETENSORS")
+HUGGINGFACE_HUB_ADVISORY_SOURCE = (
+    "https://github.com/huggingface/huggingface_hub/releases"
+)
 TORCH_MINIMUM_VERSION = "2.13.0"
 TORCHVISION_MINIMUM_VERSION = "0.28.0"
 FROZEN_OPTIONAL_DEPENDENCIES: Mapping[str, Mapping[str, str]] = {
@@ -1114,6 +1157,7 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
         "0.1.3",
     ),
     ("torch", TORCH_MINIMUM_VERSION, ""),
+    ("huggingface-hub", HUGGINGFACE_HUB_MINIMUM_VERSION, ""),
     ("torchvision", TORCHVISION_MINIMUM_VERSION, ""),
     ("pyinstaller", "6.10.0", ""),
 )

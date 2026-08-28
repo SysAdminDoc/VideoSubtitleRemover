@@ -750,6 +750,7 @@ def collect_dependency_profile_status(
         "constraintFile": _display_path(path),
         "constraintSha256": _sha256_file(path) if path.exists() else "",
         "reviewedAt": manifest["reviewedAt"],
+        "reviewAge": review_age(manifest["reviewedAt"]),
         "indexes": list(profile_data["indexes"]),
         "reviewedArtifactHashes": dict(manifest.get("reviewedArtifactHashes", {})),
         "intentionalExceptions": list(manifest.get("intentionalExceptions", [])),
@@ -758,6 +759,49 @@ def collect_dependency_profile_status(
         "importSmoke": import_smoke,
         "pipCheck": pip_check,
     }
+
+
+# RM-336: the manifest records when it was last reviewed and nothing ever
+# checked that date. protobuf shipped a major version inside one review
+# window. This does not fail the gate, because a stale review is a prompt to
+# look rather than a broken build, but it has to be visible.
+DEPENDENCY_REVIEW_MAX_AGE_DAYS = 90
+
+
+def review_age(reviewed_at: object,
+               *, today: object = None,
+               max_age_days: int = DEPENDENCY_REVIEW_MAX_AGE_DAYS) -> dict:
+    """Report how long ago the dependency set was reviewed."""
+    import datetime as _dt
+
+    payload = {
+        "reviewedAt": str(reviewed_at or ""),
+        "days": None,
+        "maxAgeDays": max_age_days,
+        "stale": None,
+        "warning": "",
+    }
+    try:
+        reviewed = _dt.date.fromisoformat(str(reviewed_at))
+    except (TypeError, ValueError):
+        payload["stale"] = True
+        payload["warning"] = (
+            f"the dependency review date {reviewed_at!r} is not a date, so "
+            "the review age cannot be checked"
+        )
+        return payload
+    current = today if today is not None else _dt.date.today()
+    days = (current - reviewed).days
+    payload["days"] = days
+    payload["stale"] = days > max_age_days
+    if payload["stale"]:
+        payload["warning"] = (
+            f"the dependency set was last reviewed {days} days ago on "
+            f"{reviewed.isoformat()}, past the {max_age_days}-day interval. "
+            "Re-check the pinned versions and advisories, then update "
+            "reviewedAt in dependency_profiles.json."
+        )
+    return payload
 
 
 def _print_diffs(changes: Mapping[str, str]) -> None:
@@ -813,6 +857,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_package_check=verify,
         )
         print(json.dumps(status, indent=2, sort_keys=True))
+        # RM-336: a stale review is a prompt to look, not a broken build, so
+        # it warns on stderr and leaves the exit code alone. Silence was the
+        # actual problem: nothing ever read reviewedAt.
+        age = status.get("reviewAge") or {}
+        if age.get("warning"):
+            print(f"WARNING: {age['warning']}", file=sys.stderr)
         if args.output:
             try:
                 _write_status_report(args.output, status)

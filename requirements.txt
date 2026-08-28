@@ -68,6 +68,16 @@ protobuf>=6.33.5
 # torch manually; that torch line stops at 2.11.0 and is not a reviewed
 # profile.
 
+# Optional model auto-fetch (VSR_VACE_AUTO_FETCH=1) needs
+# huggingface_hub >= 1.29.0. That client writes files to disk under
+# names the remote supplies. 1.26.0 fixed CVE-2026-15717, an absolute,
+# UNC and traversal filename bypass on local_dir and cache paths that
+# could write outside the target and leak a NetNTLMv2 hash on Windows;
+# 1.29.0 fixed a shard named exactly ".safetensors" being routed to
+# torch.load(weights_only=False). The auto-fetch refuses to run against
+# an older client and names the floor.
+# pip install "huggingface-hub>=1.29.0"
+
 # For AMD/Intel (DirectML via ONNX Runtime):
 # pip install onnxruntime-directml==1.24.4
 # Intel CPU/iGPU users can add OpenVINO for RapidOCR:

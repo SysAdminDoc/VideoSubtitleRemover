@@ -1603,6 +1603,9 @@ def build_release_evidence(
         for dep in dependencies
         if dep.get("name")
     }
+    # RM-336: the review age travels with the release evidence, so a stale
+    # dependency review is visible in the record rather than only on a
+    # console somebody watched once.
     dependency_profile = collect_dependency_profile_status(
         env=env,
         package_versions=package_versions,
