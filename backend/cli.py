@@ -1023,8 +1023,13 @@ def _build_parser(mode_choices):
                        help=(
                            "Skip re-running the detector over the repaired "
                            "region of sampled frames. The check is the "
-                           "standard removal-success test and costs one "
-                           "extra detector pass per sampled frame."
+                           "standard removal-success test and costs two "
+                           "detector passes per sampled frame, one over the "
+                           "output region and one over the same region in "
+                           "the source. It runs on the frames "
+                           "--quality-report samples, so without "
+                           "--quality-report there is nothing for it to "
+                           "run on."
                        ))
     parser.add_argument("--input-fps", type=float, default=24.0, metavar="FPS",
                        help="FPS for directory-of-images input.")

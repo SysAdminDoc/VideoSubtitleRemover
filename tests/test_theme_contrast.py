@@ -41,6 +41,23 @@ INK_PAIRS = (
     ("INK_ON_BLUE", ("BLUE_PRIMARY", "BLUE_HOVER", "BLUE_PRESS")),
     ("INK_ON_GREEN", ("GREEN_PRIMARY", "GREEN_HOVER", "GREEN_PRESS")),
     ("INK_ON_DANGER", ("DANGER", "DANGER_HOVER", "DANGER_PRESS")),
+    # The selected state of a list row: accent text on the muted accent
+    # fill, drawn together and reachable through neither SURFACES nor the
+    # ink enumeration above.
+    ("BLUE_HOVER", ("BLUE_MUTED",)),
+    ("BLUE_PRIMARY", ("BLUE_MUTED",)),
+    ("GREEN_PRIMARY", ("GREEN_MUTED",)),
+)
+
+# Rest/hover pairs where the hover fill is the only feedback that the
+# pointer is over an interactive control, so the step has to be visible.
+# Whether it lightens or darkens is a design choice; that it is noticeable
+# is not.
+MIN_HOVER_STEP = 1.15
+HOVER_PAIRS = (
+    ("BLUE_PRIMARY", "BLUE_HOVER"),
+    ("GREEN_PRIMARY", "GREEN_HOVER"),
+    ("DANGER", "DANGER_HOVER"),
 )
 
 EXEMPTIONS = {
@@ -55,6 +72,71 @@ EXEMPTIONS = {
         "recessed fill as well as its ink."
     ),
 }
+
+
+# Keywords that paint the boundary of a widget rather than a separator.
+_OUTLINE_KEYWORDS = frozenset(
+    {"highlightbackground", "highlightcolor", "outline", "border_color"})
+
+# Helpers that take the boundary colour as a positional argument, and the
+# index that argument sits at.
+_POSITIONAL_OUTLINE_HELPERS = {"_apply_surface_state": 1}
+
+
+def _mentions_divider(node: ast.AST) -> bool:
+    return any(
+        isinstance(child, ast.Attribute) and child.attr == "BORDER_SUBTLE"
+        for child in ast.walk(node)
+    )
+
+
+def _tests_enabled(node: ast.AST) -> bool:
+    return any(
+        (isinstance(child, ast.Name) and "enabled" in child.id)
+        or (isinstance(child, ast.Attribute) and "enabled" in child.attr)
+        for child in ast.walk(node)
+    )
+
+
+def _draws_live_divider(node: ast.AST) -> bool:
+    """The divider tone reaching a control that the user can still operate.
+
+    WCAG 2.2 1.4.11 exempts an inactive component, so `X if enabled else
+    SUBTLE` is legitimate: the divider tone only lands on the disabled
+    control. Anything else is the sole boundary of a live control.
+    """
+    if isinstance(node, ast.IfExp) and _tests_enabled(node.test):
+        negated = isinstance(node.test, ast.UnaryOp) and isinstance(
+            node.test.op, ast.Not)
+        live = node.orelse if negated else node.body
+        return _draws_live_divider(live)
+    return _mentions_divider(node)
+
+
+def _positional_divider_outline(call: ast.Call) -> bool:
+    name = getattr(call.func, "attr", getattr(call.func, "id", ""))
+    index = _POSITIONAL_OUTLINE_HELPERS.get(name)
+    if index is None or len(call.args) <= index:
+        return False
+    return _draws_live_divider(call.args[index])
+
+
+def _divider_returned_as_outline():
+    """A border-producing helper handing the divider tone back to a caller."""
+    offenders = []
+    for path in sorted((ROOT / "gui").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if "border" not in node.name:
+                continue
+            for statement in ast.walk(node):
+                if (isinstance(statement, ast.Return)
+                        and statement.value is not None
+                        and _draws_live_divider(statement.value)):
+                    offenders.append(f"{path.name}:{statement.lineno}")
+    return offenders
 
 
 def _srgb(channel: float) -> float:
@@ -130,6 +212,20 @@ class ControlBoundaryContrastTests(_ThemeCase):
                             f"{theme}: {ink} on {fill} is {value:.2f}")
         self.assertEqual(failures, [], "\n".join(failures))
 
+    def test_the_hover_state_of_a_filled_control_is_visible(self):
+        """Raising BLUE_PRIMARY for contrast left BLUE_HOVER 1.02:1 away
+        from it, so hovering an accent button changed nothing a user could
+        see."""
+        failures = []
+        for theme in self._themes():
+            for rest, hover in HOVER_PAIRS:
+                step = contrast(getattr(Theme, rest), getattr(Theme, hover))
+                if step < MIN_HOVER_STEP:
+                    failures.append(
+                        f"{theme}: {hover} is {step:.3f} from {rest}, "
+                        f"under the {MIN_HOVER_STEP} floor")
+        self.assertEqual(failures, [], "\n".join(failures))
+
     def test_status_backgrounds_carry_their_own_foreground(self):
         pairs = (("SUCCESS", "SUCCESS_BG"), ("WARNING", "WARNING_BG"),
                  ("ERROR", "ERROR_BG"), ("INFO", "INFO_BG"))
@@ -172,13 +268,16 @@ class ExemptionTests(_ThemeCase):
                 if not isinstance(node, ast.Call):
                     continue
                 for keyword in node.keywords:
-                    if keyword.arg not in {
-                            "highlightbackground", "highlightcolor"}:
+                    if keyword.arg not in _OUTLINE_KEYWORDS:
                         continue
-                    value = keyword.value
-                    if (isinstance(value, ast.Attribute)
-                            and value.attr == "BORDER_SUBTLE"):
+                    # The first version of this compared only the top node of
+                    # the keyword value, so a conditional expression hid a
+                    # real offender: `highlightbackground=(A if x else SUB)`.
+                    if _draws_live_divider(keyword.value):
                         offenders.append(f"{path.name}:{node.lineno}")
+                if _positional_divider_outline(node):
+                    offenders.append(f"{path.name}:{node.lineno}")
+        offenders.extend(_divider_returned_as_outline())
         self.assertEqual(
             offenders, [],
             "BORDER_SUBTLE is the divider tone and is exempt from the 3:1 "
@@ -199,6 +298,18 @@ class ExemptionTests(_ThemeCase):
 
 
 class RegressionGuardTests(_ThemeCase):
+    def test_the_hover_gate_would_catch_the_regression_it_was_written_for(self):
+        apply_default_theme()
+        original = Theme.BLUE_HOVER
+        try:
+            Theme.BLUE_HOVER = "#4b8aff"  # the value RM-333 left behind
+            self.assertLess(
+                contrast(Theme.BLUE_PRIMARY, Theme.BLUE_HOVER),
+                MIN_HOVER_STEP,
+            )
+        finally:
+            Theme.BLUE_HOVER = original
+
     def test_the_gate_would_catch_a_regression(self):
         """Put the old border back and the boundary check must fail."""
         apply_default_theme()

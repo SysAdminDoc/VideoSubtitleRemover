@@ -43,14 +43,14 @@ def _onnxruntime_facts() -> dict:
 
 
 def _run(cmd: list[str], *, cwd: Path) -> None:
+    import subprocess
+
+    print("[run] " + " ".join(cmd), flush=True)
     # subprocess-policy-exempt: this tool runs standalone against a plain
     # checkout, before anything has put the repository on sys.path, so it
     # cannot import backend.subprocess_policy. Every command it launches is
     # a fixed argument list built in this file, with no shell and no user
     # input, which is what the policy would enforce.
-    import subprocess
-
-    print("[run] " + " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=str(cwd), check=True, timeout=3600)
 
 

@@ -740,6 +740,31 @@ class GuiWorkflowReleaseTests(unittest.TestCase):
         finally:
             self._destroy_app(app)
 
+    def test_the_update_banner_sits_inside_the_header_not_below_its_rule(self):
+        """RM-338 follow-up: the banner is packed when an update turns up,
+        long after the rule that closes the header is packed, and pack order
+        is call order. Without an anchor it lands under the rule and reads as
+        the first thing in the body."""
+        app = self._make_app()
+        try:
+            banner = app._update_banner
+            divider = app._header_divider
+            header = banner.master
+            self.assertIs(divider.master, header)
+            self.assertFalse(banner.winfo_ismapped())
+
+            app._pack_update_banner(banner)
+            app.root.update_idletasks()
+
+            order = header.pack_slaves()
+            self.assertIn(banner, order)
+            self.assertLess(order.index(banner), order.index(divider))
+            # And it is the last thing before the rule, not floating above
+            # the header content.
+            self.assertEqual(order[order.index(banner) + 1], divider)
+        finally:
+            self._destroy_app(app)
+
     def test_shutdown_cancels_callbacks_and_detaches_log_handler(self):
         app = self._make_app()
         handler = app._log_handler

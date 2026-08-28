@@ -1140,11 +1140,17 @@ class PreviewControllerMixin:
         except Exception:
             # RM-326: this used to leave the pane blank with no explanation,
             # so a failed render was indistinguishable from a preview that
-            # had simply not arrived.
+            # had simply not arrived. _set_preview_empty_state_visible takes
+            # (visible, title, body) and no label/tone, so calling it with
+            # those raised inside the handler and blanked the pane anyway;
+            # _set_preview_unavailable is the one that takes them, and is
+            # what the decode failure path a few lines above already uses.
             logger.warning("Inpaint preview could not be shown", exc_info=True)
-            self._set_preview_empty_state_visible(
-                True,
-                label=tr("The preview could not be displayed"),
+            self._set_preview_unavailable(
+                "Preview could not be displayed",
+                "The cleaned frame was produced but could not be shown. "
+                "Check the activity log, then try the preview again.",
+                label=tr("Preview unavailable"),
                 tone="error",
             )
 

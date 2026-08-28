@@ -1529,7 +1529,7 @@ class GuiSmokeTests(unittest.TestCase):
                 (960, 540),
             )
             self.assertEqual(Theme.BG_DARK, "#080d15")
-            self.assertEqual(Theme.BLUE_PRIMARY, "#2f78ff")
+            self.assertEqual(Theme.BLUE_PRIMARY, "#4e8cff")
             self.assertEqual(Theme.TEXT_PRIMARY, "#f5f7fb")
             self.assertEqual(Theme.BG_CARD, Theme.BG_SECONDARY)
             self.assertGreaterEqual(Theme.F_BODY_SM, 14)

@@ -16,6 +16,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Removal verification no longer counts scene text it was never asked to touch. The region it re-detects in is the bounding box of every mask in the clip, so a shop sign or a scoreboard above the subtitle band was found in the source, found again in the output, and scored as text that survived the repair. It now reads the frame's own mask and only counts text the mask covered. On a run with no mask on disk it compares the pixels instead, and where that cannot tell a gap between subtitles from a repair that did nothing, the frame is reported unchecked rather than clean.
+
+- A failed preview render said nothing. The handler that was supposed to report it called the wrong helper with arguments it does not take, so it raised inside itself and left the same blank pane it was added to prevent.
+
+- Hovering an accent button changed nothing you could see. Raising the accent blue for contrast had left the hover fill fractionally darker than the resting one.
+
+- Secondary buttons, queue cards and track rows were outlined in the divider tone, which is 1.2:1 against the surfaces they sit on and is the only thing that identifies those controls. They now carry the border tone, which clears 3:1.
+
+- The update banner appeared below the rule that closes the header, so it read as the first thing in the body rather than as part of the header it belongs to.
+
+- `verify_removal` reads On by default but only runs alongside the quality report, which nothing said. The README, the command help and the run log now say so, and the help gives the real cost: two detector passes per sampled frame, not one.
+
+- The gate that keeps child-process launches inside the shared policy only knew `subprocess.run` and `subprocess.Popen` under those exact names. `check_output`, `check_call`, `call`, `getoutput`, `os.system`, `os.popen`, the `os.exec` and `os.spawn` families, `import subprocess as sp` and `from subprocess import run as _run` all walked past it. An exemption comment also reached nine lines down the file, so a reason written for one launch could quietly cover a different one; it now has to sit in the comment block attached to the call.
+
+
 - The optional model download now has a declared, enforced floor. It
   imported its client with no version required anywhere, in a project
   that pins and cites a floor for every other security-relevant

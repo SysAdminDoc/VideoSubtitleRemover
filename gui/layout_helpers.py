@@ -104,8 +104,9 @@ class LayoutHelpersMixin:
                      anchor="w", padx=pad_x, pady=(pad_top, Theme.S_SM))
 
     def _divider(self, parent, pad: int = 0):
-        tk.Frame(parent, bg=Theme.BORDER_SUBTLE, height=1).pack(
-            fill="x", padx=pad, pady=0)
+        line = tk.Frame(parent, bg=Theme.BORDER_SUBTLE, height=1)
+        line.pack(fill="x", padx=pad, pady=0)
+        return line
 
     def _update_output_label(self):
         """Refresh the output directory summary."""

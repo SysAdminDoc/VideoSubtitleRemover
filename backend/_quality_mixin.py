@@ -115,6 +115,31 @@ class _QualityMixin:
             )
         return mask
 
+    def _persisted_mask_for_verification(self, frame_index: int):
+        """This frame's mask, and whether masks are on disk at all.
+
+        `_quality_mask_from_disk` returns zeros both for a frame that had no
+        mask and for a run that never wrote any, and re-detection needs to
+        tell those apart: the first means nothing was meant to be removed
+        here, the second means the mask cannot answer the question.
+        """
+        directory = getattr(self, "_quality_frame_evidence_dir", None)
+        if directory is None or getattr(
+                self, "_quality_frame_evidence_write_error", False):
+            return None, False
+        path = Path(directory) / f"{int(frame_index):08d}.png"
+        if not path.is_file():
+            # Masks are being written, and this frame did not get one.
+            return None, True
+        try:
+            mask = safe_imread(path, cv2.IMREAD_GRAYSCALE)
+        except OSError:
+            logger.debug("Verification mask unreadable", exc_info=True)
+            return None, False
+        if mask is None:
+            return None, False
+        return mask, True
+
     def _open_final_quality_capture(self, path: str, *, source: bool):
         """Open a final-quality capture in the source's native HDR depth."""
         meta = getattr(self, "_color_metadata", None)
@@ -512,9 +537,18 @@ class _QualityMixin:
                         if verifier is not None and idx in metric_index_set:
                             # RM-325: ask the detector, not just the
                             # contrast heuristic, whether text survived.
+                            # The ROI is the union bbox of every mask in the
+                            # clip, so this frame's own mask goes with it:
+                            # without it, scene text that no mask ever
+                            # covered reads as text that survived.
+                            frame_mask, mask_available = (
+                                self._persisted_mask_for_verification(
+                                    start_frame + idx))
                             verifier.check(
                                 start_frame + idx, b, (x1, y1, x2, y2),
                                 source_frame=a,
+                                mask=frame_mask,
+                                mask_available=mask_available,
                             )
                         if idx in metric_index_set:
                             residual = residual_text_score(b_roi)
@@ -774,6 +808,14 @@ class _QualityMixin:
             verification = metrics.get('removal_verification')
             if verification and verification.get('ran'):
                 for item in verification.get('frames', []):
+                    # RM-325 follow-up: a review span was raised for every
+                    # frame with any detection at all, which walked straight
+                    # past the surviving-fraction tolerance and marked scene
+                    # text the repair never touched. Only text that was in
+                    # the source and is still matched in the output is a
+                    # residue span.
+                    if not int(item.get('survivingSourceBoxes') or 0):
+                        continue
                     review_spans.append(make_review_span(
                         "residual",
                         int(item["frame"]),

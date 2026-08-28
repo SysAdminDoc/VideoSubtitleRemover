@@ -17,6 +17,7 @@ from backend.removal_verification import (
     MATCH_IOU,
     REMOVAL_VERIFICATION_SCHEMA,
     SURVIVING_DETECTION_CONFIDENCE,
+    UNTOUCHED_MEAN_ABS_DIFF,
     RemovalVerifier,
     verification_failed,
     verify_frame_removal,
@@ -134,6 +135,172 @@ class FrameVerificationTests(unittest.TestCase):
         self.assertIn("model unloaded", result["reason"])
 
 
+class UntouchedSceneTextTests(unittest.TestCase):
+    """The ROI is the union bounding box of every mask in the clip.
+
+    Text that sits inside that box but was never inside a mask - a shop
+    sign above the subtitle band, a scoreboard, a logo - is detected in the
+    source and detected again in the output, because nothing was ever meant
+    to happen to it. It used to count as text that survived the repair, and
+    with a short clip that alone could push the surviving fraction past the
+    tolerance and fail a job that did exactly what it was asked to do.
+    """
+
+    ROI = (0, 0, 96, 64)
+    SIGN = (60, 4, 90, 20)
+    SUBTITLE = (10, 40, 70, 58)
+
+    def _pair(self, *, repaired: bool):
+        """A source frame and an output frame that share the sign."""
+        source = np.full((64, 96, 3), 40, dtype=np.uint8)
+        source[self.SIGN[1]:self.SIGN[3], self.SIGN[0]:self.SIGN[2]] = 230
+        source[self.SUBTITLE[1]:self.SUBTITLE[3],
+               self.SUBTITLE[0]:self.SUBTITLE[2]] = 230
+        output = source.copy()
+        if repaired:
+            # The subtitle band is inpainted back to the plate; the sign is
+            # bit-for-bit what it was.
+            output[self.SUBTITLE[1]:self.SUBTITLE[3],
+                   self.SUBTITLE[0]:self.SUBTITLE[2]] = 40
+        return source, output
+
+    def _detector(self, source_boxes, output_boxes):
+        """Answer by which frame is being looked at, not by its mean."""
+        state = {"calls": 0}
+
+        class _ByCall:
+            def detect_with_confidence(self, frame, threshold: float = 0.5):
+                state["calls"] += 1
+                # verify_frame_removal detects the output first, source
+                # second.
+                return list(output_boxes if state["calls"] == 1
+                            else source_boxes)
+
+        return _ByCall()
+
+    def test_scene_text_the_repair_never_touched_is_not_a_survivor(self):
+        source, output = self._pair(repaired=True)
+        sign = (*self.SIGN, 0.95)
+        subtitle = (*self.SUBTITLE, 0.95)
+        result = verify_frame_removal(
+            self._detector([sign, subtitle], [sign]),
+            output, self.ROI, source_frame=source,
+        )
+        self.assertTrue(result["checked"])
+        self.assertEqual(result["untouchedSourceBoxes"], 1)
+        # Only the subtitle counted as text that was supposed to go.
+        self.assertEqual(result["sourceBoxes"], 1)
+        self.assertEqual(result["survivingSourceBoxes"], 0)
+        # And the sign does not become a review span either.
+        self.assertEqual(result["detections"], [])
+
+    def test_the_same_clip_does_not_fail_the_gate(self):
+        source, output = self._pair(repaired=True)
+        sign = (*self.SIGN, 0.95)
+        subtitle = (*self.SUBTITLE, 0.95)
+        verifier = RemovalVerifier(None)
+        for index in range(4):
+            outcome = verify_frame_removal(
+                self._detector([sign, subtitle], [sign]),
+                output, self.ROI, source_frame=source,
+            )
+            outcome["frame"] = index
+            verifier.frames.append(outcome)
+        evidence = verifier.evidence()
+        self.assertEqual(evidence["untouchedSourceBoxes"], 4)
+        self.assertEqual(evidence["framesWithSurvivingText"], 0)
+        self.assertFalse(verification_failed(evidence))
+
+    def _mask(self):
+        """This frame's mask: the subtitle band, and nothing else."""
+        mask = np.zeros((64, 96), dtype=np.uint8)
+        mask[self.SUBTITLE[1]:self.SUBTITLE[3],
+             self.SUBTITLE[0]:self.SUBTITLE[2]] = 255
+        return mask
+
+    def test_the_mask_separates_them_without_looking_at_the_pixels(self):
+        source, output = self._pair(repaired=True)
+        sign = (*self.SIGN, 0.95)
+        subtitle = (*self.SUBTITLE, 0.95)
+        result = verify_frame_removal(
+            self._detector([sign, subtitle], [sign]),
+            output, self.ROI, source_frame=source, mask=self._mask(),
+        )
+        self.assertTrue(result["maskUsed"])
+        self.assertEqual(result["untouchedSourceBoxes"], 1)
+        self.assertEqual(result["sourceBoxes"], 1)
+        self.assertEqual(result["survivingSourceBoxes"], 0)
+
+    def test_text_inside_the_mask_that_survived_still_fails(self):
+        """The exclusion must not swallow a real failure.
+
+        This is the case the pixel test alone cannot see: the repair did
+        nothing, so every box looks untouched. The mask says the subtitle
+        band was supposed to be repaired, so the survivor counts.
+        """
+        source, output = self._pair(repaired=False)
+        sign = (*self.SIGN, 0.95)
+        subtitle = (*self.SUBTITLE, 0.95)
+        verifier = RemovalVerifier(None)
+        for index in range(4):
+            outcome = verify_frame_removal(
+                self._detector([sign, subtitle], [sign, subtitle]),
+                output, self.ROI, source_frame=source, mask=self._mask(),
+            )
+            outcome["frame"] = index
+            verifier.frames.append(outcome)
+        evidence = verifier.evidence()
+        self.assertEqual(evidence["survivingSourceBoxes"], 4)
+        self.assertEqual(evidence["survivingFraction"], 1.0)
+        self.assertTrue(verification_failed(evidence))
+
+    def test_a_frame_with_no_mask_has_nothing_that_was_meant_to_go(self):
+        """Between subtitles. Detecting the sign there proves nothing."""
+        source, output = self._pair(repaired=True)
+        sign = (*self.SIGN, 0.95)
+        result = verify_frame_removal(
+            self._detector([sign], [sign]),
+            output, self.ROI, source_frame=source,
+            mask=None, mask_available=True,
+        )
+        self.assertTrue(result["checked"])
+        self.assertTrue(result["maskUsed"])
+        self.assertEqual(result["sourceBoxes"], 0)
+        self.assertEqual(result["detections"], [])
+
+    def test_an_unrepaired_frame_without_a_mask_is_unchecked_not_clean(self):
+        """The pixel fallback cannot tell a gap from a total failure.
+
+        Reporting either one as clean would hide a job that did nothing, so
+        the frame says why it could not answer instead.
+        """
+        source, output = self._pair(repaired=False)
+        sign = (*self.SIGN, 0.95)
+        subtitle = (*self.SUBTITLE, 0.95)
+        result = verify_frame_removal(
+            self._detector([sign, subtitle], [sign, subtitle]),
+            output, self.ROI, source_frame=source,
+        )
+        self.assertFalse(result["checked"])
+        self.assertIn("identical to the source", result["reason"])
+
+    def test_the_tolerance_is_wide_enough_for_codec_noise(self):
+        """An untouched region still moves a little through a re-encode."""
+        source, output = self._pair(repaired=True)
+        rng = np.random.default_rng(7)
+        noise = rng.integers(-2, 3, size=output.shape, dtype=np.int16)
+        noisy = np.clip(output.astype(np.int16) + noise, 0, 255).astype(
+            np.uint8)
+        sign = (*self.SIGN, 0.95)
+        subtitle = (*self.SUBTITLE, 0.95)
+        result = verify_frame_removal(
+            self._detector([sign, subtitle], [sign]),
+            noisy, self.ROI, source_frame=source,
+        )
+        self.assertEqual(result["untouchedSourceBoxes"], 1)
+        self.assertLess(UNTOUCHED_MEAN_ABS_DIFF, 10.0)
+
+
 class VerifierEvidenceTests(unittest.TestCase):
     ROI = (10, 10, 80, 50)
 
@@ -188,6 +355,14 @@ class VerifierEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence["sourceBoxes"], 0)
         self.assertIsNone(evidence["survivingFraction"])
         self.assertTrue(verification_failed(evidence))
+
+    def test_the_evidence_reports_what_the_check_cost(self):
+        """Two detector passes per sampled frame, said out loud."""
+        box = (4, 4, 40, 20, 0.95)
+        evidence = self._run([([box], []) for _ in range(5)]).evidence()
+        self.assertEqual(evidence["framesChecked"], 5)
+        self.assertEqual(evidence["sourceScannedFrames"], 5)
+        self.assertEqual(evidence["detectorPasses"], 10)
 
     def test_an_unchecked_job_is_not_reported_as_passing(self):
         verifier = RemovalVerifier(None)

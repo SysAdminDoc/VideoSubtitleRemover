@@ -3148,7 +3148,7 @@ class VideoSubtitleRemoverApp(
             self._update_banner_open_btn.set_enabled(
                 bool(self._update_release_url))
             if not banner.winfo_ismapped():
-                banner.pack(fill="x", padx=0, pady=(0, Theme.S_SM))
+                self._pack_update_banner(banner)
         except tk.TclError:
             logger.warning(
                 "Update notice could not be shown; falling back to the "
@@ -3156,6 +3156,20 @@ class VideoSubtitleRemoverApp(
             )
             self._update_status(
                 tr("Update {tag} is available").format(tag=tag), "info")
+
+    def _pack_update_banner(self, banner) -> None:
+        """Place the banner inside the header, above the rule that ends it.
+
+        Pack order is call order and the rule is packed while the window is
+        built, so a banner packed later lands underneath it and reads as the
+        first thing in the body rather than the last thing in the header.
+        """
+        divider = getattr(self, "_header_divider", None)
+        if divider is not None and divider.winfo_manager() == "pack":
+            banner.pack(fill="x", padx=0, pady=(0, Theme.S_SM),
+                        before=divider)
+        else:
+            banner.pack(fill="x", padx=0, pady=(0, Theme.S_SM))
 
     def _open_update_release_page(self):
         """Open the release page in the default browser. Never installs."""

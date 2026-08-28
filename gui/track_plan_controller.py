@@ -161,7 +161,7 @@ class TrackPlanControllerMixin:
                 row.configure(
                     highlightbackground=(
                         Theme.BLUE_PRIMARY if var.get()
-                        else Theme.BORDER_SUBTLE
+                        else Theme.BORDER
                     )
                 )
 

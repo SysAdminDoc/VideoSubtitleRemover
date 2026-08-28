@@ -153,6 +153,47 @@ class NamedSiteTests(unittest.TestCase):
         self.assertEqual(len(_source_fingerprint(str(ROOT))), 16)
 
     def test_a_failed_preview_render_reports_instead_of_blanking(self):
+        """Run the handler. The first version of this test only walked the
+        AST for an identifier, so it stayed green while the handler itself
+        raised TypeError on the call it was asserting the presence of."""
+        from gui.preview_controller import PreviewControllerMixin
+
+        class _Host(PreviewControllerMixin):
+            def __init__(self):
+                self._preview_request_id = 7
+                self._selected_queue_item_id = "item-0"
+                self.reported = []
+                self.empty_state_calls = []
+
+            def _stop_throbber(self):
+                pass
+
+            def _set_preview_empty_state_visible(self, visible, title="",
+                                                 body=""):
+                self.empty_state_calls.append((visible, title, body))
+
+            def _preview_display_bounds(self):
+                # The render fails here, standing in for any of the tk calls
+                # below it that can fail on a torn-down or busy widget.
+                raise RuntimeError("no display bounds")
+
+            def _set_preview_unavailable(self, title, body, *,
+                                         label="Preview unavailable",
+                                         tone="warning"):
+                self.reported.append((title, body, label, tone))
+
+        host = _Host()
+        # No exception escapes...
+        host._apply_inpaint_preview(object(), "meta", 7, "item-0")
+        # ...and the user is told, rather than left looking at a blank pane.
+        self.assertEqual(len(host.reported), 1, host.empty_state_calls)
+        _title, body, _label, tone = host.reported[0]
+        self.assertEqual(tone, "error")
+        self.assertTrue(body.strip())
+
+    def test_the_preview_failure_report_is_not_a_silent_blank_pane(self):
+        """Mutation guard: the handler this replaced called the empty-state
+        helper, which clears the pane and says nothing."""
         import ast
 
         source = (ROOT / "gui" / "preview_controller.py").read_text(
@@ -163,18 +204,13 @@ class NamedSiteTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
             and node.name == "_apply_inpaint_preview"
         )
-        handlers = [
-            node for node in ast.walk(target)
-            if isinstance(node, ast.ExceptHandler)
-        ]
-        self.assertTrue(handlers)
-        for handler in handlers:
-            body = ast.dump(ast.Module(body=handler.body, type_ignores=[]))
+        for handler in ast.walk(target):
+            if not isinstance(handler, ast.ExceptHandler):
+                continue
             self.assertNotEqual(
                 [type(node).__name__ for node in handler.body], ["Pass"],
                 "a failed render must say so, not leave a blank pane",
             )
-            self.assertIn("_set_preview_empty_state_visible", body)
 
 
 if __name__ == "__main__":

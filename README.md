@@ -1092,7 +1092,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--keyframe-detect` | OCR only at video I-frames (ffprobe-probed) | Off | - | Public |
 | `--quality-report` | Compute PSNR/SSIM on a random frame sample after run | Off | - | Public |
 | `--quality-sheet` | Render a side-by-side comparison PNG alongside the report. | Off | - | Public |
-| `--no-verify-removal` | Skip re-running the detector over the repaired region of sampled frames. The check is the standard removal-success test and costs one extra detector pass per sampled frame. | Off | - | Public |
+| `--no-verify-removal` | Skip re-running the detector over the repaired region of sampled frames. The check is the standard removal-success test and costs two detector passes per sampled frame, one over the output region and one over the same region in the source. It runs on the frames --quality-report samples, so without --quality-report there is nothing for it to run on. | Off | - | Public |
 | `--loudnorm` | EBU R128 loudness target in LUFS. | 0.0 | 0 (off) or -70..-5 LUFS | Public |
 | `--decode-accel` | Hardware-decode hint (OpenCV or PyNvVideoCodec). | off | off \| auto \| any \| d3d11 \| vaapi \| mfx \| pynv \| nvdec | Public |
 | `--single-audio` | Mux only the first audio stream. | Off | - | Public |
@@ -1188,6 +1188,8 @@ This keeps fields without a dedicated legacy flag reproducible too. Use
 ## Configuration
 
 Settings are stored in `%APPDATA%\VideoSubtitleRemoverPro\settings.json` and persist across sessions.
+
+The table below lists what each field defaults to, not what it depends on. One worth knowing: `verify_removal` re-runs the detector over the frames the quality pass samples, so it has nothing to run on unless `quality_report` is on. The run log says so when that happens.
 
 <!-- BEGIN GENERATED CONFIG REFERENCE -->
 ### Canonical processing fields

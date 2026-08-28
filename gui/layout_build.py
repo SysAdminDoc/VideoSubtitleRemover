@@ -360,7 +360,11 @@ class LayoutBuildMixin:
         self._update_banner_dismiss_btn.pack(side="left",
                                              padx=(0, Theme.S_LG),
                                              pady=Theme.S_SM)
-        self._divider(header)
+        # The banner is packed later, when there is an update to show. Pack
+        # order is call order, so without an anchor it lands underneath the
+        # rule that closes the header and reads as part of the body instead
+        # of as part of the header it belongs to.
+        self._header_divider = self._divider(header)
 
     def _build_workflow_rail(self, parent):
         """Build the three-step workflow rail from the redesign reference."""

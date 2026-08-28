@@ -42,9 +42,14 @@ class Theme:
     # clear 4.5:1 on every surface. It measured 3.65 on the selected
     # card.
     BLUE_PRIMARY = "#4e8cff"
-    BLUE_HOVER = "#4b8aff"
+    # Raising BLUE_PRIMARY for contrast left BLUE_HOVER darker than the
+    # resting fill, so hovering an accent button made it fractionally
+    # darker instead of lighter and the affordance disappeared.
+    BLUE_HOVER = "#689dff"
     BLUE_PRESS = "#2a71ec"
-    BLUE_MUTED = "#1a2d5a"
+    # The selected state draws accent text on this fill, which measured
+    # 4.07:1 against BLUE_HOVER and 4.16:1 against BLUE_PRIMARY.
+    BLUE_MUTED = "#17274e"
     CYAN = "#36c5f0"
 
     # Text

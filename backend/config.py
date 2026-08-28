@@ -926,6 +926,14 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.quality_report_sheet = _coerce_bool(config.quality_report_sheet, False)
     config.verify_removal = _coerce_bool(
         getattr(config, "verify_removal", True), True)
+    if config.verify_removal and not getattr(config, "quality_report", False):
+        # The check re-detects on the frames the quality pass samples, so
+        # with no quality pass there are no frames to check. Left silent,
+        # a setting that reads On in the config did nothing at all.
+        logger.info(
+            "verify_removal is on but quality_report is off, so removal "
+            "verification will not run; enable the quality report to get it."
+        )
     if config.quality_report_sheet:
         # The sheet is rendered from the same sample _compute_quality_report
         # collects, so the numeric report must run for the sheet to exist.

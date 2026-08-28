@@ -508,7 +508,9 @@ class ModernButton(tk.Canvas):
             self.hover_color = Theme.BG_CARD_HOVER
             self.press_color = Theme.BG_CARD_SELECTED
             self.fg_color = Theme.TEXT_SECONDARY
-            self.border_color = Theme.BORDER_SUBTLE
+            # Drawn only while hovered or focused, where it is the boundary
+            # the pointer or keyboard user is being shown.
+            self.border_color = Theme.BORDER
         elif style == "toolbar":
             self.bg_color = self.cget("bg")
             self.hover_color = Theme.BG_CARD_HOVER
@@ -622,12 +624,16 @@ class ModernButton(tk.Canvas):
         return accessible_metadata(self)
 
     def _subtle_border(self):
-        # For filled CTAs, border should match the fill for a flat look
+        # For filled CTAs, border should match the fill for a flat look: the
+        # fill itself is the boundary, so 1.4.11 is met without an outline.
         if self.style in ("primary", "danger"):
             return self.bg_color
         if self.style in ("ghost", "toolbar"):
             return self.bg_color
-        return Theme.BORDER_SUBTLE
+        # Secondary and default buttons have a fill within 1.5:1 of the
+        # surfaces they sit on, so the outline is the only thing that
+        # identifies them. It cannot be the divider tone.
+        return Theme.BORDER
 
     def _text_width(self, text, font):
         try:
@@ -2536,7 +2542,7 @@ class QueueItemWidget(tk.Frame):
                 accent=Theme.BORDER_FOCUS,
             )
         else:
-            self._apply_surface_state(Theme.BG_CARD, Theme.BORDER_SUBTLE)
+            self._apply_surface_state(Theme.BG_CARD, Theme.BORDER)
         self._sync_a11y()
 
     def _open_output(self):
