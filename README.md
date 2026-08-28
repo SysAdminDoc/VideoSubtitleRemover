@@ -89,7 +89,7 @@ Track selection says exactly what will be removed. Region and mask tools keep th
 - **Subtitle Region Selector:** Scrub to any frame and draw one or more rectangles; saving activates the same complete mask in Auto, STTN, LaMa, and ProPainter, while Automatic keeps the saved shapes and adds OCR detections during processing, mask review, and cleanup previews
 - **Live Region OCR Feedback:** While drawing a rectangle, inspect detected text boxes and confidence before saving the region
 - **Selected-Language Masks:** Optionally remove only OCR boxes whose recognized script matches the chosen subtitle language, keeping unrelated on-screen text
-- **Batch Processing:** Queue files or drag entire folders; per-item cancellation plus safe pause/resume for long videos
+- **Batch Processing:** Queue individual files or a whole folder; per-item cancellation plus safe pause/resume for long videos
 - **Multi-track Audio + Loudness Normalisation:** Pass through every audio track on Bluray rips; optional per-stream EBU R128 normalisation to LUFS targets (YouTube -14, Apple -16, broadcast -23)
 - **Quality Self-Test**: PSNR / SSIM report, optional FFmpeg/libvmaf VMAF score, ROI-cropped metrics for the inpaint region, motion-compensated mask-local temporal evidence, outside-mask SDR or HDR color drift, and an optional side-by-side comparison PNG
 - **Detection Efficiency Reports:** Batch summaries show frames OCR'd versus skipped, skip reasons, unique regions, stage timings, and an optimization hint when OCR dominates
@@ -366,7 +366,9 @@ docker run --rm --entrypoint python vsr-pro tools/local_smoke.py --skip-self-tes
 1. **Launch** via `Run_VSR_Pro.bat`, `Run_VSR_Pro_Debug.bat`, or
    `Run_VSR_Pro.ps1`
 2. **Import:** Use **Add media** in the top command bar, press Ctrl+O, or
-   drag media directly into the window
+   right-click the drop zone to pick a folder. Dragging files into the
+   window works only when the optional `tkinterdnd2` package is installed;
+   no shipped build carries it.
 3. **Configure:** Choose the cleanup profile, subtitle region, and output
    location from the top command bar
 4. **Open Advanced** in the right inspector when you need preset management,

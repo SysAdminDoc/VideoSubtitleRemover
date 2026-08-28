@@ -103,7 +103,7 @@ class OnboardingMixin:
                 wraplength=350, justify="left",
             ).pack(anchor="w", pady=(2, 0))
 
-        step("1", "Add media", "Drop in videos, images, or a folder.")
+        step("1", "Add media", "Choose videos, images, or a whole folder.")
         step("2", "Set the region", "Use automatic detection or draw the subtitle area.")
         step("3", "Start cleanup", "Review the queue, then process the batch.")
 

@@ -2001,7 +2001,7 @@ class DragDropFrame(tk.Frame):
 
         # Sub text -- updated after DnD setup to reflect actual capabilities
         self._sub_text = tk.Label(inner,
-                           text=tr("Drag files here, choose files, or choose a folder. Originals are never modified."),
+                           text=tr("Drag files here, choose files, or right-click for a folder. Originals are never modified."),
                            font=f(Theme.F_BODY_SM), bg=self.normal_bg,
                            fg=Theme.TEXT_SECONDARY, justify="center", wraplength=480)
         if not compact:
@@ -2052,8 +2052,11 @@ class DragDropFrame(tk.Frame):
         except Exception:
             pass
         if not self._dnd_available:
+            # RM-343: dropping needs the optional tkinterdnd2 package, which
+            # no shipped build carries, so say what this zone can actually
+            # do rather than inviting a gesture that does nothing.
             self._sub_text.config(
-                text=tr("Choose files or a folder below. Originals are never modified.")
+                text=tr("Choose files below, or right-click for a folder. Originals are never modified.")
             )
         self._sync_a11y()
 

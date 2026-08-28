@@ -120,7 +120,7 @@ msgstr "[!! Åðð å ƒîŀé ţö ţħé ɋûéûé ƒîŕšţ ! ! !!]"
 msgid "Add at least two keyframes before saving a motion track"
 msgstr "[!! Åðð åţ ŀéåšţ ţŵö ķéýƒŕåḿéš ƀéƒöŕé šåṽîńĝ å ḿöţîöń ţŕåçķ ! ! ! ! !!]"
 
-#: gui/widgets.py:1991 gui/widgets.py:2085
+#: gui/widgets.py:1991 gui/widgets.py:2088
 msgid "Add files to the queue"
 msgstr "[!! Åðð ƒîŀéš ţö ţħé ɋûéûé ! !!]"
 
@@ -204,11 +204,11 @@ msgstr "[!! Åŀîĝń ĝŀöƀåŀ çåḿéŕå ḿöţîöń ƀéƒöŕé ƀ�
 msgid "Alignment"
 msgstr "[!! Åŀîĝńḿéńţ ! !!]"
 
-#: gui/widgets.py:2123
+#: gui/widgets.py:2126
 msgid "All Files"
 msgstr "[!! Åŀŀ Ƒîŀéš ! !!]"
 
-#: gui/app.py:2566 gui/region_controller.py:108 gui/widgets.py:2120
+#: gui/app.py:2566 gui/region_controller.py:108 gui/widgets.py:2123
 msgid "All Supported"
 msgstr "[!! Åŀŀ Šûƥƥöŕţéð ! !!]"
 
@@ -388,7 +388,7 @@ msgstr "[!! ÇŔƑ ţåŕĝéţ ! !!]"
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
-#: gui/widgets.py:2387
+#: gui/widgets.py:2390
 msgid "Cancel this item"
 msgstr "[!! Çåńçéŀ ţħîš îţéḿ ! !!]"
 
@@ -464,7 +464,7 @@ msgstr "[!! Çħööšé å çŀéåń ŕéƒéŕéńçé ƒöŕ ţħé šéŀé
 msgid "Choose a cleanup profile and start locally."
 msgstr "[!! Çħööšé å çŀéåńûƥ ƥŕöƒîŀé åńð šţåŕţ ŀöçåŀŀý. ! ! ! !!]"
 
-#: gui/widgets.py:2132
+#: gui/widgets.py:2135
 msgid "Choose a folder to clean"
 msgstr "[!! Çħööšé å ƒöŀðéŕ ţö çŀéåń ! ! !!]"
 
@@ -492,11 +492,11 @@ msgstr "[!! Çħööšé çŀéåńûƥ åńð ŕéĝîöń ! ! !!]"
 msgid "Choose files"
 msgstr "[!! Çħööšé ƒîŀéš ! !!]"
 
-#: gui/widgets.py:2056
-msgid "Choose files or a folder below. Originals are never modified."
-msgstr "[!! Çħööšé ƒîŀéš öŕ å ƒöŀðéŕ ƀéŀöŵ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! !!]"
+#: gui/widgets.py:2059
+msgid "Choose files below, or right-click for a folder. Originals are never modified."
+msgstr "[!! Çħööšé ƒîŀéš ƀéŀöŵ, öŕ ŕîĝħţ-çŀîçķ ƒöŕ å ƒöŀðéŕ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! ! !!]"
 
-#: gui/widgets.py:2118
+#: gui/widgets.py:2121
 msgid "Choose files to clean"
 msgstr "[!! Çħööšé ƒîŀéš ţö çŀéåń ! !!]"
 
@@ -612,7 +612,7 @@ msgstr "[!! Çŀéåŕ çöŕŕéçţîöńš ! !!]"
 msgid "Clear filter"
 msgstr "[!! Çŀéåŕ ƒîŀţéŕ ! !!]"
 
-#: gui/widgets.py:2353
+#: gui/widgets.py:2356
 msgid "Clear frozen matte"
 msgstr "[!! Çŀéåŕ ƒŕöžéń ḿåţţé ! !!]"
 
@@ -730,11 +730,11 @@ msgstr "[!! Çöńţîńûé ! !!]"
 msgid "Copy"
 msgstr "[!! Çöƥý ! !!]"
 
-#: gui/widgets.py:2374
+#: gui/widgets.py:2377
 msgid "Copy CLI command"
 msgstr "[!! Çöƥý ÇĿÎ çöḿḿåńð ! !!]"
 
-#: gui/widgets.py:2372
+#: gui/widgets.py:2375
 msgid "Copy source path"
 msgstr "[!! Çöƥý šöûŕçé ƥåţħ ! !!]"
 
@@ -931,8 +931,8 @@ msgid "Drag a rectangle, or choose Polygon and click vertices."
 msgstr "[!! Ðŕåĝ å ŕéçţåńĝŀé, öŕ çħööšé Ƥöŀýĝöń åńð çŀîçķ ṽéŕţîçéš. ! ! ! ! !!]"
 
 #: gui/widgets.py:2004
-msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
-msgstr "[!! Ðŕåĝ ƒîŀéš ħéŕé, çħööšé ƒîŀéš, öŕ çħööšé å ƒöŀðéŕ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! ! !!]"
+msgid "Drag files here, choose files, or right-click for a folder. Originals are never modified."
+msgstr "[!! Ðŕåĝ ƒîŀéš ħéŕé, çħööšé ƒîŀéš, öŕ ŕîĝħţ-çŀîçķ ƒöŕ å ƒöŀðéŕ. Öŕîĝîńåŀš åŕé ńéṽéŕ ḿöðîƒîéð. ! ! ! ! ! ! ! !!]"
 
 #: gui/preview_controller.py:1321
 msgid "Drag over the subtitle text. Release to save and refresh the mask."
@@ -1192,11 +1192,11 @@ msgstr "[!! Ƒåšţ ! !!]"
 msgid "Fast LaMa cleanup"
 msgstr "[!! Ƒåšţ ĿåḾå çŀéåńûƥ ! !!]"
 
-#: gui/widgets.py:2404
+#: gui/widgets.py:2407
 msgid "Fast remux and keep embedded subtitles"
 msgstr "[!! Ƒåšţ ŕéḿûẋ åńð ķééƥ éḿƀéððéð šûƀţîţŀéš ! ! ! !!]"
 
-#: gui/widgets.py:2400
+#: gui/widgets.py:2403
 msgid "Fast strip embedded subtitles"
 msgstr "[!! Ƒåšţ šţŕîƥ éḿƀéððéð šûƀţîţŀéš ! ! !!]"
 
@@ -1336,7 +1336,7 @@ msgstr "[!! Ƒŕåḿéš {start}-{end}, {begin}š ţö {finish}š ! ! ! !!]"
 msgid "Frames {start}-{end}: {mode}"
 msgstr "[!! Ƒŕåḿéš {start}-{end}: {mode} ! ! !!]"
 
-#: gui/widgets.py:2358
+#: gui/widgets.py:2361
 msgid "Freeze approved matte"
 msgstr "[!! Ƒŕééžé åƥƥŕöṽéð ḿåţţé ! !!]"
 
@@ -1440,7 +1440,7 @@ msgstr "[!! Îðŀé åńð ƥåûšéð îţéḿš ƒŕöḿ ýöûŕ ƥŕé�
 msgid "Image ({ext}) - {size}"
 msgstr "[!! Îḿåĝé ({ext}) - {size} ! !!]"
 
-#: gui/widgets.py:2122
+#: gui/widgets.py:2125
 msgid "Image Files"
 msgstr "[!! Îḿåĝé Ƒîŀéš ! !!]"
 
@@ -2090,7 +2090,7 @@ msgstr "[!! Öƥéń ŀöĝ ƒîŀé ! !!]"
 msgid "Open output"
 msgstr "[!! Öƥéń öûţƥûţ ! !!]"
 
-#: gui/widgets.py:2331
+#: gui/widgets.py:2334
 msgid "Open quality sheet"
 msgstr "[!! Öƥéń ɋûåŀîţý šħééţ ! !!]"
 
@@ -2102,7 +2102,7 @@ msgstr "[!! Öƥéń ŕéŀéåšé ƥåĝé ! !!]"
 msgid "Open report"
 msgstr "[!! Öƥéń ŕéƥöŕţ ! !!]"
 
-#: gui/widgets.py:2265 gui/widgets.py:2328
+#: gui/widgets.py:2268 gui/widgets.py:2331
 msgid "Open result"
 msgstr "[!! Öƥéń ŕéšûŀţ ! !!]"
 
@@ -2180,7 +2180,7 @@ msgstr "[!! Öûţƥûţš åŕé ŕéåðý ƒöŕ ŕéṽîéŵ ! ! !!]"
 msgid "Outputs are ready to review."
 msgstr "[!! Öûţƥûţš åŕé ŕéåðý ţö ŕéṽîéŵ. ! ! !!]"
 
-#: gui/widgets.py:2393
+#: gui/widgets.py:2396
 msgid "Override settings for this file..."
 msgstr "[!! Öṽéŕŕîðé šéţţîńĝš ƒöŕ ţħîš ƒîŀé... ! ! !!]"
 
@@ -2348,7 +2348,7 @@ msgstr "[!! Ƥŕéšéţ ! !!]"
 msgid "Preset '{name}' not found"
 msgstr "[!! Ƥŕéšéţ '{name}' ńöţ ƒöûńð ! ! !!]"
 
-#: gui/widgets.py:2605
+#: gui/widgets.py:2608
 msgid "Press Shift+F10 or the Menu key for item actions."
 msgstr "[!! Ƥŕéšš Šħîƒţ+Ƒ10 öŕ ţħé Ḿéńû ķéý ƒöŕ îţéḿ åçţîöńš. ! ! ! ! !!]"
 
@@ -2368,7 +2368,7 @@ msgstr "[!! Ƥŕéṽîéŵ ƒåîŀéð ! !!]"
 msgid "Preview mask dilation"
 msgstr "[!! Ƥŕéṽîéŵ ḿåšķ ðîŀåţîöń ! !!]"
 
-#: gui/widgets.py:2323
+#: gui/widgets.py:2326
 msgid "Preview source frame"
 msgstr "[!! Ƥŕéṽîéŵ šöûŕçé ƒŕåḿé ! !!]"
 
@@ -2506,7 +2506,7 @@ msgstr "[!! Ŕéåðý ƒöŕ å ƒûŀŀ ŕéŕûń ŵîţħ ḿåšķ çöŕŕ
 msgid "Ready to preview alignment."
 msgstr "[!! Ŕéåðý ţö ƥŕéṽîéŵ åŀîĝńḿéńţ. ! ! !!]"
 
-#: gui/utils.py:215 gui/widgets.py:2604
+#: gui/utils.py:215 gui/widgets.py:2607
 msgid "Ready to process"
 msgstr "[!! Ŕéåðý ţö ƥŕöçéšš ! !!]"
 
@@ -2598,7 +2598,7 @@ msgstr "[!! Ŕéŀéåšéð ţħé ƒŕöžéń ḿåţţé; ţħîš îţéḿ
 msgid "Remote VLM enabled. Video frames are sent to an HTTPS service outside this computer."
 msgstr "[!! Ŕéḿöţé ṼĿḾ éńåƀŀéð. Ṽîðéö ƒŕåḿéš åŕé šéńţ ţö åń ĦŢŢƤŠ šéŕṽîçé öûţšîðé ţħîš çöḿƥûţéŕ. ! ! ! ! ! ! ! !!]"
 
-#: gui/layout_build.py:2431 gui/layout_responsive.py:425 gui/widgets.py:2260
+#: gui/layout_build.py:2431 gui/layout_responsive.py:425 gui/widgets.py:2263
 msgid "Remove"
 msgstr "[!! Ŕéḿöṽé ! !!]"
 
@@ -2614,7 +2614,7 @@ msgstr "[!! Ŕéḿöṽé çöḿƥŀéţéð îţéḿš ŵîţħöûţ ðéŀ
 msgid "Remove dialogue subtitles (short-lived OCR tracks)"
 msgstr "[!! Ŕéḿöṽé ðîåŀöĝûé šûƀţîţŀéš (šħöŕţ-ŀîṽéð ÖÇŔ ţŕåçķš) ! ! ! ! !!]"
 
-#: gui/widgets.py:2412
+#: gui/widgets.py:2415
 msgid "Remove from queue"
 msgstr "[!! Ŕéḿöṽé ƒŕöḿ ɋûéûé ! !!]"
 
@@ -2660,7 +2660,7 @@ msgstr "[!! Ŕéḿöṽîńĝ ! !!]"
 msgid "Removing embedded subtitle tracks..."
 msgstr "[!! Ŕéḿöṽîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš... ! ! ! !!]"
 
-#: gui/widgets.py:2369
+#: gui/widgets.py:2372
 msgid "Rename output..."
 msgstr "[!! Ŕéńåḿé öûţƥûţ... ! !!]"
 
@@ -2668,7 +2668,7 @@ msgstr "[!! Ŕéńåḿé öûţƥûţ... ! !!]"
 msgid "Repeat last"
 msgstr "[!! Ŕéƥéåţ ŀåšţ ! !!]"
 
-#: gui/widgets.py:2381
+#: gui/widgets.py:2384
 msgid "Repeat with these settings"
 msgstr "[!! Ŕéƥéåţ ŵîţħ ţħéšé šéţţîńĝš ! ! !!]"
 
@@ -2704,7 +2704,7 @@ msgstr "[!! Ŕéţŕý ƒåîŀéð ! !!]"
 msgid "Retry suggested"
 msgstr "[!! Ŕéţŕý šûĝĝéšţéð ! !!]"
 
-#: gui/widgets.py:2334
+#: gui/widgets.py:2337
 msgid "Retry with suggested settings"
 msgstr "[!! Ŕéţŕý ŵîţħ šûĝĝéšţéð šéţţîńĝš ! ! !!]"
 
@@ -2716,7 +2716,7 @@ msgstr "[!! Ŕéûšé ḿåšķš öń ûńçħåńĝéð ƒŕåḿéš ! ! !!]
 msgid "Reuse the last mask for N frames. At 5, scheduled OCR drops by up to about 83% on stable footage."
 msgstr "[!! Ŕéûšé ţħé ŀåšţ ḿåšķ ƒöŕ Ń ƒŕåḿéš. Åţ 5, šçħéðûŀéð ÖÇŔ ðŕöƥš ƀý ûƥ ţö åƀöûţ 83% oń šţåƀŀé ƒööţåĝé. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/widgets.py:2342
+#: gui/widgets.py:2345
 msgid "Reveal output folder"
 msgstr "[!! Ŕéṽéåŀ öûţƥûţ ƒöŀðéŕ ! !!]"
 
@@ -2748,7 +2748,7 @@ msgstr "[!! Ŕéṽîéŵ ḿåšķ ! !!]"
 msgid "Review span"
 msgstr "[!! Ŕéṽîéŵ šƥåń ! !!]"
 
-#: gui/widgets.py:2325
+#: gui/widgets.py:2328
 msgid "Review subtitle mask"
 msgstr "[!! Ŕéṽîéŵ šûƀţîţŀé ḿåšķ ! !!]"
 
@@ -2764,7 +2764,7 @@ msgstr "[!! Ŕûń å ƀåţçħ ƒîŕšţ ţö ŕéƥéåţ îţš šéţţî�
 msgid "Run and monitor the batch"
 msgstr "[!! Ŕûń åńð ḿöńîţöŕ ţħé ƀåţçħ ! ! !!]"
 
-#: gui/widgets.py:2408
+#: gui/widgets.py:2411
 msgid "Run burned-in cleanup instead"
 msgstr "[!! Ŕûń ƀûŕńéð-îń çŀéåńûƥ îńšţéåð ! ! !!]"
 
@@ -3616,7 +3616,7 @@ msgstr "[!! Ṽéŕţîçéš ! !!]"
 msgid "Video ({ext}) - {size}"
 msgstr "[!! Ṽîðéö ({ext}) - {size} ! !!]"
 
-#: gui/widgets.py:2121
+#: gui/widgets.py:2124
 msgid "Video Files"
 msgstr "[!! Ṽîðéö Ƒîŀéš ! !!]"
 
@@ -3740,19 +3740,19 @@ msgstr "[!! Ý ! !!]"
 msgid "[{current}/{total}] {app} v{version}"
 msgstr "[!! [{current}/{total}] {app} ṽ{version} ! ! ! !!]"
 
-#: gui/widgets.py:2087
+#: gui/widgets.py:2090
 msgid "disabled"
 msgstr "[!! ðîšåƀŀéð ! !!]"
 
-#: gui/widgets.py:2089
+#: gui/widgets.py:2092
 msgid "drag and drop available"
 msgstr "[!! ðŕåĝ åńð ðŕöƥ åṽåîŀåƀŀé ! !!]"
 
-#: gui/widgets.py:2087
+#: gui/widgets.py:2090
 msgid "enabled"
 msgstr "[!! éńåƀŀéð ! !!]"
 
-#: gui/widgets.py:2088 gui/widgets.py:2600
+#: gui/widgets.py:2091 gui/widgets.py:2603
 msgid "focused"
 msgstr "[!! ƒöçûšéð ! !!]"
 
@@ -3760,7 +3760,7 @@ msgstr "[!! ƒöçûšéð ! !!]"
 msgid "invalid endpoint"
 msgstr "[!! îńṽåŀîð éńðƥöîńţ ! !!]"
 
-#: gui/widgets.py:2599
+#: gui/widgets.py:2602
 msgid "not selected"
 msgstr "[!! ńöţ šéŀéçţéð ! !!]"
 
@@ -3776,7 +3776,7 @@ msgstr "[!! ŕéåðý ! !!]"
 msgid "request"
 msgstr "[!! ŕéɋûéšţ ! !!]"
 
-#: gui/widgets.py:2599
+#: gui/widgets.py:2602
 msgid "selected"
 msgstr "[!! šéŀéçţéð ! !!]"
 

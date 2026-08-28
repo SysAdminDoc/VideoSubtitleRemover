@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- The app no longer tells you to drag files into a window that cannot
+  accept them. Drag-and-drop needs an optional package no shipped build
+  carries, so the README and the welcome flow now describe what actually
+  works and name the package for anyone who wants the gesture. The drop
+  zone also mentions its right-click shortcut for choosing a folder,
+  which existed but was documented nowhere.
 - Control outlines are visible again. The tokens that draw the boundary
   of a control measured as low as 1.18:1 against the surface behind
   them, well under the 3:1 that WCAG asks for a boundary that identifies
