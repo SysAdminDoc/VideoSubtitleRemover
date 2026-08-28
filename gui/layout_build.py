@@ -328,6 +328,38 @@ class LayoutBuildMixin:
         chips.pack(side="right", padx=(Theme.S_XL, Theme.S_LG))
         self._header_chips = chips
         self._render_header_chips()
+
+        # RM-338: a 2.6 second toast and a line in the log panel is not a way
+        # to reach a release page. This banner stays until dismissed and
+        # carries the link.
+        banner = tk.Frame(header, bg=Theme.BG_CARD)
+        self._update_banner = banner
+        text_column = tk.Frame(banner, bg=Theme.BG_CARD)
+        text_column.pack(side="left", fill="x", expand=True,
+                         padx=(Theme.S_LG, Theme.S_MD), pady=Theme.S_SM)
+        self._update_banner_title = tk.Label(
+            text_column, text="", font=f(Theme.F_BODY, "bold"),
+            bg=Theme.BG_CARD, fg=Theme.TEXT_PRIMARY, anchor="w",
+        )
+        self._update_banner_title.pack(anchor="w")
+        self._update_banner_notes = tk.Label(
+            text_column, text="", font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY, anchor="w",
+            justify="left", wraplength=620,
+        )
+        self._update_banner_open_btn = ModernButton(
+            banner, text=tr("Open release page"), width=156,
+            command=self._open_update_release_page, style="accent", size="sm",
+        )
+        self._update_banner_open_btn.pack(side="left", padx=(0, Theme.S_SM),
+                                          pady=Theme.S_SM)
+        self._update_banner_dismiss_btn = ModernButton(
+            banner, text=tr("Dismiss"), width=96,
+            command=self._dismiss_update_banner, style="ghost", size="sm",
+        )
+        self._update_banner_dismiss_btn.pack(side="left",
+                                             padx=(0, Theme.S_LG),
+                                             pady=Theme.S_SM)
         self._divider(header)
 
     def _build_workflow_rail(self, parent):

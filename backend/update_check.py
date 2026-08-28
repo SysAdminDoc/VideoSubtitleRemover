@@ -34,6 +34,37 @@ USER_AGENT_TEMPLATE = (
 DEFAULT_BACKOFF_SECONDS = 3600
 
 
+# RM-338: enough of the release body to tell the user what changed,
+# without pasting a whole changelog into a notice.
+RELEASE_NOTES_MAX_CHARS = 280
+
+
+def summarize_release_notes(body: object) -> str:
+    """Return a short, single-paragraph summary of a release body.
+
+    GitHub bodies are Markdown with headings, bullets and links. The notice
+    has room for a sentence or two, so take the first real prose and drop
+    the decoration rather than rendering anything.
+    """
+    text = str(body or "").replace("\r\n", "\n")
+    lines = []
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line or line.startswith(("#", ">", "---", "===", "|")):
+            continue
+        line = re.sub(r"^[-*+]\s+", "", line)
+        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+        line = re.sub(r"[`*_]", "", line).strip()
+        if line:
+            lines.append(line)
+        if sum(len(item) for item in lines) >= RELEASE_NOTES_MAX_CHARS:
+            break
+    summary = " ".join(lines).strip()
+    if len(summary) > RELEASE_NOTES_MAX_CHARS:
+        summary = summary[:RELEASE_NOTES_MAX_CHARS - 1].rstrip() + "\u2026"
+    return summary
+
+
 def _parse_version(tag: str) -> Optional[Tuple[int, ...]]:
     m = _VERSION_RE.search(tag)
     if not m:
@@ -111,15 +142,16 @@ def _retry_after_seconds(exc: HTTPError) -> int:
 
 def check_for_update(
     current_version: str,
-    callback: Callable[[str, str], None],
+    callback: Callable[[str, str, str], None],
     *,
     state_path: Optional[Path] = None,
 ) -> Optional[threading.Thread]:
     """Check GitHub for a newer release in a daemon thread.
 
-    *callback(latest_tag, html_url)* is called from the background
+    *callback(latest_tag, html_url, notes)* is called from the background
     thread only when a newer version exists. The caller is responsible
-    for marshalling into the GUI thread (e.g. ``root.after``).
+    for marshalling into the GUI thread (e.g. ``root.after``). *notes* is a
+    short plain-text summary of the release body, or an empty string.
 
     Returns the daemon :class:`threading.Thread` performing the check so
     callers (and tests) can ``join`` it for deterministic completion, or
@@ -155,12 +187,13 @@ def check_for_update(
                 _save_state(state, state_path)
             tag = data.get("tag_name", "")
             html_url = data.get("html_url", "")
+            notes = summarize_release_notes(data.get("body"))
             latest = _parse_version(tag)
             if latest and latest > current:
                 logger.info(
                     "Update available: %s (current %s)", tag, current_version
                 )
-                callback(tag, html_url)
+                callback(tag, html_url, notes)
             else:
                 logger.debug(
                     "No update: latest=%s current=%s", tag, current_version

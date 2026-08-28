@@ -437,7 +437,10 @@ class UpdateCheckTests(unittest.TestCase):
         with patch("backend.update_check.urlopen", return_value=fake_resp):
             t = check_for_update("3.16.1", cb)
             self._join(t)
-        cb.assert_called_once_with("v4.0.0", "https://example.com/releases/v4.0.0")
+        # RM-338: the callback now carries the release-notes summary too,
+        # so the notice can say what changed instead of only the version.
+        cb.assert_called_once_with(
+            "v4.0.0", "https://example.com/releases/v4.0.0", "")
 
     def test_no_crash_on_network_error(self):
         from unittest.mock import MagicMock, patch

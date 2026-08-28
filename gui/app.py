@@ -3026,29 +3026,88 @@ class VideoSubtitleRemoverApp(
         except ImportError:
             return
 
-        def _on_update(tag, url):
-            dispatch_to_ui(self.root, self._show_update_toast, tag, url)
+        def _on_update(tag, url, notes=""):
+            dispatch_to_ui(
+                self.root, self._show_update_toast, tag, url, notes)
 
         check_for_update(APP_VERSION, _on_update)
 
-    def _show_update_toast(self, tag, url):
+    def _show_update_toast(self, tag, url, notes=""):
+        """Show a persistent notice with a way to reach the release page.
+
+        RM-338: this used to be a 2.6 second toast plus a line in the log
+        file telling the user to go and find the URL there. Nothing is
+        downloaded or installed; the notice only opens the page.
+        """
+        self._update_release_url = str(url or "")
+        self._update_release_tag = str(tag or "")
         try:
             Toast.show(
                 self.root,
                 tr("Update available: {tag}").format(tag=tag),
                 "info",
             )
-            if url:
-                # The toast is transient; surface the release link where
-                # the user can actually reach it.
-                logger.info(f"Update {tag} available: {url}")
-                self._update_status(
-                    tr("Update {tag} available -- link in the log panel")
-                    .format(tag=tag),
-                    "info",
-                )
-        except Exception:
-            pass
+        except tk.TclError:
+            logger.warning("Update toast could not be shown", exc_info=True)
+
+        banner = getattr(self, "_update_banner", None)
+        if banner is None:
+            # No banner in this layout (background/probe modes); the status
+            # line is the remaining surface.
+            self._update_status(
+                tr("Update {tag} is available").format(tag=tag), "info")
+            return
+        try:
+            self._update_banner_title.config(
+                text=tr("Update {tag} is available").format(tag=tag))
+            summary = str(notes or "").strip()
+            if summary:
+                self._update_banner_notes.config(text=summary)
+                self._update_banner_notes.pack(anchor="w", pady=(2, 0))
+            else:
+                self._update_banner_notes.config(text="")
+                self._update_banner_notes.pack_forget()
+            self._update_banner_open_btn.set_enabled(
+                bool(self._update_release_url))
+            if not banner.winfo_ismapped():
+                banner.pack(fill="x", padx=0, pady=(0, Theme.S_SM))
+        except tk.TclError:
+            logger.warning(
+                "Update notice could not be shown; falling back to the "
+                "status line", exc_info=True,
+            )
+            self._update_status(
+                tr("Update {tag} is available").format(tag=tag), "info")
+
+    def _open_update_release_page(self):
+        """Open the release page in the default browser. Never installs."""
+        url = getattr(self, "_update_release_url", "")
+        if not url:
+            return
+        # Only ever an https GitHub release page, and only ever handed to
+        # the browser: the app does not download or install anything.
+        if not str(url).lower().startswith("https://"):
+            logger.warning("Refusing to open a non-HTTPS update URL: %s", url)
+            self._update_status(
+                tr("The release link could not be opened"), "warning")
+            return
+        import webbrowser
+
+        try:
+            webbrowser.open(url, new=2)
+        except (OSError, webbrowser.Error):
+            logger.warning("Could not open the release page", exc_info=True)
+            self._update_status(
+                tr("The release link could not be opened"), "warning")
+
+    def _dismiss_update_banner(self):
+        banner = getattr(self, "_update_banner", None)
+        if banner is None:
+            return
+        try:
+            banner.pack_forget()
+        except tk.TclError:
+            logger.debug("Update notice dismiss failed", exc_info=True)
 
     @staticmethod
     def _desktop_bounds(primary_w: int, primary_h: int) -> tuple:

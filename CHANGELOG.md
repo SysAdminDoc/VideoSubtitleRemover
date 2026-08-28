@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- An available update now leads somewhere. It used to be a two-second
+  toast plus a status line telling the user the link was in the log
+  panel, so the release page was effectively unreachable. There is now a
+  notice that stays until dismissed, names the version, summarises what
+  changed when the release says, and has a button that opens the release
+  page in the browser. Nothing is downloaded or installed, only ever an
+  https link handed to the browser, and a failure anywhere in the notice
+  is logged and reported instead of discarded.
 - Every child process the app launches now goes through one hardened
   path. The check that enforced it covered the backend package only, so
   the interface, the tools, and the reference generator were launching
