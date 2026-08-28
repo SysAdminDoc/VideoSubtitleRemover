@@ -178,7 +178,7 @@ def seedvr2_restore(input_path: str, output_path: str,
             ) from exc
     try:
         from seedvr2 import SeedVR2  # type: ignore
-    except ImportError:
+    except ImportError as exc:
         raise RequestedStageError(
             stage="restoration",
             requested_implementation="seedvr2",
@@ -188,7 +188,7 @@ def seedvr2_restore(input_path: str, output_path: str,
                 "Install the reviewed SeedVR2 wrapper or set "
                 "VSR_SEEDVR2_CMD, then retry or disable SeedVR2."
             ),
-        )
+        ) from exc
     try:
         model = SeedVR2(adapter=adapter)
         produced = model.restore(input_path, output_path)

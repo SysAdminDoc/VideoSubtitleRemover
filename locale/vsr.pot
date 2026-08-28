@@ -654,7 +654,7 @@ msgid_plural "Cleared {count} completed items"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/preview_controller.py:1205 gui/quality_controller.py:392 gui/support_controller.py:626 gui/support_controller.py:870
+#: gui/preview_controller.py:1213 gui/quality_controller.py:392 gui/support_controller.py:626 gui/support_controller.py:870
 msgid "Close"
 msgstr ""
 
@@ -694,7 +694,7 @@ msgstr ""
 msgid "Completed {name}"
 msgstr ""
 
-#: gui/preview_controller.py:1938
+#: gui/preview_controller.py:1946
 msgid "Composed mask for {name}"
 msgstr ""
 
@@ -786,7 +786,7 @@ msgstr ""
 msgid "Could not prepare suggested retry: {error}"
 msgstr ""
 
-#: gui/preview_controller.py:1266
+#: gui/preview_controller.py:1274
 msgid "Could not read the selected file for region editing"
 msgstr ""
 
@@ -886,11 +886,11 @@ msgstr ""
 msgid "Detection"
 msgstr ""
 
-#: gui/preview_controller.py:1946
+#: gui/preview_controller.py:1954
 msgid "Dilation: {px} px; detection cached."
 msgstr ""
 
-#: gui/preview_controller.py:1942
+#: gui/preview_controller.py:1950
 msgid "Dilation: {px} px; manual mask cached."
 msgstr ""
 
@@ -914,7 +914,7 @@ msgstr ""
 msgid "Down"
 msgstr ""
 
-#: gui/preview_controller.py:1463
+#: gui/preview_controller.py:1471
 msgid "Drag a larger subtitle region before releasing."
 msgstr ""
 
@@ -930,7 +930,7 @@ msgstr ""
 msgid "Drag files here, choose files, or choose a folder. Originals are never modified."
 msgstr ""
 
-#: gui/preview_controller.py:1313
+#: gui/preview_controller.py:1321
 msgid "Drag over the subtitle text. Release to save and refresh the mask."
 msgstr ""
 
@@ -958,7 +958,7 @@ msgstr ""
 msgid "Draw over the subtitle area."
 msgstr ""
 
-#: gui/preview_controller.py:1309
+#: gui/preview_controller.py:1317
 msgid "Draw subtitle region for {name}"
 msgstr ""
 
@@ -1504,7 +1504,7 @@ msgstr ""
 msgid "Initializing..."
 msgstr ""
 
-#: gui/preview_controller.py:1321
+#: gui/preview_controller.py:1329
 msgid "Inline region editor unavailable. Opening the full selector is still available."
 msgstr ""
 
@@ -1528,7 +1528,7 @@ msgstr ""
 msgid "Install Pillow to enable mask correction"
 msgstr ""
 
-#: gui/preview_controller.py:1245
+#: gui/preview_controller.py:1253
 msgid "Install Pillow to enable preview region editing"
 msgstr ""
 
@@ -1644,7 +1644,7 @@ msgstr ""
 msgid "Loading"
 msgstr ""
 
-#: gui/preview_controller.py:1557
+#: gui/preview_controller.py:1565
 msgid "Loading {name}..."
 msgstr ""
 
@@ -1680,11 +1680,11 @@ msgstr ""
 msgid "Manual mask review"
 msgstr ""
 
-#: gui/preview_controller.py:1954
+#: gui/preview_controller.py:1962
 msgid "Manual mask: {n} region(s)"
 msgstr ""
 
-#: gui/app.py:1388 gui/app.py:1420 gui/layout_build.py:193 gui/preview_controller.py:1683
+#: gui/app.py:1388 gui/app.py:1420 gui/layout_build.py:193 gui/preview_controller.py:1691
 msgid "Manual region"
 msgstr ""
 
@@ -1692,7 +1692,7 @@ msgstr ""
 msgid "Manual region is active for every cleanup profile"
 msgstr ""
 
-#: gui/preview_controller.py:1805 gui/preview_controller.py:1829
+#: gui/preview_controller.py:1813 gui/preview_controller.py:1837
 msgid "Manual region needs a saved mask."
 msgstr ""
 
@@ -1704,11 +1704,11 @@ msgstr ""
 msgid "Manual regions: {count} fixed rectangles"
 msgstr ""
 
-#: gui/preview_controller.py:1821
+#: gui/preview_controller.py:1829
 msgid "Manual-only mask is active at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1799
+#: gui/preview_controller.py:1807
 msgid "Manual-only mask is active on the first frame."
 msgstr ""
 
@@ -1748,7 +1748,7 @@ msgstr ""
 msgid "Mask feather"
 msgstr ""
 
-#: gui/preview_controller.py:1887
+#: gui/preview_controller.py:1895
 msgid "Mask preview failed"
 msgstr ""
 
@@ -1950,7 +1950,7 @@ msgstr ""
 msgid "No exported matte was found beside this output. Enable matte export and run the item again."
 msgstr ""
 
-#: gui/preview_controller.py:1620 gui/preview_controller.py:962
+#: gui/preview_controller.py:1628 gui/preview_controller.py:962
 msgid "No frame available"
 msgstr ""
 
@@ -1990,7 +1990,7 @@ msgstr ""
 msgid "No region edit to undo"
 msgstr ""
 
-#: gui/preview_controller.py:1847
+#: gui/preview_controller.py:1855
 msgid "No regions were found at {timestamp}. Try Set region, or lower the Threshold in detailed controls."
 msgstr ""
 
@@ -1998,7 +1998,7 @@ msgstr ""
 msgid "No supported videos or images were found in the selected folder"
 msgstr ""
 
-#: gui/preview_controller.py:1957
+#: gui/preview_controller.py:1965
 msgid "No text detected"
 msgstr ""
 
@@ -2348,11 +2348,11 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
-#: gui/preview_controller.py:1188
+#: gui/preview_controller.py:1196
 msgid "Preview - {name}"
 msgstr ""
 
-#: gui/preview_controller.py:1652 gui/preview_controller.py:1663
+#: gui/preview_controller.py:1660 gui/preview_controller.py:1671
 msgid "Preview failed"
 msgstr ""
 
@@ -2388,7 +2388,7 @@ msgstr ""
 msgid "Preview tools are ready. Use A/B compare to inspect the cleaned output."
 msgstr ""
 
-#: gui/preview_controller.py:1519
+#: gui/preview_controller.py:1527
 msgid "Preview tools need Pillow"
 msgstr ""
 
@@ -2482,7 +2482,7 @@ msgstr ""
 msgid "Read upcoming frames in the background so cleanup spends less time waiting on the source file."
 msgstr ""
 
-#: gui/preview_controller.py:1560
+#: gui/preview_controller.py:1568
 msgid "Reading preview frame at {timestamp}..."
 msgstr ""
 
@@ -2578,7 +2578,7 @@ msgstr ""
 msgid "Register each scene's frames to a reference before temporal background recovery. Recommended for pans, zooms, and handheld footage."
 msgstr ""
 
-#: gui/preview_controller.py:1444
+#: gui/preview_controller.py:1452
 msgid "Release to save region ({x1}, {y1}) to ({x2}, {y2})."
 msgstr ""
 
@@ -2852,11 +2852,11 @@ msgstr ""
 msgid "Saved redacted support bundle to {name}"
 msgstr ""
 
-#: gui/preview_controller.py:1835
+#: gui/preview_controller.py:1843
 msgid "Saved region added to {engine} detection at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1809
+#: gui/preview_controller.py:1817
 msgid "Saved region added to {engine} detection on the first frame."
 msgstr ""
 
@@ -3142,7 +3142,7 @@ msgstr ""
 msgid "Stop is already in progress."
 msgstr ""
 
-#: gui/preview_controller.py:1239
+#: gui/preview_controller.py:1247
 msgid "Stop the active batch before changing the subtitle region"
 msgstr ""
 
@@ -3322,6 +3322,10 @@ msgstr ""
 msgid "The motion keyframes could not be normalized"
 msgstr ""
 
+#: gui/preview_controller.py:1147
+msgid "The preview could not be displayed"
+msgstr ""
+
 #: gui/failure_copy.py:21
 msgid "The processing worker stopped unexpectedly"
 msgstr ""
@@ -3398,11 +3402,11 @@ msgstr ""
 msgid "Time-ranged mask regions"
 msgstr ""
 
-#: gui/preview_controller.py:1831
+#: gui/preview_controller.py:1839
 msgid "Timed manual region is active at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1839
+#: gui/preview_controller.py:1847
 msgid "Timed manual regions are configured but inactive at {timestamp}."
 msgstr ""
 
@@ -3412,11 +3416,11 @@ msgid_plural "Timed manual regions: {count} rectangles"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/preview_controller.py:1825
+#: gui/preview_controller.py:1833
 msgid "Timed manual-only mask is inactive at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1802
+#: gui/preview_controller.py:1810
 msgid "Timed manual-only mask is inactive on the first frame."
 msgstr ""
 
@@ -3814,11 +3818,11 @@ msgstr ""
 msgid "{current} of {total} complete"
 msgstr ""
 
-#: gui/preview_controller.py:1843
+#: gui/preview_controller.py:1851
 msgid "{engine} found {n} region(s) at {timestamp}."
 msgstr ""
 
-#: gui/preview_controller.py:1956
+#: gui/preview_controller.py:1964
 msgid "{engine}: {n} detected"
 msgstr ""
 

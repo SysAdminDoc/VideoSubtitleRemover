@@ -399,7 +399,7 @@ def _build_rapidocr(
                     "Install a RapidOCR package that supports the selected "
                     "model generation or choose a supported variant."
                 ),
-            )
+            ) from exc
         return rapid_cls(params={}), "CPU"
 
 

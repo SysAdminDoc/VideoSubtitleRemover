@@ -6,6 +6,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- FFmpeg diagnostics no longer go quietly short. The stderr reader
+  discarded every failure, so the tail an error later reported from could
+  be missing an unknown amount with nothing saying so. It now logs the
+  failure and marks the tail as incomplete where it is shown.
+- A preview that cannot be displayed says so instead of leaving a blank
+  pane that looks like one still loading.
+- The proxy cache works on a host with FIPS mode enabled. Its cache key
+  is a hash for lookup, not for security, and now says so, where before
+  such a host refused it outright.
 - Choosing a GPU device no longer refuses to run in three cases where it
   was working correctly: a cached TensorRT engine ahead of CUDA, which is
   the faster lane rather than a fallback; the DirectML opset check that

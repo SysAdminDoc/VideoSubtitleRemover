@@ -2138,6 +2138,7 @@ class _LosslessIntermediateWriter:
         self._lossless = False
         self._stderr_thread: Optional[threading.Thread] = None
         self._stderr_tail_buf = bytearray()
+        self._stderr_tail_truncated = False
         self._stderr_lock = threading.Lock()
         self._open()
 
@@ -2156,12 +2157,28 @@ class _LosslessIntermediateWriter:
                     self._stderr_tail_buf.extend(chunk)
                     if len(self._stderr_tail_buf) > 8192:
                         del self._stderr_tail_buf[:-8192]
-        except Exception:
-            pass
+        except Exception as exc:
+            # RM-326: this used to swallow the failure silently, which meant
+            # the diagnostics the error path later reports were short by an
+            # unknown amount with nothing saying so. The drain still must not
+            # raise into the writer thread, but it must not lie either.
+            with self._stderr_lock:
+                self._stderr_tail_truncated = True
+            logger.warning(
+                "FFmpeg stderr drain stopped early; the diagnostic tail is "
+                "incomplete: %s", exc, exc_info=True,
+            )
 
     def _stderr_tail(self) -> str:
         with self._stderr_lock:
-            return self._stderr_tail_buf.decode("utf-8", errors="replace")[-400:]
+            text = self._stderr_tail_buf.decode(
+                "utf-8", errors="replace")[-400:]
+            if getattr(self, "_stderr_tail_truncated", False):
+                return (
+                    "[the FFmpeg diagnostic tail is incomplete; the reader "
+                    "stopped early] " + text
+                )
+            return text
 
     def _open(self):
         if shutil.which("ffmpeg") is None:

@@ -1138,7 +1138,15 @@ class PreviewControllerMixin:
             self.preview_title_label.config(text=tr("Inpaint preview"))
             self.preview_meta_label.config(text=meta_text)
         except Exception:
-            pass
+            # RM-326: this used to leave the pane blank with no explanation,
+            # so a failed render was indistinguishable from a preview that
+            # had simply not arrived.
+            logger.warning("Inpaint preview could not be shown", exc_info=True)
+            self._set_preview_empty_state_visible(
+                True,
+                label=tr("The preview could not be displayed"),
+                tone="error",
+            )
 
     def _open_preview_zoom(self, event=None):
         """Open the currently selected queue item's frame at a larger size."""

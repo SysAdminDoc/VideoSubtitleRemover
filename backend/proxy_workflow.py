@@ -184,7 +184,11 @@ def _source_fingerprint(path: str) -> str:
         payload = f"{path}|{stat.st_size}|{int(stat.st_mtime)}"
     except OSError:
         payload = path
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()[:16]
+    # RM-326: this is a cache key, not a security primitive, and a
+    # FIPS-mode host refuses MD5 outright unless it is told so.
+    return hashlib.md5(
+        payload.encode("utf-8"), usedforsecurity=False,
+    ).hexdigest()[:16]
 
 
 def ensure_proxy(source_path: str, target_height: int = 480,
