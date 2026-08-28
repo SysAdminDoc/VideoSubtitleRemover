@@ -87,7 +87,12 @@ class MediaInputFailureTests(unittest.TestCase):
             source.write_bytes(b"")
             remover = self._minimal_remover(work)
 
-            with self.assertLogs("backend.processor", level="WARNING") as logs:
+            # RM-349: the processor is several modules now, and this warning
+            # comes from whichever one holds the code. The claim being made
+            # is that the failure is logged as a warning without a traceback,
+            # not which module logged it, so assert on the shared parent
+            # rather than re-pinning a filename after every split.
+            with self.assertLogs("backend", level="WARNING") as logs:
                 ok = remover.process_video(str(source), str(output))
 
             self.assertFalse(ok)
@@ -156,7 +161,7 @@ class MediaInputFailureTests(unittest.TestCase):
             remover = self._minimal_remover(work)
             fake_capture = FakeCapture()
 
-            with mock.patch("backend.processor._validate_video_input_file"):
+            with mock.patch("backend._pipeline_mixin._validate_video_input_file"):
                 with mock.patch(
                     "backend.hdr.probe_color_metadata",
                     return_value=ColorMetadata(
@@ -168,9 +173,9 @@ class MediaInputFailureTests(unittest.TestCase):
                         bits_per_raw_sample=8,
                     ),
                 ):
-                    with mock.patch("backend.processor._open_capture", return_value=fake_capture):
+                    with mock.patch("backend._pipeline_mixin._open_capture", return_value=fake_capture):
                         with mock.patch(
-                            "backend.processor._LosslessIntermediateWriter",
+                            "backend._pipeline_mixin._LosslessIntermediateWriter",
                             FakeWriter,
                         ):
                             ok = remover.process_video(str(source), str(output))
@@ -200,7 +205,7 @@ class MediaInputFailureTests(unittest.TestCase):
             source.write_bytes(b"video bytes")
             remover = self._minimal_remover(work)
 
-            with mock.patch("backend.processor._validate_video_input_file"):
+            with mock.patch("backend._pipeline_mixin._validate_video_input_file"):
                 with mock.patch(
                     "backend.hdr.probe_color_metadata",
                     return_value=ColorMetadata(
@@ -212,7 +217,7 @@ class MediaInputFailureTests(unittest.TestCase):
                         bits_per_raw_sample=8,
                     ),
                 ):
-                    with mock.patch("backend.processor._open_capture", return_value=ClosedCapture()):
+                    with mock.patch("backend._pipeline_mixin._open_capture", return_value=ClosedCapture()):
                         with mock.patch(
                             "backend.io._probe_video_stream_status",
                             return_value={
@@ -976,7 +981,7 @@ class HdrPipelineTests(unittest.TestCase):
 
     def test_hdr_decode_failure_refuses_8bit_fallback(self):
         with unittest.mock.patch(
-            "backend.processor._open_bgr48_capture", return_value=None,
+            "backend._pipeline_mixin._open_bgr48_capture", return_value=None,
         ):
             with self.assertRaisesRegex(ValueError, "refusing an 8-bit"):
                 processor._open_required_hdr_capture(

@@ -59,6 +59,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- _finalize_mixin.py          # Finalize, output contract, post-restore, sidecar.
 |   |-- _frame_loop_mixin.py        # Per-batch stages of the frame loop.
 |   |-- _frame_loop_types.py        # Frame-loop window, context, and batch carrier.
+|   |-- _inpaint_mixin.py           # Inpainter execution, result validation, OOM recovery.
+|   |-- _pipeline_mixin.py          # process_video and process_image, end to end.
 |   |-- _quality_mixin.py           # Quality-report stages of the processor.
 |   |-- _srt_mixin.py               # Tracked OCR consensus and SRT export stages.
 |   |-- a11y.py                     # Accessibility metadata helpers.

@@ -944,7 +944,7 @@ class RifeFastModePipelineTests(unittest.TestCase):
             return np.full_like(prev, int(t * 200))
 
         with unittest.mock.patch(
-            "backend.processor._detect_scene_cuts",
+            "backend._inpaint_mixin._detect_scene_cuts",
             return_value=[0],
         ), unittest.mock.patch(
             "backend.decode_accel.maybe_interpolate_pair",
@@ -967,7 +967,7 @@ class RifeFastModePipelineTests(unittest.TestCase):
         masks = self._masks(3)
 
         with unittest.mock.patch(
-            "backend.processor._detect_scene_cuts",
+            "backend._inpaint_mixin._detect_scene_cuts",
             return_value=[0, 1],
         ), unittest.mock.patch(
             "backend.decode_accel.maybe_interpolate_pair",

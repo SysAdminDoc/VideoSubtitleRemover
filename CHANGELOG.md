@@ -21,6 +21,9 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- The processor is readable. `backend/processor.py` was 4,487 lines holding the decode window, the frame loop's five per-batch stages, the inpainter execution and validation, and both job entry points, so none of it could be read without the rest. It is 1,620 lines now, with the rest in `_frame_loop_types`, `_frame_loop_mixin`, `_inpaint_mixin` and `_pipeline_mixin`. Nothing changed shape: the same clip produces the same output bytes on the CPU and the CUDA lane, and the GPU tests pass on the same hardware before and after.
+
+
 - A CUDA build would have run every job on the CPU. ONNX Runtime finds the CUDA and cuDNN libraries by asking the packaging metadata where PyTorch is installed, and a frozen build carries no packaging metadata, so the lookup found nothing and the provider could not load cuBLAS. It kept reporting CUDA as available and quietly ran on the CPU. The frozen build now hands ONNX Runtime the path to the runtime it ships. This was caught by the new provider check on a real build, before anything was published.
 
 - The NVIDIA lane ships a portable ZIP and no installer. Its payload is 3.1 GB because the CUDA provider needs the CUDA runtime, and the NSIS compiler is a 32-bit program that cannot package more than about 2 GB. The build says which lanes get an installer instead of discovering it through a failed compile.
