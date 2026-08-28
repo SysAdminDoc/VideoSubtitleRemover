@@ -2005,7 +2005,7 @@ class LayoutBuildMixin:
             bg=Theme.BG_TERTIARY, fg=Theme.TEXT_MUTED,
             padx=10, pady=4,
             highlightthickness=1,
-            highlightbackground=Theme.BORDER_SUBTLE,
+            highlightbackground=Theme.BORDER,
         )
         self.preview_ab_btn = ModernButton(
             preview_header_actions, text=tr("Before / after"), width=118,
@@ -2035,7 +2035,7 @@ class LayoutBuildMixin:
 
         media_surface = tk.Frame(
             section, bg=Theme.BG_DARK, highlightthickness=1,
-            highlightbackground=Theme.BORDER_SUBTLE,
+            highlightbackground=Theme.BORDER,
         )
         media_surface.pack(
             fill="both", expand=True, padx=Theme.S_MD,

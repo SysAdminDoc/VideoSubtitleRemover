@@ -1200,7 +1200,7 @@ class PreviewControllerMixin:
 
         header = tk.Frame(win, bg=Theme.BG_SECONDARY,
                           highlightthickness=1,
-                          highlightbackground=Theme.BORDER_SUBTLE)
+                          highlightbackground=Theme.BORDER)
         header.pack(fill="x")
         tk.Label(header, text=Path(item.file_path).name,
                  font=f(Theme.F_BODY, "bold"),

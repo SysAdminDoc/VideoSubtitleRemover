@@ -38,7 +38,10 @@ class Theme:
     GREEN_PRESS = "#12a77d"
     GREEN_MUTED = "#10382f"
 
-    BLUE_PRIMARY = "#2f78ff"
+    # RM-333: used as accent text and as the focus ring, so it has to
+    # clear 4.5:1 on every surface. It measured 3.65 on the selected
+    # card.
+    BLUE_PRIMARY = "#4e8cff"
     BLUE_HOVER = "#4b8aff"
     BLUE_PRESS = "#2a71ec"
     BLUE_MUTED = "#1a2d5a"
@@ -58,7 +61,10 @@ class Theme:
     # Danger / destructive action
     DANGER = "#f87171"
     DANGER_HOVER = "#ef4444"
-    DANGER_PRESS = "#dc2626"
+    # RM-333: the pressed fill was 3.87:1 against INK_ON_DANGER, so the
+    # label on a destructive button dropped below 4.5:1 exactly while
+    # it was being pressed. Still darker than the hover fill.
+    DANGER_PRESS = "#e14343"
 
     # Status
     SUCCESS = "#34d399"
@@ -71,8 +77,14 @@ class Theme:
     INFO_BG = "#102f42"
 
     # Borders
-    BORDER = "#2a3548"
-    BORDER_STRONG = "#3a4962"
+    # RM-333: BORDER and BORDER_STRONG draw the boundary of controls that
+    # have no other visual boundary, so WCAG 2.2 1.4.11 applies and they
+    # have to clear 3:1 against every surface they are drawn on, including
+    # hover, selected, raised and disabled. They used to measure 1.18 and
+    # 1.60 at worst. BORDER_SUBTLE stays where it was: it is the divider
+    # tone, decorative by design, and the test exempts it by name.
+    BORDER = "#5b739c"
+    BORDER_STRONG = "#7d93bb"
     BORDER_SUBTLE = "#1c2635"
     BORDER_FOCUS = BLUE_PRIMARY
 
@@ -159,7 +171,7 @@ def apply_high_contrast_theme():
     Theme.INK_ON_DANGER = "#2a0505"
     Theme.DANGER = "#ff5555"
     Theme.DANGER_HOVER = "#ff3333"
-    Theme.DANGER_PRESS = "#cc0000"
+    Theme.DANGER_PRESS = "#fa0000"  # RM-333: 3.18:1 before
     Theme.PROGRESS_BG = "#1a1a1a"
     Theme.PROGRESS_FILL = "#00d4ff"
 

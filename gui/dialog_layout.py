@@ -127,7 +127,7 @@ def scrollable_dialog_body(dialog, *, bg: str = "") -> tk.Frame:
 
     canvas = tk.Canvas(
         container, bg=background, highlightthickness=1,
-        highlightbackground=Theme.BORDER_SUBTLE,
+        highlightbackground=Theme.BORDER,
         highlightcolor=Theme.BORDER_FOCUS,
         takefocus=True,
     )

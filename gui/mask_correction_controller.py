@@ -193,7 +193,7 @@ class MaskCorrectionWindow:
                 tools_column,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
-                highlightbackground=Theme.BORDER_SUBTLE,
+                highlightbackground=Theme.BORDER,
             )
             tools_card.pack(fill="x")
             tools_header = tk.Frame(tools_card, bg=Theme.BG_SECONDARY)
@@ -355,7 +355,7 @@ class MaskCorrectionWindow:
                 bg=Theme.BG_TERTIARY, fg=Theme.INFO, anchor="w",
                 padx=Theme.S_MD, pady=Theme.S_SM,
                 highlightthickness=1,
-                highlightbackground=Theme.BORDER_SUBTLE)
+                highlightbackground=Theme.BORDER)
 
             self.canvas = tk.Canvas(
                 preview_column, width=self.display_w, height=self.display_h,

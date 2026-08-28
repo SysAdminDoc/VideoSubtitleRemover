@@ -124,7 +124,7 @@ class SupportControllerMixin:
 
         self._log_body = tk.Frame(log_section, bg=Theme.BG_LOG,
                                   highlightthickness=1,
-                                  highlightbackground=Theme.BORDER_SUBTLE)
+                                  highlightbackground=Theme.BORDER)
         self._log_body.pack(fill="x", padx=Theme.S_XL, pady=(Theme.S_SM, Theme.S_LG))
 
         self.log_text = tk.Text(self._log_body, height=6, bg=Theme.BG_LOG,
@@ -476,7 +476,7 @@ class SupportControllerMixin:
                 (tr("ready") if available else reason),
             ))
         card = tk.Frame(parent, bg=Theme.BG_CARD, highlightthickness=1,
-                        highlightbackground=Theme.BORDER_SUBTLE)
+                        highlightbackground=Theme.BORDER)
         card.pack(fill="x", pady=(Theme.S_MD, 0))
 
         header = tk.Frame(card, bg=Theme.BG_CARD)
@@ -826,7 +826,7 @@ class SupportControllerMixin:
             content,
             bg=Theme.BG_TERTIARY,
             highlightthickness=1,
-            highlightbackground=Theme.BORDER_SUBTLE,
+            highlightbackground=Theme.BORDER,
         )
         guidance.pack(fill="x", pady=(Theme.S_LG, 0))
         tk.Label(

@@ -195,7 +195,7 @@ class TrackPlanControllerMixin:
                 content,
                 bg=Theme.BG_CARD,
                 highlightthickness=1,
-                highlightbackground=Theme.BORDER_SUBTLE,
+                highlightbackground=Theme.BORDER,
             )
             row.pack(fill="x", pady=(0, Theme.S_SM))
             var = tk.BooleanVar(value=not track.get("keep"))

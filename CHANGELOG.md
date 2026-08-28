@@ -6,6 +6,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Control outlines are visible again. The tokens that draw the boundary
+  of a control measured as low as 1.18:1 against the surface behind
+  them, well under the 3:1 that WCAG asks for a boundary that identifies
+  a control, and the only contrast test in the suite checked three button
+  fills. Borders, the focus ring and the blue accent text now clear the
+  requirement on every surface they are drawn on, in both themes. The
+  label on a destructive button also dropped to 3.87:1 at the moment it
+  was pressed, which is fixed. Seventeen controls that were outlined in
+  the divider tone now use the control-boundary one.
 - An available update now leads somewhere. It used to be a two-second
   toast plus a status line telling the user the link was in the log
   panel, so the release page was effectively unreachable. There is now a

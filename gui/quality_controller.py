@@ -154,7 +154,7 @@ class QualityReviewControllerMixin:
 
         def stat(parent, label, count, fg, bg):
             p = tk.Frame(parent, bg=bg, highlightthickness=1,
-                         highlightbackground=Theme.BORDER_SUBTLE)
+                         highlightbackground=Theme.BORDER)
             tk.Label(
                 p,
                 text=str(count),
@@ -196,7 +196,7 @@ class QualityReviewControllerMixin:
         slow_text = self._dominant_stage_text(slow_stage)
         if slow_text:
             stage_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
-                                  highlightbackground=Theme.BORDER_SUBTLE)
+                                  highlightbackground=Theme.BORDER)
             stage_card.pack(fill="x", pady=(Theme.S_LG, 0))
             tk.Label(
                 stage_card,
@@ -220,7 +220,7 @@ class QualityReviewControllerMixin:
 
         if quality_summary:
             quality_card = tk.Frame(content, bg=Theme.BG_CARD, highlightthickness=1,
-                                    highlightbackground=Theme.BORDER_SUBTLE)
+                                    highlightbackground=Theme.BORDER)
             quality_card.pack(fill="x", pady=(Theme.S_LG, 0))
 
             tk.Label(

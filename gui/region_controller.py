@@ -276,7 +276,7 @@ class RegionSelectorWindow:
                 properties_column,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
-                highlightbackground=Theme.BORDER_SUBTLE,
+                highlightbackground=Theme.BORDER,
             )
             shape_frame.pack(fill="x", pady=(0, Theme.S_SM))
             shape_row = tk.Frame(shape_frame, bg=Theme.BG_SECONDARY)
@@ -363,7 +363,7 @@ class RegionSelectorWindow:
                     properties_column,
                     bg=Theme.BG_SECONDARY,
                     highlightthickness=1,
-                    highlightbackground=Theme.BORDER_SUBTLE,
+                    highlightbackground=Theme.BORDER,
                 )
                 timing_frame.pack(fill="x", pady=(0, Theme.S_SM))
                 timing_header = tk.Frame(
@@ -444,7 +444,7 @@ class RegionSelectorWindow:
                 properties_column,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
-                highlightbackground=Theme.BORDER_SUBTLE,
+                highlightbackground=Theme.BORDER,
             )
             precise_frame.pack(fill="x", pady=(0, Theme.S_SM))
             precise_header = tk.Frame(
@@ -566,7 +566,7 @@ class RegionSelectorWindow:
                 properties_column,
                 bg=Theme.BG_SECONDARY,
                 highlightthickness=1,
-                highlightbackground=Theme.BORDER_SUBTLE,
+                highlightbackground=Theme.BORDER,
             )
             reference_frame.pack(fill="x")
             self.reference_path_var = tk.StringVar(value="")
