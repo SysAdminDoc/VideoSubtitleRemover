@@ -49,6 +49,95 @@ class InpainterUnavailableError(RequestedStageError):
         )
 
 
+class ProviderFellBackError(RequestedStageError):
+    """Raised when a named accelerator silently ran on the CPU.
+
+    RM-322: ONNX Runtime accepts an unavailable provider, prints a warning,
+    and runs the session on CPU anyway. A user who chose a GPU device then
+    waits through a CPU run believing it is accelerated, which is the same
+    silent-substitution failure InpainterUnavailableError exists to stop.
+    `device="auto"` and `device="cpu"` are unaffected: nothing was named, so
+    nothing was substituted.
+    """
+
+    def __init__(self, device: str, requested: str, active: list,
+                 *, stage: str = "inpaint"):
+        self.device = device
+        self.requested = requested
+        self.active = list(active)
+        ran = self.active[0] if self.active else "no provider"
+        super().__init__(
+            stage=stage,
+            requested_implementation=device,
+            failure_class=FAILURE_INITIALIZATION,
+            detail=(
+                f"{requested} was requested for device {device!r} but "
+                f"{ran} ran the session"
+            ),
+            recovery_hint=(
+                "Install the provider's runtime, or select CPU or Auto if a "
+                "CPU run is acceptable. ONNX Runtime does not fail on its "
+                "own when a requested provider cannot load."
+            ),
+        )
+
+
+# Device tokens that name a specific accelerator. "auto" and "cpu" do not,
+# so a CPU session under those is the requested behaviour, not a fallback.
+_NAMED_ACCELERATOR_PROVIDERS = {
+    "cuda": "CUDAExecutionProvider",
+    "directml": "DmlExecutionProvider",
+}
+
+
+def named_accelerator_provider(device: object) -> str:
+    """Return the provider a device token explicitly asks for, or ""."""
+    token = str(device or "").strip().lower()
+    if not token or token in {"auto", "cpu", "windowsml"}:
+        return ""
+    for prefix, provider in _NAMED_ACCELERATOR_PROVIDERS.items():
+        if token.startswith(prefix):
+            return provider
+    return ""
+
+
+def verify_active_provider(device: object, active: object,
+                           *, stage: str = "inpaint") -> None:
+    """Fail loudly when a named accelerator did not actually run."""
+    requested = named_accelerator_provider(device)
+    if not requested:
+        return
+    names = [str(item) for item in (active or [])]
+    if names and names[0] == requested:
+        return
+    raise ProviderFellBackError(str(device), requested, names, stage=stage)
+
+
+def verify_session_provider(device: object, session: object,
+                            *, stage: str = "inpaint") -> None:
+    """Check a live session, skipping when it cannot report its providers.
+
+    Resolving the provider list lazily matters: a test double or a runtime
+    that predates `get_providers` must not turn into an AttributeError on a
+    device token that names nothing to verify in the first place.
+    """
+    if not named_accelerator_provider(device):
+        return
+    reader = getattr(session, "get_providers", None)
+    if not callable(reader):
+        logger.debug(
+            "Session for device %r cannot report its providers; skipping the "
+            "fallback check", device,
+        )
+        return
+    try:
+        active = reader()
+    except Exception as exc:
+        logger.debug("Provider read failed for device %r: %s", device, exc)
+        return
+    verify_active_provider(device, active, stage=stage)
+
+
 class DeviceProvider(Protocol):
     """Runtime strategy seam used by the processing orchestrator."""
 

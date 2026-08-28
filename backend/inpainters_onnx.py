@@ -53,7 +53,8 @@ from backend.inpainters._common import (
 logger = logging.getLogger(__name__)
 
 
-def _maybe_session(model_path: str, providers=None, adapter_name: str = "lama-onnx"):
+def _maybe_session(model_path: str, providers=None,
+                   adapter_name: str = "lama-onnx", device: str = ""):
     """Lazy-init an ONNX Runtime session for a fail-closed caller."""
     try:
         import onnxruntime as ort  # type: ignore
@@ -84,10 +85,16 @@ def _maybe_session(model_path: str, providers=None, adapter_name: str = "lama-on
         providers = _providers_after_opset_audit(model_path, providers)
         from backend.onnxruntime_cuda import preload_onnxruntime_cuda_dlls_if_needed
         preload_onnxruntime_cuda_dlls_if_needed(ort, providers)
-        return ort.InferenceSession(model_path, providers=providers)
+        session = ort.InferenceSession(model_path, providers=providers)
     except Exception as exc:
         logger.warning(f"Failed to load ONNX session {model_path!r}: {exc}")
         return None
+    # RM-322: ONNX Runtime runs on CPU when a requested provider cannot load
+    # and only warns, so check what actually got the session.
+    from backend.device_provider import verify_session_provider
+
+    verify_session_provider(device, session)
+    return session
 
 
 def _providers_for_device(device: str) -> List:
@@ -200,7 +207,7 @@ class LamaOnnxInpainter(BaseInpainter):
         except Exception as exc:
             logger.debug(f"TensorRT path skipped: {exc}")
         providers += _providers_for_device(device)
-        self._session = _maybe_session(model_path, providers, "lama-onnx")
+        self._session = _maybe_session(model_path, providers, "lama-onnx", device)
         if self._session is None:
             raise RequestedStageError(
                 stage="inpaint",
@@ -303,7 +310,7 @@ class MiGanInpainter(BaseInpainter):
                 ),
             )
         providers = _providers_for_device(device)
-        self._session = _maybe_session(model_path, providers, "migan-onnx")
+        self._session = _maybe_session(model_path, providers, "migan-onnx", device)
         if self._session is None:
             raise RequestedStageError(
                 stage="inpaint",

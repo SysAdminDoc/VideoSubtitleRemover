@@ -4,8 +4,21 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- An opt-in GPU verification lane. Nothing in the suite exercised CUDA,
+  NVENC, provider selection, or memory-exhaustion recovery, so every GPU
+  claim rested on reading the code. Set VSR_GPU_TESTS=1 to run it; it
+  skips cleanly without an NVIDIA card or a CUDA-capable ONNX Runtime.
+
 ### Fixed
 
+- Choosing a GPU device and getting a CPU run is now an error instead of
+  a log line. ONNX Runtime accepts a provider it cannot load, prints a
+  warning, and runs on the CPU anyway, so a user who picked CUDA or
+  DirectML waited through a CPU run believing it was accelerated.
+  Selecting CPU or Auto is unaffected: nothing was named, so nothing was
+  substituted.
 - A broken FFmpeg on PATH is no longer reported as working. The startup
   probe was reading availability from a PATH lookup rather than from
   running the binary, so a truncated download or one that exits non-zero

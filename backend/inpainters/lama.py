@@ -242,12 +242,18 @@ def _try_onnx_session(model_path: str, device: str):
         providers = ["CPUExecutionProvider"]
     try:
         session = ort.InferenceSession(model_path, providers=providers)
-        active = session.get_providers()
-        provider = active[0] if active else "unknown"
-        return session, provider
     except Exception as exc:
         logger.info("LaMa-ONNX session creation failed: %s", exc)
         return None, None
+    # RM-322: a named accelerator that quietly ran on CPU is a silent
+    # substitution, not a successful session.
+    from backend.device_provider import verify_session_provider
+
+    verify_session_provider(device, session)
+    reader = getattr(session, "get_providers", None)
+    active = list(reader()) if callable(reader) else []
+    provider = active[0] if active else "unknown"
+    return session, provider
 
 
 class LAMAInpainter(BaseInpainter):
