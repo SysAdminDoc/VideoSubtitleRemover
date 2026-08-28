@@ -1013,6 +1013,195 @@ class RealClipManifestTests(unittest.TestCase):
             self.assertIn(required, text)
 
 
+
+class ReferenceCorpusQualityGateTests(unittest.TestCase):
+    """RM-318: the corpus runs the shipping gate, not just PSNR/SSIM floors.
+
+    Before this the corpus gated on a frame hash plus self-referential
+    metric floors blessed from its own last run, so every clip reported as
+    passing while eight of ten sat far over the runtime residual-text
+    ceiling. The gate verdict is now recorded per clip and a violation
+    fails the run unless the manifest carries a dated, reasoned exception
+    that also names the worst value it will accept.
+    """
+
+    MANIFEST = _HERE / "clips" / "manifest.json"
+
+    def _entry(self, **overrides):
+        entry = {"filename": "fixture.mkv"}
+        entry.update(overrides)
+        return entry
+
+    def test_a_clean_verdict_needs_no_exception(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        metrics = {
+            "samples": 4, "tag": "Good", "ssim": 0.99, "roi_ssim": 0.99,
+            "psnr": 44.0, "residual_text_score": 0.001,
+        }
+        gate, failures = evaluate_clip_quality_gate(self._entry(), metrics)
+        self.assertEqual(gate["status"], "passed")
+        self.assertEqual(failures, [])
+
+    def test_an_unexcused_violation_fails_the_clip(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        metrics = {
+            "samples": 4, "tag": "Good", "ssim": 0.99, "roi_ssim": 0.99,
+            "psnr": 44.0, "residual_text_score": 0.9,
+        }
+        gate, failures = evaluate_clip_quality_gate(self._entry(), metrics)
+        self.assertEqual(gate["status"], "review")
+        self.assertEqual(len(failures), 1)
+        self.assertIn("residual_text_score", failures[0])
+        self.assertIn("no recorded exception", failures[0])
+
+    def test_an_exception_must_carry_a_date_and_a_reason(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        metrics = {
+            "samples": 4, "tag": "Good", "ssim": 0.99, "roi_ssim": 0.99,
+            "psnr": 44.0, "residual_text_score": 0.9,
+        }
+        for exception in (
+            {"metric": "residual_text_score", "accepted_max": 1.0},
+            {"metric": "residual_text_score", "accepted_max": 1.0,
+             "recorded": "2026-08-27"},
+            {"metric": "residual_text_score", "accepted_max": 1.0,
+             "reason": "synthetic fixture"},
+        ):
+            with self.subTest(exception=sorted(exception)):
+                _, failures = evaluate_clip_quality_gate(
+                    self._entry(quality_gate_exceptions=[exception]), metrics)
+                self.assertEqual(len(failures), 1)
+                self.assertIn("recorded date and a reason", failures[0])
+
+    def test_an_exception_must_name_a_bound(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        metrics = {
+            "samples": 4, "tag": "Good", "ssim": 0.99, "roi_ssim": 0.99,
+            "psnr": 44.0, "residual_text_score": 0.9,
+        }
+        _, failures = evaluate_clip_quality_gate(
+            self._entry(quality_gate_exceptions=[{
+                "metric": "residual_text_score",
+                "recorded": "2026-08-27",
+                "reason": "synthetic fixture",
+            }]),
+            metrics,
+        )
+        self.assertEqual(len(failures), 1)
+        self.assertIn("accepted_max", failures[0])
+
+    def test_a_bounded_exception_covers_the_violation_until_it_worsens(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        entry = self._entry(quality_gate_exceptions=[{
+            "metric": "residual_text_score",
+            "gate_threshold": 0.025,
+            "accepted_max": 0.9,
+            "recorded": "2026-08-27",
+            "reason": "static manual region leaves cv2 residue by design",
+        }])
+        base = {
+            "samples": 4, "tag": "Good", "ssim": 0.99, "roi_ssim": 0.99,
+            "psnr": 44.0,
+        }
+        _, covered = evaluate_clip_quality_gate(
+            entry, dict(base, residual_text_score=0.85))
+        self.assertEqual(covered, [])
+
+        _, worse = evaluate_clip_quality_gate(
+            entry, dict(base, residual_text_score=0.95))
+        self.assertEqual(len(worse), 1)
+        self.assertIn("worse than the recorded accepted_max", worse[0])
+
+    def test_a_floor_exception_fails_when_the_metric_drops(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        entry = self._entry(quality_gate_exceptions=[
+            {"metric": "ssim", "gate_threshold": 0.95, "accepted_min": 0.40,
+             "recorded": "2026-08-27", "reason": "synthetic 160x96 fixture"},
+        ])
+        base = {"samples": 4, "tag": "Good", "psnr": 44.0}
+        _, covered = evaluate_clip_quality_gate(
+            entry, dict(base, ssim=0.45, roi_ssim=0.45))
+        self.assertEqual(covered, [])
+        _, dropped = evaluate_clip_quality_gate(
+            entry, dict(base, ssim=0.20, roi_ssim=0.20))
+        self.assertEqual(len(dropped), 1)
+        self.assertIn("worse than the recorded accepted_min", dropped[0])
+
+    def test_every_committed_exception_names_a_date_reason_and_bound(self):
+        import json
+        from backend.reference_corpus import normalize_gate_exceptions
+
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        unbounded = {"tag", "quality_final_encode_verified"}
+        ceilings = {
+            "temporal_flicker_score", "mask_local_temporal_score",
+            "outside_mask_color_drift", "residual_text_score", "seam_score",
+        }
+        seen = 0
+        for clip in data["clips"]:
+            for metric, record in normalize_gate_exceptions(clip).items():
+                seen += 1
+                with self.subTest(clip=clip["filename"], metric=metric):
+                    self.assertRegex(
+                        str(record.get("recorded")), r"^\d{4}-\d{2}-\d{2}$")
+                    self.assertGreater(len(str(record.get("reason", ""))), 40)
+                    if metric in unbounded:
+                        continue
+                    key = "accepted_max" if metric in ceilings else "accepted_min"
+                    self.assertIsInstance(record.get(key), (int, float))
+        self.assertGreater(seen, 0)
+
+    @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
+    def test_a_clip_left_with_visible_residue_turns_the_corpus_red(self):
+        """Mutate the pipeline so removal leaves the subtitle band alone.
+
+        The frame hash catches the change too, so the assertion is specific:
+        the residual-text exception must be the thing that reports it.
+        """
+        import json
+        from backend import reference_corpus as corpus
+
+        runtime = corpus.reference_runtime_contract()
+        if not runtime["passed"]:
+            self.skipTest("reference corpus needs the reviewed CPU profile")
+
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        entry = next(
+            clip for clip in data["clips"]
+            if clip["filename"] == "static_dialogue.mkv"
+        )
+        entry = dict(entry)
+        entry["path"] = str(_HERE / "clips" / entry["filename"])
+
+        real_run = corpus.run_reference_clip
+
+        def _leave_residue(clip_entry, output_dir):
+            result = real_run(clip_entry, output_dir)
+            metrics = dict(result["metrics"])
+            # A run that leaves the band untouched scores near the source's
+            # own residual text level.
+            metrics["residual_text_score"] = 0.99
+            gate, failures = corpus.evaluate_clip_quality_gate(
+                clip_entry, metrics)
+            return gate, failures
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gate, failures = _leave_residue(entry, tmpdir)
+
+        self.assertEqual(gate["status"], "review")
+        self.assertTrue(failures)
+        self.assertTrue(
+            any("residual_text_score" in failure and "accepted_max" in failure
+                for failure in failures),
+            failures,
+        )
+
 class ReferenceBlessTests(unittest.TestCase):
     """The blessing path folds a run back into the manifest."""
 

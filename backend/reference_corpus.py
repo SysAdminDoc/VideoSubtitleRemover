@@ -24,6 +24,7 @@ import numpy as np
 
 from backend import processor
 from backend.dependency_profiles import profile_required_packages
+from backend.quality_gate import STATUS_PASSED, evaluate_quality_gate
 
 
 REFERENCE_CORPUS_SCHEMA = "vsr.reference_corpus.v1"
@@ -33,6 +34,10 @@ REFERENCE_CORPUS_CATEGORY = "core_reference"
 # a 0.0002 SSIM movement into a release-gate failure; the hash already catches
 # any output change at all, so the floor's job is to catch a quality drop.
 BLESS_METRIC_TOLERANCE = 0.005
+# RM-318: a recorded gate exception is blessed a little above the measured
+# value for a ceiling and a little below it for a floor, so ordinary noise
+# does not flip the corpus while a real quality drop still does.
+GATE_EXCEPTION_TOLERANCE = 0.05
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "tests" / "clips" / "manifest.json"
 REFERENCE_LICENSE_ALLOWLIST = {
@@ -373,6 +378,107 @@ def _deterministic_remover(config: processor.ProcessingConfig):
     return remover
 
 
+# Gate violations that read a metric against a maximum. Anything else is
+# either a floor (the value must stay at or above the recorded bound) or has
+# no number at all, like the report's own Review tag.
+_GATE_CEILING_METRICS = {
+    "temporal_flicker_score",
+    "mask_local_temporal_score",
+    "outside_mask_color_drift",
+    "residual_text_score",
+    "seam_score",
+}
+_GATE_UNBOUNDED_METRICS = {"tag", "quality_final_encode_verified"}
+
+
+def normalize_gate_exceptions(entry: Mapping[str, object]) -> dict:
+    """Index a clip's recorded gate exceptions by the metric they cover."""
+    raw = entry.get("quality_gate_exceptions")
+    indexed: dict = {}
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        return indexed
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        metric = str(item.get("metric") or "").strip()
+        if metric:
+            indexed[metric] = dict(item)
+    return indexed
+
+
+def _exception_failure(metric: str,
+                       exception: Optional[Mapping[str, object]],
+                       observed: Optional[float],
+                       detail: str) -> Optional[str]:
+    """Return why this violation is not covered, or None when it is."""
+    if exception is None:
+        return (
+            f"quality gate violation for {metric} with no recorded "
+            f"exception: {detail}"
+        )
+    recorded = str(exception.get("recorded") or "").strip()
+    reason = str(exception.get("reason") or "").strip()
+    if not recorded or not reason:
+        return (
+            f"quality gate exception for {metric} needs both a recorded date "
+            "and a reason"
+        )
+    if metric in _GATE_UNBOUNDED_METRICS:
+        return None
+    bound_key = (
+        "accepted_max" if metric in _GATE_CEILING_METRICS else "accepted_min")
+    bound = exception.get(bound_key)
+    if not isinstance(bound, (int, float)):
+        return (
+            f"quality gate exception for {metric} needs a numeric {bound_key}"
+        )
+    if observed is None:
+        return f"quality gate exception for {metric} has no measured value"
+    if bound_key == "accepted_max" and observed > float(bound):
+        return (
+            f"{metric} {observed:.6f} is worse than the recorded "
+            f"accepted_max {float(bound):.6f}"
+        )
+    if bound_key == "accepted_min" and observed < float(bound):
+        return (
+            f"{metric} {observed:.6f} is worse than the recorded "
+            f"accepted_min {float(bound):.6f}"
+        )
+    return None
+
+
+def evaluate_clip_quality_gate(entry: Mapping[str, object],
+                               metrics: Mapping[str, object]) -> tuple:
+    """Run the shipping quality gate over one clip's metrics.
+
+    Returns the gate verdict and the failures it produces for the corpus.
+    A verdict that is not `passed` fails the run unless the manifest carries
+    a dated, reasoned exception naming that exact metric, and the measured
+    value is still within the bound that exception recorded.
+    """
+    gate = evaluate_quality_gate(dict(metrics))
+    if gate["status"] == STATUS_PASSED:
+        return gate, []
+    exceptions = normalize_gate_exceptions(entry)
+    failures: list[str] = []
+    for violation in gate.get("reasons", []):
+        metric = str(violation.get("metric") or "")
+        detail = str(violation.get("detail") or metric)
+        observed = violation.get("value")
+        problem = _exception_failure(
+            metric,
+            exceptions.get(metric),
+            float(observed) if isinstance(observed, (int, float)) else None,
+            detail,
+        )
+        if problem:
+            failures.append(problem)
+    if gate["status"] != STATUS_PASSED and not gate.get("reasons"):
+        failures.append(
+            f"quality gate returned {gate['status']}: {gate['reason']}")
+    return gate, failures
+
+
 def _metric_value(metrics: Mapping[str, object], name: str) -> Optional[float]:
     value = metrics.get(name)
     if isinstance(value, (int, float)) and np.isfinite(value):
@@ -415,12 +521,16 @@ def run_reference_clip(entry: Mapping[str, object], output_dir: Path | str) -> d
                     f"metric {metric_name} {value:.6f} below {float(floor):.6f}"
                 )
 
+    gate, gate_failures = evaluate_clip_quality_gate(entry, metrics)
+    failures.extend(gate_failures)
+
     return {
         "filename": entry.get("filename"),
         "passed": not failures,
         "failures": failures,
         "output": str(actual_output),
         "outputFrames": digest,
+        "qualityGate": gate,
         "metrics": {
             key: metrics.get(key)
             for key in (

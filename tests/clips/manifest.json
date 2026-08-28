@@ -80,6 +80,41 @@
         "psnr": 9.91274,
         "ssim": 0.672729
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.36391,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.642304,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 1.286128,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.848418,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "3d9bffa859a245e7adb7cfb926f24b970d99c9032934ae5d5cdeb0a7e4f0848a"
     },
     {
@@ -116,6 +151,34 @@
         "psnr": 11.453744,
         "ssim": 0.705444
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.423973,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.653326,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.023949,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "ab124826841d308c1c2df9d4e0d7a9c4e403bd3810c06d672e4deae254eee069"
     },
     {
@@ -152,6 +215,41 @@
         "psnr": 12.943833,
         "ssim": 0.797337
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.590532,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.737331,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.0,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.309068,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "381f7fef152e2c664c2ea20b7a7a039c073281d762fbe552f65f7889252099e9"
     },
     {
@@ -188,6 +286,34 @@
         "psnr": 11.537584,
         "ssim": 0.786338
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.370842,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.750477,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 2.662113,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "d306e04ed99d56b312740a0060793663ef3bec6728f8235bb18e1f8e6dff4e18"
     },
     {
@@ -224,6 +350,41 @@
         "psnr": 9.525943,
         "ssim": 0.680557
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.378044,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.644995,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 1.010625,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.272615,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "872be31164688de1aa439fd707f72be800f24250a7729a291c0c1304c902744c"
     },
     {
@@ -260,6 +421,41 @@
         "psnr": 16.742013,
         "ssim": 0.723431
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.457202,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.690105,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.0,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.226454,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "589690cb8875c5f97727afdec51f073bd407cd12abc3981f70d145699be1b7e2"
     },
     {
@@ -296,6 +492,41 @@
         "psnr": 9.874841,
         "ssim": 0.62373
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.274578,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.595521,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 2.454552,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.214873,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "bf66844f2212ec19c0f149420afe99305faabf3fb24f3bf32c9a2f81c55c180d"
     },
     {
@@ -332,6 +563,34 @@
         "psnr": 11.024994,
         "ssim": 0.723934
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.458163,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.680087,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.0,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "8dd768d00cc843c592818a01c92a9a75c3827004e29fafd0bba8c6b197f0ebd7"
     },
     {
@@ -368,6 +627,41 @@
         "psnr": 9.675798,
         "ssim": 0.654141
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.329909,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.624557,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 1.55383,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.226731,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "4860837a0a59c8a44ca923b713e23bac692c13f3dab0b7548b7dd1eac0a4a6b5"
     },
     {
@@ -420,6 +714,41 @@
         "psnr": 9.531329,
         "ssim": 0.674757
       },
+      "quality_gate_exceptions": [
+        {
+          "metric": "tag",
+          "reason": "The corpus drives every clip with sttn_skip_detection and a fixed subtitle_area, so the masked band has zero temporal exposure and the whole region falls back to cv2.inpaint. The report tags that Review by design; these clips are regression fixtures for determinism, not samples of shipping removal quality.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.641038,
+          "gate_threshold": 0.95,
+          "metric": "ssim",
+          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.64093,
+          "gate_threshold": 0.8,
+          "metric": "worst_frame",
+          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_min": 0.0,
+          "gate_threshold": 90.0,
+          "metric": "vmaf",
+          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "recorded": "2026-08-27"
+        },
+        {
+          "accepted_max": 0.484625,
+          "gate_threshold": 0.025,
+          "metric": "residual_text_score",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "recorded": "2026-08-27"
+        }
+      ],
       "sha256": "74340c4c5f03ce3e9d42b28e8712d765f257c91aea6853b90b5334ca10f95872"
     }
   ],

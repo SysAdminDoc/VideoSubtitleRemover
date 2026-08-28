@@ -6,6 +6,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- The reference corpus now runs the shipping quality gate. It used to
+  check a frame hash plus PSNR and SSIM floors blessed from its own last
+  run, so it reported all ten clips as passing while eight of them sat
+  over the runtime residual-text ceiling by as much as 32x, which meant
+  it could not detect a removal-quality failure at all. Each clip now
+  records the full gate verdict, and a clip that does not pass fails the
+  run unless the manifest carries a dated, reasoned exception naming the
+  metric, the threshold it crosses, and the worst value that stays
+  acceptable. Go past that value and the corpus goes red.
 - A second launch no longer races the first one's state. Two GUI
   processes share `settings.json` and `queue_state.json`, and the
   Windows named mutex the installer already relies on was created
