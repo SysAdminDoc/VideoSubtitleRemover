@@ -6,6 +6,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- A fixed manual region with automatic detection off no longer reports a
+  clean success while quietly falling back to cv2. STTN and ProPainter
+  rebuild masked pixels from other frames, and a region that is identical
+  in every frame gives them nothing to work from, so the whole band was
+  filled by cv2.inpaint and the interface showed the state in success
+  green. The run now measures how much of the mask the temporal path
+  actually repaired and records it in execution provenance and the
+  quality report. The region card shows a warning with a one-line
+  explanation and a control that moves the job to LaMa, which does not
+  need temporal exposure, and the CLI prints the same warning before it
+  starts.
 - The FFmpeg that ships inside the OpenCV wheel is now classified against
   the same 9.0.1 floor the external binary has to meet. It was left
   permanently unclassified because OpenCV prints library ABI numbers

@@ -2091,6 +2091,21 @@ def _run_processing(
     args, parser, config, SubtitleRemover, ProcessingPaused,
     ffmpeg_ready, video_exts,
 ):
+    # RM-321: a fixed manual region gives the temporal engines nothing to
+    # recover from, so say so before the run rather than reporting a clean
+    # success over a cv2 result.
+    from backend.config import (
+        STATIC_REGION_DEGRADES_MESSAGE,
+        static_region_degrades_to_cv2,
+    )
+
+    if static_region_degrades_to_cv2(config):
+        print(
+            "WARNING: "
+            + STATIC_REGION_DEGRADES_MESSAGE.format(mode=config.mode.value),
+            file=sys.stderr,
+        )
+
     remover = SubtitleRemover(config)
     identity_config = normalized_config_snapshot(config)
     remover.output_identity_config = identity_config

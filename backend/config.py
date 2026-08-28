@@ -652,6 +652,45 @@ def _coerce_backend_device(value) -> str:
     return "cpu"
 
 
+def static_region_degrades_to_cv2(config) -> bool:
+    """Whether this job pairs a fully static mask with a temporal engine.
+
+    RM-321: STTN and ProPainter recover masked pixels from other frames. A
+    manual region with automatic detection switched off is identical in every
+    frame, so nothing is ever exposed and the whole band falls back to
+    cv2.inpaint. The job still succeeds; it just does not run the engine the
+    user chose. LaMa does not depend on temporal exposure and is unaffected.
+    """
+    mode = getattr(config, "mode", None)
+    mode_value = str(getattr(mode, "value", mode) or "").strip().lower()
+    # "auto" routes between STTN and ProPainter, so it is exposed to the
+    # same fallback.
+    if mode_value not in {"sttn", "propainter", "auto"}:
+        return False
+    if not getattr(config, "sttn_skip_detection", False):
+        return False
+    if not getattr(config, "tbe_enable", True):
+        return False
+    if getattr(config, "subtitle_region_spans", None):
+        # Timed regions move between spans, so exposure is possible.
+        return False
+    if getattr(config, "region_keyframe_tracks", None):
+        return False
+    return bool(
+        getattr(config, "subtitle_area", None)
+        or getattr(config, "subtitle_areas", None)
+    )
+
+
+STATIC_REGION_DEGRADES_MESSAGE = (
+    "This job uses a fixed manual region with automatic detection off, so "
+    "every frame shares one mask and {mode} has no other frame to recover "
+    "those pixels from. The whole region will be filled by cv2.inpaint "
+    "instead. Switch to LaMa, which does not need temporal exposure, or let "
+    "automatic detection run per frame."
+)
+
+
 def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     """Coerce config values into a safe runtime shape."""
     config.mode = _coerce_backend_mode(config.mode)

@@ -15,6 +15,14 @@ from backend.inpainters._common import (
 )
 
 
+# RM-321: below this share of masked pixels recovered from other frames, the
+# visible result is a cv2.inpaint result and calling the run temporal is
+# untrue. It is not zero because global-motion alignment warps the mask a
+# little, so even a perfectly static region picks up a few exposed pixels at
+# the edges. The measured fraction is always reported alongside the verdict.
+TEMPORAL_EXPOSURE_DEGRADED_FRACTION = 0.05
+
+
 class STTNInpainter(BaseInpainter):
     """Temporal-propagation video inpainting via Temporal Background
     Exposure. Falls back to cv2.inpaint only for pixels masked in every
@@ -32,15 +40,71 @@ class STTNInpainter(BaseInpainter):
             "TBE (temporal background exposure)"
             if self.config.tbe_enable else "cv2"
         )
+        # RM-321: filled in after each batch so the run can report whether
+        # the temporal path actually contributed anything.
+        self.last_exposure_stats: dict = {}
 
     @property
     def backend_name(self) -> str:
         return self._last_backend_name
 
+    def _record_exposure(self, stats: dict) -> None:
+        """Name the path that actually repaired the pixels.
+
+        RM-321: a fully static region gives every masked pixel zero temporal
+        coverage, so temporal background exposure contributes nothing and the
+        whole band is repaired by cv2.inpaint. Reporting the temporal engine
+        for that run is a truthful-execution failure, not a naming quibble:
+        the user picked an engine that did not run.
+        """
+        masked = int(stats.get("maskedPixels", 0) or 0)
+        exposed = int(stats.get("exposedPixels", 0) or 0)
+        fraction = (exposed / masked) if masked else None
+        self.last_exposure_stats = {
+            "maskedPixels": masked,
+            "exposedPixels": exposed,
+            "cv2Pixels": int(stats.get("cv2Pixels", 0) or 0),
+            "exposedFraction": fraction,
+            "degradedThreshold": TEMPORAL_EXPOSURE_DEGRADED_FRACTION,
+            "degradedToCv2": bool(
+                masked and fraction is not None
+                and fraction < TEMPORAL_EXPOSURE_DEGRADED_FRACTION
+            ),
+        }
+        if self.last_exposure_stats["degradedToCv2"]:
+            self._last_backend_name = "cv2 (no temporal exposure)"
+
+    def execution_identity(self) -> dict:
+        identity = super().execution_identity()
+        stats = getattr(self, "last_exposure_stats", None)
+        if not stats:
+            return identity
+        identity["exposure"] = dict(stats)
+        if stats.get("degradedToCv2"):
+            identity["fallbackChain"] = list(identity.get("fallbackChain", [])) + [{
+                "implementation": "sttn",
+                "outcome": "degraded",
+                "provider": "cv2 (no temporal exposure)",
+                "effectiveDevice": str(getattr(self, "device", "") or "unknown"),
+                "reason": (
+                    "only "
+                    f"{(stats.get('exposedFraction') or 0.0) * 100:.1f}% of "
+                    "masked pixels were ever exposed in another frame, so "
+                    "temporal background exposure contributed almost nothing "
+                    "and cv2.inpaint repaired the region"
+                ),
+                "recoveryHint": (
+                    "Let automatic detection run per frame, or switch the "
+                    "job to LaMa, which does not depend on temporal exposure."
+                ),
+            }]
+        return identity
+
     def inpaint(self, frames: List[np.ndarray], masks: List[np.ndarray]) -> List[np.ndarray]:
         if self.config.tbe_enable and len(frames) > 1:
             self._last_backend_name = "TBE (temporal background exposure)"
-            return _temporal_background_expose(
+            stats: dict = {}
+            result = _temporal_background_expose(
                 frames, masks,
                 min_coverage=max(1, self.config.tbe_min_coverage),
                 use_median=self.config.tbe_use_median,
@@ -59,7 +123,10 @@ class STTNInpainter(BaseInpainter):
                 scene_cut_use_transnetv2=self.config.tbe_scene_cut_use_transnetv2,
                 translucency_enable=getattr(
                     self.config, "translucency_enable", True),
+                exposure_stats=stats,
             )
+            self._record_exposure(stats)
+            return result
         self._last_backend_name = "cv2"
         filled = [_cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
                   for f, m in zip(frames, masks, strict=True)]

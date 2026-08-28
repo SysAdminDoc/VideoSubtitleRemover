@@ -690,6 +690,15 @@ class LayoutBuildMixin:
                                     anchor="w")
         self.region_meta.pack(anchor="w", pady=(2, 0))
 
+        # RM-321: a fixed region leaves the temporal engines nothing to
+        # recover from, so say that plainly and offer the way out rather
+        # than reporting the state in success green.
+        self.static_region_notice = tk.Label(
+            region_text, text="", font=f(Theme.F_META),
+            bg=Theme.BG_CARD, fg=Theme.WARNING,
+            anchor="w", justify="left", wraplength=460,
+        )
+
         region_actions = tk.Frame(region_surface, bg=Theme.BG_CARD)
         region_actions.pack(fill="x", pady=(Theme.S_SM, Theme.S_XS))
 
@@ -702,6 +711,11 @@ class LayoutBuildMixin:
                                              command=self._reset_region, style="ghost",
                                              size="sm")
         self.region_reset_btn.pack(side="left", padx=(Theme.S_SM, 0))
+
+        self.static_region_switch_btn = ModernButton(
+            region_surface, text=tr("Switch to LaMa"), width=132,
+            command=self._switch_job_to_lama, style="ghost", size="sm",
+        )
         return workflow_panel, workflow_details, region_surface
 
     def _build_sttn_settings_group(self):

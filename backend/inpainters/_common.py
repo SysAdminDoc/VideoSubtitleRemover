@@ -1132,7 +1132,9 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
                          flow_estimator: str = "dis",
                          grain_strength: float = 0.0,
                          grain_frame_offset: int = 0,
-                         translucency_enable: bool = True) -> List[np.ndarray]:
+                         translucency_enable: bool = True,
+                         exposure_stats: Optional[dict] = None,
+                         ) -> List[np.ndarray]:
     """Aggregate one scene-contiguous segment via Temporal Background Exposure.
 
     Global affine registration puts every frame and mask in the middle-frame
@@ -1150,6 +1152,12 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
             int(min_coverage), n, effective_min_coverage,
         )
     if n == 1:
+        if exposure_stats is not None:
+            masked = int((np.asarray(masks[0]) > 0).sum())
+            exposure_stats["maskedPixels"] = (
+                exposure_stats.get("maskedPixels", 0) + masked)
+            exposure_stats["cv2Pixels"] = (
+                exposure_stats.get("cv2Pixels", 0) + masked)
         filled = _cv2_inpaint(frames[0], masks[0], 7, cv2.INPAINT_NS)
         if edge_ring_px > 0:
             filled = _edge_ring_color_correct(frames[0], filled, masks[0], edge_ring_px)
@@ -1296,6 +1304,17 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
             coverage_for_frame >= effective_min_coverage)
         no_exposure = mask_bool & (
             coverage_for_frame < effective_min_coverage)
+        # RM-321: a fully static mask gives every masked pixel zero temporal
+        # coverage, so the whole band is repaired by cv2.inpaint while the
+        # run still reports the temporal engine. Count what really happened.
+        if exposure_stats is not None:
+            exposure_stats["maskedPixels"] = (
+                exposure_stats.get("maskedPixels", 0) + int(mask_bool.sum()))
+            exposure_stats["exposedPixels"] = (
+                exposure_stats.get("exposedPixels", 0)
+                + int(has_exposure.sum()))
+            exposure_stats["cv2Pixels"] = (
+                exposure_stats.get("cv2Pixels", 0) + int(no_exposure.sum()))
 
         filled = frame.copy()
         if has_exposure.any():
@@ -1337,7 +1356,9 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
                                  scene_cut_use_transnetv2: bool = False,
                                  flow_estimator: str = "dis",
                                  grain_strength: float = 0.0,
-                                 translucency_enable: bool = True) -> List[np.ndarray]:
+                                 translucency_enable: bool = True,
+                                 exposure_stats: Optional[dict] = None,
+                                 ) -> List[np.ndarray]:
     """Video-inpainting primitive: reconstruct masked pixels from
     temporally exposed neighbours with optional scene splitting, global
     alignment, and residual flow refinement."""
@@ -1367,6 +1388,7 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
         sub_masks = masks[start:end]
         out.extend(_tbe_single_segment(
             sub_frames, sub_masks,
+            exposure_stats=exposure_stats,
             min_coverage=min_coverage,
             use_median=use_median,
             feather_px=feather_px,

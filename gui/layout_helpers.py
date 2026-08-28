@@ -181,13 +181,82 @@ class LayoutHelpersMixin:
                 or self.config.subtitle_area is not None
             )
             if has_manual and self.config.sttn_skip_detection:
-                self.region_meta.config(
-                    text=tr("Manual-only mask; automatic detection is off"),
-                    fg=Theme.SUCCESS,
-                )
+                from backend.config import static_region_degrades_to_cv2
+
+                # RM-321: a static mask leaves the temporal engines nothing
+                # to recover from, so the whole band goes through
+                # cv2.inpaint. Green here told the user the opposite.
+                if static_region_degrades_to_cv2(self.config):
+                    self.region_meta.config(
+                        text=tr(
+                            "Manual-only mask; {mode} cannot use it and will "
+                            "fall back to cv2"
+                        ).format(mode=self.config.mode.value),
+                        fg=Theme.WARNING,
+                    )
+                else:
+                    self.region_meta.config(
+                        text=tr("Manual-only mask; automatic detection is off"),
+                        fg=Theme.SUCCESS,
+                    )
             elif has_manual:
                 self.region_meta.config(
                     text=tr("Saved region; automatic detection is on"),
                     fg=Theme.TEXT_SECONDARY,
                 )
             self.region_reset_btn.set_enabled(has_manual and not self.is_processing)
+        self._refresh_static_region_notice()
+
+    def _refresh_static_region_notice(self):
+        """Explain the cv2 fallback and offer the one-click way out.
+
+        RM-321: the GUI used to report this state in success green with no
+        hint that the selected engine would not run.
+        """
+        label = getattr(self, "static_region_notice", None)
+        button = getattr(self, "static_region_switch_btn", None)
+        if label is None:
+            return
+        from backend.config import static_region_degrades_to_cv2
+
+        degrades = static_region_degrades_to_cv2(self.config)
+        if not degrades:
+            label.config(text="")
+            label.pack_forget()
+            if button is not None:
+                button.pack_forget()
+            return
+        label.config(
+            text=tr(
+                "{mode} recovers pixels from other frames, and a fixed "
+                "manual region looks the same in every frame, so the whole "
+                "region will be filled by cv2 instead."
+            ).format(mode=self.config.mode.value),
+            fg=Theme.WARNING,
+        )
+        if not label.winfo_ismapped():
+            label.pack(anchor="w", pady=(Theme.S_XS, 0))
+        if button is not None and not button.winfo_ismapped():
+            button.pack(anchor="w", pady=(Theme.S_XS, 0))
+
+    def _switch_job_to_lama(self):
+        """Move the job to the engine that does not need temporal exposure."""
+        from gui.config import InpaintMode as _GuiMode
+
+        self.config.mode = _GuiMode.LAMA
+        if hasattr(self, "mode_var"):
+            self.mode_var.set(self.config.mode.value)
+        picker = getattr(self, "mode_picker", None)
+        if picker is not None:
+            picker.set(self.config.mode.value)
+        combo = getattr(self, "_command_mode_combo", None)
+        if combo is not None:
+            try:
+                combo.set(self.config.mode.value)
+            except Exception:
+                pass
+        self._update_region_label_display()
+        self._update_status(
+            tr("Switched to LaMa so the manual region is repaired properly."),
+            "info",
+        )

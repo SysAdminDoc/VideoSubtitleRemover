@@ -606,6 +606,11 @@ class _QualityMixin:
                     duration_seconds=segment_duration,
                     roi=roi,
                 )
+            exposure = getattr(
+                getattr(self, "inpainter", None),
+                "last_exposure_stats",
+                None,
+            )
             tag_ssim = roi_mean_ssim if roi_mean_ssim is not None else mean_ssim
             tag = "Good" if tag_ssim >= 0.95 else "Review"
             sheet_path = None
@@ -742,6 +747,10 @@ class _QualityMixin:
                 'samples': len(psnrs),
                 'tag': tag,
                 'sheet': sheet_path,
+                # RM-321: how much of the mask the temporal path actually
+                # repaired. Without this the report cannot distinguish a
+                # temporal run from a cv2 run wearing its name.
+                'temporal_exposure': dict(exposure) if exposure else None,
             }
             if (
                 temporal_local_score is not None
