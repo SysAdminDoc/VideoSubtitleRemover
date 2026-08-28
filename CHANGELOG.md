@@ -4,6 +4,19 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Still images and mask files now read and write correctly on paths holding
+  CJK, Cyrillic, or accented Latin characters. OpenCV hands the filename to
+  its C++ layer as a narrow byte string, so `cv2.imwrite` silently returned
+  False and `cv2.imread` returned None for those paths, which made image
+  cleanup, mask export and import, clean-reference plates, frame export, and
+  preview staging unusable for anyone whose folders are not pure ASCII. All of
+  it now goes through `backend.safe_image`, which encodes and decodes in
+  memory and moves the bytes with Python's own file I/O. A source-hygiene test
+  parses the tree and fails if any module outside that one calls `cv2.imread`
+  or `cv2.imwrite` directly.
+
 ## [3.40.0] - 2026-08-27
 
 ### Changed

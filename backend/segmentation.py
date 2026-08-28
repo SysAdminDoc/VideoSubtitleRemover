@@ -43,7 +43,7 @@ from backend.execution_provenance import (
 )
 
 from backend.remote_model_policy import resolve_remote_model_source
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 
 logger = logging.getLogger(__name__)
 
@@ -831,7 +831,7 @@ def _run_matanyone_process_video(process_video,
         output_dir.mkdir()
         _write_matanyone_video(input_video, active_frames)
         first_alpha = np.where(active_masks[0] > 0, 255, 0).astype(np.uint8)
-        if not cv2.imwrite(str(first_mask), first_alpha):
+        if not safe_imwrite(first_mask, first_alpha):
             raise RuntimeError("could not write MatAnyone first-frame mask")
         try:
             result = process_video(

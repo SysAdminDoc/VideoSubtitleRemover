@@ -24,7 +24,7 @@ from backend.io import (
     timing_ticks_digest,
     _write_text_atomic,
 )
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 
 
 MASK_INTERCHANGE_SCHEMA = "vsr.mask_interchange.v1"
@@ -206,8 +206,8 @@ class MaskInterchangeWriter:
         else:
             assert self._temp_dir is not None
             frame_path = self._temp_dir / f"frame_{self._frame_count:08d}.png"
-            if not cv2.imwrite(
-                str(frame_path), matte, [cv2.IMWRITE_PNG_COMPRESSION, 9]
+            if not safe_imwrite(
+                frame_path, matte, [cv2.IMWRITE_PNG_COMPRESSION, 9]
             ):
                 raise OSError(f"Could not write matte frame {frame_path.name}")
         self._frame_count += 1

@@ -147,13 +147,13 @@ class FrameSequenceWriterFailureTests(unittest.TestCase):
         writer = real_io._FrameSequenceWriter(str(tmp))
         frame = np.zeros((4, 4, 3), dtype=np.uint8)
 
-        original = real_io.cv2.imwrite
-        real_io.cv2.imwrite = lambda *args, **kwargs: False
+        original = real_io.safe_imwrite
+        real_io.safe_imwrite = lambda *args, **kwargs: False
         try:
             with self.assertRaises(real_io.MediaWriteError) as ctx:
                 writer.write(frame)
         finally:
-            real_io.cv2.imwrite = original
+            real_io.safe_imwrite = original
 
         self.assertEqual(ctx.exception.reason, "frame_write_failed")
         # The frame index must not advance past a frame that never landed.
@@ -162,7 +162,7 @@ class FrameSequenceWriterFailureTests(unittest.TestCase):
         self.assertEqual(writer._idx, 1)
         self.assertTrue((tmp / "frame_000000.png").is_file())
 
-    def test_write_wraps_cv2_error(self):
+    def test_write_wraps_encoder_error(self):
         import tempfile
         from pathlib import Path
         import numpy as np
@@ -171,16 +171,28 @@ class FrameSequenceWriterFailureTests(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp())
         writer = real_io._FrameSequenceWriter(str(tmp))
 
+        # RM-317: safe_imwrite turns an OpenCV encode error into False, so the
+        # writer sees a failed write rather than a cv2.error. Either way the
+        # frame index must not advance.
+        original = real_io.safe_imwrite
+
         def _boom(*args, **kwargs):
             raise real_io.cv2.error("disk on fire")
 
-        original = real_io.cv2.imwrite
-        real_io.cv2.imwrite = _boom
+        real_io.safe_imwrite = _boom
+        try:
+            with self.assertRaises(real_io.cv2.error):
+                writer.write(np.zeros((4, 4, 3), dtype=np.uint8))
+        finally:
+            real_io.safe_imwrite = original
+        self.assertEqual(writer._idx, 0)
+
+        real_io.safe_imwrite = lambda *args, **kwargs: False
         try:
             with self.assertRaises(real_io.MediaWriteError):
                 writer.write(np.zeros((4, 4, 3), dtype=np.uint8))
         finally:
-            real_io.cv2.imwrite = original
+            real_io.safe_imwrite = original
         self.assertEqual(writer._idx, 0)
 
     def test_terminate_aborts_active_ffmpeg_writer(self):

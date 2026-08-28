@@ -13,6 +13,7 @@ Covers:
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -340,19 +341,27 @@ class SafeImreadPrecomputedFlagTests(unittest.TestCase):
         self.assertIsNotNone(frame)
         self.assertEqual(frame.shape, (1, 2, 3))
 
-    def test_precomputed_false_uses_cv2(self):
+    def test_precomputed_false_skips_status_and_pillow(self):
+        # RM-317 replaced the cv2.imread seam with an in-memory decode, so this
+        # asserts the observable contract instead: a precomputed flag must not
+        # re-resolve the libpng status and must not divert to Pillow.
         import unittest.mock
-        import numpy as _np
+        from PIL import Image
         from backend import safe_image
 
-        expected = _np.zeros((1, 1, 3), dtype=_np.uint8)
-        with unittest.mock.patch(
-                "backend.safe_image.opencv_libpng_status") as status:
-            with unittest.mock.patch("cv2.imread", return_value=expected) as imread:
-                frame = safe_image.safe_imread("s.png", png_vulnerable=False)
-            status.assert_not_called()
-        self.assertIs(frame, expected)
-        imread.assert_called_once_with("s.png")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "s.png"
+            Image.new("RGB", (2, 1), (10, 20, 30)).save(path)
+            with unittest.mock.patch(
+                    "backend.safe_image.opencv_libpng_status") as status:
+                with unittest.mock.patch(
+                        "backend.safe_image._pillow_read_png",
+                        side_effect=AssertionError("Pillow used")):
+                    frame = safe_image.safe_imread(path, png_vulnerable=False)
+                status.assert_not_called()
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.shape, (1, 2, 3))
+        self.assertEqual(frame[0, 0].tolist(), [30, 20, 10])
 
     def test_default_still_resolves_status_per_call(self):
         import unittest.mock

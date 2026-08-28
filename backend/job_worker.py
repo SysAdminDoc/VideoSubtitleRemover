@@ -213,11 +213,11 @@ class _ControlFile:
 def _write_preview(frame, scratch: Path, index: int) -> Optional[str]:
     """Persist one preview frame as PNG and return its path."""
     try:
-        import cv2
+        from backend.safe_image import safe_imwrite
 
         scratch.mkdir(parents=True, exist_ok=True)
         path = scratch / f"preview_{index:06d}.png"
-        if not cv2.imwrite(str(path), frame):
+        if not safe_imwrite(path, frame):
             return None
         # Keep only the newest few frames; the parent reads immediately
         # and a stalled parent must not fill the disk.

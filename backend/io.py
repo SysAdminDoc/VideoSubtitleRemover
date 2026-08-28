@@ -40,7 +40,7 @@ from typing import Callable, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 from backend.subprocess_policy import (
     popen_process,
     run_process,
@@ -2396,20 +2396,11 @@ class _FrameSequenceWriter:
     def write(self, frame) -> None:
         name = f"{self._prefix}_{self._idx:06d}{self._ext}"
         target = self._dir / name
-        # RM-139: cv2.imwrite reports failure by returning False (full disk,
+        # RM-139: the writer reports failure by returning False (full disk,
         # permissions, unsupported depth). Swallowing that would advance the
         # frame index and the resume checkpoint past a frame that is not on
         # disk, so fail closed before the index moves.
-        try:
-            ok = cv2.imwrite(str(target), frame)
-        except cv2.error as exc:
-            raise MediaWriteError(
-                "A processed frame could not be written to disk, so the "
-                "output is incomplete.",
-                reason="frame_write_failed",
-                path=str(target),
-                detail=str(exc),
-            ) from exc
+        ok = safe_imwrite(target, frame)
         if not ok:
             raise MediaWriteError(
                 "A processed frame could not be written to disk, so the "
@@ -2417,7 +2408,7 @@ class _FrameSequenceWriter:
                 "permissions, then run the job again.",
                 reason="frame_write_failed",
                 path=str(target),
-                detail=f"cv2.imwrite returned False for {target}",
+                detail=f"the image writer returned False for {target}",
             )
         self._idx += 1
 

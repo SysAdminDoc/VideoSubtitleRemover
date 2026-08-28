@@ -1176,7 +1176,7 @@ class VlmOcrAdapterTests(unittest.TestCase):
         detector._model = object()
 
         with mock.patch("backend.ocr_vlm.validate_vlm_server_endpoint"), \
-                mock.patch("backend.ocr_vlm.cv2.imwrite", return_value=False):
+                mock.patch("backend.ocr_vlm.safe_imwrite", return_value=False):
             with self.assertRaisesRegex(RuntimeError, "could not stage"):
                 detector._extract_boxes(
                     _np.zeros((8, 8, 3), dtype=_np.uint8), 0.5

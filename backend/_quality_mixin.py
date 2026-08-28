@@ -38,7 +38,7 @@ from backend.quality_gate import (
     TEMPORAL_FLICKER_CEILING,
     evaluate_quality_gate,
 )
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class _QualityMixin:
         normalized = np.where(values > 0, 255, 0).astype(np.uint8)
         path = Path(directory) / f"{int(frame_index):08d}.png"
         try:
-            if not cv2.imwrite(str(path), normalized):
+            if not safe_imwrite(path, normalized):
                 raise OSError(f"could not write {path}")
         except Exception:
             self._quality_frame_evidence_write_error = True
@@ -300,7 +300,7 @@ class _QualityMixin:
         )
         overlay = np.concatenate([header, body], axis=0)
         overlay_path = str(Path(output_path).with_suffix("")) + ".temporalworst.png"
-        if not cv2.imwrite(overlay_path, overlay, [cv2.IMWRITE_PNG_COMPRESSION, 3]):
+        if not safe_imwrite(overlay_path, overlay, [cv2.IMWRITE_PNG_COMPRESSION, 3]):
             return None
         return overlay_path
 
@@ -805,6 +805,7 @@ class _QualityMixin:
                     0.7, (245, 245, 245), 1, cv2.LINE_AA)
         sep = np.full((gap, body_img.shape[1], 3), 48, dtype=np.uint8)
         sheet = np.concatenate([header, sep, body_img], axis=0)
-        cv2.imwrite(sheet_path, sheet, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+        if not safe_imwrite(sheet_path, sheet, [cv2.IMWRITE_PNG_COMPRESSION, 3]):
+            raise OSError(f"could not write quality sheet {sheet_path}")
         logger.info(f"Quality sheet written: {sheet_path}")
         return sheet_path

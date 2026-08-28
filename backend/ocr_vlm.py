@@ -48,6 +48,7 @@ import numpy as np
 
 from backend.remote_model_policy import resolve_remote_model_source
 from backend.detection_geometry import DetectionGeometry
+from backend.safe_image import safe_imwrite
 
 logger = logging.getLogger(__name__)
 
@@ -892,7 +893,7 @@ class _PaddleOcrVlLlamaCppDetector(_BaseVlmDetector):
         fd, path = tempfile.mkstemp(prefix="vsr_paddleocr_vl_", suffix=".png")
         os.close(fd)
         try:
-            if not cv2.imwrite(path, frame):
+            if not safe_imwrite(path, frame):
                 raise RuntimeError(
                     "could not stage the PaddleOCR-VL inference frame"
                 )

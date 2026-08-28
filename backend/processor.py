@@ -146,7 +146,7 @@ from backend.resume_checkpoint import (
     pause_frame_dir,
     write_pause_checkpoint,
 )
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 from backend.detection_geometry import (
     DetectionGeometry,
     as_detection_geometry,
@@ -2093,13 +2093,13 @@ class SubtitleRemover(
             try:
                 with self._time_stage("encode"):
                     if ext in ('.jpg', '.jpeg'):
-                        ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                        ok = safe_imwrite(temp_output, result, [cv2.IMWRITE_JPEG_QUALITY, 95])
                     elif ext == '.png':
-                        ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+                        ok = safe_imwrite(temp_output, result, [cv2.IMWRITE_PNG_COMPRESSION, 3])
                     elif ext == '.webp':
-                        ok = cv2.imwrite(str(temp_output), result, [cv2.IMWRITE_WEBP_QUALITY, 95])
+                        ok = safe_imwrite(temp_output, result, [cv2.IMWRITE_WEBP_QUALITY, 95])
                     else:
-                        ok = cv2.imwrite(str(temp_output), result)
+                        ok = safe_imwrite(temp_output, result)
                     if not ok:
                         raise IOError(f"Failed to write output image: {output_path}")
                     _promote_temp_output(temp_output, output_path)

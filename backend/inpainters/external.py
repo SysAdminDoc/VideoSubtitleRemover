@@ -40,7 +40,7 @@ from backend.execution_provenance import (
     FAILURE_RUNTIME,
     RequestedStageError,
 )
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,7 @@ class ExternalInpainter(BaseInpainter):
 
         for i, (frame, mask) in enumerate(zip(frames, masks)):
             name = f"{i:06d}.png"
-            if not cv2.imwrite(os.path.join(in_dir, name), frame):
+            if not safe_imwrite(os.path.join(in_dir, name), frame):
                 raise RequestedStageError(
                     stage="inpaint",
                     requested_implementation="external",
@@ -237,7 +237,7 @@ class ExternalInpainter(BaseInpainter):
                     detail=f"could not stage input frame {i}",
                     recovery_hint="Verify work-directory permissions, then retry.",
                 )
-            if not cv2.imwrite(os.path.join(mask_dir, name), mask):
+            if not safe_imwrite(os.path.join(mask_dir, name), mask):
                 raise RequestedStageError(
                     stage="inpaint",
                     requested_implementation="external",

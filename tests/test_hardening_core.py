@@ -652,48 +652,90 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
         self.assertEqual(frame.shape, (1, 2, 3))
         self.assertEqual(frame[0, 0].tolist(), [30, 20, 10])
 
-    def test_fixed_png_decode_uses_opencv_imread(self):
+    def test_fixed_png_decode_uses_opencv_not_pillow(self):
         from unittest import mock
-        import numpy as _np
+        from PIL import Image
         from backend.safe_image import safe_imread
 
-        expected = _np.zeros((1, 1, 3), dtype=_np.uint8)
-        with mock.patch(
-            "backend.safe_image.opencv_libpng_status",
-            return_value={"vulnerable": False},
-        ):
-            with mock.patch("cv2.imread", return_value=expected) as imread:
-                frame = safe_imread("sample.png")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "sample.png"
+            Image.new("RGB", (2, 1), (10, 20, 30)).save(path)
+            with mock.patch(
+                "backend.safe_image.opencv_libpng_status",
+                return_value={"vulnerable": False},
+            ):
+                with mock.patch(
+                    "backend.safe_image._pillow_read_png",
+                    side_effect=AssertionError("Pillow used for a fixed build"),
+                ):
+                    frame = safe_imread(path)
 
-        self.assertIs(frame, expected)
-        imread.assert_called_once_with("sample.png")
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.shape, (1, 2, 3))
+        self.assertEqual(frame[0, 0].tolist(), [30, 20, 10])
 
     def test_non_png_decode_uses_opencv_even_when_libpng_vulnerable(self):
         from unittest import mock
-        import numpy as _np
+        from PIL import Image
         from backend.safe_image import safe_imread
 
-        expected = _np.zeros((1, 1, 3), dtype=_np.uint8)
-        with mock.patch(
-            "backend.safe_image.opencv_libpng_status",
-            return_value={"vulnerable": True},
-        ):
-            with mock.patch("cv2.imread", return_value=expected) as imread:
-                frame = safe_imread("sample.jpg")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "sample.bmp"
+            Image.new("RGB", (2, 1), (10, 20, 30)).save(path)
+            with mock.patch(
+                "backend.safe_image.opencv_libpng_status",
+                return_value={"vulnerable": True},
+            ):
+                with mock.patch(
+                    "backend.safe_image._pillow_read_png",
+                    side_effect=AssertionError("Pillow used for a non-PNG"),
+                ):
+                    frame = safe_imread(path)
 
-        self.assertIs(frame, expected)
-        imread.assert_called_once_with("sample.jpg")
+        self.assertIsNotNone(frame)
+        self.assertEqual(frame.shape, (1, 2, 3))
+        self.assertEqual(frame[0, 0].tolist(), [30, 20, 10])
 
-    def test_production_image_reads_go_through_safe_helper(self):
-        roots = [Path("backend"), Path("gui")]
+    def test_safe_imread_returns_none_for_missing_and_corrupt_files(self):
+        from backend.safe_image import safe_imread
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "absent.jpg"
+            self.assertIsNone(safe_imread(missing))
+            empty = Path(tmpdir) / "empty.jpg"
+            empty.write_bytes(b"")
+            self.assertIsNone(safe_imread(empty))
+            junk = Path(tmpdir) / "junk.jpg"
+            junk.write_bytes(b"not an image at all")
+            self.assertIsNone(safe_imread(junk))
+
+    def test_production_image_io_goes_through_safe_helpers(self):
+        """RM-317: cv2.imread/imwrite cannot handle non-ASCII paths on
+        Windows, so every production call must route through
+        backend.safe_image. Parse rather than grep so a comment or a
+        docstring naming the function does not register as a call."""
+        import ast
+
+        roots = [Path("backend"), Path("gui"), Path("scripts"), Path("tools")]
+        banned = {"imread", "imwrite"}
         offenders = []
         for root in roots:
-            for path in root.rglob("*.py"):
+            if not root.is_dir():
+                continue
+            for path in sorted(root.rglob("*.py")):
                 if path.as_posix() == "backend/safe_image.py":
                     continue
-                text = path.read_text(encoding="utf-8")
-                if "cv2.imread" in text or "_cv2.imread" in text:
-                    offenders.append(path.as_posix())
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    func = node.func
+                    if not isinstance(func, ast.Attribute) or func.attr not in banned:
+                        continue
+                    value = func.value
+                    if isinstance(value, ast.Name) and value.id in {"cv2", "_cv2"}:
+                        offenders.append(
+                            f"{path.as_posix()}:{node.lineno} cv2.{func.attr}")
         self.assertEqual(offenders, [])
 
 

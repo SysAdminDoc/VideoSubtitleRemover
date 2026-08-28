@@ -63,7 +63,7 @@ from backend.execution_provenance import (
     FAILURE_RUNTIME,
     RequestedStageError,
 )
-from backend.safe_image import safe_imread
+from backend.safe_image import safe_imread, safe_imwrite
 from backend.subprocess_policy import run_process
 
 logger = logging.getLogger(__name__)
@@ -1251,9 +1251,9 @@ def _write_adapter_frame_dirs(frames: List[np.ndarray],
         if mask_arr.ndim == 3:
             mask_arr = cv2.cvtColor(mask_arr, cv2.COLOR_BGR2GRAY)
         mask_arr = np.where(mask_arr > 0, 255, 0).astype(np.uint8)
-        if not cv2.imwrite(str(in_dir / name), frame_arr):
+        if not safe_imwrite(in_dir / name, frame_arr):
             raise RuntimeError(f"could not write adapter input frame: {name}")
-        if not cv2.imwrite(str(mask_dir / name), mask_arr):
+        if not safe_imwrite(mask_dir / name, mask_arr):
             raise RuntimeError(f"could not write adapter mask frame: {name}")
     return in_dir, mask_dir, names
 
