@@ -58,8 +58,12 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler(),
+        # RM-314: delay=True so importing this module does not open or
+        # create the shared log. A launch that is about to be refused for a
+        # second instance must leave the running instance's files alone.
         logging.handlers.RotatingFileHandler(
-            LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2, encoding='utf-8'),
+            LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=2,
+            encoding='utf-8', delay=True),
     ]
 )
 logger = logging.getLogger(__name__)
@@ -375,13 +379,20 @@ def main():
     guard = single_instance.acquire()
     if guard.already_running:
         guard.release()
-        logger.warning(single_instance.ALREADY_RUNNING_MESSAGE)
+        # Deliberately stderr only. The log file lives in the same per-user
+        # directory the running instance has open, so a refused launch must
+        # not append to it or trip its rotation.
         print(single_instance.ALREADY_RUNNING_MESSAGE, file=sys.stderr)
         sys.exit(3)
-    guard.release()
 
-    app = VideoSubtitleRemoverApp()
-    app.run()
+    # Hold the slot for the whole session. Releasing it here and letting the
+    # app re-acquire leaves a window, measured in tens of milliseconds, where
+    # a second launch during a cold start sees the slot free.
+    try:
+        app = VideoSubtitleRemoverApp(instance_guard=guard)
+        app.run()
+    finally:
+        guard.release()
 
 
 if __name__ == "__main__":

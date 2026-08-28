@@ -1670,20 +1670,25 @@ def save_user_preset(name: str, description: str,
             v = v.value
         if v is not None:
             snap[k] = v
-    user = _load_user_presets()
-    user[name] = {"description": description, "fields": snap}
-    # RM-144: a preset that never reached disk is not a saved preset.
-    return bool(_save_user_presets(user))
+    # RM-314: read and write inside one cross-process lock. Holding it only
+    # for the write keeps the file valid but still drops a peer's preset that
+    # landed between this process's read and its write.
+    with shared_state_lock():
+        user = _load_user_presets()
+        user[name] = {"description": description, "fields": snap}
+        # RM-144: a preset that never reached disk is not a saved preset.
+        return bool(_save_user_presets(user))
 
 
 def delete_user_preset(name: str) -> bool:
     if name in BUILTIN_PRESETS:
         return False
-    user = _load_user_presets()
-    if name not in user:
-        return False
-    del user[name]
-    return bool(_save_user_presets(user))
+    with shared_state_lock():
+        user = _load_user_presets()
+        if name not in user:
+            return False
+        del user[name]
+        return bool(_save_user_presets(user))
 
 
 def export_preset(name: str, path: str) -> bool:
@@ -1746,9 +1751,10 @@ def import_preset(path: str) -> Optional[str]:
         )
     if name in BUILTIN_PRESETS:
         name = f"{name} (imported)"
-    user = _load_user_presets()
-    user[name] = {"description": description, "fields": fields}
-    saved = _save_user_presets(user)
+    with shared_state_lock():
+        user = _load_user_presets()
+        user[name] = {"description": description, "fields": fields}
+        saved = _save_user_presets(user)
     if not saved:
         _set_preset_import_notice(saved.message())
         return None

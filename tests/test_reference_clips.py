@@ -1153,54 +1153,161 @@ class ReferenceCorpusQualityGateTests(unittest.TestCase):
                     self.assertGreater(len(str(record.get("reason", ""))), 40)
                     if metric in unbounded:
                         continue
+                    if record.get("inert"):
+                        # A measured value sitting on the metric's own limit
+                        # cannot produce a bound that could ever fail, so it
+                        # is recorded as inert rather than as a live check.
+                        continue
                     key = "accepted_max" if metric in ceilings else "accepted_min"
                     self.assertIsInstance(record.get(key), (int, float))
         self.assertGreater(seen, 0)
 
-    @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
-    def test_a_clip_left_with_visible_residue_turns_the_corpus_red(self):
-        """Mutate the pipeline so removal leaves the subtitle band alone.
-
-        The frame hash catches the change too, so the assertion is specific:
-        the residual-text exception must be the thing that reports it.
-        """
+    def _one_clip_manifest(self, tmpdir, filename="static_dialogue.mkv"):
+        """Write a manifest holding a single committed clip, unmodified."""
         import json
+
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        data["clips"] = [
+            clip for clip in data["clips"] if clip["filename"] == filename
+        ]
+        self.assertEqual(len(data["clips"]), 1)
+        path = Path(tmpdir) / "manifest.json"
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return path
+
+    @unittest.skipUnless(_have_ffmpeg(), "ffmpeg not on PATH")
+    def test_a_clip_whose_repair_leaves_residue_turns_the_corpus_run_red(self):
+        """Break removal for real and drive the whole corpus run.
+
+        The inpainter is replaced with one that fills the masked band with
+        noise, so the repair genuinely leaves the region wrong while every
+        other stage runs normally. This exercises `run_reference_corpus` end
+        to end rather than calling the gate helper directly, because the
+        wiring that turns a gate verdict into a failed run is the thing
+        under test. Deleting the line that folds gate failures into the
+        clip's failures makes this test red.
+
+        A literal no-op inpainter cannot be used: `_validate_inpaint_results`
+        already refuses one, so the run would fail before reaching the gate.
+        """
+        from unittest import mock
+
+        import numpy as _np
+
         from backend import reference_corpus as corpus
 
         runtime = corpus.reference_runtime_contract()
         if not runtime["passed"]:
             self.skipTest("reference corpus needs the reviewed CPU profile")
 
-        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
-        entry = next(
-            clip for clip in data["clips"]
-            if clip["filename"] == "static_dialogue.mkv"
-        )
-        entry = dict(entry)
-        entry["path"] = str(_HERE / "clips" / entry["filename"])
+        class _RuinTheBand:
+            def inpaint(self, frames, masks):
+                output = []
+                for frame, mask in zip(frames, masks, strict=True):
+                    repaired = frame.copy()
+                    active = _np.asarray(mask) > 0
+                    if active.any():
+                        rng = _np.random.default_rng(1234)
+                        repaired[active] = rng.integers(
+                            0, 256, size=repaired[active].shape,
+                            dtype=_np.uint8)
+                    output.append(repaired)
+                return output
 
-        real_run = corpus.run_reference_clip
+        real_remover = corpus._deterministic_remover
 
-        def _leave_residue(clip_entry, output_dir):
-            result = real_run(clip_entry, output_dir)
-            metrics = dict(result["metrics"])
-            # A run that leaves the band untouched scores near the source's
-            # own residual text level.
-            metrics["residual_text_score"] = 0.99
-            gate, failures = corpus.evaluate_clip_quality_gate(
-                clip_entry, metrics)
-            return gate, failures
+        def _broken_remover(config):
+            remover = real_remover(config)
+            remover.inpainter = _RuinTheBand()
+            return remover
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            gate, failures = _leave_residue(entry, tmpdir)
+            manifest = self._one_clip_manifest(tmpdir)
 
-        self.assertEqual(gate["status"], "review")
-        self.assertTrue(failures)
+            # Control: the same one-clip run passes untouched, so the red
+            # below comes from the broken inpainter and not the harness.
+            clean = corpus.run_reference_corpus(
+                manifest, clips_dir=_HERE / "clips",
+                output_dir=str(Path(tmpdir) / "clean"),
+            )
+            self.assertTrue(clean["passed"], clean["failures"])
+            self.assertEqual(
+                clean["clips"][0]["qualityGate"]["status"], "review")
+
+            with mock.patch.object(
+                    corpus, "_deterministic_remover", _broken_remover):
+                broken = corpus.run_reference_corpus(
+                    manifest, clips_dir=_HERE / "clips",
+                    output_dir=str(Path(tmpdir) / "broken"),
+                )
+
+        self.assertFalse(broken["passed"])
+        failures = broken["clips"][0]["failures"]
+
+        # A metric that already had a recorded exception must report the
+        # measured value crossing the bound that exception wrote down.
         self.assertTrue(
-            any("residual_text_score" in failure and "accepted_max" in failure
+            any("worse than the recorded accepted_min" in failure
+                or "worse than the recorded accepted_max" in failure
                 for failure in failures),
             failures,
         )
+        # A violation this clip never had before, and so has no exception
+        # for, must fail closed rather than pass unnoticed.
+        self.assertTrue(
+            any("no recorded exception" in failure for failure in failures),
+            failures,
+        )
+
+    def test_a_floor_bound_that_can_never_fail_is_rejected(self):
+        from backend.reference_corpus import evaluate_clip_quality_gate
+
+        metrics = {"samples": 4, "tag": "Good", "psnr": 44.0,
+                   "ssim": 0.99, "roi_ssim": 0.99, "vmaf": 0.0}
+        base = {
+            "metric": "vmaf",
+            "gate_threshold": 90.0,
+            "recorded": "2026-08-27",
+            "reason": "VMAF returns zero on a 160x96 fixture whatever the "
+                      "picture looks like, so it carries no signal here.",
+        }
+        _, vacuous = evaluate_clip_quality_gate(
+            self._entry(quality_gate_exceptions=[dict(base, accepted_min=0.0)]),
+            metrics,
+        )
+        self.assertEqual(len(vacuous), 1)
+        self.assertIn("can never fail", vacuous[0])
+
+        _, acknowledged = evaluate_clip_quality_gate(
+            self._entry(quality_gate_exceptions=[dict(base, inert=True)]),
+            metrics,
+        )
+        self.assertEqual(acknowledged, [])
+
+    def test_the_bound_helper_marks_a_zero_floor_inert(self):
+        from backend.reference_corpus import gate_exception_bound
+
+        self.assertEqual(gate_exception_bound("vmaf", 0.0), ("inert", True))
+        self.assertEqual(
+            gate_exception_bound("residual_text_score", 0.8),
+            ("accepted_max", 0.84))
+        self.assertEqual(
+            gate_exception_bound("ssim", 0.38), ("accepted_min", 0.361))
+        self.assertEqual(gate_exception_bound("tag", 0.0), (None, None))
+
+    def test_no_committed_exception_claims_a_bound_it_does_not_have(self):
+        import json
+        from backend.reference_corpus import normalize_gate_exceptions
+
+        data = json.loads(self.MANIFEST.read_text(encoding="utf-8"))
+        for clip in data["clips"]:
+            for metric, record in normalize_gate_exceptions(clip).items():
+                with self.subTest(clip=clip["filename"], metric=metric):
+                    if record.get("inert"):
+                        self.assertNotIn("accepted_min", record)
+                        self.assertNotIn("accepted_max", record)
+                    if "accepted_min" in record:
+                        self.assertGreater(record["accepted_min"], 0.0)
 
 class ReferenceBlessTests(unittest.TestCase):
     """The blessing path folds a run back into the manifest."""

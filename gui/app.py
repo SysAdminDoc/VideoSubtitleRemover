@@ -108,7 +108,7 @@ class VideoSubtitleRemoverApp(
 ):
     """Main application class."""
 
-    def __init__(self):
+    def __init__(self, *, instance_guard=None):
         # Resolve the palette before creating the root so the native root
         # surface and every child start in the same theme. Explicitly restore
         # defaults for embedders/tests that create more than one app instance
@@ -153,8 +153,13 @@ class VideoSubtitleRemoverApp(
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
         self._ui_resources_released = False
-        self._instance_guard = None
-        if sys.platform == "win32":
+        # RM-314: main() acquires the interactive-instance slot before any
+        # state is read and hands it over here, so there is no gap between
+        # the check and the window. A caller that builds the app directly
+        # (tests, the release probe, an embedder) gets its own handle, and
+        # never a refusal: only the entry point decides who runs.
+        self._instance_guard = instance_guard
+        if self._instance_guard is None:
             try:
                 self._instance_guard = single_instance.acquire()
             except Exception:

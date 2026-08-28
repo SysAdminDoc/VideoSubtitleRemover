@@ -90,28 +90,28 @@
           "accepted_min": 0.36391,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.642304,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 1.286128,
           "gate_threshold": 90.0,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.848418,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],
@@ -161,21 +161,21 @@
           "accepted_min": 0.423973,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.653326,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.023949,
           "gate_threshold": 90.0,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         }
       ],
@@ -225,28 +225,28 @@
           "accepted_min": 0.590532,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.737331,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
-          "accepted_min": 0.0,
           "gate_threshold": 90.0,
+          "inert": true,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.309068,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],
@@ -296,21 +296,21 @@
           "accepted_min": 0.370842,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.750477,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 2.662113,
           "gate_threshold": 90.0,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         }
       ],
@@ -360,28 +360,28 @@
           "accepted_min": 0.378044,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.644995,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 1.010625,
           "gate_threshold": 90.0,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.272615,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],
@@ -431,28 +431,28 @@
           "accepted_min": 0.457202,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.690105,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
-          "accepted_min": 0.0,
           "gate_threshold": 90.0,
+          "inert": true,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.226454,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],
@@ -502,28 +502,28 @@
           "accepted_min": 0.274578,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.595521,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 2.454552,
           "gate_threshold": 90.0,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.214873,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],
@@ -573,21 +573,21 @@
           "accepted_min": 0.458163,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.680087,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
-          "accepted_min": 0.0,
           "gate_threshold": 90.0,
+          "inert": true,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         }
       ],
@@ -637,28 +637,28 @@
           "accepted_min": 0.329909,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.624557,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 1.55383,
           "gate_threshold": 90.0,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.226731,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],
@@ -724,28 +724,28 @@
           "accepted_min": 0.641038,
           "gate_threshold": 0.95,
           "metric": "ssim",
-          "reason": "Mean SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
+          "reason": "ROI SSIM over a 160x96 synthetic frame is dominated by the fixed band the fixture deliberately leaves hard to reconstruct. The frame hash and the per-clip metric floor already catch any movement.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_min": 0.64093,
           "gate_threshold": 0.8,
           "metric": "worst_frame",
-          "reason": "Same cause as the mean SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
+          "reason": "Same cause as the ROI SSIM entry: the worst sampled frame is the one where the fixed band covers the most detail.",
           "recorded": "2026-08-27"
         },
         {
-          "accepted_min": 0.0,
           "gate_threshold": 90.0,
+          "inert": true,
           "metric": "vmaf",
-          "reason": "VMAF's model is trained for 1080p viewing and returns near-zero on a 160x96 fixture whatever the picture looks like, so the number carries no signal here. It is recorded rather than dropped so a real corpus on real footage inherits a live check.",
+          "reason": "VMAF's model is trained for 1080p viewing and returns at or near zero on a 160x96 fixture whatever the picture looks like. A floor derived from that measurement could never fail, so this is recorded as inert rather than dressed up as a live check. Replacing these fixtures with licensed real footage is tracked in ROADMAP.md, and a real corpus would carry a live VMAF bound.",
           "recorded": "2026-08-27"
         },
         {
           "accepted_max": 0.484625,
           "gate_threshold": 0.025,
           "metric": "residual_text_score",
-          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in RM-342.",
+          "reason": "A static manual region gives the temporal path nothing to recover from, so cv2.inpaint leaves measurable residue. Replacing these with licensed footage is tracked separately in ROADMAP.md.",
           "recorded": "2026-08-27"
         }
       ],

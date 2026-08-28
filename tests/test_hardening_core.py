@@ -709,34 +709,142 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
             junk.write_bytes(b"not an image at all")
             self.assertIsNone(safe_imread(junk))
 
-    def test_production_image_io_goes_through_safe_helpers(self):
-        """RM-317: cv2.imread/imwrite cannot handle non-ASCII paths on
+    def _cv2_image_io_offenders(self, paths):
+        """Every cv2.imread/imwrite call reachable in the given sources.
+
+        RM-317: cv2.imread and cv2.imwrite cannot handle non-ASCII paths on
         Windows, so every production call must route through
-        backend.safe_image. Parse rather than grep so a comment or a
-        docstring naming the function does not register as a call."""
+        backend.safe_image. Parse rather than grep, so a comment or a
+        docstring naming the function does not register as a call, and
+        resolve the local names cv2 was imported under rather than matching
+        a fixed alias list. `import cv2 as _cv2_live` hid a live defect from
+        an earlier version of this check.
+        """
         import ast
 
-        roots = [Path("backend"), Path("gui"), Path("scripts"), Path("tools")]
-        banned = {"imread", "imwrite"}
         offenders = []
-        for root in roots:
-            if not root.is_dir():
-                continue
-            for path in sorted(root.rglob("*.py")):
-                if path.as_posix() == "backend/safe_image.py":
+        banned = {"imread", "imwrite"}
+        for path in paths:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            # Local names bound to the cv2 module, plus any name bound
+            # directly to one of the banned functions.
+            module_aliases = set()
+            direct_aliases = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name == "cv2":
+                            module_aliases.add(alias.asname or "cv2")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module != "cv2":
+                        continue
+                    for alias in node.names:
+                        if alias.name in banned:
+                            direct_aliases.add(alias.asname or alias.name)
+                        else:
+                            module_aliases.add(alias.asname or alias.name)
+                elif isinstance(node, ast.Assign):
+                    # `imwrite = cv2.imwrite` and `_c = cv2` both launder it.
+                    value = node.value
+                    name = None
+                    if isinstance(value, ast.Attribute) and value.attr in banned:
+                        name = value.attr
+                    elif isinstance(value, ast.Name) and value.id in module_aliases:
+                        module_aliases.update(
+                            target.id for target in node.targets
+                            if isinstance(target, ast.Name)
+                        )
+                    if name is not None:
+                        direct_aliases.update(
+                            target.id for target in node.targets
+                            if isinstance(target, ast.Name)
+                        )
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
                     continue
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.Call):
-                        continue
-                    func = node.func
-                    if not isinstance(func, ast.Attribute) or func.attr not in banned:
-                        continue
+                func = node.func
+                if isinstance(func, ast.Attribute) and func.attr in banned:
                     value = func.value
-                    if isinstance(value, ast.Name) and value.id in {"cv2", "_cv2"}:
+                    if isinstance(value, ast.Name) and value.id in module_aliases:
                         offenders.append(
-                            f"{path.as_posix()}:{node.lineno} cv2.{func.attr}")
-        self.assertEqual(offenders, [])
+                            f"{path.as_posix()}:{node.lineno} "
+                            f"{value.id}.{func.attr}")
+                    elif (isinstance(value, ast.Attribute)
+                            and value.attr == "cv2"):
+                        offenders.append(
+                            f"{path.as_posix()}:{node.lineno} "
+                            f"<module>.cv2.{func.attr}")
+                elif isinstance(func, ast.Name) and func.id in direct_aliases:
+                    offenders.append(
+                        f"{path.as_posix()}:{node.lineno} {func.id}()")
+                elif (isinstance(func, ast.Name) and func.id == "getattr"
+                        and len(node.args) >= 2):
+                    target, attribute = node.args[0], node.args[1]
+                    if (isinstance(target, ast.Name)
+                            and target.id in module_aliases
+                            and isinstance(attribute, ast.Constant)
+                            and attribute.value in banned):
+                        offenders.append(
+                            f"{path.as_posix()}:{node.lineno} "
+                            f"getattr({target.id}, {attribute.value!r})")
+        return offenders
+
+    def _production_sources(self):
+        paths = []
+        for root in (Path("backend"), Path("gui"), Path("scripts"),
+                     Path("tools"), Path("installer")):
+            if root.is_dir():
+                paths.extend(sorted(root.rglob("*.py")))
+        paths.extend(sorted(Path(".").glob("*.py")))
+        return [
+            path for path in paths
+            if path.as_posix() != "backend/safe_image.py"
+        ]
+
+    def test_production_image_io_goes_through_safe_helpers(self):
+        self.assertEqual(
+            self._cv2_image_io_offenders(self._production_sources()), [])
+
+    def test_the_image_io_gate_sees_through_an_alias(self):
+        """The gate is only worth having if it catches the laundered forms."""
+        import tempfile as _tempfile
+
+        laundered = (
+            "import cv2 as _live\n"
+            "def read(p):\n"
+            "    return _live.imread(p)\n",
+            "from cv2 import imwrite\n"
+            "def write(p, f):\n"
+            "    return imwrite(p, f)\n",
+            "import cv2\n"
+            "def read(p):\n"
+            "    return getattr(cv2, 'imread')(p)\n",
+            "import cv2\n"
+            "_c = cv2\n"
+            "def read(p):\n"
+            "    return _c.imread(p)\n",
+        )
+        for index, source in enumerate(laundered):
+            with self.subTest(case=index):
+                with _tempfile.TemporaryDirectory() as tmpdir:
+                    path = Path(tmpdir) / f"case_{index}.py"
+                    path.write_text(source, encoding="utf-8")
+                    self.assertTrue(self._cv2_image_io_offenders([path]))
+
+    def test_the_image_io_gate_ignores_a_mention_that_is_not_a_call(self):
+        import tempfile as _tempfile
+
+        source = (
+            "import cv2\n"
+            "# cv2.imwrite cannot handle non-ASCII paths.\n"
+            'DOC = "cv2.imread"\n'
+            "def resize(f):\n"
+            "    return cv2.resize(f, (2, 2))\n"
+        )
+        with _tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "mention.py"
+            path.write_text(source, encoding="utf-8")
+            self.assertEqual(self._cv2_image_io_offenders([path]), [])
 
 
 class NsisInstallerArtefactTests(unittest.TestCase):

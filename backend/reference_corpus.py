@@ -38,6 +38,8 @@ BLESS_METRIC_TOLERANCE = 0.005
 # value for a ceiling and a little below it for a floor, so ordinary noise
 # does not flip the corpus while a real quality drop still does.
 GATE_EXCEPTION_TOLERANCE = 0.05
+
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "tests" / "clips" / "manifest.json"
 REFERENCE_LICENSE_ALLOWLIST = {
@@ -391,6 +393,24 @@ _GATE_CEILING_METRICS = {
 _GATE_UNBOUNDED_METRICS = {"tag", "quality_final_encode_verified"}
 
 
+def gate_exception_bound(metric: str, observed: float,
+                         *, tolerance: float = GATE_EXCEPTION_TOLERANCE):
+    """Return the (key, value) bound to record for one measured violation.
+
+    Returns ``(None, None)`` when the metric carries no number, and
+    ``("inert", True)`` when the measured value sits on the metric's own
+    limit so a bound derived from it could never fail.
+    """
+    if metric in _GATE_UNBOUNDED_METRICS:
+        return None, None
+    if metric in _GATE_CEILING_METRICS:
+        return "accepted_max", round(float(observed) * (1.0 + tolerance), 6)
+    bound = round(float(observed) * (1.0 - tolerance), 6)
+    if bound <= 0.0:
+        return "inert", True
+    return "accepted_min", bound
+
+
 def normalize_gate_exceptions(entry: Mapping[str, object]) -> dict:
     """Index a clip's recorded gate exceptions by the metric they cover."""
     raw = entry.get("quality_gate_exceptions")
@@ -423,7 +443,13 @@ def _exception_failure(metric: str,
             f"quality gate exception for {metric} needs both a recorded date "
             "and a reason"
         )
+    inert = bool(exception.get("inert"))
     if metric in _GATE_UNBOUNDED_METRICS:
+        return None
+    if inert:
+        # Explicitly acknowledged as carrying no signal on this fixture. The
+        # reason is mandatory above, so this is a recorded decision rather
+        # than a silently missing bound.
         return None
     bound_key = (
         "accepted_max" if metric in _GATE_CEILING_METRICS else "accepted_min")
@@ -434,6 +460,15 @@ def _exception_failure(metric: str,
         )
     if observed is None:
         return f"quality gate exception for {metric} has no measured value"
+    if bound_key == "accepted_min" and float(bound) <= 0.0 and not inert:
+        # A floor of zero on a metric that is bounded below by zero can never
+        # fail, so it reads as a live check while guarding nothing. Say so in
+        # the manifest instead of leaving the reason text claiming otherwise.
+        return (
+            f"quality gate exception for {metric} records an accepted_min of "
+            f"{float(bound):.6f}, which can never fail; mark it "
+            '"inert": true with a reason if the metric carries no signal here'
+        )
     if bound_key == "accepted_max" and observed > float(bound):
         return (
             f"{metric} {observed:.6f} is worse than the recorded "
@@ -695,6 +730,36 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 f"Blessed {len(changed)} clip(s): "
                 f"{', '.join(changed) or 'none'}"
             )
+            # Blessing re-derives the frame hash and the metric floors, so a
+            # hash or floor failure in this run is expected and now fixed.
+            # It deliberately never touches quality_gate_exceptions, so a
+            # gate failure survives the bless and must not exit clean.
+            remaining = [
+                {
+                    "filename": clip["filename"],
+                    "failures": [
+                        failure for failure in clip["failures"]
+                        if "quality gate" in failure
+                        or "accepted_max" in failure
+                        or "accepted_min" in failure
+                    ],
+                }
+                for clip in blessed["run"]["clips"]
+            ]
+            remaining = [item for item in remaining if item["failures"]]
+            if remaining:
+                for item in remaining:
+                    for failure in item["failures"]:
+                        print(
+                            f"  {item['filename']}: {failure}",
+                            file=sys.stderr,
+                        )
+                print(
+                    "Bless does not touch quality_gate_exceptions. Decide "
+                    "each of these by hand.",
+                    file=sys.stderr,
+                )
+                return 1
             return 0
         result = run_reference_corpus(
             args.manifest,

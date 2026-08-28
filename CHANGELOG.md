@@ -4,6 +4,27 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The live preview no longer goes blank for the whole run when the
+  temporary directory holds non-ASCII characters. One staged frame read
+  was still going through OpenCV under a local alias, which returned
+  nothing on such a path and was swallowed as "no frame yet". The
+  source-hygiene check now resolves whatever local name OpenCV was
+  imported under, so an alias cannot hide the next one.
+- A second launch during a cold start could still get through. The entry
+  point gave the instance slot back before the window existed and let the
+  app take it again, leaving a gap of tens of milliseconds; it now holds
+  the slot for the whole session, on every platform. A refused launch
+  also no longer appends to the running instance's log file.
+- Saving, deleting, or importing a preset now reads and writes inside one
+  cross-process lock. Holding it only for the write kept the file valid
+  but still dropped a preset another process saved in between.
+- A recorded corpus gate exception can no longer claim a bound that could
+  never fail. A floor of zero on a metric that is bounded below by zero
+  is refused unless it is explicitly marked inert with a reason, and
+  `--bless` stops exiting clean on a run the gate still rejects.
+
 ### Changed
 
 - The NVIDIA lane moves to the CUDA 13 channel: torch 2.13.0 and

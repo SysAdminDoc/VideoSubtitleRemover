@@ -600,7 +600,14 @@ class ProcessingControllerMixin:
             try:
                 import cv2 as _cv2_live
 
-                frame = _cv2_live.imread(path, _cv2_live.IMREAD_COLOR)
+                from backend.safe_image import safe_imread
+
+                # RM-317: the worker stages this frame under the scratch
+                # directory, which lives in %TEMP%. cv2.imread returns None
+                # for any path holding non-ASCII characters, and the guard
+                # below would swallow that as "no frame yet", so the live
+                # preview would stay blank for the whole run.
+                frame = safe_imread(path, _cv2_live.IMREAD_COLOR)
                 if frame is None:
                     return
                 max_w, max_h = 520, 320

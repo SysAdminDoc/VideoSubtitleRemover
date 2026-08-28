@@ -78,6 +78,28 @@ def _save_queue_records(state_dir: str, marker: str, rounds: int) -> None:
             raise AssertionError("queue state read back as unusable")
 
 
+def _save_preset(state_dir: str, name: str, ready_path: str,
+                 wait_for: str) -> None:
+    """Save one user preset through the real public entry point."""
+    sys.path.insert(0, str(REPO_ROOT))
+    from gui import config as gcfg
+
+    state = Path(state_dir)
+    gcfg.PRESETS_FILE = state / "presets.json"
+    gcfg.STATE_LOCK_FILE = state / "state.lock"
+
+    Path(ready_path).write_text("ready", encoding="utf-8")
+    deadline = time.monotonic() + 60
+    while wait_for and not Path(wait_for).exists():
+        if time.monotonic() > deadline:
+            raise AssertionError("peer never signalled")
+        time.sleep(0.02)
+
+    config = gcfg.ProcessingConfig()
+    if not gcfg.save_user_preset(name, "cross-process", config):
+        raise AssertionError(f"preset {name} was not saved")
+
+
 def _claim_instance(lock_path: str, result_path: str, hold_seconds: float) -> None:
     sys.path.insert(0, str(REPO_ROOT))
     from gui import single_instance
@@ -180,6 +202,119 @@ class ConcurrentQueueStateTests(unittest.TestCase):
                 sorted(p.name for p in Path(tmpdir).glob("*.corrupt-*")), [])
 
 
+class ConcurrentPresetTests(unittest.TestCase):
+    """RM-314: the preset read-modify-write must not straddle the lock.
+
+    Holding the lock only for the write keeps presets.json valid but still
+    loses a peer's preset that landed between this process's read and its
+    write, which is the exact failure the lock exists to remove.
+    """
+
+    WORKERS = 4
+
+    def test_every_concurrent_preset_survives(self):
+        ctx = mp.get_context("spawn")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = Path(tmpdir)
+            (state / "presets.json").write_text("{}", encoding="utf-8")
+            ready = [state / f"ready_{i}" for i in range(self.WORKERS)]
+            go = state / "go"
+            procs = [
+                ctx.Process(
+                    target=_save_preset,
+                    args=(tmpdir, f"peer_{index}", str(ready[index]), str(go)),
+                )
+                for index in range(self.WORKERS)
+            ]
+            for proc in procs:
+                proc.start()
+            # Release them together so their read-modify-writes really overlap.
+            deadline = time.monotonic() + 60
+            while not all(path.exists() for path in ready):
+                if time.monotonic() > deadline:
+                    self.fail("a preset worker never started")
+                time.sleep(0.02)
+            go.write_text("go", encoding="utf-8")
+            for proc in procs:
+                proc.join(120)
+                self.assertEqual(proc.exitcode, 0)
+
+            saved = json.loads(
+                (state / "presets.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                sorted(saved), [f"peer_{i}" for i in range(self.WORKERS)])
+
+
+class EntryPointSlotOwnershipTests(unittest.TestCase):
+    """RM-314: the slot must be held across app construction.
+
+    Acquiring, releasing, and letting the app re-acquire leaves a window of
+    tens of milliseconds where a second launch during a cold start sees the
+    slot free, and both processes then read and write the same state files.
+    """
+
+    def test_the_slot_is_not_released_before_the_app_is_built(self):
+        from unittest import mock
+
+        import VideoSubtitleRemover as entry
+        from gui import single_instance
+
+        events = []
+
+        class _Guard:
+            already_running = False
+
+            def release(self):
+                events.append("released")
+
+        class _App:
+            def __init__(self, *, instance_guard=None):
+                events.append(("constructed", instance_guard is not None))
+
+            def run(self):
+                events.append("ran")
+
+        with mock.patch.object(sys, "argv", ["VideoSubtitleRemover.py"]):
+            with mock.patch.object(
+                    single_instance, "acquire", return_value=_Guard()):
+                with mock.patch.object(entry, "VideoSubtitleRemoverApp", _App):
+                    entry.main()
+
+        self.assertEqual(
+            events, [("constructed", True), "ran", "released"])
+
+    def test_a_second_launch_exits_before_the_app_is_built(self):
+        from unittest import mock
+
+        import VideoSubtitleRemover as entry
+        from gui import single_instance
+
+        built = []
+
+        class _Guard:
+            already_running = True
+
+            def release(self):
+                pass
+
+        class _App:
+            def __init__(self, *, instance_guard=None):
+                built.append(instance_guard)
+
+            def run(self):
+                built.append("ran")
+
+        with mock.patch.object(sys, "argv", ["VideoSubtitleRemover.py"]):
+            with mock.patch.object(
+                    single_instance, "acquire", return_value=_Guard()):
+                with mock.patch.object(entry, "VideoSubtitleRemoverApp", _App):
+                    with self.assertRaises(SystemExit) as ctx:
+                        entry.main()
+
+        self.assertEqual(ctx.exception.code, 3)
+        self.assertEqual(built, [])
+
+
 class SecondInstanceTests(unittest.TestCase):
     def test_second_process_sees_the_first_and_writes_nothing(self):
         ctx = mp.get_context("spawn")
@@ -253,10 +388,13 @@ class SecondInstanceTests(unittest.TestCase):
                 )
                 self.assertEqual(second.returncode, 3)
                 self.assertIn("already running", second.stderr.lower())
+                # Nothing at all may land in the per-user directory: the
+                # log file there belongs to the running instance, and a second
+                # process appending to it can trip its rotation.
                 self.assertEqual(
-                    sorted(Path(appdata).rglob("settings.json")), [])
-                self.assertEqual(
-                    sorted(Path(appdata).rglob("queue_state.json")), [])
+                    sorted(p.name for p in Path(appdata).rglob("*")
+                           if p.is_file()),
+                    [])
         finally:
             holder.wait(timeout=60)
 
