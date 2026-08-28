@@ -45,6 +45,8 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- region_controller.py          # Region editor: rects, spans, keyframes, polygons.
 |   |-- release_probe.py              # Packaged scaling, contrast, RTL, and dialog release probe.
 |   |-- settings_controller.py        # Settings widgets, presets, mode selection.
+|   |-- single_instance.py            # One interactive instance per user session.
+|   |-- state_lock.py                 # Cross-process lock for the shared user state files.
 |   |-- support_controller.py         # Support bundle, model cache, log panel, About.
 |   |-- theme.py                      # Design tokens, colors, spacing, typography, text scale.
 |   |-- track_plan_controller.py      # Pre-run track plan scan and review dialog.

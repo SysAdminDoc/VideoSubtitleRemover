@@ -367,6 +367,19 @@ def main():
             locale=locale,
         ))
 
+    # RM-314: a second GUI shares settings.json and queue_state.json with
+    # the first, so refuse before anything is read or written. Report and
+    # exit without raising or focusing the running window.
+    from gui import single_instance
+
+    guard = single_instance.acquire()
+    if guard.already_running:
+        guard.release()
+        logger.warning(single_instance.ALREADY_RUNNING_MESSAGE)
+        print(single_instance.ALREADY_RUNNING_MESSAGE, file=sys.stderr)
+        sys.exit(3)
+    guard.release()
+
     app = VideoSubtitleRemoverApp()
     app.run()
 

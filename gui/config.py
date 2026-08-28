@@ -27,6 +27,7 @@ from backend.config_schema import (
 from backend.failure_reason import normalize_failure_reason
 from backend.region_keyframes import normalize_region_keyframe_tracks
 from backend.mask_corrections import normalize_mask_correction_list
+from gui.state_lock import state_file_lock
 from gui.theme import Theme, normalize_text_scale_percent
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,15 @@ QUEUE_STATE_FILE = LOG_DIR / "queue_state.json"
 MAX_JSON_OBJECT_BYTES = 1 * 1024 * 1024
 QUEUE_STATE_SCHEMA = 5
 _queue_state_io_lock = threading.RLock()
+# RM-314: every process that persists shared user state takes this
+# cross-process lock first. The thread lock above only orders writers
+# inside one process; a second GUI or a CLI run is a different one.
+STATE_LOCK_FILE = LOG_DIR / "state.lock"
+
+
+def shared_state_lock(timeout: float = 10.0):
+    """Serialize a shared-state read-modify-write across processes."""
+    return state_file_lock(STATE_LOCK_FILE, timeout=timeout)
 
 # Bump VSR_SETTINGS_FORMAT whenever settings.json keys are renamed or
 # semantics change. _migrate_settings() must learn the upgrade path so
@@ -1166,7 +1176,8 @@ def save_settings(config: ProcessingConfig) -> PersistenceResult:
             read_only=True,
         ))
     try:
-        _write_json_atomic(settings_file, config.normalized().to_dict())
+        with shared_state_lock():
+            _write_json_atomic(settings_file, config.normalized().to_dict())
         logger.info(f"Settings saved to {settings_file}")
     except Exception as e:
         logger.warning(f"Could not save settings: {e}")
@@ -1211,7 +1222,7 @@ def save_queue_state(queue_items):
     scheduler will skip forever.
     """
     try:
-        with _queue_state_io_lock:
+        with _queue_state_io_lock, shared_state_lock():
             records = []
             for item in list(queue_items):
                 if item.status == ProcessingStatus.COMPLETE:
@@ -1326,7 +1337,7 @@ def _quarantine_queue_state(reason: str) -> Optional[Path]:
 
 def load_queue_state():
     """Load saved queue state. Returns a list of dicts or None."""
-    with _queue_state_io_lock:
+    with _queue_state_io_lock, shared_state_lock():
         try:
             if not QUEUE_STATE_FILE.exists():
                 return None
@@ -1396,7 +1407,7 @@ def load_queue_state():
 def clear_queue_state():
     """Remove the saved queue state file."""
     try:
-        with _queue_state_io_lock:
+        with _queue_state_io_lock, shared_state_lock():
             if QUEUE_STATE_FILE.exists():
                 QUEUE_STATE_FILE.unlink()
     except Exception:
@@ -1542,7 +1553,8 @@ def _load_user_presets() -> dict:
 
 def _save_user_presets(presets: dict) -> PersistenceResult:
     try:
-        _write_json_atomic(PRESETS_FILE, presets)
+        with shared_state_lock():
+            _write_json_atomic(PRESETS_FILE, presets)
     except Exception as exc:
         logger.warning(f"Could not save user presets: {exc}")
         return _report_persistence(PersistenceResult(

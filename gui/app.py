@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import math
 import os
@@ -87,6 +86,7 @@ from gui.layout_responsive import ResponsiveLayoutMixin
 from gui.layout_build import LayoutBuildMixin
 from gui.queue_view import QueueViewMixin
 from gui.onboarding import OnboardingMixin
+from gui import single_instance
 
 logger = logging.getLogger(__name__)
 
@@ -153,16 +153,12 @@ class VideoSubtitleRemoverApp(
         self.root.minsize(980, 720)
         self.root.configure(bg=Theme.BG_DARK)
         self._ui_resources_released = False
-        self._running_mutex_handle = None
+        self._instance_guard = None
         if sys.platform == "win32":
             try:
-                self._running_mutex_handle = ctypes.windll.kernel32.CreateMutexW(
-                    None,
-                    False,
-                    "Local\\VideoSubtitleRemoverPro.Running",
-                )
+                self._instance_guard = single_instance.acquire()
             except Exception:
-                self._running_mutex_handle = None
+                self._instance_guard = None
         self.root.bind(
             "<Destroy>",
             self._on_root_destroyed,
@@ -501,14 +497,14 @@ class VideoSubtitleRemoverApp(
         self._release_running_mutex()
 
     def _release_running_mutex(self):
-        handle = getattr(self, "_running_mutex_handle", None)
-        if not handle:
+        guard = getattr(self, "_instance_guard", None)
+        if guard is None:
             return
         try:
-            ctypes.windll.kernel32.CloseHandle(handle)
+            guard.release()
         except Exception:
             pass
-        self._running_mutex_handle = None
+        self._instance_guard = None
 
     def _sync_plain_setting_vars(self):
         """Read every plain toggle/picker widget back onto the config.

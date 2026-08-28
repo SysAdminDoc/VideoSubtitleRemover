@@ -6,6 +6,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- A second launch no longer races the first one's state. Two GUI
+  processes share `settings.json` and `queue_state.json`, and the
+  Windows named mutex the installer already relies on was created
+  without ever reading whether it existed. A second launch now reports
+  that the app is open and exits without writing anything, and it does
+  not steal the foreground from the running window. Every path that
+  persists shared user state also takes a real cross-process lock, so a
+  GUI and a CLI run that legitimately overlap cannot drop each other's
+  updates.
+
 - Still images and mask files now read and write correctly on paths holding
   CJK, Cyrillic, or accented Latin characters. OpenCV hands the filename to
   its C++ layer as a narrow byte string, so `cv2.imwrite` silently returned

@@ -45,6 +45,8 @@ DESCRIPTIONS: dict[str, str] = {
     "gui/release_probe.py": "Packaged scaling, contrast, RTL, and dialog release probe.",
     "gui/region_controller.py": "Region editor: rects, spans, keyframes, polygons.",
     "gui/settings_controller.py": "Settings widgets, presets, mode selection.",
+    "gui/single_instance.py": "One interactive instance per user session.",
+    "gui/state_lock.py": "Cross-process lock for the shared user state files.",
     "gui/support_controller.py": "Support bundle, model cache, log panel, About.",
     "gui/theme.py": "Design tokens, colors, spacing, typography, text scale.",
     "gui/utils.py": "File helpers, media type checks, formatting.",
