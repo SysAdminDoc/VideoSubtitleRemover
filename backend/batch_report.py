@@ -912,6 +912,7 @@ def _quality_report_record(metrics: dict) -> dict:
         "outside_mask_color_drift_worst_frame",
         "outside_mask_color_drift_threshold",
         "residual_text_score",
+        "removal_verification",
         "seam_score",
         "lpips",
         "dists",

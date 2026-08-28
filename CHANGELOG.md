@@ -6,6 +6,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- Removal is now proved by re-running the detector over the repaired
+  region instead of only measuring contrast. The residual score beside it
+  says in its own docstring that it is not a substitute for OCR, while a
+  detector sat loaded for every job and was never asked. Sampled frames
+  are re-detected inside the repaired region, the boxes and confidences
+  are recorded with the fraction of the original text that still matches,
+  frames where text survived become review spans, and the quality gate
+  flags the job. It appears in the batch report and can be skipped with
+  --no-verify-removal. A frame that could not be checked is reported as
+  unchecked rather than as clean.
 - Long jobs keep the machine awake while they run. A batch or a CLI run
   could previously be interrupted by idle sleep. The hold is narrow on
   purpose: the system stays up, the display is free to switch off, and a

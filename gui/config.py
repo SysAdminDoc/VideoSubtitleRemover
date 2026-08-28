@@ -617,6 +617,9 @@ class ProcessingConfig:
     prefetch_queue_size: int = 0
     input_fps: float = 24.0
     quality_report_sheet: bool = False
+    # RM-325: re-run the detector over the repaired region and report
+    # what survived. On by default; the CLI can skip it.
+    verify_removal: bool = True
     remove_subtitles: bool = True
     remove_chyrons: bool = True
     chyron_min_hits: int = 90
@@ -879,6 +882,8 @@ class ProcessingConfig:
             self.quality_report_sheet, False)
         if self.quality_report_sheet:
             self.quality_report = True
+        self.verify_removal = _coerce_bool(
+            getattr(self, "verify_removal", True), True)
         self.remove_subtitles = _coerce_bool(self.remove_subtitles, True)
         self.remove_chyrons = _coerce_bool(self.remove_chyrons, True)
         self.chyron_min_hits = _coerce_int(self.chyron_min_hits, 90, 1, 9000)

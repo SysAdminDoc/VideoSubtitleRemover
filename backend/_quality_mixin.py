@@ -473,6 +473,14 @@ class _QualityMixin:
                 and (roi[2] - roi[0]) >= 32
                 and (roi[3] - roi[1]) >= 32
             )
+            # RM-325: re-detect over the repaired region on the same
+            # frames the metrics already sample, so the extra cost is one
+            # detector pass over frames that are decoded anyway.
+            verifier = None
+            if getattr(self.config, "verify_removal", True):
+                from backend.removal_verification import RemovalVerifier
+
+                verifier = RemovalVerifier(getattr(self, "detector", None))
             pairs: List[Tuple[int, np.ndarray, np.ndarray, float, float]] = []
             for idx in flicker_indices:
                 _seek_capture_to_frame_deferred(cap_in, start_frame + idx)
@@ -501,6 +509,13 @@ class _QualityMixin:
                     b_roi = b[y1:y2, x1:x2]
                     if b_roi.size:
                         temporal_samples.append((idx, b_roi.copy()))
+                        if verifier is not None and idx in metric_index_set:
+                            # RM-325: ask the detector, not just the
+                            # contrast heuristic, whether text survived.
+                            verifier.check(
+                                start_frame + idx, b, (x1, y1, x2, y2),
+                                source_frame=a,
+                            )
                         if idx in metric_index_set:
                             residual = residual_text_score(b_roi)
                             if residual is not None:
@@ -751,7 +766,28 @@ class _QualityMixin:
                 # repaired. Without this the report cannot distinguish a
                 # temporal run from a cv2 run wearing its name.
                 'temporal_exposure': dict(exposure) if exposure else None,
+                # RM-325: what the detector says about the repaired region,
+                # beside what the contrast heuristic says.
+                'removal_verification': (
+                    verifier.evidence() if verifier is not None else None),
             }
+            verification = metrics.get('removal_verification')
+            if verification and verification.get('ran'):
+                for item in verification.get('frames', []):
+                    review_spans.append(make_review_span(
+                        "residual",
+                        int(item["frame"]),
+                        int(item["frame"]) + 1,
+                        fps=fps,
+                        score=max(
+                            (d["confidence"] for d in item["detections"]),
+                            default=0.0),
+                        threshold=verification["confidenceThreshold"],
+                        reason=(
+                            "The detector still found text inside the "
+                            "repaired region"
+                        ),
+                    ))
             if (
                 temporal_local_score is not None
                 and temporal_local_score > MASK_LOCAL_TEMPORAL_CEILING

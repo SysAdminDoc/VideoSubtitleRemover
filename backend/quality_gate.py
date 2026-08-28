@@ -123,6 +123,7 @@ def evaluate_quality_gate(metrics: Optional[dict]) -> Dict[str, Any]:
     _check_final_encode_quality(metrics, violations)
     _check_outside_mask_color_drift(metrics, violations)
     _check_residual_text(metrics, violations)
+    _check_removal_verification(metrics, violations)
     _check_seam(metrics, violations)
 
     degraded = _find_degraded_metrics(metrics)
@@ -449,6 +450,45 @@ def _check_residual_text(metrics: dict,
             ),
             "ladder": LADDER_INCREASE_DILATION,
         })
+
+
+def _check_removal_verification(metrics: dict,
+                                violations: List[Dict[str, Any]]) -> None:
+    """RM-325: the detector's own answer about the repaired region.
+
+    The residual-text score beside this is a contrast heuristic that says of
+    itself it is not a substitute for OCR. This one re-runs the detector the
+    job already loaded and reports what it still finds.
+    """
+    from backend.removal_verification import verification_failed
+
+    evidence = metrics.get("removal_verification")
+    if not isinstance(evidence, Mapping) or not evidence.get("ran"):
+        return
+    if not verification_failed(dict(evidence)):
+        return
+    fraction = evidence.get("survivingFraction")
+    frames = int(evidence.get("framesWithSurvivingText") or 0)
+    if fraction is not None:
+        detail = (
+            f"re-detection still matched {fraction * 100:.0f}% of the "
+            f"original text boxes in the repaired region, above "
+            f"{float(evidence.get('survivingFractionThreshold', 0.0)) * 100:.0f}%"
+        )
+        value = float(fraction)
+        threshold = float(evidence.get("survivingFractionThreshold") or 0.0)
+    else:
+        detail = (
+            f"re-detection found text in {frames} repaired frame(s)")
+        value = float(frames)
+        threshold = 0.0
+    violations.append({
+        "metric": "removal_verification",
+        "value": value,
+        "threshold": threshold,
+        "detail": detail,
+        "ladder": LADDER_INCREASE_DILATION,
+    })
 
 
 def _check_seam(metrics: dict,

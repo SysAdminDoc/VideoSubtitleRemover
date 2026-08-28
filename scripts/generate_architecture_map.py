@@ -109,6 +109,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/preprocess.py": "Deinterlacing and keyframe enumeration.",
     "backend/presets.py": "Shared preset library (GUI + CLI).",
     "backend/keep_awake.py": "Scoped Windows sleep hold for the length of a job.",
+    "backend/removal_verification.py": "Re-detects text in the repaired region to prove removal.",
     "backend/provider_benchmark.py": "Measured cost of one provider lane on one clip.",
     "backend/processor.py": "Frame loop plus the legacy re-export / CLI shim.",
     "backend/proxy_workflow.py": "Proxy-encode workflow for large files.",

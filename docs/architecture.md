@@ -122,6 +122,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- release_staging.py          # Atomic, version-derived release artifact set.
 |   |-- release_verification.py     # Local PyInstaller release evidence writer.
 |   |-- remote_model_policy.py      # Gate for trust_remote_code / torch.hub.
+|   |-- removal_verification.py     # Re-detects text in the repaired region to prove removal.
 |   |-- remux.py                    # Soft-subtitle strip / keep remux paths.
 |   |-- resume_checkpoint.py        # Crash-resume and pause checkpoints.
 |   |-- safe_image.py               # Bounded image reads.

@@ -1090,6 +1090,7 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--keyframe-detect` | OCR only at video I-frames (ffprobe-probed) | Off | - | Public |
 | `--quality-report` | Compute PSNR/SSIM on a random frame sample after run | Off | - | Public |
 | `--quality-sheet` | Render a side-by-side comparison PNG alongside the report. | Off | - | Public |
+| `--no-verify-removal` | Skip re-running the detector over the repaired region of sampled frames. The check is the standard removal-success test and costs one extra detector pass per sampled frame. | Off | - | Public |
 | `--loudnorm` | EBU R128 loudness target in LUFS. | 0.0 | 0 (off) or -70..-5 LUFS | Public |
 | `--decode-accel` | Hardware-decode hint (OpenCV or PyNvVideoCodec). | off | off \| auto \| any \| d3d11 \| vaapi \| mfx \| pynv \| nvdec | Public |
 | `--single-audio` | Mux only the first audio stream. | Off | - | Public |
@@ -1313,6 +1314,7 @@ The table is generated directly from `ProcessingConfig` in registry order.
 | `prefetch_queue_size` | `int` | `0` |
 | `input_fps` | `float` | `24.0` |
 | `quality_report_sheet` | `bool` | `Off` |
+| `verify_removal` | `bool` | `On` |
 | `remove_subtitles` | `bool` | `On` |
 | `remove_chyrons` | `bool` | `On` |
 | `chyron_min_hits` | `int` | `90` |

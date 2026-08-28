@@ -111,7 +111,8 @@ _CLI_CATEGORY_OPTIONS = (
             "--frozen-matte",
             "--deinterlace",
             "--no-deinterlace-detect", "--keyframe-detect", "--quality-report",
-            "--quality-sheet", "--loudnorm", "--decode-accel", "--single-audio",
+            "--quality-sheet", "--no-verify-removal", "--loudnorm",
+            "--decode-accel", "--single-audio",
         ),
     ),
     (
@@ -1018,6 +1019,13 @@ def _build_parser(mode_choices):
                        help="Compute PSNR/SSIM on a random frame sample after run")
     parser.add_argument("--quality-sheet", action="store_true",
                        help="Render a side-by-side comparison PNG alongside the report.")
+    parser.add_argument("--no-verify-removal", action="store_true",
+                       help=(
+                           "Skip re-running the detector over the repaired "
+                           "region of sampled frames. The check is the "
+                           "standard removal-success test and costs one "
+                           "extra detector pass per sampled frame."
+                       ))
     parser.add_argument("--input-fps", type=float, default=24.0, metavar="FPS",
                        help="FPS for directory-of-images input.")
     parser.add_argument("--output-frames", action="store_true",
@@ -1845,6 +1853,7 @@ def _build_processing_config(
         input_fps=args.input_fps,
         output_frames=args.output_frames,
         quality_report_sheet=args.quality_sheet,
+        verify_removal=not getattr(args, "no_verify_removal", False),
         remove_subtitles=not args.keep_subtitles,
         remove_chyrons=not args.keep_chyrons,
         chyron_min_hits=args.chyron_min_hits,

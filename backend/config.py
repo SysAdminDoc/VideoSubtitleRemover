@@ -413,6 +413,11 @@ class ProcessingConfig:
     # PSNR/SSIM numeric report so reviewers can scan visually instead of
     # squinting at metrics. Implies `quality_report = True`.
     quality_report_sheet: bool = False
+    # RM-325: re-run the configured detector over the repaired region of
+    # every sampled frame and report what survived. This is the standard
+    # scene-text-removal success check; the contrast heuristic beside it
+    # says of itself that it is not a substitute for OCR.
+    verify_removal: bool = True
 
     # Chyron classifier: persistent text boxes (station logos, lower-
     # thirds, breaking-news tickers) are categorised separately from
@@ -917,6 +922,8 @@ def normalize_processing_config(config: ProcessingConfig) -> ProcessingConfig:
     config.prefetch_queue_size = _coerce_int(config.prefetch_queue_size, 0, 0, 512)
     config.input_fps = _coerce_float(config.input_fps, 24.0, 1.0, 240.0)
     config.quality_report_sheet = _coerce_bool(config.quality_report_sheet, False)
+    config.verify_removal = _coerce_bool(
+        getattr(config, "verify_removal", True), True)
     if config.quality_report_sheet:
         # The sheet is rendered from the same sample _compute_quality_report
         # collects, so the numeric report must run for the sheet to exist.
