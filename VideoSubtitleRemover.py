@@ -266,6 +266,68 @@ def _run_frozen_import_smoke(result_path: str) -> int:
     return 0 if payload["passed"] else 1
 
 
+def _run_frozen_provider_smoke(result_path: str) -> int:
+    """RM-350: which provider does THIS artifact actually get?
+
+    The dependency profile smoke answers that for the environment the build
+    ran in. This answers it for the frozen payload, from inside the frozen
+    payload, so a CPU-only bundle cannot be published under a CUDA name.
+    """
+    path = os.path.abspath(result_path)
+    payload = {
+        "schema": "vsr.frozen_provider_smoke.v1",
+        "appVersion": APP_VERSION,
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "profile": "",
+        "profileSource": "",
+        "declaredProvider": "",
+        "availableProviders": [],
+        "activeProviders": [],
+        "ran": False,
+        "passed": False,
+        "fellBack": None,
+        "error": "",
+    }
+    try:
+        from backend.build_profile import resolve_build_profile
+        from backend.dependency_profiles import run_profile_provider_smoke
+
+        build = resolve_build_profile()
+        payload["profile"] = build["profile"]
+        payload["profileSource"] = build["source"]
+        payload["declaredProvider"] = build["provider"]
+
+        smoke = run_profile_provider_smoke(build["profile"])
+        payload.update({
+            "availableProviders": list(smoke.get("availableProviders") or []),
+            "activeProviders": list(smoke.get("activeProviders") or []),
+            "ran": bool(smoke.get("ran")),
+            "passed": smoke.get("passed") is True,
+            "fellBack": smoke.get("fellBack"),
+            "error": str(smoke.get("error") or ""),
+        })
+    except Exception:  # noqa: BLE001 - this is the probe, not the product
+        # An artifact that cannot answer is exactly what this smoke exists to
+        # catch, and the answer has to reach the caller as a written record
+        # rather than as a traceback on a stream nobody reads. The failure is
+        # reported in the payload and in the exit code; nothing is swallowed.
+        payload["error"] = traceback.format_exc()
+        logger.critical("Frozen provider smoke failed:\n%s", payload["error"])
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+    except OSError:
+        logger.critical(
+            "Frozen provider smoke could not write %s:\n%s",
+            path,
+            traceback.format_exc(),
+        )
+        return 1
+    return 0 if payload["passed"] else 1
+
+
 def _run_ui_release_probe(
     result_path: str,
     *,
@@ -332,6 +394,15 @@ def main():
             logger.error("--frozen-import-smoke requires a result path")
             sys.exit(2)
         sys.exit(_run_frozen_import_smoke(result_path))
+
+    if "--frozen-provider-smoke" in sys.argv[1:]:
+        try:
+            result_index = sys.argv.index("--frozen-provider-smoke") + 1
+            result_path = sys.argv[result_index]
+        except (IndexError, ValueError):
+            logger.error("--frozen-provider-smoke requires a result path")
+            sys.exit(2)
+        sys.exit(_run_frozen_provider_smoke(result_path))
 
     # RM-106: headless self-test for release verification. Must run before
     # the DPI/mainloop path so it can exit cleanly on a CI runner.

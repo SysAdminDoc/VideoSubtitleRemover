@@ -120,12 +120,34 @@ Track selection says exactly what will be removed. Region and mask tools keep th
 
 ### Prebuilt Download (no setup)
 
-Grab the latest standalone Windows x64 build from the
-[Releases page](https://github.com/SysAdminDoc/VideoSubtitleRemover/releases/latest):
-download `VideoSubtitleRemoverPro-X.Y.Z-Windows-x64.zip`, extract anywhere, and run
-`VideoSubtitleRemoverPro.exe` (or `Run_VSR_Pro.bat`). The build is unsigned, so
-Windows SmartScreen may prompt. Choose **More info -> Run anyway**, and verify
-the download against the published `SHA256SUMS.txt` file.
+Two builds are published per release, one per hardware lane. Pick the one that
+matches the machine you are going to run it on. The lane is in the filename,
+and it is not a label: the release cannot be staged unless the frozen build
+itself reports that it activates that lane's execution provider.
+
+| Download | Runs inference on | Ships as | Download | Installed | Pick this if |
+|----------|-------------------|----------|----------|-----------|--------------|
+| `VideoSubtitleRemoverPro-X.Y.Z-cpu-*` | `CPUExecutionProvider` | Installer and portable ZIP | 99 MB installer, 128 MB ZIP | 288 MB | You have no NVIDIA card, or you want the smaller download |
+| `VideoSubtitleRemoverPro-X.Y.Z-nvidia-*` | `CUDAExecutionProvider` | Portable ZIP only | 2.1 GB ZIP | 3.1 GB | You have an NVIDIA card with a current driver |
+
+The portable ZIP extracts anywhere and runs `VideoSubtitleRemoverPro.exe` (or
+`Run_VSR_Pro.bat`) with no installer involved.
+
+The NVIDIA lane has no installer because it cannot have one. Its bundle
+carries the PyTorch CUDA 13.0 runtime that the CUDA execution provider loads
+cuBLAS and cuDNN out of, which puts it past 3 GB, and the NSIS compiler is a
+32-bit program that cannot package more than about 2 GB. The sizes above are
+from the v3.40.0 build and move a little with each release.
+
+DirectML is a supported profile for a local install from source and is
+deliberately not published as a build. Nothing here has measured it on the
+hardware it targets, and shipping an untested bundle is how a single generic
+download came to recommend NVIDIA while running on the CPU.
+
+Both builds are unsigned, so Windows SmartScreen may prompt. Choose
+**More info -> Run anyway**, and verify the download against the
+`SHA256SUMS.txt` published beside it. Each lane has its own checksum file
+covering exactly that lane's assets.
 
 ### Quick Install
 

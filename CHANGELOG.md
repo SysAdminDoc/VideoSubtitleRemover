@@ -6,6 +6,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- Separate CPU and NVIDIA downloads. The release used to be one generically named build that ran on the CPU while the README recommended NVIDIA, and nothing in the artifact said which it was. Each lane is now built from its own locked dependency profile into its own dist tree, carries the lane in every filename, and ships its own checksums, SBOM, dependency audit and evidence. The NVIDIA bundle keeps the PyTorch CUDA 13.0 runtime that the CUDA execution provider loads cuBLAS and cuDNN from, which the old single build stripped.
+
+- A release cannot be published under a name it does not deserve. The profile is stamped into the bundle when it is frozen, and the frozen executable is run to report which execution provider it actually activates. Staging refuses to promote an artifact whose stamp, or whose measured provider, disagrees with the lane its filename claims, or whose profile was inferred rather than stamped. `build_exe.bat <lane>` builds one lane, and `release_staging check-lanes` says which are still missing before a release goes out. DirectML stays a supported profile for a local install and is deliberately not published as a bundle.
+
+
 - Three ways back from a mistake. **Reset settings** in the preset row
   restores the cleanup settings to their defaults and names how many it
   will change before acting, leaving presets, output location, saved
@@ -15,6 +20,11 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
   Remove or Clear completed discarded, in its original position.
 
 ### Fixed
+
+- A CUDA build would have run every job on the CPU. ONNX Runtime finds the CUDA and cuDNN libraries by asking the packaging metadata where PyTorch is installed, and a frozen build carries no packaging metadata, so the lookup found nothing and the provider could not load cuBLAS. It kept reporting CUDA as available and quietly ran on the CPU. The frozen build now hands ONNX Runtime the path to the runtime it ships. This was caught by the new provider check on a real build, before anything was published.
+
+- The NVIDIA lane ships a portable ZIP and no installer. Its payload is 3.1 GB because the CUDA provider needs the CUDA runtime, and the NSIS compiler is a 32-bit program that cannot package more than about 2 GB. The build says which lanes get an installer instead of discovering it through a failed compile.
+
 
 - Removal verification no longer counts scene text it was never asked to touch. The region it re-detects in is the bounding box of every mask in the clip, so a shop sign or a scoreboard above the subtitle band was found in the source, found again in the output, and scored as text that survived the repair. It now reads the frame's own mask and only counts text the mask covered. On a run with no mask on disk it compares the pixels instead, and where that cannot tell a gap between subtitles from a repair that did nothing, the frame is reported unchecked rather than clean.
 

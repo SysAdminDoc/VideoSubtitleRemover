@@ -63,6 +63,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- adapter_manifest.py         # Optional model pins, artifact hashes, provenance records.
 |   |-- atomic_replace.py           # Journalled multi-file replacement and recovery.
 |   |-- batch_report.py             # JSON + Markdown batch summary and output sidecars.
+|   |-- build_profile.py            # Dependency profile a frozen build was made from.
 |   |-- cache_inventory.py          # Cache info/clean and portable model-cache bundles.
 |   |-- cli.py                      # argparse entry point and batch driver.
 |   |-- config.py                   # Backend ProcessingConfig, InpaintMode, coercers.

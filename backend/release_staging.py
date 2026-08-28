@@ -46,22 +46,68 @@ class ReleaseStagingError(RuntimeError):
     """A release stage could not be built or did not verify."""
 
 
-def installer_asset_name(version: str) -> str:
-    return f"VideoSubtitleRemoverPro-{version}-Setup.exe"
+# RM-350: the download used to be one generically named build that was
+# effectively CPU-only while the product recommended NVIDIA. The lane is now
+# part of the filename, and `evidence_problems` refuses to promote an
+# artifact whose recorded provider does not match the lane its name claims.
+DEFAULT_PROFILE = "cpu"
+
+# The lane published as a tested bundle. DirectML stays a supported profile
+# for a local install and is deliberately not shipped as an artifact: nothing
+# here has ever measured it on the hardware it targets.
+PUBLISHED_PROFILES: tuple[str, ...] = ("cpu", "nvidia")
+
+# Lanes that ship an NSIS installer as well as a portable ZIP.
+#
+# The NSIS compiler is a 32-bit program and maps its payload into a 32-bit
+# address space, so an installer cannot exceed about 2 GB. Compiling the CUDA
+# lane fails there with "Internal compiler error #12345: error mmapping file
+# (2078463402, 33554432) is out of range" against a 3.1 GB payload. That size
+# is not slack: the CUDA execution provider loads its runtime out of the
+# torch cu130 wheel, where cuBLASLt is 456 MB and cuFFT is 272 MB on their
+# own. The lane therefore ships as a portable ZIP, which uses ZIP64 and has
+# no such ceiling. This is a property of the packager, not a missing step, so
+# it is declared here rather than discovered by a failed build.
+INSTALLER_PROFILES: tuple[str, ...] = ("cpu",)
 
 
-def portable_asset_name(version: str) -> str:
-    return f"VideoSubtitleRemoverPro-{version}-Windows-x64.zip"
+def ships_installer(profile: str) -> bool:
+    return normalize_release_profile(profile) in INSTALLER_PROFILES
 
 
-def expected_assets(version: str) -> tuple[str, ...]:
+def normalize_release_profile(profile: object) -> str:
+    from backend.build_profile import normalize_profile
+
+    name = normalize_profile(profile)
+    if not name:
+        raise ReleaseStagingError(
+            f"Unsupported release profile: {profile!r}")
+    return name
+
+
+def installer_asset_name(version: str,
+                         profile: str = DEFAULT_PROFILE) -> str:
+    return (f"VideoSubtitleRemoverPro-{version}-"
+            f"{normalize_release_profile(profile)}-Setup.exe")
+
+
+def portable_asset_name(version: str,
+                        profile: str = DEFAULT_PROFILE) -> str:
+    return (f"VideoSubtitleRemoverPro-{version}-"
+            f"{normalize_release_profile(profile)}-Windows-x64.zip")
+
+
+def expected_assets(version: str,
+                    profile: str = DEFAULT_PROFILE) -> tuple[str, ...]:
     """Every filename a complete release directory must contain, and no more."""
-    return tuple(sorted((
-        installer_asset_name(version),
-        portable_asset_name(version),
+    names = [
+        portable_asset_name(version, profile),
         CHECKSUM_NAME,
         *EVIDENCE_FILES,
-    )))
+    ]
+    if ships_installer(profile):
+        names.append(installer_asset_name(version, profile))
+    return tuple(sorted(names))
 
 
 def _sha256_file(path: Path) -> str:
@@ -85,7 +131,62 @@ def _read_evidence(evidence_dir: Path) -> dict[str, Any]:
     return dict(payload)
 
 
-def evidence_problems(evidence: Mapping[str, Any], version: str) -> list[str]:
+def profile_problems(evidence: Mapping[str, Any], profile: str) -> list[str]:
+    """Reject evidence whose provider does not match the name being claimed.
+
+    RM-350: a filename is a claim about what is inside. Two independent
+    records have to agree with it before the artifact is promoted: the
+    profile stamped into the frozen bundle at freeze time, and the provider
+    ONNX Runtime actually activated when that frozen bundle ran. A CPU
+    payload with an NVIDIA name fails here rather than on a user's machine.
+    """
+    from backend.build_profile import declared_provider
+
+    name = normalize_release_profile(profile)
+    problems: list[str] = []
+    expected_provider = declared_provider(name)
+
+    frozen = evidence.get("frozenProviderSmoke")
+    if not isinstance(frozen, Mapping):
+        return [
+            f"the artifact claims the {name} lane but carries no frozen "
+            "provider evidence to support it"
+        ]
+    stamped = str(frozen.get("profile") or "")
+    if stamped != name:
+        problems.append(
+            f"the artifact name claims the {name} lane but the frozen build "
+            f"is stamped {stamped or 'unstamped'!r}"
+        )
+    if str(frozen.get("profileSource") or "") != "stamp":
+        problems.append(
+            "the frozen build's profile was inferred rather than stamped in "
+            "at freeze time, so it is not evidence of what was built"
+        )
+    if not frozen.get("ran"):
+        problems.append(
+            "the frozen provider smoke did not run, so nothing measured "
+            "which provider this artifact selects"
+        )
+    active = [str(item) for item in (frozen.get("activeProviders") or [])]
+    if expected_provider and expected_provider not in active:
+        problems.append(
+            f"the artifact claims the {name} lane, whose provider is "
+            f"{expected_provider}, but the frozen build activated "
+            + (", ".join(active) if active else "no provider")
+        )
+    if frozen.get("fellBack"):
+        problems.append(
+            f"the frozen build fell back off {expected_provider}, so the "
+            f"{name} name would be untrue"
+        )
+    if not frozen.get("passed"):
+        problems.append("the frozen provider smoke did not pass")
+    return problems
+
+
+def evidence_problems(evidence: Mapping[str, Any], version: str,
+                      profile: str = DEFAULT_PROFILE) -> list[str]:
     """Reject evidence that does not describe this exact, fully smoked build."""
     problems: list[str] = []
     app = evidence.get("app")
@@ -107,20 +208,24 @@ def evidence_problems(evidence: Mapping[str, Any], version: str) -> list[str]:
         problems.append(
             f"release evidence reports {len(errors)} verification error(s)"
         )
-    for key, label in (
-        ("installerSmoke", "installer payload smoke"),
-        ("smokeLaunch", "frozen launch smoke"),
-    ):
+    required_smokes = [("smokeLaunch", "frozen launch smoke")]
+    if ships_installer(profile):
+        required_smokes.insert(
+            0, ("installerSmoke", "installer payload smoke"))
+    for key, label in required_smokes:
         section = evidence.get(key)
         if not isinstance(section, Mapping):
             problems.append(f"{label} evidence is missing")
             continue
         if not section.get("passed"):
             problems.append(f"{label} did not pass")
-    installer = evidence.get("installer")
-    if not isinstance(installer, Mapping) or not installer.get(
-            "validPortableExecutable"):
-        problems.append("installer artifact evidence is missing or invalid")
+    if ships_installer(profile):
+        installer = evidence.get("installer")
+        if not isinstance(installer, Mapping) or not installer.get(
+                "validPortableExecutable"):
+            problems.append(
+                "installer artifact evidence is missing or invalid")
+    problems.extend(profile_problems(evidence, profile))
     return problems
 
 
@@ -170,20 +275,23 @@ def parse_checksums(text: str) -> dict[str, str]:
     return parsed
 
 
-def verify_release_dir(directory: str | Path, version: str) -> dict[str, Any]:
+def verify_release_dir(directory: str | Path, version: str,
+                       profile: str = DEFAULT_PROFILE) -> dict[str, Any]:
     """Confirm a promoted release directory is exactly one versioned set."""
     path = Path(directory)
+    name = normalize_release_profile(profile)
     problems: list[str] = []
     if not path.is_dir():
         return {
             "schema": RELEASE_STAGE_SCHEMA,
             "version": version,
+            "profile": name,
             "directory": str(path),
             "valid": False,
             "problems": [f"release directory is missing: {path}"],
             "assets": [],
         }
-    expected = set(expected_assets(version))
+    expected = set(expected_assets(version, name))
     present = {item.name for item in path.iterdir()}
     for missing in sorted(expected - present):
         problems.append(f"missing release asset: {missing}")
@@ -208,6 +316,7 @@ def verify_release_dir(directory: str | Path, version: str) -> dict[str, Any]:
     return {
         "schema": RELEASE_STAGE_SCHEMA,
         "version": version,
+        "profile": name,
         "directory": str(path),
         "valid": not problems,
         "problems": problems,
@@ -222,9 +331,9 @@ def stale_release_artifacts(
 ) -> list[str]:
     """Loose files in the release root left over from the pre-versioned layout.
 
-    Promoted sets live in ``<release root>/<version>/``. Anything else sitting
-    loose in the root is a leftover from an older build, except the evidence
-    inputs the current build just produced.
+    Promoted sets live in ``<release root>/<version>/<profile>/``. Anything
+    else sitting loose in the root is a leftover from an older build, except
+    the evidence inputs the current build just produced.
     """
     root = Path(release_root)
     if not root.is_dir():
@@ -245,17 +354,26 @@ def stage_release(
     release_root: str | Path = DEFAULT_RELEASE_ROOT,
     stage_root: str | Path | None = None,
     prune_stale: bool = False,
+    profile: str = DEFAULT_PROFILE,
 ) -> dict[str, Any]:
     """Stage, hash, verify, and promote one complete versioned release set."""
     version = str(version).strip()
     if not version:
         raise ReleaseStagingError("A release version is required")
-    installer = Path(installer_path)
-    if not installer.is_file():
-        raise ReleaseStagingError(f"Installer artifact is missing: {installer}")
+    name = normalize_release_profile(profile)
+    installer = Path(installer_path) if installer_path else None
+    if ships_installer(name):
+        if installer is None or not installer.is_file():
+            raise ReleaseStagingError(
+                f"Installer artifact is missing: {installer or '(none given)'}")
+    elif installer is not None and installer.is_file():
+        raise ReleaseStagingError(
+            f"The {name} lane ships no installer, but one was passed: "
+            f"{installer}. See INSTALLER_PROFILES for why."
+        )
     evidence_path = Path(evidence_dir)
     evidence = _read_evidence(evidence_path)
-    problems = evidence_problems(evidence, version)
+    problems = evidence_problems(evidence, version, name)
     if problems:
         raise ReleaseStagingError(
             "Release evidence does not describe a promotable build:\n- "
@@ -271,18 +389,25 @@ def stage_release(
 
     root = Path(release_root)
     root.mkdir(parents=True, exist_ok=True)
-    target = root / version
+    # One directory per lane, so a CPU set and a CUDA set of the same version
+    # cannot overwrite each other or share a checksum manifest.
+    target = root / version / name
+    target.parent.mkdir(parents=True, exist_ok=True)
     stage_parent = Path(stage_root) if stage_root else root
     stage_parent.mkdir(parents=True, exist_ok=True)
-    stage = Path(tempfile.mkdtemp(prefix=f".stage-{version}-", dir=str(stage_parent)))
+    stage = Path(tempfile.mkdtemp(
+        prefix=f".stage-{version}-{name}-", dir=str(stage_parent)))
     try:
-        shutil.copy2(installer, stage / installer_asset_name(version))
-        build_portable_zip(dist_dir, stage / portable_asset_name(version))
-        for name in EVIDENCE_FILES:
-            shutil.copy2(evidence_path / name, stage / name)
-        hashed = [name for name in expected_assets(version) if name != CHECKSUM_NAME]
+        if ships_installer(name):
+            shutil.copy2(
+                installer, stage / installer_asset_name(version, name))
+        build_portable_zip(dist_dir, stage / portable_asset_name(version, name))
+        for evidence_name in EVIDENCE_FILES:
+            shutil.copy2(evidence_path / evidence_name, stage / evidence_name)
+        hashed = [item for item in expected_assets(version, name)
+                  if item != CHECKSUM_NAME]
         digests = write_checksums(stage, hashed)
-        report = verify_release_dir(stage, version)
+        report = verify_release_dir(stage, version, name)
         if not report["valid"]:
             raise ReleaseStagingError(
                 "Staged release did not verify:\n- "
@@ -290,7 +415,7 @@ def stage_release(
             )
         if target.exists():
             replaced = Path(tempfile.mkdtemp(
-                prefix=f".replaced-{version}-", dir=str(stage_parent)))
+                prefix=f".replaced-{version}-{name}-", dir=str(stage_parent)))
             os.replace(target, replaced / "previous")
             shutil.rmtree(replaced, ignore_errors=True)
         os.replace(stage, target)
@@ -309,8 +434,9 @@ def stage_release(
     return {
         "schema": RELEASE_STAGE_SCHEMA,
         "version": version,
+        "profile": name,
         "directory": str(target),
-        "assets": list(expected_assets(version)),
+        "assets": list(expected_assets(version, name)),
         "checksums": digests,
         "prunedStaleArtifacts": stale if prune_stale else [],
         "staleArtifacts": [] if prune_stale else stale,
@@ -318,17 +444,58 @@ def stage_release(
     }
 
 
+def published_release_dirs(version: str,
+                           release_root: str | Path = DEFAULT_RELEASE_ROOT,
+                           ) -> list[Path]:
+    """The per-lane directories a complete publication has to cover."""
+    root = Path(release_root) / version
+    return [root / name for name in PUBLISHED_PROFILES]
+
+
+def missing_published_profiles(
+    version: str,
+    release_root: str | Path = DEFAULT_RELEASE_ROOT,
+) -> list[str]:
+    """Lanes that have not been staged for this version.
+
+    RM-350: the CPU build alone used to be the whole release, published
+    under a name that said nothing while the README recommended NVIDIA.
+    """
+    root = Path(release_root) / version
+    missing = []
+    for name in PUBLISHED_PROFILES:
+        report = verify_release_dir(root / name, version, name)
+        if not report["valid"]:
+            missing.append(name)
+    return missing
+
+
 def publication_guidance(version: str) -> list[str]:
     """Publication steps for an unsigned, immutable GitHub release."""
+    lanes = ", ".join(PUBLISHED_PROFILES)
+    zip_only = [name for name in PUBLISHED_PROFILES
+                if not ships_installer(name)]
     return [
+        f"Build every published lane before releasing: {lanes}. Each is "
+        "built from its own locked dependency profile with "
+        "`build_exe.bat <profile>`, and each carries the provider its name "
+        "claims.",
+        (("These lanes ship a portable ZIP and no installer, because their "
+          "payload is past the 2 GB ceiling of the 32-bit NSIS compiler: "
+          + ", ".join(zip_only) + ".")
+         if zip_only else
+         "Every published lane ships both an installer and a portable ZIP."),
         f"gh release create v{version} --draft --title \"v{version}\" "
         "--notes-file <changelog excerpt>",
-        f"gh release upload v{version} build/release/{version}/* --clobber",
+        f"gh release upload v{version} build/release/{version}/*/* --clobber",
         "Review the draft, then publish it. Enable immutable releases on the "
         "repository so a published tag's assets can never be replaced.",
         "Artifacts are intentionally UNSIGNED. Do not acquire or apply a "
-        "code-signing certificate; publish the SHA256SUMS.txt from the same "
-        "staged set as the only integrity reference.",
+        "code-signing certificate; publish the SHA256SUMS.txt from each "
+        "staged lane as the only integrity reference.",
+        "DirectML is a supported local install profile and is deliberately "
+        "not published as a tested bundle: nothing here has measured it on "
+        "the hardware it targets.",
     ]
 
 
@@ -336,10 +503,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Stage and verify one versioned release artifact set."
     )
-    parser.add_argument("command", choices=("stage", "verify", "guidance"))
+    parser.add_argument(
+        "command", choices=("stage", "verify", "guidance", "check-lanes"))
     parser.add_argument("--version", default="")
+    parser.add_argument(
+        "--profile",
+        default=DEFAULT_PROFILE,
+        help=(
+            "Dependency profile this artifact set was built from. It becomes "
+            "part of every filename, and staging refuses evidence whose "
+            "recorded provider does not match it."
+        ),
+    )
     parser.add_argument("--dist-dir", default="dist/VideoSubtitleRemoverPro")
-    parser.add_argument("--installer-path", default="")
+    parser.add_argument(
+        "--installer-path",
+        default="",
+        help=(
+            "The compiled installer for this lane. Leave empty for a lane "
+            "that ships only a portable ZIP; see INSTALLER_PROFILES."
+        ),
+    )
     parser.add_argument("--evidence-dir", default=str(DEFAULT_RELEASE_ROOT))
     parser.add_argument("--release-root", default=str(DEFAULT_RELEASE_ROOT))
     parser.add_argument(
@@ -360,8 +544,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(line)
         return 0
 
+    if args.command == "check-lanes":
+        missing = missing_published_profiles(version, args.release_root)
+        if missing:
+            print(
+                "Release is incomplete. These lanes have not been staged "
+                f"for {version}: " + ", ".join(missing)
+            )
+            return 1
+        print(f"All published lanes are staged for {version}: "
+              + ", ".join(PUBLISHED_PROFILES))
+        return 0
+
     if args.command == "verify":
-        report = verify_release_dir(Path(args.release_root) / version, version)
+        report = verify_release_dir(
+            Path(args.release_root) / version / args.profile,
+            version,
+            args.profile,
+        )
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report["valid"] else 1
 
@@ -373,6 +573,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             evidence_dir=args.evidence_dir,
             release_root=args.release_root,
             prune_stale=args.prune_stale,
+            profile=args.profile,
         )
     except ReleaseStagingError as exc:
         print(f"Release staging failed: {exc}")

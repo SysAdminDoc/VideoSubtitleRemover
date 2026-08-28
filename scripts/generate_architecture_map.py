@@ -61,6 +61,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/adapter_manifest.py": "Optional model pins, artifact hashes, provenance records.",
     "backend/atomic_replace.py": "Journalled multi-file replacement and recovery.",
     "backend/batch_report.py": "JSON + Markdown batch summary and output sidecars.",
+    "backend/build_profile.py": "Dependency profile a frozen build was made from.",
     "backend/cache_inventory.py": "Cache info/clean and portable model-cache bundles.",
     "backend/cli.py": "argparse entry point and batch driver.",
     "backend/config.py": "Backend ProcessingConfig, InpaintMode, coercers.",

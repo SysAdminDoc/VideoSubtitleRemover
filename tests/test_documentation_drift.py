@@ -124,8 +124,11 @@ class UnsignedDistributionWordingTests(unittest.TestCase):
                     )
 
     def test_readme_states_the_build_is_unsigned(self):
+        # RM-350: there are two builds now, one per hardware lane, so the
+        # sentence is plural. The claim being checked is that the README
+        # says they are unsigned, not that it uses one wording.
         text = README.read_text(encoding="utf-8")
-        self.assertIn("The build is unsigned", text)
+        self.assertRegex(text, r"builds? (?:is|are) unsigned")
         self.assertIn("SHA256SUMS.txt", text)
 
 

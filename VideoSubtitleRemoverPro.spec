@@ -16,6 +16,26 @@ def _available(name):
         return False
 
 
+def _build_profile():
+    """RM-350: the dependency profile this artifact is being built from.
+
+    Stamped into the bundle so the frozen executable, and the release
+    verification that reads it back, can say which lane this payload is
+    rather than inferring it from a filename.
+    """
+    import sys
+
+    sys.path.insert(0, os.path.abspath(SPECPATH))
+    from backend.build_profile import normalize_profile, write_build_profile
+    from backend.dependency_profiles import PROFILE_ENV
+    from gui.config import APP_VERSION
+
+    name = normalize_profile(os.environ.get(PROFILE_ENV, "")) or "cpu"
+    stamp_dir = os.path.join(os.path.abspath(SPECPATH), "build", "profile-stamp")
+    path = write_build_profile(stamp_dir, name, app_version=APP_VERSION)
+    return name, str(path)
+
+
 def _package_payload(entry, package):
     """Return whether a TOC entry physically belongs to an excluded package."""
     destination, source, _kind = entry
@@ -29,7 +49,11 @@ def _package_payload(entry, package):
     )
 
 
-datas = [('backend', 'backend'), ('locale', 'locale'), ('icon.png', '.'), ('icon.ico', '.')]
+# RM-350: the frozen build reads its own dependency profile manifest to
+# report which provider it activates, and backend.dependency_profiles
+# resolves it relative to the bundle root.
+datas = [('backend', 'backend'), ('locale', 'locale'), ('icon.png', '.'), ('icon.ico', '.'),
+         ('dependency_profiles.json', '.'), ('dependency_profiles', 'dependency_profiles')]
 hiddenimports = [
     'PIL._tkinter_finder', 'cv2', 'numpy', 'backend.opencv_ocr',
     'tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox',
@@ -39,6 +63,9 @@ for package in ('rapidocr', 'rapidocr_onnxruntime'):
         hiddenimports.append(package)
         datas += collect_data_files(package)
 
+build_profile, build_profile_path = _build_profile()
+datas.append((build_profile_path, '.'))
+
 full_ocr = _enabled('VSR_ENABLE_FULL_OCR')
 pytorch_lama = _enabled('VSR_ENABLE_PYTORCH_LAMA')
 if full_ocr:
@@ -46,12 +73,18 @@ if full_ocr:
 if pytorch_lama and _available('simple_lama_inpainting'):
     hiddenimports.append('simple_lama_inpainting')
 
+# RM-319/RM-350: the CUDA lane loads its cuBLAS and cuDNN runtime out of
+# the torch cu130 wheel, so onnxruntime_providers_cuda.dll cannot load
+# without it. Stripping torch from an NVIDIA artifact would produce exactly
+# the CPU-only bundle under a CUDA name that RM-350 exists to stop.
+needs_torch = build_profile == 'nvidia'
+
 excludes = []
 if not full_ocr:
     excludes += ['paddle', 'paddleocr', 'easyocr']
 if not pytorch_lama:
     excludes.append('simple_lama_inpainting')
-if not full_ocr and not pytorch_lama:
+if not full_ocr and not pytorch_lama and not needs_torch:
     excludes += ['torch', 'torchvision']
 
 # numpy 2.x splits its C core into submodules (numpy._core._exceptions, ...)
@@ -79,7 +112,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-if not full_ocr and not pytorch_lama:
+if not full_ocr and not pytorch_lama and not needs_torch:
     # Hooks for other GPU providers can discover CUDA DLLs inside torch even
     # when the torch module is excluded. Keep the default RapidOCR artifact
     # physically free of PyTorch so its SBOM and dependency audit match the

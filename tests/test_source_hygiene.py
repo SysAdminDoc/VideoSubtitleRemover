@@ -20,13 +20,34 @@ EXCLUDED_DIRS = {
     "venv",
 }
 
+# RM-350 builds each release lane from its own environment, so `venv` is no
+# longer the only one in the tree. Naming them one at a time is how the next
+# `venv-directml` ends up inside these gates: every rule here is about this
+# project's own sources, and a directory with a `pyvenv.cfg` in it is by
+# definition somebody else's.
+_VENV_MARKER = "pyvenv.cfg"
+
+
+def _is_virtualenv(directory: Path) -> bool:
+    try:
+        return (directory / _VENV_MARKER).is_file()
+    except OSError:
+        return False
+
 
 def _is_excluded(path: Path) -> bool:
     try:
         relative = path.relative_to(ROOT)
     except ValueError:
         return True
-    return any(part in EXCLUDED_DIRS for part in relative.parts)
+    if any(part in EXCLUDED_DIRS for part in relative.parts):
+        return True
+    current = ROOT
+    for part in relative.parts[:-1]:
+        current = current / part
+        if _is_virtualenv(current):
+            return True
+    return False
 
 
 def _source_files():
@@ -122,7 +143,13 @@ class SourceHygieneTests(unittest.TestCase):
             "-m ruff check backend gui scripts VideoSubtitleRemover.py --no-cache",
             build_script,
         )
-        self.assertIn('"%PYTHON%" scripts\\generate_cli_reference.py', build_script)
+        # RM-350: PYTHON is set inside an if/else block now that each lane
+        # builds from its own venv, so it has to be read with delayed
+        # expansion. %PYTHON% there would expand to the value from before
+        # the block, which is nothing.
+        self.assertIn('"!PYTHON!" scripts\\generate_cli_reference.py',
+                      build_script)
+        self.assertNotIn('"%PYTHON%"', build_script)
 
     def test_generated_cli_and_config_reference_is_current(self):
         check = subprocess.run(
@@ -470,6 +497,36 @@ class SourceHygieneTests(unittest.TestCase):
             [],
             "Non-ASCII bytes found in source files: " + ", ".join(offenders),
         )
+
+    def test_a_second_build_environment_is_not_treated_as_project_source(self):
+        """RM-350: `venv` was the only environment name these gates knew.
+
+        Building the CUDA lane needs its own environment, and every file in
+        it is third-party. Recognising it by its `pyvenv.cfg` covers the next
+        one too, which naming them one at a time does not.
+        """
+        import tempfile as _tempfile
+
+        with _tempfile.TemporaryDirectory(dir=str(ROOT)) as tmpdir:
+            folder = Path(tmpdir) / "venv-someprofile"
+            (folder / "Lib" / "site-packages" / "vendored").mkdir(parents=True)
+            module = (folder / "Lib" / "site-packages" / "vendored"
+                      / "thirdparty.py")
+            module.write_text(
+                "# a vendored module with a non-ASCII byte: \u00e9\n"
+                "import subprocess\n"
+                "def go():\n"
+                "    return subprocess.run(['x'])\n",
+                encoding="utf-8",
+            )
+            # Not a virtualenv yet, so the file is in scope and offends.
+            self.assertFalse(_is_excluded(module))
+            (folder / "pyvenv.cfg").write_text(
+                "home = C:\\Python313\n", encoding="utf-8")
+            self.assertTrue(_is_excluded(module))
+            self.assertNotIn(module, list(_source_files()))
+            self.assertEqual(
+                self._raw_launch_sites((folder.relative_to(ROOT),)), [])
 
     def test_language_support_docs_do_not_repeat_legacy_claim(self):
         stale_phrases = ("12-language support", "12 language support")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from threading import Lock
 from typing import Any, Mapping, Optional, Sequence
 
@@ -13,6 +15,37 @@ CUDA_PROVIDER = "CUDAExecutionProvider"
 TENSORRT_RTX_PROVIDER = "NvTensorRTRTXExecutionProvider"
 
 _LOCK = Lock()
+
+
+def frozen_cuda_dll_directory() -> Optional[str]:
+    """Where a frozen build keeps the CUDA runtime, or None if not frozen.
+
+    RM-350: `onnxruntime.preload_dlls()` finds the CUDA and cuDNN libraries by
+    asking `importlib.metadata` where the torch distribution lives. A frozen
+    bundle has no distribution metadata, so that lookup returns nothing, the
+    search falls back to the directory above onnxruntime, and the CUDA
+    provider cannot resolve cuBLAS. ONNX Runtime then reports CUDA as
+    available and silently runs the session on the CPU: the exact "why is my
+    GPU idle" failure the separate CUDA download exists to fix.
+
+    The DLLs are in the bundle all along, under `torch/lib`. This hands
+    `preload_dlls()` that path directly, which is the documented way to say
+    where they are.
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    roots = []
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        roots.append(str(meipass))
+    roots.append(os.path.dirname(os.path.abspath(sys.executable)))
+    roots.append(os.path.join(
+        os.path.dirname(os.path.abspath(sys.executable)), "_internal"))
+    for root in roots:
+        candidate = os.path.join(root, "torch", "lib")
+        if os.path.isdir(candidate):
+            return candidate
+    return None
 
 
 def _initial_status() -> dict:
@@ -76,6 +109,10 @@ def preload_onnxruntime_cuda_dlls_if_needed(
     """
     names = _provider_names(providers)
     needs_cuda = CUDA_PROVIDER in names
+    if needs_cuda and not directory:
+        # A frozen build has to say where the runtime is; see
+        # frozen_cuda_dll_directory for why the automatic lookup cannot.
+        directory = frozen_cuda_dll_directory()
     with _LOCK:
         _STATUS["lastProviders"] = names
         if not needs_cuda:

@@ -1108,10 +1108,13 @@ class LocalBuildScriptTests(unittest.TestCase):
         self.assertIn("-m pytest tests -q", self.bat)
         self.assertNotIn("-m unittest discover", self.bat)
         self.assertIn('"pytest>=9.0.0"', self.bat)
-        self.assertIn(
-            "-m PyInstaller --noconfirm --clean VideoSubtitleRemoverPro.spec",
-            self.bat,
-        )
+        # RM-350: the command grew per-lane --distpath and --workpath so a
+        # CPU build and a CUDA build of the same version cannot overwrite
+        # each other's dist tree, which is why this is no longer one line.
+        self.assertIn("-m PyInstaller --noconfirm --clean", self.bat)
+        self.assertIn('--distpath "dist\\!PROFILE!"', self.bat)
+        self.assertIn('--workpath "build\\!PROFILE!"', self.bat)
+        self.assertIn("VideoSubtitleRemoverPro.spec", self.bat)
         self.assertIn("installer\\vsr.nsi", self.bat)
         self.assertIn("/DVSR_SMOKE_BUILD=1", self.bat)
         # The smoke installer invocation itself is asserted in

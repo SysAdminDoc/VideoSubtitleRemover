@@ -22,7 +22,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Sequence
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from backend.adapter_manifest import (
     collect_adapter_conformance_matrix,
@@ -1214,6 +1214,126 @@ def _run_smoke(dist_dir: Path, timeout: float = 45.0) -> dict:
     return payload
 
 
+def _run_frozen_provider_smoke(dist_dir: Path, *, enabled: bool,
+                               timeout: float = 180.0) -> dict:
+    """RM-350: ask the frozen artifact which provider it actually gets.
+
+    `dependencyProfile.providerSmoke` answers that for the environment the
+    build ran in. This answers it for the payload that will be published, by
+    running the payload. The two can disagree: the build environment can have
+    a CUDA-capable onnxruntime while the frozen bundle shipped without the
+    runtime DLLs it needs.
+    """
+    exe = dist_dir / "VideoSubtitleRemoverPro.exe"
+    payload = {
+        "schema": "vsr.frozen_provider_smoke.v1",
+        "exe": str(exe),
+        "available": exe.is_file(),
+        "ran": False,
+        "passed": False,
+        "profile": "",
+        "profileSource": "",
+        "declaredProvider": "",
+        "availableProviders": [],
+        "activeProviders": [],
+        "fellBack": None,
+        "returncode": None,
+        "error": "",
+    }
+    if not enabled:
+        payload["error"] = "frozen provider smoke skipped"
+        return payload
+    if not exe.is_file():
+        payload["error"] = "frozen executable not found"
+        return payload
+    try:
+        with tempfile.TemporaryDirectory(prefix="vsr-provider-smoke-") as tmp:
+            result_path = Path(tmp) / "frozen-provider-smoke.json"
+            proc = run_process(
+                [str(exe), "--frozen-provider-smoke", str(result_path)],
+                cwd=dist_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+            payload["returncode"] = proc.returncode
+            if not result_path.is_file():
+                payload["error"] = (
+                    "the frozen provider smoke wrote no result: "
+                    + (proc.stderr or proc.stdout or "no output")[-2000:]
+                )
+                return payload
+            reported = json.loads(result_path.read_text(encoding="utf-8"))
+        if not isinstance(reported, Mapping):
+            payload["error"] = "the frozen provider smoke result is not an object"
+            return payload
+        payload.update({
+            "ran": bool(reported.get("ran")),
+            "passed": reported.get("passed") is True,
+            "profile": str(reported.get("profile") or ""),
+            "profileSource": str(reported.get("profileSource") or ""),
+            "declaredProvider": str(reported.get("declaredProvider") or ""),
+            "availableProviders": [
+                str(item) for item in (reported.get("availableProviders") or [])],
+            "activeProviders": [
+                str(item) for item in (reported.get("activeProviders") or [])],
+            "fellBack": reported.get("fellBack"),
+            "error": str(reported.get("error") or ""),
+        })
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        # Launching the frozen exe, waiting for it, and reading back the JSON
+        # it wrote. Anything else here is a bug in this function, not a
+        # property of the artifact, and should surface as one.
+        payload["error"] = str(exc)
+    return payload
+
+
+def _frozen_provider_problems(evidence: Mapping[str, Any]):
+    """RM-350: the artifact has to be the lane it was built as.
+
+    The check is against the profile stamped into the bundle at freeze time,
+    not against a filename, because the filename is what this evidence is
+    used to justify.
+    """
+    from backend.build_profile import declared_provider
+
+    frozen = evidence.get("frozenProviderSmoke")
+    if not isinstance(frozen, Mapping):
+        yield "Frozen provider evidence is missing"
+        return
+    if not frozen.get("ran"):
+        # A dist folder with no executable is the same non-event here as it
+        # is for the launch smoke: nothing was built to measure. An exe that
+        # is present and still did not answer is a real failure.
+        if frozen.get("available"):
+            error = str(frozen.get("error") or "the smoke produced no result")
+            yield f"Frozen provider smoke did not run: {error}"
+        return
+    profile = str(frozen.get("profile") or "")
+    if not profile:
+        yield "The frozen build carries no dependency profile stamp"
+        return
+    if str(frozen.get("profileSource") or "") != "stamp":
+        yield (
+            "The frozen build's profile was inferred rather than stamped in "
+            "at freeze time"
+        )
+    expected = declared_provider(profile)
+    active = [str(item) for item in (frozen.get("activeProviders") or [])]
+    if expected and expected not in active:
+        yield (
+            f"The frozen build was made from the {profile} profile, whose "
+            f"provider is {expected}, but it activated "
+            + (", ".join(active) if active else "no provider")
+        )
+    if frozen.get("fellBack"):
+        yield f"The frozen build fell back off {expected or profile}"
+    if not frozen.get("passed"):
+        detail = str(frozen.get("error") or "")
+        yield "Frozen provider smoke failed" + (f": {detail}" if detail else "")
+
+
 def _installer_status(installer_path: str | Path | None) -> dict:
     path = Path(installer_path) if installer_path else Path()
     available = bool(installer_path) and path.is_file()
@@ -1766,6 +1886,9 @@ def build_release_evidence(
             "passed": None,
             "error": "smoke launch skipped",
         },
+        # RM-350: the lane this payload really is, measured from the payload.
+        "frozenProviderSmoke": _run_frozen_provider_smoke(
+            dist, enabled=run_smoke),
         "sbom": {
             "file": "sbom.cdx.json",
             "componentCount": len(sbom.get("components", [])),
@@ -1814,6 +1937,7 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     smoke = evidence.get("smokeLaunch", {})
     if isinstance(smoke, Mapping) and smoke.get("ran") and not smoke.get("passed"):
         yield "Smoke launch failed"
+    yield from _frozen_provider_problems(evidence)
     gui_accessibility = evidence.get("releaseTools", {}).get(
         "guiAccessibility", {}
     )
@@ -1928,6 +2052,7 @@ def write_release_evidence(
     run_dependency_audit: bool = False,
     run_ui_release_probes: bool = False,
     strict: bool = False,
+    ships_installer: bool = True,
     env: Optional[Mapping[str, str]] = None,
 ) -> dict:
     out_dir = Path(evidence_dir) if evidence_dir is not None else Path(dist_dir)
@@ -1985,10 +2110,16 @@ def write_release_evidence(
                 or not dependency_profile.get("valid")):
             strict_errors.append(
                 "Reviewed dependency profile evidence is missing or stale")
-        installer = evidence.get("installer", {})
-        if (not isinstance(installer, Mapping)
-                or not installer.get("validPortableExecutable")):
-            strict_errors.append("NSIS installer artifact is missing or invalid")
+        # RM-350: the CUDA lane's payload is past the 2 GB ceiling of the
+        # 32-bit NSIS compiler, so it ships a portable ZIP and no installer.
+        # The shipped-executable smoke below still runs, against the frozen
+        # payload the ZIP is made from.
+        if ships_installer:
+            installer = evidence.get("installer", {})
+            if (not isinstance(installer, Mapping)
+                    or not installer.get("validPortableExecutable")):
+                strict_errors.append(
+                    "NSIS installer artifact is missing or invalid")
         installer_smoke = evidence.get("installerSmoke", {})
         if (not isinstance(installer_smoke, Mapping)
                 or not installer_smoke.get("ran")
@@ -2020,6 +2151,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--analysis-path", default="")
     parser.add_argument("--installer-path", default="")
     parser.add_argument("--installer-smoke-executable", default="")
+    parser.add_argument(
+        "--no-installer",
+        action="store_true",
+        help=(
+            "This lane ships a portable ZIP and no installer. Strict "
+            "verification then stops requiring an installer artifact; every "
+            "other proof, including the shipped-executable smoke, still runs."
+        ),
+    )
     parser.add_argument("--hidden-imports", default="")
     parser.add_argument("--runtime-hooks", default="")
     parser.add_argument("--excludes", default="")
@@ -2040,6 +2180,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         analysis_path=args.analysis_path or None,
         installer_path=args.installer_path or None,
         installer_smoke_executable=args.installer_smoke_executable or None,
+        ships_installer=not args.no_installer,
         hidden_imports=args.hidden_imports,
         runtime_hooks=args.runtime_hooks,
         excludes=args.excludes,
