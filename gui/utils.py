@@ -244,7 +244,9 @@ def get_app_dir() -> Path:
 def detect_gpu() -> List[dict]:
     gpus = []
     try:
-        result = subprocess.run(
+        from backend.subprocess_policy import run_process
+
+        result = run_process(
             [
                 "nvidia-smi",
                 "--query-gpu=index,name,memory.total",

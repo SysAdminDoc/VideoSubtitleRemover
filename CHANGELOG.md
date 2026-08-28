@@ -6,6 +6,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Every child process the app launches now goes through one hardened
+  path. The check that enforced it covered the backend package only, so
+  the interface, the tools, and the reference generator were launching
+  processes without its argument validation. The one launch that cannot
+  use the shared helper, the supervised worker held in a Windows job
+  object, says so at the call with its reason and applies the same
+  hardening directly.
 - FFmpeg diagnostics no longer go quietly short. The stderr reader
   discarded every failure, so the tail an error later reported from could
   be missing an unknown amount with nothing saying so. It now logs the

@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -44,8 +43,15 @@ def _onnxruntime_facts() -> dict:
 
 
 def _run(cmd: list[str], *, cwd: Path) -> None:
+    # subprocess-policy-exempt: this tool runs standalone against a plain
+    # checkout, before anything has put the repository on sys.path, so it
+    # cannot import backend.subprocess_policy. Every command it launches is
+    # a fixed argument list built in this file, with no shell and no user
+    # input, which is what the policy would enforce.
+    import subprocess
+
     print("[run] " + " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=str(cwd), check=True)
+    subprocess.run(cmd, cwd=str(cwd), check=True, timeout=3600)
 
 
 def _write_smoke_ppm(path: Path) -> None:

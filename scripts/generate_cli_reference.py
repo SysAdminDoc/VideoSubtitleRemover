@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import subprocess
 import sys
 from typing import Any
 
@@ -22,7 +21,9 @@ if str(ROOT) not in sys.path:
 
 
 def _cli_payload() -> dict[str, Any]:
-    result = subprocess.run(
+    from backend.subprocess_policy import run_process
+
+    result = run_process(
         [sys.executable, "-m", "backend.processor", "--dump-cli-reference"],
         cwd=ROOT,
         capture_output=True,

@@ -270,8 +270,13 @@ class DirectMlProviderTests(unittest.TestCase):
                 "DmlExecutionProvider", "CPUExecutionProvider"
             ]
         )
-        from gui import utils as _gui_utils
-        with mock.patch.object(_gui_utils.subprocess, "run", side_effect=FileNotFoundError):
+        # RM-334: the GPU probe launches through backend.subprocess_policy
+        # now, so that is the seam a missing nvidia-smi is simulated at.
+        from backend import subprocess_policy
+
+        with mock.patch.object(
+                subprocess_policy, "run_process",
+                side_effect=FileNotFoundError):
             with mock.patch.dict(sys.modules, {"onnxruntime": fake_ort}):
                 gpus = gui.detect_gpu()
 
@@ -284,8 +289,11 @@ class DirectMlProviderTests(unittest.TestCase):
         fake_ort = SimpleNamespace(
             get_available_providers=lambda: ["CPUExecutionProvider"]
         )
-        from gui import utils as _gui_utils
-        with mock.patch.object(_gui_utils.subprocess, "run", side_effect=FileNotFoundError):
+        from backend import subprocess_policy
+
+        with mock.patch.object(
+                subprocess_policy, "run_process",
+                side_effect=FileNotFoundError):
             with mock.patch.dict(sys.modules, {"onnxruntime": fake_ort}):
                 self.assertEqual(gui.detect_gpu(), [])
 

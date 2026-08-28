@@ -172,37 +172,105 @@ class SourceHygieneTests(unittest.TestCase):
                 self.assertIn(category + ":", help_result.stdout)
         self.assertIn("Diagnostics and automation:", help_result.stdout)
 
-    def test_backend_launches_only_through_subprocess_policy(self):
+    # RM-334: an exempt launch says so on the spot, with a reason. The
+    # marker has to be within a few lines above the call so it reads as part
+    # of the code rather than as a list somewhere else that nobody updates.
+    POLICY_EXEMPT_MARKER = "subprocess-policy-exempt:"
+
+    # setup.py bootstraps the environment that makes `backend` importable in
+    # the first place, so it cannot import from it. Every other root-level
+    # module is in scope.
+    POLICY_EXEMPT_FILES = {"setup.py"}
+
+    def _raw_launch_sites(self, roots):
+        """Every raw subprocess launch, minus the ones that explain
+        themselves."""
         policy = ROOT / "backend" / "subprocess_policy.py"
         offenders = []
-        for path in sorted((ROOT / "backend").rglob("*.py")):
-            if path == policy or _is_excluded(path):
-                continue
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                    owner = node.func.value
-                    if (
-                        isinstance(owner, ast.Name)
-                        and owner.id == "subprocess"
-                        and node.func.attr in {"run", "Popen"}
-                    ):
-                        offenders.append(
-                            f"{path.relative_to(ROOT)}:{node.lineno}"
-                        )
-                if isinstance(node, ast.ImportFrom) and node.module == "subprocess":
-                    for alias in node.names:
-                        if alias.name in {"run", "Popen"}:
-                            offenders.append(
-                                f"{path.relative_to(ROOT)}:{node.lineno}"
-                            )
+        for root in roots:
+            base = ROOT / root
+            paths = (
+                sorted(base.rglob("*.py")) if base.is_dir() else [base])
+            for path in paths:
+                if path == policy or _is_excluded(path):
+                    continue
+                if path.name in self.POLICY_EXEMPT_FILES:
+                    continue
+                source = path.read_text(encoding="utf-8")
+                lines = source.split("\n")
+                tree = ast.parse(source, filename=str(path))
 
+                def _exempt(lineno: int) -> bool:
+                    window = lines[max(0, lineno - 9):lineno]
+                    return any(
+                        self.POLICY_EXEMPT_MARKER in line for line in window)
+
+                for node in ast.walk(tree):
+                    if (isinstance(node, ast.Call)
+                            and isinstance(node.func, ast.Attribute)):
+                        owner = node.func.value
+                        if (
+                            isinstance(owner, ast.Name)
+                            and owner.id == "subprocess"
+                            and node.func.attr in {"run", "Popen"}
+                            and not _exempt(node.lineno)
+                        ):
+                            offenders.append(
+                                f"{path.relative_to(ROOT)}:{node.lineno}")
+                    if (isinstance(node, ast.ImportFrom)
+                            and node.module == "subprocess"):
+                        for alias in node.names:
+                            if (alias.name in {"run", "Popen"}
+                                    and not _exempt(node.lineno)):
+                                offenders.append(
+                                    f"{path.relative_to(ROOT)}:{node.lineno}")
+        return offenders
+
+    def test_launches_go_through_subprocess_policy(self):
+        """RM-334: the gate covers gui/ and tools/, not only backend/.
+
+        Eleven launch sites outside backend/ were bypassing the shared
+        policy's argument validation, including the ones that shell out to
+        nvidia-smi and to the release smoke.
+        """
+        offenders = self._raw_launch_sites(
+            ("backend", "gui", "tools", "scripts"))
         self.assertEqual(
             offenders,
             [],
-            "Raw backend child-process launch outside subprocess_policy: "
+            "Raw child-process launch outside subprocess_policy: "
             + ", ".join(offenders),
         )
+
+    def test_the_gate_catches_a_raw_launch_and_honours_an_exemption(self):
+        import tempfile as _tempfile
+
+        raw = (
+            "import subprocess\n"
+            "def go():\n"
+            "    return subprocess.run(['x'])\n"
+        )
+        exempt = (
+            "import subprocess\n"
+            "def go():\n"
+            "    # subprocess-policy-exempt: this is a test fixture\n"
+            "    return subprocess.run(['x'])\n"
+        )
+        with _tempfile.TemporaryDirectory(dir=str(ROOT)) as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "raw.py").write_text(raw, encoding="utf-8")
+            self.assertTrue(
+                self._raw_launch_sites((folder.relative_to(ROOT),)))
+            (folder / "raw.py").write_text(exempt, encoding="utf-8")
+            self.assertEqual(
+                self._raw_launch_sites((folder.relative_to(ROOT),)), [])
+
+    def test_the_setup_exemption_states_its_reason(self):
+        """setup.py is exempt because it creates the venv backend lives in."""
+        self.assertEqual(self.POLICY_EXEMPT_FILES, {"setup.py"})
+        source = (ROOT / "tests" / "test_source_hygiene.py").read_text(
+            encoding="utf-8")
+        self.assertIn("bootstraps the environment", source)
 
     def test_python_and_batch_sources_are_ascii_only(self):
         offenders = []

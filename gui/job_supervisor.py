@@ -188,6 +188,13 @@ class JobSupervisor:
         # child is a cold Python interpreter and cannot reach the first
         # ffmpeg spawn in that time.
         self._job = ProcessJob.create()
+        # subprocess-policy-exempt: backend.subprocess_policy runs a child to
+        # completion and returns its output. This child is a long-lived
+        # supervised worker that has to be handed to a Windows job object and
+        # streamed from while it runs, so the supervisor owns the Popen. The
+        # hardening the policy provides is applied here directly: no shell,
+        # an explicit argument list, stdin closed, and a job object created
+        # before the spawn so nothing escapes containment.
         process = subprocess.Popen(
             command,
             # Closed on purpose: the child reads its job from a file and
