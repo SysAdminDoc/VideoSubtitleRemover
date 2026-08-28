@@ -89,6 +89,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- io.py                       # Capture, ffprobe, intermediate writers, PrefetchReader.
 |   |-- job_worker.py               # Child-process entry for one isolated queue job.
 |   |-- karaoke_flow.py             # Karaoke optical-flow grouping helper.
+|   |-- keep_awake.py               # Scoped Windows sleep hold for the length of a job.
 |   |-- language_support.py         # GUI picker scope vs. OCR engine language facts.
 |   |-- mask_corrections.py         # Ordered add/subtract mask corrections.
 |   |-- mask_free_benchmark.py      # Mask-free removal benchmark harness.

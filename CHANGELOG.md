@@ -6,6 +6,12 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- Long jobs keep the machine awake while they run. A batch or a CLI run
+  could previously be interrupted by idle sleep. The hold is narrow on
+  purpose: the system stays up, the display is free to switch off, and a
+  user who closes the lid or picks Sleep still gets a sleeping machine.
+  It is released when the job finishes, fails, is cancelled, is paused,
+  or the app closes, and it is a no-op outside Windows.
 - A provider benchmark that measures what a run costs on a named device,
   and published evidence for the CPU and NVIDIA CUDA lanes. It records
   the input and config hashes, cold and warm time, frames per second,

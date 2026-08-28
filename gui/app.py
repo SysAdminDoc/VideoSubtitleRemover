@@ -504,6 +504,13 @@ class VideoSubtitleRemoverApp(
             except Exception:
                 pass
             self._taskbar = None
+        # RM-316: never leave a sleep hold behind on shutdown.
+        try:
+            from backend import keep_awake
+
+            keep_awake.release_all()
+        except Exception:
+            pass
         self._release_running_mutex()
 
     def _release_running_mutex(self):

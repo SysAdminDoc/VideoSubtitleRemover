@@ -27,6 +27,7 @@ from backend.failure_reason import (
     REASON_PAUSED,
     classify_failure_reason,
 )
+from backend import keep_awake
 from backend.i18n import N_, tr
 from backend.job_worker import describe_exit_code
 from backend.resume_checkpoint import ProcessingPaused
@@ -396,46 +397,55 @@ class ProcessingControllerMixin:
 
     def _process_queue(self):
         """Process all items in the queue."""
-        with self.queue_lock:
-            items_to_process = [i for i in self.queue
-                                if i.status not in (ProcessingStatus.COMPLETE,
-                                                     ProcessingStatus.ERROR,
-                                                     ProcessingStatus.CANCELLED)]
-        if items_to_process:
-            self._announce_model_download_guidance(items_to_process[0])
-        # F-9: pre-batch ETA probe runs here, on the worker thread, so
-        # model load + 30-frame detection never block the Tk main loop.
+        # RM-316: a long batch must not be cut short by idle sleep,
+        # and the machine must be free to sleep again the moment the
+        # batch stops, including when it stops because the user
+        # paused it.
+        keep_awake.acquire()
         try:
-            self._probe_eta_seconds = self._probe_batch_eta()
-        except Exception:
-            self._probe_eta_seconds = 0.0
+            with self.queue_lock:
+                items_to_process = [i for i in self.queue
+                                    if i.status not in (ProcessingStatus.COMPLETE,
+                                                         ProcessingStatus.ERROR,
+                                                         ProcessingStatus.CANCELLED)]
+            if items_to_process:
+                self._announce_model_download_guidance(items_to_process[0])
+            # F-9: pre-batch ETA probe runs here, on the worker thread, so
+            # model load + 30-frame detection never block the Tk main loop.
+            try:
+                self._probe_eta_seconds = self._probe_batch_eta()
+            except Exception:
+                self._probe_eta_seconds = 0.0
 
-        total = len(items_to_process)
-        for idx, item in enumerate(items_to_process):
-            if self.cancel_event.is_set():
-                # Mark ALL remaining items as cancelled
-                now = datetime.now()
-                for remaining in items_to_process[idx:]:
-                    remaining.status = ProcessingStatus.CANCELLED
-                    remaining.message = "Cancelled"
-                    remaining.failure_reason = REASON_CANCELLED
-                    remaining.completed_at = now
-                    self._update_item_display(remaining)
-                break
+            total = len(items_to_process)
+            for idx, item in enumerate(items_to_process):
+                if self.cancel_event.is_set():
+                    # Mark ALL remaining items as cancelled
+                    now = datetime.now()
+                    for remaining in items_to_process[idx:]:
+                        remaining.status = ProcessingStatus.CANCELLED
+                        remaining.message = "Cancelled"
+                        remaining.failure_reason = REASON_CANCELLED
+                        remaining.completed_at = now
+                        self._update_item_display(remaining)
+                    break
 
-            # Update batch progress + window title
-            if dispatch_to_ui(
-                self.root, self._update_batch_progress, idx, total
-            ) is None:
-                return  # root destroyed during shutdown
-            self._process_item(item)
-            if self.pause_event.is_set():
-                break
+                # Update batch progress + window title
+                if dispatch_to_ui(
+                    self.root, self._update_batch_progress, idx, total
+                ) is None:
+                    return  # root destroyed during shutdown
+                self._process_item(item)
+                if self.pause_event.is_set():
+                    break
 
-        # Final batch state
-        save_queue_state(self.queue)
-        dispatch_to_ui(self.root, self._update_batch_progress, total, total)
-        dispatch_to_ui(self.root, self._on_processing_complete)
+            # Final batch state
+            save_queue_state(self.queue)
+            dispatch_to_ui(self.root, self._update_batch_progress, total, total)
+            dispatch_to_ui(self.root, self._on_processing_complete)
+
+        finally:
+            keep_awake.release()
 
     def _process_soft_subtitle_item(self, item: QueueItem) -> bool:
         action_value = getattr(item, "soft_subtitle_action", "burned_in")

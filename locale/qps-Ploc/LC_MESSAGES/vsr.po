@@ -8,7 +8,7 @@ msgstr ""
 "Language: qps-Ploc\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: gui/processing_controller.py:1432
+#: gui/processing_controller.py:1442
 msgid "   -   about {eta} left"
 msgstr "[!!    -   åƀöûţ {eta} ŀéƒţ ! !!]"
 
@@ -26,7 +26,7 @@ msgstr "[!! '{mode}' îš ńöţ å šûƥƥöŕţéð ƥŕöƒîŀé; ķééƥ�
 msgid "(no readable text)"
 msgstr "[!! (ńö ŕéåðåƀŀé ţéẋţ) ! !!]"
 
-#: gui/app.py:2758
+#: gui/app.py:2765
 msgid "...and {n} more queued item."
 msgid_plural "...and {n} more queued items."
 msgstr[0] "[!! ...åńð {n} ḿöŕé ɋûéûéð îţéḿ. ! ! !!]"
@@ -60,7 +60,7 @@ msgstr "[!! ; ŵöûŀð ƒåŀŀ ƀåçķ ţö ńöŕḿåŀ îńƥåîńţîń
 msgid "A batch is still running."
 msgstr "[!! Å ƀåţçħ îš šţîŀŀ ŕûńńîńĝ. ! ! !!]"
 
-#: gui/app.py:2021
+#: gui/app.py:2028
 msgid "A folder scan is already running"
 msgstr "[!! Å ƒöŀðéŕ šçåń îš åŀŕéåðý ŕûńńîńĝ ! ! !!]"
 
@@ -96,7 +96,7 @@ msgstr "[!! ÅÇŢÎṼÎŢÝ ! !!]"
 msgid "ASS style override"
 msgstr "[!! ÅŠŠ šţýŀé öṽéŕŕîðé ! !!]"
 
-#: gui/app.py:1565 gui/layout_build.py:2535 gui/layout_responsive.py:454 gui/support_controller.py:166
+#: gui/app.py:1572 gui/layout_build.py:2535 gui/layout_responsive.py:454 gui/support_controller.py:166
 msgid "Activity"
 msgstr "[!! Åçţîṽîţý ! !!]"
 
@@ -132,11 +132,11 @@ msgstr "[!! Åðð ƒîŀéš, ŕéṽîéŵ å šåḿƥŀé ƒŕåḿé, ţħ�
 msgid "Add media"
 msgstr "[!! Åðð ḿéðîå ! !!]"
 
-#: gui/processing_controller.py:68
+#: gui/processing_controller.py:69
 msgid "Add media to the queue before starting a batch"
 msgstr "[!! Åðð ḿéðîå ţö ţħé ɋûéûé ƀéƒöŕé šţåŕţîńĝ å ƀåţçħ ! ! ! !!]"
 
-#: gui/app.py:1051
+#: gui/app.py:1058
 msgid "Add media to the queue before starting."
 msgstr "[!! Åðð ḿéðîå ţö ţħé ɋûéûé ƀéƒöŕé šţåŕţîńĝ. ! ! ! !!]"
 
@@ -168,7 +168,7 @@ msgstr "[!! Åðð ṽîðéö öŕ îḿåĝé ƒîŀéš ! ! !!]"
 msgid "Added motion keyframe at {seconds:.3f} seconds"
 msgstr "[!! Åððéð ḿöţîöń ķéýƒŕåḿé åţ {seconds:.3f} šéçöńðš ! ! ! !!]"
 
-#: gui/app.py:2072
+#: gui/app.py:2079
 msgid "Adding files... {done} of {total}"
 msgstr "[!! Åððîńĝ ƒîŀéš... {done} öƒ {total} ! ! !!]"
 
@@ -208,11 +208,11 @@ msgstr "[!! Åŀîĝńḿéńţ ! !!]"
 msgid "All Files"
 msgstr "[!! Åŀŀ Ƒîŀéš ! !!]"
 
-#: gui/app.py:2553 gui/region_controller.py:108 gui/widgets.py:2120
+#: gui/app.py:2560 gui/region_controller.py:108 gui/widgets.py:2120
 msgid "All Supported"
 msgstr "[!! Åŀŀ Šûƥƥöŕţéð ! !!]"
 
-#: gui/app.py:2240 gui/region_controller.py:1441 gui/settings_controller.py:296 gui/settings_controller.py:333 gui/settings_controller.py:358 gui/settings_controller.py:390 gui/settings_controller.py:421 gui/settings_controller.py:445 gui/support_controller.py:263 gui/support_controller.py:337 gui/support_controller.py:381
+#: gui/app.py:2247 gui/region_controller.py:1441 gui/settings_controller.py:296 gui/settings_controller.py:333 gui/settings_controller.py:358 gui/settings_controller.py:390 gui/settings_controller.py:421 gui/settings_controller.py:445 gui/support_controller.py:263 gui/support_controller.py:337 gui/support_controller.py:381
 msgid "All files"
 msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
 
@@ -228,7 +228,7 @@ msgstr "[!! Åŀţéŕńåţîṽé ƥåŀéţţé ţûńéð ƒöŕ ŀöŵ-ṽ�
 msgid "An FFmpeg was found but it did not run, so outputs will be saved without original audio. Reinstall it from a stable {floor} or newer release build."
 msgstr "[!! Åń ƑƑḿƥéĝ ŵåš ƒöûńð ƀûţ îţ ðîð ńöţ ŕûń, šö öûţƥûţš ŵîŀŀ ƀé šåṽéð ŵîţħöûţ öŕîĝîńåŀ åûðîö. Ŕéîńšţåŀŀ îţ ƒŕöḿ å šţåƀŀé {floor} öŕ ńéŵéŕ ŕéŀéåšé ƀûîŀð. ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:2465 gui/layout_build.py:2520
+#: gui/app.py:2472 gui/layout_build.py:2520
 msgid "Application status"
 msgstr "[!! Åƥƥŀîçåţîöń šţåţûš ! !!]"
 
@@ -264,7 +264,7 @@ msgstr "[!! Åûţö-ðéţéçţ šûƀţîţŀé ƀåńð öń ŀöåð ! ! !!
 msgid "Auto-detect the subtitle language from a sample frame."
 msgstr "[!! Åûţö-ðéţéçţ ţħé šûƀţîţŀé ŀåńĝûåĝé ƒŕöḿ å šåḿƥŀé ƒŕåḿé. ! ! ! ! !!]"
 
-#: gui/app.py:1375 gui/app.py:1415 gui/layout_build.py:193
+#: gui/app.py:1382 gui/app.py:1422 gui/layout_build.py:193
 msgid "Automatic"
 msgstr "[!! Åûţöḿåţîç ! !!]"
 
@@ -284,7 +284,7 @@ msgstr "[!! Åûţöḿåţîç šûƀţîţŀé ðéţéçţîöń ! ! !!]"
 msgid "Automatic subtitle detection is active"
 msgstr "[!! Åûţöḿåţîç šûƀţîţŀé ðéţéçţîöń îš åçţîṽé ! ! ! !!]"
 
-#: gui/app.py:1719
+#: gui/app.py:1726
 msgid "Automatic subtitle-band detection enabled"
 msgstr "[!! Åûţöḿåţîç šûƀţîţŀé-ƀåńð ðéţéçţîöń éńåƀŀéð ! ! ! !!]"
 
@@ -304,7 +304,7 @@ msgstr "[!! ƁÅÇĶÉŃÐ ŠŢÅŢÛŠ ! !!]"
 msgid "Backend status is still being probed."
 msgstr "[!! Ɓåçķéńð šţåţûš îš šţîŀŀ ƀéîńĝ ƥŕöƀéð. ! ! ! !!]"
 
-#: gui/app.py:1383 gui/app.py:1394 gui/app.py:1461 gui/layout_build.py:166 gui/onboarding.py:127 gui/onboarding.py:131 gui/onboarding.py:141
+#: gui/app.py:1390 gui/app.py:1401 gui/app.py:1468 gui/layout_build.py:166 gui/onboarding.py:127 gui/onboarding.py:131 gui/onboarding.py:141
 msgid "Balanced"
 msgstr "[!! Ɓåŀåńçéð ! !!]"
 
@@ -316,31 +316,31 @@ msgstr "[!! Ɓåţçħ ƒîńîšħéð ! !!]"
 msgid "Batch finished with issues"
 msgstr "[!! Ɓåţçħ ƒîńîšħéð ŵîţħ îššûéš ! ! !!]"
 
-#: gui/processing_controller.py:76
+#: gui/processing_controller.py:77
 msgid "Batch is already pausing. Please wait for the checkpoint to finish."
 msgstr "[!! Ɓåţçħ îš åŀŕéåðý ƥåûšîńĝ. Ƥŀéåšé ŵåîţ ƒöŕ ţħé çħéçķƥöîńţ ţö ƒîńîšħ. ! ! ! ! ! !!]"
 
-#: gui/processing_controller.py:167
+#: gui/processing_controller.py:168
 msgid "Batch is already pausing..."
 msgstr "[!! Ɓåţçħ îš åŀŕéåðý ƥåûšîńĝ... ! ! !!]"
 
-#: gui/processing_controller.py:82
+#: gui/processing_controller.py:83
 msgid "Batch is already stopping. Please wait for the current item to wrap up."
 msgstr "[!! Ɓåţçħ îš åŀŕéåðý šţöƥƥîńĝ. Ƥŀéåšé ŵåîţ ƒöŕ ţħé çûŕŕéńţ îţéḿ ţö ŵŕåƥ ûƥ. ! ! ! ! ! !!]"
 
-#: gui/processing_controller.py:185
+#: gui/processing_controller.py:186
 msgid "Batch is already stopping..."
 msgstr "[!! Ɓåţçħ îš åŀŕéåðý šţöƥƥîńĝ... ! ! !!]"
 
-#: gui/app.py:2783
+#: gui/app.py:2790
 msgid "Batch not started. Review FFmpeg-dependent settings or install a fuller FFmpeg build."
 msgstr "[!! Ɓåţçħ ńöţ šţåŕţéð. Ŕéṽîéŵ ƑƑḿƥéĝ-ðéƥéńðéńţ šéţţîńĝš öŕ îńšţåŀŀ å ƒûŀŀéŕ ƑƑḿƥéĝ ƀûîŀð. ! ! ! ! ! ! ! !!]"
 
-#: gui/processing_controller.py:127
+#: gui/processing_controller.py:128
 msgid "Batch processing started"
 msgstr "[!! Ɓåţçħ ƥŕöçéššîńĝ šţåŕţéð ! ! !!]"
 
-#: gui/app.py:1550 gui/layout_build.py:1979
+#: gui/app.py:1557 gui/layout_build.py:1979
 msgid "Before / after"
 msgstr "[!! Ɓéƒöŕé / åƒţéŕ ! !!]"
 
@@ -372,7 +372,7 @@ msgstr "[!! Ɓûîŀţ-îń ƥŕéšéţ ńåḿéš åŕé ŕéšéŕṽéð. !
 msgid "COMPLETED"
 msgstr "[!! ÇÖḾƤĿÉŢÉÐ ! !!]"
 
-#: gui/app.py:914 gui/app.py:931 gui/app.py:957 gui/app.py:958 gui/layout_helpers.py:42
+#: gui/app.py:921 gui/app.py:938 gui/app.py:964 gui/app.py:965 gui/layout_helpers.py:42
 msgid "CPU mode"
 msgstr "[!! ÇƤÛ ḿöðé ! !!]"
 
@@ -420,7 +420,7 @@ msgstr "[!! Çħéçķ ţéẋţ öń ḿåĵöŕ šçéńé ƒŕåḿéš åń�
 msgid "Checking"
 msgstr "[!! Çħéçķîńĝ ! !!]"
 
-#: gui/app.py:966 gui/layout_build.py:665
+#: gui/app.py:973 gui/layout_build.py:665
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr "[!! Çħéçķîńĝ ƑƑḿƥéĝ åṽåîŀåƀîŀîţý ƒöŕ åûðîö ƥŕéšéŕṽåţîöń... ! ! ! ! !!]"
 
@@ -480,7 +480,7 @@ msgstr "[!! Çħööšé å ŕéšîðûåŀ, ƒŀîçķéŕ, öŕ ŀöŵ-çöń
 msgid "Choose a starting point. Every setting remains editable."
 msgstr "[!! Çħööšé å šţåŕţîńĝ ƥöîńţ. Éṽéŕý šéţţîńĝ ŕéḿåîńš éðîţåƀŀé. ! ! ! ! !!]"
 
-#: gui/app.py:2234
+#: gui/app.py:2241
 msgid "Choose an output path"
 msgstr "[!! Çħööšé åń öûţƥûţ ƥåţħ ! !!]"
 
@@ -608,7 +608,7 @@ msgstr "[!! Çŀéåŕ çöḿƥŀéţéð ! !!]"
 msgid "Clear corrections"
 msgstr "[!! Çŀéåŕ çöŕŕéçţîöńš ! !!]"
 
-#: gui/app.py:1613
+#: gui/app.py:1620
 msgid "Clear filter"
 msgstr "[!! Çŀéåŕ ƒîŀţéŕ ! !!]"
 
@@ -624,11 +624,11 @@ msgstr "[!! Çŀéåŕ îḿƥöŕţ ! !!]"
 msgid "Clear queue"
 msgstr "[!! Çŀéåŕ ɋûéûé ! !!]"
 
-#: gui/app.py:1603
+#: gui/app.py:1610
 msgid "Clear the filter or search for part of a filename."
 msgstr "[!! Çŀéåŕ ţħé ƒîŀţéŕ öŕ šéåŕçħ ƒöŕ ƥåŕţ öƒ å ƒîŀéńåḿé. ! ! ! ! !!]"
 
-#: gui/app.py:2382
+#: gui/app.py:2389
 msgid "Clear the queue?"
 msgstr "[!! Çŀéåŕ ţħé ɋûéûé? ! !!]"
 
@@ -648,7 +648,7 @@ msgstr "[!! Çŀéåŕéð ḿåńûåŀ šûƀţîţŀé ŕéĝîöńš; åûţ
 msgid "Cleared mask corrections"
 msgstr "[!! Çŀéåŕéð ḿåšķ çöŕŕéçţîöńš ! ! !!]"
 
-#: gui/app.py:2339
+#: gui/app.py:2346
 msgid "Cleared {count} completed item"
 msgid_plural "Cleared {count} completed items"
 msgstr[0] "[!! Çŀéåŕéð {count} çöḿƥŀéţéð îţéḿ ! ! !!]"
@@ -686,11 +686,11 @@ msgstr "[!! Çöḿƥŀéţéð öûţƥûţš åŕé ŕéåðý. Ŕéṽîéŵ 
 msgid "Completed outputs on disk are kept."
 msgstr "[!! Çöḿƥŀéţéð öûţƥûţš öń ðîšķ åŕé ķéƥţ. ! ! !!]"
 
-#: gui/app.py:2388
+#: gui/app.py:2395
 msgid "Completed outputs on disk are not deleted."
 msgstr "[!! Çöḿƥŀéţéð öûţƥûţš öń ðîšķ åŕé ńöţ ðéŀéţéð. ! ! ! !!]"
 
-#: gui/app.py:2809
+#: gui/app.py:2816
 msgid "Completed {name}"
 msgstr "[!! Çöḿƥŀéţéð {name} ! !!]"
 
@@ -742,7 +742,7 @@ msgstr "[!! Çöƥý šöûŕçé ƥåţħ ! !!]"
 msgid "Copying embedded subtitle tracks..."
 msgstr "[!! Çöƥýîńĝ éḿƀéððéð šûƀţîţŀé ţŕåçķš... ! ! !!]"
 
-#: gui/app.py:1555 gui/layout_build.py:2155
+#: gui/app.py:1562 gui/layout_build.py:2155
 msgid "Correct mask"
 msgstr "[!! Çöŕŕéçţ ḿåšķ ! !!]"
 
@@ -778,7 +778,7 @@ msgstr "[!! Çöûŀð ńöţ ðéţéçţ ŀåńĝûåĝé ƒŕöḿ ţħîš �
 msgid "Could not open input/output for compare"
 msgstr "[!! Çöûŀð ńöţ öƥéń îńƥûţ/öûţƥûţ ƒöŕ çöḿƥåŕé ! ! ! !!]"
 
-#: gui/processing_controller.py:784
+#: gui/processing_controller.py:794
 msgid "Could not pause the running job; it is still processing."
 msgstr "[!! Çöûŀð ńöţ ƥåûšé ţħé ŕûńńîńĝ ĵöƀ; îţ îš šţîŀŀ ƥŕöçéššîńĝ. ! ! ! ! !!]"
 
@@ -794,7 +794,7 @@ msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ƒîŀé ƒöŕ �
 msgid "Could not read the selected review frame"
 msgstr "[!! Çöûŀð ńöţ ŕéåð ţħé šéŀéçţéð ŕéṽîéŵ ƒŕåḿé ! ! ! !!]"
 
-#: gui/processing_controller.py:786
+#: gui/processing_controller.py:796
 msgid "Could not resume the paused job."
 msgstr "[!! Çöûŀð ńöţ ŕéšûḿé ţħé ƥåûšéð ĵöƀ. ! ! !!]"
 
@@ -802,7 +802,7 @@ msgstr "[!! Çöûŀð ńöţ ŕéšûḿé ţħé ƥåûšéð ĵöƀ. ! ! !!]"
 msgid "Could not save preset '{name}'"
 msgstr "[!! Çöûŀð ńöţ šåṽé ƥŕéšéţ '{name}' ! ! !!]"
 
-#: gui/processing_controller.py:161
+#: gui/processing_controller.py:162
 msgid "Could not start batch: {error}"
 msgstr "[!! Çöûŀð ńöţ šţåŕţ ƀåţçħ: {error} ! ! !!]"
 
@@ -834,7 +834,7 @@ msgstr "[!! Ðéçöðîńĝ ! !!]"
 msgid "Default workflow"
 msgstr "[!! Ðéƒåûŀţ ŵöŕķƒŀöŵ ! !!]"
 
-#: gui/app.py:1385 gui/app.py:1396 gui/app.py:1463 gui/layout_build.py:166
+#: gui/app.py:1392 gui/app.py:1403 gui/app.py:1470 gui/layout_build.py:166
 msgid "Detail"
 msgstr "[!! Ðéţåîŀ ! !!]"
 
@@ -1026,7 +1026,7 @@ msgstr "[!! Éńţéŕ å ŵħöŀé ńûḿƀéŕ ŵîţħîń ţħé šöûŕ�
 msgid "Erase, translate, and re-embed"
 msgstr "[!! Éŕåšé, ţŕåńšŀåţé, åńð ŕé-éḿƀéð ! ! !!]"
 
-#: gui/app.py:1982
+#: gui/app.py:1989
 msgid "Everything selected is already in the queue"
 msgstr "[!! Éṽéŕýţħîńĝ šéŀéçţéð îš åŀŕéåðý îń ţħé ɋûéûé ! ! ! !!]"
 
@@ -1108,7 +1108,7 @@ msgstr "[!! ƑƑḿƥéĝ ƀåšîç ! !!]"
 msgid "FFmpeg broken"
 msgstr "[!! ƑƑḿƥéĝ ƀŕöķéń ! !!]"
 
-#: gui/app.py:2770
+#: gui/app.py:2777
 msgid "FFmpeg capability warning"
 msgstr "[!! ƑƑḿƥéĝ çåƥåƀîŀîţý ŵåŕńîńĝ ! ! !!]"
 
@@ -1128,7 +1128,7 @@ msgstr "[!! ƑƑḿƥéĝ çöḿḿåńðš çöƥîéð ţö ţħé çŀîƥƀ
 msgid "FFmpeg did not run"
 msgstr "[!! ƑƑḿƥéĝ ðîð ńöţ ŕûń ! !!]"
 
-#: gui/processing_controller.py:98
+#: gui/processing_controller.py:99
 msgid "FFmpeg is missing, so video outputs will be saved without original audio."
 msgstr "[!! ƑƑḿƥéĝ îš ḿîššîńĝ, šö ṽîðéö öûţƥûţš ŵîŀŀ ƀé šåṽéð ŵîţħöûţ öŕîĝîńåŀ åûðîö. ! ! ! ! ! ! !!]"
 
@@ -1244,7 +1244,7 @@ msgstr "[!! Ƒîŀţéŕ ŵħåţ ĝéţš ŕéḿöṽéð ! ! !!]"
 msgid "Finalizing output"
 msgstr "[!! Ƒîńåŀîžîńĝ öûţƥûţ ! !!]"
 
-#: gui/processing_controller.py:89
+#: gui/processing_controller.py:90
 msgid "Finalizing the previous batch..."
 msgstr "[!! Ƒîńåŀîžîńĝ ţħé ƥŕéṽîöûš ƀåţçħ... ! ! !!]"
 
@@ -1256,7 +1256,7 @@ msgstr "[!! Ƒîńîšħ öŕ çåńçéŀ ţħé ƥöŀýĝöń îń ƥŕöĝŕ
 msgid "Finish polygon"
 msgstr "[!! Ƒîńîšħ ƥöŀýĝöń ! !!]"
 
-#: gui/app.py:1068
+#: gui/app.py:1075
 msgid "Finish processing an item to open its output folder."
 msgstr "[!! Ƒîńîšħ ƥŕöçéššîńĝ åń îţéḿ ţö öƥéń îţš öûţƥûţ ƒöŀðéŕ. ! ! ! ! !!]"
 
@@ -1340,7 +1340,7 @@ msgstr "[!! Ƒŕééžé åƥƥŕöṽéð ḿåţţé ! !!]"
 msgid "Froze the approved matte ({summary}); reruns will skip detection"
 msgstr "[!! Ƒŕöžé ţħé åƥƥŕöṽéð ḿåţţé ({summary}); ŕéŕûńš ŵîŀŀ šķîƥ ðéţéçţîöń ! ! ! ! ! !!]"
 
-#: gui/app.py:1554 gui/layout_build.py:2151
+#: gui/app.py:1561 gui/layout_build.py:2151
 msgid "Full size"
 msgstr "[!! Ƒûŀŀ šîžé ! !!]"
 
@@ -1356,7 +1356,7 @@ msgstr "[!! Ĝŕöŵ ţħé ḿåšķ ţö çöṽéŕ šéŕîƒš / ðŕöƥ �
 msgid "H.264 plays almost everywhere. H.265 and AV1 make smaller files but take longer; VVC needs a compatible FFmpeg build."
 msgstr "[!! Ħ.264 ƥŀåýš åŀḿöšţ éṽéŕýŵħéŕé. Ħ.265 åńð ÅṼ1 ḿåķé šḿåŀŀéŕ ƒîŀéš ƀûţ ţåķé ŀöńĝéŕ; ṼṼÇ ńééðš å çöḿƥåţîƀŀé ƑƑḿƥéĝ ƀûîŀð. ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:917
+#: gui/app.py:924
 msgid "Hardware detected: {gpu}; {audio}"
 msgstr "[!! Ħåŕðŵåŕé ðéţéçţéð: {gpu}; {audio} ! ! !!]"
 
@@ -1396,7 +1396,7 @@ msgstr "[!! Ħîðé åðṽåńçéð šéţţîńĝš ! !!]"
 msgid "Hide queued files"
 msgstr "[!! Ħîðé ɋûéûéð ƒîŀéš ! !!]"
 
-#: gui/app.py:1519
+#: gui/app.py:1526
 msgid "Hide {section} settings."
 msgstr "[!! Ħîðé {section} šéţţîńĝš. ! ! !!]"
 
@@ -1428,7 +1428,7 @@ msgstr "[!! Ħöŵ ƒåŕ åƥåŕţ ńéåŕƀý ƒŕåḿéš åŕé šåḿƥ
 msgid "How many reference frames are kept in view. More references steady long, slow-moving shots."
 msgstr "[!! Ħöŵ ḿåńý ŕéƒéŕéńçé ƒŕåḿéš åŕé ķéƥţ îń ṽîéŵ. Ḿöŕé ŕéƒéŕéńçéš šţéåðý ŀöńĝ, šŀöŵ-ḿöṽîńĝ šħöţš. ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:2855
+#: gui/app.py:2862
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr "[!! Îðŀé åńð ƥåûšéð îţéḿš ƒŕöḿ ýöûŕ ƥŕéṽîöûš šéššîöń ŵéŕé šåṽéð. Ŕéšţöŕé ţħéḿ ţö ţħé ɋûéûé? ! ! ! ! ! ! ! !!]"
 
@@ -1560,7 +1560,7 @@ msgstr "[!! Îńţéŕƥöŀåţéð ķéýƒŕåḿé ḿåšķš ! ! !!]"
 msgid "Isolates each queue item so a fatal crash in a native library fails only that item instead of closing the app and losing the batch. Costs a process start and a model reload per item."
 msgstr "[!! Îšöŀåţéš éåçħ ɋûéûé îţéḿ šö å ƒåţåŀ çŕåšħ îń å ńåţîṽé ŀîƀŕåŕý ƒåîŀš öńŀý ţħåţ îţéḿ îńšţéåð öƒ çŀöšîńĝ ţħé åƥƥ åńð ŀöšîńĝ ţħé ƀåţçħ. Çöšţš å ƥŕöçéšš šţåŕţ åńð å ḿöðéŀ ŕéŀöåð ƥéŕ îţéḿ. ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:2185
+#: gui/app.py:2192
 msgid "Item not found in queue"
 msgstr "[!! Îţéḿ ńöţ ƒöûńð îń ɋûéûé ! !!]"
 
@@ -1584,7 +1584,7 @@ msgstr "[!! Ķééƥ åŀŀ ! !!]"
 msgid "Keep background recovery from mixing frames across scene changes. Recommended for edited video."
 msgstr "[!! Ķééƥ ƀåçķĝŕöûńð ŕéçöṽéŕý ƒŕöḿ ḿîẋîńĝ ƒŕåḿéš åçŕöšš šçéńé çħåńĝéš. Ŕéçöḿḿéńðéð ƒöŕ éðîţéð ṽîðéö. ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:2239
+#: gui/app.py:2246
 msgid "Keep extension"
 msgstr "[!! Ķééƥ éẋţéńšîöń ! !!]"
 
@@ -1668,7 +1668,7 @@ msgstr "[!! Ŀöššŀéšš ḿåţţé ƒöŕḿåţ ! !!]"
 msgid "Loudness + tracks"
 msgstr "[!! Ŀöûðńéšš + ţŕåçķš ! !!]"
 
-#: gui/app.py:2692
+#: gui/app.py:2699
 msgid "Low disk space at {path}: about {needed} GB is estimated for {purposes}, but {free} GB is free. The backend will run an exact frame-based check."
 msgstr "[!! Ŀöŵ ðîšķ šƥåçé åţ {path}: åƀöûţ {needed} ĜƁ îš éšţîḿåţéð ƒöŕ {purposes}, ƀûţ {free} ĜƁ îš ƒŕéé. Ţħé ƀåçķéńð ŵîŀŀ ŕûń åń éẋåçţ ƒŕåḿé-ƀåšéð çħéçķ. ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
@@ -1684,7 +1684,7 @@ msgstr "[!! Ḿåńûåŀ ḿåšķ ŕéṽîéŵ ! !!]"
 msgid "Manual mask: {n} region(s)"
 msgstr "[!! Ḿåńûåŀ ḿåšķ: {n} ŕéĝîöń(š) ! ! !!]"
 
-#: gui/app.py:1375 gui/app.py:1407 gui/layout_build.py:193 gui/preview_controller.py:1683
+#: gui/app.py:1382 gui/app.py:1414 gui/layout_build.py:193 gui/preview_controller.py:1683
 msgid "Manual region"
 msgstr "[!! Ḿåńûåŀ ŕéĝîöń ! !!]"
 
@@ -1832,7 +1832,7 @@ msgstr "[!! Ḿöŕé ɋûéûé åçţîöńš ! !!]"
 msgid "Most frames held in memory per pass. Lower this if you run out of GPU or system memory."
 msgstr "[!! Ḿöšţ ƒŕåḿéš ħéŀð îń ḿéḿöŕý ƥéŕ ƥåšš. Ŀöŵéŕ ţħîš îƒ ýöû ŕûń öûţ öƒ ĜƤÛ öŕ šýšţéḿ ḿéḿöŕý. ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:1384 gui/app.py:1395 gui/app.py:1462 gui/layout_build.py:166
+#: gui/app.py:1391 gui/app.py:1402 gui/app.py:1469 gui/layout_build.py:166
 msgid "Motion"
 msgstr "[!! Ḿöţîöń ! !!]"
 
@@ -1872,11 +1872,11 @@ msgstr "[!! Ḿöṽé ţħé šéŀéçţéð îţéḿ ûƥ. ! ! !!]"
 msgid "Move up"
 msgstr "[!! Ḿöṽé ûƥ ! !!]"
 
-#: gui/app.py:2370
+#: gui/app.py:2377
 msgid "Moved {name} down"
 msgstr "[!! Ḿöṽéð {name} ðöŵń ! !!]"
 
-#: gui/app.py:2369
+#: gui/app.py:2376
 msgid "Moved {name} up"
 msgstr "[!! Ḿöṽéð {name} ûƥ ! !!]"
 
@@ -1922,19 +1922,19 @@ msgstr "[!! Ńö åçţîöń ńééðéð. ! !!]"
 msgid "No automatic retry settings are available for this review item"
 msgstr "[!! Ńö åûţöḿåţîç ŕéţŕý šéţţîńĝš åŕé åṽåîŀåƀŀé ƒöŕ ţħîš ŕéṽîéŵ îţéḿ ! ! ! ! ! !!]"
 
-#: gui/app.py:1118
+#: gui/app.py:1125
 msgid "No completed items are in the queue."
 msgstr "[!! Ńö çöḿƥŀéţéð îţéḿš åŕé îń ţħé ɋûéûé. ! ! ! !!]"
 
-#: gui/app.py:2328
+#: gui/app.py:2335
 msgid "No completed items to clear"
 msgstr "[!! Ńö çöḿƥŀéţéð îţéḿš ţö çŀéåŕ ! ! !!]"
 
-#: gui/app.py:2548
+#: gui/app.py:2555
 msgid "No completed job to repeat"
 msgstr "[!! Ńö çöḿƥŀéţéð ĵöƀ ţö ŕéƥéåţ ! ! !!]"
 
-#: gui/app.py:2496
+#: gui/app.py:2503
 msgid "No completed results are available yet"
 msgstr "[!! Ńö çöḿƥŀéţéð ŕéšûŀţš åŕé åṽåîŀåƀŀé ýéţ ! ! ! !!]"
 
@@ -1978,7 +1978,7 @@ msgstr "[!! Ńö ḿéðîå šéŀéçţéð ! !!]"
 msgid "No quality review items are available"
 msgstr "[!! Ńö ɋûåŀîţý ŕéṽîéŵ îţéḿš åŕé åṽåîŀåƀŀé ! ! ! !!]"
 
-#: gui/app.py:1595
+#: gui/app.py:1602
 msgid "No queued items match this search"
 msgstr "[!! Ńö ɋûéûéð îţéḿš ḿåţçħ ţħîš šéåŕçħ ! ! !!]"
 
@@ -1994,7 +1994,7 @@ msgstr "[!! Ńö ŕéĝîöń éðîţ ţö ûńðö ! !!]"
 msgid "No regions were found at {timestamp}. Try Set region, or lower the Threshold in detailed controls."
 msgstr "[!! Ńö ŕéĝîöńš ŵéŕé ƒöûńð åţ {timestamp}. Ţŕý Šéţ ŕéĝîöń, öŕ ŀöŵéŕ ţħé Ţħŕéšħöŀð îń ðéţåîŀéð çöńţŕöŀš. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:1977
+#: gui/app.py:1984
 msgid "No supported videos or images were found in the selected folder"
 msgstr "[!! Ńö šûƥƥöŕţéð ṽîðéöš öŕ îḿåĝéš ŵéŕé ƒöûńð îń ţħé šéŀéçţéð ƒöŀðéŕ ! ! ! ! ! !!]"
 
@@ -2030,11 +2030,11 @@ msgstr "[!! Ńöńé ! !!]"
 msgid "Not a valid VSR preset file"
 msgstr "[!! Ńöţ å ṽåŀîð ṼŠŔ ƥŕéšéţ ƒîŀé ! ! !!]"
 
-#: gui/app.py:2000
+#: gui/app.py:2007
 msgid "Nothing new was added to the queue"
 msgstr "[!! Ńöţħîńĝ ńéŵ ŵåš åððéð ţö ţħé ɋûéûé ! ! !!]"
 
-#: gui/app.py:1075
+#: gui/app.py:1082
 msgid "Nothing to retry - every item is done."
 msgstr "[!! Ńöţħîńĝ ţö ŕéţŕý - éṽéŕý îţéḿ îš ðöńé. ! ! ! !!]"
 
@@ -2058,11 +2058,11 @@ msgstr "[!! ÖÇŔ ƒöûńð {count} ŕéĝîöń{suffix}; åṽéŕåĝé çö
 msgid "OCR preview unavailable; the region can still be saved."
 msgstr "[!! ÖÇŔ ƥŕéṽîéŵ ûńåṽåîŀåƀŀé; ţħé ŕéĝîöń çåń šţîŀŀ ƀé šåṽéð. ! ! ! ! !!]"
 
-#: gui/app.py:2226
+#: gui/app.py:2233
 msgid "Only idle items can have their output renamed"
 msgstr "[!! Öńŀý îðŀé îţéḿš çåń ħåṽé ţħéîŕ öûţƥûţ ŕéńåḿéð ! ! ! !!]"
 
-#: gui/app.py:1909
+#: gui/app.py:1916
 msgid "Only idle queue items can change subtitle action"
 msgstr "[!! Öńŀý îðŀé ɋûéûé îţéḿš çåń çħåńĝé šûƀţîţŀé åçţîöń ! ! ! ! !!]"
 
@@ -2122,7 +2122,7 @@ msgstr "[!! Öƥéńéð ɋûåŀîţý ŕéṽîéŵ ƒöŕ {name}{stage} ! ! !
 msgid "Opened the log file"
 msgstr "[!! Öƥéńéð ţħé ŀöĝ ƒîŀé ! !!]"
 
-#: gui/app.py:2492
+#: gui/app.py:2499
 msgid "Opened the output folder"
 msgstr "[!! Öƥéńéð ţħé öûţƥûţ ƒöŀðéŕ ! ! !!]"
 
@@ -2156,15 +2156,15 @@ msgid_plural "Output quality preflight warning for {count} items: {name} - {deta
 msgstr[0] "[!! Öûţƥûţ ɋûåŀîţý ƥŕéƒŀîĝħţ ŵåŕńîńĝ ƒöŕ {count} îţéḿ: {name} - {detail} ! ! ! ! ! !!]"
 msgstr[1] "[!! Öûţƥûţ ɋûåŀîţý ƥŕéƒŀîĝħţ ŵåŕńîńĝ ƒöŕ {count} îţéḿš: {name} - {detail} ! ! ! ! ! !!]"
 
-#: gui/app.py:2263
+#: gui/app.py:2270
 msgid "Output renamed to {name}"
 msgstr "[!! Öûţƥûţ ŕéńåḿéð ţö {name} ! ! !!]"
 
-#: gui/app.py:2257
+#: gui/app.py:2264
 msgid "Output renamed to {name} to avoid an overwrite"
 msgstr "[!! Öûţƥûţ ŕéńåḿéð ţö {name} ţö åṽöîð åń öṽéŕŵŕîţé ! ! ! !!]"
 
-#: gui/app.py:1142
+#: gui/app.py:1149
 msgid "Outputs are ready for review"
 msgstr "[!! Öûţƥûţš åŕé ŕéåðý ƒöŕ ŕéṽîéŵ ! ! !!]"
 
@@ -2224,11 +2224,11 @@ msgstr "[!! Ƥåîńţîńĝ ḿåšķ çöŕŕéçţîöń ! ! !!]"
 msgid "Pass through every audio stream (Bluray/DVD multi-track)"
 msgstr "[!! Ƥåšš ţħŕöûĝħ éṽéŕý åûðîö šţŕéåḿ (Ɓŀûŕåý/ÐṼÐ ḿûŀţî-ţŕåçķ) ! ! ! ! !!]"
 
-#: gui/processing_controller.py:113
+#: gui/processing_controller.py:114
 msgid "Pause batch"
 msgstr "[!! Ƥåûšé ƀåţçħ ! !!]"
 
-#: gui/app.py:1053
+#: gui/app.py:1060
 msgid "Pause is already in progress."
 msgstr "[!! Ƥåûšé îš åŀŕéåðý îń ƥŕöĝŕéšš. ! ! !!]"
 
@@ -2248,15 +2248,15 @@ msgstr "[!! Ƥåûšéð ! !!]"
 msgid "Paused at checkpoint"
 msgstr "[!! Ƥåûšéð åţ çħéçķƥöîńţ ! !!]"
 
-#: gui/app.py:2818
+#: gui/app.py:2825
 msgid "Paused {name}: resume from checkpoint"
 msgstr "[!! Ƥåûšéð {name}: ŕéšûḿé ƒŕöḿ çħéçķƥöîńţ ! ! ! !!]"
 
-#: gui/processing_controller.py:176
+#: gui/processing_controller.py:177
 msgid "Pausing at the next safe frame checkpoint. Current progress will resume later."
 msgstr "[!! Ƥåûšîńĝ åţ ţħé ńéẋţ šåƒé ƒŕåḿé çħéçķƥöîńţ. Çûŕŕéńţ ƥŕöĝŕéšš ŵîŀŀ ŕéšûḿé ŀåţéŕ. ! ! ! ! ! ! !!]"
 
-#: gui/processing_controller.py:173
+#: gui/processing_controller.py:174
 msgid "Pausing..."
 msgstr "[!! Ƥåûšîńĝ... ! !!]"
 
@@ -2440,7 +2440,7 @@ msgstr "[!! Ɋûåŀîţý ŕéṽîéŵ ! !!]"
 msgid "Quality review span"
 msgstr "[!! Ɋûåŀîţý ŕéṽîéŵ šƥåń ! !!]"
 
-#: gui/app.py:2399
+#: gui/app.py:2406
 msgid "Queue cleared"
 msgstr "[!! Ɋûéûé çŀéåŕéð ! !!]"
 
@@ -2448,7 +2448,7 @@ msgstr "[!! Ɋûéûé çŀéåŕéð ! !!]"
 msgid "Queue sorted"
 msgstr "[!! Ɋûéûé šöŕţéð ! !!]"
 
-#: gui/app.py:2573
+#: gui/app.py:2580
 msgid "Queued {count} file with the last job's settings"
 msgid_plural "Queued {count} files with the last job's settings"
 msgstr[0] "[!! Ɋûéûéð {count} ƒîŀé ŵîţħ ţħé ŀåšţ ĵöƀ'š šéţţîńĝš ! ! ! ! !!]"
@@ -2470,7 +2470,7 @@ msgstr "[!! ŔåƥîðÖÇŔ ḿöðéŀ ĝéńéŕåţîöń ! ! !!]"
 msgid "Re-embed translated subtitles after cleanup"
 msgstr "[!! Ŕé-éḿƀéð ţŕåńšŀåţéð šûƀţîţŀéš åƒţéŕ çŀéåńûƥ ! ! ! !!]"
 
-#: gui/app.py:2211
+#: gui/app.py:2218
 msgid "Re-queued {name} with the same settings"
 msgstr "[!! Ŕé-ɋûéûéð {name} ŵîţħ ţħé šåḿé šéţţîńĝš ! ! ! !!]"
 
@@ -2486,7 +2486,7 @@ msgstr "[!! Ŕéåð ûƥçöḿîńĝ ƒŕåḿéš îń ţħé ƀåçķĝŕö�
 msgid "Reading preview frame at {timestamp}..."
 msgstr "[!! Ŕéåðîńĝ ƥŕéṽîéŵ ƒŕåḿé åţ {timestamp}... ! ! ! !!]"
 
-#: gui/app.py:1151 gui/config.py:206 gui/layout_build.py:2277 gui/layout_build.py:2511 gui/layout_build.py:2522 gui/layout_helpers.py:54 gui/processing_controller.py:1445 gui/processing_controller.py:1480 gui/support_controller.py:793
+#: gui/app.py:1158 gui/config.py:206 gui/layout_build.py:2277 gui/layout_build.py:2511 gui/layout_build.py:2522 gui/layout_helpers.py:54 gui/processing_controller.py:1455 gui/processing_controller.py:1490 gui/support_controller.py:793
 msgid "Ready"
 msgstr "[!! Ŕéåðý ! !!]"
 
@@ -2634,13 +2634,13 @@ msgstr "[!! Ŕéḿöṽé ţéẋţ ţħåţ šţåýš îń öńé ƥŀåçé 
 msgid "Remove the selected item from the queue."
 msgstr "[!! Ŕéḿöṽé ţħé šéŀéçţéð îţéḿ ƒŕöḿ ţħé ɋûéûé. ! ! ! !!]"
 
-#: gui/app.py:2383
+#: gui/app.py:2390
 msgid "Remove {n} item from the batch."
 msgid_plural "Remove {n} items from the batch."
 msgstr[0] "[!! Ŕéḿöṽé {n} îţéḿ ƒŕöḿ ţħé ƀåţçħ. ! ! !!]"
 msgstr[1] "[!! Ŕéḿöṽé {n} îţéḿš ƒŕöḿ ţħé ƀåţçħ. ! ! !!]"
 
-#: gui/app.py:2299
+#: gui/app.py:2306
 msgid "Removed {name} from the queue"
 msgstr "[!! Ŕéḿöṽéð {name} ƒŕöḿ ţħé ɋûéûé ! ! !!]"
 
@@ -2672,17 +2672,17 @@ msgstr "[!! Ŕéƥŀåçé, åðð ţö, öŕ šûƀţŕåçţ ƒŕöḿ ţħé 
 msgid "Reset"
 msgstr "[!! Ŕéšéţ ! !!]"
 
-#: gui/app.py:2523
+#: gui/app.py:2530
 msgid "Reset {count} item for retry"
 msgid_plural "Reset {count} items for retry"
 msgstr[0] "[!! Ŕéšéţ {count} îţéḿ ƒöŕ ŕéţŕý ! ! !!]"
 msgstr[1] "[!! Ŕéšéţ {count} îţéḿš ƒöŕ ŕéţŕý ! ! !!]"
 
-#: gui/app.py:2853
+#: gui/app.py:2860
 msgid "Restore queue?"
 msgstr "[!! Ŕéšţöŕé ɋûéûé? ! !!]"
 
-#: gui/app.py:2995
+#: gui/app.py:3002
 msgid "Restored {count} item from last session"
 msgid_plural "Restored {count} items from last session"
 msgstr[0] "[!! Ŕéšţöŕéð {count} îţéḿ ƒŕöḿ ŀåšţ šéššîöń ! ! ! !!]"
@@ -2732,7 +2732,7 @@ msgstr "[!! Ŕéṽîéŵ ƒîŕšţ ! !!]"
 msgid "Review frame"
 msgstr "[!! Ŕéṽîéŵ ƒŕåḿé ! !!]"
 
-#: gui/app.py:1552 gui/layout_build.py:2126 gui/mask_correction_controller.py:155 gui/mask_correction_controller.py:166
+#: gui/app.py:1559 gui/layout_build.py:2126 gui/mask_correction_controller.py:155 gui/mask_correction_controller.py:166
 msgid "Review mask"
 msgstr "[!! Ŕéṽîéŵ ḿåšķ ! !!]"
 
@@ -2748,7 +2748,7 @@ msgstr "[!! Ŕéṽîéŵ šûƀţîţŀé ḿåšķ ! !!]"
 msgid "Review text tracks"
 msgstr "[!! Ŕéṽîéŵ ţéẋţ ţŕåçķš ! !!]"
 
-#: gui/app.py:1091
+#: gui/app.py:1098
 msgid "Run a batch first to repeat its settings."
 msgstr "[!! Ŕûń å ƀåţçħ ƒîŕšţ ţö ŕéƥéåţ îţš šéţţîńĝš. ! ! ! !!]"
 
@@ -2902,11 +2902,11 @@ msgstr "[!! Šçåń ţħé ŵħöŀé ƒîŀé åńð ŕéṽîéŵ éṽéŕý
 msgid "Scanning"
 msgstr "[!! Šçåńńîńĝ ! !!]"
 
-#: gui/app.py:2026
+#: gui/app.py:2033
 msgid "Scanning folders..."
 msgstr "[!! Šçåńńîńĝ ƒöŀðéŕš... ! !!]"
 
-#: gui/app.py:2039
+#: gui/app.py:2046
 msgid "Scanning folders... {n} entries checked"
 msgstr "[!! Šçåńńîńĝ ƒöŀðéŕš... {n} éńţŕîéš çħéçķéð ! ! ! !!]"
 
@@ -2954,15 +2954,15 @@ msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö éńåƀŀé ḿåšķ ŕ�
 msgid "Select a queue item to inspect its subtitle region."
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö îńšƥéçţ îţš šûƀţîţŀé ŕéĝîöń. ! ! ! ! !!]"
 
-#: gui/app.py:2353
+#: gui/app.py:2360
 msgid "Select a queue item to move"
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö ḿöṽé ! ! !!]"
 
-#: gui/app.py:2307
+#: gui/app.py:2314
 msgid "Select a queue item to remove"
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö ŕéḿöṽé ! ! !!]"
 
-#: gui/app.py:1110
+#: gui/app.py:1117
 msgid "Select a queue item to remove."
 msgstr "[!! Šéŀéçţ å ɋûéûé îţéḿ ţö ŕéḿöṽé. ! ! !!]"
 
@@ -2982,15 +2982,15 @@ msgstr "[!! Šéŀéçţ å ţîḿéð ŕéĝîöń ţö åţţåçħ å çŀé
 msgid "Select a video/image to define subtitle region"
 msgstr "[!! Šéŀéçţ å ṽîðéö/îḿåĝé ţö ðéƒîńé šûƀţîţŀé ŕéĝîöń ! ! ! !!]"
 
-#: gui/app.py:1131
+#: gui/app.py:1138
 msgid "Select an item above the last row to move it down."
 msgstr "[!! Šéŀéçţ åń îţéḿ åƀöṽé ţħé ŀåšţ ŕöŵ ţö ḿöṽé îţ ðöŵń. ! ! ! ! !!]"
 
-#: gui/app.py:1124
+#: gui/app.py:1131
 msgid "Select an item below the first row to move it up."
 msgstr "[!! Šéŀéçţ åń îţéḿ ƀéŀöŵ ţħé ƒîŕšţ ŕöŵ ţö ḿöṽé îţ ûƥ. ! ! ! ! !!]"
 
-#: gui/app.py:2551
+#: gui/app.py:2558
 msgid "Select files to process with the last job's settings"
 msgstr "[!! Šéŀéçţ ƒîŀéš ţö ƥŕöçéšš ŵîţħ ţħé ŀåšţ ĵöƀ'š šéţţîńĝš ! ! ! ! !!]"
 
@@ -3010,11 +3010,11 @@ msgstr "[!! Šéŀéçţéð ḿåńûåŀ ŕéĝîöń ! !!]"
 msgid "Sensitivity"
 msgstr "[!! Šéńšîţîṽîţý ! !!]"
 
-#: gui/app.py:1551 gui/layout_build.py:2119 gui/layout_build.py:705
+#: gui/app.py:1558 gui/layout_build.py:2119 gui/layout_build.py:705
 msgid "Set region"
 msgstr "[!! Šéţ ŕéĝîöń ! !!]"
 
-#: gui/app.py:1405 gui/layout_build.py:193
+#: gui/app.py:1412 gui/layout_build.py:193
 msgid "Set region..."
 msgstr "[!! Šéţ ŕéĝîöń... ! !!]"
 
@@ -3038,7 +3038,7 @@ msgstr "[!! Šħöŵ åçţîṽîţý ! !!]"
 msgid "Show queued files"
 msgstr "[!! Šħöŵ ɋûéûéð ƒîŀéš ! !!]"
 
-#: gui/app.py:1521 gui/layout_build.py:1749
+#: gui/app.py:1528 gui/layout_build.py:1749
 msgid "Show {section} settings."
 msgstr "[!! Šħöŵ {section} šéţţîńĝš. ! ! !!]"
 
@@ -3074,15 +3074,15 @@ msgstr "[!! Šöƒţ-ƀŀéńð ţħé ŕéḿöṽåŀ éðĝé ƒöŕ šéå�
 msgid "Some completed outputs need a closer look. Start with the quality review item, then retry failed items if needed."
 msgstr "[!! Šöḿé çöḿƥŀéţéð öûţƥûţš ńééð å çŀöšéŕ ŀööķ. Šţåŕţ ŵîţħ ţħé ɋûåŀîţý ŕéṽîéŵ îţéḿ, ţħéń ŕéţŕý ƒåîŀéð îţéḿš îƒ ńééðéð. ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:1147
+#: gui/app.py:1154
 msgid "Some items need attention"
 msgstr "[!! Šöḿé îţéḿš ńééð åţţéńţîöń ! ! !!]"
 
-#: gui/app.py:2771
+#: gui/app.py:2778
 msgid "Some selected batch options are not supported by this FFmpeg build."
 msgstr "[!! Šöḿé šéŀéçţéð ƀåţçħ öƥţîöńš åŕé ńöţ šûƥƥöŕţéð ƀý ţħîš ƑƑḿƥéĝ ƀûîŀð. ! ! ! ! ! !!]"
 
-#: gui/app.py:1996
+#: gui/app.py:2003
 msgid "Some selected files could not be found"
 msgstr "[!! Šöḿé šéŀéçţéð ƒîŀéš çöûŀð ńöţ ƀé ƒöûńð ! ! ! !!]"
 
@@ -3098,7 +3098,7 @@ msgstr "[!! Šöŕţîńĝ îš ðîšåƀŀéð ŵħîŀé å ƀåţçħ îš �
 msgid "Source"
 msgstr "[!! Šöûŕçé ! !!]"
 
-#: gui/app.py:1864
+#: gui/app.py:1871
 msgid "Source frame. Set the subtitle region or review automatic detection."
 msgstr "[!! Šöûŕçé ƒŕåḿé. Šéţ ţħé šûƀţîţŀé ŕéĝîöń öŕ ŕéṽîéŵ åûţöḿåţîç ðéţéçţîöń. ! ! ! ! ! !!]"
 
@@ -3118,7 +3118,7 @@ msgstr "[!! Šţåŕţ (š) ! !!]"
 msgid "Start and end frames must be whole numbers"
 msgstr "[!! Šţåŕţ åńð éńð ƒŕåḿéš ḿûšţ ƀé ŵħöŀé ńûḿƀéŕš ! ! ! !!]"
 
-#: gui/processing_controller.py:1477 gui/processing_controller.py:158
+#: gui/processing_controller.py:1487 gui/processing_controller.py:159
 msgid "Start batch"
 msgstr "[!! Šţåŕţ ƀåţçħ ! !!]"
 
@@ -3138,7 +3138,7 @@ msgstr "[!! Šţåţûš ! !!]"
 msgid "Status (pending first)"
 msgstr "[!! Šţåţûš (ƥéńðîńĝ ƒîŕšţ) ! !!]"
 
-#: gui/app.py:1055
+#: gui/app.py:1062
 msgid "Stop is already in progress."
 msgstr "[!! Šţöƥ îš åŀŕéåðý îń ƥŕöĝŕéšš. ! ! !!]"
 
@@ -3154,15 +3154,15 @@ msgstr "[!! Šţöƥ ţħé åçţîṽé ƀåţçħ ƀéƒöŕé çöŕŕéçţ
 msgid "Stop the active batch before preparing a retry"
 msgstr "[!! Šţöƥ ţħé åçţîṽé ƀåţçħ ƀéƒöŕé ƥŕéƥåŕîńĝ å ŕéţŕý ! ! ! !!]"
 
-#: gui/app.py:2501
+#: gui/app.py:2508
 msgid "Stop the active batch before retrying failed items"
 msgstr "[!! Šţöƥ ţħé åçţîṽé ƀåţçħ ƀéƒöŕé ŕéţŕýîńĝ ƒåîŀéð îţéḿš ! ! ! ! !!]"
 
-#: gui/app.py:2544
+#: gui/app.py:2551
 msgid "Stop the active batch first"
 msgstr "[!! Šţöƥ ţħé åçţîṽé ƀåţçħ ƒîŕšţ ! ! !!]"
 
-#: gui/app.py:2376
+#: gui/app.py:2383
 msgid "Stop the batch before clearing the queue"
 msgstr "[!! Šţöƥ ţħé ƀåţçħ ƀéƒöŕé çŀéåŕîńĝ ţħé ɋûéûé ! ! ! !!]"
 
@@ -3170,19 +3170,19 @@ msgstr "[!! Šţöƥ ţħé ƀåţçħ ƀéƒöŕé çŀéåŕîńĝ ţħé ɋû
 msgid "Stopped"
 msgstr "[!! Šţöƥƥéð ! !!]"
 
-#: gui/app.py:2823
+#: gui/app.py:2830
 msgid "Stopped {name}"
 msgstr "[!! Šţöƥƥéð {name} ! !!]"
 
-#: gui/processing_controller.py:201
+#: gui/processing_controller.py:202
 msgid "Stopping after the current step. Finished outputs stay on disk."
 msgstr "[!! Šţöƥƥîńĝ åƒţéŕ ţħé çûŕŕéńţ šţéƥ. Ƒîńîšħéð öûţƥûţš šţåý öń ðîšķ. ! ! ! ! ! !!]"
 
-#: gui/app.py:2173
+#: gui/app.py:2180
 msgid "Stopping {name}"
 msgstr "[!! Šţöƥƥîńĝ {name} ! !!]"
 
-#: gui/processing_controller.py:198
+#: gui/processing_controller.py:199
 msgid "Stopping..."
 msgstr "[!! Šţöƥƥîńĝ... ! !!]"
 
@@ -3262,7 +3262,7 @@ msgstr "[!! Ţåŕĝéţ ! !!]"
 msgid "Target language tag"
 msgstr "[!! Ţåŕĝéţ ŀåńĝûåĝé ţåĝ ! !!]"
 
-#: gui/app.py:1386 gui/app.py:1397 gui/app.py:1464 gui/layout_build.py:166
+#: gui/app.py:1393 gui/app.py:1404 gui/app.py:1471 gui/layout_build.py:166
 msgid "Temporal"
 msgstr "[!! Ţéḿƥöŕåŀ ! !!]"
 
@@ -3270,15 +3270,15 @@ msgstr "[!! Ţéḿƥöŕåŀ ! !!]"
 msgid "Temporary, mask, checkpoint, and resume files"
 msgstr "[!! Ţéḿƥöŕåŕý, ḿåšķ, çħéçķƥöîńţ, åńð ŕéšûḿé ƒîŀéš ! ! ! !!]"
 
-#: gui/app.py:1553 gui/layout_build.py:2134
+#: gui/app.py:1560 gui/layout_build.py:2134
 msgid "Test cleanup"
 msgstr "[!! Ţéšţ çŀéåńûƥ ! !!]"
 
-#: gui/app.py:2169
+#: gui/app.py:2176
 msgid "That item is not running"
 msgstr "[!! Ţħåţ îţéḿ îš ńöţ ŕûńńîńĝ ! ! !!]"
 
-#: gui/app.py:1057
+#: gui/app.py:1064
 msgid "The batch is already running."
 msgstr "[!! Ţħé ƀåţçħ îš åŀŕéåðý ŕûńńîńĝ. ! ! !!]"
 
@@ -3326,11 +3326,11 @@ msgstr "[!! Ţħé ḿöţîöń ķéýƒŕåḿéš çöûŀð ńöţ ƀé ńö
 msgid "The processing worker stopped unexpectedly"
 msgstr "[!! Ţħé ƥŕöçéššîńĝ ŵöŕķéŕ šţöƥƥéð ûńéẋƥéçţéðŀý ! ! ! !!]"
 
-#: gui/app.py:1972
+#: gui/app.py:1979
 msgid "The queue is already full (500 items max)"
 msgstr "[!! Ţħé ɋûéûé îš åŀŕéåðý ƒûŀŀ (500 îţéḿš ḿåẋ) ! ! ! !!]"
 
-#: gui/app.py:1083
+#: gui/app.py:1090
 msgid "The queue is empty - add media to get started."
 msgstr "[!! Ţħé ɋûéûé îš éḿƥţý - åðð ḿéðîå ţö ĝéţ šţåŕţéð. ! ! ! !!]"
 
@@ -3370,7 +3370,7 @@ msgstr "[!! Ţħé šöûŕçé îḿåĝé çöûŀð ńöţ ƀé öƥéńéð 
 msgid "The source video could not be opened"
 msgstr "[!! Ţħé šöûŕçé ṽîðéö çöûŀð ńöţ ƀé öƥéńéð ! ! ! !!]"
 
-#: gui/app.py:2528
+#: gui/app.py:2535
 msgid "There are no failed items to retry"
 msgstr "[!! Ţħéŕé åŕé ńö ƒåîŀéð îţéḿš ţö ŕéţŕý ! ! !!]"
 
@@ -3436,7 +3436,7 @@ msgstr "[!! Ţîḿîńĝ ! !!]"
 msgid "Total time {elapsed}, {count} item{suffix} processed"
 msgstr "[!! Ţöţåŀ ţîḿé {elapsed}, {count} îţéḿ{suffix} ƥŕöçéššéð ! ! ! ! !!]"
 
-#: gui/app.py:1548 gui/layout_build.py:2142 gui/track_plan_controller.py:260
+#: gui/app.py:1555 gui/layout_build.py:2142 gui/track_plan_controller.py:260
 msgid "Track plan"
 msgstr "[!! Ţŕåçķ ƥŀåń ! !!]"
 
@@ -3508,11 +3508,11 @@ msgstr "[!! Ûńķńöŵń ! !!]"
 msgid "Up"
 msgstr "[!! Ûƥ ! !!]"
 
-#: gui/app.py:3025
+#: gui/app.py:3032
 msgid "Update available: {tag}"
 msgstr "[!! Ûƥðåţé åṽåîŀåƀŀé: {tag} ! !!]"
 
-#: gui/app.py:3033
+#: gui/app.py:3040
 msgid "Update {tag} available -- link in the log panel"
 msgstr "[!! Ûƥðåţé {tag} åṽåîŀåƀŀé -- ŀîńķ îń ţħé ŀöĝ ƥåńéŀ ! ! ! !!]"
 
@@ -3616,7 +3616,7 @@ msgstr "[!! Ṽîðéö ƒîŀéš ! !!]"
 msgid "Videos and images supported"
 msgstr "[!! Ṽîðéöš åńð îḿåĝéš šûƥƥöŕţéð ! ! !!]"
 
-#: gui/app.py:2315
+#: gui/app.py:2322
 msgid "Wait for the active batch to finish before clearing completed items"
 msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé çŀéåŕîńĝ çöḿƥŀéţéð îţéḿš ! ! ! ! ! !!]"
 
@@ -3628,15 +3628,15 @@ msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀ
 msgid "Wait for the active batch to finish before editing regions."
 msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé éðîţîńĝ ŕéĝîöńš. ! ! ! ! !!]"
 
-#: gui/app.py:2347
+#: gui/app.py:2354
 msgid "Wait for the active batch to finish before reordering the queue"
 msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé ŕéöŕðéŕîńĝ ţħé ɋûéûé ! ! ! ! ! !!]"
 
-#: gui/app.py:2290
+#: gui/app.py:2297
 msgid "Wait for the active item to finish before removing it"
 msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé îţéḿ ţö ƒîńîšħ ƀéƒöŕé ŕéḿöṽîńĝ îţ ! ! ! ! !!]"
 
-#: gui/app.py:1074 gui/app.py:1082 gui/app.py:1090 gui/app.py:1097 gui/app.py:1109 gui/app.py:1117
+#: gui/app.py:1081 gui/app.py:1089 gui/app.py:1097 gui/app.py:1104 gui/app.py:1116 gui/app.py:1124
 msgid "Wait for the current batch to finish."
 msgstr "[!! Ŵåîţ ƒöŕ ţħé çûŕŕéńţ ƀåţçħ ţö ƒîńîšħ. ! ! ! !!]"
 
@@ -3720,7 +3720,7 @@ msgstr "[!! Ẋ ! !!]"
 msgid "Y"
 msgstr "[!! Ý ! !!]"
 
-#: gui/processing_controller.py:1435
+#: gui/processing_controller.py:1445
 msgid "[{current}/{total}] {app} v{version}"
 msgstr "[!! [{current}/{total}] {app} ṽ{version} ! ! ! !!]"
 
@@ -3798,7 +3798,7 @@ msgstr[1] "[!! {count} éḿƀéððéð šûƀţîţŀé ţŕåçķš: {names} 
 msgid "{count} error{suffix}"
 msgstr "[!! {count} éŕŕöŕ{suffix} ! !!]"
 
-#: gui/app.py:1137
+#: gui/app.py:1144
 msgid "{count} queued and ready to process"
 msgstr "[!! {count} ɋûéûéð åńð ŕéåðý ţö ƥŕöçéšš ! ! !!]"
 
@@ -3810,7 +3810,7 @@ msgstr "[!! {count} ŵåŕńîńĝ{suffix} ! !!]"
 msgid "{current} of {total}"
 msgstr "[!! {current} öƒ {total} ! !!]"
 
-#: gui/processing_controller.py:1429
+#: gui/processing_controller.py:1439
 msgid "{current} of {total} complete"
 msgstr "[!! {current} öƒ {total} çöḿƥŀéţé ! ! !!]"
 
@@ -3838,19 +3838,19 @@ msgstr "[!! {method} åŀîĝńḿéńţ: {confidence:.1%} ! ! ! !!]"
 msgid "{mode} recovers pixels from other frames, and a fixed manual region looks the same in every frame, so the whole region will be filled by cv2 instead."
 msgstr "[!! {mode} ŕéçöṽéŕš ƥîẋéŀš ƒŕöḿ öţħéŕ ƒŕåḿéš, åńð å ƒîẋéð ḿåńûåŀ ŕéĝîöń ŀööķš ţħé šåḿé îń éṽéŕý ƒŕåḿé, šö ţħé ŵħöŀé ŕéĝîöń ŵîŀŀ ƀé ƒîŀŀéð ƀý çṽ2 îńšţéåð. ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/app.py:2803
+#: gui/app.py:2810
 msgid "{name} completed; quality review recommended"
 msgstr "[!! {name} çöḿƥŀéţéð; ɋûåŀîţý ŕéṽîéŵ ŕéçöḿḿéńðéð ! ! ! !!]"
 
-#: gui/app.py:2812
+#: gui/app.py:2819
 msgid "{name} needs attention: {detail}"
 msgstr "[!! {name} ńééðš åţţéńţîöń: {detail} ! ! !!]"
 
-#: gui/app.py:1925
+#: gui/app.py:1932
 msgid "{name}: {action}"
 msgstr "[!! {name}: {action} ! !!]"
 
-#: gui/app.py:2826
+#: gui/app.py:2833
 msgid "{name}: {detail}"
 msgstr "[!! {name}: {detail} ! !!]"
 
@@ -3882,7 +3882,7 @@ msgid_plural "{n} need attention"
 msgstr[0] "[!! {n} ńééðš åţţéńţîöń ! !!]"
 msgstr[1] "[!! {n} ńééð åţţéńţîöń ! !!]"
 
-#: gui/app.py:2846
+#: gui/app.py:2853
 msgid "{n} queued item from last session"
 msgid_plural "{n} queued items from last session"
 msgstr[0] "[!! {n} ɋûéûéð îţéḿ ƒŕöḿ ŀåšţ šéššîöń ! ! !!]"

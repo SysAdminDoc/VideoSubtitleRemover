@@ -10,6 +10,7 @@ the processing orchestrator never imports this CLI module.
 from __future__ import annotations
 
 import argparse
+import atexit
 import datetime
 import json
 import logging
@@ -2105,6 +2106,13 @@ def _run_processing(
             + STATIC_REGION_DEGRADES_MESSAGE.format(mode=config.mode.value),
             file=sys.stderr,
         )
+
+    # RM-316: hold the system awake for the run and release it however
+    # the run ends.
+    from backend import keep_awake
+
+    keep_awake.acquire()
+    atexit.register(keep_awake.release_all)
 
     remover = SubtitleRemover(config)
     identity_config = normalized_config_snapshot(config)
