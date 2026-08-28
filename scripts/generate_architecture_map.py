@@ -108,6 +108,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/post_restore.py": "Post-inpaint temporal smoothing and burn-in.",
     "backend/preprocess.py": "Deinterlacing and keyframe enumeration.",
     "backend/presets.py": "Shared preset library (GUI + CLI).",
+    "backend/provider_benchmark.py": "Measured cost of one provider lane on one clip.",
     "backend/processor.py": "Frame loop plus the legacy re-export / CLI shim.",
     "backend/proxy_workflow.py": "Proxy-encode workflow for large files.",
     "backend/quality.py": "PSNR / SSIM / VMAF and temporal metrics.",

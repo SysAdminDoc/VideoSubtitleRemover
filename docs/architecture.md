@@ -110,6 +110,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- preprocess.py               # Deinterlacing and keyframe enumeration.
 |   |-- presets.py                  # Shared preset library (GUI + CLI).
 |   |-- processor.py                # Frame loop plus the legacy re-export / CLI shim.
+|   |-- provider_benchmark.py       # Measured cost of one provider lane on one clip.
 |   |-- proxy_workflow.py           # Proxy-encode workflow for large files.
 |   |-- quality.py                  # PSNR / SSIM / VMAF and temporal metrics.
 |   |-- quality_gate.py             # Graduated quality gate with a remediation ladder.

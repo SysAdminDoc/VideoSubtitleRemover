@@ -492,8 +492,23 @@ for the current installation and deprecation status.
 | CPU | `CPUExecutionProvider` | CPU profile; tested |
 | CUDA 13 | `CUDAExecutionProvider` | NVIDIA profile; tested at 1.29.0 on an RTX 4070 SUPER |
 | CUDA 12 | `CUDAExecutionProvider` | Manual legacy lane; untested; torch stops at 2.11.0 there |
-| DirectML | `DmlExecutionProvider` | DirectML profile; tested at 1.24.4 |
+| DirectML | `DmlExecutionProvider` | DirectML profile; wheel pinned at 1.24.4; no measured run, no benchmark published |
 | TensorRT-RTX | `NvTensorRTRTXExecutionProvider` | Manual lane; untested; no live benchmark |
+
+### Measured provider evidence
+
+Every number below came from `python -m backend.provider_benchmark`, which runs one reference clip end to end and records what the run cost. The machine-readable evidence sits in `docs/benchmarks/`, including the input and config hashes, so a figure here traces back to a run rather than to an estimate.
+
+| Lane | Provider that ran | Cold | Warm | Peak RSS | GPU memory |
+|------|-------------------|------|------|----------|------------|
+| CPU | `CPUExecutionProvider` | 6.18 FPS | 8.88 FPS | 345 MiB | n/a |
+| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 5.68 FPS | 9.91 FPS | 975 MiB | +0 MiB device-wide |
+
+Host: NVIDIA GeForce RTX 4070 SUPER (12282 MiB, driver 610.88), Windows 11, Python 3.13. Clip: `tests/clips/static_dialogue.mkv`, a 160x96 sixteen-frame fixture driven with a fixed manual region.
+
+Read that as evidence, not as a GPU recommendation. The two lanes land within run-to-run noise of each other here, and the fixture is why: a fixed manual region sends the work down the temporal-exposure and cv2 paths, which are CPU numpy rather than ONNX inference, and a 1.6-second run over sixteen 160x96 frames never reaches the point where moving data to the card pays for itself. Repeat the command and the ordering changes. What the CUDA run does establish is that the provider really was CUDA and that its output was identical to the CPU run. A throughput comparison that would justify picking one bundle over the other needs real footage at a real resolution, which ROADMAP.md tracks separately.
+
+GPU memory is recorded device-wide rather than per process, because consumer GeForce cards under WDDM report `[N/A]` for per-process VRAM and a per-process figure would be invented. The evidence states which it is.
 
 `python -m backend.dependency_profiles smoke --profile
 <name>` creates one real inference session on the profile's claimed

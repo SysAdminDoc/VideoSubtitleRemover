@@ -6,6 +6,17 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- A provider benchmark that measures what a run costs on a named device,
+  and published evidence for the CPU and NVIDIA CUDA lanes. It records
+  the input and config hashes, cold and warm time, frames per second,
+  peak resident memory, GPU memory, whether the runs produced identical
+  output, and the quality-gate verdict. The README publishes both lanes
+  with the provider that actually ran, and says plainly that the two are
+  within noise of each other on the tiny synthetic fixture, so the table
+  is evidence rather than a recommendation. GPU memory is labelled
+  device-wide because consumer cards do not report it per process.
+  DirectML is now listed as having no measured run rather than as
+  tested.
 - An opt-in GPU verification lane. Nothing in the suite exercised CUDA,
   NVENC, provider selection, or memory-exhaustion recovery, so every GPU
   claim rested on reading the code. Set VSR_GPU_TESTS=1 to run it; it

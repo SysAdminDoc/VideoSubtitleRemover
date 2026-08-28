@@ -1,0 +1,314 @@
+{
+  "config": {
+    "device": "cuda:0",
+    "overrides": {
+      "adaptive_batch": false,
+      "decode_hw_accel": "off",
+      "device": "cuda:0",
+      "mode": "sttn",
+      "output_quality": 0,
+      "prefetch_decode": false,
+      "preserve_audio": false,
+      "quality_report": true,
+      "sttn_skip_detection": true,
+      "subtitle_area": [
+        14,
+        58,
+        146,
+        92
+      ],
+      "use_hw_encode": false
+    },
+    "sha256": "a921aec15aead8e61c494883dce99f291f446cc727f51a2a4f402504e4a3497e"
+  },
+  "errors": [],
+  "host": {
+    "cpuCount": 24,
+    "gpu": {
+      "driver": "610.88",
+      "memoryTotalMiB": 12282,
+      "name": "NVIDIA GeForce RTX 4070 SUPER",
+      "present": true
+    },
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.15"
+  },
+  "input": {
+    "bytes": 29706,
+    "path": "tests/clips/static_dialogue.mkv",
+    "sha256": "3d9bffa859a245e7adb7cfb926f24b970d99c9032934ae5d5cdeb0a7e4f0848a"
+  },
+  "memory": {
+    "gpu": {
+      "baselineMiB": 1270,
+      "deltaMiB": 0,
+      "measured": true,
+      "peakMiB": 1270,
+      "sampleCount": 18,
+      "sampleIntervalSeconds": 0.25,
+      "scope": "device-wide"
+    },
+    "peakWorkingSetBytes": 1022529536
+  },
+  "passed": true,
+  "profile": "nvidia",
+  "quality": {
+    "gate": {
+      "degradedMetrics": [
+        "vmaf",
+        "roi_vmaf",
+        "lpips",
+        "dists",
+        "temporal_consistency"
+      ],
+      "ladderStep": "manual-review",
+      "previewFramePaths": [
+        "C:\\Users\\--\\AppData\\Local\\Temp\\vsr-provider-bench-i7ltite7\\static_dialogue_nvidia_cold.temporalworst.png"
+      ],
+      "reason": "quality report tag is Review; ROI SSIM 0.3831 below 0.9500; worst sampled frame 1 SSIM 0.6761 below 0.8000; residual text score 0.8080 above 0.0250",
+      "reasons": [
+        {
+          "detail": "quality report tag is Review",
+          "ladder": "manual-review",
+          "metric": "tag"
+        },
+        {
+          "detail": "ROI SSIM 0.3831 below 0.9500",
+          "ladder": "alternate-inpainter",
+          "metric": "ssim",
+          "threshold": 0.95,
+          "value": 0.3830636739730835
+        },
+        {
+          "detail": "worst sampled frame 1 SSIM 0.6761 below 0.8000",
+          "frame": 1,
+          "ladder": "temporal-smooth",
+          "metric": "worst_frame",
+          "threshold": 0.8,
+          "value": 0.6761095921198527
+        },
+        {
+          "detail": "residual text score 0.8080 above 0.0250",
+          "ladder": "increase-dilation",
+          "metric": "residual_text_score",
+          "threshold": 0.025,
+          "value": 0.8080168776371308
+        }
+      ],
+      "remediation": "Multiple quality checks failed or a single check failed severely. Inspect the quality sheet and decide whether to accept, re-process with different settings, or exclude this file from the batch.",
+      "status": "review"
+    },
+    "metrics": {
+      "dists": null,
+      "lpips": null,
+      "mask_local_temporal_mean_score": 0.0,
+      "mask_local_temporal_pairs": 15,
+      "mask_local_temporal_scene_cuts_excluded": 0,
+      "mask_local_temporal_score": 0.0,
+      "mask_local_temporal_threshold": 0.08,
+      "mask_local_temporal_worst_pair": {
+        "end_frame": 1,
+        "inside_error": 0.0,
+        "motion_inlier_ratio": 0.0,
+        "outside_error": 0.0,
+        "overlay": "C:\\Users\\--\\AppData\\Local\\Temp\\vsr-provider-bench-i7ltite7\\static_dialogue_nvidia_cold.temporalworst.png",
+        "pixels": 8020,
+        "reference_inside_error": 0.0,
+        "score": 0.0,
+        "start_frame": 0,
+        "timestamp": 0.08333333333333333
+      },
+      "mask_local_temporal_worst_score": 0.0,
+      "mask_review_spans": [
+        {
+          "end": 0.3333333333333333,
+          "end_frame": 4,
+          "kind": "residual",
+          "reason": "Residual text score exceeded the review threshold",
+          "schema": "vsr.mask_review_spans.v1",
+          "score": 0.808017,
+          "start": 0.08333333333333333,
+          "start_frame": 1,
+          "suggested_mode": "add",
+          "threshold": 0.025
+        },
+        {
+          "end": 0.6666666666666666,
+          "end_frame": 8,
+          "kind": "residual",
+          "reason": "Residual text score exceeded the review threshold",
+          "schema": "vsr.mask_review_spans.v1",
+          "score": 0.808017,
+          "start": 0.5,
+          "start_frame": 6,
+          "suggested_mode": "add",
+          "threshold": 0.025
+        },
+        {
+          "end": 1.1666666666666667,
+          "end_frame": 14,
+          "kind": "residual",
+          "reason": "Residual text score exceeded the review threshold",
+          "schema": "vsr.mask_review_spans.v1",
+          "score": 0.808017,
+          "start": 0.8333333333333334,
+          "start_frame": 10,
+          "suggested_mode": "add",
+          "threshold": 0.025
+        }
+      ],
+      "outside_mask_color_drift": 0.554593563079834,
+      "outside_mask_color_drift_frames": 16,
+      "outside_mask_color_drift_metric": "cielab_delta_e",
+      "outside_mask_color_drift_threshold": 1.0,
+      "outside_mask_color_drift_worst_frame": {
+        "frame": 0,
+        "metric": "cielab_delta_e",
+        "p95": 0.554593563079834,
+        "score": 0.554593563079834,
+        "timestamp": 0.0
+      },
+      "psnr": 9.962553032447886,
+      "psnr_harmonic_mean": 9.962553032447886,
+      "quality_final_encode_verified": true,
+      "quality_gate": {
+        "degradedMetrics": [
+          "vmaf",
+          "roi_vmaf",
+          "lpips",
+          "dists",
+          "temporal_consistency"
+        ],
+        "ladderStep": "manual-review",
+        "previewFramePaths": [
+          "C:\\Users\\--\\AppData\\Local\\Temp\\vsr-provider-bench-i7ltite7\\static_dialogue_nvidia_cold.temporalworst.png"
+        ],
+        "reason": "quality report tag is Review; ROI SSIM 0.3831 below 0.9500; worst sampled frame 1 SSIM 0.6761 below 0.8000; residual text score 0.8080 above 0.0250",
+        "reasons": [
+          {
+            "detail": "quality report tag is Review",
+            "ladder": "manual-review",
+            "metric": "tag"
+          },
+          {
+            "detail": "ROI SSIM 0.3831 below 0.9500",
+            "ladder": "alternate-inpainter",
+            "metric": "ssim",
+            "threshold": 0.95,
+            "value": 0.3830636739730835
+          },
+          {
+            "detail": "worst sampled frame 1 SSIM 0.6761 below 0.8000",
+            "frame": 1,
+            "ladder": "temporal-smooth",
+            "metric": "worst_frame",
+            "threshold": 0.8,
+            "value": 0.6761095921198527
+          },
+          {
+            "detail": "residual text score 0.8080 above 0.0250",
+            "ladder": "increase-dilation",
+            "metric": "residual_text_score",
+            "threshold": 0.025,
+            "value": 0.8080168776371308
+          }
+        ],
+        "remediation": "Multiple quality checks failed or a single check failed severely. Inspect the quality sheet and decide whether to accept, re-process with different settings, or exclude this file from the batch.",
+        "status": "review"
+      },
+      "residual_text_score": 0.8080168776371308,
+      "roi_bbox": [
+        1,
+        45,
+        159,
+        96
+      ],
+      "roi_psnr": 7.16143817434562,
+      "roi_psnr_harmonic_mean": 7.16143817434562,
+      "roi_ssim": 0.3830636739730835,
+      "roi_ssim_harmonic_mean": 0.38306367397308344,
+      "roi_vmaf": null,
+      "roi_worst_frame": {
+        "frame": 1,
+        "psnr": 7.16143817434562,
+        "ssim": 0.3830636739730835
+      },
+      "samples": 8,
+      "seam_score": 0.013859578207819608,
+      "sheet": null,
+      "ssim": 0.6761095921198527,
+      "ssim_harmonic_mean": 0.6761095921198527,
+      "tag": "Review",
+      "temporal_consistency": null,
+      "temporal_exposure": {
+        "cv2Pixels": 128320,
+        "degradedThreshold": 0.05,
+        "degradedToCv2": true,
+        "exposedFraction": 0.0,
+        "exposedPixels": 0,
+        "maskedPixels": 128320
+      },
+      "temporal_flicker_score": 0.0,
+      "vmaf": null,
+      "worst_frame": {
+        "frame": 1,
+        "psnr": 9.962553032447886,
+        "ssim": 0.6761095921198527
+      }
+    }
+  },
+  "runs": [
+    {
+      "error": "",
+      "fps": 5.6834,
+      "frames": 16,
+      "label": "cold",
+      "ok": true,
+      "outputFrames": {
+        "frame_count": 16,
+        "height": 96,
+        "sha256": "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d",
+        "width": 160
+      },
+      "seconds": 2.815233
+    },
+    {
+      "error": "",
+      "fps": 9.9098,
+      "frames": 16,
+      "label": "warm1",
+      "ok": true,
+      "outputFrames": {
+        "frame_count": 16,
+        "height": 96,
+        "sha256": "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d",
+        "width": 160
+      },
+      "seconds": 1.61457
+    }
+  ],
+  "runtime": {
+    "activeProviders": [
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "availableProviders": [
+      "TensorrtExecutionProvider",
+      "CUDAExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "error": "",
+    "onnxruntime": "1.29.0",
+    "providerVerified": true,
+    "requestedDevice": "cuda:0"
+  },
+  "schema": "vsr.provider_benchmark.v1",
+  "timing": {
+    "identicalOutputs": true,
+    "outputDigests": [
+      "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d"
+    ],
+    "runCount": 2
+  }
+}
