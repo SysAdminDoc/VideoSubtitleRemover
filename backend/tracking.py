@@ -374,7 +374,7 @@ def _group_horizontal_geometry(
             weights = [max(1, len(item.text.strip())) for item in texts]
             confidence = sum(
                 item.confidence * weight
-                for item, weight in zip(texts, weights)
+                for item, weight in zip(texts, weights, strict=True)
             ) / float(sum(weights))
         else:
             confidence = sum(item.confidence for item in group) / len(group)

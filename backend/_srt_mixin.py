@@ -56,7 +56,7 @@ class SrtFrameObservation:
         ]
         return sum(
             item.confidence * weight
-            for item, weight in zip(self.detections, weights)
+            for item, weight in zip(self.detections, weights, strict=True)
         ) / float(sum(weights))
 
     @property

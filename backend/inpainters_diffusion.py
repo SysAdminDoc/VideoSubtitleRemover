@@ -1243,7 +1243,7 @@ def _write_adapter_frame_dirs(frames: List[np.ndarray],
     in_dir.mkdir()
     mask_dir.mkdir()
     names: List[str] = []
-    for idx, (frame, mask) in enumerate(zip(frames, masks)):
+    for idx, (frame, mask) in enumerate(zip(frames, masks, strict=True)):
         name = f"{idx:06d}.png"
         names.append(name)
         frame_arr = np.asarray(frame).astype(np.uint8)
@@ -1262,7 +1262,7 @@ def _read_adapter_frame_dir(out_dir: Path,
                             names: List[str],
                             target_frames: List[np.ndarray]) -> List[np.ndarray]:
     output: List[np.ndarray] = []
-    for name, original in zip(names, target_frames):
+    for name, original in zip(names, target_frames, strict=True):
         path = out_dir / name
         frame = safe_imread(path)
         if frame is None:

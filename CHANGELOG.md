@@ -6,6 +6,14 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- A frames-to-masks length mismatch now fails the run instead of quietly
+  processing the shorter list. 61 sequence pairings carried no explicit
+  length rule, including the inpainting hot path, so a mismatch repaired
+  the common prefix and wrote the remaining frames out untouched with
+  nothing reported. Every pairing in the decode, mask, inpaint, encode,
+  and quality paths now states that the lengths must match, or says in a
+  comment why unequal lengths are correct there, and the linter enforces
+  it from here on.
 - The live preview no longer goes blank for the whole run when the
   temporary directory holds non-ASCII characters. One staged frame read
   was still going through OpenCV under a local alias, which returned

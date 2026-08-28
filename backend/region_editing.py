@@ -68,7 +68,7 @@ def parse_polygon_vertices(
                 f"Vertex {index} must stay within 0,{frame_width} by 0,{frame_height}"
             )
         coords.extend((px, py))
-    points = list(zip(coords[::2], coords[1::2]))
+    points = list(zip(coords[::2], coords[1::2], strict=True))
     if len(points) < 3 or len(set(points)) < 3:
         raise ValueError("A polygon needs at least three distinct vertices")
     if max(coords[::2]) <= min(coords[::2]) or max(coords[1::2]) <= min(coords[1::2]):
@@ -78,8 +78,11 @@ def parse_polygon_vertices(
 
 def format_polygon_vertices(coords: list[int] | tuple[int, ...]) -> str:
     """Format a flattened polygon for deterministic numeric editing."""
+    # strict=False: this formats whatever a caller hands it, including a
+    # malformed odd-length list, and must not raise while rendering.
     return "; ".join(
-        f"{int(x)},{int(y)}" for x, y in zip(coords[::2], coords[1::2])
+        f"{int(x)},{int(y)}"
+        for x, y in zip(coords[::2], coords[1::2], strict=False)
     )
 
 
@@ -126,7 +129,7 @@ def transform_region_shape(
         old_height = max(1, bottom - top)
         new_height = max(1, min(old_height + int(dh), frame_height - top))
         ys = [top + int(round((y - top) * new_height / old_height)) for y in ys]
-    return {"polygon": [coord for point in zip(xs, ys) for coord in point]}
+    return {"polygon": [coord for point in zip(xs, ys, strict=True) for coord in point]}
 
 
 def seconds_to_frame(value: Any, fps: float) -> int:

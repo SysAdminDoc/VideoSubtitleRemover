@@ -235,7 +235,7 @@ class LamaOnnxInpainter(BaseInpainter):
                 recovery_hint="Recreate the LaMa ONNX session, then retry.",
             )
         results: List[np.ndarray] = []
-        for frame, mask in zip(frames, masks):
+        for frame, mask in zip(frames, masks, strict=True):
             if mask.max() == 0:
                 results.append(frame.copy())
                 continue
@@ -338,7 +338,7 @@ class MiGanInpainter(BaseInpainter):
                 recovery_hint="Recreate the MI-GAN ONNX session, then retry.",
             )
         results: List[np.ndarray] = []
-        for frame, mask in zip(frames, masks):
+        for frame, mask in zip(frames, masks, strict=True):
             if mask.max() == 0:
                 results.append(frame.copy())
                 continue

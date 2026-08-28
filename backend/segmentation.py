@@ -625,7 +625,7 @@ def _normalize_alpha_sequence(value,
     if len(value) != len(frames):
         return None
     out: List[np.ndarray] = []
-    for alpha, frame, hint in zip(value, frames, masks):
+    for alpha, frame, hint in zip(value, frames, masks, strict=True):
         normalized = _normalize_alpha_matte(alpha, frame.shape)
         if int(np.asarray(hint).max()) == 0:
             out.append(np.asarray(hint).astype(np.uint8))
@@ -728,7 +728,7 @@ def _read_alpha_image_dir(path: Path,
         return None
     out: List[np.ndarray] = []
     for index, (item, frame) in enumerate(
-            zip(files[:expected_count], target_frames)):
+            zip(files[:expected_count], target_frames, strict=True)):
         alpha = safe_imread(item, cv2.IMREAD_UNCHANGED)
         normalized = _normalize_alpha_matte(alpha, frame.shape)
         if normalized is None:
@@ -804,7 +804,7 @@ class _MatAnyone2Adapter:
             if process_video is None:
                 continue
             return _run_matanyone_process_video(process_video, frames, masks)
-        return [_call_frame_api(self._model, frame, mask) for frame, mask in zip(frames, masks)]
+        return [_call_frame_api(self._model, frame, mask) for frame, mask in zip(frames, masks, strict=True)]
 
 
 def _run_matanyone_process_video(process_video,
@@ -1037,7 +1037,7 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
         else:
             raw_refined = [
                 model.matte(frame, mask) if int(mask.max()) > 0 else None
-                for frame, mask in zip(frames, original)
+                for frame, mask in zip(frames, original, strict=True)
             ]
             refined = _normalize_alpha_sequence(
                 raw_refined, frames, original
@@ -1056,11 +1056,11 @@ def refine_masks_with_matanyone(frames: List[np.ndarray],
                 ),
             )
         out: List[np.ndarray] = []
-        for source, refined_mask in zip(original, refined):
+        for source, refined_mask in zip(original, refined, strict=True):
             out.append(source if int(source.max()) == 0 else refined_mask)
         active_pairs = [
             (source, refined_mask)
-            for source, refined_mask in zip(original, out)
+            for source, refined_mask in zip(original, out, strict=True)
             if int(source.max()) > 0
         ]
         if active_pairs and all(

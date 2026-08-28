@@ -1334,7 +1334,7 @@ class SubtitleRemover(
                 "Verify the selected inpainter output contract.",
             )
         validated: List[np.ndarray] = []
-        for index, (source, candidate) in enumerate(zip(frames, results)):
+        for index, (source, candidate) in enumerate(zip(frames, results, strict=True)):
             if not isinstance(candidate, np.ndarray) or candidate.shape != source.shape:
                 raise invalid_output(
                     f"inpainter frame {index} has an invalid shape or type",
@@ -1349,7 +1349,7 @@ class SubtitleRemover(
         if masks is not None:
             active_masks = 0
             changed_masked_pixels = False
-            for source, candidate, mask in zip(frames, validated, masks):
+            for source, candidate, mask in zip(frames, validated, masks, strict=True):
                 mask_array = np.asarray(mask)
                 if mask_array.ndim == 3:
                     active = np.any(mask_array != 0, axis=2)
@@ -2377,7 +2377,7 @@ class SubtitleRemover(
             return self._execute_inpainter(frames, masks)
 
         results: List[Optional[np.ndarray]] = [None] * len(frames)
-        for key_idx, cleaned in zip(key_indices, key_results):
+        for key_idx, cleaned in zip(key_indices, key_results, strict=True):
             results[key_idx] = self._valid_output_frame(cleaned, frames[key_idx])
 
         try:
@@ -2965,7 +2965,7 @@ class SubtitleRemover(
                         self.config.chyron_min_hits)
                     smoothed_geometry = [
                         detection for detection, category in zip(
-                            smoothed_geometry, cats)
+                            smoothed_geometry, cats, strict=True)
                         if (
                             category == "chyron"
                             and self.config.remove_chyrons
@@ -3149,7 +3149,7 @@ class SubtitleRemover(
             if self._clean_reference_cache:
                 batch_start = ctx.start_frame + state.written_idx
                 for offset, (frame, mask) in enumerate(zip(
-                        batch.frames, batch.masks)):
+                        batch.frames, batch.masks, strict=True)):
                     if batch.passthrough_flags[offset]:
                         continue
                     absolute = batch_start + offset

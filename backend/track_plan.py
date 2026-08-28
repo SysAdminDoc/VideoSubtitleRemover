@@ -470,7 +470,9 @@ def load_track_plan(path: str | Path) -> dict:
             raise ValueError("track plan timing has a non-positive duration")
         if any(
             current < previous
-            for previous, current in zip(timestamp_ticks, timestamp_ticks[1:])
+            # strict=False: a pairwise monotonicity walk.
+            for previous, current in zip(
+                timestamp_ticks, timestamp_ticks[1:], strict=False)
         ):
             raise ValueError("track plan timing is not monotonic")
         expected_digest = timing_ticks_digest(timestamp_ticks, duration_ticks)

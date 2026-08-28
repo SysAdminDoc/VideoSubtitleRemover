@@ -175,7 +175,7 @@ class QueueViewMixin:
             state="readonly", style="Dark.TCombobox", font=f(Theme.F_BODY_SM),
         )
         # Match the friendly label for the current code.
-        for label, (code, _) in zip(self._lang_labels, self._lang_display):
+        for label, (code, _) in zip(self._lang_labels, self._lang_display, strict=True):
             if code == lang_var.get():
                 lang_combo.set(label)
                 break

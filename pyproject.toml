@@ -3,7 +3,12 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+# RM-323: B905 forbids a bare zip(). A frames-to-masks length mismatch in
+# the inpaint path used to process the shorter prefix and leave the rest
+# of the video untouched, with nothing reported. Every pairing now states
+# strict=True, or strict=False with a comment saying why unequal lengths
+# are correct there.
+select = ["E4", "E7", "E9", "F", "B905"]
 
 [tool.ruff.lint.per-file-ignores]
 "VideoSubtitleRemover.py" = ["E402"]

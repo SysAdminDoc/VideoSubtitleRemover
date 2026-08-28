@@ -625,6 +625,12 @@ def apply_finishing(original, filled, masks, config=None, *,
     Centralizing this here keeps the ONNX, diffusion, and built-in backends on
     identical boundary handling instead of each re-implementing the loop.
     """
+    if len(filled) != len(original) or len(masks) != len(original):
+        raise ValueError(
+            "finishing needs one filled frame and one mask per source frame; "
+            f"got {len(original)} frames, {len(filled)} filled, "
+            f"{len(masks)} masks"
+        )
     if feather_px is None:
         if config is None:
             return list(filled)
@@ -641,7 +647,7 @@ def apply_finishing(original, filled, masks, config=None, *,
         if config is not None else 0.0
     )
     out = []
-    for index, (f, r, m) in enumerate(zip(original, filled, masks)):
+    for index, (f, r, m) in enumerate(zip(original, filled, masks, strict=True)):
         if poisson_seam:
             r = _poisson_seam_correct(f, r, m)
         elif edge_ring and edge_ring_px > 0 and m.max() > 0:
@@ -1158,7 +1164,7 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
     aligned_frames: List[np.ndarray] = []
     aligned_masks: List[np.ndarray] = []
     identity = _identity_affine()
-    for i, (frame, mask) in enumerate(zip(frames, masks)):
+    for i, (frame, mask) in enumerate(zip(frames, masks, strict=True)):
         matrix = None
         if global_motion_align and i != ref_idx:
             try:
@@ -1204,7 +1210,7 @@ def _tbe_single_segment(frames: List[np.ndarray], masks: List[np.ndarray],
     if flow_warp:
         warped_frames: List[np.ndarray] = []
         warped_masks: List[np.ndarray] = []
-        for i, (frame, mask) in enumerate(zip(aligned_frames, aligned_masks)):
+        for i, (frame, mask) in enumerate(zip(aligned_frames, aligned_masks, strict=True)):
             if i == ref_idx:
                 warped_frames.append(frame)
                 warped_masks.append(mask)
@@ -1335,6 +1341,13 @@ def _temporal_background_expose(frames: List[np.ndarray], masks: List[np.ndarray
     """Video-inpainting primitive: reconstruct masked pixels from
     temporally exposed neighbours with optional scene splitting, global
     alignment, and residual flow refinement."""
+    if len(masks) != len(frames):
+        # Scene segments slice both lists, so an unguarded mismatch surfaces
+        # deep inside a segment as an index error rather than here.
+        raise ValueError(
+            "temporal background exposure needs one mask per frame; "
+            f"got {len(frames)} frames and {len(masks)} masks"
+        )
     if not scene_cut_split or len(frames) <= 1:
         segments = [(0, len(frames))]
     else:

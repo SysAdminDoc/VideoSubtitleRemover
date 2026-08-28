@@ -132,7 +132,8 @@ def probe_proxy_window(
         bounded_end = available[-1]
         scene_before = False
         scene_after = False
-        for left, right in zip(available, available[1:]):
+        # strict=False: a pairwise walk over consecutive frame indices.
+        for left, right in zip(available, available[1:], strict=False):
             if _scene_delta(frames[left], frames[right]) < scene_cut_threshold:
                 continue
             if right <= target:

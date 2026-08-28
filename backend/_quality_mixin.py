@@ -563,7 +563,10 @@ class _QualityMixin:
             roi_worst_frame = worst_sample(
                 roi_sample_frames, roi_psnrs, roi_ssims)
             flicker_score = temporal_flicker_score(temporal_samples)
-            for left, right in zip(temporal_samples, temporal_samples[1:]):
+            # strict=False: a pairwise walk, so the second sequence is
+            # one shorter by construction.
+            for left, right in zip(
+                    temporal_samples, temporal_samples[1:], strict=False):
                 if right[0] != left[0] + 1:
                     continue
                 pair_score = temporal_flicker_score([left, right])

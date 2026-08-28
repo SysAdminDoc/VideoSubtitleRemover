@@ -1357,7 +1357,7 @@ class VideoSubtitleRemoverApp(
             self._command_inner.columnconfigure(4, weight=1)
             self._command_inner.columnconfigure(5, minsize=188)
             positions = ((0, 0, 1), (0, 1, 1), (0, 2, 1), (0, 3, 1), (0, 5, 1))
-        for block, (row, column, span) in zip(blocks, positions):
+        for block, (row, column, span) in zip(blocks, positions, strict=True):
             block.grid(
                 row=row, column=column, columnspan=span, sticky="ew",
                 padx=(0, Theme.S_MD), pady=(0, Theme.S_SM) if compact else 0,
@@ -2675,7 +2675,7 @@ class VideoSubtitleRemoverApp(
                 max(512 * 1024 * 1024, sum(source_sizes) * 6),
                 "batch temporary/checkpoint files",
             )]
-            for item, source_size in zip(pending, source_sizes):
+            for item, source_size in zip(pending, source_sizes, strict=True):
                 requirements.append(StorageRequirement(
                     Path(item.output_path).parent,
                     max(64 * 1024 * 1024, source_size),

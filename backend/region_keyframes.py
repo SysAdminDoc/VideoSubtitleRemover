@@ -37,7 +37,9 @@ def _coerce_polygon(value) -> Optional[list[int]]:
         coords = [max(0, int(round(float(part)))) for part in value]
     except (TypeError, ValueError):
         return None
-    points = list(zip(coords[::2], coords[1::2]))
+    # strict=False: untrusted flattened x,y from a settings file. An odd
+    # count is malformed and the distinct-vertex check below rejects it.
+    points = list(zip(coords[::2], coords[1::2], strict=False))
     if len(set(points)) < 3:
         return None
     return coords
@@ -120,7 +122,7 @@ def normalize_region_keyframe_tracks(value) -> Optional[list[dict]]:
 def _interpolate_values(first: Iterable[int], second: Iterable[int], ratio: float) -> list[int]:
     return [
         int(round(left + (right - left) * ratio))
-        for left, right in zip(first, second)
+        for left, right in zip(first, second, strict=True)
     ]
 
 
@@ -145,7 +147,8 @@ def region_shapes_at(value, seconds: float) -> list[dict]:
             kind = "rect" if "rect" in source else "polygon"
             shapes.append({kind: list(source[kind])})
             continue
-        for left, right in zip(keyframes, keyframes[1:]):
+        # strict=False: a pairwise walk over consecutive keyframes.
+        for left, right in zip(keyframes, keyframes[1:], strict=False):
             if left["time"] <= current <= right["time"]:
                 duration = max(1e-12, right["time"] - left["time"])
                 ratio = (current - left["time"]) / duration

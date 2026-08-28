@@ -645,7 +645,7 @@ class AdvancedSettingsControllerMixin:
 
     def _set_lang_display(self, code: str):
         """Sync the friendly-name label to the underlying lang code."""
-        for label, (c, _) in zip(self._lang_labels, self._lang_display):
+        for label, (c, _) in zip(self._lang_labels, self._lang_display, strict=True):
             if c == code:
                 self._lang_display_var.set(label)
                 return

@@ -103,7 +103,10 @@ class SourceHygieneTests(unittest.TestCase):
     def test_ruff_baseline_and_release_gate_are_explicit(self):
         config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         lint = config["tool"]["ruff"]["lint"]
-        self.assertEqual(lint["select"], ["E4", "E7", "E9", "F"])
+        # RM-323: B905 is part of the baseline now. A bare zip() in the
+        # inpaint path silently processed the shorter prefix and left the
+        # rest of the video untouched.
+        self.assertEqual(lint["select"], ["E4", "E7", "E9", "F", "B905"])
         self.assertNotIn("ignore", lint)
         self.assertEqual(
             lint["per-file-ignores"],

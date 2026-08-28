@@ -566,7 +566,7 @@ class MaskInterchangeReader:
             if actual_duration_ticks != expected_duration_ticks:
                 raise ValueError("Imported matte duration mismatch at exact tick")
         for index, (actual, expected) in enumerate(
-            zip(actual_timestamps, expected_timestamps)
+            zip(actual_timestamps, expected_timestamps, strict=True)
         ):
             if not np.isfinite(actual) or abs(actual - expected) > tolerance:
                 raise ValueError(
@@ -581,7 +581,7 @@ class MaskInterchangeReader:
         except (TypeError, ValueError) as exc:
             raise ValueError("Imported matte durations are malformed") from exc
         for index, (actual, expected) in enumerate(
-            zip(actual_durations, expected_durations)
+            zip(actual_durations, expected_durations, strict=True)
         ):
             if not np.isfinite(actual) or abs(actual - expected) > tolerance:
                 raise ValueError(

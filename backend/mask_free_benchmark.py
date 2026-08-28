@@ -290,7 +290,7 @@ def compare_mask_free_subtitle_outputs(
         residuals: list[Optional[float]] = []
         reference_scores: list[Optional[float]] = []
         artifact_scores: list[Optional[float]] = []
-        for idx, (original, output, mask) in enumerate(zip(originals, outputs, eval_masks)):
+        for idx, (original, output, mask) in enumerate(zip(originals, outputs, eval_masks, strict=True)):
             if output.shape != first_shape:
                 raise MaskFreeBenchmarkError(
                     f"method {name!r} frame {idx} shape does not match input"

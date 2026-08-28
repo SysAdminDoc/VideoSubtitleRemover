@@ -773,7 +773,7 @@ def compare_static_logo_cleanup(
         }
         if refs is not None:
             ref_scores: List[Optional[float]] = []
-            for ref, out in zip(refs, output_frames):
+            for ref, out in zip(refs, output_frames, strict=True):
                 ref_roi = _crop_bbox(ref, bbox)
                 out_roi = _crop_bbox(out, bbox)
                 ref_scores.append(_ssim(ref_roi, out_roi))

@@ -462,7 +462,7 @@ class LAMAInpainter(BaseInpainter):
         tile_size = self.config.lama_tile_size
         tile_overlap = self.config.lama_tile_overlap
         results = []
-        for frame, mask in zip(frames, masks):
+        for frame, mask in zip(frames, masks, strict=True):
             if mask.max() == 0:
                 results.append(frame.copy())
                 continue
@@ -576,7 +576,7 @@ class LAMAInpainter(BaseInpainter):
         tile_size = self.config.lama_tile_size
         tile_overlap = self.config.lama_tile_overlap
         results = []
-        for frame, mask in zip(frames, masks):
+        for frame, mask in zip(frames, masks, strict=True):
             if mask.max() == 0:
                 results.append(frame.copy())
                 continue
@@ -709,7 +709,7 @@ class LAMAInpainter(BaseInpainter):
         tile_size = self.config.lama_tile_size
         tile_overlap = self.config.lama_tile_overlap
         results = []
-        for frame, mask in zip(frames, masks):
+        for frame, mask in zip(frames, masks, strict=True):
             if mask.max() == 0:
                 results.append(frame.copy())
                 continue
@@ -845,7 +845,7 @@ class LAMAInpainter(BaseInpainter):
         imgs = []
         msks = []
         had_mask: List[bool] = []
-        for f, m in zip(frames, masks):
+        for f, m in zip(frames, masks, strict=True):
             had_mask.append(m.max() > 0)
             rgb = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
             if (ph, pw) != (h, w):

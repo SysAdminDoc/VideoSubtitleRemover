@@ -186,7 +186,7 @@ def mask_edge_leakage(
     kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (band_px * 2 + 1,) * 2)
     scores = []
-    for source, output, mask in zip(sources, filled, masks):
+    for source, output, mask in zip(sources, filled, masks, strict=True):
         binary = _binary(mask) * 255
         if binary.max() == 0:
             continue
@@ -359,7 +359,7 @@ def inject_regression(
     rng = np.random.RandomState(seed)
     out: list[np.ndarray] = []
     first = np.asarray(clean[0])
-    for index, (frame, mask) in enumerate(zip(clean, masks)):
+    for index, (frame, mask) in enumerate(zip(clean, masks, strict=True)):
         result = np.asarray(frame).copy()
         binary = _binary(mask).astype(bool)
         if kind == "frozen":

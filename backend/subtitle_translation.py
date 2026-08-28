@@ -178,7 +178,7 @@ def render_srt(cues: Sequence[SrtCue], translations: Sequence[str]) -> str:
         raise SubtitleTranslationError(
             "translation provider returned a different cue count")
     blocks = []
-    for cue, translated in zip(cues, translations):
+    for cue, translated in zip(cues, translations, strict=True):
         text = str(translated or "").strip()
         if not text or "\x00" in text or len(text) > MAX_CUE_TEXT:
             raise SubtitleTranslationError(

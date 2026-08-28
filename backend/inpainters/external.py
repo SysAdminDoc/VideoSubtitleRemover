@@ -113,7 +113,7 @@ def deterministic_static_logo_cleanup(
 
     candidates: List[np.ndarray] = []
     norm_masks: List[np.ndarray] = []
-    for original, mask, filled in zip(frames, masks, filled_frames):
+    for original, mask, filled in zip(frames, masks, filled_frames, strict=True):
         frame_mask = np.asarray(mask)
         if frame_mask.ndim == 3:
             frame_mask = cv2.cvtColor(frame_mask, cv2.COLOR_BGR2GRAY)
@@ -225,7 +225,7 @@ class ExternalInpainter(BaseInpainter):
         os.makedirs(mask_dir)
         os.makedirs(out_dir)
 
-        for i, (frame, mask) in enumerate(zip(frames, masks)):
+        for i, (frame, mask) in enumerate(zip(frames, masks, strict=True)):
             name = f"{i:06d}.png"
             if not safe_imwrite(os.path.join(in_dir, name), frame):
                 raise RequestedStageError(
@@ -335,7 +335,7 @@ class ExternalInpainter(BaseInpainter):
         filled = []
         result_masks = []
         missing_indices = []
-        for i, (frame, mask) in enumerate(zip(frames, masks)):
+        for i, (frame, mask) in enumerate(zip(frames, masks, strict=True)):
             out_path = os.path.join(out_dir, f"{i:06d}.png")
             if os.path.isfile(out_path):
                 out_frame = safe_imread(out_path)

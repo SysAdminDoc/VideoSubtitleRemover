@@ -98,7 +98,7 @@ def normalize_polygon(
     if len(compact) < 3:
         return None
     area = 0.0
-    for first, second in zip(compact, compact[1:] + compact[:1]):
+    for first, second in zip(compact, compact[1:] + compact[:1], strict=True):
         area += first[0] * second[1] - second[0] * first[1]
     if abs(area) <= 1.0:
         return None

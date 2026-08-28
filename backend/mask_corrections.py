@@ -55,7 +55,10 @@ def normalize_mask_correction(value: Any) -> Optional[dict]:
             coords = [int(round(float(coord))) for coord in polygon]
         except (TypeError, ValueError):
             continue
-        points = list(zip(coords[::2], coords[1::2]))
+        # strict=False: coords is untrusted flattened x,y from settings.
+        # An odd count drops the dangling value, and the vertex check
+        # below rejects the result.
+        points = list(zip(coords[::2], coords[1::2], strict=False))
         if len(set(points)) < 3:
             continue
         coerced_polygons.append(coords)
@@ -154,8 +157,11 @@ def apply_mask_corrections(
             continue
         fill_value = 0 if correction.get("mode", "add") == "subtract" else 255
         for coords in correction["polygons"]:
+            # strict=False: see _coerce_polygons; an odd coordinate count
+            # is malformed input, not a reason to raise here.
             points = np.asarray(
-                list(zip(coords[::2], coords[1::2])), dtype=np.int32)
+                list(zip(coords[::2], coords[1::2], strict=False)),
+                dtype=np.int32)
             points[:, 0] = np.clip(points[:, 0], 0, width - 1)
             points[:, 1] = np.clip(points[:, 1], 0, height - 1)
             cv2.fillPoly(mask, [points], fill_value)

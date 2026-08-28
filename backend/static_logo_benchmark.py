@@ -131,7 +131,7 @@ def current_cv2_static_logo_cleanup(
 ) -> List[np.ndarray]:
     """Current no-weight static-logo baseline: per-frame OpenCV inpaint."""
     out: List[np.ndarray] = []
-    for frame, mask in zip(frames, masks):
+    for frame, mask in zip(frames, masks, strict=True):
         filled = _cv2_inpaint(frame, mask, radius, cv2.INPAINT_NS)
         out.append(_feather_blend(frame, filled, mask, feather_px))
     return out

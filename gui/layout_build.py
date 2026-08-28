@@ -594,7 +594,7 @@ class LayoutBuildMixin:
         self._lang_display = _build_language_list()
         self._lang_labels = [f"{name} ({code})" for code, name in self._lang_display]
         self._lang_by_label = {label: code for label, (code, _) in
-                               zip(self._lang_labels, self._lang_display)}
+                               zip(self._lang_labels, self._lang_display, strict=True)}
         self._lang_display_var = tk.StringVar()
         self._set_lang_display(self.lang_var.get())
 

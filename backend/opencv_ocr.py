@@ -395,7 +395,7 @@ def build_opencv_dnn_rapidocr():
                 module.get_engine = lambda _engine_type: OpenCVDnnSession
             engine = rapidocr.RapidOCR(params=params)
         finally:
-            for module, original in zip(modules, originals):
+            for module, original in zip(modules, originals, strict=True):
                 module.get_engine = original
     engine._vsr_engine_provider = "OpenCV 5 DNN"
     return engine

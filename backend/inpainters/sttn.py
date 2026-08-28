@@ -62,5 +62,5 @@ class STTNInpainter(BaseInpainter):
             )
         self._last_backend_name = "cv2"
         filled = [_cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
-                  for f, m in zip(frames, masks)]
+                  for f, m in zip(frames, masks, strict=True)]
         return apply_finishing(frames, filled, masks, self.config)

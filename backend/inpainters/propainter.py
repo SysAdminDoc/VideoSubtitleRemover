@@ -89,7 +89,7 @@ class ProPainterInpainter(BaseInpainter):
                 refined = []
                 refinement_successes = 0
                 refinement_failures = 0
-                for frame, inpainted, mask in zip(frames, results, masks):
+                for frame, inpainted, mask in zip(frames, results, masks, strict=True):
                     if mask.max() == 0:
                         refined.append(inpainted)
                         continue
@@ -129,6 +129,6 @@ class ProPainterInpainter(BaseInpainter):
                 return refined
             return results
         filled = [_cv2_inpaint(f, m, 5, cv2.INPAINT_TELEA)
-                  for f, m in zip(frames, masks)]
+                  for f, m in zip(frames, masks, strict=True)]
         self._last_backend_name = "cv2"
         return apply_finishing(frames, filled, masks, self.config)

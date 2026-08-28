@@ -491,7 +491,7 @@ def validate_container_payload(plan: Mapping[str, Any], output_path: str | Path)
                     f"{stream_type} stream count is {len(actual_streams)}, expected {len(expected_streams)}"
                 )
                 continue
-            for expected, actual in zip(expected_streams, actual_streams):
+            for expected, actual in zip(expected_streams, actual_streams, strict=True):
                 expected_codec = (
                     expected.get("codec")
                     if expected.get("action") == "copy"

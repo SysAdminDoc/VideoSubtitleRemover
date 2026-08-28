@@ -662,7 +662,7 @@ class PreviewControllerMixin:
             lang, conf, script = result
             for label, (code, _name) in zip(
                 self._lang_labels, self._lang_display
-            ):
+            , strict=True):
                 if code == lang:
                     self._lang_display_var.set(label)
                     self.lang_var.set(lang)
@@ -1012,7 +1012,11 @@ class PreviewControllerMixin:
                 boxes_per_frame = []
                 masks = []
                 region_count = 0
-                for frame_index, current_frame in zip(indices, frames):
+                # strict=False: indices is deliberately clipped to the
+                # decoded frame count above, and a short decode must not
+                # raise inside the preview thread.
+                for frame_index, current_frame in zip(
+                        indices, frames, strict=False):
                     if _stale():
                         return
                     current_time = float(frame_index) / fps
@@ -1738,8 +1742,11 @@ class PreviewControllerMixin:
                 coords = shape.get("polygon")
                 if not coords:
                     continue
+                # strict=False: saved flattened x,y; an odd count is
+                # malformed and must not raise while drawing an overlay.
                 points = np.asarray(
-                    list(zip(coords[::2], coords[1::2])), dtype=np.int32)
+                    list(zip(coords[::2], coords[1::2], strict=False)),
+                    dtype=np.int32)
                 _cv2.polylines(vis, [points], True, (_db, _dg, _dr), 2)
             import cv2 as _mask_cv2
 
@@ -1759,8 +1766,10 @@ class PreviewControllerMixin:
                 coords = shape.get("polygon")
                 if not coords:
                     continue
+                # strict=False: see the overlay above.
                 points = np.asarray(
-                    list(zip(coords[::2], coords[1::2])), dtype=np.int32)
+                    list(zip(coords[::2], coords[1::2], strict=False)),
+                    dtype=np.int32)
                 _mask_cv2.fillPoly(base_mask, [points], 255)
             imported = None
             imported_note = ""
