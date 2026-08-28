@@ -4,6 +4,16 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Three ways back from a mistake. **Reset settings** in the preset row
+  restores the cleanup settings to their defaults and names how many it
+  will change before acting, leaving presets, output location, saved
+  region, queue and interface preferences alone. **Show walkthrough** in
+  Help replays the welcome flow, which could previously be seen once and
+  never again. **Undo** in the queue toolbar puts back whatever the last
+  Remove or Clear completed discarded, in its original position.
+
 ### Fixed
 
 - The optional model download now has a declared, enforced floor. It
