@@ -12,7 +12,7 @@ msgstr ""
 msgid "   -   about {eta} left"
 msgstr ""
 
-#: gui/utils.py:597
+#: gui/utils.py:625
 msgid " across {count} sampled frame"
 msgid_plural " across {count} sampled frames"
 msgstr[0] ""
@@ -222,6 +222,10 @@ msgstr ""
 
 #: gui/layout_build.py:1590
 msgid "Alternative palette tuned for low-vision users. Persists across sessions."
+msgstr ""
+
+#: gui/utils.py:474
+msgid "An FFmpeg was found but it did not run, so outputs will be saved without original audio. Reinstall it from a stable {floor} or newer release build."
 msgstr ""
 
 #: gui/app.py:2465 gui/layout_build.py:2520
@@ -1100,6 +1104,10 @@ msgstr ""
 msgid "FFmpeg basic"
 msgstr ""
 
+#: gui/utils.py:472
+msgid "FFmpeg broken"
+msgstr ""
+
 #: gui/app.py:2770
 msgid "FFmpeg capability warning"
 msgstr ""
@@ -1116,15 +1124,19 @@ msgstr ""
 msgid "FFmpeg commands copied to the clipboard"
 msgstr ""
 
+#: gui/utils.py:473
+msgid "FFmpeg did not run"
+msgstr ""
+
 #: gui/processing_controller.py:98
 msgid "FFmpeg is missing, so video outputs will be saved without original audio."
 msgstr ""
 
-#: gui/utils.py:458
+#: gui/utils.py:486
 msgid "FFmpeg is not available, so outputs will be saved without original audio until it is installed."
 msgstr ""
 
-#: gui/utils.py:457
+#: gui/utils.py:485
 msgid "FFmpeg missing"
 msgstr ""
 
@@ -1136,11 +1148,11 @@ msgstr ""
 msgid "FFmpeg speech"
 msgstr ""
 
-#: gui/utils.py:476
+#: gui/utils.py:504
 msgid "FFmpeg unclassified"
 msgstr ""
 
-#: gui/utils.py:477
+#: gui/utils.py:505
 msgid "FFmpeg version not identified"
 msgstr ""
 
@@ -1148,15 +1160,15 @@ msgstr ""
 msgid "FFmpeg {name}"
 msgstr ""
 
-#: gui/utils.py:467 gui/utils.py:468 gui/utils.py:487
+#: gui/utils.py:495 gui/utils.py:496 gui/utils.py:515
 msgid "FFmpeg {version}"
 msgstr ""
 
-#: gui/utils.py:488
+#: gui/utils.py:516
 msgid "FFmpeg {version} below the security floor"
 msgstr ""
 
-#: gui/utils.py:490
+#: gui/utils.py:518
 msgid "FFmpeg {version} is below the required {floor}. Processing will stop when it reaches the security check. Install {floor} or newer."
 msgstr ""
 
@@ -1420,7 +1432,7 @@ msgstr ""
 msgid "Idle and paused items from your previous session were saved. Restore them to the queue?"
 msgstr ""
 
-#: gui/utils.py:510
+#: gui/utils.py:538
 msgid "Image ({ext}) - {size}"
 msgstr ""
 
@@ -1894,7 +1906,7 @@ msgstr ""
 msgid "Next action"
 msgstr ""
 
-#: gui/utils.py:456
+#: gui/utils.py:484
 msgid "No FFmpeg"
 msgstr ""
 
@@ -3366,7 +3378,7 @@ msgstr ""
 msgid "These apply to this queued item only and survive a global settings change."
 msgstr ""
 
-#: gui/utils.py:478
+#: gui/utils.py:506
 msgid "This FFmpeg build does not report a release version, so it cannot be checked against the required {floor} or newer. Install a stable release build."
 msgstr ""
 
@@ -3584,7 +3596,7 @@ msgstr ""
 msgid "Vertices"
 msgstr ""
 
-#: gui/utils.py:508
+#: gui/utils.py:536
 msgid "Video ({ext}) - {size}"
 msgstr ""
 
@@ -3744,7 +3756,7 @@ msgstr ""
 msgid "ready"
 msgstr ""
 
-#: gui/utils.py:699
+#: gui/utils.py:727
 msgid "request"
 msgstr ""
 
@@ -3776,7 +3788,7 @@ msgstr[1] ""
 msgid "{count} earlier corrections"
 msgstr ""
 
-#: gui/utils.py:551
+#: gui/utils.py:579
 msgid "{count} embedded subtitle track: {names}"
 msgid_plural "{count} embedded subtitle tracks: {names}"
 msgstr[0] ""
@@ -3810,7 +3822,7 @@ msgstr ""
 msgid "{engine}: {n} detected"
 msgstr ""
 
-#: gui/utils.py:511
+#: gui/utils.py:539
 msgid "{ext} - {size}"
 msgstr ""
 
@@ -3912,7 +3924,7 @@ msgstr ""
 msgid "{stage} took the most time in this run. Open the report to review timing for each processing stage."
 msgstr ""
 
-#: gui/utils.py:698
+#: gui/utils.py:726
 msgid "{summary}  [fallback from {device}]"
 msgstr ""
 

@@ -172,7 +172,10 @@ PROVIDER_LANES: Tuple[ProviderLane, ...] = (
         profile="",
         provider="CUDAExecutionProvider",
         package="onnxruntime-gpu",
-        minimum=ONNXRUNTIME_GPU_STABLE_CUDA12_MIN,
+        # The reviewed range starts at the security floor, not at the oldest
+        # CUDA 12 wheel that ever worked: a version below the floor must not
+        # report as inside the range while its securityState says otherwise.
+        minimum=ONNXRUNTIME_SECURITY_MIN,
         maximum_exclusive=ONNXRUNTIME_CUDA13_MIN,
         tested_version=ONNXRUNTIME_CUDA12_TESTED_VERSION,
         security_floor=ONNXRUNTIME_SECURITY_MIN,
@@ -533,6 +536,11 @@ def _onnxruntime_gpu_channel(version: Optional[str]) -> str:
         return "cuda13-nightly-or-custom"
     if "dev" in lowered or "nightly" in lowered:
         return "nightly-or-custom"
+    # RM-319: the default PyPI onnxruntime-gpu wheel is the CUDA 13 build
+    # from 1.27.0 on, confirmed by running 1.29.0 against a host with no
+    # CUDA 13 runtime, where it fails to load cublasLt64_13.dll.
+    if _version_gte(version, ONNXRUNTIME_CUDA13_MIN):
+        return "cuda13-pypi-stable"
     if _version_gte(version, ONNXRUNTIME_GPU_STABLE_CUDA12_MIN):
         return "cuda12-pypi-stable"
     return "legacy-cuda-package"
@@ -788,7 +796,9 @@ def collect_onnxruntime_provider_status(
             "preloadDllsAvailable": bool(preload_dlls_available),
             "preloadStatus": cuda_preload_status,
             "recommendedPackage": ONNXRUNTIME_GPU_RECOMMENDED_SPEC,
-            "cuda13Status": "cuda13-default-since-1.27-install-manually",
+            "cuda13Status": (
+                "cuda13-default-since-1.27-and-is-the-reviewed-lane"
+            ),
         },
         "directml": {
             "packageInstalled": bool(
@@ -1086,8 +1096,11 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
         FROZEN_OPTIONAL_DEPENDENCIES["easyocr"]["reviewed_version"],
         "1.7.3",
     ),
-    ("onnxruntime", "1.26.0", ""),
-    ("onnxruntime-gpu", "1.26.0", ""),
+    ("onnxruntime", ONNXRUNTIME_SECURITY_MIN, ""),
+    # RM-319: the reviewed NVIDIA lane is CUDA 13, so a 1.26.x wheel
+    # beside a cu130 torch cannot create CUDAExecutionProvider at all.
+    ("onnxruntime-gpu", ONNXRUNTIME_CUDA13_MIN,
+     ONNXRUNTIME_CUDA13_MAX_EXCLUSIVE),
     (
         "onnxruntime-directml",
         ONNXRUNTIME_DIRECTML_VERSION,

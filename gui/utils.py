@@ -412,17 +412,30 @@ def detect_ffmpeg_state(*, timeout: float = 8.0) -> dict:
     from backend.ffmpeg_profiles import probe_ffmpeg_security
 
     try:
-        return probe_ffmpeg_security(timeout=timeout)
+        state = dict(probe_ffmpeg_security(timeout=timeout))
     except Exception:
         logger.warning("FFmpeg security probe failed", exc_info=True)
         return {
             "available": False,
+            "onPath": False,
             "parsed": False,
             "classification": "unknown",
             "version": "",
             "raw": "",
+            "probeError": "the FFmpeg probe could not be run",
             "reason": "the FFmpeg probe could not be run",
         }
+    # probe_ffmpeg_security reports `available` from shutil.which, so a
+    # truncated or non-zero-exiting ffmpeg.exe on PATH still reads as
+    # available with the failure only in `error`. The old boolean probe ran
+    # the binary, so keep that meaning: available is "it answered".
+    state["onPath"] = bool(state.get("available"))
+    state["available"] = bool(
+        state.get("available")
+        and not state.get("probeError")
+        and str(state.get("raw") or "").strip()
+    )
+    return state
 
 
 def detect_ffmpeg() -> bool:
@@ -452,6 +465,21 @@ def ffmpeg_status_summary(state) -> dict:
     floor = ffmpeg_security_floor_str()
 
     if not available:
+        if payload.get("onPath"):
+            # On PATH but it did not answer: a truncated download, a broken
+            # install, or a binary that exits non-zero.
+            return {
+                "short": tr("FFmpeg broken"),
+                "status": tr("FFmpeg did not run"),
+                "warning": tr(
+                    "An FFmpeg was found but it did not run, so outputs will "
+                    "be saved without original audio. Reinstall it from a "
+                    "stable {floor} or newer release build."
+                ).format(floor=floor),
+                "tone": "warning",
+                "available": False,
+                "safe": False,
+            }
         return {
             "short": tr("No FFmpeg"),
             "status": tr("FFmpeg missing"),

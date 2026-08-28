@@ -6,6 +6,18 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- A broken FFmpeg on PATH is no longer reported as working. The startup
+  probe was reading availability from a PATH lookup rather than from
+  running the binary, so a truncated download or one that exits non-zero
+  looked healthy and the audio-preservation warning never fired. It is
+  now reported as found but not running, with the reason recorded.
+- The NVIDIA move to CUDA 13 left several places still describing the old
+  CUDA 12 lane: the package-channel classifier called the CUDA 13 wheel a
+  CUDA 12 build in the provider summary, the dependency-drift floor still
+  accepted a 1.26.x wheel that cannot create a CUDA provider beside a
+  cu130 PyTorch, setup still announced CUDA 12.8 for Blackwell cards it
+  now installs from cu130, and requirements.txt still walked a manual
+  installer into an environment that fails its own profile check.
 - A fixed manual region with automatic detection off no longer reports a
   clean success while quietly falling back to cv2. STTN and ProPainter
   rebuild masked pixels from other frames, and a region that is identical

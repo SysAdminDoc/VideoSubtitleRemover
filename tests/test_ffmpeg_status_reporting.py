@@ -72,6 +72,64 @@ class FfmpegStatusSummaryTests(unittest.TestCase):
                 self.assertTrue(summary["warning"])
 
 
+class BrokenBinaryTests(unittest.TestCase):
+    """An ffmpeg on PATH that does not run is not a working ffmpeg.
+
+    probe_ffmpeg_security reports availability from shutil.which, so a
+    truncated download or a binary that exits non-zero still reads as
+    available with the failure recorded only in `error`. The boolean probe
+    this replaced actually ran the binary, and audio preservation depends on
+    that meaning: a run that believes the merge will work does not warn.
+    """
+
+    def _probe_with(self, run_result):
+        from backend import ffmpeg_profiles
+
+        with mock.patch.object(
+                ffmpeg_profiles.shutil, "which",
+                return_value=r"C:\fake\ffmpeg.exe"):
+            with mock.patch.object(
+                    ffmpeg_profiles, "_run_ffmpeg_text",
+                    return_value=run_result):
+                return detect_ffmpeg_state()
+
+    def test_a_binary_that_fails_to_run_is_not_available(self):
+        state = self._probe_with(("", "exit status 1"))
+        self.assertTrue(state["onPath"])
+        self.assertFalse(state["available"])
+        self.assertEqual(state["probeError"], "exit status 1")
+
+    def test_a_binary_that_prints_nothing_is_not_available(self):
+        state = self._probe_with(("", ""))
+        self.assertTrue(state["onPath"])
+        self.assertFalse(state["available"])
+
+    def test_a_working_binary_is_available(self):
+        state = self._probe_with(
+            ("ffmpeg version 9.0.1 Copyright (c) 2000-2026\n", ""))
+        self.assertTrue(state["onPath"])
+        self.assertTrue(state["available"])
+        self.assertTrue(ffmpeg_status_summary(state)["safe"])
+
+    def test_the_summary_separates_broken_from_missing(self):
+        broken = ffmpeg_status_summary(self._probe_with(("", "exit status 1")))
+        self.assertFalse(broken["available"])
+        self.assertFalse(broken["safe"])
+        self.assertEqual(broken["tone"], "warning")
+        self.assertIn("did not run", broken["status"])
+        self.assertIn("without original audio", broken["warning"])
+
+        missing = ffmpeg_status_summary({"available": False, "onPath": False})
+        self.assertNotIn("did not run", missing["status"])
+
+    def test_the_audio_merge_question_answers_no_for_a_broken_binary(self):
+        with mock.patch(
+            "gui.utils.detect_ffmpeg_state",
+            return_value=self._probe_with(("", "exit status 1")),
+        ):
+            self.assertFalse(detect_ffmpeg())
+
+
 class FfmpegProbeTests(unittest.TestCase):
     def test_the_probe_returns_the_classification_not_a_boolean(self):
         with mock.patch(

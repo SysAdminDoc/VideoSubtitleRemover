@@ -201,6 +201,9 @@ def probe_ffmpeg_security(*, timeout: float = 10.0) -> dict:
     classified = classify_ffmpeg_security(status.get("version"))
     classified["available"] = bool(status.get("available"))
     classified["path"] = status.get("path", "")
+    # RM-324: an ffmpeg on PATH that fails to run reports here and nowhere
+    # else, so carry the reason rather than dropping it.
+    classified["probeError"] = str(status.get("error") or "")
     classified["passed"] = bool(
         classified["available"] and classified["classification"] == "safe"
     )

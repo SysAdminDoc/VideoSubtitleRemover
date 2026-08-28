@@ -299,7 +299,7 @@ files reflect the folder that actually ships, while PyInstaller and other
 build tools are marked with excluded scope. `release-verification.json` and
 `pip-audit.json` record the remaining release proof. Strict evidence rejects
 Torch through 2.5.1 for CVE-2025-32434 and through 2.9.1 for CVE-2026-24747.
-Reviewed profiles stay on Torch 2.11.0 or newer.
+Reviewed profiles stay on Torch 2.13.0 or newer.
 
 Release evidence also records the external FFmpeg version and full build
 configuration, plus OpenCV's wheel provenance and embedded `avcodec`,
@@ -465,12 +465,12 @@ its ordered fallback chain. A requested inpainting, segmentation, tracking, or
 restoration stage that can't run is recorded with a failure class and recovery
 hint instead of being reported as successful unchanged output.
 
-On NVIDIA systems, setup installs `onnxruntime-gpu>=1.26.0,<1.27.0` for the
-tested CUDA 12.x ONNX Runtime path. ONNX Runtime 1.27 dropped CUDA 12 (its
-default GPU wheel is now CUDA 13 only), so the pin caps below 1.27.0 to keep a
-working CUDA 12 provider on a fresh install; CUDA 13 hosts install the cuda13
-wheel manually per the ONNX Runtime install docs. ONNX Runtime `>=1.26.0` is
-required for the CPU and CUDA packages. VSR runs untrusted OCR/inpaint ONNX
+On NVIDIA systems, setup installs `onnxruntime-gpu>=1.27.0,<1.30.0` for the
+reviewed CUDA 13 ONNX Runtime path. The default GPU wheel has been the CUDA 13
+build since 1.27.0, and the cu130 PyTorch wheel installed beside it supplies the
+CUDA 13 runtime it loads; without that runtime the CUDA provider silently falls
+back to CPU. A host that must stay on CUDA 12 installs onnxruntime-gpu 1.26.x
+and cu128 torch manually, which is not a reviewed profile. ONNX Runtime `>=1.26.0` is
 models through the runtime, and the self-test and strict release validation
 flag older CPU/CUDA builds as a blocking security advisory.
 Backend status and

@@ -767,16 +767,16 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
                     value = func.value
                     if isinstance(value, ast.Name) and value.id in module_aliases:
                         offenders.append(
-                            f"{path.as_posix()}:{node.lineno} "
+                            f"{path.name}:{node.lineno} "
                             f"{value.id}.{func.attr}")
                     elif (isinstance(value, ast.Attribute)
                             and value.attr == "cv2"):
                         offenders.append(
-                            f"{path.as_posix()}:{node.lineno} "
+                            f"{path.name}:{node.lineno} "
                             f"<module>.cv2.{func.attr}")
                 elif isinstance(func, ast.Name) and func.id in direct_aliases:
                     offenders.append(
-                        f"{path.as_posix()}:{node.lineno} {func.id}()")
+                        f"{path.name}:{node.lineno} {func.id}()")
                 elif (isinstance(func, ast.Name) and func.id == "getattr"
                         and len(node.args) >= 2):
                     target, attribute = node.args[0], node.args[1]
@@ -785,21 +785,23 @@ class RuntimeSecurityCheckTests(unittest.TestCase):
                             and isinstance(attribute, ast.Constant)
                             and attribute.value in banned):
                         offenders.append(
-                            f"{path.as_posix()}:{node.lineno} "
+                            f"{path.name}:{node.lineno} "
                             f"getattr({target.id}, {attribute.value!r})")
         return offenders
 
     def _production_sources(self):
+        # Anchor on the repo, not the cwd. Relative roots make this scan zero
+        # files and pass vacuously when pytest runs from anywhere else.
+        root_dir = Path(__file__).resolve().parent.parent
         paths = []
-        for root in (Path("backend"), Path("gui"), Path("scripts"),
-                     Path("tools"), Path("installer")):
+        for name in ("backend", "gui", "scripts", "tools", "installer"):
+            root = root_dir / name
             if root.is_dir():
                 paths.extend(sorted(root.rglob("*.py")))
-        paths.extend(sorted(Path(".").glob("*.py")))
-        return [
-            path for path in paths
-            if path.as_posix() != "backend/safe_image.py"
-        ]
+        self.assertTrue(paths, "no production sources were scanned")
+        paths.extend(sorted(root_dir.glob("*.py")))
+        skip = root_dir / "backend" / "safe_image.py"
+        return [path for path in paths if path != skip]
 
     def test_production_image_io_goes_through_safe_helpers(self):
         self.assertEqual(

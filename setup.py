@@ -570,7 +570,7 @@ def detect_gpu():
         print(f"  [OK] NVIDIA GPU detected: {gpu_info['name']}")
         print(f"    Driver version: {gpu_info['cuda_version']}")
         if gpu_info["blackwell"]:
-            print(f"    Blackwell (RTX 50-series) detected -- using CUDA 12.8 wheels")
+            print(f"    Blackwell (RTX 50-series) detected -- using CUDA 13 wheels")
     elif gpu_info["amd"]:
         print(f"  [OK] AMD GPU detected: {gpu_info['name']}")
         print(f"    Will use DirectML")

@@ -186,7 +186,9 @@ def mask_edge_leakage(
     kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (band_px * 2 + 1,) * 2)
     scores = []
-    for source, output, mask in zip(sources, filled, masks, strict=True):
+    # strict=False: the guard above deliberately admits sources and masks
+    # longer than filled, and scores the frames that were filled.
+    for source, output, mask in zip(sources, filled, masks, strict=False):
         binary = _binary(mask) * 255
         if binary.max() == 0:
             continue

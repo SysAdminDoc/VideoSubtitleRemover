@@ -84,10 +84,11 @@ class ZipStrictnessGateTests(unittest.TestCase):
     def test_every_lenient_pairing_says_why(self):
         """A strict=False must carry a comment, or it reads as an oversight."""
         offenders = []
-        for root in (Path("backend"), Path("gui"), Path("scripts"),
-                     Path("tools")):
-            if not root.is_dir():
-                continue
+        # Anchor on the repo, not the cwd: relative roots make this scan
+        # zero files and pass vacuously when pytest runs from elsewhere.
+        for root in (ROOT / "backend", ROOT / "gui", ROOT / "scripts",
+                     ROOT / "tools"):
+            self.assertTrue(root.is_dir(), root)
             for path in sorted(root.rglob("*.py")):
                 lines = path.read_text(encoding="utf-8").split("\n")
                 tree = ast.parse("\n".join(lines), filename=str(path))
@@ -110,7 +111,7 @@ class ZipStrictnessGateTests(unittest.TestCase):
                     if not any(
                             "strict=False" in line and line.lstrip().startswith("#")
                             for line in window):
-                        offenders.append(f"{path.as_posix()}:{node.lineno}")
+                        offenders.append(f"{path.name}:{node.lineno}")
         self.assertEqual(offenders, [])
 
 
