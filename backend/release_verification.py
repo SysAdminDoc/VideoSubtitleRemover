@@ -1298,6 +1298,11 @@ def _frozen_provider_problems(evidence: Mapping[str, Any]):
     """
     from backend.build_profile import declared_provider
 
+    def _supported_profiles():
+        from backend.dependency_profiles import SUPPORTED_PROFILES
+
+        return SUPPORTED_PROFILES
+
     frozen = evidence.get("frozenProviderSmoke")
     if not isinstance(frozen, Mapping):
         yield "Frozen provider evidence is missing"
@@ -1320,12 +1325,28 @@ def _frozen_provider_problems(evidence: Mapping[str, Any]):
             "at freeze time"
         )
     expected = declared_provider(profile)
+    if not expected:
+        # A stamp naming a profile this build does not know about used to
+        # disable the comparison silently: declared_provider returned "" and
+        # every check below short-circuited on it. Fall back to the provider
+        # the stamp itself declares, and say the vocabulary disagrees.
+        expected = str(frozen.get("declaredProvider") or "")
+        yield (
+            f"The frozen build is stamped with the unrecognised profile "
+            f"{profile!r}; the supported profiles are "
+            + ", ".join(sorted(_supported_profiles()))
+        )
     active = [str(item) for item in (frozen.get("activeProviders") or [])]
     if expected and expected not in active:
         yield (
             f"The frozen build was made from the {profile} profile, whose "
             f"provider is {expected}, but it activated "
             + (", ".join(active) if active else "no provider")
+        )
+    elif not expected:
+        yield (
+            "The frozen build declares no provider, so nothing measured what "
+            "it selects"
         )
     if frozen.get("fellBack"):
         yield f"The frozen build fell back off {expected or profile}"

@@ -8,6 +8,7 @@ standard success check in the scene-text-removal literature.
 
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 import numpy as np
@@ -22,6 +23,8 @@ from backend.removal_verification import (
     verification_failed,
     verify_frame_removal,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class _Detector:
@@ -254,8 +257,14 @@ class UntouchedSceneTextTests(unittest.TestCase):
         self.assertEqual(evidence["survivingFraction"], 1.0)
         self.assertTrue(verification_failed(evidence))
 
-    def test_a_frame_with_no_mask_has_nothing_that_was_meant_to_go(self):
-        """Between subtitles. Detecting the sign there proves nothing."""
+    def test_a_frame_with_no_mask_defers_rather_than_deciding(self):
+        """An empty mask cannot say what the text in the region is.
+
+        A gap between subtitles and a subtitle the detector missed entirely
+        both produce an empty mask, so one frame has no way to tell them
+        apart. Deciding "scene text" here is what scored a total removal
+        failure as clean; the box is held for the clip-level pass instead.
+        """
         source, output = self._pair(repaired=True)
         sign = (*self.SIGN, 0.95)
         result = verify_frame_removal(
@@ -265,8 +274,11 @@ class UntouchedSceneTextTests(unittest.TestCase):
         )
         self.assertTrue(result["checked"])
         self.assertTrue(result["maskUsed"])
+        self.assertTrue(result["maskEmpty"])
         self.assertEqual(result["sourceBoxes"], 0)
-        self.assertEqual(result["detections"], [])
+        self.assertEqual(result["untouchedSourceBoxes"], 0)
+        self.assertEqual(len(result["deferredSourceBoxes"]), 1)
+
 
     def test_an_unrepaired_frame_without_a_mask_is_unchecked_not_clean(self):
         """The pixel fallback cannot tell a gap from a total failure.
@@ -300,6 +312,108 @@ class UntouchedSceneTextTests(unittest.TestCase):
         self.assertEqual(result["untouchedSourceBoxes"], 1)
         self.assertLess(UNTOUCHED_MEAN_ABS_DIFF, 10.0)
 
+
+class MissedDetectionTests(unittest.TestCase):
+    """A subtitle the detector never found is the common removal failure.
+
+    No detection means no mask, and an empty mask used to read as "nothing
+    was meant to be removed on this frame", so the surviving subtitle was
+    filed as scene text and the clip scored a perfect `survivingFraction` of
+    0.0. The clip knows better than the frame: text this job masked on some
+    other frame is text it set out to remove.
+    """
+
+    ROI = (0, 0, 96, 64)
+    SUBTITLE = (10, 40, 70, 58)
+
+    def _frames(self, *, repaired: bool):
+        source = np.full((64, 96, 3), 40, dtype=np.uint8)
+        source[self.SUBTITLE[1]:self.SUBTITLE[3],
+               self.SUBTITLE[0]:self.SUBTITLE[2]] = 230
+        output = source.copy()
+        if repaired:
+            output[self.SUBTITLE[1]:self.SUBTITLE[3],
+                   self.SUBTITLE[0]:self.SUBTITLE[2]] = 40
+        return source, output
+
+    def _mask(self):
+        mask = np.zeros((64, 96), dtype=np.uint8)
+        mask[self.SUBTITLE[1]:self.SUBTITLE[3],
+             self.SUBTITLE[0]:self.SUBTITLE[2]] = 255
+        return mask
+
+    def _detector(self, source_boxes, output_boxes):
+        state = {"calls": 0}
+
+        class _ByCall:
+            def detect_with_confidence(self, frame, threshold: float = 0.5):
+                state["calls"] += 1
+                return list(output_boxes if state["calls"] == 1
+                            else source_boxes)
+
+        return _ByCall()
+
+    def _verifier(self, frames):
+        """frames: list of (repaired, has_mask)."""
+        verifier = RemovalVerifier(None)
+        subtitle = (*self.SUBTITLE, 0.95)
+        for index, (repaired, has_mask) in enumerate(frames):
+            source, output = self._frames(repaired=repaired)
+            found = [] if repaired else [subtitle]
+            outcome = verify_frame_removal(
+                self._detector([subtitle], found),
+                output, self.ROI, source_frame=source,
+                mask=self._mask() if has_mask else None,
+                mask_available=True,
+            )
+            outcome["frame"] = index
+            if has_mask:
+                verifier.mask_union = self._mask()
+            verifier.frames.append(outcome)
+        return verifier
+
+    def test_a_clip_the_detector_missed_entirely_is_not_reported_clean(self):
+        """Ten frames, every subtitle still there, no frame ever masked."""
+        evidence = self._verifier([(False, False)] * 10).evidence()
+        self.assertEqual(evidence["framesChecked"], 0)
+        self.assertEqual(evidence["framesUnchecked"], 10)
+        self.assertTrue(evidence["uncheckedReasons"])
+        self.assertFalse(
+            evidence.get("survivingFraction") == 0.0,
+            "a clip nothing was measured on must not score a perfect run",
+        )
+
+    def test_one_repaired_frame_does_not_excuse_ninety_nine_missed_ones(self):
+        frames = [(True, True)] + [(False, False)] * 99
+        evidence = self._verifier(frames).evidence()
+        self.assertEqual(evidence["missedDetectionBoxes"], 99)
+        self.assertEqual(evidence["survivingSourceBoxes"], 99)
+        self.assertEqual(evidence["sourceBoxes"], 100)
+        self.assertAlmostEqual(evidence["survivingFraction"], 0.99)
+        self.assertTrue(verification_failed(evidence))
+
+    def test_scene_text_no_frame_ever_masked_is_still_not_a_failure(self):
+        """The fix must not undo the one it was built on top of."""
+        verifier = RemovalVerifier(None)
+        sign = (60, 4, 90, 20, 0.95)
+        for index in range(6):
+            source = np.full((64, 96, 3), 40, dtype=np.uint8)
+            source[4:20, 60:90] = 230
+            output = source.copy()
+            outcome = verify_frame_removal(
+                self._detector([sign], [sign]),
+                output, self.ROI, source_frame=source,
+                mask=None, mask_available=True,
+            )
+            outcome["frame"] = index
+            verifier.frames.append(outcome)
+        # Some other frame in the clip masked the subtitle band, well away
+        # from the sign.
+        verifier.mask_union = self._mask()
+        evidence = verifier.evidence()
+        self.assertEqual(evidence["missedDetectionBoxes"], 0)
+        self.assertEqual(evidence["survivingSourceBoxes"], 0)
+        self.assertFalse(verification_failed(evidence))
 
 class VerifierEvidenceTests(unittest.TestCase):
     ROI = (10, 10, 80, 50)
@@ -379,6 +493,162 @@ class VerifierEvidenceTests(unittest.TestCase):
         evidence = RemovalVerifier(_Detector({})).evidence()
         self.assertFalse(evidence["ran"])
         self.assertFalse(verification_failed(evidence))
+
+
+class ReviewSpanTests(unittest.TestCase):
+    """The spans the user is sent to look at.
+
+    Every frame with any detection at all used to raise one, which walked
+    straight past the surviving-fraction tolerance: a clip inside the
+    accepted one-in-ten still sent the user to every frame, and untouched
+    scene text sent them to frames where nothing was wrong.
+    """
+
+    def _spans_for(self, frames):
+        """Run the span-building block from _quality_mixin against evidence."""
+        spans = []
+        for item in frames:
+            if not int(item.get("survivingSourceBoxes") or 0):
+                continue
+            spans.append(item["frame"])
+        return spans
+
+    def test_the_block_that_builds_them_skips_frames_with_no_survivor(self):
+        import ast
+
+        source = (ROOT / "backend" / "_quality_mixin.py").read_text(
+            encoding="utf-8")
+        tree = ast.parse(source)
+        guard = "survivingSourceBoxes"
+        found = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.For):
+                continue
+            body = ast.dump(ast.Module(body=node.body, type_ignores=[]))
+            if "make_review_span" in body and guard in body:
+                # The guard has to be a `continue` before the span is built,
+                # not merely a mention somewhere in the loop.
+                first = node.body[0]
+                if isinstance(first, ast.If) and any(
+                        isinstance(item, ast.Continue) for item in first.body):
+                    found = True
+        self.assertTrue(
+            found,
+            "the review-span loop must skip a frame whose surviving count "
+            "is zero before it builds a span for it",
+        )
+
+    def test_a_frame_whose_only_text_was_untouched_raises_no_span(self):
+        frames = [
+            {"frame": 3, "survivingSourceBoxes": 0, "untouchedSourceBoxes": 2},
+            {"frame": 9, "survivingSourceBoxes": 1},
+        ]
+        self.assertEqual(self._spans_for(frames), [9])
+
+
+class MaskLoaderTests(unittest.TestCase):
+    """`_persisted_mask_for_verification` has to say three different things.
+
+    A mask, no mask on this frame, and no masks at all are three different
+    answers, and the check downstream branches on all three. Collapsing the
+    middle one into "no mask information" silently turns the mask path back
+    into the pixel fallback.
+    """
+
+    def _host(self, directory, *, write_error=False):
+        from backend._quality_mixin import _QualityMixin
+
+        class _Host(_QualityMixin):
+            _quality_frame_evidence_dir = directory
+            _quality_frame_evidence_write_error = write_error
+
+        return _Host()
+
+    def test_a_frame_with_a_mask_returns_it(self):
+        import tempfile
+
+        import cv2
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            directory = Path(tmpdir)
+            mask = np.zeros((16, 16), dtype=np.uint8)
+            mask[4:8, 4:8] = 255
+            cv2.imwrite(str(directory / "00000007.png"), mask)
+            loaded, available = self._host(
+                directory)._persisted_mask_for_verification(7)
+            self.assertTrue(available)
+            self.assertIsNotNone(loaded)
+            self.assertTrue(np.any(np.asarray(loaded) > 0))
+
+    def test_a_frame_with_no_mask_says_masks_are_being_written(self):
+        """Not the same as "there is no mask information".
+
+        Returning False here would send an unrepaired frame down the pixel
+        fallback, which reports it unchecked, instead of down the clip-level
+        pass that can recognise a missed detection.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            loaded, available = self._host(
+                Path(tmpdir))._persisted_mask_for_verification(3)
+            self.assertIsNone(loaded)
+            self.assertTrue(
+                available,
+                "a run that writes masks and skipped this frame is not the "
+                "same as a run that writes none",
+            )
+
+    def test_a_run_that_writes_no_masks_says_so(self):
+        loaded, available = self._host(None)._persisted_mask_for_verification(3)
+        self.assertIsNone(loaded)
+        self.assertFalse(available)
+
+    def test_a_failed_write_is_not_read_as_an_empty_mask(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            loaded, available = self._host(
+                Path(tmpdir), write_error=True,
+            )._persisted_mask_for_verification(3)
+            self.assertIsNone(loaded)
+            self.assertFalse(available)
+
+
+class VerdictToleranceTests(unittest.TestCase):
+    """`verification_failed`'s second branch, for clips with nothing to
+    match against."""
+
+    def _evidence(self, **overrides):
+        payload = {
+            "ran": True,
+            "framesChecked": 10,
+            "framesWithSurvivingText": 0,
+            "sourceBoxes": 0,
+            "survivingFraction": None,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_one_jittery_frame_in_ten_does_not_fail_the_job(self):
+        """Without this tolerance a single stray detection fails a clip."""
+        self.assertFalse(verification_failed(
+            self._evidence(framesWithSurvivingText=1)))
+
+    def test_two_in_ten_do_fail(self):
+        self.assertTrue(verification_failed(
+            self._evidence(framesWithSurvivingText=2)))
+
+    def test_a_measured_clip_does_not_reach_the_second_branch(self):
+        """Once the fraction has been measured and passed, a stray box is
+        not a second, stricter test."""
+        self.assertFalse(verification_failed(self._evidence(
+            sourceBoxes=40, survivingFraction=0.05,
+            framesWithSurvivingText=9)))
+
+    def test_nothing_checked_is_not_a_failure_and_not_a_pass(self):
+        self.assertFalse(verification_failed(
+            self._evidence(framesChecked=0, framesWithSurvivingText=0)))
 
 
 class QualityGateIntegrationTests(unittest.TestCase):

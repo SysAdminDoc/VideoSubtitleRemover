@@ -84,7 +84,11 @@ def _bundle_roots() -> list[Path]:
     executable = Path(sys.executable).resolve().parent
     roots.append(executable)
     roots.append(executable / "_internal")
-    roots.append(ROOT)
+    if getattr(sys, "frozen", False):
+        # A source checkout is not a bundle. Reading a stray stamp out of the
+        # repo root and reporting it as `source: "stamp"` would dress a file
+        # anyone can drop there up as evidence of what was built.
+        roots.append(ROOT)
     seen: set[Path] = set()
     unique = []
     for root in roots:
@@ -108,13 +112,22 @@ def read_stamped_profile(
             continue
         if not isinstance(payload, Mapping):
             continue
+        if str(payload.get("schema") or "") != BUILD_PROFILE_SCHEMA:
+            # Written by something else, or by a version that meant something
+            # different by these fields. Reporting it as this schema would be
+            # a claim the file never made.
+            continue
         name = normalize_profile(payload.get("profile"))
         if not name:
+            continue
+        provider = str(payload.get("provider") or "")
+        if provider and provider != declared_provider(name):
+            # The stamp contradicts itself. Trust neither half of it.
             continue
         return {
             "schema": BUILD_PROFILE_SCHEMA,
             "profile": name,
-            "provider": str(payload.get("provider") or ""),
+            "provider": provider or declared_provider(name),
             "appVersion": str(payload.get("appVersion") or ""),
             "source": "stamp",
             "path": str(path),

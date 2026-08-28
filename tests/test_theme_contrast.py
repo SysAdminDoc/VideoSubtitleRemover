@@ -83,11 +83,80 @@ _OUTLINE_KEYWORDS = frozenset(
 _POSITIONAL_OUTLINE_HELPERS = {"_apply_surface_state": 1}
 
 
-def _mentions_divider(node: ast.AST) -> bool:
-    return any(
-        isinstance(child, ast.Attribute) and child.attr == "BORDER_SUBTLE"
-        for child in ast.walk(node)
-    )
+def _mentions_divider(node: ast.AST,
+                      aliases: frozenset[str] = frozenset()) -> bool:
+    """The divider tone, under `Theme.BORDER_SUBTLE` or any local name.
+
+    Matching only the attribute node meant `edge = Theme.BORDER_SUBTLE`
+    followed by `highlightbackground=edge` walked straight past.
+    """
+    for child in ast.walk(node):
+        if isinstance(child, ast.Attribute) and child.attr == "BORDER_SUBTLE":
+            return True
+        if isinstance(child, ast.Name) and child.id in aliases:
+            return True
+    return False
+
+
+def _is_divider_value(value: ast.AST, aliases: frozenset[str]) -> bool:
+    """The value IS the divider tone, rather than merely containing it.
+
+    `tk.Frame(bg=Theme.BORDER_SUBTLE)` contains it and is a widget, not a
+    colour; treating that as an alias made the gate flag every later use of
+    the variable it was assigned to.
+    """
+    if isinstance(value, ast.Attribute):
+        return value.attr == "BORDER_SUBTLE"
+    if isinstance(value, ast.Name):
+        return value.id in aliases
+    return False
+
+
+def _divider_aliases(scope: ast.AST) -> frozenset[str]:
+    """Names in one scope that can only ever be the divider tone.
+
+    A name assigned the divider tone in one branch and something else in
+    another is a variable, not an alias: the branch decides, and the
+    conditional handling below already reads that. Only a name whose every
+    binding is the divider tone stands in for it.
+    """
+    assigned: dict[str, list[ast.AST]] = {}
+    for node in ast.walk(scope):
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets = [node.target]
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            targets = [node.target]
+        else:
+            continue
+        value = getattr(node, "value", None)
+        for target in targets:
+            if isinstance(target, ast.Name):
+                assigned.setdefault(target.id, []).append(value)
+
+    names: set[str] = set()
+    for _ in range(3):  # resolve a short chain of rebinding
+        before = len(names)
+        for name, values in assigned.items():
+            if name in names:
+                continue
+            if values and all(
+                    _is_divider_value(value, frozenset(names))
+                    for value in values):
+                names.add(name)
+        if len(names) == before:
+            break
+    return frozenset(names)
+
+
+def _scopes(tree: ast.AST):
+    """Every function body, plus the module body itself."""
+    yield tree
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node
 
 
 def _tests_enabled(node: ast.AST) -> bool:
@@ -98,7 +167,33 @@ def _tests_enabled(node: ast.AST) -> bool:
     )
 
 
-def _draws_live_divider(node: ast.AST) -> bool:
+def _negates_enabled(test: ast.AST) -> bool:
+    """`not enabled`, and the spellings that mean the same thing.
+
+    Only recognising a top-level `ast.Not` let `X if enabled is False else
+    SUBTLE` put the divider tone on the live control and read as exempt.
+    """
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return True
+    if isinstance(test, ast.Compare) and len(test.comparators) == 1:
+        operator = test.ops[0]
+        comparator = test.comparators[0]
+        falsey = (
+            isinstance(comparator, ast.Constant)
+            and comparator.value in (False, 0, None)
+        )
+        if falsey and isinstance(operator, (ast.Is, ast.Eq)):
+            return True
+        truthy = (
+            isinstance(comparator, ast.Constant) and comparator.value is True
+        )
+        if truthy and isinstance(operator, (ast.IsNot, ast.NotEq)):
+            return True
+    return False
+
+
+def _draws_live_divider(node: ast.AST,
+                        aliases: frozenset[str] = frozenset()) -> bool:
     """The divider tone reaching a control that the user can still operate.
 
     WCAG 2.2 1.4.11 exempts an inactive component, so `X if enabled else
@@ -106,35 +201,40 @@ def _draws_live_divider(node: ast.AST) -> bool:
     control. Anything else is the sole boundary of a live control.
     """
     if isinstance(node, ast.IfExp) and _tests_enabled(node.test):
-        negated = isinstance(node.test, ast.UnaryOp) and isinstance(
-            node.test.op, ast.Not)
-        live = node.orelse if negated else node.body
-        return _draws_live_divider(live)
-    return _mentions_divider(node)
+        live = (node.orelse if _negates_enabled(node.test) else node.body)
+        return _draws_live_divider(live, aliases)
+    return _mentions_divider(node, aliases)
 
 
-def _positional_divider_outline(call: ast.Call) -> bool:
+def _positional_divider_outline(call: ast.Call,
+                                aliases: frozenset[str] = frozenset()) -> bool:
     name = getattr(call.func, "attr", getattr(call.func, "id", ""))
     index = _POSITIONAL_OUTLINE_HELPERS.get(name)
     if index is None or len(call.args) <= index:
         return False
-    return _draws_live_divider(call.args[index])
+    return _draws_live_divider(call.args[index], aliases)
 
 
 def _divider_returned_as_outline():
-    """A border-producing helper handing the divider tone back to a caller."""
+    """Any helper handing the divider tone back to a caller.
+
+    This used to require "border" in the function name, so `_outline_colour`,
+    `_edge_colour` and `_ring_color` were all invisible to it. A helper that
+    returns a colour is a colour source whatever it is called; the ones that
+    legitimately return the divider tone are the separator builders, and they
+    return a widget rather than a colour.
+    """
     offenders = []
     for path in sorted((ROOT / "gui").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            if "border" not in node.name:
-                continue
+            aliases = _divider_aliases(node)
             for statement in ast.walk(node):
                 if (isinstance(statement, ast.Return)
                         and statement.value is not None
-                        and _draws_live_divider(statement.value)):
+                        and _draws_live_divider(statement.value, aliases)):
                     offenders.append(f"{path.name}:{statement.lineno}")
     return offenders
 
@@ -254,6 +354,19 @@ class ExemptionTests(_ThemeCase):
                 self.assertTrue(hasattr(Theme, token))
                 self.assertGreater(len(reason), 60)
 
+    @staticmethod
+    def _check_outline_call(node, aliases, path, offenders):
+        for keyword in node.keywords:
+            if keyword.arg not in _OUTLINE_KEYWORDS:
+                continue
+            # The first version of this compared only the top node of the
+            # keyword value, so a conditional expression hid a real
+            # offender: `highlightbackground=(A if x else SUBTLE)`.
+            if _draws_live_divider(keyword.value, aliases):
+                offenders.append(f"{path.name}:{node.lineno}")
+        if _positional_divider_outline(node, aliases):
+            offenders.append(f"{path.name}:{node.lineno}")
+
     def test_the_divider_token_is_never_a_control_outline(self):
         """The exemption is only true while this stays true.
 
@@ -264,26 +377,142 @@ class ExemptionTests(_ThemeCase):
         offenders = []
         for path in sorted((ROOT / "gui").rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call):
-                    continue
-                for keyword in node.keywords:
-                    if keyword.arg not in _OUTLINE_KEYWORDS:
+            for scope in _scopes(tree):
+                # An outline assigned to a local and then handed over is the
+                # same outline: `edge = Theme.BORDER_SUBTLE` followed by
+                # `highlightbackground=edge`. Aliases are resolved per scope,
+                # because a name is only a stand-in for the tone where every
+                # one of its bindings is that tone.
+                aliases = _divider_aliases(scope)
+                for node in ast.walk(scope):
+                    if not isinstance(node, ast.Call):
                         continue
-                    # The first version of this compared only the top node of
-                    # the keyword value, so a conditional expression hid a
-                    # real offender: `highlightbackground=(A if x else SUB)`.
-                    if _draws_live_divider(keyword.value):
-                        offenders.append(f"{path.name}:{node.lineno}")
-                if _positional_divider_outline(node):
-                    offenders.append(f"{path.name}:{node.lineno}")
+                    self._check_outline_call(
+                        node, aliases, path, offenders)
         offenders.extend(_divider_returned_as_outline())
+        offenders = sorted(set(offenders))
         self.assertEqual(
             offenders, [],
             "BORDER_SUBTLE is the divider tone and is exempt from the 3:1 "
             "control-boundary rule; using it as a control outline makes that "
             "exemption untrue. Use Theme.BORDER: " + ", ".join(offenders),
         )
+
+    def test_the_gate_sees_the_ways_round_it(self):
+        """Three spellings that put the divider tone on a live control.
+
+        Each one passed the first version of this gate: it matched only a
+        literal `Theme.BORDER_SUBTLE` attribute node, only recognised a
+        helper whose name contained "border", and only read negation as a
+        top-level `not`.
+        """
+        import subprocess
+        import sys as _sys
+
+        cases = {
+            "a local variable holding the tone": (
+                "import tkinter as tk\n"
+                "from gui.theme import Theme\n"
+                "\n\n"
+                "class ProbeCard(tk.Frame):\n"
+                "    def __init__(self, parent):\n"
+                "        edge = Theme.BORDER_SUBTLE\n"
+                "        super().__init__(parent, highlightbackground=edge)\n"
+            ),
+            "a helper whose name lacks 'border'": (
+                "import tkinter as tk\n"
+                "from gui.theme import Theme\n"
+                "\n\n"
+                "def _outline_colour():\n"
+                "    return Theme.BORDER_SUBTLE\n"
+                "\n\n"
+                "class ProbeCard(tk.Frame):\n"
+                "    def __init__(self, parent):\n"
+                "        super().__init__(\n"
+                "            parent, highlightbackground=_outline_colour())\n"
+            ),
+            "`is False` instead of `not`": (
+                "import tkinter as tk\n"
+                "from gui.theme import Theme\n"
+                "\n\n"
+                "class ProbeCard(tk.Frame):\n"
+                "    enabled = True\n"
+                "\n"
+                "    def __init__(self, parent):\n"
+                "        super().__init__(\n"
+                "            parent,\n"
+                "            highlightbackground=(\n"
+                "                Theme.BORDER_FOCUS if self.enabled is False\n"
+                "                else Theme.BORDER_SUBTLE),\n"
+                "        )\n"
+            ),
+        }
+        target = (
+            "tests/test_theme_contrast.py::ExemptionTests::"
+            "test_the_divider_token_is_never_a_control_outline"
+        )
+        probe = ROOT / "gui" / "_divider_gate_probe.py"
+        for label, body in cases.items():
+            with self.subTest(case=label):
+                probe.write_text(body, encoding="utf-8")
+                try:
+                    result = subprocess.run(
+                        [_sys.executable, "-m", "pytest", target, "-q"],
+                        cwd=str(ROOT), capture_output=True, text=True,
+                        timeout=300,
+                    )
+                finally:
+                    probe.unlink()
+                self.assertNotEqual(
+                    result.returncode, 0,
+                    f"the gate did not catch {label}:\n{result.stdout[-800:]}",
+                )
+
+    def test_a_widget_built_with_the_divider_tone_is_not_an_outline(self):
+        """A separator is a Frame whose background is the tone.
+
+        Treating the variable it is assigned to as a stand-in for the tone
+        made the gate flag every later use of that name, which is the noise
+        that makes a gate get deleted rather than fixed.
+        """
+        import ast as _ast
+
+        source = (
+            "import tkinter as tk\n"
+            "from gui.theme import Theme\n"
+            "\n\n"
+            "def _divider(parent):\n"
+            "    line = tk.Frame(parent, bg=Theme.BORDER_SUBTLE, height=1)\n"
+            "    line.pack(fill='x')\n"
+            "    return line\n"
+        )
+        tree = _ast.parse(source)
+        function = next(
+            node for node in _ast.walk(tree)
+            if isinstance(node, _ast.FunctionDef)
+        )
+        self.assertEqual(_divider_aliases(function), frozenset())
+
+    def test_a_name_assigned_two_different_tones_is_not_an_alias(self):
+        """`border` takes the divider tone only on the disabled branch."""
+        import ast as _ast
+
+        source = (
+            "from gui.theme import Theme\n"
+            "\n\n"
+            "def draw(enabled):\n"
+            "    if not enabled:\n"
+            "        border = Theme.BORDER_SUBTLE\n"
+            "    else:\n"
+            "        border = Theme.BORDER\n"
+            "    return border\n"
+        )
+        tree = _ast.parse(source)
+        function = next(
+            node for node in _ast.walk(tree)
+            if isinstance(node, _ast.FunctionDef)
+        )
+        self.assertEqual(_divider_aliases(function), frozenset())
 
     def test_the_disabled_ink_is_still_legible_enough_to_read(self):
         """Exempt from 4.5:1, but it must not vanish entirely."""

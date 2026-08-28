@@ -253,13 +253,28 @@ class SourceHygieneTests(unittest.TestCase):
                     if alias.name in attributes:
                         bare.add(alias.asname or alias.name)
             elif isinstance(node, ast.Assign):
-                # `_sp = subprocess` rebinds the module under a new name.
+                # `_sp = subprocess` rebinds the module under a new name, and
+                # `_run = subprocess.Popen` binds the launcher itself.
                 if (isinstance(node.value, ast.Name)
                         and node.value.id in modules):
                     for target in node.targets:
                         if isinstance(target, ast.Name):
                             modules.add(target.id)
+                elif (isinstance(node.value, ast.Attribute)
+                        and isinstance(node.value.value, ast.Name)
+                        and node.value.value.id in modules
+                        and node.value.attr in attributes):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            bare.add(target.id)
         return modules, bare
+
+    @staticmethod
+    def _root_modules():
+        return tuple(
+            path.name for path in sorted(ROOT.glob("*.py"))
+            if not _is_excluded(path)
+        )
 
     def _raw_launch_sites(self, roots):
         """Every raw child-process launch, minus the ones that explain
@@ -282,14 +297,15 @@ class SourceHygieneTests(unittest.TestCase):
 
                 def _exempt(lineno: int, lines=lines) -> bool:
                     # Walk up through the comment block directly above the
-                    # call and stop at the first line of real code.
+                    # call and stop at the first line of real code. A blank
+                    # line ends the block too: skipping blanks without bound
+                    # let a reason written for one launch keep covering an
+                    # unrelated one further down, which is the hole the
+                    # nine-line lookback had in the first place.
                     index = lineno - 2
                     while index >= 0:
                         stripped = lines[index].strip()
-                        if not stripped:
-                            index -= 1
-                            continue
-                        if not stripped.startswith("#"):
+                        if not stripped or not stripped.startswith("#"):
                             return False
                         if self.POLICY_EXEMPT_MARKER in stripped:
                             return True
@@ -301,7 +317,21 @@ class SourceHygieneTests(unittest.TestCase):
                 os_modules, os_bare = self._launcher_names(
                     tree, "os", self.OS_LAUNCHERS)
 
+                # A launcher does not have to be called here to be a raw
+                # launch: handing `subprocess.run` to an executor launches it
+                # somewhere else. The gate this replaced flagged the import
+                # line itself, so dropping that was a regression.
                 for node in ast.walk(tree):
+                    if (isinstance(node, ast.ImportFrom)
+                            and node.module in {"subprocess", "os"}):
+                        launchers = (self.SUBPROCESS_LAUNCHERS
+                                     if node.module == "subprocess"
+                                     else self.OS_LAUNCHERS)
+                        if any(alias.name in launchers
+                               for alias in node.names) and not _exempt(
+                                   node.lineno):
+                            offenders.append(
+                                f"{path.relative_to(ROOT)}:{node.lineno}")
                     if not isinstance(node, ast.Call):
                         continue
                     func = node.func
@@ -329,8 +359,12 @@ class SourceHygieneTests(unittest.TestCase):
         policy's argument validation, including the ones that shell out to
         nvidia-smi and to the release smoke.
         """
+        # The root-level modules were missing, so `VideoSubtitleRemover.py`
+        # -- the shipped entry point, and the one the frozen build runs --
+        # was outside the gate entirely, along with the `setup.py` the
+        # exemption below is written for.
         offenders = self._raw_launch_sites(
-            ("backend", "gui", "tools", "scripts"))
+            ("backend", "gui", "tools", "scripts", *self._root_modules()))
         self.assertEqual(
             offenders,
             [],
@@ -418,6 +452,68 @@ class SourceHygieneTests(unittest.TestCase):
                         self._raw_launch_sites((folder.relative_to(ROOT),)),
                         label,
                     )
+
+    def test_the_shipped_entry_point_is_inside_the_gate(self):
+        """`VideoSubtitleRemover.py` is what the frozen build runs, and it
+        was outside the scanned roots, so a raw shell launch there passed."""
+        self.assertIn("VideoSubtitleRemover.py", self._root_modules())
+        self.assertIn("setup.py", self._root_modules())
+
+    def test_a_launcher_bound_to_a_name_is_still_a_launch(self):
+        """`_launch = subprocess.Popen` then `_launch(cmd)`."""
+        import tempfile as _tempfile
+
+        body = (
+            "import subprocess\n"
+            "_launch = subprocess.Popen\n"
+            "def go():\n"
+            "    return _launch(['x'])\n"
+        )
+        with _tempfile.TemporaryDirectory(dir=str(ROOT)) as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "raw.py").write_text(body, encoding="utf-8")
+            self.assertTrue(
+                self._raw_launch_sites((folder.relative_to(ROOT),)))
+
+    def test_importing_a_launcher_counts_even_without_calling_it(self):
+        """Handing `subprocess.run` to an executor launches it elsewhere.
+
+        The gate this replaced flagged the import line; dropping that was a
+        coverage regression, not a simplification.
+        """
+        import tempfile as _tempfile
+
+        body = (
+            "from subprocess import run\n"
+            "def go(pool):\n"
+            "    return pool.submit(run, ['x'])\n"
+        )
+        with _tempfile.TemporaryDirectory(dir=str(ROOT)) as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "raw.py").write_text(body, encoding="utf-8")
+            offenders = self._raw_launch_sites((folder.relative_to(ROOT),))
+            self.assertTrue(offenders)
+            self.assertTrue(offenders[0].endswith(":1"), offenders)
+
+    def test_a_blank_line_ends_the_exemption_block(self):
+        """Skipping blanks without bound is the nine-line hole again."""
+        import tempfile as _tempfile
+
+        body = (
+            "import subprocess\n"
+            "def go():\n"
+            "    # subprocess-policy-exempt: the probe below is validated\n"
+            "    first = subprocess.run(['probe'])\n"
+            "\n"
+            "\n"
+            "    return subprocess.run(['unrelated'], shell=True), first\n"
+        )
+        with _tempfile.TemporaryDirectory(dir=str(ROOT)) as tmpdir:
+            folder = Path(tmpdir)
+            (folder / "raw.py").write_text(body, encoding="utf-8")
+            offenders = self._raw_launch_sites((folder.relative_to(ROOT),))
+            self.assertEqual(len(offenders), 1, offenders)
+            self.assertTrue(offenders[0].endswith(":7"), offenders)
 
     def test_an_exemption_does_not_cover_a_later_unrelated_launch(self):
         """The marker used to reach nine lines down the file."""

@@ -426,9 +426,13 @@ def stage_release(
 
     stale = stale_release_artifacts(root, version)
     if prune_stale:
-        for name in stale:
+        # `name` is the profile, and rebinding it here left the return below
+        # reading a filename as the lane. The release was already promoted at
+        # that point, so the operator saw "Release staging failed" for a
+        # release that had in fact succeeded.
+        for stale_name in stale:
             try:
-                (root / name).unlink()
+                (root / stale_name).unlink()
             except OSError:
                 pass
     return {

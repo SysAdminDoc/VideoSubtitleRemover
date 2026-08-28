@@ -136,6 +136,31 @@ def _is_untouched(source_frame, frame, box,
     return difference is not None and difference <= tolerance
 
 
+def _mask_is_populated(mask) -> bool:
+    """Whether this frame masked anything at all."""
+    if mask is None:
+        return False
+    values = np.asarray(mask)
+    return bool(values.size) and bool(np.any(values > 0))
+
+
+def _mask_union(masks) -> Optional[np.ndarray]:
+    """Everywhere this job masked text, across the frames it sampled."""
+    union = None
+    for mask in masks:
+        values = np.asarray(mask)
+        if values.ndim == 3:
+            values = values[:, :, 0]
+        if values.ndim != 2 or not values.size:
+            continue
+        binary = values > 0
+        if union is None:
+            union = binary
+        elif union.shape == binary.shape:
+            union = union | binary
+    return union
+
+
 def _mask_coverage(mask: np.ndarray, box: Sequence[float]) -> Optional[float]:
     """Fraction of one box that the frame's mask covers."""
     if mask is None:
@@ -189,8 +214,10 @@ def verify_frame_removal(
         "survivingSourceBoxes": 0,
         "sourceBoxes": 0,
         "untouchedSourceBoxes": 0,
+        "deferredSourceBoxes": [],
         "sourceScanned": False,
         "maskUsed": False,
+        "maskEmpty": False,
     }
     if detector is None:
         result["reason"] = "no detector was loaded for this job"
@@ -235,17 +262,31 @@ def verify_frame_removal(
     # the denominator, and out of the review spans built from `detections`.
     considered = []
     untouched = []
+    deferred = []
     if mask is not None or mask_available:
         # The mask says which text the product set out to remove, so the
-        # answer does not depend on what the pixels did afterwards. A frame
-        # with no mask has nothing that was meant to go.
+        # answer does not depend on what the pixels did afterwards.
+        result["maskUsed"] = True
+        covered = _mask_is_populated(mask)
+        result["maskEmpty"] = not covered
         for source in source_boxes:
             coverage = _mask_coverage(mask, source["box"]) or 0.0
-            if coverage < MASK_OVERLAP_MIN:
+            if coverage >= MASK_OVERLAP_MIN:
+                considered.append(source)
+            elif covered:
+                # This frame masked something else, so text outside that
+                # mask is text the product deliberately left alone.
                 untouched.append(source)
             else:
-                considered.append(source)
-        result["maskUsed"] = True
+                # Nothing was masked on this frame at all. That is either a
+                # frame with no subtitle on it, or a frame whose subtitle the
+                # detector missed entirely, and one frame cannot tell those
+                # apart: a missed detection produces exactly the same empty
+                # mask as a gap between subtitles. Deciding "untouched" here
+                # is what turned a total removal failure into a clean report.
+                # Hold it for the clip-level pass, which knows where this job
+                # masked text on its OTHER frames.
+                deferred.append(source)
     elif source_boxes and source_frame is not None:
         roi_change = _mean_abs_difference(
             source_frame, array, (x1, y1, x2, y2))
@@ -288,6 +329,7 @@ def verify_frame_removal(
         "survivingSourceBoxes": surviving,
         "sourceBoxes": len(considered),
         "untouchedSourceBoxes": len(untouched),
+        "deferredSourceBoxes": deferred,
         "sourceScanned": source_frame is not None,
     })
     return result
@@ -304,6 +346,10 @@ class RemovalVerifier:
         self.match_iou = match_iou
         self.frames: list[dict] = []
         self.seconds = 0.0
+        # Where this job masked text, across every frame it sampled. A frame
+        # with an empty mask cannot say whether the text in its repaired
+        # region is scene text or a missed subtitle; the rest of the clip can.
+        self.mask_union: Optional[np.ndarray] = None
 
     def check(self, frame_index: int, frame: np.ndarray,
               roi: Optional[Sequence[int]],
@@ -321,10 +367,66 @@ class RemovalVerifier:
         )
         self.seconds += time.perf_counter() - started
         outcome["frame"] = int(frame_index)
+        if mask is not None:
+            self.mask_union = _mask_union(
+                [self.mask_union, mask] if self.mask_union is not None
+                else [mask])
         self.frames.append(outcome)
         return outcome
 
+    def _resolve_deferred(self) -> int:
+        """Decide the frames whose own mask was empty.
+
+        A box the job masked on some OTHER frame is text it set out to
+        remove, so finding it still there on a frame the detector skipped is
+        a missed detection, not scene text. A box nothing ever masked is
+        scene text. Doing this at the clip level is the only way round the
+        fact that a missed detection and a gap between subtitles produce the
+        same empty mask.
+        """
+        unresolved = 0
+        for item in self.frames:
+            deferred = item.get("deferredSourceBoxes") or []
+            if not deferred:
+                continue
+            if self.mask_union is None:
+                # No frame in the whole sample masked anything. Nothing here
+                # can be called clean, so say so rather than guess.
+                item["checked"] = False
+                item["reason"] = (
+                    "no sampled frame carried a mask, so text found in the "
+                    "region cannot be told apart from text that was missed"
+                )
+                unresolved += len(deferred)
+                continue
+            missed = []
+            scene = []
+            for source in deferred:
+                coverage = _mask_coverage(self.mask_union, source["box"]) or 0.0
+                (missed if coverage >= MASK_OVERLAP_MIN else scene).append(
+                    source)
+            item["sourceBoxes"] = int(item.get("sourceBoxes") or 0) + len(missed)
+            item["untouchedSourceBoxes"] = (
+                int(item.get("untouchedSourceBoxes") or 0) + len(scene))
+            item["missedDetectionBoxes"] = len(missed)
+            still_there = 0
+            for source in missed:
+                if any(_iou(source["box"], found["box"]) >= self.match_iou
+                       for found in item.get("detections", [])):
+                    still_there += 1
+            item["survivingSourceBoxes"] = (
+                int(item.get("survivingSourceBoxes") or 0) + still_there)
+            if scene:
+                item["detections"] = [
+                    found for found in item.get("detections", [])
+                    if not any(_iou(found["box"], skip["box"]) >= self.match_iou
+                               for skip in scene)
+                ]
+            item["deferredSourceBoxes"] = []
+        return unresolved
+
     def evidence(self) -> dict:
+        unresolved = self._resolve_deferred()
         checked = [item for item in self.frames if item.get("checked")]
         with_text = [item for item in checked if item["detections"]]
         source_total = sum(int(item.get("sourceBoxes") or 0) for item in checked)
@@ -334,6 +436,10 @@ class RemovalVerifier:
             int(item.get("untouchedSourceBoxes") or 0) for item in checked)
         source_scanned = [item for item in checked if item.get("sourceScanned")]
         mask_used = [item for item in checked if item.get("maskUsed")]
+        missed_total = sum(
+            int(item.get("missedDetectionBoxes") or 0) for item in checked)
+        empty_mask_frames = [
+            item for item in checked if item.get("maskEmpty")]
         return {
             "schema": REMOVAL_VERIFICATION_SCHEMA,
             "ran": bool(self.frames),
@@ -358,6 +464,12 @@ class RemovalVerifier:
             # ever covered.
             "untouchedSourceBoxes": untouched_total,
             "sourceScannedFrames": len(source_scanned),
+            # Text this job masked somewhere in the clip, found again on a
+            # frame whose own mask was empty. That is a missed detection, and
+            # it used to be filed as scene text and scored as clean.
+            "missedDetectionBoxes": missed_total,
+            "framesWithNoMask": len(empty_mask_frames),
+            "unresolvedBoxes": unresolved,
             # Frames where the mask itself separated text that was meant to
             # go from scene text that was not, rather than the pixel
             # fallback.

@@ -318,6 +318,38 @@ class ReleaseStagingTests(unittest.TestCase):
                 ["nvidia"],
             )
 
+    def test_pruning_stale_artifacts_does_not_corrupt_the_report(self):
+        """`--prune-stale` used to rebind the profile to a filename.
+
+        The release was already promoted by then, so the operator saw
+        "Release staging failed" and exit 1 for a release that had in fact
+        succeeded, and the report named a ZIP as its lane.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            dist, installer, evidence_dir = _make_inputs(root)
+            release_root = root / "release"
+            release_root.mkdir()
+            stale = release_root / "VideoSubtitleRemoverPro-3.39.0-Setup.exe"
+            stale.write_bytes(b"MZ from an older build")
+            report = release_staging.stage_release(
+                VERSION,
+                dist_dir=dist,
+                installer_path=installer,
+                evidence_dir=evidence_dir,
+                release_root=release_root,
+                profile=PROFILE,
+                prune_stale=True,
+            )
+            self.assertTrue(report["valid"])
+            self.assertEqual(report["profile"], PROFILE)
+            self.assertIn(stale.name, report["prunedStaleArtifacts"])
+            self.assertFalse(stale.exists())
+            self.assertEqual(
+                report["assets"],
+                list(release_staging.expected_assets(VERSION, PROFILE)),
+            )
+
     def test_version_drift_in_evidence_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -469,6 +501,127 @@ class PublicationGuidanceTests(unittest.TestCase):
             if not release_staging.ships_installer(profile):
                 self.assertIn("portable ZIP and no installer", lines)
                 self.assertIn("2 GB", lines)
+
+
+class FrozenProviderVerificationTests(unittest.TestCase):
+    """`release_verification`'s half of the name-versus-provider gate.
+
+    Staging refuses a mismatched artifact, and that is tested. This is the
+    other end: the evidence writer's own error list, which could be deleted
+    whole with every test still green.
+    """
+
+    def setUp(self):
+        from backend import release_verification
+
+        self.module = release_verification
+
+    def _problems(self, **overrides):
+        frozen = {
+            "available": True,
+            "ran": True,
+            "passed": True,
+            "profile": "nvidia",
+            "profileSource": "stamp",
+            "declaredProvider": "CUDAExecutionProvider",
+            "activeProviders": ["CUDAExecutionProvider"],
+            "fellBack": False,
+            "error": "",
+        }
+        frozen.update(overrides)
+        return list(self.module._frozen_provider_problems(
+            {"frozenProviderSmoke": frozen}))
+
+    def test_a_matching_build_reports_nothing(self):
+        self.assertEqual(self._problems(), [])
+
+    def test_a_build_that_ran_on_the_cpu_under_a_cuda_stamp_is_reported(self):
+        problems = self._problems(
+            activeProviders=["CPUExecutionProvider"], passed=False)
+        self.assertTrue(problems)
+        self.assertTrue(any("CUDAExecutionProvider" in item
+                            for item in problems), problems)
+
+    def test_a_fallback_is_reported(self):
+        problems = self._problems(fellBack=True)
+        self.assertTrue(any("fell back" in item for item in problems),
+                        problems)
+
+    def test_an_inferred_profile_is_reported(self):
+        problems = self._problems(profileSource="installed-provider")
+        self.assertTrue(any("stamped" in item for item in problems), problems)
+
+    def test_an_unstamped_build_is_reported(self):
+        problems = self._problems(profile="")
+        self.assertTrue(any("no dependency profile stamp" in item
+                            for item in problems), problems)
+
+    def test_an_unrecognised_profile_does_not_silence_the_check(self):
+        """`declared_provider` returns "" for a profile it does not know, and
+        every comparison below used to short-circuit on that: a stamp saying
+        CUDA with the CPU actually running produced no problem at all."""
+        problems = self._problems(
+            profile="cuda", activeProviders=["CPUExecutionProvider"])
+        self.assertTrue(problems)
+        self.assertTrue(any("unrecognised profile" in item
+                            for item in problems), problems)
+        self.assertTrue(any("CUDAExecutionProvider" in item
+                            for item in problems), problems)
+
+    def test_a_missing_exe_is_not_reported_as_a_failure(self):
+        """A dist folder with no executable is the same non-event here as it
+        is for the launch smoke; staging still refuses to promote it."""
+        self.assertEqual(
+            self._problems(available=False, ran=False, passed=False), [])
+
+    def test_an_exe_that_was_there_and_did_not_answer_is_reported(self):
+        problems = self._problems(
+            ran=False, passed=False, error="the smoke wrote no result")
+        self.assertTrue(any("did not run" in item for item in problems),
+                        problems)
+
+    def test_missing_evidence_is_reported(self):
+        self.assertTrue(list(self.module._frozen_provider_problems({})))
+
+
+class InstallerlessLaneTests(unittest.TestCase):
+    """Strict verification for a lane that ships no installer."""
+
+    def test_the_flag_is_wired_from_the_command_line(self):
+        import argparse
+        import inspect
+
+        from backend import release_verification
+
+        signature = inspect.signature(
+            release_verification.write_release_evidence)
+        self.assertIn("ships_installer", signature.parameters)
+        self.assertIs(
+            signature.parameters["ships_installer"].default, True,
+            "a lane ships an installer unless it says otherwise",
+        )
+        source = inspect.getsource(release_verification.main)
+        self.assertIn("--no-installer", source)
+        self.assertIn("ships_installer=not args.no_installer", source)
+        self.assertIsInstance(argparse.ArgumentParser(), argparse.ArgumentParser)
+
+    def test_strict_mode_only_demands_an_installer_from_a_lane_with_one(self):
+        import inspect
+
+        from backend import release_verification
+
+        source = inspect.getsource(release_verification.write_release_evidence)
+        installer_check = source.index("NSIS installer artifact")
+        guard = source.rindex("if ships_installer:", 0, installer_check)
+        self.assertLess(guard, installer_check)
+        # The shipped-executable smoke is NOT inside that guard: a ZIP-only
+        # lane still has to prove its payload runs.
+        smoke_check = source.index("Installer payload smoke did not pass")
+        self.assertGreater(
+            smoke_check - guard,
+            installer_check - guard,
+            "the smoke must stay outside the ships_installer guard",
+        )
 
 
 class FrozenCudaRuntimeTests(unittest.TestCase):
