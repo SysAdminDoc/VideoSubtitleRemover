@@ -138,6 +138,40 @@ class GpuIntegrationTests(unittest.TestCase):
         session = self._identity_session(["NotARealProvider"])
         self.assertEqual(session.get_providers(), ["CPUExecutionProvider"])
 
+    def test_a_faster_accelerator_ahead_of_the_named_one_is_not_a_fallback(self):
+        """RM-70 puts TensorRT ahead of CUDA when a cached engine exists.
+
+        That is the better accelerated lane, not a drop to the CPU, and an
+        earlier version of this check refused it.
+        """
+        from backend.device_provider import verify_active_provider
+
+        offered = ["TensorrtExecutionProvider", "CUDAExecutionProvider",
+                   "CPUExecutionProvider"]
+        verify_active_provider("cuda:0", offered, requested_providers=offered)
+
+    def test_a_deliberate_downgrade_upstream_is_not_a_silent_fallback(self):
+        """The DirectML opset audit drops the provider on purpose and says so."""
+        from backend.device_provider import verify_active_provider
+
+        verify_active_provider(
+            "directml", ["CPUExecutionProvider"],
+            requested_providers=["CPUExecutionProvider"],
+        )
+
+    def test_a_provider_that_was_offered_and_did_not_run_still_raises(self):
+        from backend.device_provider import (
+            ProviderFellBackError,
+            verify_active_provider,
+        )
+
+        with self.assertRaises(ProviderFellBackError):
+            verify_active_provider(
+                "directml", ["CPUExecutionProvider"],
+                requested_providers=["DmlExecutionProvider",
+                                     "CPUExecutionProvider"],
+            )
+
     def test_a_named_accelerator_that_ran_on_cpu_raises(self):
         from backend.device_provider import (
             ProviderFellBackError,

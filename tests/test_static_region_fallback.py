@@ -83,6 +83,16 @@ class StaticRegionPredicateTests(unittest.TestCase):
         self.assertFalse(static_region_degrades_to_cv2(
             self._config(subtitle_region_spans=spans)))
 
+        # The field is subtitle_region_keyframes. An earlier version read a
+        # name that exists nowhere, so a moving keyframe track, which does
+        # give temporal exposure, was wrongly flagged.
+        tracks = [{"track": [
+            {"time": 0.0, "rect": (12, 10, 30, 18)},
+            {"time": 1.0, "rect": (40, 10, 58, 18)},
+        ]}]
+        self.assertFalse(static_region_degrades_to_cv2(
+            self._config(subtitle_region_keyframes=tracks)))
+
     def test_no_region_at_all_is_not_flagged(self):
         self.assertFalse(static_region_degrades_to_cv2(
             self._config(subtitle_area=None, subtitle_areas=None)))
@@ -171,6 +181,49 @@ class ExposureProvenanceTests(unittest.TestCase):
 
         self.assertEqual(len(sttn_out), len(lama_out))
         self.assertNotEqual(_digest(sttn_out), _digest(lama_out))
+
+
+class RunLevelExposureTests(unittest.TestCase):
+    """The verdict has to describe the job, not whichever batch was last.
+
+    A video processes in batches. Reporting the last batch's numbers lets a
+    90% static run with motion at the end read as a clean temporal run, and
+    leaves a trailing single-frame cv2 batch reporting the previous batch's
+    verdict as if it were its own.
+    """
+
+    def _config(self) -> ProcessingConfig:
+        config = ProcessingConfig()
+        config.tbe_enable = True
+        return config
+
+    def test_a_moving_batch_does_not_erase_a_static_one(self):
+        inpainter = STTNInpainter("cpu", self._config())
+        inpainter.inpaint(_frames(), [_static_mask() for _ in range(6)])
+        self.assertTrue(inpainter.last_exposure_stats["degradedToCv2"])
+
+        inpainter.inpaint(_frames(), [_moving_mask(i) for i in range(6)])
+        stats = inpainter.last_exposure_stats
+        self.assertEqual(stats["batches"], 2)
+        # Both batches are in the totals, so the run is still mostly cv2.
+        self.assertGreater(stats["maskedPixels"], 0)
+        self.assertLess(stats["exposedFraction"], 0.5)
+
+    def test_a_cv2_batch_does_not_leave_the_previous_verdict_standing(self):
+        config = self._config()
+        inpainter = STTNInpainter("cpu", config)
+        inpainter.inpaint(
+            _frames(), [_moving_mask(i) for i in range(6)])
+        self.assertFalse(inpainter.last_exposure_stats["degradedToCv2"])
+
+        # A trailing single-frame batch takes the cv2 route.
+        inpainter.inpaint([_frames(1)[0]], [_static_mask()])
+        self.assertEqual(inpainter.backend_name, "cv2")
+        stats = inpainter.last_exposure_stats
+        self.assertEqual(stats["batches"], 2)
+        # That batch contributed no exposure, and the totals say so rather
+        # than still reporting the moving batch on its own.
+        self.assertEqual(stats["cv2Pixels"], inpainter._exposure_totals["cv2Pixels"])
 
 
 class MessageTests(unittest.TestCase):

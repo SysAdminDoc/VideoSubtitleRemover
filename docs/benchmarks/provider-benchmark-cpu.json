@@ -1,7 +1,27 @@
 {
   "config": {
     "device": "cpu",
+    "fromManifest": true,
     "overrides": {
+      "adaptive_batch": false,
+      "decode_hw_accel": "off",
+      "device": "cpu",
+      "mode": "sttn",
+      "output_quality": 0,
+      "prefetch_decode": false,
+      "preserve_audio": false,
+      "quality_report": false,
+      "quality_report_sheet": false,
+      "sttn_skip_detection": true,
+      "subtitle_area": [
+        14,
+        58,
+        146,
+        92
+      ],
+      "use_hw_encode": false
+    },
+    "qualityOverrides": {
       "adaptive_batch": false,
       "decode_hw_accel": "off",
       "device": "cpu",
@@ -19,7 +39,7 @@
       ],
       "use_hw_encode": false
     },
-    "sha256": "355d48b856661cdf63d5b186fedf2515ac2f89ff9f9ec81e131e3f97cd3c964f"
+    "sha256": "495f012dd874b86e15c0a0b6bd57f218f0a083171d64c6893a4f1ec4f26460cd"
   },
   "errors": [],
   "host": {
@@ -41,15 +61,15 @@
   },
   "memory": {
     "gpu": {
-      "baselineMiB": 1113,
+      "baselineMiB": 1077,
       "deltaMiB": 0,
       "measured": true,
-      "peakMiB": 1113,
-      "sampleCount": 12,
+      "peakMiB": 1077,
+      "sampleCount": 9,
       "sampleIntervalSeconds": 0.25,
       "scope": "device-wide"
     },
-    "peakWorkingSetBytes": 361558016
+    "peakWorkingSetBytes": 958251008
   },
   "passed": true,
   "profile": "cpu",
@@ -63,9 +83,7 @@
         "temporal_consistency"
       ],
       "ladderStep": "manual-review",
-      "previewFramePaths": [
-        "C:\\Users\\--\\AppData\\Local\\Temp\\vsr-provider-bench-ywoutv1l\\static_dialogue_cpu_cold.temporalworst.png"
-      ],
+      "previewFrameCount": 1,
       "reason": "quality report tag is Review; ROI SSIM 0.3831 below 0.9500; worst sampled frame 1 SSIM 0.6761 below 0.8000; residual text score 0.8080 above 0.0250",
       "reasons": [
         {
@@ -112,7 +130,7 @@
         "inside_error": 0.0,
         "motion_inlier_ratio": 0.0,
         "outside_error": 0.0,
-        "overlay": "C:\\Users\\--\\AppData\\Local\\Temp\\vsr-provider-bench-ywoutv1l\\static_dialogue_cpu_cold.temporalworst.png",
+        "overlay": "<local path removed>",
         "pixels": 8020,
         "reference_inside_error": 0.0,
         "score": 0.0,
@@ -182,7 +200,7 @@
         ],
         "ladderStep": "manual-review",
         "previewFramePaths": [
-          "C:\\Users\\--\\AppData\\Local\\Temp\\vsr-provider-bench-ywoutv1l\\static_dialogue_cpu_cold.temporalworst.png"
+          "<local path removed>"
         ],
         "reason": "quality report tag is Review; ROI SSIM 0.3831 below 0.9500; worst sampled frame 1 SSIM 0.6761 below 0.8000; residual text score 0.8080 above 0.0250",
         "reasons": [
@@ -217,6 +235,25 @@
         "remediation": "Multiple quality checks failed or a single check failed severely. Inspect the quality sheet and decide whether to accept, re-process with different settings, or exclude this file from the batch.",
         "status": "review"
       },
+      "removal_verification": {
+        "confidenceThreshold": 0.6,
+        "detectionCount": 0,
+        "frames": [],
+        "framesChecked": 8,
+        "framesSampled": 8,
+        "framesUnchecked": 0,
+        "framesWithSurvivingText": 0,
+        "matchIou": 0.3,
+        "maxConfidence": null,
+        "ran": true,
+        "schema": "vsr.removal_verification.v1",
+        "seconds": 15.884529,
+        "sourceBoxes": 8,
+        "survivingFraction": 0.0,
+        "survivingFractionThreshold": 0.1,
+        "survivingSourceBoxes": 0,
+        "uncheckedReasons": []
+      },
       "residual_text_score": 0.8080168776371308,
       "roi_bbox": [
         1,
@@ -242,6 +279,7 @@
       "tag": "Review",
       "temporal_consistency": null,
       "temporal_exposure": {
+        "batches": 1,
         "cv2Pixels": 128320,
         "degradedThreshold": 0.05,
         "degradedToCv2": true,
@@ -256,12 +294,14 @@
         "psnr": 9.962553032447886,
         "ssim": 0.6761095921198527
       }
-    }
+    },
+    "ran": true,
+    "timed": false
   },
   "runs": [
     {
       "error": "",
-      "fps": 6.1783,
+      "fps": 9.8064,
       "frames": 16,
       "label": "cold",
       "ok": true,
@@ -271,11 +311,11 @@
         "sha256": "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d",
         "width": 160
       },
-      "seconds": 2.589694
+      "seconds": 1.631594
     },
     {
       "error": "",
-      "fps": 8.885,
+      "fps": 11.8522,
       "frames": 16,
       "label": "warm1",
       "ok": true,
@@ -285,7 +325,7 @@
         "sha256": "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d",
         "width": 160
       },
-      "seconds": 1.800789
+      "seconds": 1.349956
     }
   ],
   "runtime": {
@@ -308,5 +348,6 @@
       "ad0c9d9d379a6c646b48162a3d89dd0dc480963270952797a0ea6ea2cfb6040d"
     ],
     "runCount": 2
-  }
+  },
+  "timingScope": "removal only; the quality report and its re-detection pass run separately and are not in the timings"
 }

@@ -2101,21 +2101,6 @@ def _run_processing(
     args, parser, config, SubtitleRemover, ProcessingPaused,
     ffmpeg_ready, video_exts,
 ):
-    # RM-321: a fixed manual region gives the temporal engines nothing to
-    # recover from, so say so before the run rather than reporting a clean
-    # success over a cv2 result.
-    from backend.config import (
-        STATIC_REGION_DEGRADES_MESSAGE,
-        static_region_degrades_to_cv2,
-    )
-
-    if static_region_degrades_to_cv2(config):
-        print(
-            "WARNING: "
-            + STATIC_REGION_DEGRADES_MESSAGE.format(mode=config.mode.value),
-            file=sys.stderr,
-        )
-
     # RM-316: hold the system awake for the run and release it however
     # the run ends.
     from backend import keep_awake
@@ -2130,6 +2115,22 @@ def _run_processing(
 
     if getattr(args, "dry_run", False):
         _run_dry_run_and_exit(remover, config, args, video_exts)
+
+    # RM-321: a fixed manual region gives the temporal engines nothing to
+    # recover from, so say so before the run rather than reporting a clean
+    # success over a cv2 result. This sits after the dry-run branch: a dry
+    # run performs no removal, so there is no fallback to warn about.
+    from backend.config import (
+        STATIC_REGION_DEGRADES_MESSAGE,
+        static_region_degrades_to_cv2,
+    )
+
+    if static_region_degrades_to_cv2(config):
+        print(
+            "WARNING: "
+            + STATIC_REGION_DEGRADES_MESSAGE.format(mode=config.mode.value),
+            file=sys.stderr,
+        )
 
     print(
         "[run] "

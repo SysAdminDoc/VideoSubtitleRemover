@@ -40,9 +40,10 @@ class STTNInpainter(BaseInpainter):
             "TBE (temporal background exposure)"
             if self.config.tbe_enable else "cv2"
         )
-        # RM-321: filled in after each batch so the run can report whether
-        # the temporal path actually contributed anything.
+        # RM-321: accumulated across every batch of the run so the report
+        # describes the job rather than whichever batch happened to be last.
         self.last_exposure_stats: dict = {}
+        self._exposure_totals: dict = {}
 
     @property
     def backend_name(self) -> str:
@@ -57,13 +58,29 @@ class STTNInpainter(BaseInpainter):
         for that run is a truthful-execution failure, not a naming quibble:
         the user picked an engine that did not run.
         """
-        masked = int(stats.get("maskedPixels", 0) or 0)
-        exposed = int(stats.get("exposedPixels", 0) or 0)
+        # Accumulate across every batch of the run. A per-call verdict
+        # would let one moving batch at the end of an otherwise static video
+        # report the whole job as a clean temporal run, and a trailing
+        # single-frame batch would leave the previous batch's numbers
+        # standing as if they described this one.
+        totals = getattr(self, "_exposure_totals", None) or {
+            "maskedPixels": 0, "exposedPixels": 0, "cv2Pixels": 0,
+            "batches": 0,
+        }
+        totals["maskedPixels"] += int(stats.get("maskedPixels", 0) or 0)
+        totals["exposedPixels"] += int(stats.get("exposedPixels", 0) or 0)
+        totals["cv2Pixels"] += int(stats.get("cv2Pixels", 0) or 0)
+        totals["batches"] += 1
+        self._exposure_totals = totals
+
+        masked = int(totals["maskedPixels"])
+        exposed = int(totals["exposedPixels"])
         fraction = (exposed / masked) if masked else None
         self.last_exposure_stats = {
             "maskedPixels": masked,
             "exposedPixels": exposed,
-            "cv2Pixels": int(stats.get("cv2Pixels", 0) or 0),
+            "cv2Pixels": int(totals["cv2Pixels"]),
+            "batches": int(totals["batches"]),
             "exposedFraction": fraction,
             "degradedThreshold": TEMPORAL_EXPOSURE_DEGRADED_FRACTION,
             "degradedToCv2": bool(
@@ -127,6 +144,10 @@ class STTNInpainter(BaseInpainter):
             )
             self._record_exposure(stats)
             return result
+        # A batch that takes the cv2 route contributed no temporal
+        # exposure at all, and leaving the previous batch's numbers in place
+        # would report its verdict against this one.
+        self._record_exposure({})
         self._last_backend_name = "cv2"
         filled = [_cv2_inpaint(f, m, 3, cv2.INPAINT_TELEA)
                   for f, m in zip(frames, masks, strict=True)]

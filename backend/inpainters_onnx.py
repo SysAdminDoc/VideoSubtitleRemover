@@ -93,7 +93,8 @@ def _maybe_session(model_path: str, providers=None,
     # and only warns, so check what actually got the session.
     from backend.device_provider import verify_session_provider
 
-    verify_session_provider(device, session)
+    verify_session_provider(
+        device, session, requested_providers=providers)
     return session
 
 

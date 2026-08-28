@@ -246,10 +246,24 @@ def _try_onnx_session(model_path: str, device: str):
         logger.info("LaMa-ONNX session creation failed: %s", exc)
         return None, None
     # RM-322: a named accelerator that quietly ran on CPU is a silent
-    # substitution, not a successful session.
-    from backend.device_provider import verify_session_provider
+    # substitution. This is the first rung of the LaMa ladder, though, and
+    # the rungs below it (OpenCV DNN, PyTorch) may themselves be GPU
+    # capable, so report the drop and let the ladder continue rather than
+    # ending the whole load here.
+    from backend.device_provider import (
+        ProviderFellBackError,
+        verify_session_provider,
+    )
 
-    verify_session_provider(device, session)
+    try:
+        verify_session_provider(
+            device, session, requested_providers=providers)
+    except ProviderFellBackError as exc:
+        logger.warning(
+            "LaMa-ONNX fell back to CPU for device %s; trying the remaining "
+            "providers: %s", device, exc,
+        )
+        return None, None
     reader = getattr(session, "get_providers", None)
     active = list(reader()) if callable(reader) else []
     provider = active[0] if active else "unknown"

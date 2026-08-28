@@ -497,12 +497,12 @@ for the current installation and deprecation status.
 
 ### Measured provider evidence
 
-Every number below came from `python -m backend.provider_benchmark`, which runs one reference clip end to end and records what the run cost. The machine-readable evidence sits in `docs/benchmarks/`, including the input and config hashes, so a figure here traces back to a run rather than to an estimate.
+Every number below came from `python -m backend.provider_benchmark`, which runs one reference clip end to end and records what the run cost. The timings cover removal only: the quality report samples frames, renders overlays, and re-runs the detector over the repaired region, which costs several times the removal itself on a clip this small, so it runs separately and is not folded into the frames per second. The machine-readable evidence sits in `docs/benchmarks/`, including the input and config hashes, so a figure here traces back to a run rather than to an estimate.
 
 | Lane | Provider that ran | Cold | Warm | Peak RSS | GPU memory |
 |------|-------------------|------|------|----------|------------|
-| CPU | `CPUExecutionProvider` | 6.18 FPS | 8.88 FPS | 345 MiB | n/a |
-| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 5.68 FPS | 9.91 FPS | 975 MiB | +0 MiB device-wide |
+| CPU | `CPUExecutionProvider` | 9.81 FPS | 11.85 FPS | 914 MiB | n/a |
+| NVIDIA CUDA 13 | `CUDAExecutionProvider` | 6.43 FPS | 10.98 FPS | 1562 MiB | +0 MiB device-wide |
 
 Host: NVIDIA GeForce RTX 4070 SUPER (12282 MiB, driver 610.88), Windows 11, Python 3.13. Clip: `tests/clips/static_dialogue.mkv`, a 160x96 sixteen-frame fixture driven with a fixed manual region.
 

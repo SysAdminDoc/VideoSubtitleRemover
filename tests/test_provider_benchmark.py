@@ -56,7 +56,7 @@ class MeasurementTests(unittest.TestCase):
         readings = ["1000", "1000", "1400", "1200"]
         index = {"n": 0}
 
-        def _fake(query):
+        def _fake(query, timeout=20.0):
             if "memory.used" not in query:
                 return ["NVIDIA Test, 999.99, 12282"]
             value = readings[min(index["n"], len(readings) - 1)]
@@ -96,6 +96,21 @@ class MeasurementTests(unittest.TestCase):
         self.assertEqual(config_digest(first), config_digest(second))
         second.mask_dilate_px = int(first.mask_dilate_px) + 3
         self.assertNotEqual(config_digest(first), config_digest(second))
+
+    def test_an_unlisted_clip_is_marked_rather_than_silently_defaulted(self):
+        import tempfile as _tempfile
+
+        with _tempfile.TemporaryDirectory() as tmpdir:
+            unlisted = Path(tmpdir) / "not-in-the-manifest.mkv"
+            unlisted.write_bytes(b"not a video")
+            evidence = run_provider_benchmark(
+                unlisted, device="cpu", profile="cpu",
+                output_dir=tmpdir, warm_runs=0,
+            )
+        # It failed for other reasons too, but the point is that the
+        # evidence distinguishes "used the reviewed config" from "there was
+        # no entry for this clip".
+        self.assertFalse(evidence["config"]["fromManifest"])
 
     def test_the_manifest_config_is_used_rather_than_an_invented_one(self):
         config = manifest_config_for(CLIP)
@@ -238,12 +253,26 @@ class CommittedEvidenceTests(unittest.TestCase):
             cpu["runtime"]["activeProviders"][:1], ["CPUExecutionProvider"])
 
     def test_the_evidence_carries_no_absolute_paths(self):
+        """Anywhere in the document, not only in input.path.
+
+        The quality gate carries preview paths under the run's temporary
+        directory, which named one machine and pointed at a directory that
+        no longer exists by the time anyone reads the evidence.
+        """
+        for name in ("provider-benchmark-cpu.json",
+                     "provider-benchmark-nvidia.json"):
+            with self.subTest(name=name):
+                raw = (EVIDENCE_DIR / name).read_text(encoding="utf-8")
+                for marker in ("C:\\\\", "C:/", "/home/", "/Users/",
+                               "AppData", "Temp"):
+                    self.assertNotIn(marker, raw, marker)
+
+    def test_the_evidence_says_whether_the_reviewed_config_was_used(self):
         for name in ("provider-benchmark-cpu.json",
                      "provider-benchmark-nvidia.json"):
             with self.subTest(name=name):
                 payload = self._load(name)
-                self.assertNotIn(":", payload["input"]["path"])
-                self.assertFalse(payload["input"]["path"].startswith("/"))
+                self.assertTrue(payload["config"]["fromManifest"])
 
 
 class BenchmarkCliTests(unittest.TestCase):

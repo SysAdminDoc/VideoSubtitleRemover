@@ -62,12 +62,34 @@ class EmbeddedReleaseIdentityTests(unittest.TestCase):
         self.assertEqual(identity["release"], "9.0.1")
         self.assertFalse(identity["belowFloor"])
 
-    def test_an_unknown_abi_is_unidentified_rather_than_assumed_safe(self):
+    def test_an_inferred_branch_is_named_but_marked_unmeasured(self):
+        """6.x is covered by the branch table, but was never measured here."""
         identity = opencv_ffmpeg_release_from_abi(
             _libraries((58, 12, 100), (60, 31, 102), (60, 16, 100)))
+        self.assertTrue(identity["identified"])
+        self.assertEqual(identity["branch"], "6.x")
+        self.assertFalse(identity["branchMeasured"])
+        # No exact release: the triple names a series, not a point release.
+        self.assertEqual(identity["release"], "")
+        self.assertTrue(identity["belowFloor"])
+
+    def test_the_two_measured_anchors_say_so(self):
+        for libraries, branch in (
+            (_libraries((59, 39, 100), (61, 19, 100), (61, 7, 100)), "7.x"),
+            (_libraries((61, 1, 101), (63, 1, 101), (63, 1, 101)), "9.x"),
+        ):
+            with self.subTest(branch=branch):
+                identity = opencv_ffmpeg_release_from_abi(libraries)
+                self.assertEqual(identity["branch"], branch)
+                self.assertTrue(identity["branchMeasured"])
+
+    def test_an_abi_outside_every_known_series_is_unidentified(self):
+        identity = opencv_ffmpeg_release_from_abi(
+            _libraries((40, 40, 40), (41, 41, 41), (42, 42, 42)))
         self.assertFalse(identity["identified"])
         self.assertEqual(identity["release"], "")
-        # Still measurably below the floor even though the branch is unnamed.
+        self.assertEqual(identity["branch"], "")
+        # Still measurably below the floor even though the series is unnamed.
         self.assertTrue(identity["belowFloor"])
 
     def test_missing_or_partial_abi_data_identifies_nothing(self):

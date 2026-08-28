@@ -101,20 +101,42 @@ def named_accelerator_provider(device: object) -> str:
     return ""
 
 
+def _provider_name(provider: object) -> str:
+    if isinstance(provider, tuple) and provider:
+        return str(provider[0])
+    return str(provider)
+
+
 def verify_active_provider(device: object, active: object,
-                           *, stage: str = "inpaint") -> None:
-    """Fail loudly when a named accelerator did not actually run."""
+                           *, requested_providers: object = None,
+                           stage: str = "inpaint") -> None:
+    """Fail loudly when a named accelerator silently ran on the CPU.
+
+    The question is whether the session dropped to the CPU, not whether one
+    exact provider is first. Two legitimate cases would fail that stricter
+    reading: RM-70 puts TensorrtExecutionProvider ahead of CUDA when a
+    cached engine exists, which is the faster accelerated lane rather than a
+    fallback, and the DirectML opset audit deliberately drops the DirectML
+    provider for models above its supported opset and says so in a warning.
+    A deliberate downgrade that the product announced is not a silent one.
+    """
     requested = named_accelerator_provider(device)
     if not requested:
         return
-    names = [str(item) for item in (active or [])]
-    if names and names[0] == requested:
+    if requested_providers is not None:
+        offered = {_provider_name(item) for item in requested_providers}
+        if requested not in offered:
+            # The provider was removed from the request on purpose upstream.
+            return
+    names = [_provider_name(item) for item in (active or [])]
+    if any(name != "CPUExecutionProvider" for name in names):
         return
     raise ProviderFellBackError(str(device), requested, names, stage=stage)
 
 
 def verify_session_provider(device: object, session: object,
-                            *, stage: str = "inpaint") -> None:
+                            *, requested_providers: object = None,
+                            stage: str = "inpaint") -> None:
     """Check a live session, skipping when it cannot report its providers.
 
     Resolving the provider list lazily matters: a test double or a runtime
@@ -135,7 +157,9 @@ def verify_session_provider(device: object, session: object,
     except Exception as exc:
         logger.debug("Provider read failed for device %r: %s", device, exc)
         return
-    verify_active_provider(device, active, stage=stage)
+    verify_active_provider(
+        device, active, requested_providers=requested_providers,
+        stage=stage)
 
 
 class DeviceProvider(Protocol):

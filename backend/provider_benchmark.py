@@ -17,6 +17,7 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import json
+import logging
 import platform
 import shutil
 import subprocess
@@ -24,6 +25,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Mapping, Optional
+
+logger = logging.getLogger(__name__)
 
 PROVIDER_BENCHMARK_SCHEMA = "vsr.provider_benchmark.v1"
 
@@ -91,7 +94,7 @@ def peak_working_set_bytes() -> Optional[int]:
         return None
 
 
-def _nvidia_smi(query: str) -> list:
+def _nvidia_smi(query: str, *, timeout: float = 20.0) -> list:
     if not shutil.which("nvidia-smi"):
         return []
     from backend.subprocess_policy import run_process
@@ -100,7 +103,7 @@ def _nvidia_smi(query: str) -> list:
         result = run_process(
             ["nvidia-smi", f"--query-gpu={query}",
              "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError, ValueError):
         return []
@@ -146,7 +149,10 @@ class GpuMemoryWatcher:
         self.available = bool(_nvidia_smi("memory.used"))
 
     def _read(self) -> Optional[int]:
-        rows = _nvidia_smi("memory.used")
+        # A short timeout on the sampling path: the watcher must not be able
+        # to outlive the block it is sampling, and a hung probe is a missing
+        # sample rather than a reason to hold the run open.
+        rows = _nvidia_smi("memory.used", timeout=5.0)
         if not rows:
             return None
         try:
@@ -171,7 +177,14 @@ class GpuMemoryWatcher:
     def __exit__(self, *exc) -> None:
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=5)
+            # Longer than the sampling timeout above, so the thread is
+            # always finished before evidence() reads its samples.
+            self._thread.join(timeout=10)
+            if self._thread.is_alive():  # pragma: no cover - hung driver
+                logger.warning(
+                    "The GPU memory watcher did not stop; its last sample "
+                    "may be missing from the evidence")
+        self._thread = None
 
     def evidence(self) -> dict:
         if not self.available:
@@ -198,6 +211,38 @@ class GpuMemoryWatcher:
             "sampleCount": len(self.samples),
             "sampleIntervalSeconds": self.interval,
         }
+
+
+_ABSOLUTE_PATH_MARKERS = ("\\", "/")
+
+
+def _looks_like_a_path(value: str) -> bool:
+    """Whether a recorded string names a place on this machine."""
+    text = str(value)
+    if len(text) < 4:
+        return False
+    if text[1:3] == ":\\" or text[1:3] == ":/":
+        return True
+    return text.startswith("/") and any(
+        marker in text for marker in _ABSOLUTE_PATH_MARKERS)
+
+
+def scrub_local_paths(value):
+    """Replace absolute paths in recorded evidence with a marker.
+
+    The quality report carries overlay and sheet paths under the run's
+    temporary directory. Committed evidence must not name one machine, and
+    those paths point at a directory that no longer exists by the time
+    anyone reads it, so the fact that a file was produced is kept and the
+    location is not.
+    """
+    if isinstance(value, dict):
+        return {key: scrub_local_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [scrub_local_paths(item) for item in value]
+    if isinstance(value, str) and _looks_like_a_path(value):
+        return "<local path removed>"
+    return value
 
 
 def _repo_relative(path: Path) -> str:
@@ -343,11 +388,23 @@ def run_provider_benchmark(
     out_root = Path(output_dir)
     out_root.mkdir(parents=True, exist_ok=True)
 
-    overrides = manifest_config_for(source, manifest_path)
+    manifest_overrides = manifest_config_for(source, manifest_path)
+    overrides = dict(manifest_overrides)
     overrides.update(dict(config_overrides or {}))
     overrides["device"] = device
-    overrides.setdefault("quality_report", True)
-    config = _apply_config_overrides(overrides)
+    # The timed runs measure removal. The quality report samples frames,
+    # re-encodes overlays, and re-runs the detector over the repaired
+    # region, which on a sixteen-frame fixture costs several times the
+    # removal itself; folding that into the FPS would report a number for
+    # work the product does not do on a normal run. One extra untimed run
+    # produces the gate verdict.
+    timed_overrides = dict(overrides)
+    timed_overrides["quality_report"] = False
+    timed_overrides["quality_report_sheet"] = False
+    quality_overrides = dict(overrides)
+    quality_overrides["quality_report"] = True
+    config = _apply_config_overrides(timed_overrides)
+    quality_config = _apply_config_overrides(quality_overrides)
 
     evidence: dict = {
         "schema": PROVIDER_BENCHMARK_SCHEMA,
@@ -364,7 +421,17 @@ def run_provider_benchmark(
         "config": {
             "device": device,
             "sha256": config_digest(config),
-            "overrides": {key: overrides[key] for key in sorted(overrides)},
+            "overrides": {
+                key: timed_overrides[key] for key in sorted(timed_overrides)},
+            "qualityOverrides": {
+                key: quality_overrides[key]
+                for key in sorted(quality_overrides)
+            },
+            # Without this, "the manifest had no entry for this clip so a
+            # bare default config was benchmarked" is indistinguishable from
+            # "the reviewed config was used", which is the one thing
+            # manifest_config_for exists to guarantee.
+            "fromManifest": bool(manifest_overrides),
         },
         "runs": [],
         "memory": {},
@@ -400,17 +467,38 @@ def run_provider_benchmark(
                 evidence["errors"].append(
                     f"{label} run failed: {remover.last_error_message}")
                 break
-            if index == 0:
-                evidence["quality"] = {
-                    "metrics": dict(remover.last_quality_report or {}),
-                    "gate": evaluate_quality_gate(
-                        dict(remover.last_quality_report or {})),
-                }
+
+    if not evidence["errors"]:
+        # Untimed, and after the watcher has stopped: this run exists to
+        # produce the quality-gate verdict, not to contribute a number to
+        # the timings above.
+        quality_output = out_root / f"{source.stem}_{profile}_quality.mp4"
+        quality_remover = processor.SubtitleRemover(quality_config)
+        quality_ok = quality_remover.process_video(
+            str(source), str(quality_output))
+        metrics = dict(quality_remover.last_quality_report or {})
+        gate = evaluate_quality_gate(dict(metrics))
+        previews = gate.pop("previewFramePaths", []) or []
+        gate["previewFrameCount"] = len(previews)
+        evidence["quality"] = {
+            "ran": bool(quality_ok),
+            "timed": False,
+            "metrics": scrub_local_paths(metrics),
+            "gate": scrub_local_paths(gate),
+        }
+        if not quality_ok:
+            evidence["errors"].append(
+                "the quality run failed: "
+                f"{quality_remover.last_error_message}")
 
     evidence["memory"] = {
         "peakWorkingSetBytes": peak_working_set_bytes(),
         "gpu": watcher.evidence(),
     }
+    evidence["timingScope"] = (
+        "removal only; the quality report and its re-detection pass run "
+        "separately and are not in the timings"
+    )
     # Exact timing: every run has to produce the same frames, or the numbers
     # above are timing different amounts of work.
     evidence["timing"] = {

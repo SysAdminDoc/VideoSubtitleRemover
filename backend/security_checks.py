@@ -340,10 +340,20 @@ OPENCV_FFMPEG_FLOOR_ABI_MAJORS: Mapping[str, int] = {
     "avcodec": 63,
     "avformat": 63,
 }
+# Major triples identify a release *series*, not a point release: 7.0 and
+# 7.1 share (59, 61, 61) and differ only in the minors, so this names the
+# series and leaves OPENCV_FFMPEG_ABI_RELEASES to name an exact release
+# where one was measured. The two anchors were read from real binaries; the
+# others follow FFmpeg's one-major-per-series step and are reported as
+# inferred rather than measured.
 OPENCV_FFMPEG_ABI_BRANCHES: Mapping[Tuple[int, int, int], str] = {
-    (61, 63, 63): "9.0",
-    (59, 61, 61): "7.1",
+    (61, 63, 63): "9.x",
+    (60, 62, 62): "8.x",
+    (59, 61, 61): "7.x",
+    (58, 60, 60): "6.x",
+    (57, 59, 59): "5.x",
 }
+OPENCV_FFMPEG_MEASURED_BRANCHES = frozenset({(61, 63, 63), (59, 61, 61)})
 # RM-320: the embedded runtime is now classified against the same floor as the
 # external binary. Each rule fires when a component's ABI predates the floor
 # branch, which is the condition that puts the build outside every advisory in
@@ -403,6 +413,7 @@ def opencv_ffmpeg_release_from_abi(libraries: Optional[Mapping[str, object]]) ->
         "release": "",
         "branch": "",
         "identified": False,
+        "branchMeasured": False,
         "abi": {},
         "belowFloor": None,
     }
@@ -424,6 +435,7 @@ def opencv_ffmpeg_release_from_abi(libraries: Optional[Mapping[str, object]]) ->
     branch = OPENCV_FFMPEG_ABI_BRANCHES.get(tuple(majors), "")
     payload["release"] = exact or ""
     payload["branch"] = branch
+    payload["branchMeasured"] = tuple(majors) in OPENCV_FFMPEG_MEASURED_BRANCHES
     payload["identified"] = bool(exact or branch)
     payload["belowFloor"] = any(
         major < OPENCV_FFMPEG_FLOOR_ABI_MAJORS[name]
@@ -560,7 +572,7 @@ def opencv_ffmpeg_status(
         "provenance": provenance,
         "embeddedRelease": {
             "release": "", "branch": "", "identified": False,
-            "abi": {}, "belowFloor": None,
+            "branchMeasured": False, "abi": {}, "belowFloor": None,
         },
         "securityFloor": ffmpeg_security_floor_str(),
         "classification": "unknown",
@@ -631,16 +643,17 @@ def opencv_ffmpeg_status(
     payload["advisories"] = matches
     if matches:
         identity = payload["embeddedRelease"]
-        named = (
-            identity.get("release")
-            or (f"{identity.get('branch')} branch" if identity.get("branch")
-                else "an unidentified release")
-        )
+        if identity.get("release"):
+            named = f"FFmpeg {identity['release']}"
+        elif identity.get("branch"):
+            named = f"an FFmpeg {identity['branch']} build"
+        else:
+            named = "an unidentified FFmpeg build"
         payload["classification"] = "vulnerable"
         payload["vulnerable"] = True
         payload["blocking"] = True
         payload["warning"] = (
-            f"OpenCV's wheel embeds FFmpeg {named} "
+            f"OpenCV's wheel embeds {named} "
             f"(libavcodec {payload['avcodec']['version']}, "
             f"libavformat {payload['avformat']['version']}), which is below "
             f"the {payload['securityFloor']} floor enforced on the external "

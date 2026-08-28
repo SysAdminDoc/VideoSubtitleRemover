@@ -4,6 +4,26 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Choosing a GPU device no longer refuses to run in three cases where it
+  was working correctly: a cached TensorRT engine ahead of CUDA, which is
+  the faster lane rather than a fallback; the DirectML opset check that
+  deliberately drops to the CPU for models it cannot run, which it
+  already announces; and LaMa, where the check ended the whole load
+  instead of letting the remaining providers try. It now reports only a
+  silent drop to the CPU, which is the failure it exists for.
+- The manual-region warning no longer fires for a moving keyframe track,
+  which does give the temporal engines something to work from.
+- The temporal-exposure verdict describes the whole run instead of
+  whichever batch happened to be last, so a mostly static video with
+  motion at the end no longer reports a clean temporal run, and a
+  trailing single-frame batch no longer inherits the previous batch's
+  numbers.
+- Switching the profile now refreshes the manual-region warning, and the
+  Switch to LaMa control goes through the same path as the picker, so the
+  dependent controls and the description follow it.
+
 ### Added
 
 - Removal is now proved by re-running the detector over the repaired

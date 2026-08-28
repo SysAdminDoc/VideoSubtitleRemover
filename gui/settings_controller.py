@@ -219,6 +219,13 @@ class AdvancedSettingsControllerMixin:
             return
         self.algo_desc.config(text=self._get_algo_description())
         self._update_mode_options()
+        # RM-321: whether a saved region degrades to cv2 depends on the mode
+        # as much as on the region, so the notice has to follow this change
+        # too. Drawing a region in LaMa and then switching to STTN is the
+        # exact sequence the warning exists for.
+        refresh = getattr(self, "_update_region_label_display", None)
+        if callable(refresh):
+            refresh()
         self._update_status(
             tr("Switched to the {profile} profile").format(
                 profile=self.mode_var.get()))

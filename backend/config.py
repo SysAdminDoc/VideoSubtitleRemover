@@ -679,7 +679,9 @@ def static_region_degrades_to_cv2(config) -> bool:
     if getattr(config, "subtitle_region_spans", None):
         # Timed regions move between spans, so exposure is possible.
         return False
-    if getattr(config, "region_keyframe_tracks", None):
+    # The field is subtitle_region_keyframes; the earlier name existed
+    # nowhere, so a moving keyframe track was wrongly flagged.
+    if getattr(config, "subtitle_region_keyframes", None):
         return False
     return bool(
         getattr(config, "subtitle_area", None)

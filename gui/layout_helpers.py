@@ -240,22 +240,32 @@ class LayoutHelpersMixin:
             button.pack(anchor="w", pady=(Theme.S_XS, 0))
 
     def _switch_job_to_lama(self):
-        """Move the job to the engine that does not need temporal exposure."""
+        """Move the job to the engine that does not need temporal exposure.
+
+        Setting the variable is not enough. The combobox binding does not
+        fire for a programmatic set, so the dependent controls and the
+        algorithm description would keep describing the old engine; route
+        through the same handler the picker uses.
+        """
         from gui.config import InpaintMode as _GuiMode
 
-        self.config.mode = _GuiMode.LAMA
         if hasattr(self, "mode_var"):
-            self.mode_var.set(self.config.mode.value)
+            self.mode_var.set(_GuiMode.LAMA.value)
         picker = getattr(self, "mode_picker", None)
         if picker is not None:
-            picker.set(self.config.mode.value)
+            picker.set(_GuiMode.LAMA.value)
         combo = getattr(self, "_command_mode_combo", None)
         if combo is not None:
             try:
-                combo.set(self.config.mode.value)
+                combo.set(_GuiMode.LAMA.value)
             except Exception:
                 pass
-        self._update_region_label_display()
+        handler = getattr(self, "_on_mode_changed", None)
+        if callable(handler):
+            handler()
+        else:  # pragma: no cover - the mixin is always present in the app
+            self.config.mode = _GuiMode.LAMA
+            self._update_region_label_display()
         self._update_status(
             tr("Switched to LaMa so the manual region is repaired properly."),
             "info",

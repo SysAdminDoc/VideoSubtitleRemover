@@ -504,13 +504,19 @@ class VideoSubtitleRemoverApp(
             except Exception:
                 pass
             self._taskbar = None
-        # RM-316: never leave a sleep hold behind on shutdown.
-        try:
-            from backend import keep_awake
+        # RM-316: never leave a sleep hold behind on shutdown. Do this
+        # only once the worker thread is gone: SetThreadExecutionState is
+        # per-thread, so clearing from here cannot cancel the worker's
+        # request, and zeroing the count would turn the worker's own
+        # release into a no-op while the OS request stayed live.
+        worker = getattr(self, "_processing_thread", None)
+        if worker is None or not worker.is_alive():
+            try:
+                from backend import keep_awake
 
-            keep_awake.release_all()
-        except Exception:
-            pass
+                keep_awake.release_all()
+            except Exception:
+                pass
         self._release_running_mutex()
 
     def _release_running_mutex(self):
