@@ -62,6 +62,8 @@ from gui.utils import (  # noqa: F401
     _soft_subtitle_stream_record,
     detect_ai_engines,
     detect_ffmpeg,
+    detect_ffmpeg_state,
+    ffmpeg_status_summary,
     detect_gpu,
     format_quality_report,
     format_size,

@@ -43,8 +43,14 @@ class LayoutHelpersMixin:
             )
             detection = self.ai_engines.get("detection", [])
             det_short = detection[0] if detection else tr("OpenCV fallback")
-            audio_short = tr("FFmpeg") if self.ffmpeg_ready else tr("No FFmpeg")
-            ready = bool(detection) and self.ffmpeg_ready
+            from gui.utils import ffmpeg_status_summary
+
+            ffmpeg_summary = ffmpeg_status_summary(
+                getattr(self, "ffmpeg_state", {}))
+            audio_short = ffmpeg_summary["short"]
+            # RM-324: a build below the enforced floor stops the run at the
+            # security check, so the chip must not read as ready.
+            ready = bool(detection) and ffmpeg_summary["safe"]
             state_text = tr("Ready") if ready else tr("Limited")
             state_fg = Theme.SUCCESS if ready else Theme.WARNING
             summary = f"{gpu_short}  /  {det_short}  /  {audio_short}"

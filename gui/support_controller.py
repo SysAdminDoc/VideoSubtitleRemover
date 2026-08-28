@@ -242,6 +242,15 @@ class SupportControllerMixin:
             return
         extra_facts = {
             "ffmpeg_ready": self.ffmpeg_ready,
+            "ffmpeg_security": {
+                key: value
+                for key, value in (getattr(self, "ffmpeg_state", {}) or {}).items()
+                if key in {
+                    "available", "version", "classification", "parsed",
+                    "safe", "supported", "vulnerable", "fixed_in",
+                    "advisories", "reason",
+                }
+            },
             "detection_engines": self.ai_engines.get("detection", []),
             "inpainting_engines": self.ai_engines.get("inpainting", []),
             "gpu_count": len(self.gpus),
@@ -716,17 +725,20 @@ class SupportControllerMixin:
         fact(system, tr("Compute"), gpu_label)
         fact(system, tr("Detection"), det_label)
         fact(system, tr("Inpainting"), inp_label)
+        from gui.utils import ffmpeg_status_summary
+
+        ffmpeg_summary = ffmpeg_status_summary(
+            getattr(self, "ffmpeg_state", {}))
         fact(
             system,
             tr("FFmpeg"),
             (
-                tr("Ready") if self.ffmpeg_ready
-                else tr("Checking...") if checking_system
-                else tr("Missing")
+                tr("Checking...") if checking_system
+                else ffmpeg_summary["status"]
             ),
             (
-                Theme.SUCCESS if self.ffmpeg_ready
-                else Theme.INFO if checking_system
+                Theme.INFO if checking_system
+                else Theme.SUCCESS if ffmpeg_summary["safe"]
                 else Theme.WARNING
             ),
         )

@@ -401,17 +401,100 @@ def detect_ai_engines() -> dict:
     return engines
 
 
-def detect_ffmpeg() -> bool:
+def detect_ffmpeg_state(*, timeout: float = 8.0) -> dict:
+    """Probe FFmpeg and classify it against the enforced security floor.
+
+    RM-324: an exit code says only that something answered. The backend
+    already classifies the banner, and a build below the floor fails later
+    in the run, so the startup state has to carry that verdict rather than
+    reporting a bare "ready".
+    """
+    from backend.ffmpeg_profiles import probe_ffmpeg_security
+
     try:
-        result = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+        return probe_ffmpeg_security(timeout=timeout)
+    except Exception:
+        logger.warning("FFmpeg security probe failed", exc_info=True)
+        return {
+            "available": False,
+            "parsed": False,
+            "classification": "unknown",
+            "version": "",
+            "raw": "",
+            "reason": "the FFmpeg probe could not be run",
+        }
+
+
+def detect_ffmpeg() -> bool:
+    """Whether an FFmpeg binary answered at all.
+
+    This is the audio-merge capability question, not the security one: a
+    build below the floor still merges audio. Use `detect_ffmpeg_state` for
+    anything that reports readiness to the user.
+    """
+    return bool(detect_ffmpeg_state().get("available"))
+
+
+def ffmpeg_status_summary(state) -> dict:
+    """What the interface should say about one FFmpeg probe result.
+
+    Returns the short header chip text, the startup status phrase, the
+    warning-label copy (empty when there is nothing to warn about), and a
+    tone name. A build below the enforced floor, or one whose version
+    cannot be identified, is never described as ready.
+    """
+    from backend.ffmpeg_profiles import ffmpeg_security_floor_str
+
+    payload = dict(state or {})
+    available = bool(payload.get("available"))
+    classification = str(payload.get("classification") or "unknown")
+    version = str(payload.get("version") or "")
+    floor = ffmpeg_security_floor_str()
+
+    if not available:
+        return {
+            "short": tr("No FFmpeg"),
+            "status": tr("FFmpeg missing"),
+            "warning": tr(
+                "FFmpeg is not available, so outputs will be saved without "
+                "original audio until it is installed."),
+            "tone": "warning",
+            "available": False,
+            "safe": False,
+        }
+    if classification == "safe":
+        return {
+            "short": tr("FFmpeg {version}").format(version=version),
+            "status": tr("FFmpeg {version}").format(version=version),
+            "warning": "",
+            "tone": "success",
+            "available": True,
+            "safe": True,
+        }
+    if not payload.get("parsed"):
+        return {
+            "short": tr("FFmpeg unclassified"),
+            "status": tr("FFmpeg version not identified"),
+            "warning": tr(
+                "This FFmpeg build does not report a release version, so it "
+                "cannot be checked against the required {floor} or newer. "
+                "Install a stable release build.").format(floor=floor),
+            "tone": "warning",
+            "available": True,
+            "safe": False,
+        }
+    return {
+        "short": tr("FFmpeg {version}").format(version=version),
+        "status": tr("FFmpeg {version} below the security floor").format(
+            version=version),
+        "warning": tr(
+            "FFmpeg {version} is below the required {floor}. Processing will "
+            "stop when it reaches the security check. Install {floor} or "
+            "newer.").format(version=version, floor=floor),
+        "tone": "warning",
+        "available": True,
+        "safe": False,
+    }
 
 
 def get_file_info(path: str) -> str:

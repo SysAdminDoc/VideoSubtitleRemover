@@ -6,6 +6,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- Startup no longer reports "FFmpeg ready" for a build that will stop the
+  run. It was reading a bare exit code, so an FFmpeg below the enforced
+  9.0.1 security floor showed a green state at launch and then failed at
+  the security check partway through a job. The status line, the header
+  chip, the settings warning, and the About panel now all come from the
+  same classification the backend already computed, naming the detected
+  version. A development snapshot, whose version cannot be identified, is
+  reported as unclassified rather than ready. The support bundle carries
+  the verdict too.
 - A frames-to-masks length mismatch now fails the run instead of quietly
   processing the shorter list. 61 sequence pairings carried no explicit
   length rule, including the inpainting hot path, so a mismatch repaired

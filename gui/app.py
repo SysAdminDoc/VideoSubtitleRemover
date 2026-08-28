@@ -42,7 +42,8 @@ from gui.utils import (
     dispatch_to_ui,
     install_ui_dispatcher,
     get_app_dir, detect_gpu, is_video_file, is_image_file,
-    detect_ai_engines, detect_ffmpeg, get_file_info,
+    detect_ai_engines, detect_ffmpeg_state, ffmpeg_status_summary,
+    get_file_info,
     _soft_subtitle_stream_record, _format_soft_subtitle_summary,
     truncate_middle,
     stop_ui_dispatcher,
@@ -225,6 +226,10 @@ class VideoSubtitleRemoverApp(
             },
         }
         self.ffmpeg_ready = False
+        # RM-324: the full classify_ffmpeg_security payload, so the
+        # startup status and the warning label report the verdict the
+        # backend already computed instead of a bare exit code.
+        self.ffmpeg_state: dict = {}
         self.ffmpeg_profiles = {
             "schema": FFMPEG_PROFILE_SCHEMA,
             "profiles": [],
@@ -837,11 +842,8 @@ class VideoSubtitleRemoverApp(
         except Exception:
             logger.warning("Startup AI engine probe failed", exc_info=True)
             ai_engines = self._fallback_ai_engines()
-        try:
-            ffmpeg_ready = detect_ffmpeg()
-        except Exception:
-            logger.warning("Startup FFmpeg probe failed", exc_info=True)
-            ffmpeg_ready = False
+        ffmpeg_state = detect_ffmpeg_state()
+        ffmpeg_ready = bool(ffmpeg_state.get("available"))
         try:
             ffmpeg_profiles = collect_ffmpeg_capability_profiles(timeout=8.0)
         except Exception:
@@ -876,6 +878,7 @@ class VideoSubtitleRemoverApp(
             ffmpeg_ready,
             backend_status,
             ffmpeg_profiles,
+            ffmpeg_state,
         )
 
     def _apply_startup_hardware_probe(
@@ -885,6 +888,7 @@ class VideoSubtitleRemoverApp(
         ffmpeg_ready,
         backend_status=None,
         ffmpeg_profiles=None,
+        ffmpeg_state=None,
     ):
         """Apply background probe results on the Tk main thread."""
         if self._shutdown_started:
@@ -896,6 +900,7 @@ class VideoSubtitleRemoverApp(
         if ffmpeg_profiles:
             self.ffmpeg_profiles = ffmpeg_profiles
         self.ffmpeg_ready = bool(ffmpeg_ready)
+        self.ffmpeg_state = dict(ffmpeg_state or {})
         self._hardware_probe_pending = False
         self._apply_gpu_selection_from_config()
         self._refresh_gpu_selector()
@@ -907,11 +912,11 @@ class VideoSubtitleRemoverApp(
         self._refresh_action_states()
 
         gpu_label = self.gpus[0]["name"] if self.gpus else tr("CPU mode")
-        audio_label = "FFmpeg ready" if self.ffmpeg_ready else "FFmpeg missing"
+        summary = ffmpeg_status_summary(self.ffmpeg_state)
         self._update_status(
             tr("Hardware detected: {gpu}; {audio}").format(
-                gpu=gpu_label, audio=audio_label),
-            "info")
+                gpu=gpu_label, audio=summary["status"]),
+            "info" if summary["safe"] else "warning")
         logger.info(
             "Startup hardware probe complete: gpus=%s detection=%s inpainting=%s ffmpeg=%s",
             len(self.gpus),
@@ -963,11 +968,11 @@ class VideoSubtitleRemoverApp(
             )
             if not self.ffmpeg_warning_label.winfo_ismapped():
                 self.ffmpeg_warning_label.pack(anchor="w", pady=(Theme.S_XS, 0))
-        elif not self.ffmpeg_ready:
+            return
+        summary = ffmpeg_status_summary(self.ffmpeg_state)
+        if summary["warning"]:
             self.ffmpeg_warning_label.config(
-                text=tr("FFmpeg is not available, so outputs will be saved without original audio until it is installed."),
-                fg=Theme.WARNING,
-            )
+                text=summary["warning"], fg=Theme.WARNING)
             if not self.ffmpeg_warning_label.winfo_ismapped():
                 self.ffmpeg_warning_label.pack(anchor="w", pady=(Theme.S_XS, 0))
         else:
