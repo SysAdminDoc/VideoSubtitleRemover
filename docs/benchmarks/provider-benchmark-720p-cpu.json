@@ -1,0 +1,85 @@
+{
+  "config": {
+    "device": "cpu",
+    "fromManifest": false,
+    "overrides": {
+      "device": "cpu",
+      "quality_report": false,
+      "quality_report_sheet": false,
+      "sttn_skip_detection": false
+    },
+    "qualityOverrides": {
+      "device": "cpu",
+      "quality_report": true,
+      "sttn_skip_detection": false
+    },
+    "sha256": "b62e6d425404683b7f117c02461a172fc749f116d38eff0aff411788f34451e7"
+  },
+  "errors": [
+    "cold run failed: output contract mismatch: color range is not preserved",
+    "runs produced different output, so the timings are not comparable"
+  ],
+  "host": {
+    "cpuCount": 24,
+    "gpu": {
+      "driver": "610.88",
+      "memoryTotalMiB": 12282,
+      "name": "NVIDIA GeForce RTX 4070 SUPER",
+      "present": true
+    },
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.15"
+  },
+  "input": {
+    "bytes": 1310267,
+    "path": "tests/benchmarks/benchmark_720p.mkv",
+    "sha256": "72793c81a69a1390a75d1565dd2e03b54ec01e635d377d15a72c450882662a7d"
+  },
+  "memory": {
+    "gpu": {
+      "baselineMiB": 1096,
+      "deltaMiB": 9,
+      "measured": true,
+      "peakMiB": 1105,
+      "sampleCount": 434,
+      "sampleIntervalSeconds": 0.25,
+      "scope": "device-wide"
+    },
+    "peakWorkingSetBytes": 3716571136
+  },
+  "passed": false,
+  "profile": "cpu",
+  "quality": {},
+  "runs": [
+    {
+      "error": "output contract mismatch: color range is not preserved",
+      "fps": 0.0,
+      "frames": 0,
+      "label": "cold",
+      "ok": false,
+      "outputFrames": null,
+      "seconds": 207.855698
+    }
+  ],
+  "runtime": {
+    "activeProviders": [
+      "CPUExecutionProvider"
+    ],
+    "availableProviders": [
+      "AzureExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "error": "",
+    "onnxruntime": "1.29.0",
+    "providerVerified": true,
+    "requestedDevice": "cpu"
+  },
+  "schema": "vsr.provider_benchmark.v1",
+  "timing": {
+    "identicalOutputs": false,
+    "outputDigests": [],
+    "runCount": 1
+  },
+  "timingScope": "removal only; the quality report and its re-detection pass run separately and are not in the timings"
+}

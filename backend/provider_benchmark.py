@@ -529,13 +529,35 @@ def main(argv: Optional[list] = None) -> int:
         "--manifest", default="",
         help="clip manifest to take the reviewed config from")
     parser.add_argument("--output", default="", help="write the JSON here")
+    parser.add_argument(
+        "--set", action="append", default=[], metavar="FIELD=JSON",
+        dest="overrides",
+        help=(
+            "override one processing field, same spelling as the product's "
+            "own --set. RM-351: the reviewed fixtures are driven with a fixed "
+            "region and sttn_skip_detection, so measuring a clip with "
+            "automatic detection needs `--set sttn_skip_detection=false`."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    overrides = {}
+    for item in args.overrides:
+        field, _, raw = item.partition("=")
+        field = field.strip()
+        if not field or not _:
+            parser.error(f"--set needs FIELD=JSON, got {item!r}")
+        try:
+            overrides[field] = json.loads(raw)
+        except json.JSONDecodeError:
+            overrides[field] = raw
 
     with tempfile.TemporaryDirectory(prefix="vsr-provider-bench-") as tmpdir:
         evidence = run_provider_benchmark(
             args.clip,
             device=args.device,
             profile=args.profile,
+            config_overrides=overrides or None,
             output_dir=tmpdir,
             warm_runs=args.warm_runs,
             manifest_path=args.manifest or None,
