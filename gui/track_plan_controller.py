@@ -232,6 +232,21 @@ class TrackPlanControllerMixin:
                 font=f(Theme.F_META), bg=Theme.BG_CARD,
                 fg=Theme.TEXT_MUTED, anchor="w",
             ).pack(anchor="w")
+            if track.get("persistent_overlay"):
+                # RM-361: say why this one arrived already kept, rather than
+                # leaving the user to wonder which rows they changed.
+                tk.Label(
+                    text_col,
+                    text=tr(
+                        "Present for {percent}% of the video and outside the "
+                        "subtitle area, so it looks like a logo."
+                    ).format(
+                        percent=int(round(
+                            float(track.get("coverage") or 0.0) * 100))),
+                    font=f(Theme.F_META), bg=Theme.BG_CARD,
+                    fg=Theme.WARNING, anchor="w", justify="left",
+                    wraplength=420,
+                ).pack(anchor="w")
         _refresh_selection()
         # PhotoImages are garbage collected unless referenced; pin them to
         # the dialog for its lifetime.

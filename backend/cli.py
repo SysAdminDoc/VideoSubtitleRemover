@@ -1370,8 +1370,14 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
               f"{len(tracks)} track(s)")
         for track in tracks:
             text = track.get("sample_text") or "(no text)"
+            # RM-361: a track the scan already decided to keep has to say so
+            # here, or the plan silently disagrees with this summary.
+            note = ""
+            if track.get("persistent_overlay"):
+                note = (f"  [kept: {float(track.get('coverage') or 0):.0%} of "
+                        "the runtime, outside the subtitle area]")
             print(f"  #{track['id']} frames {track['start_frame']}-"
-                  f"{track['end_frame']}  {text[:60]}")
+                  f"{track['end_frame']}  {text[:60]}{note}")
         sys.exit(0)
 
     if getattr(args, "ocr_benchmark", False):

@@ -224,7 +224,7 @@ msgstr ""
 msgid "All files"
 msgstr ""
 
-#: gui/track_plan_controller.py:320
+#: gui/track_plan_controller.py:335
 msgid "All tracks marked for removal; nothing was excluded"
 msgstr ""
 
@@ -252,7 +252,7 @@ msgstr ""
 msgid "Apply"
 msgstr ""
 
-#: gui/track_plan_controller.py:277
+#: gui/track_plan_controller.py:292
 msgid "Apply selection"
 msgstr ""
 
@@ -392,7 +392,7 @@ msgstr ""
 msgid "CRF target"
 msgstr ""
 
-#: gui/mask_correction_controller.py:413 gui/queue_view.py:252 gui/region_controller.py:820 gui/settings_controller.py:596 gui/track_plan_controller.py:282
+#: gui/mask_correction_controller.py:413 gui/queue_view.py:252 gui/region_controller.py:820 gui/settings_controller.py:596 gui/track_plan_controller.py:297
 msgid "Cancel"
 msgstr ""
 
@@ -2388,6 +2388,10 @@ msgstr ""
 msgid "Preparing review frame..."
 msgstr ""
 
+#: gui/track_plan_controller.py:240
+msgid "Present for {percent}% of the video and outside the subtitle area, so it looks like a logo."
+msgstr ""
+
 #: gui/layout_build.py:741
 msgid "Preserve source audio"
 msgstr ""
@@ -2906,7 +2910,7 @@ msgstr ""
 msgid "Save motion track"
 msgstr ""
 
-#: gui/track_plan_controller.py:273
+#: gui/track_plan_controller.py:288
 msgid "Save plan..."
 msgstr ""
 
@@ -2930,7 +2934,7 @@ msgstr ""
 msgid "Save the current setup as a preset"
 msgstr ""
 
-#: gui/track_plan_controller.py:258
+#: gui/track_plan_controller.py:273
 msgid "Save track plan"
 msgstr ""
 
@@ -3554,11 +3558,11 @@ msgstr ""
 msgid "Total time {elapsed}, {count} item{suffix} processed"
 msgstr ""
 
-#: gui/app.py:1623 gui/layout_build.py:2225 gui/track_plan_controller.py:260
+#: gui/app.py:1623 gui/layout_build.py:2225 gui/track_plan_controller.py:275
 msgid "Track plan"
 msgstr ""
 
-#: gui/track_plan_controller.py:267
+#: gui/track_plan_controller.py:282
 msgid "Track plan saved to {name}"
 msgstr ""
 
@@ -4050,7 +4054,7 @@ msgid_plural "{n} tracks found. Select the tracks to remove, or clear a track to
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/track_plan_controller.py:314
+#: gui/track_plan_controller.py:329
 msgid "{n} track kept: its frames are excluded from cleanup"
 msgid_plural "{n} tracks kept: their frames are excluded from cleanup"
 msgstr[0] ""

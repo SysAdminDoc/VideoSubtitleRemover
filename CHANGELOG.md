@@ -4,6 +4,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- A logo that sits in a corner for the whole video is no longer queued for removal on the same footing as a caption that appears for two seconds. Track review created every track set to remove, and the plan already recorded the span needed to tell the two apart. A track that covers substantially the whole runtime and sits outside the subtitle area is now flagged, with the coverage and position that classified it recorded, and it arrives already set to keep when you are removing subtitles. When you are removing a logo or watermark the default is untouched, because there the overlay is the thing you asked to erase. Neither condition is enough on its own: a caption can run the length of a short clip, and a chyron can be brief.
+
 ### Removed
 
 - The EasyOCR detector is retired. It had no release after 1.7.2 on 2024-09-24, it was the slowest and largest engine in the cascade, and RapidOCR, PaddleOCR and the OpenCV 5 DNN detector cover the same work while it held a constraint line and a vendored hash in every dependency profile. Automatic detection now goes from Surya straight to the OpenCV fallback. A saved setting or preset that names it is not silently switched to something else: the command line refuses it with the reason, and the interface resets to Automatic and says why.

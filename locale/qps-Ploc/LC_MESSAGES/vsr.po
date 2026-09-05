@@ -224,7 +224,7 @@ msgstr "[!! Åŀŀ Šûƥƥöŕţéð ! !!]"
 msgid "All files"
 msgstr "[!! Åŀŀ ƒîŀéš ! !!]"
 
-#: gui/track_plan_controller.py:320
+#: gui/track_plan_controller.py:335
 msgid "All tracks marked for removal; nothing was excluded"
 msgstr "[!! Åŀŀ ţŕåçķš ḿåŕķéð ƒöŕ ŕéḿöṽåŀ; ńöţħîńĝ ŵåš éẋçŀûðéð ! ! ! ! !!]"
 
@@ -252,7 +252,7 @@ msgstr "[!! Åƥƥŀîéð ƥŕéšéţ '{name}' ! !!]"
 msgid "Apply"
 msgstr "[!! Åƥƥŀý ! !!]"
 
-#: gui/track_plan_controller.py:277
+#: gui/track_plan_controller.py:292
 msgid "Apply selection"
 msgstr "[!! Åƥƥŀý šéŀéçţîöń ! !!]"
 
@@ -392,7 +392,7 @@ msgstr "[!! ÇƤÛ öńŀý ! !!]"
 msgid "CRF target"
 msgstr "[!! ÇŔƑ ţåŕĝéţ ! !!]"
 
-#: gui/mask_correction_controller.py:413 gui/queue_view.py:252 gui/region_controller.py:820 gui/settings_controller.py:596 gui/track_plan_controller.py:282
+#: gui/mask_correction_controller.py:413 gui/queue_view.py:252 gui/region_controller.py:820 gui/settings_controller.py:596 gui/track_plan_controller.py:297
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
@@ -2388,6 +2388,10 @@ msgstr "[!! Ƥŕéƥåŕîńĝ ḿöðéŀ ðöŵńŀöåðš îƒ ńééðéð.
 msgid "Preparing review frame..."
 msgstr "[!! Ƥŕéƥåŕîńĝ ŕéṽîéŵ ƒŕåḿé... ! ! !!]"
 
+#: gui/track_plan_controller.py:240
+msgid "Present for {percent}% of the video and outside the subtitle area, so it looks like a logo."
+msgstr "[!! Ƥŕéšéńţ ƒöŕ {percent}% oƒ ţħé ṽîðéö åńð öûţšîðé ţħé šûƀţîţŀé åŕéå, šö îţ ŀööķš ŀîķé å ŀöĝö. ! ! ! ! ! ! ! !!]"
+
 #: gui/layout_build.py:741
 msgid "Preserve source audio"
 msgstr "[!! Ƥŕéšéŕṽé šöûŕçé åûðîö ! !!]"
@@ -2906,7 +2910,7 @@ msgstr "[!! Šåṽé çöŕŕéçţîöńš ! !!]"
 msgid "Save motion track"
 msgstr "[!! Šåṽé ḿöţîöń ţŕåçķ ! !!]"
 
-#: gui/track_plan_controller.py:273
+#: gui/track_plan_controller.py:288
 msgid "Save plan..."
 msgstr "[!! Šåṽé ƥŀåń... ! !!]"
 
@@ -2930,7 +2934,7 @@ msgstr "[!! Šåṽé šûƥƥöŕţ ƀûńðŀé ! !!]"
 msgid "Save the current setup as a preset"
 msgstr "[!! Šåṽé ţħé çûŕŕéńţ šéţûƥ åš å ƥŕéšéţ ! ! !!]"
 
-#: gui/track_plan_controller.py:258
+#: gui/track_plan_controller.py:273
 msgid "Save track plan"
 msgstr "[!! Šåṽé ţŕåçķ ƥŀåń ! !!]"
 
@@ -3554,11 +3558,11 @@ msgstr "[!! Ţîḿîńĝ ! !!]"
 msgid "Total time {elapsed}, {count} item{suffix} processed"
 msgstr "[!! Ţöţåŀ ţîḿé {elapsed}, {count} îţéḿ{suffix} ƥŕöçéššéð ! ! ! ! !!]"
 
-#: gui/app.py:1623 gui/layout_build.py:2225 gui/track_plan_controller.py:260
+#: gui/app.py:1623 gui/layout_build.py:2225 gui/track_plan_controller.py:275
 msgid "Track plan"
 msgstr "[!! Ţŕåçķ ƥŀåń ! !!]"
 
-#: gui/track_plan_controller.py:267
+#: gui/track_plan_controller.py:282
 msgid "Track plan saved to {name}"
 msgstr "[!! Ţŕåçķ ƥŀåń šåṽéð ţö {name} ! ! !!]"
 
@@ -4050,7 +4054,7 @@ msgid_plural "{n} tracks found. Select the tracks to remove, or clear a track to
 msgstr[0] "[!! {n} ţŕåçķ ƒöûńð. Šéŀéçţ îţ ţö ŕéḿöṽé ţħé ţéẋţ, öŕ çŀéåŕ îţ ţö ķééƥ ţħé ţéẋţ ṽîšîƀŀé. ! ! ! ! ! ! ! !!]"
 msgstr[1] "[!! {n} ţŕåçķš ƒöûńð. Šéŀéçţ ţħé ţŕåçķš ţö ŕéḿöṽé, öŕ çŀéåŕ å ţŕåçķ ţö ķééƥ îţš ţéẋţ ṽîšîƀŀé. ! ! ! ! ! ! ! !!]"
 
-#: gui/track_plan_controller.py:314
+#: gui/track_plan_controller.py:329
 msgid "{n} track kept: its frames are excluded from cleanup"
 msgid_plural "{n} tracks kept: their frames are excluded from cleanup"
 msgstr[0] "[!! {n} ţŕåçķ ķéƥţ: îţš ƒŕåḿéš åŕé éẋçŀûðéð ƒŕöḿ çŀéåńûƥ ! ! ! ! !!]"

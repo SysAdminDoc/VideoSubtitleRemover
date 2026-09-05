@@ -224,6 +224,67 @@ def _thumbnail_b64(frame: np.ndarray, bbox: Sequence[int]) -> str:
     return base64.b64encode(payload.tobytes()).decode("ascii")
 
 
+# RM-361: every track was created with keep False, so a station logo present
+# for the whole runtime was queued for removal on exactly the same footing as
+# a caption that appears for two seconds. The plan already recorded the span
+# needed to tell them apart and never used it.
+#
+# "Substantially the whole runtime" is deliberately high: a caption can run
+# most of a short clip, and the cost of a false positive is a subtitle left
+# on screen, which is worse than the cost of a false negative here.
+PERSISTENT_COVERAGE_THRESHOLD = 0.9
+
+# Subtitles sit low. Chyrons and station logos do not. The band is generous
+# because burned-in captions are sometimes placed well above the lower edge.
+CAPTION_BAND_TOP_FRACTION = 0.62
+
+
+def classify_persistent_overlays(
+    tracks: List[dict],
+    *,
+    frame_count: int,
+    frame_height: int,
+    remove_subtitles: bool = True,
+    coverage_threshold: float = PERSISTENT_COVERAGE_THRESHOLD,
+    band_top_fraction: float = CAPTION_BAND_TOP_FRACTION,
+) -> List[dict]:
+    """Mark tracks that look like a persistent overlay rather than a caption.
+
+    A track qualifies when it covers substantially the whole runtime *and* its
+    box sits outside the caption band. Both conditions are recorded on the
+    track, so a reviewer can see what classified it rather than being handed a
+    verdict.
+
+    Under subtitle-removal intent a flagged track defaults to keep, which is
+    what stops a channel logo being erased by a run the user started to remove
+    captions. Under logo or watermark intent the default is untouched: there
+    the overlay is the target.
+    """
+    if frame_count <= 0 or frame_height <= 0:
+        return tracks
+    band_top = float(band_top_fraction) * float(frame_height)
+    for track in tracks:
+        start = int(track.get("start_frame", 0))
+        end = int(track.get("end_frame", start))
+        span = max(0, end - start + 1)
+        coverage = span / float(frame_count)
+        bbox = track.get("bbox") or [0, 0, 0, 0]
+        centre_y = (float(bbox[1]) + float(bbox[3])) / 2.0
+        in_caption_band = centre_y >= band_top
+        position = "lower" if in_caption_band else "upper"
+        persistent = coverage >= coverage_threshold and not in_caption_band
+        track["coverage"] = round(coverage, 4)
+        track["position"] = position
+        track["persistent_overlay"] = bool(persistent)
+        if persistent and remove_subtitles:
+            track["keep"] = True
+            track["keep_reason"] = (
+                f"present for {coverage:.0%} of the runtime and outside the "
+                "caption band, so it looks like a logo rather than a subtitle"
+            )
+    return tracks
+
+
 def scan_track_plan(
     video_path: str | Path,
     *,
@@ -255,6 +316,9 @@ def scan_track_plan(
         if not np.isfinite(fps) or fps <= 0:
             fps = 30.0
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        # Read before the finally releases the capture: the overlay
+        # classifier needs it and cap.get returns 0 on a released handle.
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         if frame_timing is not None and frame_timing.frame_count != total:
             logger.warning(
                 "Using ffprobe's %d-frame timing map instead of the decoder's "
@@ -324,6 +388,15 @@ def scan_track_plan(
             max(track["end_frame"] + stride - 1, track["end_frame"]),
             max(0, (total - 1) if total else track["end_frame"] + stride - 1),
         )
+    classify_persistent_overlays(
+        tracks,
+        frame_count=total,
+        frame_height=frame_height,
+        remove_subtitles=bool(
+            getattr(config, "remove_subtitles", True)
+            if config is not None else True
+        ),
+    )
     if thumbnails and tracks:
         # Second targeted pass: one approximate seek per track. Holding the
         # sampled frames through the scan instead would pin the whole video
