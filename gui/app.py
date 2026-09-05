@@ -1388,28 +1388,59 @@ class VideoSubtitleRemoverApp(
         label = tr("Manual region") if self.skip_detection_var.get() else tr("Automatic")
         self._command_region_var.set(label)
 
-    def _sync_command_profile(self, *_args):
-        """Show friendly profile names while preserving backend mode values."""
-        if not hasattr(self, "_command_profile_var"):
-            return
-        labels = {
+    def _command_profile_labels(self) -> dict:
+        return {
             "Auto": tr("Balanced"),
             "STTN": tr("Motion"),
             "LAMA": tr("Detail"),
             "ProPainter": tr("Temporal"),
         }
+
+    def _command_profile_suffix(self) -> str:
+        # RM-355: the list has to say which profiles cannot run before one is
+        # chosen. A readonly Combobox cannot grey a single entry, so the state
+        # rides in the label and is stripped back off on selection.
+        return tr(" (setup needed)")
+
+    def _sync_command_profile_values(self, *_args):
+        """Rebuild the command-bar profile list with each profile's state."""
+        combo = getattr(self, "_command_mode_combo", None)
+        if combo is None:
+            return
+        states = self.algorithm_availability()
+        suffix = self._command_profile_suffix()
+        values = []
+        for mode, label in self._command_profile_labels().items():
+            state = states.get(mode, {"available": True})
+            values.append(
+                label if state.get("available", True) else label + suffix)
+        try:
+            combo.configure(values=values)
+        except tk.TclError:
+            return
+        self._sync_command_profile()
+
+    def _sync_command_profile(self, *_args):
+        """Show friendly profile names while preserving backend mode values."""
+        if not hasattr(self, "_command_profile_var"):
+            return
+        labels = self._command_profile_labels()
         mode = self.mode_var.get()
-        self._command_profile_var.set(labels.get(mode, mode))
+        label = labels.get(mode, mode)
+        states = getattr(self, "_algo_availability", None) or {}
+        if not states.get(mode, {}).get("available", True):
+            label += self._command_profile_suffix()
+        self._command_profile_var.set(label)
 
     def _on_command_profile_changed(self, _event=None):
         """Translate the friendly command-bar profile back to its mode."""
-        values = {
-            tr("Balanced"): "Auto",
-            tr("Motion"): "STTN",
-            tr("Detail"): "LAMA",
-            tr("Temporal"): "ProPainter",
-        }
-        requested = values.get(self._command_profile_var.get(), "Auto")
+        chosen = self._command_profile_var.get()
+        suffix = self._command_profile_suffix()
+        if suffix and chosen.endswith(suffix):
+            chosen = chosen[:-len(suffix)]
+        values = {label: mode
+                  for mode, label in self._command_profile_labels().items()}
+        requested = values.get(chosen, "Auto")
         self._on_mode_picker_changed(requested)
 
     def _on_command_region_changed(self, _event=None):

@@ -13,7 +13,7 @@ import importlib.util
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from backend.dependency_caps import (
     collect_opencv_wheel_status,
@@ -908,6 +908,83 @@ def _lama_model_status(env: Mapping[str, str], providers: Mapping[str, Any]) -> 
             "next_action": "",
         },
     ]
+
+
+def inpaint_mode_availability(
+    env: Optional[Mapping[str, str]] = None,
+) -> Dict[str, dict]:
+    """Say which cleanup algorithms can actually run right now.
+
+    RM-355: the picker was built from the raw ``InpaintMode`` enum, so a stock
+    build offered LaMa with no weight file and MiGAN with no model at all, and
+    the user only found out after committing a job. The two gated modes are
+    the ones with a hard prerequisite:
+
+    * ``lama`` needs one of the three reviewed LaMa providers to be loadable.
+    * ``migan`` is only registered as a mode at all when ``VSR_MIGAN_ONNX``
+      names a file (``backend/inpainters_onnx.py:428``), so without it the
+      backend has no such mode to dispatch to.
+
+    ``sttn`` and ``auto`` are numpy and OpenCV built-ins, and ``propainter``'s
+    LaMa refinement is optional (``backend/inpainters/propainter.py:40-55``
+    sets it to None and reports the plain TBE backend name), so all three run
+    unconditionally.
+
+    Each entry carries ``available``, a short ``reason`` when it is not, the
+    ``next_action`` the user can take, and ``fetch``: the adapter name
+    ``backend.model_fetch`` can download to resolve it, or an empty string.
+    """
+    source = os.environ if env is None else env
+    providers = {
+        "onnxruntime": _onnxruntime_provider_status(),
+        "opencv": _opencv_runtime_status(),
+    }
+    lama_items = _lama_model_status(source, providers)
+    lama_ready = next(
+        (item for item in lama_items
+         if item.get("kind") == "inpaint"
+         and item.get("available")
+         and item.get("model_file")),
+        None,
+    )
+    lama_action = next(
+        (str(item.get("next_action") or "") for item in lama_items
+         if item.get("name") == "LaMa ONNX"),
+        "",
+    )
+
+    migan_path = str(source.get("VSR_MIGAN_ONNX", "") or "").strip()
+    migan_ready = bool(migan_path) and Path(migan_path).is_file()
+
+    return {
+        "sttn": {"available": True, "reason": "", "next_action": "",
+                 "fetch": ""},
+        "auto": {"available": True, "reason": "", "next_action": "",
+                 "fetch": ""},
+        "propainter": {"available": True, "reason": "", "next_action": "",
+                       "fetch": ""},
+        "lama": {
+            "available": bool(lama_ready),
+            "reason": "" if lama_ready else "no LaMa model is installed",
+            # RM-354 gave this a download, so lead with it. The manual path
+            # stays because an offline install still needs it.
+            "next_action": "" if lama_ready else (
+                "Download the reviewed LaMa model, or "
+                + (lama_action[0].lower() + lama_action[1:] if lama_action
+                   else "point VSR_LAMA_ONNX at one you already have.")
+            ),
+            "fetch": "" if lama_ready else "opencv-lama",
+        },
+        "migan": {
+            "available": migan_ready,
+            "reason": "" if migan_ready else "no MI-GAN model is installed",
+            "next_action": "" if migan_ready else (
+                "Set VSR_MIGAN_ONNX to a reviewed MI-GAN model to use this "
+                "algorithm."
+            ),
+            "fetch": "",
+        },
+    }
 
 
 def _summarize_backend_status(status: Mapping[str, Any]) -> dict:

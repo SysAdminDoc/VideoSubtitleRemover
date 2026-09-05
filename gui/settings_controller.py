@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Optional, Protocol, Tuple
 
@@ -28,6 +29,7 @@ from gui.config import (
     save_user_preset,
 )
 from gui.theme import Theme, f
+from gui.utils import dispatch_to_ui
 from gui.widgets import (
     ModernButton,
     ModernSlider,
@@ -644,9 +646,161 @@ class AdvancedSettingsControllerMixin:
             self._update_status(
                 tr("Save preset failed: {error}").format(error=exc), "error")
 
+    # RM-355: GUI mode values against the backend names the availability map
+    # is keyed by. The two enums are deliberately separate (see CLAUDE.md), so
+    # the mapping is written out rather than derived from a lowercase().
+    _ALGO_BACKEND_MODES = {
+        "Auto": "auto",
+        "STTN": "sttn",
+        "LAMA": "lama",
+        "ProPainter": "propainter",
+    }
+
+    @staticmethod
+    def _optimistic_algorithm_states() -> dict:
+        return {
+            mode: {"available": True, "reason": "", "next_action": "",
+                   "fetch": ""}
+            for mode in
+            AdvancedSettingsControllerMixin._ALGO_BACKEND_MODES
+        }
+
+    def algorithm_availability(self, refresh: bool = False) -> dict:
+        """Availability of each cleanup algorithm, keyed by GUI mode value.
+
+        Never probes on the calling thread. The probe asks ONNX Runtime and
+        OpenCV what they can load, which imports onnxruntime, so running it
+        from the UI thread would stall the first paint. Until the background
+        answer arrives every algorithm reads as available, which is the safe
+        direction to be wrong in: the run itself still fails closed.
+        """
+        if refresh or getattr(self, "_algo_availability", None) is None:
+            self._start_algorithm_availability_probe()
+        cached = getattr(self, "_algo_availability", None)
+        return cached if cached is not None else self._optimistic_algorithm_states()
+
+    def _start_algorithm_availability_probe(self):
+        existing = getattr(self, "_algo_availability_thread", None)
+        if existing is not None and existing.is_alive():
+            return
+
+        def _worker():
+            try:
+                from backend.model_downloads import inpaint_mode_availability
+                backend_states = inpaint_mode_availability()
+            except Exception:
+                logger.debug("algorithm availability probe failed",
+                             exc_info=True)
+                backend_states = {}
+            states = {}
+            for gui_mode, backend_mode in self._ALGO_BACKEND_MODES.items():
+                states[gui_mode] = backend_states.get(
+                    backend_mode,
+                    {"available": True, "reason": "", "next_action": "",
+                     "fetch": ""},
+                )
+            dispatch_to_ui(self.root, self._apply_algorithm_availability, states)
+
+        thread = threading.Thread(
+            target=_worker, name="vsr-algo-availability", daemon=True)
+        self._algo_availability_thread = thread
+        thread.start()
+
+    def _apply_algorithm_availability(self, states: dict):
+        self._algo_availability = states
+        self._refresh_algorithm_availability()
+
+    def _refresh_algorithm_availability(self, refresh: bool = False):
+        """Say which algorithms can run, where the algorithm is chosen.
+
+        RM-355: the picker and the command-bar profile list both offered
+        everything unconditionally, so a user picked LaMa, pressed Start and
+        only then learned there was no model. The hint row and the download
+        button live next to the choice instead.
+        """
+        states = self.algorithm_availability(refresh=refresh)
+
+        picker = getattr(self, "mode_picker", None)
+        if picker is not None and hasattr(picker, "set_option_enabled"):
+            for gui_mode, state in states.items():
+                picker.set_option_enabled(gui_mode, bool(state.get("available")))
+
+        sync = getattr(self, "_sync_command_profile_values", None)
+        if callable(sync):
+            sync()
+
+        selected = self.mode_var.get()
+        state = states.get(selected, {"available": True})
+        row = getattr(self, "algo_unavailable_row", None)
+        label = getattr(self, "algo_unavailable_label", None)
+        button = getattr(self, "algo_fetch_btn", None)
+        if row is None or label is None:
+            return
+        if state.get("available", True):
+            row.pack_forget()
+            set_accessible_subtree_visible(row, False)
+            return
+        label.config(text=str(state.get("next_action") or ""))
+        if button is not None:
+            if state.get("fetch"):
+                button.pack(anchor="w", pady=(Theme.S_XS, 0))
+            else:
+                button.pack_forget()
+        row.pack(anchor="w", fill="x", pady=(Theme.S_XS, 0))
+        set_accessible_subtree_visible(row, True)
+
+    def _download_missing_algorithm_model(self):
+        """Fetch the model the selected algorithm needs. RM-354 does the work."""
+        selected = self.mode_var.get()
+        state = self.algorithm_availability().get(selected, {})
+        adapter = str(state.get("fetch") or "")
+        if not adapter:
+            return
+        button = getattr(self, "algo_fetch_btn", None)
+        if button is not None:
+            button.set_enabled(False)
+        self._update_status(
+            tr("Downloading the {profile} model...").format(profile=selected))
+
+        def _worker():
+            from backend.model_fetch import fetch_weight
+            try:
+                result = fetch_weight(adapter)
+            except Exception as exc:  # noqa: BLE001 - reported below
+                logger.debug("model fetch failed", exc_info=True)
+                result = None
+                detail = str(exc)
+            else:
+                detail = result.detail
+            dispatch_to_ui(
+                self.root, self._apply_model_fetch_result,
+                selected, bool(result is not None and result.ok), detail,
+            )
+
+        threading.Thread(
+            target=_worker, name="vsr-model-fetch", daemon=True
+        ).start()
+
+    def _apply_model_fetch_result(self, profile: str, ok: bool, detail: str):
+        button = getattr(self, "algo_fetch_btn", None)
+        if button is not None:
+            button.set_enabled(True)
+        if ok:
+            self._update_status(
+                tr("The {profile} model is ready.").format(profile=profile),
+                "success")
+        else:
+            self._update_status(
+                tr("Could not download the {profile} model: {error}").format(
+                    profile=profile, error=detail),
+                "error")
+        self._algo_availability = None
+        self._refresh_algorithm_availability(refresh=True)
+
     def _update_mode_options(self):
         """Enable/disable mode-specific toggles based on selected algorithm."""
         mode = self.mode_var.get()
+        self._refresh_algorithm_availability()
 
         # A fixed region defines the mask before inpainting, so it is valid for
         # every cleanup profile rather than belonging to STTN.

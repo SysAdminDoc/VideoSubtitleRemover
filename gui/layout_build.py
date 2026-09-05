@@ -615,6 +615,25 @@ class LayoutBuildMixin:
                                   wraplength=320)
         Tooltip(self.mode_picker, self._get_algo_description())
 
+        # RM-355: an algorithm that cannot run has to say so, and say what to
+        # do about it, where the choice is made. This row stays hidden while
+        # everything the picker offers is usable.
+        self.algo_unavailable_row = tk.Frame(profile_panel, bg=Theme.BG_CARD)
+        self.algo_unavailable_label = tk.Label(
+            self.algo_unavailable_row, text="", font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_CARD, fg=Theme.TEXT_SECONDARY, justify="left",
+            anchor="w", wraplength=320,
+        )
+        self.algo_unavailable_label.pack(anchor="w", fill="x")
+        self.algo_fetch_btn = ModernButton(
+            self.algo_unavailable_row, text=tr("Download model"), width=150,
+            command=self._download_missing_algorithm_model,
+            style="secondary", size="sm",
+        )
+        Tooltip(self.algo_fetch_btn, tr(
+            "Download the reviewed model this algorithm needs. It is checked "
+            "against a known hash before it is used."))
+
         row2 = tk.Frame(profile_details, bg=Theme.BG_CARD)
         row2.pack(fill="x", padx=Theme.S_MD, pady=(0, Theme.S_SM))
 

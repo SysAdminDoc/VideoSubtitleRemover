@@ -1824,6 +1824,25 @@ class SegmentedPicker(tk.Frame):
     def get(self) -> str:
         return self.value
 
+    def set_option_enabled(self, val: str, enabled: bool):
+        """Enable or disable one segment. RM-355.
+
+        An option the product cannot run has to say so where the choice is
+        made, not after the job starts. A disabled segment already refuses
+        clicks and keyboard activation and reports "disabled" to a screen
+        reader, so this is the whole gate.
+        """
+        seg = self._segments.get(val)
+        if seg is not None:
+            seg.set_enabled(bool(enabled))
+
+    def option_enabled(self, val: str) -> bool:
+        seg = self._segments.get(val)
+        return bool(seg.enabled) if seg is not None else False
+
+    def option_values(self) -> List[str]:
+        return [val for val, _ in self.options]
+
 
 class _Segment(tk.Canvas):
     """Single button inside a SegmentedPicker."""
