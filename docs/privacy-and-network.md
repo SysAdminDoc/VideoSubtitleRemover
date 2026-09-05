@@ -13,7 +13,6 @@ enabled. The complete list is below.
 | Path | Trigger | Remote source | Local destination | Identity rule |
 |---|---|---|---|---|
 | PaddleOCR | PaddleOCR is selected and its assets are missing | URLs managed by the installed PaddleOCR package | PaddleOCR user cache | Package-managed. Pre-populate the cache for offline use. |
-| EasyOCR | EasyOCR is selected and its assets are missing | URLs managed by the installed EasyOCR package | EasyOCR user model cache | Package-managed. Pre-populate the cache for offline use. |
 | Surya | Surya is installed and `VSR_ALLOW_GPL=1` | Hugging Face repositories selected by Surya | Hugging Face user cache | Package-managed. Pre-populate the cache for offline use. |
 | Florence-2 | `VSR_VLM_OCR=florence2` and an approved remote source is configured | `huggingface.co/microsoft/Florence-2-base` | Hugging Face user cache | `VSR_FLORENCE2_REVISION` must be a full commit because repository code executes. |
 | Qwen2.5-VL | `VSR_VLM_OCR=qwen25vl` and an approved remote source is configured | `huggingface.co/Qwen/Qwen2.5-VL-2B-Instruct` | Hugging Face user cache | `VSR_QWEN25VL_REVISION` must be a pinned revision. |

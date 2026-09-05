@@ -60,13 +60,6 @@ _OPTIONAL_OUTBOUND_MODEL_PATHS = (
         "pinPolicy": "package-managed; use a pre-populated cache for offline work",
     },
     {
-        "name": "EasyOCR",
-        "trigger": "EasyOCR is selected and its assets are not cached",
-        "source": "EasyOCR package model URLs",
-        "cache": "EasyOCR user model cache",
-        "pinPolicy": "package-managed; use a pre-populated cache for offline work",
-    },
-    {
         "name": "Surya",
         "trigger": "Surya is installed and VSR_ALLOW_GPL=1",
         "source": "Surya package Hugging Face repositories",
@@ -291,10 +284,6 @@ def _hf_repo_cached(env: Mapping[str, str], repo: str) -> bool:
     return (home / ".cache" / "huggingface" / "hub" / escaped).exists()
 
 
-def _easyocr_cached(env: Mapping[str, str]) -> bool:
-    return _has_any_file(_home(env) / ".EasyOCR" / "model", suffixes=(".pth",))
-
-
 def _paddleocr_cached(env: Mapping[str, str]) -> bool:
     return _has_any_file(_home(env) / ".paddleocr", suffixes=(".pdparams", ".onnx"))
 
@@ -310,13 +299,6 @@ def _append_detection_hints(hints: list[ModelDownloadHint], env: Mapping[str, st
             cache_hint="%USERPROFILE%\\.paddleocr",
         ))
         return
-    if _module_available("easyocr") and not _easyocr_cached(env):
-        hints.append(ModelDownloadHint(
-            label="EasyOCR detection models",
-            size_estimate="~80-150 MB",
-            detail="First EasyOCR fallback may download detection and recognition weights.",
-            cache_hint="%USERPROFILE%\\.EasyOCR\\model",
-        ))
 
 
 def _append_vlm_hints(hints: list[ModelDownloadHint], env: Mapping[str, str]) -> None:
@@ -726,7 +708,7 @@ def _rapidocr_status() -> dict:
     ]
     if not installed:
         status = "not_installed"
-        next_action = "Install rapidocr for the fastest OCR path, or use PaddleOCR/EasyOCR/OpenCV fallback."
+        next_action = "Install rapidocr for the fastest OCR path, or use PaddleOCR or the OpenCV fallback."
     elif compatible:
         status = "ready"
         next_action = ""
@@ -908,6 +890,32 @@ def _lama_model_status(env: Mapping[str, str], providers: Mapping[str, Any]) -> 
             "next_action": "",
         },
     ]
+
+
+def format_download_progress(
+    filename: str,
+    read_bytes: int,
+    total_bytes: Optional[int],
+    elapsed_seconds: float,
+) -> str:
+    """One line describing a download in flight. RM-328.
+
+    Shared so the interface and the command line say the same thing. The
+    previous feedback for a multi-gigabyte first fetch was a single toast and
+    a queue row stuck at 2 percent, which reads as a hang.
+    """
+    read_mib = read_bytes / 1048576.0
+    elapsed = max(0.0, float(elapsed_seconds))
+    if total_bytes:
+        percent = int(read_bytes * 100 / total_bytes)
+        size = f"{read_mib:.1f} of {total_bytes / 1048576.0:.1f} MB ({percent}%)"
+    else:
+        size = f"{read_mib:.1f} MB"
+    if elapsed >= 1.0:
+        minutes, seconds = divmod(int(elapsed), 60)
+        clock = f"{minutes}:{seconds:02d}" if minutes else f"{seconds}s"
+        return f"{filename}: {size}, {clock} elapsed"
+    return f"{filename}: {size}"
 
 
 def inpaint_mode_availability(
@@ -1136,11 +1144,6 @@ def installed_backend_status(
             "PaddleOCR",
             "paddleocr",
             next_action="Install paddleocr for the secondary OCR path.",
-        ),
-        _module_status(
-            "EasyOCR",
-            "easyocr",
-            next_action="Install easyocr for the legacy OCR fallback.",
         ),
         {
             "name": "OpenCV fallback",
