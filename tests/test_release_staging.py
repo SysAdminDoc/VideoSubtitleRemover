@@ -480,6 +480,95 @@ class ReleaseVerificationTests(unittest.TestCase):
             self.assertFalse(report["valid"])
 
 
+class OversizedAssetSplitTests(unittest.TestCase):
+    """GitHub refuses a release asset at or above 2 GiB. RM-353.
+
+    The NVIDIA portable ZIP is past that and cannot be brought under it:
+    deflate level 9 buys 0.55 percent over level 6 on these DLLs, and the
+    payload cannot be trimmed because torch loads its whole CUDA set eagerly
+    at import. So the asset ships in parts, and the split needs a tested
+    inverse rather than a documented hope.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="vsr-split-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def test_a_file_under_the_limit_is_not_split(self):
+        asset = self.root / "small.zip"
+        asset.write_bytes(b"x" * 4096)
+        self.assertEqual(
+            release_staging.split_asset_for_upload(
+                asset, limit=8192, part_bytes=2048),
+            [],
+            "no parts means the caller uploads the file itself",
+        )
+        self.assertEqual(list(self.root.glob("*.001")), [])
+
+    def test_parts_rejoin_to_the_original_bytes(self):
+        import os
+
+        payload = os.urandom(9000)
+        asset = self.root / "big.zip"
+        asset.write_bytes(payload)
+
+        parts = release_staging.split_asset_for_upload(
+            asset, limit=4096, part_bytes=3000)
+        self.assertEqual([part.name for part in parts],
+                         ["big.zip.001", "big.zip.002", "big.zip.003"])
+        for part in parts[:-1]:
+            self.assertEqual(part.stat().st_size, 3000)
+        self.assertLessEqual(max(p.stat().st_size for p in parts), 3000)
+
+        rejoined = self.root / "rejoined.zip"
+        release_staging.rejoin_split_asset(parts[0], rejoined)
+        self.assertEqual(rejoined.read_bytes(), payload)
+
+    def test_every_part_is_under_the_limit(self):
+        asset = self.root / "big.zip"
+        asset.write_bytes(b"y" * 20000)
+        parts = release_staging.split_asset_for_upload(
+            asset, limit=8192, part_bytes=6000)
+        self.assertTrue(parts)
+        for part in parts:
+            with self.subTest(part=part.name):
+                self.assertLess(
+                    part.stat().st_size, 8192,
+                    "a part at or over the limit defeats the whole point",
+                )
+
+    def test_a_rerun_does_not_leave_parts_from_a_longer_previous_split(self):
+        asset = self.root / "big.zip"
+        asset.write_bytes(b"z" * 20000)
+        release_staging.split_asset_for_upload(
+            asset, limit=8192, part_bytes=2048)
+        first = sorted(p.name for p in self.root.glob("big.zip.[0-9][0-9][0-9]"))
+        self.assertGreater(len(first), 3)
+
+        release_staging.split_asset_for_upload(
+            asset, limit=8192, part_bytes=7000)
+        second = sorted(p.name for p in self.root.glob("big.zip.[0-9][0-9][0-9]"))
+        self.assertLess(len(second), len(first))
+        rejoined = self.root / "rejoined.zip"
+        release_staging.rejoin_split_asset(self.root / "big.zip.001", rejoined)
+        self.assertEqual(
+            rejoined.read_bytes(), asset.read_bytes(),
+            "stale parts from a previous split would corrupt the rejoin",
+        )
+
+    def test_the_default_limit_is_the_github_ceiling(self):
+        self.assertEqual(release_staging.GITHUB_ASSET_LIMIT_BYTES, 2 * 1024 ** 3)
+        self.assertLess(
+            release_staging.SPLIT_PART_BYTES,
+            release_staging.GITHUB_ASSET_LIMIT_BYTES,
+        )
+
+    def test_a_missing_asset_is_reported_not_ignored(self):
+        with self.assertRaises(release_staging.ReleaseStagingError):
+            release_staging.split_asset_for_upload(self.root / "absent.zip")
+
+
 class PublicationGuidanceTests(unittest.TestCase):
     def test_guidance_is_draft_immutable_and_explicitly_unsigned(self):
         lines = "\n".join(release_staging.publication_guidance("1.2.3"))

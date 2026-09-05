@@ -6,6 +6,10 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [3.41.0] - 2026-09-05
 
+### Changed
+
+- The NVIDIA download now arrives in two parts. Its portable ZIP is 2.12 GiB and GitHub refuses any single release asset at or above 2 GiB, so it is uploaded as `.zip.001` and `.zip.002` and joined with one `copy /b` before extracting. The checksum in that lane's `SHA256SUMS.txt` still describes the joined file, so verifying it after the join proves the whole download. Compression could not close the gap (deflate level 9 buys half a percent on these libraries) and the payload could not be trimmed, because PyTorch loads its entire CUDA library set at import.
+
 ### Security
 
 - Every reviewed dependency profile moves to Torch 2.14.0 and torchvision 0.29.0. This closes CVE-2026-65918, an out-of-bounds heap read in torchvision's GIF decoder that affects everything through 0.28.0 and that the previous profile note recorded as unavoidable because no fixed release existed at the time. Torch 2.14.0 also validates sparse-tensor invariants when loading with `weights_only=True`, which this product reaches whenever the PyTorch LaMa path loads a third-party checkpoint. Verified on the build machine's RTX 4070 SUPER: both profiles resolve, and the CUDA execution provider still activates.

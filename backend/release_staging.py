@@ -250,6 +250,76 @@ def build_portable_zip(dist_dir: str | Path, target: str | Path) -> Path:
     return destination
 
 
+# GitHub refuses a single release asset at or above 2 GiB. The NVIDIA lane's
+# portable ZIP is past it (2.119 GiB at 3.41.0) and cannot be compressed
+# under: deflate level 9 buys 0.55 percent over level 6 on these DLLs, and the
+# payload cannot be trimmed because torch loads its whole CUDA set eagerly at
+# import. So the asset is uploaded in parts and rejoined by the user.
+GITHUB_ASSET_LIMIT_BYTES = 2 * 1024 ** 3
+SPLIT_PART_BYTES = 1536 * 1024 ** 2
+
+
+def split_asset_for_upload(
+    path: str | Path,
+    *,
+    limit: int = GITHUB_ASSET_LIMIT_BYTES,
+    part_bytes: int = SPLIT_PART_BYTES,
+) -> list[Path]:
+    """Split one oversized asset into ``.001``, ``.002`` upload parts.
+
+    Returns an empty list when the file is already small enough, so a caller
+    can treat "no parts" as "upload the file itself". Concatenating the parts
+    in name order reproduces the original byte for byte, which is what the
+    whole-file digest in ``SHA256SUMS.txt`` still refers to.
+    """
+    source = Path(path)
+    if not source.is_file():
+        raise ReleaseStagingError(f"Asset to split is missing: {source}")
+    size = source.stat().st_size
+    if size < limit:
+        return []
+    if part_bytes <= 0 or part_bytes >= limit:
+        raise ReleaseStagingError(
+            f"Split part size {part_bytes} must be below the {limit} limit"
+        )
+
+    for stale in sorted(source.parent.glob(f"{source.name}.[0-9][0-9][0-9]")):
+        stale.unlink()
+
+    parts: list[Path] = []
+    with source.open("rb") as handle:
+        index = 1
+        while True:
+            chunk = handle.read(part_bytes)
+            if not chunk:
+                break
+            part = source.with_name(f"{source.name}.{index:03d}")
+            part.write_bytes(chunk)
+            parts.append(part)
+            index += 1
+    return parts
+
+
+def rejoin_split_asset(first_part: str | Path, target: str | Path) -> Path:
+    """Concatenate ``.001``, ``.002`` parts back into one file.
+
+    The product does not need this at runtime; it exists so the split has a
+    tested inverse rather than a documented hope.
+    """
+    start = Path(first_part)
+    base = start.with_suffix("")
+    parts = sorted(base.parent.glob(f"{base.name}.[0-9][0-9][0-9]"))
+    if not parts:
+        raise ReleaseStagingError(f"No split parts found beside {start}")
+    destination = Path(target)
+    with destination.open("wb") as out:
+        for part in parts:
+            with part.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    out.write(chunk)
+    return destination
+
+
 def write_checksums(stage: Path, names: Sequence[str]) -> dict[str, str]:
     """Hash exactly ``names`` and write the checksum manifest beside them."""
     digests = {name: _sha256_file(stage / name) for name in sorted(names)}
@@ -508,7 +578,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Stage and verify one versioned release artifact set."
     )
     parser.add_argument(
-        "command", choices=("stage", "verify", "guidance", "check-lanes"))
+        "command",
+        choices=("stage", "verify", "guidance", "check-lanes",
+                 "split-oversized"))
     parser.add_argument("--version", default="")
     parser.add_argument(
         "--profile",
@@ -546,6 +618,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "guidance":
         for line in publication_guidance(version):
             print(line)
+        return 0
+
+    if args.command == "split-oversized":
+        root = Path(args.release_root) / version
+        if not root.is_dir():
+            print(f"No staged release at {root}")
+            return 1
+        split_any = False
+        for lane in sorted(p for p in root.iterdir() if p.is_dir()):
+            for asset in sorted(lane.iterdir()):
+                if not asset.is_file() or asset.suffix == ".txt":
+                    continue
+                parts = split_asset_for_upload(asset)
+                if not parts:
+                    continue
+                split_any = True
+                print(f"{asset.name} exceeds the GitHub asset limit; "
+                      f"split into {len(parts)} parts:")
+                for part in parts:
+                    print(f"  {part.name}  {part.stat().st_size} bytes")
+        if not split_any:
+            print("No staged asset is over the GitHub limit.")
         return 0
 
     if args.command == "check-lanes":

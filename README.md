@@ -145,10 +145,23 @@ itself reports that it activates that lane's execution provider.
 | Download | Runs inference on | Ships as | Download | Installed | Pick this if |
 |----------|-------------------|----------|----------|-----------|--------------|
 | `VideoSubtitleRemoverPro-X.Y.Z-cpu-*` | `CPUExecutionProvider` | Installer and portable ZIP | 99 MB installer, 128 MB ZIP | 288 MB | You have no NVIDIA card, or you want the smaller download |
-| `VideoSubtitleRemoverPro-X.Y.Z-nvidia-*` | `CUDAExecutionProvider` | Portable ZIP only | 2.1 GB ZIP | 3.1 GB | You have an NVIDIA card with a current driver |
+| `VideoSubtitleRemoverPro-X.Y.Z-nvidia-*` | `CUDAExecutionProvider` | Portable ZIP, uploaded in two parts | 2.1 GB total | 3.2 GB | You have an NVIDIA card with a current driver |
 
 The portable ZIP extracts anywhere and runs `VideoSubtitleRemoverPro.exe` (or
 `Run_VSR_Pro.bat`) with no installer involved.
+
+The NVIDIA ZIP arrives as `....zip.001` and `....zip.002` because GitHub
+refuses a single release asset at or above 2 GiB and this one is 2.12 GiB.
+Download both into the same folder and join them before extracting:
+
+```powershell
+cmd /c copy /b VideoSubtitleRemoverPro-X.Y.Z-nvidia-Windows-x64.zip.001+VideoSubtitleRemoverPro-X.Y.Z-nvidia-Windows-x64.zip.002 VideoSubtitleRemoverPro-X.Y.Z-nvidia-Windows-x64.zip
+Get-FileHash VideoSubtitleRemoverPro-X.Y.Z-nvidia-Windows-x64.zip -Algorithm SHA256
+```
+
+The hash that comes back is the one listed for the `.zip` in that lane's
+`SHA256SUMS.txt`. The parts themselves are not listed there; the joined
+file is what the checksum describes.
 
 The NVIDIA lane has no installer because it cannot have one. Its bundle
 carries the PyTorch CUDA 13.0 runtime that the CUDA execution provider loads
