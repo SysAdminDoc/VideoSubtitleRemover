@@ -239,6 +239,68 @@ class FrozenManifestStatusTests(unittest.TestCase):
         self.assertTrue(status["dpiAware"])
 
 
+class ManifestGateTests(unittest.TestCase):
+    """Recording the value is not asserting it.
+
+    frozen_manifest_status writes longPathAware into the evidence, but only
+    _validation_errors can fail a build. An earlier version of this work
+    recorded the flag and gated on nothing, so a spec edit that silently
+    stopped embedding the manifest still produced a green release.
+    """
+
+    def test_a_build_without_the_declaration_is_rejected(self):
+        from backend.release_verification import _validation_errors
+
+        errors = list(_validation_errors({
+            "frozenManifest": {
+                "available": True, "readable": True, "longPathAware": False,
+            },
+        }))
+        self.assertTrue(
+            any("longPathAware" in error for error in errors),
+            f"nothing failed the build; errors were {errors}",
+        )
+
+    def test_a_build_with_the_declaration_raises_no_manifest_error(self):
+        from backend.release_verification import _validation_errors
+
+        errors = list(_validation_errors({
+            "frozenManifest": {
+                "available": True, "readable": True, "longPathAware": True,
+            },
+        }))
+        self.assertEqual(
+            [error for error in errors if "longPathAware" in error], [])
+
+    def test_an_unreadable_manifest_is_rejected(self):
+        from backend.release_verification import _validation_errors
+
+        errors = list(_validation_errors({
+            "frozenManifest": {"available": True, "readable": False},
+        }))
+        self.assertTrue(any("readable" in error for error in errors))
+
+    def test_missing_evidence_is_rejected_rather_than_assumed_fine(self):
+        from backend.release_verification import _validation_errors
+
+        errors = list(_validation_errors({}))
+        self.assertTrue(
+            any("manifest evidence" in error for error in errors),
+            "absent evidence must not read as a pass",
+        )
+
+    def test_no_frozen_executable_does_not_double_report(self):
+        from backend.release_verification import _validation_errors
+
+        errors = list(_validation_errors({
+            "frozenManifest": {"available": False},
+        }))
+        self.assertEqual(
+            [error for error in errors if "manifest" in error.lower()], [],
+            "the launcher checks already report a missing executable",
+        )
+
+
 class AppUserModelIdTests(unittest.TestCase):
     def test_the_identity_is_the_product_not_the_interpreter(self):
         self.assertEqual(

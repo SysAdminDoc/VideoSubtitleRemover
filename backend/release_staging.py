@@ -282,6 +282,14 @@ def split_asset_for_upload(
         raise ReleaseStagingError(
             f"Split part size {part_bytes} must be below the {limit} limit"
         )
+    # The suffix and the rejoin glob are both three digits, so a 1000th part
+    # would be written and then silently dropped when the file is put back
+    # together. Refuse instead of producing an archive that is quietly short.
+    if -(-size // part_bytes) > 999:
+        raise ReleaseStagingError(
+            f"{source.name} needs {-(-size // part_bytes)} parts at "
+            f"{part_bytes} bytes each; the .NNN suffix holds 999"
+        )
 
     for stale in sorted(source.parent.glob(f"{source.name}.[0-9][0-9][0-9]")):
         stale.unlink()
@@ -561,7 +569,16 @@ def publication_guidance(version: str) -> list[str]:
          "Every published lane ships both an installer and a portable ZIP."),
         f"gh release create v{version} --draft --title \"v{version}\" "
         "--notes-file <changelog excerpt>",
-        f"gh release upload v{version} build/release/{version}/*/* --clobber",
+        # RM-353: GitHub refuses an asset at or above 2 GiB, and the NVIDIA
+        # ZIP is past it. Split first, then upload the parts INSTEAD of the
+        # oversized file: a glob over the lane directory would offer both and
+        # the upload would be refused.
+        f"python -m backend.release_staging split-oversized --version {version}",
+        f"Upload every asset from build/release/{version}/<lane>/ except any "
+        "file a split replaced; upload its .001/.002 parts instead. Evidence "
+        "files repeat across lanes, so prefix each with its lane name to keep "
+        "asset names unique.",
+        f"gh release upload v{version} <the assets named above> --clobber",
         "Review the draft, then publish it. Enable immutable releases on the "
         "repository so a published tag's assets can never be replaced.",
         "Artifacts are intentionally UNSIGNED. Do not acquire or apply a "

@@ -466,8 +466,8 @@ that run.
 ### Detection Engines
 
 The app automatically selects the best available engine. Advanced > Detection
-can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, Surya (GPL opt-in)
-(frozen; last release 2024-09-24), any of the four vision-language tiers, or
+can pin RapidOCR, OpenCV 5 DNN, PaddleOCR, Surya (GPL opt-in), any of
+the four vision-language tiers, or
 the dependency-free OpenCV detector for comparison and reproducible runs.
 If a pinned engine can't load or execute, processing stops with a classified
 reason and repair instructions. Only Auto can continue with another OCR

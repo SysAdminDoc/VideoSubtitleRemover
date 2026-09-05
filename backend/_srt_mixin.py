@@ -10,7 +10,6 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple
 
-import cv2
 import numpy as np
 
 from backend.detection_geometry import (
@@ -442,14 +441,6 @@ class _SrtMixin:
                     return " ".join(line[1][0] for line in results[0] if line and line[1]).strip()
             except Exception:
                 logger.warning("PaddleOCR SRT extraction failed", exc_info=True)
-        # EasyOCR: readtext yields (bbox, text, conf)
-        if self.detector._easyocr_reader is not None:
-            try:
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                rows = self.detector._easyocr_reader.readtext(frame_rgb)
-                return " ".join(r[1] for r in rows if len(r) >= 2 and r[1]).strip()
-            except Exception:
-                logger.warning("EasyOCR SRT extraction failed", exc_info=True)
         return ""
 
     def _write_srt(

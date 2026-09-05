@@ -2053,6 +2053,41 @@ def build_release_evidence(
     return evidence, hidden_payload, sbom, advisories
 
 
+def _frozen_manifest_problems(
+    evidence: Mapping[str, object],
+) -> Iterable[str]:
+    """Fail a build whose executable did not get the manifest. RM-346.
+
+    Recording the value is not asserting it. PyInstaller replaces its default
+    manifest with the spec's, and a spec edit that silently stopped taking
+    effect looks exactly like one that worked until a user hits a path past
+    260 characters. This is the gate that tells the difference.
+    """
+    manifest = evidence.get("frozenManifest")
+    if not isinstance(manifest, Mapping):
+        yield (
+            "The frozen build carries no manifest evidence, so nothing "
+            "checked whether it declares long-path awareness"
+        )
+        return
+    if not manifest.get("available"):
+        # No frozen executable in this run: the launcher checks above already
+        # report that, and repeating it here would double-count.
+        return
+    if not manifest.get("readable"):
+        yield (
+            "The frozen executable has no readable application manifest, so "
+            "it cannot be declaring longPathAware"
+        )
+        return
+    if not manifest.get("longPathAware"):
+        yield (
+            "The frozen executable's manifest does not declare longPathAware, "
+            "so the installed build cannot open media paths past 260 "
+            "characters that a source run can"
+        )
+
+
 def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     for item in evidence.get("documents", []):
         if isinstance(item, Mapping) and not item.get("bundled"):
@@ -2073,6 +2108,7 @@ def _validation_errors(evidence: Mapping[str, object]) -> Iterable[str]:
     if isinstance(smoke, Mapping) and smoke.get("ran") and not smoke.get("passed"):
         yield "Smoke launch failed"
     yield from _frozen_provider_problems(evidence)
+    yield from _frozen_manifest_problems(evidence)
     gui_accessibility = evidence.get("releaseTools", {}).get(
         "guiAccessibility", {}
     )

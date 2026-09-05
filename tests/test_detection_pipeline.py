@@ -121,6 +121,58 @@ class RetiredEngineTests(unittest.TestCase):
         )
 
 
+class SrtTextExtractionAfterRetirementTests(unittest.TestCase):
+    """RM-332 removed the reader; its consumers must not still reach for it.
+
+    _read_text_for_boxes checked _rapid_model, then _paddle_model, then
+    _easyocr_reader. The first two are None for Surya, the OpenCV fallback and
+    the VLM engines, so those engines fell through to an attribute that no
+    longer exists. The caller wraps this in a bare except, so the job kept
+    running while every affected frame logged a failure instead of quietly
+    returning no text.
+    """
+
+    def test_a_detector_without_a_reader_returns_no_text_rather_than_raising(self):
+        from backend._srt_mixin import _SrtMixin
+
+        class _Detector:
+            _rapid_model = None
+            _paddle_model = None
+            _surya_det = None
+            _surya_processor = None
+
+        class _Host(_SrtMixin):
+            def __init__(self):
+                self.detector = _Detector()
+
+        import numpy as np
+
+        frame = np.zeros((32, 64, 3), np.uint8)
+        host = _Host()
+        try:
+            text = host._read_text_for_boxes(frame, [(0, 0, 10, 10)])
+        except AttributeError as exc:  # pragma: no cover - the defect
+            self.fail(f"SRT extraction reached a removed attribute: {exc}")
+        self.assertEqual(text, "")
+
+    def test_no_module_still_names_the_removed_reader(self):
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[1]
+        offenders = []
+        for path in list((root / "backend").rglob("*.py")) + list(
+                (root / "gui").rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            if "_easyocr_reader" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(root)))
+        self.assertEqual(
+            offenders, [],
+            "an attribute nothing sets is an AttributeError waiting for the "
+            "engine that reaches it",
+        )
+
+
 class DetectionCascadeTests(unittest.TestCase):
     def _vlm_disabled_module(self):
         module = types.ModuleType("backend.ocr_vlm")

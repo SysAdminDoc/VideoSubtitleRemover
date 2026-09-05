@@ -361,7 +361,6 @@ def _deterministic_remover(config: processor.ProcessingConfig):
     remover.detector._paddle_model = None
     remover.detector._surya_det = None
     remover.detector._surya_processor = None
-    remover.detector._easyocr_reader = None
     remover.inpainter = processor.STTNInpainter("cpu", config)
     remover.on_progress = None
     remover.on_preview_frame = None

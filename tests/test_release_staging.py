@@ -564,9 +564,63 @@ class OversizedAssetSplitTests(unittest.TestCase):
             release_staging.GITHUB_ASSET_LIMIT_BYTES,
         )
 
+    def test_more_than_999_parts_is_refused_rather_than_truncated(self):
+        """The suffix and the rejoin glob are both three digits.
+
+        A 1000th part would be written and then silently dropped when the
+        file was put back together, producing an archive that is quietly
+        short rather than an error.
+        """
+        asset = self.root / "many.zip"
+        asset.write_bytes(b"x" * 1005)
+        with self.assertRaises(release_staging.ReleaseStagingError) as caught:
+            release_staging.split_asset_for_upload(
+                asset, limit=8, part_bytes=1)
+        self.assertIn("999", str(caught.exception))
+        self.assertEqual(list(self.root.glob("many.zip.*")), [])
+
+    def test_exactly_999_parts_is_allowed(self):
+        asset = self.root / "edge.zip"
+        asset.write_bytes(b"y" * 999)
+        parts = release_staging.split_asset_for_upload(
+            asset, limit=8, part_bytes=1)
+        self.assertEqual(len(parts), 999)
+        rejoined = self.root / "edge-rejoined.zip"
+        release_staging.rejoin_split_asset(parts[0], rejoined)
+        self.assertEqual(rejoined.read_bytes(), asset.read_bytes())
+
     def test_a_missing_asset_is_reported_not_ignored(self):
         with self.assertRaises(release_staging.ReleaseStagingError):
             release_staging.split_asset_for_upload(self.root / "absent.zip")
+
+
+class SplitAwarePublicationGuidanceTests(unittest.TestCase):
+    """The printed publish steps have to match the split feature.
+
+    The guidance used to say to glob the whole lane directory. After a split
+    that directory holds both the oversized original and its parts, so
+    following the instructions would offer GitHub a file it refuses.
+    """
+
+    def test_the_guidance_names_the_split_step(self):
+        lines = list(release_staging.publication_guidance("9.9.9"))
+        joined = chr(10).join(lines)
+        self.assertIn("split-oversized", joined)
+
+    def test_the_split_step_comes_before_the_upload(self):
+        lines = list(release_staging.publication_guidance("9.9.9"))
+        split = next(i for i, line in enumerate(lines)
+                     if "split-oversized" in line)
+        upload = next(i for i, line in enumerate(lines)
+                      if "gh release upload" in line)
+        self.assertLess(split, upload)
+
+    def test_the_guidance_no_longer_globs_the_lane_directory(self):
+        joined = chr(10).join(release_staging.publication_guidance("9.9.9"))
+        self.assertNotIn(
+            "build/release/9.9.9/*/*", joined,
+            "a glob would offer the oversized original alongside its parts",
+        )
 
 
 class PublicationGuidanceTests(unittest.TestCase):

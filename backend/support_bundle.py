@@ -27,7 +27,6 @@ from backend.ffmpeg_profiles import (
     ffmpeg_profile_entries,
     probe_ffmpeg_security,
 )
-from backend.import_safety import module_can_import
 from backend.model_downloads import (
     installed_backend_status,
     optional_outbound_model_paths,
@@ -451,14 +450,6 @@ def run_self_test() -> dict:
         except ImportError:
             return False, "paddleocr not installed"
 
-    def _check_easyocr():
-        if module_can_import(
-            "easyocr",
-            failure_context="EasyOCR self-test unavailable",
-        ):
-            return True, "easyocr available"
-        return False, "easyocr not installed or failed its import probe"
-
     def _check_lama_onnx():
         try:
             import onnxruntime
@@ -515,7 +506,6 @@ def run_self_test() -> dict:
 
     _probe("ocr", "RapidOCR", _check_rapidocr)
     _probe("ocr", "PaddleOCR", _check_paddleocr)
-    _probe("ocr", "EasyOCR", _check_easyocr)
     _probe("inpaint", "LaMa-ONNX", _check_lama_onnx)
     _probe("inpaint", "LaMa-CV2DNN", _check_lama_cv2dnn)
     _probe("gpu", "CUDA", _check_cuda)

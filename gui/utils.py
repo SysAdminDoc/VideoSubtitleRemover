@@ -379,14 +379,6 @@ def detect_ai_engines() -> dict:
             engines["detection"].append(
                 "Surya (GPL -- set VSR_ALLOW_GPL=1)"
             )
-    if module_can_import(
-        "easyocr",
-        logger=logger,
-        failure_context="EasyOCR engine probe skipped",
-    ):
-        easyocr_release = FROZEN_OPTIONAL_DEPENDENCIES["easyocr"]["last_release"]
-        engines["detection"].append(
-            f"EasyOCR (frozen, last release {easyocr_release})")
     if not engines["detection"]:
         engines["detection"].append("OpenCV fallback")
     engines["inpainting"].append("Temporal BG (TBE)")
