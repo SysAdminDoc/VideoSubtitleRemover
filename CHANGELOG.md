@@ -4,6 +4,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+## [3.41.0] - 2026-09-05
+
 ### Security
 
 - Every reviewed dependency profile moves to Torch 2.14.0 and torchvision 0.29.0. This closes CVE-2026-65918, an out-of-bounds heap read in torchvision's GIF decoder that affects everything through 0.28.0 and that the previous profile note recorded as unavoidable because no fixed release existed at the time. Torch 2.14.0 also validates sparse-tensor invariants when loading with `weights_only=True`, which this product reaches whenever the PyTorch LaMa path loads a third-party checkpoint. Verified on the build machine's RTX 4070 SUPER: both profiles resolve, and the CUDA execution provider still activates.
