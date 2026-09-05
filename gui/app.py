@@ -898,7 +898,11 @@ class VideoSubtitleRemoverApp(
             gpu_lane_notice = cpu_build_on_nvidia_hardware(
                 requested_device="cuda:0" if wants_gpu else "cpu",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - see below
+            # Shells nvidia-smi and reads the build stamp. Both can fail in
+            # ways this code cannot enumerate, and neither is worth failing
+            # startup for: the notice is advisory and its absence costs the
+            # user nothing they had before.
             logger.warning("CPU-build GPU notice probe failed", exc_info=True)
             gpu_lane_notice = None
 

@@ -2220,9 +2220,15 @@ def _run_processing(
     # args.gpu is what the user asked for. config.device is already past the
     # fallback, so "cpu" there cannot tell a deliberate CPU run from one that
     # dropped to the CPU, which is the whole case this notice exists for.
-    gpu_notice = cpu_build_on_nvidia_hardware(
-        requested_device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
-    )
+    try:
+        gpu_notice = cpu_build_on_nvidia_hardware(
+            requested_device=f"cuda:{args.gpu}" if args.gpu >= 0 else "cpu",
+        )
+    except Exception:  # noqa: BLE001 - an advisory note must not end the run
+        # This shells nvidia-smi and reads the build stamp. Neither is worth
+        # aborting a render for, and the GUI already guards the same call.
+        logger.debug("CPU-build GPU notice probe failed", exc_info=True)
+        gpu_notice = None
     if gpu_notice:
         print(
             f"[note] {gpu_notice['adapter']} is present but this build runs "

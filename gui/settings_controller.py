@@ -688,9 +688,14 @@ class AdvancedSettingsControllerMixin:
             try:
                 from backend.model_downloads import inpaint_mode_availability
                 backend_states = inpaint_mode_availability()
-            except Exception:
-                logger.debug("algorithm availability probe failed",
-                             exc_info=True)
+            except Exception:  # noqa: BLE001 - see below
+                # This asks ONNX Runtime and OpenCV what they can load, so the
+                # failure surface is whatever those imports raise on a broken
+                # install. The answer is advisory: an empty map leaves every
+                # algorithm enabled and the run still fails closed. Logged at
+                # warning so a machine that never gets an answer says so.
+                logger.warning("algorithm availability probe failed",
+                               exc_info=True)
                 backend_states = {}
             states = {}
             for gui_mode, backend_mode in self._ALGO_BACKEND_MODES.items():
@@ -756,10 +761,18 @@ class AdvancedSettingsControllerMixin:
         removes its partial file, so there is no way to leave a half-written
         model behind short of killing the process.
         """
-        cancel_event = getattr(self, "_model_fetch_cancel", None)
-        if cancel_event is not None and not cancel_event.is_set():
-            cancel_event.set()
-            self._update_status(tr("Cancelling the download..."))
+        # A fetch is in flight until its worker reports back, which is later
+        # than the moment its cancel flag is set: the worker only checks that
+        # flag once per megabyte read. Deciding from is_set() alone let a
+        # third click start a second worker writing the same .part file.
+        if getattr(self, "_model_fetch_cancel", None) is not None:
+            cancel_event = self._model_fetch_cancel
+            if not cancel_event.is_set():
+                cancel_event.set()
+                self._update_status(tr("Cancelling the download..."))
+                button = getattr(self, "algo_fetch_btn", None)
+                if button is not None:
+                    button.set_enabled(False)
             return
 
         selected = self.mode_var.get()

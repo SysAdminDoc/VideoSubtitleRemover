@@ -264,6 +264,38 @@ class SupportBundleReachTests(unittest.TestCase):
         self.assertIn("decode_error", blob)
         self.assertNotIn("clip.mkv", blob)
 
+    def test_a_path_inside_the_failure_message_is_scrubbed(self):
+        """The message is usually str(exc), and raises interpolate paths.
+
+        The bundle's default rule deliberately keeps leaf filenames in log
+        lines. This block promises no filename, so it needs the strict rule,
+        and an earlier version of this test could not tell the difference
+        because it only ever set message to a canonical string with no path
+        in it.
+        """
+        from gui.config import ProcessingStatus
+
+        app = self._make_app()
+        item = self._gui_config.QueueItem(
+            id="job-9", file_path="x.mkv", output_path="y.mp4",
+            config=self._gui_config.ProcessingConfig(),
+        )
+        item.status = ProcessingStatus.ERROR
+        item.message = (
+            "Failed to write output image: "
+            r"C:\Users\alice\Videos\family_vacation_private.mp4"
+        )
+        item.failure_reason = "write_error"
+        app.queue = [item]
+
+        message = app._failed_queue_item_facts()[0]["message"]
+        self.assertNotIn("family_vacation_private", message)
+        self.assertNotIn("alice", message)
+        self.assertIn(
+            "Failed to write output image", message,
+            "scrubbing must not throw the diagnosis away with the path",
+        )
+
     def test_items_that_did_not_fail_are_not_reported(self):
         from gui.config import ProcessingStatus
 

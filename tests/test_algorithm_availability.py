@@ -285,6 +285,51 @@ class AlgorithmPickerAvailabilityTests(unittest.TestCase):
             "MiGAN is a CLI-only registry mode and must not reach this picker",
         )
 
+    def test_a_third_click_cannot_start_a_second_download(self):
+        """Cancel is not instant, and the button must not re-arm before it is.
+
+        The worker only checks its cancel flag once per megabyte read, so
+        there is a real window after the flag is set and before the worker
+        reports back. Deciding from is_set() alone let a click inside that
+        window start a second worker writing the same .part file.
+        """
+        import threading
+
+        app = self._make_app()
+        self._apply(app, available_lama=False)
+        app.mode_var.set("LAMA")
+        app._refresh_algorithm_availability()
+
+        started = []
+        real_thread = threading.Thread
+
+        def _capture(*args, **kwargs):
+            started.append(kwargs.get("name") or "")
+            thread = real_thread(target=lambda: None, daemon=True)
+            return thread
+
+        with mock.patch.object(threading, "Thread", _capture):
+            app._download_missing_algorithm_model()   # starts one
+            app._download_missing_algorithm_model()   # cancels it
+            app._download_missing_algorithm_model()   # must do nothing
+            app._download_missing_algorithm_model()   # still nothing
+
+        self.assertEqual(
+            [name for name in started if name == "vsr-model-fetch"],
+            ["vsr-model-fetch"],
+            "only one fetch worker may exist at a time",
+        )
+        self.assertTrue(
+            app._model_fetch_cancel.is_set(),
+            "the in-flight fetch is still the cancelled one",
+        )
+
+        app._apply_model_fetch_result("LAMA", False, "cancelled")
+        self.assertIsNone(
+            app._model_fetch_cancel,
+            "the worker reporting back is what clears the in-flight fetch",
+        )
+
     def test_availability_is_not_probed_on_the_ui_thread(self):
         app = self._make_app()
         app._algo_availability = None

@@ -262,6 +262,7 @@ def cpu_build_on_nvidia_hardware(
     env: Optional[Mapping[str, str]] = None,
     gpu_probe: Optional[Callable[[], dict]] = None,
     cuda_probe: Callable[[int], bool] = _cuda_available,
+    directml_probe: Callable[[], bool] = _directml_available,
     profile_probe: Optional[Callable[[], dict]] = None,
 ) -> Optional[dict]:
     """Report a machine that has an NVIDIA card and a build that cannot use it.
@@ -288,8 +289,16 @@ def cpu_build_on_nvidia_hardware(
     profile = str((profile_probe() or {}).get("profile") or "").lower()
     if profile == "nvidia":
         return None
+    if profile == "directml":
+        # DirectML is a supported profile that runs on this very card through
+        # DmlExecutionProvider. It ships onnxruntime-directml, so the CUDA
+        # probe is correctly False, and telling that user their build runs on
+        # the CPU would be wrong twice over.
+        return None
 
     if cuda_probe(0):
+        return None
+    if directml_probe():
         return None
 
     if gpu_probe is None:

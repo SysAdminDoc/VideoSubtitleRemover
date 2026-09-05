@@ -446,7 +446,7 @@ class LAMAInpainter(BaseInpainter):
                 recovery_hint=(
                     # RM-354: the old hint said to install a model and gave
                     # no way to get one, which is what issue #11 ran into.
-                    "Download the reviewed weight with "
+                    "Download the reviewed LaMa weight with "
                     "`--fetch-model opencv-lama`, or point VSR_LAMA_ONNX / "
                     "VSR_OPENCV_LAMA at a model you already have, or set "
                     "VSR_ENABLE_PYTORCH_LAMA=1 with simple-lama-inpainting."

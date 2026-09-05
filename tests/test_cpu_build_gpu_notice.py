@@ -107,6 +107,58 @@ class CpuBuildOnNvidiaNoticeTests(unittest.TestCase):
             "nothing the answer could change",
         )
 
+    def test_no_notice_on_a_directml_build(self):
+        # DirectML is a supported profile that runs on this very card through
+        # DmlExecutionProvider, and it ships onnxruntime-directml, so the CUDA
+        # probe is correctly False. Telling that user their build runs on the
+        # CPU would be wrong, and pointing them at a CUDA download redundant.
+        self.assertIsNone(cpu_build_on_nvidia_hardware(
+            requested_device="cuda:0",
+            gpu_probe=_nvidia_present,
+            cuda_probe=lambda index: False,
+            directml_probe=lambda: True,
+            profile_probe=_profile("directml"),
+        ))
+
+    def test_no_notice_when_directml_is_loadable_on_an_unstamped_build(self):
+        self.assertIsNone(cpu_build_on_nvidia_hardware(
+            requested_device="cuda:0",
+            gpu_probe=_nvidia_present,
+            cuda_probe=lambda index: False,
+            directml_probe=lambda: True,
+            profile_probe=_profile(""),
+        ))
+
+    def test_a_failing_probe_does_not_take_the_run_down(self):
+        """The notice is advisory. A raise from it must not end a render."""
+        import subprocess
+
+        repo_root = Path(__file__).resolve().parents[1]
+        clip = repo_root / "tests" / "clips" / "static_dialogue.mkv"
+        with tempfile.TemporaryDirectory(prefix="vsr-probe-raise-") as tmp:
+            output = Path(tmp) / "out.mp4"
+            script = (
+                "import backend.device_provider as dp\n"
+                "def _boom(*a, **k):\n"
+                "    raise RuntimeError('build stamp corrupted')\n"
+                "dp.cpu_build_on_nvidia_hardware = _boom\n"
+                "import backend.cli as cli\n"
+                "cli.cpu_build_on_nvidia_hardware = _boom\n"
+                "import sys\n"
+                f"sys.argv = ['cli', '--input', {str(clip)!r},"
+                f" '--output', {str(output)!r}, '--mode', 'sttn']\n"
+                "cli.main()\n"
+            )
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=str(repo_root), capture_output=True, text=True,
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"a raising notice probe ended the run:\n{result.stderr[-1500:]}",
+            )
+            self.assertTrue(output.is_file())
+
     def test_an_empty_requested_device_still_reports(self):
         # The GUI has no device string before the config loads, and that is
         # not the same as the user choosing the CPU.

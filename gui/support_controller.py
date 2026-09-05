@@ -256,7 +256,16 @@ class SupportControllerMixin:
         information, so the bundle records only its extension and size along
         with the closed-set failure reason. That is enough to tell a 4K MKV
         that failed on a missing model from a WEBM that failed on a decode.
+
+        ``message`` is scrubbed with the strict rule rather than the bundle's
+        default. The bundle deliberately keeps leaf filenames in log lines,
+        because a log line without one is not actionable and the user reads
+        the archive before sharing it. But this block promises no filename,
+        and ``item.message`` is often ``str(exc)`` from a raise that
+        interpolated the output path, so the default rule would have kept the
+        very name the rest of this function removes.
         """
+        from backend.crash_reporter import _path_scrub
         from gui.config import ProcessingStatus
 
         facts = []
@@ -270,7 +279,8 @@ class SupportControllerMixin:
                 size = None
             facts.append({
                 "id": str(getattr(item, "id", "")),
-                "message": str(getattr(item, "message", "")),
+                "message": _path_scrub(
+                    str(getattr(item, "message", "")), keep_basename=False),
                 "failure_reason": str(getattr(item, "failure_reason", "")),
                 "mode": str(getattr(
                     getattr(item, "config", None), "mode", "") or ""),
