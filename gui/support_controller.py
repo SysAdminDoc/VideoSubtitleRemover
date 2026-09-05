@@ -249,6 +249,36 @@ class SupportControllerMixin:
             target=_worker, name="vsr-support-task", daemon=True
         ).start()
 
+    def _failed_queue_item_facts(self) -> list:
+        """Identify the failed jobs, without naming anyone's files. RM-358.
+
+        The file name is the one field here that could carry personal
+        information, so the bundle records only its extension and size along
+        with the closed-set failure reason. That is enough to tell a 4K MKV
+        that failed on a missing model from a WEBM that failed on a decode.
+        """
+        from gui.config import ProcessingStatus
+
+        facts = []
+        for item in list(getattr(self, "queue", []) or []):
+            if getattr(item, "status", None) is not ProcessingStatus.ERROR:
+                continue
+            source = Path(str(getattr(item, "file_path", "") or ""))
+            try:
+                size = source.stat().st_size if source.is_file() else None
+            except OSError:
+                size = None
+            facts.append({
+                "id": str(getattr(item, "id", "")),
+                "message": str(getattr(item, "message", "")),
+                "failure_reason": str(getattr(item, "failure_reason", "")),
+                "mode": str(getattr(
+                    getattr(item, "config", None), "mode", "") or ""),
+                "source_suffix": source.suffix.lower(),
+                "source_bytes": size,
+            })
+        return facts
+
     def _save_support_bundle(self):
         """Save a redacted diagnostics zip for bug reports."""
         initial = (
@@ -286,6 +316,10 @@ class SupportControllerMixin:
             "gpu_count": len(self.gpus),
             "gpus": self.gpus,
             "queue_count": len(self.queue),
+            # RM-358: the bundle is asked for because something failed, so it
+            # has to carry what failed. The message is the canonical English
+            # failure text, which is what the tracker can be searched on.
+            "failed_items": self._failed_queue_item_facts(),
         }
         report_paths = list(getattr(self, "_last_batch_report_paths", []))
 
@@ -870,7 +904,7 @@ class SupportControllerMixin:
         ModernButton(support_actions, text=tr("FFmpeg commands"), width=142,
                      command=self._show_ffmpeg_commands, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
-        ModernButton(support_actions, text=tr("Support bundle"), width=128,
+        ModernButton(support_actions, text=tr("Create support bundle"), width=178,
                      command=self._save_support_bundle, style="ghost",
                      size="md").pack(side="left", padx=(Theme.S_SM, 0))
         close_btn = ModernButton(actions_inner, text=tr("Close"), width=84,

@@ -388,6 +388,19 @@ class QualityReviewControllerMixin:
             if default_button is None:
                 default_button = retry_failed_button
             retry_failed_button.pack(side="left", padx=(Theme.S_SM, 0))
+        if errors > 0:
+            # RM-358: the bug template asks every reporter to attach a
+            # redacted support bundle, and the only way to make one was a
+            # ghost button inside the About dialog. The reporter of issue #11
+            # wrote that they could not find the option. This is the moment
+            # they need it.
+            self._batch_summary_bundle_button = ModernButton(
+                actions_inner, text=tr("Create support bundle"), width=178,
+                command=self._save_support_bundle,
+                style="ghost", size="md",
+            )
+            self._batch_summary_bundle_button.pack(
+                side="left", padx=(Theme.S_SM, 0))
         close_button = ModernButton(
             actions_inner, text=tr("Close"), width=92,
             command=_close,

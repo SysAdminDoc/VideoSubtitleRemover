@@ -1535,9 +1535,12 @@ attach the `ffprobe` color fields of your source to a bug report.
 - GUI activity panel (open it from the footer, then click "Open Log File" for
   the full log)
 - File log: `%APPDATA%\VideoSubtitleRemoverPro\vsr_pro.log` (5MB rotating)
-- About -> Support bundle saves a redacted `.zip` with runtime facts,
-  dependency versions, settings summary, recent log lines, and batch report
-  evidence, including per-stage timing summaries. CLI equivalent:
+- **Create support bundle** saves a redacted `.zip` with runtime facts,
+  dependency versions, settings summary, recent log lines, batch report
+  evidence including per-stage timing summaries, and which queue items
+  failed and why. That is the button the bug report template asks you to
+  attach. It is on the batch summary whenever a run had failures, and in
+  Help -> About at any time. CLI equivalent:
   `python -m backend.cli --support-bundle support.zip`
 - About -> Model cache can export/import a portable cache bundle. CLI
   equivalents: `python -m backend.cli --model-cache-export models.zip`
