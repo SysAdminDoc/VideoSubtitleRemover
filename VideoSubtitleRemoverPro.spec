@@ -138,6 +138,10 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['icon.ico'],
+    # RM-346: longPathAware, so the installed application can open the
+    # same deep media paths a source run can. PyInstaller replaces its
+    # default manifest wholesale when given one.
+    manifest='installer/VideoSubtitleRemoverPro.exe.manifest',
 )
 coll = COLLECT(
     exe,

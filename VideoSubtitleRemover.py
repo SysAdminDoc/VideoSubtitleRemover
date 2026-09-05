@@ -374,6 +374,35 @@ def _required_option(args: list[str], option: str) -> str:
         raise ValueError(f"{option} requires a value") from exc
 
 
+APP_USER_MODEL_ID = "SysAdminDoc.VideoSubtitleRemoverPro"
+
+
+def _set_app_user_model_id() -> bool:
+    """Give the app its own taskbar identity. RM-346.
+
+    Without this a frozen Python application inherits the interpreter's
+    identity, so Windows groups it under whatever else is running and pins the
+    wrong thing. It has to happen before the first window is presented, which
+    is why it sits beside the DPI call rather than in the GUI layer.
+
+    Returns whether the call was made, for the test to assert on rather than
+    inspect the taskbar.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        from ctypes import windll
+
+        windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            APP_USER_MODEL_ID)
+        return True
+    except Exception:  # noqa: BLE001 - see below
+        # A missing shell32 export or a locked-down container is not worth
+        # refusing to start over: the only cost is taskbar grouping.
+        logger.debug("Could not set the AppUserModelID", exc_info=True)
+        return False
+
+
 def main():
     """Main entry point."""
     # RM-155: a frozen build has no importable `-m backend.job_worker`
@@ -419,6 +448,8 @@ def main():
             windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
         pass
+
+    _set_app_user_model_id()
 
     if "--ui-release-probe" in sys.argv[1:]:
         try:

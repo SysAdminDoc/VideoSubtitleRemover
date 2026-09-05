@@ -29,6 +29,9 @@ output/
 
 # PyInstaller
 *.manifest
+# RM-346: this one is a source file the spec feeds to PyInstaller, not
+# a manifest PyInstaller generated.
+!installer/VideoSubtitleRemoverPro.exe.manifest
 
 # AI model weights (auto-downloaded, large)
 models/*.pth

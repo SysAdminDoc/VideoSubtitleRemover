@@ -4,6 +4,13 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The installed application can open the deep media paths a source run already could. It shipped without an application manifest, so it never declared long-path awareness, while CPython declares it in `python.exe` and a developer running from source got it for free. Windows reads that value once per process on first use, so it cannot be set at runtime; the frozen build now carries a manifest that declares it, and release verification reads the manifest back out of the built executable rather than trusting the build to have embedded it.
+
+- The app has its own taskbar identity. A frozen Python application with no AppUserModelID inherits the interpreter's, so Windows grouped and pinned the wrong thing.
+
+
 ## [3.41.0] - 2026-09-05
 
 ### Changed

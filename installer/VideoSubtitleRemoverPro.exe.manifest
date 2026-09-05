@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <!--
+    RM-346: without this, the frozen build silently loses behaviour the source
+    run has. CPython ships longPathAware in python.exe's own manifest, so a
+    developer running from source can open a media path past 260 characters
+    while the same code in the installed application cannot. The value is read
+    once per process on first use, so it has to be declared here rather than
+    set at runtime.
+  -->
+  <assemblyIdentity
+      type="win32"
+      name="SysAdminDoc.VideoSubtitleRemoverPro"
+      version="1.0.0.0"
+      processorArchitecture="amd64"/>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+      <!--
+        Per-Monitor V2 is also requested at runtime in VideoSubtitleRemover.py,
+        because the manifest cannot express the fallback ladder this app needs
+        on older Windows. Declaring it here as well means the process starts
+        aware rather than becoming aware a few instructions in.
+      -->
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor, System</dpiAwareness>
+    </windowsSettings>
+  </application>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 and 11. -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+</assembly>

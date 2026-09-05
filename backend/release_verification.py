@@ -1090,6 +1090,118 @@ def _ffmpeg_subprocess_smoke(timeout: float = 30.0) -> dict:
     return payload
 
 
+def read_embedded_manifest(exe_path: str | Path) -> str:
+    """Return the RT_MANIFEST resource of a Windows executable, or "".
+
+    RM-346: the manifest is the only place `longPathAware` can be declared,
+    the value is cached per process on first use, and PyInstaller replaces its
+    default manifest wholesale when the spec supplies one. So a spec edit that
+    silently failed would look identical to one that worked until a user hit a
+    deep path. This reads the resource back out of the built file.
+    """
+    path = Path(exe_path)
+    if not path.is_file():
+        return ""
+    if sys.platform != "win32":
+        return ""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # argtypes matter here: without them ctypes passes a returned HANDLE back
+    # as a Python int and SizeofResource raises OverflowError rather than
+    # reading the resource.
+    kernel32.LoadLibraryExW.restype = wintypes.HMODULE
+    kernel32.LoadLibraryExW.argtypes = [
+        wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]
+    kernel32.FindResourceW.restype = wintypes.HANDLE
+    kernel32.FindResourceW.argtypes = [
+        wintypes.HMODULE, wintypes.LPCWSTR, wintypes.LPCWSTR]
+    kernel32.LoadResource.restype = wintypes.HANDLE
+    kernel32.LoadResource.argtypes = [wintypes.HMODULE, wintypes.HANDLE]
+    kernel32.LockResource.restype = ctypes.c_void_p
+    kernel32.LockResource.argtypes = [wintypes.HANDLE]
+    kernel32.SizeofResource.restype = wintypes.DWORD
+    kernel32.SizeofResource.argtypes = [wintypes.HMODULE, wintypes.HANDLE]
+    kernel32.FreeLibrary.argtypes = [wintypes.HMODULE]
+
+    load_library_as_datafile = 0x00000002
+    rt_manifest = 24
+    module = kernel32.LoadLibraryExW(
+        str(path), None, load_library_as_datafile)
+    if not module:
+        return ""
+    try:
+        for resource_id in (1, 2):
+            info = kernel32.FindResourceW(
+                module,
+                ctypes.cast(resource_id, wintypes.LPCWSTR),
+                ctypes.cast(rt_manifest, wintypes.LPCWSTR),
+            )
+            if not info:
+                continue
+            size = kernel32.SizeofResource(module, info)
+            handle = kernel32.LoadResource(module, info)
+            if not handle or not size:
+                continue
+            pointer = kernel32.LockResource(handle)
+            if not pointer:
+                continue
+            data = ctypes.string_at(pointer, size)
+            return data.decode("utf-8", errors="replace")
+    finally:
+        kernel32.FreeLibrary(module)
+    return ""
+
+
+def frozen_manifest_status(dist_dir: str | Path) -> dict:
+    """Report whether the frozen executable declares long-path awareness."""
+    exe = Path(dist_dir) / "VideoSubtitleRemoverPro.exe"
+    status = {
+        "schema": "vsr.frozen_manifest.v1",
+        "path": str(exe),
+        "available": exe.is_file(),
+        "longPathAware": False,
+        "dpiAware": False,
+        "readable": False,
+    }
+    if not exe.is_file():
+        return status
+    text = read_embedded_manifest(exe)
+    if not text:
+        return status
+    status["readable"] = True
+    status["longPathAware"] = _manifest_flag_is_true(text, "longPathAware")
+    status["dpiAware"] = bool(
+        _manifest_element_text(text, "dpiAwareness")
+        or _manifest_element_text(text, "dpiAware")
+    )
+    return status
+
+
+def _manifest_element_text(manifest_xml: str, local_name: str) -> str:
+    """Return one windowsSettings element's text, or "".
+
+    Parsed rather than substring-matched. A manifest that merely mentions the
+    setting in a comment, which this project's own manifest does, would
+    otherwise be read as declaring it, or as declaring it empty.
+    """
+    import xml.etree.ElementTree as ET
+
+    try:
+        root = ET.fromstring(manifest_xml.strip().rstrip(chr(0)))
+    except ET.ParseError:
+        return ""
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] == local_name:
+            return (element.text or "").strip()
+    return ""
+
+
+def _manifest_flag_is_true(manifest_xml: str, local_name: str) -> bool:
+    return _manifest_element_text(manifest_xml, local_name).lower() == "true"
+
+
 def _frozen_launcher_status(dist_dir: Path, name: str) -> dict:
     status = _dist_file_status(dist_dir, name)
     status.update({
@@ -1820,6 +1932,7 @@ def build_release_evidence(
     }
     documents = [_dist_file_status(dist, name) for name in DOCUMENTS]
     launchers = [_frozen_launcher_status(dist, name) for name in LAUNCHERS]
+    frozen_manifest = frozen_manifest_status(dist)
     version_docs = [_doc_version_status(ROOT / name) for name in VERSIONED_DOCS]
     evidence = {
         "schema": "vsr.release_verification.v1",
@@ -1831,6 +1944,7 @@ def build_release_evidence(
         "distDir": str(dist),
         "documents": documents,
         "launchers": launchers,
+        "frozenManifest": frozen_manifest,
         "versionChecks": {
             "appVersion": APP_VERSION,
             "documents": version_docs,
