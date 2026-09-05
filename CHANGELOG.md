@@ -18,6 +18,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Added
 
+- The README and the Help dialog now say what this tool is for. A watermark remover that states no scope invites uses its authors do not want to serve, and it leaves the boundary against provenance stripping unwritten. The short version: this is for footage you have the right to change, it rebuilds the pixels under burned-in text, and it does not read, strip or forge content credentials, C2PA manifests or invisible watermarks. That is a deliberate limit, not an omission.
+
 - The support bundle is reachable from the failure that needs it. The bug report template asks every reporter to attach one, and the only way to make it was a ghost button inside the About dialog, which the reporter of the LaMa issue said they could not find. A batch that had failures now offers Create support bundle on its summary, the About action uses that same label, and the README troubleshooting section names it. The bundle also records which queue items failed, with the classified reason, the mode, and the source file extension and size, but never the file name.
 
 - An NVIDIA card the build cannot use is now said out loud, before the run rather than in a log line after it. The application already knew both halves of that sentence: it shells nvidia-smi at startup and it knows whether a CUDA execution provider will load. On the CPU download with an NVIDIA card present it now names the card, says this build runs on the CPU, and offers the releases page where the NVIDIA download is listed. The command line prints the same thing once per invocation. Nothing appears on the NVIDIA build, on a machine without an NVIDIA card, or when CPU was chosen deliberately.

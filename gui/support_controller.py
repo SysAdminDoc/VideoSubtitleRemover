@@ -888,6 +888,28 @@ class SupportControllerMixin:
             fg=Theme.TEXT_SECONDARY,
         ).pack(side="left", pady=Theme.S_SM)
 
+        # RM-364: the product removes watermarks and said nothing anywhere
+        # about what it is for. The README carries the long version; this is
+        # the short one, where someone reading Help will meet it.
+        scope = tk.Frame(body, bg=Theme.BG_SECONDARY)
+        scope.pack(fill="x", padx=24, pady=(Theme.S_MD, 0))
+        self._help_scope_label = tk.Label(
+            scope,
+            text=tr(
+                "Scope: this is for footage you have the right to change. It "
+                "rebuilds the pixels under burned-in text. It does not read, "
+                "strip or forge content credentials, provenance manifests or "
+                "invisible watermarks."
+            ),
+            font=f(Theme.F_BODY_SM),
+            bg=Theme.BG_SECONDARY,
+            fg=Theme.TEXT_MUTED,
+            wraplength=720,
+            justify="left",
+            anchor="w",
+        )
+        self._help_scope_label.pack(anchor="w", fill="x")
+
         actions = tk.Frame(body, bg=Theme.BG_SECONDARY)
         actions.pack(fill="x")
         tk.Frame(actions, bg=Theme.BORDER_SUBTLE, height=1).pack(fill="x")

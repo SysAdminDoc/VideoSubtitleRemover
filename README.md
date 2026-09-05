@@ -39,6 +39,23 @@ reporting is disabled unless both `VSR_GLITCHTIP_DSN` and
 
 This project builds on [YaoFANGUK/video-subtitle-remover](https://github.com/YaoFANGUK/video-subtitle-remover). It adds a desktop review workflow, local LaMa inpainting, multiple detection engines, and a 52-code language picker backed by broader OCR engine coverage.
 
+## Scope and lawful use
+
+This tool is for footage you have the right to change. It removes burned-in
+subtitles and text watermarks by rebuilding the pixels underneath, which is
+useful when you own the source and need a clean plate: your own recordings,
+your own generated video, material you have licensed, or archive work where
+the caption is baked into the picture and the rights are yours to exercise.
+
+It does not touch provenance. There is no code here that reads, strips, or
+forges C2PA manifests, invisible pixel watermarks, or embedded content
+credentials, and there will not be. Removing a caption a person can see is a
+different act from erasing a cryptographic record of where a file came from,
+and only the first one is what this is for.
+
+Whether a given clip is yours to edit is your call, not the software's. The
+MIT licence covers the code and says nothing about the media you feed it.
+
 ## Interface
 
 The main workspace keeps the current frame large even when settings are open.

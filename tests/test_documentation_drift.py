@@ -172,6 +172,37 @@ class OfflineGuaranteeDocumentationTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
 
+    def test_readme_states_the_scope_and_lawful_use(self):
+        """RM-364: a watermark remover that says nothing about its purpose.
+
+        The nearest large neighbour in this space ships a scope document
+        because the category attracts uses its authors do not want to serve.
+        This is also where the boundary against provenance stripping is
+        written down, so that direction cannot drift in unnoticed.
+        """
+        text = README.read_text(encoding="utf-8")
+        self.assertIn("## Scope and lawful use", text)
+        for phrase in (
+            "footage you have the right to change",
+            "C2PA",
+            "invisible pixel watermarks",
+            "content\ncredentials",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+
+    def test_the_help_dialog_carries_the_same_scope_statement(self):
+        source = (_ROOT / "gui" / "support_controller.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("_help_scope_label", source)
+        for phrase in (
+            "footage you have the right to change",
+            "invisible watermarks",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, source)
+
     def test_readme_controls_match_network_modules(self):
         update = (_ROOT / "backend" / "update_check.py").read_text(
             encoding="utf-8"
