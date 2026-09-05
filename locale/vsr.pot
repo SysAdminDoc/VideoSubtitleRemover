@@ -22,7 +22,7 @@ msgid_plural " across {count} sampled frames"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/settings_controller.py:1027
+#: gui/settings_controller.py:1042
 msgid " and {count} more"
 msgstr ""
 
@@ -396,12 +396,20 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
+#: gui/settings_controller.py:774
+msgid "Cancel download"
+msgstr ""
+
 #: gui/widgets.py:2415
 msgid "Cancel this item"
 msgstr ""
 
 #: gui/failure_copy.py:20
 msgid "Cancelled"
+msgstr ""
+
+#: gui/settings_controller.py:762
+msgid "Cancelling the download..."
 msgstr ""
 
 #: gui/layout_build.py:1091
@@ -412,7 +420,7 @@ msgstr ""
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr ""
 
-#: gui/settings_controller.py:1034
+#: gui/settings_controller.py:1049
 msgid "Changing: {preview}. Your presets, output location, saved region and queue are not affected."
 msgstr ""
 
@@ -436,7 +444,7 @@ msgstr ""
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr ""
 
-#: gui/settings_controller.py:873
+#: gui/settings_controller.py:888
 msgid "Checking VLM endpoint privacy..."
 msgstr ""
 
@@ -604,7 +612,7 @@ msgstr ""
 msgid "Cleanup settings"
 msgstr ""
 
-#: gui/settings_controller.py:1023
+#: gui/settings_controller.py:1038
 msgid "Cleanup settings are already at their defaults"
 msgstr ""
 
@@ -722,7 +730,7 @@ msgstr ""
 msgid "Compute device"
 msgstr ""
 
-#: gui/settings_controller.py:950
+#: gui/settings_controller.py:965
 msgid "Compute device set to {device}"
 msgstr ""
 
@@ -790,7 +798,7 @@ msgstr ""
 msgid "Could not detect language from this frame"
 msgstr ""
 
-#: gui/settings_controller.py:794
+#: gui/settings_controller.py:809
 msgid "Could not download the {profile} model: {error}"
 msgstr ""
 
@@ -938,7 +946,7 @@ msgstr ""
 msgid "Down"
 msgstr ""
 
-#: gui/layout_build.py:629
+#: gui/layout_build.py:629 gui/settings_controller.py:801
 msgid "Download model"
 msgstr ""
 
@@ -946,7 +954,7 @@ msgstr ""
 msgid "Download the reviewed model this algorithm needs. It is checked against a known hash before it is used."
 msgstr ""
 
-#: gui/settings_controller.py:763
+#: gui/settings_controller.py:776
 msgid "Downloading the {profile} model..."
 msgstr ""
 
@@ -1316,7 +1324,7 @@ msgstr ""
 msgid "Fixed mask regions"
 msgstr ""
 
-#: gui/settings_controller.py:840
+#: gui/settings_controller.py:855
 msgid "Florence-2 needs the optional transformers install; without it the run uses the automatic cascade"
 msgstr ""
 
@@ -1684,7 +1692,7 @@ msgstr ""
 msgid "Loading {name}..."
 msgstr ""
 
-#: gui/settings_controller.py:886
+#: gui/settings_controller.py:901
 msgid "Local VLM endpoint. Frame pixels stay on this computer."
 msgstr ""
 
@@ -2232,11 +2240,11 @@ msgstr ""
 msgid "PP-OCRv6 is the default RapidOCR generation. Keep PP-OCRv5 for regression comparison or a known-compatible run."
 msgstr ""
 
-#: gui/settings_controller.py:846
+#: gui/settings_controller.py:861
 msgid "PaddleOCR-VL needs the optional paddleocr install; without it the run uses the automatic cascade"
 msgstr ""
 
-#: gui/settings_controller.py:849
+#: gui/settings_controller.py:864
 msgid "PaddleOCR-VL via llama.cpp stays local by default. A remote endpoint sends video frames outside this computer and requires HTTPS plus VSR_ALLOW_REMOTE_VLM=1"
 msgstr ""
 
@@ -2502,7 +2510,7 @@ msgid_plural "Queued {count} files with the last job's settings"
 msgstr[0] ""
 msgstr[1] ""
 
-#: gui/settings_controller.py:843
+#: gui/settings_controller.py:858
 msgid "Qwen2.5-VL needs the optional transformers install; without it the run uses the automatic cascade"
 msgstr ""
 
@@ -2634,7 +2642,7 @@ msgstr ""
 msgid "Released the frozen matte; this item will detect again"
 msgstr ""
 
-#: gui/settings_controller.py:878
+#: gui/settings_controller.py:893
 msgid "Remote VLM enabled. Video frames are sent to an HTTPS service outside this computer."
 msgstr ""
 
@@ -2716,11 +2724,11 @@ msgstr ""
 msgid "Replace, add to, or subtract from the native composed mask."
 msgstr ""
 
-#: gui/layout_build.py:492 gui/layout_build.py:776 gui/settings_controller.py:1038
+#: gui/layout_build.py:492 gui/layout_build.py:776 gui/settings_controller.py:1053
 msgid "Reset"
 msgstr ""
 
-#: gui/settings_controller.py:1030
+#: gui/settings_controller.py:1045
 msgid "Reset cleanup settings?"
 msgstr ""
 
@@ -2728,7 +2736,7 @@ msgstr ""
 msgid "Reset settings"
 msgstr ""
 
-#: gui/settings_controller.py:1045
+#: gui/settings_controller.py:1060
 msgid "Reset {count} cleanup setting(s) to their defaults"
 msgstr ""
 
@@ -2992,11 +3000,11 @@ msgstr ""
 msgid "Scanning this region for text..."
 msgstr ""
 
-#: gui/settings_controller.py:958
+#: gui/settings_controller.py:973
 msgid "Select Output Directory"
 msgstr ""
 
-#: gui/settings_controller.py:976
+#: gui/settings_controller.py:991
 msgid "Select Processing Work Directory"
 msgstr ""
 
@@ -3304,7 +3312,7 @@ msgstr ""
 msgid "Support bundle"
 msgstr ""
 
-#: gui/settings_controller.py:837
+#: gui/settings_controller.py:852
 msgid "Surya is GPL-licensed: install it yourself and set VSR_ALLOW_GPL=1, or the run uses the automatic cascade"
 msgstr ""
 
@@ -3448,7 +3456,7 @@ msgstr ""
 msgid "The source video could not be opened"
 msgstr ""
 
-#: gui/settings_controller.py:790
+#: gui/settings_controller.py:805
 msgid "The {profile} model is ready."
 msgstr ""
 
@@ -3468,7 +3476,7 @@ msgstr ""
 msgid "This FFmpeg build does not report a release version, so it cannot be checked against the required {floor} or newer. Install a stable release build."
 msgstr ""
 
-#: gui/settings_controller.py:1031
+#: gui/settings_controller.py:1046
 msgid "This restores {count} setting(s) to their defaults."
 msgstr ""
 
@@ -3662,7 +3670,7 @@ msgstr ""
 msgid "Uses the system language or a compiled catalog on the next launch."
 msgstr ""
 
-#: gui/settings_controller.py:893
+#: gui/settings_controller.py:908
 msgid "VLM endpoint blocked: {reason}"
 msgstr ""
 
@@ -3734,7 +3742,7 @@ msgstr ""
 msgid "Wait for the active batch to finish before reordering the queue"
 msgstr ""
 
-#: gui/settings_controller.py:1016
+#: gui/settings_controller.py:1031
 msgid "Wait for the active batch to finish before resetting"
 msgstr ""
 
@@ -3786,11 +3794,11 @@ msgstr ""
 msgid "Wipe between the source frame and cleaned output."
 msgstr ""
 
-#: gui/settings_controller.py:998
+#: gui/settings_controller.py:1013
 msgid "Work directory reset to the system temporary location"
 msgstr ""
 
-#: gui/settings_controller.py:986
+#: gui/settings_controller.py:1001
 msgid "Work directory selected for temporary and resume files"
 msgstr ""
 
@@ -3854,7 +3862,7 @@ msgstr ""
 msgid "focused"
 msgstr ""
 
-#: gui/settings_controller.py:894
+#: gui/settings_controller.py:909
 msgid "invalid endpoint"
 msgstr ""
 

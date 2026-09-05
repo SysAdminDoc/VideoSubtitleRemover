@@ -1096,8 +1096,15 @@ def enforce_ocr_dependency_caps() -> None:
 
 DRIFT_REPORT_SCHEMA = "vsr.dependency_drift.v1"
 PILLOW_MINIMUM_VERSION = "12.3.0"
-# RM-319: every reviewed profile now reaches torch 2.13.0, which is the
-# first release outside GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1).
+# RM-319: every reviewed profile reached torch 2.13.0, the first release
+# outside GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1).
+# RM-357: the floor moves to 2.14.0/0.29.0 (both published 2026-09-02).
+# CVE-2026-65918 is an out-of-bounds heap read in torchvision's GIF decoder
+# read_from_tensor callback, affecting everything THROUGH 0.28.0, so the
+# torchvision floor is the one that closes it. torch 2.14.0 also validates
+# sparse-tensor invariants under torch.load(weights_only=True) (pytorch
+# #184750), which this product reaches through the PyTorch LaMa rung loading
+# a third-party big-lama.pt.
 # RM-336: the opt-in model fetch imports huggingface_hub, in a project
 # that pins and cites a floor for every other security-relevant dependency,
 # and that client shipped two Windows-relevant fixes this year:
@@ -1112,8 +1119,8 @@ HUGGINGFACE_HUB_ADVISORY_IDS = ("CVE-2026-15717", "HF-HUB-1.29.0-SAFETENSORS")
 HUGGINGFACE_HUB_ADVISORY_SOURCE = (
     "https://github.com/huggingface/huggingface_hub/releases"
 )
-TORCH_MINIMUM_VERSION = "2.13.0"
-TORCHVISION_MINIMUM_VERSION = "0.28.0"
+TORCH_MINIMUM_VERSION = "2.14.0"
+TORCHVISION_MINIMUM_VERSION = "0.29.0"
 FROZEN_OPTIONAL_DEPENDENCIES: Mapping[str, Mapping[str, str]] = {
     "easyocr": {
         "reviewed_version": "1.7.2",
@@ -1158,7 +1165,7 @@ TRACKED_PACKAGES: Tuple[Tuple[str, str, str], ...] = (
     ),
     ("torch", TORCH_MINIMUM_VERSION, ""),
     ("huggingface-hub", HUGGINGFACE_HUB_MINIMUM_VERSION, ""),
-    ("torchvision", TORCHVISION_MINIMUM_VERSION, ""),
+    ("torchvision", TORCHVISION_MINIMUM_VERSION, ""),  # CVE-2026-65918
     ("pyinstaller", "6.10.0", ""),
 )
 

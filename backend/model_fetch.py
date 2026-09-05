@@ -36,7 +36,12 @@ import ssl
 from typing import Callable, Mapping, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import (
+    HTTPRedirectHandler,
+    HTTPSHandler,
+    Request,
+    build_opener,
+)
 
 from backend.adapter_manifest import (
     AdapterManifestEntry,
@@ -169,6 +174,29 @@ def _endpoint_problem(endpoint: str) -> str:
     )
 
 
+class _CheckedRedirectHandler(HTTPRedirectHandler):
+    """Re-apply the transport rule to every hop, not just the first.
+
+    Hugging Face answers a resolve URL with a redirect to its CDN or Xet
+    storage, so redirects have to be followed. But urlopen follows them into
+    any scheme, so validating only the configured endpoint left the rule
+    checkable at the front door and unenforced after it. A downgrade to plain
+    http on a non-loopback host is refused here instead.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        problem = _endpoint_problem(newurl)
+        if problem:
+            raise URLError(f"refusing redirect to {newurl!r}: {problem}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_url(url: str, timeout: int):
+    opener = build_opener(HTTPSHandler(), _CheckedRedirectHandler())
+    return opener.open(Request(url, headers={"User-Agent": USER_AGENT}),
+                       timeout=timeout)
+
+
 def _pin_problem(entry: AdapterManifestEntry, filename: str) -> str:
     if filename not in entry.expected_filenames:
         return (
@@ -254,8 +282,7 @@ def fetch_weight(
     read = 0
     total: Optional[int] = None
     try:
-        request = Request(url, headers={"User-Agent": USER_AGENT})
-        with urlopen(request, timeout=CONNECT_TIMEOUT_SECONDS) as response:
+        with _open_url(url, CONNECT_TIMEOUT_SECONDS) as response:
             length = response.headers.get("Content-Length")
             if length and length.isdigit():
                 total = int(length)
@@ -291,6 +318,13 @@ def fetch_weight(
                            f"{type(exc).__name__}: {exc}", url=url,
                            bytes_read=read, bytes_total=total,
                            expected_sha256=expected)
+    except BaseException:
+        # Ctrl+C is a BaseException, so the clauses above never saw it, and it
+        # is the cancellation route the CLI actually offers. A half-written
+        # model left in the cache fails hours into a render rather than at
+        # load time, so the partial goes before the interrupt continues.
+        _discard(partial)
+        raise
 
     actual = digest.hexdigest()
     if total is not None and read != total:

@@ -298,6 +298,95 @@ class FetchWeightTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], endpoint)
 
 
+class FetchInterruptTests(unittest.TestCase):
+    """Ctrl+C is the cancellation route the CLI offers, and it is not Exception."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="vsr-fetch-int-")
+        self.addCleanup(self._tmp.cleanup)
+        self.appdata = Path(self._tmp.name) / "AppData"
+        self.env = {"APPDATA": str(self.appdata)}
+        self.cache = self.appdata / "VideoSubtitleRemoverPro" / "models"
+
+    def test_a_keyboard_interrupt_still_removes_the_partial_file(self):
+        calls = []
+
+        def _cancel() -> bool:
+            calls.append(1)
+            if len(calls) > 1:
+                raise KeyboardInterrupt()
+            return False
+
+        with _FixtureManifest(_FIXTURE_BODY):
+            with _ServerContext(_body_handler(_FIXTURE_BODY)) as url:
+                with self.assertRaises(KeyboardInterrupt):
+                    model_fetch.fetch_weight(
+                        _FIXTURE_ADAPTER, env=self.env, endpoint=url,
+                        cancel=_cancel,
+                    )
+
+        self.assertFalse(
+            (self.cache / f"{_FIXTURE_NAME}.part").exists(),
+            "an interrupted download must not leave a truncated model behind",
+        )
+        self.assertFalse((self.cache / _FIXTURE_NAME).exists())
+
+
+class RedirectPolicyTests(unittest.TestCase):
+    """The transport rule has to hold for every hop, not just the first."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="vsr-fetch-redir-")
+        self.addCleanup(self._tmp.cleanup)
+        self.appdata = Path(self._tmp.name) / "AppData"
+        self.env = {"APPDATA": str(self.appdata)}
+        self.cache = self.appdata / "VideoSubtitleRemoverPro" / "models"
+
+    @staticmethod
+    def _redirect_handler(target: str):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.0"
+
+            def do_GET(self):  # noqa: N802 - stdlib callback name
+                self.send_response(302)
+                self.send_header("Location", target)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *_args):
+                return
+
+        return Handler
+
+    def test_a_redirect_to_plain_http_off_the_loopback_is_refused(self):
+        with _FixtureManifest(_FIXTURE_BODY):
+            handler = self._redirect_handler(
+                "http://models.example.com/weight.onnx")
+            with _ServerContext(handler) as url:
+                result = model_fetch.fetch_weight(
+                    _FIXTURE_ADAPTER, env=self.env, endpoint=url,
+                )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "unreachable")
+        self.assertIn("refusing redirect", result.detail)
+        self.assertFalse((self.cache / f"{_FIXTURE_NAME}.part").exists())
+
+    def test_a_redirect_that_keeps_the_transport_is_followed(self):
+        # Hugging Face redirects a resolve URL to its CDN, so refusing every
+        # redirect would break the real fetch. Loopback http is the allowed
+        # case here for the same reason the endpoint check allows it.
+        with _FixtureManifest(_FIXTURE_BODY):
+            with _ServerContext(_body_handler(_FIXTURE_BODY)) as content_url:
+                handler = self._redirect_handler(
+                    f"{content_url}/redirected.bin")
+                with _ServerContext(handler) as entry_url:
+                    result = model_fetch.fetch_weight(
+                        _FIXTURE_ADAPTER, env=self.env, endpoint=entry_url,
+                    )
+        self.assertTrue(result.ok, result.detail)
+        self.assertEqual(result.reason, "downloaded")
+
+
 class FetchPolicyTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="vsr-fetch-policy-")
@@ -383,6 +472,50 @@ class ShippedLamaPinTests(unittest.TestCase):
                     KNOWN_WEIGHT_HASHES[filename],
                     "the manifest and the vendored hash table disagree, so "
                     "one of them would reject a good download",
+                )
+
+    @unittest.skipUnless(
+        os.environ.get("VSR_MODEL_FETCH_TESTS", "").strip().lower()
+        in {"1", "true", "yes", "on"},
+        "opt-in: reaches Hugging Face. Set VSR_MODEL_FETCH_TESTS=1.",
+    )
+    def test_the_pins_still_match_what_upstream_serves(self):
+        """Catch a wrong or rotated pin without downloading 300 MB.
+
+        The other pin test only proves the manifest and the vendored hash
+        table agree with each other, and both are hand-maintained here, so it
+        cannot see a digest that was wrong when it was written or a file the
+        upstream repository has since replaced. Hugging Face returns the LFS
+        digest in X-Linked-Etag on a HEAD, so the real answer costs one
+        request per file rather than the whole download.
+        """
+        import urllib.error
+        import urllib.request
+
+        for adapter, filename in model_fetch.FETCHABLE_WEIGHTS:
+            with self.subTest(adapter=adapter, filename=filename):
+                entry = get_manifest_entry(adapter)
+                url = model_fetch.resolve_url(
+                    entry, filename, model_fetch.DEFAULT_ENDPOINT)
+
+                class _NoRedirect(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, *_args, **_kwargs):
+                        return None
+
+                opener = urllib.request.build_opener(_NoRedirect())
+                request = urllib.request.Request(url, method="HEAD")
+                try:
+                    with opener.open(request, timeout=30) as response:
+                        headers = response.headers
+                except urllib.error.HTTPError as exc:
+                    # The digest rides on the 302 that points at storage, and
+                    # refusing to follow it turns that response into this.
+                    headers = exc.headers
+                served = headers.get("X-Linked-Etag", "").strip('"')
+                self.assertEqual(
+                    served, entry.sha256[filename],
+                    f"{filename} upstream now serves {served!r}; the pin in "
+                    f"adapter_manifest.py would reject every real download",
                 )
 
     def test_the_resolve_url_names_the_commit_not_a_branch(self):

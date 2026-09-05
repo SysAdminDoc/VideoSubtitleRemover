@@ -750,22 +750,35 @@ class AdvancedSettingsControllerMixin:
         set_accessible_subtree_visible(row, True)
 
     def _download_missing_algorithm_model(self):
-        """Fetch the model the selected algorithm needs. RM-354 does the work."""
+        """Fetch the model the selected algorithm needs. RM-354 does the work.
+
+        A second press cancels: the fetch polls this event per chunk and
+        removes its partial file, so there is no way to leave a half-written
+        model behind short of killing the process.
+        """
+        cancel_event = getattr(self, "_model_fetch_cancel", None)
+        if cancel_event is not None and not cancel_event.is_set():
+            cancel_event.set()
+            self._update_status(tr("Cancelling the download..."))
+            return
+
         selected = self.mode_var.get()
         state = self.algorithm_availability().get(selected, {})
         adapter = str(state.get("fetch") or "")
         if not adapter:
             return
+        cancel_event = threading.Event()
+        self._model_fetch_cancel = cancel_event
         button = getattr(self, "algo_fetch_btn", None)
         if button is not None:
-            button.set_enabled(False)
+            button.set_text(tr("Cancel download"))
         self._update_status(
             tr("Downloading the {profile} model...").format(profile=selected))
 
         def _worker():
             from backend.model_fetch import fetch_weight
             try:
-                result = fetch_weight(adapter)
+                result = fetch_weight(adapter, cancel=cancel_event.is_set)
             except Exception as exc:  # noqa: BLE001 - reported below
                 logger.debug("model fetch failed", exc_info=True)
                 result = None
@@ -782,8 +795,10 @@ class AdvancedSettingsControllerMixin:
         ).start()
 
     def _apply_model_fetch_result(self, profile: str, ok: bool, detail: str):
+        self._model_fetch_cancel = None
         button = getattr(self, "algo_fetch_btn", None)
         if button is not None:
+            button.set_text(tr("Download model"))
             button.set_enabled(True)
         if ok:
             self._update_status(

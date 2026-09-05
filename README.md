@@ -194,7 +194,7 @@ $profile = "cpu"
 
 # Install PyTorch. Python 3.12 or 3.13 is recommended for NVIDIA CUDA.
 $torchIndex = if ($profile -eq "nvidia") { "https://download.pytorch.org/whl/cu130" } else { "https://download.pytorch.org/whl/cpu" }
-pip install "torch>=2.13.0" "torchvision>=0.28.0" --constraint "dependency_profiles/$profile.txt" --index-url $torchIndex
+pip install "torch>=2.14.0" "torchvision>=0.29.0" --constraint "dependency_profiles/$profile.txt" --index-url $torchIndex
 
 # Install dependencies
 pip install -r requirements.txt --constraint "dependency_profiles/$profile.txt"
@@ -321,7 +321,8 @@ files reflect the folder that actually ships, while PyInstaller and other
 build tools are marked with excluded scope. `release-verification.json` and
 `pip-audit.json` record the remaining release proof. Strict evidence rejects
 Torch through 2.5.1 for CVE-2025-32434 and through 2.9.1 for CVE-2026-24747.
-Reviewed profiles stay on Torch 2.13.0 or newer.
+Reviewed profiles stay on Torch 2.14.0 and torchvision 0.29.0 or newer,
+which is where CVE-2026-65918 is closed.
 
 Release evidence also records the external FFmpeg version and full build
 configuration, plus OpenCV's wheel provenance and embedded `avcodec`,
@@ -1422,11 +1423,11 @@ existing environment manually:
 ```powershell
 .\venv\Scripts\activate
 pip uninstall -y torch torchvision
-pip install "torch==2.13.0" "torchvision==0.28.0" --index-url https://download.pytorch.org/whl/cu130
+pip install "torch==2.14.0" "torchvision==0.29.0" --index-url https://download.pytorch.org/whl/cu130
 ```
 
-Every reviewed profile now uses torch 2.13.0 / torchvision
-0.28.0. The `cu130` wheel also carries the CUDA 13 runtime
+Every reviewed profile now uses torch 2.14.0 / torchvision
+0.29.0. The `cu130` wheel also carries the CUDA 13 runtime
 that `onnxruntime-gpu` 1.27 and newer load, so installing it is what
 makes `CUDAExecutionProvider` work rather than silently dropping to CPU. If
 PaddleOCR fails to load on Blackwell, detection automatically falls back

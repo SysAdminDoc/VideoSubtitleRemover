@@ -4,7 +4,15 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- Every reviewed dependency profile moves to Torch 2.14.0 and torchvision 0.29.0. This closes CVE-2026-65918, an out-of-bounds heap read in torchvision's GIF decoder that affects everything through 0.28.0 and that the previous profile note recorded as unavoidable because no fixed release existed at the time. Torch 2.14.0 also validates sparse-tensor invariants when loading with `weights_only=True`, which this product reaches whenever the PyTorch LaMa path loads a third-party checkpoint. Verified on the build machine's RTX 4070 SUPER: both profiles resolve, and the CUDA execution provider still activates.
+
+- An interrupted model download no longer leaves a partial file in the cache. Ctrl+C raises through a different branch than the ones the download was cleaning up on, so the one cancellation route the command line actually offers was the one that could orphan a half-written model. The download also refuses a redirect that drops from HTTPS to plain HTTP: the rule was checked on the address you configure and then not checked again on where that address sent you.
+
 ### Fixed
+
+- The model download in the interface can be cancelled. The button becomes Cancel download while one is running, and cancelling removes the partial file rather than leaving it to be found later.
 
 - Tiled LaMa repair no longer sizes its working buffers to the whole picture. Each of the three tiled paths allocated two full-frame float32 accumulators per frame and blended across the entire image to repair a caption strip covering a few percent of it. On a 3840x2160 frame that measured 234.1 MB of peak allocation against 62.0 MB now, a saving of 172 MB per frame, and the three copies of the loop became one. Output is byte-identical; the reference corpus verifies it.
 

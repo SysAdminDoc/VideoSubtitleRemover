@@ -35,7 +35,7 @@ protobuf>=6.33.5
 
 # AI/ML Frameworks (choose based on your GPU)
 # ------------------------------------------
-# IMPORTANT: torch >= 2.13.0 is required.
+# IMPORTANT: torch >= 2.14.0 is required.
 # CVE-2026-24747 / CVE-2025-32434: torch.load weights_only RCE in PyTorch
 # 2.9.1 and earlier. simple-lama-inpainting loads weights via torch.load,
 # so this is a runtime concern, not just a transitive-dependency one.
@@ -43,9 +43,11 @@ protobuf>=6.33.5
 # Python compatibility: VSR requires Python 3.11+. PyTorch publishes Windows
 # CUDA wheels through Python 3.13. Python 3.14 currently resolves CPU-only torch;
 # setup.py blocks that NVIDIA path unless VSR_ALLOW_PY314_CPU=1 is set.
-# Every reviewed profile locks torch 2.13.0/torchvision 0.28.0. NVIDIA reaches
+# Every reviewed profile locks torch 2.14.0/torchvision 0.29.0. NVIDIA reaches
 # that pair through the cu130 index; cu128 stopped at torch 2.11.0, which sits
-# inside GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1).
+# inside GHSA-rrmf-rvhw-rf47 (CVE-2025-3000, torch <= 2.12.1). The torchvision
+# floor is what closes CVE-2026-65918, an out-of-bounds heap read in its GIF
+# decoder affecting everything through 0.28.0.
 
 # ONNX Runtime >= 1.26.0 is required for CPU/CUDA. Older builds predate
 # OOB/overflow hardening in 1.26.0 (unrestricted setattr allowlist,
@@ -56,7 +58,7 @@ protobuf>=6.33.5
 # sustained-engineering line, pinned below to its latest PyPI build.
 #
 # For NVIDIA (Turing through Blackwell, including sm_120 RTX 50-series):
-# pip install torch>=2.13.0 torchvision>=0.28.0 --index-url https://download.pytorch.org/whl/cu130
+# pip install torch>=2.14.0 torchvision>=0.29.0 --index-url https://download.pytorch.org/whl/cu130
 # pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
 # pip install "onnxruntime-gpu>=1.27.0,<1.30.0"
 # cu130 carries the Blackwell kernels the cu118/cu121 builds lack, and it is
@@ -82,11 +84,11 @@ protobuf>=6.33.5
 # pip install onnxruntime-directml==1.24.4
 # Intel CPU/iGPU users can add OpenVINO for RapidOCR:
 # pip install openvino==2026.2.1 --constraint dependency_profiles/directml.txt
-# pip install torch>=2.13.0 torchvision>=0.28.0 --index-url https://download.pytorch.org/whl/cpu
+# pip install torch>=2.14.0 torchvision>=0.29.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # For CPU only:
-# pip install torch>=2.13.0 torchvision>=0.28.0 --index-url https://download.pytorch.org/whl/cpu
+# pip install torch>=2.14.0 torchvision>=0.29.0 --index-url https://download.pytorch.org/whl/cpu
 # pip install paddlepaddle==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 # Text Detection (install at least one, listed in priority order)

@@ -63,11 +63,20 @@ class DependencyProfileTests(unittest.TestCase):
         self.assertIn("onnxruntime-directml==1.24.4", (
             dependency_profiles.profile_constraint_path("directml").read_text(
                 encoding="utf-8")))
+        # The pins are stated here rather than read back from the manifest,
+        # so moving a reviewed version is a deliberate edit in two places.
+        # RM-357 moved them from 2.13.0/0.28.0: torchvision 0.29.0 is where
+        # CVE-2026-65918 is closed.
         expected_torch = {
-            "cpu": ("2.13.0", "0.28.0"),
-            "nvidia": ("2.13.0", "0.28.0"),
-            "directml": ("2.13.0", "0.28.0"),
+            "cpu": (dependency_caps.TORCH_MINIMUM_VERSION,
+                    dependency_caps.TORCHVISION_MINIMUM_VERSION),
+            "nvidia": (dependency_caps.TORCH_MINIMUM_VERSION,
+                       dependency_caps.TORCHVISION_MINIMUM_VERSION),
+            "directml": (dependency_caps.TORCH_MINIMUM_VERSION,
+                         dependency_caps.TORCHVISION_MINIMUM_VERSION),
         }
+        self.assertEqual(dependency_caps.TORCH_MINIMUM_VERSION, "2.14.0")
+        self.assertEqual(dependency_caps.TORCHVISION_MINIMUM_VERSION, "0.29.0")
         for name, (torch, torchvision) in expected_torch.items():
             text = dependency_profiles.profile_constraint_path(name).read_text(
                 encoding="utf-8")
