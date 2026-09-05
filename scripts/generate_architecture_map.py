@@ -99,6 +99,7 @@ DESCRIPTIONS: dict[str, str] = {
     "backend/matte_interchange.py": "Lossless matte export / import / compose.",
     "backend/model_file_format.py": "Identifies a model file from its bytes, never its name.",
     "backend/model_downloads.py": "First-run guidance and outbound-model inventory.",
+    "backend/model_fetch.py": "Consented, hash-verified download of optional model weights.",
     "backend/model_hashes.py": "Vendored SHA-256 hashes and chunked verifier.",
     "backend/nle_sidecar.py": "EDL / FCPXML sidecar export.",
     "backend/ocr_benchmark.py": "OCR engine recall / precision benchmark.",

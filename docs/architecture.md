@@ -100,6 +100,7 @@ given change. Pairs with [ROADMAP.md](../ROADMAP.md) and
 |   |-- mask_free_benchmark.py      # Mask-free removal benchmark harness.
 |   |-- matte_interchange.py        # Lossless matte export / import / compose.
 |   |-- model_downloads.py          # First-run guidance and outbound-model inventory.
+|   |-- model_fetch.py              # Consented, hash-verified download of optional model weights.
 |   |-- model_file_format.py        # Identifies a model file from its bytes, never its name.
 |   |-- model_hashes.py             # Vendored SHA-256 hashes and chunked verifier.
 |   |-- nle_sidecar.py              # EDL / FCPXML sidecar export.

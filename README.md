@@ -1136,6 +1136,8 @@ default, range, visibility, and deprecation metadata. Regenerate it with
 | `--audit-onnx` | Audit all discoverable ONNX models for DirectML opset compatibility and exit. | Off | - | Public |
 | `--audit-windows-ml` | Probe the Windows ML Python path with a tiny ONNX smoke model and exit. | Off | - | Public |
 | `--scan-weights` | Scan cached model weights and verify SHA-256 against known hashes, then exit. | Off | - | Public |
+| `--list-fetchable-models` | List optional model weights this build can download, then exit. | Off | - | Public |
+| `--fetch-model` | Download one pinned optional model weight, verify its SHA-256, and exit. | - | - | Public |
 | `--cache-info` | Print cache directory inventory with sizes and exit. | Off | - | Public |
 | `--cache-clean` | Remove stale cache entries (checkpoints, proxies, TRT engines) and exit. | Off | - | Public |
 | `--model-cache-export` | Write a portable model-cache zip with SHA-256 manifest and exit. | - | - | Public |

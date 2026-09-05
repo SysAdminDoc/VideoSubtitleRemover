@@ -108,6 +108,11 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         source_url="https://huggingface.co/Carve/LaMa-ONNX",
         preferred_format="ONNX",
         remote_code_required=False,
+        # RM-354: pinned so backend.model_fetch can download the weight the
+        # installer does not ship. Both digests above were read back from
+        # this commit's resolve endpoint on 2026-09-04 before pinning it.
+        repository="Carve/LaMa-ONNX",
+        revision="c3c0c9e468934d62e79c329e35d82dd09ff8c444",
     ),
     "opencv-lama": AdapterManifestEntry(
         name="opencv-lama",
@@ -123,6 +128,10 @@ ADAPTER_MANIFEST: Dict[str, AdapterManifestEntry] = {
         source_url="https://huggingface.co/opencv/inpainting_lama",
         preferred_format="ONNX",
         remote_code_required=False,
+        # RM-354: see the lama-onnx note. 92.6 MB against 208 MB, so this is
+        # the weight the fetch offers first.
+        repository="opencv/inpainting_lama",
+        revision="aee6d22f0a13e5e35af1c9a1c3afd62841fc6f3f",
     ),
     "migan-onnx": AdapterManifestEntry(
         name="migan-onnx",

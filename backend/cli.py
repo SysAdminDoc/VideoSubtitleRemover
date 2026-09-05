@@ -125,7 +125,8 @@ _CLI_CATEGORY_OPTIONS = (
     (
         "Diagnostics and automation",
         (
-            "--audit-onnx", "--audit-windows-ml", "--scan-weights", "--cache-info",
+            "--audit-onnx", "--audit-windows-ml", "--scan-weights",
+            "--list-fetchable-models", "--fetch-model", "--cache-info",
             "--cache-clean", "--model-cache-export", "--model-cache-import",
             "--support-bundle", "--validate-config", "--self-test",
             "--inference-smoke", "--ocr-benchmark", "--ocr-engine",
@@ -1089,6 +1090,10 @@ def _build_parser(mode_choices):
                        help="Probe the Windows ML Python path with a tiny ONNX smoke model and exit.")
     parser.add_argument("--scan-weights", action="store_true",
                        help="Scan cached model weights and verify SHA-256 against known hashes, then exit.")
+    parser.add_argument("--list-fetchable-models", action="store_true",
+                       help="List optional model weights this build can download, then exit.")
+    parser.add_argument("--fetch-model", metavar="ADAPTER[:FILE]",
+                       help="Download one pinned optional model weight, verify its SHA-256, and exit.")
     parser.add_argument("--cache-info", action="store_true",
                        help="Print cache directory inventory with sizes and exit.")
     parser.add_argument("--cache-clean", action="store_true",
@@ -1266,6 +1271,19 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
         print_weight_report()
         sys.exit(0)
 
+    if args.list_fetchable_models:
+        from backend.model_fetch import fetchable_weights
+        for item in fetchable_weights():
+            print(
+                f"{item['adapter']}:{item['filename']}  "
+                f"{item['repository']}@{item['revision'][:12]}  "
+                f"{item['license']}"
+            )
+        sys.exit(0)
+
+    if args.fetch_model:
+        sys.exit(_run_model_fetch(args.fetch_model))
+
     if args.cache_info:
         from backend.cache_inventory import print_cache_info
         print_cache_info()
@@ -1427,6 +1445,53 @@ def _handle_utility_actions(args, parser, attach_json_log) -> bool:
         print(f"Confidence: {conf:.2f}")
         sys.exit(0)
     return False
+
+
+def _run_model_fetch(spec: str) -> int:
+    """Download one pinned optional weight. RM-354.
+
+    *spec* is ``adapter`` or ``adapter:filename``. Returns a process exit
+    code: 0 when the weight is present and verified, 1 otherwise. Progress is
+    printed on one rewritten line so a 208 MB download does not look hung.
+    """
+    from backend.model_fetch import fetch_weight
+
+    adapter, _, filename = spec.partition(":")
+    last = [-1]
+
+    def _progress(read: int, total) -> None:
+        if total:
+            percent = int(read * 100 / total)
+            if percent == last[0]:
+                return
+            last[0] = percent
+            print(
+                f"\r[fetch] {adapter} {read / 1048576:.1f}/"
+                f"{total / 1048576:.1f} MiB ({percent}%)",
+                end="", flush=True,
+            )
+        else:
+            print(f"\r[fetch] {adapter} {read / 1048576:.1f} MiB",
+                  end="", flush=True)
+
+    try:
+        result = fetch_weight(
+            adapter.strip(), filename.strip(), progress=_progress
+        )
+    except KeyboardInterrupt:
+        print("\n[fetch] cancelled", file=sys.stderr)
+        return 1
+    if result.bytes_read:
+        print()
+    if result.ok:
+        print(f"[fetch] {result.filename}: {result.reason} -> {result.path}")
+        return 0
+    print(
+        f"[fetch] {result.filename or adapter}: {result.reason}: "
+        f"{result.detail}",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def _explicitly_provided_dests(parser, argv):
