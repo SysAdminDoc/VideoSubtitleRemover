@@ -6,6 +6,8 @@ All notable changes to VideoSubtitleRemover will be documented in this file.
 
 ### Fixed
 
+- A model download says how far along it is. The only feedback for a first fetch was one toast and a queue row stuck at 2 percent, which reads as a hang on a large file. The interface and the command line now report the file name, bytes transferred, the total when the server gives one, and elapsed time, from one shared formatter so the two cannot drift into describing the same download differently. The advice to keep the window open is shown rather than written to the log.
+
 - A logo that sits in a corner for the whole video is no longer queued for removal on the same footing as a caption that appears for two seconds. Track review created every track set to remove, and the plan already recorded the span needed to tell the two apart. A track that covers substantially the whole runtime and sits outside the subtitle area is now flagged, with the coverage and position that classified it recorded, and it arrives already set to keep when you are removing subtitles. When you are removing a logo or watermark the default is untouched, because there the overlay is the thing you asked to erase. Neither condition is enough on its own: a caption can run the length of a short clip, and a chyron can be brief.
 
 ### Removed

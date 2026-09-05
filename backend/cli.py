@@ -1460,26 +1460,25 @@ def _run_model_fetch(spec: str) -> int:
     code: 0 when the weight is present and verified, 1 otherwise. Progress is
     printed on one rewritten line so a 208 MB download does not look hung.
     """
+    import time
+
+    from backend.model_downloads import format_download_progress
     from backend.model_fetch import fetch_weight
 
     adapter, _, filename = spec.partition(":")
     last = [-1]
+    started = time.monotonic()
 
     def _progress(read: int, total) -> None:
-        if total:
-            percent = int(read * 100 / total)
-            if percent == last[0]:
-                return
-            last[0] = percent
-            print(
-                f"\r[fetch] {adapter} {read / 1048576:.1f}/"
-                f"{total / 1048576:.1f} MiB ({percent}%)",
-                end="", flush=True,
-            )
-        else:
-            print(f"\r[fetch] {adapter} {read / 1048576:.1f} MiB",
-                  end="", flush=True)
-
+        # RM-328: the same line the interface shows, so the two surfaces
+        # cannot drift into describing one download differently.
+        percent = int(read * 100 / total) if total else -1
+        if total and percent == last[0]:
+            return
+        last[0] = percent
+        line = format_download_progress(
+            filename or adapter, read, total, time.monotonic() - started)
+        print(f"\r[fetch] {line}", end="", flush=True)
     try:
         result = fetch_weight(
             adapter.strip(), filename.strip(), progress=_progress

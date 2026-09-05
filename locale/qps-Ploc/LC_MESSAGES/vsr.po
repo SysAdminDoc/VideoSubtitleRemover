@@ -22,7 +22,7 @@ msgid_plural " across {count} sampled frames"
 msgstr[0] "[!!  åçŕöšš {count} šåḿƥŀéð ƒŕåḿé ! ! !!]"
 msgstr[1] "[!!  åçŕöšš {count} šåḿƥŀéð ƒŕåḿéš ! ! !!]"
 
-#: gui/settings_controller.py:1055
+#: gui/settings_controller.py:1093
 msgid " and {count} more"
 msgstr "[!!  åńð {count} ḿöŕé ! !!]"
 
@@ -396,7 +396,7 @@ msgstr "[!! ÇŔƑ ţåŕĝéţ ! !!]"
 msgid "Cancel"
 msgstr "[!! Çåńçéŀ ! !!]"
 
-#: gui/settings_controller.py:787
+#: gui/settings_controller.py:799
 msgid "Cancel download"
 msgstr "[!! Çåńçéŀ ðöŵńŀöåð ! !!]"
 
@@ -420,7 +420,7 @@ msgstr "[!! Çåŕŕý ḿåšķš åçŕöšš ḿîššéð ðéţéçţîöń
 msgid "Change cleanup settings for this queue item only. Press Control+Enter to save or Escape to cancel."
 msgstr "[!! Çħåńĝé çŀéåńûƥ šéţţîńĝš ƒöŕ ţħîš ɋûéûé îţéḿ öńŀý. Ƥŕéšš Çöńţŕöŀ+Éńţéŕ ţö šåṽé öŕ Éšçåƥé ţö çåńçéŀ. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:1062
+#: gui/settings_controller.py:1100
 msgid "Changing: {preview}. Your presets, output location, saved region and queue are not affected."
 msgstr "[!! Çħåńĝîńĝ: {preview}. Ýöûŕ ƥŕéšéţš, öûţƥûţ ŀöçåţîöń, šåṽéð ŕéĝîöń åńð ɋûéûé åŕé ńöţ åƒƒéçţéð. ! ! ! ! ! ! ! !!]"
 
@@ -444,7 +444,7 @@ msgstr "[!! Çħéçķîńĝ ! !!]"
 msgid "Checking FFmpeg availability for audio preservation..."
 msgstr "[!! Çħéçķîńĝ ƑƑḿƥéĝ åṽåîŀåƀîŀîţý ƒöŕ åûðîö ƥŕéšéŕṽåţîöń... ! ! ! ! !!]"
 
-#: gui/settings_controller.py:901
+#: gui/settings_controller.py:939
 msgid "Checking VLM endpoint privacy..."
 msgstr "[!! Çħéçķîńĝ ṼĿḾ éńðƥöîńţ ƥŕîṽåçý... ! ! !!]"
 
@@ -612,7 +612,7 @@ msgstr "[!! Çŀéåńûƥ ƥŕöƒîŀé ! !!]"
 msgid "Cleanup settings"
 msgstr "[!! Çŀéåńûƥ šéţţîńĝš ! !!]"
 
-#: gui/settings_controller.py:1051
+#: gui/settings_controller.py:1089
 msgid "Cleanup settings are already at their defaults"
 msgstr "[!! Çŀéåńûƥ šéţţîńĝš åŕé åŀŕéåðý åţ ţħéîŕ ðéƒåûŀţš ! ! ! !!]"
 
@@ -730,7 +730,7 @@ msgstr "[!! Çöḿƥûţé ! !!]"
 msgid "Compute device"
 msgstr "[!! Çöḿƥûţé ðéṽîçé ! !!]"
 
-#: gui/settings_controller.py:978
+#: gui/settings_controller.py:1016
 msgid "Compute device set to {device}"
 msgstr "[!! Çöḿƥûţé ðéṽîçé šéţ ţö {device} ! ! !!]"
 
@@ -798,7 +798,7 @@ msgstr "[!! Çöûŀð ńöţ çöƥý ţö ţħé çŀîƥƀöåŕð ! ! !!]"
 msgid "Could not detect language from this frame"
 msgstr "[!! Çöûŀð ńöţ ðéţéçţ ŀåńĝûåĝé ƒŕöḿ ţħîš ƒŕåḿé ! ! ! !!]"
 
-#: gui/settings_controller.py:822
+#: gui/settings_controller.py:860
 msgid "Could not download the {profile} model: {error}"
 msgstr "[!! Çöûŀð ńöţ ðöŵńŀöåð ţħé {profile} ḿöðéŀ: {error} ! ! ! !!]"
 
@@ -950,7 +950,7 @@ msgstr "[!! Ðöûƀŀé-çŀîçķ ƒöŕ ƒûŀŀ šîžé, öŕ ûšé ţħé
 msgid "Down"
 msgstr "[!! Ðöŵń ! !!]"
 
-#: gui/layout_build.py:629 gui/settings_controller.py:814
+#: gui/layout_build.py:629 gui/settings_controller.py:852
 msgid "Download model"
 msgstr "[!! Ðöŵńŀöåð ḿöðéŀ ! !!]"
 
@@ -958,9 +958,9 @@ msgstr "[!! Ðöŵńŀöåð ḿöðéŀ ! !!]"
 msgid "Download the reviewed model this algorithm needs. It is checked against a known hash before it is used."
 msgstr "[!! Ðöŵńŀöåð ţħé ŕéṽîéŵéð ḿöðéŀ ţħîš åŀĝöŕîţħḿ ńééðš. Îţ îš çħéçķéð åĝåîńšţ å ķńöŵń ħåšħ ƀéƒöŕé îţ îš ûšéð. ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:789
-msgid "Downloading the {profile} model..."
-msgstr "[!! Ðöŵńŀöåðîńĝ ţħé {profile} ḿöðéŀ... ! ! !!]"
+#: gui/settings_controller.py:800
+msgid "Downloading the {profile} model. Keep this window open; the download resumes from nothing if it is interrupted."
+msgstr "[!! Ðöŵńŀöåðîńĝ ţħé {profile} ḿöðéŀ. Ķééƥ ţħîš ŵîńðöŵ öƥéń; ţħé ðöŵńŀöåð ŕéšûḿéš ƒŕöḿ ńöţħîńĝ îƒ îţ îš îńţéŕŕûƥţéð. ! ! ! ! ! ! ! ! ! !!]"
 
 #: gui/preview_controller.py:1477
 msgid "Drag a larger subtitle region before releasing."
@@ -1328,7 +1328,7 @@ msgstr "[!! Ƒîẋéð ḿåšķ ŕéĝîöń ! !!]"
 msgid "Fixed mask regions"
 msgstr "[!! Ƒîẋéð ḿåšķ ŕéĝîöńš ! !!]"
 
-#: gui/settings_controller.py:868
+#: gui/settings_controller.py:906
 msgid "Florence-2 needs the optional transformers install; without it the run uses the automatic cascade"
 msgstr "[!! Ƒŀöŕéńçé-2 ńééðš ţħé öƥţîöńåŀ ţŕåńšƒöŕḿéŕš îńšţåŀŀ; ŵîţħöûţ îţ ţħé ŕûń ûšéš ţħé åûţöḿåţîç çåšçåðé ! ! ! ! ! ! ! ! !!]"
 
@@ -1700,7 +1700,7 @@ msgstr "[!! Ŀöåðîńĝ ! !!]"
 msgid "Loading {name}..."
 msgstr "[!! Ŀöåðîńĝ {name}... ! !!]"
 
-#: gui/settings_controller.py:914
+#: gui/settings_controller.py:952
 msgid "Local VLM endpoint. Frame pixels stay on this computer."
 msgstr "[!! Ŀöçåŀ ṼĿḾ éńðƥöîńţ. Ƒŕåḿé ƥîẋéŀš šţåý öń ţħîš çöḿƥûţéŕ. ! ! ! ! !!]"
 
@@ -2252,11 +2252,11 @@ msgstr "[!! ƤÅÛŠÉÐ ! !!]"
 msgid "PP-OCRv6 is the default RapidOCR generation. Keep PP-OCRv5 for regression comparison or a known-compatible run."
 msgstr "[!! ƤƤ-ÖÇŔṽ6 îš ţħé ðéƒåûŀţ ŔåƥîðÖÇŔ ĝéńéŕåţîöń. Ķééƥ ƤƤ-ÖÇŔṽ5 ƒöŕ ŕéĝŕéššîöń çöḿƥåŕîšöń öŕ å ķńöŵń-çöḿƥåţîƀŀé ŕûń. ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:874
+#: gui/settings_controller.py:912
 msgid "PaddleOCR-VL needs the optional paddleocr install; without it the run uses the automatic cascade"
 msgstr "[!! ƤåððŀéÖÇŔ-ṼĿ ńééðš ţħé öƥţîöńåŀ ƥåððŀéöçŕ îńšţåŀŀ; ŵîţħöûţ îţ ţħé ŕûń ûšéš ţħé åûţöḿåţîç çåšçåðé ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:877
+#: gui/settings_controller.py:915
 msgid "PaddleOCR-VL via llama.cpp stays local by default. A remote endpoint sends video frames outside this computer and requires HTTPS plus VSR_ALLOW_REMOTE_VLM=1"
 msgstr "[!! ƤåððŀéÖÇŔ-ṼĿ ṽîå ŀŀåḿå.çƥƥ šţåýš ŀöçåŀ ƀý ðéƒåûŀţ. Å ŕéḿöţé éńðƥöîńţ šéńðš ṽîðéö ƒŕåḿéš öûţšîðé ţħîš çöḿƥûţéŕ åńð ŕéɋûîŕéš ĦŢŢƤŠ ƥŀûš ṼŠŔ_ÅĿĿÖŴ_ŔÉḾÖŢÉ_ṼĿḾ=1 ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
@@ -2526,7 +2526,7 @@ msgid_plural "Queued {count} files with the last job's settings"
 msgstr[0] "[!! Ɋûéûéð {count} ƒîŀé ŵîţħ ţħé ŀåšţ ĵöƀ'š šéţţîńĝš ! ! ! ! !!]"
 msgstr[1] "[!! Ɋûéûéð {count} ƒîŀéš ŵîţħ ţħé ŀåšţ ĵöƀ'š šéţţîńĝš ! ! ! ! !!]"
 
-#: gui/settings_controller.py:871
+#: gui/settings_controller.py:909
 msgid "Qwen2.5-VL needs the optional transformers install; without it the run uses the automatic cascade"
 msgstr "[!! Ɋŵéń2.5-ṼĿ ńééðš ţħé öƥţîöńåŀ ţŕåńšƒöŕḿéŕš îńšţåŀŀ; ŵîţħöûţ îţ ţħé ŕûń ûšéš ţħé åûţöḿåţîç çåšçåðé ! ! ! ! ! ! ! ! !!]"
 
@@ -2658,7 +2658,7 @@ msgstr "[!! Ŕéŀéåšé ţö šåṽé ŕéĝîöń ({x1}, {y1}) ţö ({x2}, 
 msgid "Released the frozen matte; this item will detect again"
 msgstr "[!! Ŕéŀéåšéð ţħé ƒŕöžéń ḿåţţé; ţħîš îţéḿ ŵîŀŀ ðéţéçţ åĝåîń ! ! ! ! !!]"
 
-#: gui/settings_controller.py:906
+#: gui/settings_controller.py:944
 msgid "Remote VLM enabled. Video frames are sent to an HTTPS service outside this computer."
 msgstr "[!! Ŕéḿöţé ṼĿḾ éńåƀŀéð. Ṽîðéö ƒŕåḿéš åŕé šéńţ ţö åń ĦŢŢƤŠ šéŕṽîçé öûţšîðé ţħîš çöḿƥûţéŕ. ! ! ! ! ! ! ! !!]"
 
@@ -2740,11 +2740,11 @@ msgstr "[!! Ŕéƥéåţ ŵîţħ ţħéšé šéţţîńĝš ! ! !!]"
 msgid "Replace, add to, or subtract from the native composed mask."
 msgstr "[!! Ŕéƥŀåçé, åðð ţö, öŕ šûƀţŕåçţ ƒŕöḿ ţħé ńåţîṽé çöḿƥöšéð ḿåšķ. ! ! ! ! !!]"
 
-#: gui/layout_build.py:492 gui/layout_build.py:793 gui/settings_controller.py:1066
+#: gui/layout_build.py:492 gui/layout_build.py:793 gui/settings_controller.py:1104
 msgid "Reset"
 msgstr "[!! Ŕéšéţ ! !!]"
 
-#: gui/settings_controller.py:1058
+#: gui/settings_controller.py:1096
 msgid "Reset cleanup settings?"
 msgstr "[!! Ŕéšéţ çŀéåńûƥ šéţţîńĝš? ! !!]"
 
@@ -2752,7 +2752,7 @@ msgstr "[!! Ŕéšéţ çŀéåńûƥ šéţţîńĝš? ! !!]"
 msgid "Reset settings"
 msgstr "[!! Ŕéšéţ šéţţîńĝš ! !!]"
 
-#: gui/settings_controller.py:1073
+#: gui/settings_controller.py:1111
 msgid "Reset {count} cleanup setting(s) to their defaults"
 msgstr "[!! Ŕéšéţ {count} çŀéåńûƥ šéţţîńĝ(š) ţö ţħéîŕ ðéƒåûŀţš ! ! ! ! !!]"
 
@@ -3020,11 +3020,11 @@ msgstr "[!! Šçåńńîńĝ ţħîš ŕéĝîöń ƒöŕ ţéẋţ... ! ! !!]"
 msgid "Scope: this is for footage you have the right to change. It rebuilds the pixels under burned-in text. It does not read, strip or forge content credentials, provenance manifests or invisible watermarks."
 msgstr "[!! Šçöƥé: ţħîš îš ƒöŕ ƒööţåĝé ýöû ħåṽé ţħé ŕîĝħţ ţö çħåńĝé. Îţ ŕéƀûîŀðš ţħé ƥîẋéŀš ûńðéŕ ƀûŕńéð-îń ţéẋţ. Îţ ðöéš ńöţ ŕéåð, šţŕîƥ öŕ ƒöŕĝé çöńţéńţ çŕéðéńţîåŀš, ƥŕöṽéńåńçé ḿåńîƒéšţš öŕ îńṽîšîƀŀé ŵåţéŕḿåŕķš. ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:986
+#: gui/settings_controller.py:1024
 msgid "Select Output Directory"
 msgstr "[!! Šéŀéçţ Öûţƥûţ Ðîŕéçţöŕý ! !!]"
 
-#: gui/settings_controller.py:1004
+#: gui/settings_controller.py:1042
 msgid "Select Processing Work Directory"
 msgstr "[!! Šéŀéçţ Ƥŕöçéššîńĝ Ŵöŕķ Ðîŕéçţöŕý ! ! !!]"
 
@@ -3332,7 +3332,7 @@ msgstr "[!! Šûĝĝéšţéð ŕéţŕý šéţţîńĝš åŀŕéåðý ḿå�
 msgid "Support bundle"
 msgstr "[!! Šûƥƥöŕţ ƀûńðŀé ! !!]"
 
-#: gui/settings_controller.py:865
+#: gui/settings_controller.py:903
 msgid "Surya is GPL-licensed: install it yourself and set VSR_ALLOW_GPL=1, or the run uses the automatic cascade"
 msgstr "[!! Šûŕýå îš ĜƤĿ-ŀîçéńšéð: îńšţåŀŀ îţ ýöûŕšéŀƒ åńð šéţ ṼŠŔ_ÅĿĿÖŴ_ĜƤĿ=1, öŕ ţħé ŕûń ûšéš ţħé åûţöḿåţîç çåšçåðé ! ! ! ! ! ! ! ! !!]"
 
@@ -3476,7 +3476,7 @@ msgstr "[!! Ţħé šöûŕçé îḿåĝé çöûŀð ńöţ ƀé öƥéńéð 
 msgid "The source video could not be opened"
 msgstr "[!! Ţħé šöûŕçé ṽîðéö çöûŀð ńöţ ƀé öƥéńéð ! ! ! !!]"
 
-#: gui/settings_controller.py:818
+#: gui/settings_controller.py:856
 msgid "The {profile} model is ready."
 msgstr "[!! Ţħé {profile} ḿöðéŀ îš ŕéåðý. ! ! !!]"
 
@@ -3496,7 +3496,7 @@ msgstr "[!! Ţħéšé åƥƥŀý ţö ţħîš ɋûéûéð îţéḿ öńŀý 
 msgid "This FFmpeg build does not report a release version, so it cannot be checked against the required {floor} or newer. Install a stable release build."
 msgstr "[!! Ţħîš ƑƑḿƥéĝ ƀûîŀð ðöéš ńöţ ŕéƥöŕţ å ŕéŀéåšé ṽéŕšîöń, šö îţ çåńńöţ ƀé çħéçķéð åĝåîńšţ ţħé ŕéɋûîŕéð {floor} öŕ ńéŵéŕ. Îńšţåŀŀ å šţåƀŀé ŕéŀéåšé ƀûîŀð. ! ! ! ! ! ! ! ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:1059
+#: gui/settings_controller.py:1097
 msgid "This restores {count} setting(s) to their defaults."
 msgstr "[!! Ţħîš ŕéšţöŕéš {count} šéţţîńĝ(š) ţö ţħéîŕ ðéƒåûŀţš. ! ! ! ! !!]"
 
@@ -3690,7 +3690,7 @@ msgstr "[!! Ûšéŕ ƥŕéšéţ ! !!]"
 msgid "Uses the system language or a compiled catalog on the next launch."
 msgstr "[!! Ûšéš ţħé šýšţéḿ ŀåńĝûåĝé öŕ å çöḿƥîŀéð çåţåŀöĝ öń ţħé ńéẋţ ŀåûńçħ. ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:921
+#: gui/settings_controller.py:959
 msgid "VLM endpoint blocked: {reason}"
 msgstr "[!! ṼĿḾ éńðƥöîńţ ƀŀöçķéð: {reason} ! ! !!]"
 
@@ -3762,7 +3762,7 @@ msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀ
 msgid "Wait for the active batch to finish before reordering the queue"
 msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé ŕéöŕðéŕîńĝ ţħé ɋûéûé ! ! ! ! ! !!]"
 
-#: gui/settings_controller.py:1044
+#: gui/settings_controller.py:1082
 msgid "Wait for the active batch to finish before resetting"
 msgstr "[!! Ŵåîţ ƒöŕ ţħé åçţîṽé ƀåţçħ ţö ƒîńîšħ ƀéƒöŕé ŕéšéţţîńĝ ! ! ! ! !!]"
 
@@ -3814,11 +3814,11 @@ msgstr "[!! Ŵîƥé ! !!]"
 msgid "Wipe between the source frame and cleaned output."
 msgstr "[!! Ŵîƥé ƀéţŵééń ţħé šöûŕçé ƒŕåḿé åńð çŀéåńéð öûţƥûţ. ! ! ! ! !!]"
 
-#: gui/settings_controller.py:1026
+#: gui/settings_controller.py:1064
 msgid "Work directory reset to the system temporary location"
 msgstr "[!! Ŵöŕķ ðîŕéçţöŕý ŕéšéţ ţö ţħé šýšţéḿ ţéḿƥöŕåŕý ŀöçåţîöń ! ! ! ! !!]"
 
-#: gui/settings_controller.py:1014
+#: gui/settings_controller.py:1052
 msgid "Work directory selected for temporary and resume files"
 msgstr "[!! Ŵöŕķ ðîŕéçţöŕý šéŀéçţéð ƒöŕ ţéḿƥöŕåŕý åńð ŕéšûḿé ƒîŀéš ! ! ! ! !!]"
 
@@ -3882,7 +3882,7 @@ msgstr "[!! éńåƀŀéð ! !!]"
 msgid "focused"
 msgstr "[!! ƒöçûšéð ! !!]"
 
-#: gui/settings_controller.py:922
+#: gui/settings_controller.py:960
 msgid "invalid endpoint"
 msgstr "[!! îńṽåŀîð éńðƥöîńţ ! !!]"
 

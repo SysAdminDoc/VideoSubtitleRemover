@@ -330,6 +330,119 @@ class AlgorithmPickerAvailabilityTests(unittest.TestCase):
             "the worker reporting back is what clears the in-flight fetch",
         )
 
+    def test_a_download_reports_bytes_not_just_a_spinner(self):
+        """RM-328: a multi-gigabyte fetch used to be one toast and 2 percent.
+
+        The worker is driven with a real fetch_weight call against a local
+        server, so this exercises the progress plumbing rather than asserting
+        the callback shape.
+        """
+        import hashlib
+        import http.server
+        import threading as _threading
+
+        from backend.adapter_manifest import ADAPTER_MANIFEST, AdapterManifestEntry
+        from backend import model_fetch
+
+        body = b"weight bytes " * 200000  # ~2.6 MB, several chunks
+        name = "vsr_progress_weight.onnx"
+        entry = AdapterManifestEntry(
+            name="vsr-progress",
+            env_vars=(),
+            expected_filenames=(name,),
+            sha256={name: hashlib.sha256(body).hexdigest()},
+            repository="vsr/progress",
+            revision="0" * 40,
+        )
+
+        class _Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):  # noqa: N802 - stdlib callback name
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_a):
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        thread = _threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        host, port = server.server_address
+        endpoint = f"http://{host}:{port}"
+
+        ADAPTER_MANIFEST["vsr-progress"] = entry
+        self.addCleanup(ADAPTER_MANIFEST.pop, "vsr-progress", None)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        app = self._make_app()
+        lines = []
+        app._update_status = lambda text, tone="neutral", toast=False: (
+            lines.append(text))
+
+        import tempfile
+        import time
+
+        from backend.model_downloads import format_download_progress
+
+        with tempfile.TemporaryDirectory(prefix="vsr-prog-") as tmp:
+            started = time.monotonic()
+            last = [-1]
+            reported = []
+
+            def _progress(read, total):
+                percent = int(read * 100 / total) if total else -1
+                if total and percent == last[0]:
+                    return
+                last[0] = percent
+                reported.append((read, total))
+                lines.append(format_download_progress(
+                    name, read, total, time.monotonic() - started))
+
+            result = model_fetch.fetch_weight(
+                "vsr-progress", name,
+                env={"APPDATA": tmp}, endpoint=endpoint,
+                progress=_progress,
+            )
+
+        self.assertTrue(result.ok, result.detail)
+        self.assertGreater(len(reported), 1, "one update is a spinner")
+        self.assertEqual(
+            [read for read, _ in reported],
+            sorted(read for read, _ in reported),
+            "progress must be monotonic",
+        )
+        self.assertEqual(reported[-1][0], len(body))
+        byte_lines = [line for line in lines if "MB" in line]
+        self.assertTrue(byte_lines, "no line reported a byte count")
+        self.assertIn(name, byte_lines[-1])
+        self.assertIn("%", byte_lines[-1],
+                      "the total is known, so a percentage is expected")
+
+    def test_the_download_guidance_is_shown_not_only_logged(self):
+        app = self._make_app()
+        self._apply(app, available_lama=False)
+        app.mode_var.set("LAMA")
+        app._refresh_algorithm_availability()
+
+        said = []
+        app._update_status = lambda text, tone="neutral", toast=False: (
+            said.append(text))
+        import threading as _threading
+
+        with mock.patch.object(_threading, "Thread",
+                               lambda *a, **k: mock.Mock()):
+            app._download_missing_algorithm_model()
+
+        self.assertTrue(said, "starting a download said nothing")
+        self.assertIn(
+            "Keep this window open", said[0],
+            "the guidance text was logged rather than shown",
+        )
+
     def test_availability_is_not_probed_on_the_ui_thread(self):
         app = self._make_app()
         app._algo_availability = None

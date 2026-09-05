@@ -782,16 +782,54 @@ class AdvancedSettingsControllerMixin:
             return
         cancel_event = threading.Event()
         self._model_fetch_cancel = cancel_event
+        filename = adapter
+        try:
+            from backend.model_fetch import fetchable_weights
+
+            filename = next(
+                (item["filename"] for item in fetchable_weights()
+                 if item["adapter"] == adapter),
+                adapter,
+            )
+        except Exception:  # noqa: BLE001 - a label, not a gate
+            logger.debug("could not resolve the weight filename",
+                         exc_info=True)
         button = getattr(self, "algo_fetch_btn", None)
         if button is not None:
             button.set_text(tr("Cancel download"))
-        self._update_status(
-            tr("Downloading the {profile} model...").format(profile=selected))
+        self._update_status(tr(
+            "Downloading the {profile} model. Keep this window open; the "
+            "download resumes from nothing if it is interrupted."
+        ).format(profile=selected))
 
         def _worker():
+            import time
+
+            from backend.model_downloads import format_download_progress
             from backend.model_fetch import fetch_weight
+
+            started = time.monotonic()
+            # RM-328: a multi-gigabyte first download used to be one toast and
+            # a row stuck at 2 percent, which reads as a hang. Report bytes.
+            # Throttled to whole percents so a 92 MB fetch posts about a
+            # hundred updates rather than one per megabyte read.
+            last = [-1]
+
+            def _progress(read: int, total) -> None:
+                percent = int(read * 100 / total) if total else -1
+                if total and percent == last[0]:
+                    return
+                last[0] = percent
+                dispatch_to_ui(
+                    self.root, self._update_status,
+                    format_download_progress(
+                        filename, read, total, time.monotonic() - started),
+                    "info",
+                )
+
             try:
-                result = fetch_weight(adapter, cancel=cancel_event.is_set)
+                result = fetch_weight(
+                    adapter, cancel=cancel_event.is_set, progress=_progress)
             except Exception as exc:  # noqa: BLE001 - reported below
                 logger.debug("model fetch failed", exc_info=True)
                 result = None
